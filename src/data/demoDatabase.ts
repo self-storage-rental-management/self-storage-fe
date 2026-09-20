@@ -527,11 +527,44 @@ export const CONVERSION_DATA = [
   { month: 'Sep', visits: 760, bookings: 84 }
 ]
 
-export const PRICING_TIERS = [
-  { id: 'tier-1', name: 'Small Unit', size: '5 ft (25 sq ft)', basePrice: 89, climateAdder: 20, highDemandMultiplier: 1.15, facility: 'All facilities' },
-  { id: 'tier-2', name: 'Medium Unit', size: '10 ft (100 sq ft)', basePrice: 149, climateAdder: 30, highDemandMultiplier: 1.2, facility: 'All facilities' },
-  { id: 'tier-3', name: 'Large Unit', size: '20 ft (400 sq ft)', basePrice: 269, climateAdder: 45, highDemandMultiplier: 1.25, facility: 'All facilities' }
-]
+// export const PRICING_TIERS = [
+//   { id: 'tier-1', name: 'Small Unit', size: '5 ft (25 sq ft)', basePrice: 89, climateAdder: 20, highDemandMultiplier: 1.15, facility: 'All facilities' },
+//   { id: 'tier-2', name: 'Medium Unit', size: '10 ft (100 sq ft)', basePrice: 149, climateAdder: 30, highDemandMultiplier: 1.2, facility: 'All facilities' },
+//   { id: 'tier-3', name: 'Large Unit', size: '20 ft (400 sq ft)', basePrice: 269, climateAdder: 45, highDemandMultiplier: 1.25, facility: 'All facilities' }
+// ]
+
+export const PRICING_TIERS =
+  [
+    {
+      id: 'tier-1',
+      name: 'Small Unit',
+      size: '7,500,000 cm³',
+      basePrice: 89,
+      climateAdder: 20,
+      highDemandMultiplier: 1.15,
+      facility: 'All facilities'
+    },
+
+    {
+      id: 'tier-2',
+      name: 'Medium Unit',
+      size: '18,750,000 cm³',
+      basePrice: 149,
+      climateAdder: 30,
+      highDemandMultiplier: 1.2,
+      facility: 'All facilities'
+    },
+
+    {
+      id: 'tier-3',
+      name: 'Large Unit',
+      size: '60,000,000 cm³',
+      basePrice: 269,
+      climateAdder: 45,
+      highDemandMultiplier: 1.25,
+      facility: 'All facilities'
+    }
+  ];
 
 export interface PromotionItem {
   id: string
@@ -651,10 +684,19 @@ export const DISCOUNTS: PromotionItem[] = [
   }
 ]
 
+// export const POLICIES = [
+//   { id: 'pol-1', name: 'Standard monthly rental', description: 'Month-to-month rental with 30-day notice.', status: 'active' },
+//   { id: 'pol-2', name: 'Annual corporate lease', description: '12-month fixed commitment with discounted base rate.', status: 'active' }
+// ]
+
 export const POLICIES = [
-  { id: 'pol-1', name: 'Standard monthly rental', description: 'Month-to-month rental with 30-day notice.', status: 'active' },
-  { id: 'pol-2', name: 'Annual corporate lease', description: '12-month fixed commitment with discounted base rate.', status: 'active' }
+  { id: 'pol-1', name: 'Grace Period', value: '5 days', scope: 'All Facilities', editable: true },
+  { id: 'pol-2', name: 'Late Fee', value: '$25 / month', scope: 'All Facilities', editable: true },
+  { id: 'pol-3', name: 'Security Deposit', value: '1 month', scope: 'All Facilities', editable: true },
+  { id: 'pol-4', name: 'Notice to Vacate', value: '15 days', scope: 'All Facilities', editable: true },
+  { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', editable: true }
 ]
+
 
 export const FEES = [
   { type: 'Late payment fee', amount: '$25.00', trigger: 'Applied automatically 5 days after payment due date', applies: 'All tenants' },

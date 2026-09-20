@@ -1,12 +1,21 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 
 export type Language = 'en' | 'vi'
+export const USD_TO_VND_RATE = 26000
+
+// interface LanguageContextType {
+//   lang: Language
+//   setLang: (lang: Language) => void
+//   toggleLang: () => void
+//   t: (key: string, fallback?: string) => string
+// }
 
 interface LanguageContextType {
   lang: Language
   setLang: (lang: Language) => void
   toggleLang: () => void
   t: (key: string, fallback?: string) => string
+  formatCurrency: (usdAmount: number) => string
 }
 
 const STORAGE_KEY = 'storagehub:lang'
@@ -352,9 +361,10 @@ export const dictionary: Record<Language, Record<string, string>> = {
 
 const LanguageContext = createContext<LanguageContextType>({
   lang: 'vi',
-  setLang: () => {},
-  toggleLang: () => {},
+  setLang: () => { },
+  toggleLang: () => { },
   t: (key: string, fallback?: string) => fallback || key,
+  formatCurrency: () => '',
 })
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -362,14 +372,22 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved === 'en' || saved === 'vi') return saved
-    } catch {}
+    } catch { }
     return 'vi' // Mặc định Tiếng Việt theo yêu cầu của user
   })
+  // add new func
+  const formatCurrency = (usdAmount: number): string => {
+    if (lang === 'vi') {
+      const vnd = Math.round(usdAmount * USD_TO_VND_RATE)
+      return `${vnd.toLocaleString('vi-VN')} ₫` // hoặc 'VNĐ'
+    }
+    return `$${usdAmount.toLocaleString('en-US')}`
+  }
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, lang)
-    } catch {}
+    } catch { }
     document.documentElement.lang = lang
   }, [lang])
 
@@ -386,7 +404,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, toggleLang, t }}>
+    <LanguageContext.Provider value={{ lang, setLang, toggleLang, t, formatCurrency }}>
       {children}
     </LanguageContext.Provider>
   )
@@ -395,3 +413,4 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 export function useLanguage() {
   return useContext(LanguageContext)
 }
+
