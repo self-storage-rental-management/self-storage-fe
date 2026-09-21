@@ -397,9 +397,9 @@ export const RENTALS: RentalRecord[] = [
 ]
 
 export const STAFF_LIST = [
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', shift: 'Morning', tasks: 3, status: 'on-duty', phone: '090 555 0101' },
-  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', shift: 'Day', tasks: 5, status: 'on-duty', phone: '090 555 0102' },
-  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', shift: 'Night', tasks: 1, status: 'off-duty', phone: '090 555 0103' }
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'fac-001', facilityName: 'Downtown Storage' },
+  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'fac-001', facilityName: 'Downtown Storage' },
+  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'fac-002', facilityName: 'Riverside Storage' }
 ]
 
 export interface OverdueAccount {

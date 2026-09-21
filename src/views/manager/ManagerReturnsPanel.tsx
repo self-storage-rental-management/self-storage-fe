@@ -13,7 +13,7 @@ interface ManagerReturnsPanelProps {
 }
 
 export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerReturnsPanelProps) {
-  const { lang } = useLanguage()
+  const { lang, formatCurrency } = useLanguage()
   const { returns: storeReturns, reviewReturnDispute, completeReturnRefund } = useStorageHub()
 
   const [returnTab, setReturnTab] = useState('All')
@@ -23,11 +23,20 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const [disputeModalOpen, setDisputeModalOpen] = useState(false)
   const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('')
+  const [disputeFees, setDisputeFees] = useState({ damageFee: 0, cleaningFee: 0, overdueFee: 0, outstandingFee: 0 })
   const [refundTxnRef, setRefundTxnRef] = useState('')
+  const returnTabs = [
+    { key: 'All', label: lang === 'vi' ? 'Tất cả' : 'All' },
+    { key: 'disputed', label: lang === 'vi' ? 'Khiếu nại' : 'Disputed' },
+    { key: 'refund_pending', label: lang === 'vi' ? 'Chờ hoàn cọc' : 'Refund pending' },
+    { key: 'payment_due', label: lang === 'vi' ? 'Còn nợ phí' : 'Payment due' },
+    { key: 'in_progress', label: lang === 'vi' ? 'Đang xử lý' : 'In progress' },
+    { key: 'completed', label: lang === 'vi' ? 'Đã hoàn tất' : 'Completed' }
+  ]
 
   // Filter returns by facility
   const facilityReturns = storeReturns.filter(
-    r => !user.facility || r.facilityName === user.facility || user.facility === 'All facilities'
+    r => !user.facility || r.facilityName === user.facility || r.facilityId === user.facility || user.facility === 'All facilities'
   )
 
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
@@ -74,10 +83,22 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     }
   }
 
+  const openDispute = (returnCase: ReturnCase) => {
+    setSelectedReturn(returnCase)
+    setDisputeResolutionNote('')
+    setDisputeFees({
+      damageFee: returnCase.damageFee || 0,
+      cleaningFee: returnCase.cleaningFee || 0,
+      overdueFee: returnCase.overdueFee || 0,
+      outstandingFee: returnCase.outstandingFee || 0
+    })
+    setDisputeModalOpen(true)
+  }
+
   const handleReviewDispute = () => {
     if (!selectedReturn) return
     try {
-      reviewReturnDispute(selectedReturn.id, user, disputeResolutionNote)
+      reviewReturnDispute(selectedReturn.id, user, { ...disputeFees, resolutionNote: disputeResolutionNote })
       showToast(
         lang === 'vi'
           ? `Đã rà soát khiếu nại cho đơn ${selectedReturn.id} thành công!`
@@ -87,7 +108,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       setDisputeResolutionNote('')
       setSelectedReturn(null)
     } catch (err: any) {
-      showToast(err?.message || 'Error reviewing dispute')
+      showToast(err?.message || (lang === 'vi' ? 'Không thể xử lý khiếu nại.' : 'Error reviewing dispute.'))
     }
   }
 
@@ -101,14 +122,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       completeReturnRefund(selectedReturn.id, user, refundTxnRef.trim())
       showToast(
         lang === 'vi'
-          ? `Đã xác nhận hoàn tiền cọc $${selectedReturn.netRefundAmount} cho ${selectedReturn.customerName}!`
-          : `Refund of $${selectedReturn.netRefundAmount} completed for ${selectedReturn.customerName}!`
+          ? `Đã xác nhận hoàn ${formatCurrency(selectedReturn.netRefundAmount)} tiền cọc cho ${selectedReturn.customerName}!`
+          : `Refund of ${formatCurrency(selectedReturn.netRefundAmount)} completed for ${selectedReturn.customerName}!`
       )
       setRefundModalOpen(false)
       setRefundTxnRef('')
       setSelectedReturn(null)
     } catch (err: any) {
-      showToast(err?.message || 'Error completing refund')
+      showToast(err?.message || (lang === 'vi' ? 'Không thể hoàn tiền cọc.' : 'Error completing refund.'))
     }
   }
 
@@ -134,7 +155,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
         <StatCard
           title={lang === 'vi' ? 'Khiếu nại chờ xử lý' : 'Active Disputes'}
           value={disputedCount}
-          delta={disputedCount > 0 ? (lang === 'vi' ? 'Cần Manager giải quyết' : 'Requires Manager action') : undefined}
+          delta={disputedCount > 0 ? (lang === 'vi' ? 'Cần quản lý giải quyết' : 'Requires Manager action') : undefined}
           deltaPositive={disputedCount === 0}
           icon={Icon.alert}
           iconBg={disputedCount > 0 ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-200' : 'bg-stone-50 text-stone-600'}
@@ -158,27 +179,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <Tabs
-          tabs={
-            lang === 'vi'
-              ? ['Tất cả', 'Khiếu nại', 'Chờ hoàn cọc', 'Còn nợ phí', 'Đang xử lý', 'Đã hoàn tất']
-              : ['All', 'disputed', 'refund_pending', 'payment_due', 'in_progress', 'completed']
-          }
-          active={
-            returnTab === 'All' && lang === 'vi' ? 'Tất cả' :
-            returnTab === 'disputed' && lang === 'vi' ? 'Khiếu nại' :
-            returnTab === 'refund_pending' && lang === 'vi' ? 'Chờ hoàn cọc' :
-            returnTab === 'payment_due' && lang === 'vi' ? 'Còn nợ phí' :
-            returnTab === 'in_progress' && lang === 'vi' ? 'Đang xử lý' :
-            returnTab === 'completed' && lang === 'vi' ? 'Đã hoàn tất' : returnTab
-          }
+          tabs={returnTabs.map(item => item.label)}
+          active={returnTabs.find(item => item.key === returnTab)?.label || returnTabs[0].label}
           onChange={val => {
-            if (val === 'Tất cả') setReturnTab('All')
-            else if (val === 'Khiếu nại') setReturnTab('disputed')
-            else if (val === 'Chờ hoàn cọc') setReturnTab('refund_pending')
-            else if (val === 'Còn nợ phí') setReturnTab('payment_due')
-            else if (val === 'Đang xử lý') setReturnTab('in_progress')
-            else if (val === 'Đã hoàn tất') setReturnTab('completed')
-            else setReturnTab(val)
+            setReturnTab(returnTabs.find(item => item.label === val)?.key || 'All')
           }}
         />
         <div className="w-full sm:w-72">
@@ -238,7 +242,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   >
                     <Td>
                       <span className="font-mono text-xs font-bold text-stone-800">{ret.id}</span>
-                      <p className="text-[11px] text-stone-400 font-mono">HĐ: {ret.rentalId}</p>
+                      <p className="text-[11px] text-stone-400 font-mono">{lang === 'vi' ? 'HĐ' : 'Lease'}: {ret.rentalId}</p>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
@@ -277,7 +281,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                         </span>
                         {totalDeductions > 0 && (
                           <p className="text-[11px] text-red-600 font-medium">
-                            {lang === 'vi' ? `Khấu trừ: -$${totalDeductions}` : `Deduction: -$${totalDeductions}`}
+                            {lang === 'vi' ? `Khấu trừ: -${formatCurrency(totalDeductions)}` : `Deduction: -${formatCurrency(totalDeductions)}`}
                           </p>
                         )}
                       </div>
@@ -285,15 +289,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     <Td>
                       <div className="text-xs">
                         <p className="text-stone-500">
-                          {lang === 'vi' ? 'Cọc:' : 'Deposit:'} <span className="font-mono">${ret.depositAmount}</span>
+                          {lang === 'vi' ? 'Cọc:' : 'Deposit:'} <span className="font-mono">{formatCurrency(ret.depositAmount)}</span>
                         </p>
                         {ret.amountDueFromCustomer && ret.amountDueFromCustomer > 0 ? (
                           <p className="font-bold text-rose-600">
-                            {lang === 'vi' ? `Khách nộp thêm: $${ret.amountDueFromCustomer}` : `Due: $${ret.amountDueFromCustomer}`}
+                            {lang === 'vi' ? `Khách nộp thêm: ${formatCurrency(ret.amountDueFromCustomer)}` : `Due: ${formatCurrency(ret.amountDueFromCustomer)}`}
                           </p>
                         ) : (
                           <p className="font-bold text-emerald-700">
-                            {lang === 'vi' ? `Hoàn lại: $${ret.netRefundAmount}` : `Refund: $${ret.netRefundAmount}`}
+                            {lang === 'vi' ? `Hoàn lại: ${formatCurrency(ret.netRefundAmount)}` : `Refund: ${formatCurrency(ret.netRefundAmount)}`}
                           </p>
                         )}
                       </div>
@@ -318,9 +322,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             size="sm"
                             className="bg-rose-600 hover:bg-rose-700 text-white font-medium"
                             onClick={() => {
-                              setSelectedReturn(ret)
-                              setDisputeResolutionNote(ret.staffNotes || '')
-                              setDisputeModalOpen(true)
+                              openDispute(ret)
                             }}
                           >
                             {lang === 'vi' ? 'Xử lý khiếu nại' : 'Resolve Dispute'}
@@ -363,7 +365,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             <div className="p-4 rounded-xl bg-slate-900 text-white shadow-inner">
               <div className="flex justify-between items-center text-xs font-mono text-amber-400">
                 <span>{selectedReturn.id}</span>
-                <span>HĐ: {selectedReturn.rentalId}</span>
+                <span>{lang === 'vi' ? 'HĐ' : 'Lease'}: {selectedReturn.rentalId}</span>
               </div>
               <div className="mt-2 flex justify-between items-end">
                 <div>
@@ -392,21 +394,25 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               <div>
                 <span className="text-stone-400 block">{lang === 'vi' ? 'Khớp danh mục đồ gửi' : 'Inventory Match'}</span>
                 <span className="font-semibold text-stone-800 text-sm capitalize">
-                  {selectedReturn.inventoryMatch || 'N/A'}
+                  {selectedReturn.inventoryMatch
+                    ? ({ match: lang === 'vi' ? 'Khớp' : 'Matched', missing: lang === 'vi' ? 'Thiếu' : 'Missing', excess: lang === 'vi' ? 'Dư thừa' : 'Excess' }[selectedReturn.inventoryMatch])
+                    : (lang === 'vi' ? 'Không có' : 'N/A')}
                 </span>
               </div>
               <div>
                 <span className="text-stone-400 block">{lang === 'vi' ? 'Ngày nghiệm thu' : 'Inspected At'}</span>
                 <span className="font-medium text-stone-700">
-                  {selectedReturn.inspectedAt ? selectedReturn.inspectedAt.slice(0, 16).replace('T', ' ') : 'Chưa nghiệm thu'}
+                  {selectedReturn.inspectedAt ? selectedReturn.inspectedAt.slice(0, 16).replace('T', ' ') : (lang === 'vi' ? 'Chưa nghiệm thu' : 'Not inspected')}
                 </span>
               </div>
               <div>
                 <span className="text-stone-400 block">{lang === 'vi' ? 'Vật tư bàn giao lại' : 'Returned Items'}</span>
                 <span className="font-medium text-stone-700">
                   {selectedReturn.returnedItems
-                    ? `Chìa: ${selectedReturn.returnedItems.key ? '✓' : '✗'} · Thẻ: ${selectedReturn.returnedItems.card ? '✓' : '✗'} · Khóa: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`
-                    : 'N/A'}
+                    ? (lang === 'vi'
+                      ? `Chìa: ${selectedReturn.returnedItems.key ? '✓' : '✗'} · Thẻ: ${selectedReturn.returnedItems.card ? '✓' : '✗'} · Khóa: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`
+                      : `Key: ${selectedReturn.returnedItems.key ? '✓' : '✗'} · Card: ${selectedReturn.returnedItems.card ? '✓' : '✗'} · Lock: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`)
+                    : (lang === 'vi' ? 'Không có' : 'N/A')}
                 </span>
               </div>
             </div>
@@ -418,42 +424,42 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </p>
               <div className="flex justify-between py-0.5">
                 <span className="text-stone-500">{lang === 'vi' ? 'Tiền đặt cọc ban đầu' : 'Initial Security Deposit'}</span>
-                <span className="font-mono font-semibold text-stone-800">${selectedReturn.depositAmount}</span>
+                <span className="font-mono font-semibold text-stone-800">{formatCurrency(selectedReturn.depositAmount)}</span>
               </div>
               {selectedReturn.damageFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? 'Phí sửa chữa hư hại' : 'Damage Repair Fee'}</span>
-                  <span className="font-mono">-${selectedReturn.damageFee}</span>
+                  <span className="font-mono">-{formatCurrency(selectedReturn.damageFee)}</span>
                 </div>
               )}
               {selectedReturn.cleaningFee && selectedReturn.cleaningFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? 'Phí vệ sinh kho' : 'Cleaning Fee'}</span>
-                  <span className="font-mono">-${selectedReturn.cleaningFee}</span>
+                  <span className="font-mono">-{formatCurrency(selectedReturn.cleaningFee)}</span>
                 </div>
               )}
               {selectedReturn.overdueFee && selectedReturn.overdueFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? `Phí phạt trễ hạn (${selectedReturn.overdueDays || 0} ngày)` : `Overdue Fee (${selectedReturn.overdueDays || 0}d)`}</span>
-                  <span className="font-mono">-${selectedReturn.overdueFee}</span>
+                  <span className="font-mono">-{formatCurrency(selectedReturn.overdueFee)}</span>
                 </div>
               )}
               {selectedReturn.outstandingFee && selectedReturn.outstandingFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? 'Cước thuê còn nợ' : 'Outstanding Rent'}</span>
-                  <span className="font-mono">-${selectedReturn.outstandingFee}</span>
+                  <span className="font-mono">-{formatCurrency(selectedReturn.outstandingFee)}</span>
                 </div>
               )}
               <div className="pt-2 border-t flex justify-between font-bold text-sm">
                 <span>{lang === 'vi' ? 'Thực hoàn lại cho khách' : 'Net Deposit Refund'}</span>
                 <span className={selectedReturn.netRefundAmount > 0 ? 'text-emerald-700 font-mono' : 'text-stone-600 font-mono'}>
-                  ${selectedReturn.netRefundAmount}
+                  {formatCurrency(selectedReturn.netRefundAmount)}
                 </span>
               </div>
               {selectedReturn.amountDueFromCustomer && selectedReturn.amountDueFromCustomer > 0 && (
                 <div className="flex justify-between font-bold text-sm text-rose-600 pt-1">
                   <span>{lang === 'vi' ? 'Khách còn phải nộp thêm' : 'Additional Amount Due'}</span>
-                  <span className="font-mono">${selectedReturn.amountDueFromCustomer}</span>
+                  <span className="font-mono">{formatCurrency(selectedReturn.amountDueFromCustomer)}</span>
                 </div>
               )}
             </div>
@@ -485,8 +491,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   className="bg-rose-600 hover:bg-rose-700 text-white"
                   onClick={() => {
                     setDetailModalOpen(false)
-                    setDisputeResolutionNote(selectedReturn.staffNotes || '')
-                    setDisputeModalOpen(true)
+                    openDispute(selectedReturn)
                   }}
                 >
                   {lang === 'vi' ? 'Xử lý khiếu nại' : 'Resolve Dispute'}
@@ -533,9 +538,20 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <Input label={lang === 'vi' ? 'Phí hư hại điều chỉnh' : 'Adjusted damage fee'} type="number" min="0" value={String(disputeFees.damageFee)} onChange={e => setDisputeFees(value => ({ ...value, damageFee: Math.max(0, Number(e.target.value) || 0) }))} />
+              <Input label={lang === 'vi' ? 'Phí vệ sinh điều chỉnh' : 'Adjusted cleaning fee'} type="number" min="0" value={String(disputeFees.cleaningFee)} onChange={e => setDisputeFees(value => ({ ...value, cleaningFee: Math.max(0, Number(e.target.value) || 0) }))} />
+              <Input label={lang === 'vi' ? 'Phí quá hạn điều chỉnh' : 'Adjusted overdue fee'} type="number" min="0" value={String(disputeFees.overdueFee)} onChange={e => setDisputeFees(value => ({ ...value, overdueFee: Math.max(0, Number(e.target.value) || 0) }))} />
+              <Input label={lang === 'vi' ? 'Cước còn nợ điều chỉnh' : 'Adjusted outstanding rent'} type="number" min="0" value={String(disputeFees.outstandingFee)} onChange={e => setDisputeFees(value => ({ ...value, outstandingFee: Math.max(0, Number(e.target.value) || 0) }))} />
+            </div>
+            <div className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">
+              {lang === 'vi' ? 'Tiền hoàn cọc sau điều chỉnh' : 'Revised refund'}: <b>{formatCurrency(Math.max(0, selectedReturn.depositAmount - Object.values(disputeFees).reduce((sum, value) => sum + value, 0)))}</b>
+              {Object.values(disputeFees).reduce((sum, value) => sum + value, 0) > selectedReturn.depositAmount && <span className="ml-2 font-semibold text-rose-700">{lang === 'vi' ? `Khách cần nộp thêm ${formatCurrency(Object.values(disputeFees).reduce((sum, value) => sum + value, 0) - selectedReturn.depositAmount)}` : `Customer owes ${formatCurrency(Object.values(disputeFees).reduce((sum, value) => sum + value, 0) - selectedReturn.depositAmount)}`}</span>}
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-stone-700">
-                {lang === 'vi' ? 'Kết luận phân xử của Facility Manager' : 'Manager Resolution Decision & Notes'}
+                {lang === 'vi' ? 'Kết luận phân xử của Quản lý cơ sở' : 'Manager Resolution Decision & Notes'}
               </label>
               <textarea
                 rows={4}
@@ -585,7 +601,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-emerald-200 text-sm">
                 <span className="font-bold text-emerald-900">{lang === 'vi' ? 'Số tiền hoàn cọc' : 'Refund Amount'}</span>
-                <span className="font-mono font-extrabold text-emerald-700 text-lg">${selectedReturn.netRefundAmount}</span>
+                <span className="font-mono font-extrabold text-emerald-700 text-lg">{formatCurrency(selectedReturn.netRefundAmount)}</span>
               </div>
             </div>
 
@@ -593,7 +609,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               label={lang === 'vi' ? 'Mã chứng từ / Tham chiếu chuyển khoản ngân hàng' : 'Bank Transfer Reference'}
               value={refundTxnRef}
               onChange={e => setRefundTxnRef(e.target.value)}
-              placeholder="e.g. VCB-REF-849204"
+              placeholder={lang === 'vi' ? 'Ví dụ: VCB-REF-849204' : 'e.g. VCB-REF-849204'}
             />
 
             <div className="flex gap-2 justify-end pt-3 border-t">

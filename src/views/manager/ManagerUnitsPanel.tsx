@@ -3,7 +3,8 @@ import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody,
 import { useLanguage } from '../../i18n/LanguageContext'
 import type { User } from '../../types'
 import type { RentalRecord, StorageReservation, StorageUnit } from '../../types/storageHub'
-import { checkDateOverlap } from '../../store/StorageHubContext'
+import { unitHasAllocationConflict } from '../../domain/managerRules'
+import { managerStatusLabel, managerUnitTypeLabel } from './managerI18n'
 
 interface ManagerUnitsPanelProps {
   user: User
@@ -31,7 +32,7 @@ function statusVariant(status: string) {
 }
 
 export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeRentals, assignUnitToHold, showToast }: ManagerUnitsPanelProps) {
-  const { lang } = useLanguage()
+  const { lang, formatCurrency } = useLanguage()
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
   const [selectedReservation, setSelectedReservation] = useState<StorageReservation | null>(null)
@@ -53,11 +54,8 @@ export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeR
     return storeUnits.filter(unit => {
       if (unit.facilityId !== selectedReservation.facilityId) return false
       if (!matchesType(unit, selectedReservation)) return false
-      if (unit.id !== selectedReservation.assignedUnitId && unit.status !== 'available') return false
       if (unit.status === 'maintenance') return false
-      const reservationConflict = storeHolds.some(other => other.id !== selectedReservation.id && other.assignedUnitId === unit.id && activeReservationStatuses.includes(other.status) && checkDateOverlap(selectedReservation.startDate, selectedReservation.endDate, other.startDate, other.endDate))
-      const rentalConflict = storeRentals.some(rental => rental.unitId === unit.id && rental.status === 'active' && checkDateOverlap(selectedReservation.startDate, selectedReservation.endDate, rental.startDate, rental.endDate))
-      return !reservationConflict && !rentalConflict
+      return !unitHasAllocationConflict(unit.id, selectedReservation.startDate, selectedReservation.endDate, selectedReservation.id, storeHolds, storeRentals)
     })
   }, [selectedReservation, storeHolds, storeRentals, storeUnits])
 
@@ -80,7 +78,7 @@ export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeR
 
   return (
     <div className="fade-in space-y-5">
-      <SectionHeader eyebrow={lang === 'vi' ? 'Vận hành đặt chỗ' : 'Reservation operations'} title="Reservations & Unit Assignment" subtitle={lang === 'vi' ? 'Chỉ hiển thị đơn thuộc cơ sở của bạn; mọi phân bổ đều được kiểm tra loại kho, khoảng thuê và xung đột.' : 'Facility-scoped reservations with type, date-range and conflict validation.'} />
+      <SectionHeader eyebrow={lang === 'vi' ? 'Vận hành đặt chỗ' : 'Reservation operations'} title={lang === 'vi' ? 'Đặt chỗ & Phân kho' : 'Reservations & Unit Assignment'} subtitle={lang === 'vi' ? 'Chỉ hiển thị đơn thuộc cơ sở của bạn; mọi phân bổ đều được kiểm tra loại kho, khoảng thuê và xung đột.' : 'Facility-scoped reservations with type, date-range and conflict validation.'} />
 
       <div className="grid gap-3 md:grid-cols-[1fr_220px]">
         <Input value={query} onChange={event => setQuery(event.target.value)} placeholder={lang === 'vi' ? 'Tìm mã đơn, khách hàng, email hoặc gian kho…' : 'Search reservation, customer, email or unit…'} />
@@ -89,7 +87,7 @@ export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeR
           <option value="all">{lang === 'vi' ? 'Tất cả trạng thái' : 'All statuses'}</option>
           <option value="DEPOSIT_PAID">{lang === 'vi' ? 'Đã cọc, chờ phân kho' : 'Deposit paid'}</option>
           <option value="UNIT_RESERVED">{lang === 'vi' ? 'Đã phân kho' : 'Unit reserved'}</option>
-          <option value="READY_FOR_CHECKIN">{lang === 'vi' ? 'Sẵn sàng check-in' : 'Ready for check-in'}</option>
+          <option value="READY_FOR_CHECKIN">{lang === 'vi' ? 'Sẵn sàng nhận kho' : 'Ready for move-in'}</option>
         </Select>
       </div>
 
@@ -102,11 +100,11 @@ export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeR
               return <Tr key={reservation.id}>
                 <Td className="font-mono text-xs font-bold">{reservation.id}</Td>
                 <Td><p className="font-semibold text-stone-900">{reservation.customerName}</p><p className="text-xs text-stone-400">{reservation.customerEmail}</p></Td>
-                <Td>{reservation.unitTypeName}</Td>
+                <Td>{managerUnitTypeLabel(reservation.unitTypeName, lang)}</Td>
                 <Td><p>{reservation.startDate}</p><p className="text-xs text-stone-400">→ {reservation.endDate}</p></Td>
-                <Td><Badge variant={reservation.payment.status === 'paid' ? 'success' : 'warning'}>{reservation.payment.status === 'paid' ? (lang === 'vi' ? 'Đã cọc' : 'Deposit paid') : (lang === 'vi' ? 'Chưa thanh toán' : 'Unpaid')}</Badge>{reservation.remainingAmount > 0 && <p className="mt-1 text-xs text-stone-500">{lang === 'vi' ? `Còn $${reservation.remainingAmount}` : `$${reservation.remainingAmount} remaining`}</p>}</Td>
+                <Td><Badge variant={reservation.payment.status === 'paid' ? 'success' : 'warning'}>{reservation.payment.status === 'paid' ? (lang === 'vi' ? 'Đã cọc' : 'Deposit paid') : (lang === 'vi' ? 'Chưa thanh toán' : 'Unpaid')}</Badge>{reservation.remainingAmount > 0 && <p className="mt-1 text-xs text-stone-500">{lang === 'vi' ? `Còn ${formatCurrency(reservation.remainingAmount)}` : `${formatCurrency(reservation.remainingAmount)} remaining`}</p>}</Td>
                 <Td>{assignedUnit ? <span className="font-mono font-bold">{assignedUnit.code}</span> : <span className="text-stone-400">—</span>}</Td>
-                <Td><Badge variant={statusVariant(reservation.status)}>{reservation.status}</Badge></Td>
+                <Td><Badge variant={statusVariant(reservation.status)}>{managerStatusLabel(reservation.status, lang)}</Badge></Td>
                 <Td className="text-right"><Button size="sm" variant={activeReservationStatuses.includes(reservation.status) && reservation.payment.status === 'paid' ? 'primary' : 'outline'} disabled={!activeReservationStatuses.includes(reservation.status) || reservation.payment.status !== 'paid'} onClick={() => openAssignment(reservation)}>{assignedUnit ? (lang === 'vi' ? 'Đổi gian' : 'Reassign') : (lang === 'vi' ? 'Phân kho' : 'Assign')}</Button></Td>
               </Tr>
             })}
@@ -118,18 +116,21 @@ export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeR
       <Modal open={Boolean(selectedReservation)} onClose={() => setSelectedReservation(null)} title={lang === 'vi' ? 'Phân gian kho vật lý' : 'Assign physical unit'} size="lg">
         {selectedReservation && <div className="space-y-5">
           <div className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2">
-            <div><p className="text-xs text-stone-400">Reservation</p><p className="font-mono font-bold">{selectedReservation.id}</p></div>
-            <div><p className="text-xs text-stone-400">Facility</p><p className="font-semibold">{selectedReservation.facilityName}</p></div>
-            <div><p className="text-xs text-stone-400">Unit type</p><p className="font-semibold">{selectedReservation.unitTypeName}</p></div>
-            <div><p className="text-xs text-stone-400">Period</p><p className="font-semibold">{selectedReservation.startDate} → {selectedReservation.endDate}</p></div>
+            <div><p className="text-xs text-stone-400">{lang === 'vi' ? 'Đơn đặt' : 'Reservation'}</p><p className="font-mono font-bold">{selectedReservation.id}</p></div>
+            <div><p className="text-xs text-stone-400">{lang === 'vi' ? 'Cơ sở' : 'Facility'}</p><p className="font-semibold">{selectedReservation.facilityName}</p></div>
+            <div><p className="text-xs text-stone-400">{lang === 'vi' ? 'Loại gian kho' : 'Unit type'}</p><p className="font-semibold">{managerUnitTypeLabel(selectedReservation.unitTypeName, lang)}</p></div>
+            <div><p className="text-xs text-stone-400">{lang === 'vi' ? 'Thời hạn' : 'Period'}</p><p className="font-semibold">{selectedReservation.startDate} → {selectedReservation.endDate}</p></div>
           </div>
-          <Select label={lang === 'vi' ? 'Gian kho đáp ứng toàn bộ business rule' : 'Eligible physical unit'} value={selectedUnitId} onChange={event => setSelectedUnitId(event.target.value)}>
+          <Select label={lang === 'vi' ? 'Gian kho đáp ứng toàn bộ quy tắc nghiệp vụ' : 'Eligible physical unit'} value={selectedUnitId} onChange={event => setSelectedUnitId(event.target.value)}>
             <option value="">{candidates.length ? (lang === 'vi' ? 'Chọn gian kho' : 'Select a unit') : (lang === 'vi' ? 'Không có gian kho phù hợp' : 'No eligible unit')}</option>
-            {candidates.map(unit => <option key={unit.id} value={unit.id}>{unit.code} · {unit.type} · {unit.areaM2}m² · {unit.zone}</option>)}
+            {candidates.map(unit => <option key={unit.id} value={unit.id}>{unit.code} · {managerUnitTypeLabel(unit.type, lang)} · {unit.areaM2}m² · {unit.zone}</option>)}
           </Select>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-            <p className="font-bold">{lang === 'vi' ? 'Rule được xác minh lại khi xác nhận' : 'Rules revalidated on confirmation'}</p>
-            <ul className="mt-2 grid gap-1 sm:grid-cols-2"><li>✓ Same facility</li><li>✓ Same unit type</li><li>✓ Available for rental period</li><li>✓ No overlapping allocation</li><li>✓ Not maintenance</li><li>✓ Deposit paid & reservation active</li></ul>
+            <p className="font-bold">{lang === 'vi' ? 'Quy tắc được xác minh lại khi xác nhận' : 'Rules revalidated on confirmation'}</p>
+            <ul className="mt-2 grid gap-1 sm:grid-cols-2">{(lang === 'vi'
+              ? ['Cùng cơ sở', 'Đúng loại gian kho', 'Khả dụng trong kỳ thuê', 'Không trùng lịch phân bổ', 'Không trong bảo trì', 'Đã cọc và đơn còn hiệu lực']
+              : ['Same facility', 'Same unit type', 'Available for rental period', 'No overlapping allocation', 'Not under maintenance', 'Deposit paid and reservation active']
+            ).map(rule => <li key={rule}>✓ {rule}</li>)}</ul>
           </div>
           <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSelectedReservation(null)}>{lang === 'vi' ? 'Hủy' : 'Cancel'}</Button><Button disabled={!selectedUnitId} onClick={confirmAssignment}>{lang === 'vi' ? 'Xác nhận phân kho' : 'Confirm assignment'}</Button></div>
         </div>}

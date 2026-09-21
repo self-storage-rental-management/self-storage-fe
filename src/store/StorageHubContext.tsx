@@ -22,11 +22,21 @@ import type {
   RenewalRecord,
   MaintenanceTask,
   ReservedPeriod,
-  FacilityTask
+  FacilityTask,
+  ReturnSettlementAdjustments
 } from '../types/storageHub'
 import type { User } from '../types'
-import { FACILITIES, UNITS, USERS, TICKETS, type TicketItem } from '../data/demoDatabase'
+import { FACILITIES, UNITS, USERS, TICKETS, STAFF_LIST, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
+import {
+  isActiveReservationStatus,
+  nextDueAfterPayment,
+  rentalAmountDue,
+  sanitizeOperationalRentals,
+  sanitizeOperationalReturns,
+  unitHasAllocationConflict,
+  unitStatusFromAllocations
+} from '../domain/managerRules'
 
 const STORAGE_KEY = 'storagehub:v3:canonical'
 
@@ -445,102 +455,7 @@ const INITIAL_CHECKINS: CheckInRecord[] = [
   }
 ]
 
-const demoDateOffset = (days: number) => {
-  const date = new Date()
-  date.setHours(12, 0, 0, 0)
-  date.setDate(date.getDate() + days)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-const RENEWAL_TEST_RENTALS: RentalRecord[] = [
-  {
-    id: 'RNT-TEST-RENEW-BEFORE-2D',
-    holdId: 'RSV-TEST-RENEW-BEFORE-2D',
-    unitId: 'B-209',
-    facilityId: 'fac-001',
-    facilityName: 'Downtown Storage',
-    customerId: 'demo-customer',
-    customerName: 'Demo Customer',
-    customerEmail: 'customer@storagehub.demo',
-    customerPhone: '+84 908 123 456',
-    unitType: 'Medium Storage',
-    areaM2: 6,
-    volumeM3: 15,
-    startDate: demoDateOffset(-28),
-    endDate: demoDateOffset(2),
-    nextDue: demoDateOffset(2),
-    monthlyRate: 149,
-    deposit: 149,
-    securityDeposit: 149,
-    status: 'active',
-    paymentStatus: 'paid',
-    autoRenew: false,
-    gateCode: '2202#',
-    initialCondition: 'Dữ liệu kiểm thử: hợp đồng còn đúng 2 ngày trước khi hết hạn.',
-    evidencePhotos: ['TEST · Gia hạn trước hạn 2 ngày']
-  },
-  {
-    id: 'RNT-TEST-RENEW-AFTER-2D',
-    holdId: 'RSV-TEST-RENEW-AFTER-2D',
-    unitId: 'B-210',
-    facilityId: 'fac-001',
-    facilityName: 'Downtown Storage',
-    customerId: 'demo-customer',
-    customerName: 'Demo Customer',
-    customerEmail: 'customer@storagehub.demo',
-    customerPhone: '+84 908 123 456',
-    unitType: 'Medium Storage',
-    areaM2: 6,
-    volumeM3: 15,
-    startDate: demoDateOffset(-32),
-    endDate: demoDateOffset(-2),
-    nextDue: demoDateOffset(-2),
-    monthlyRate: 149,
-    deposit: 149,
-    securityDeposit: 149,
-    status: 'active',
-    paymentStatus: 'overdue',
-    autoRenew: false,
-    gateCode: '2200#',
-    initialCondition: 'Dữ liệu kiểm thử: hợp đồng đã hết hạn đúng 2 ngày.',
-    evidencePhotos: ['TEST · Gia hạn muộn sau hạn 2 ngày']
-  },
-  {
-    id: 'RNT-TEST-RETURN-DEDUCT',
-    holdId: 'RSV-TEST-RETURN-DEDUCT',
-    unitId: 'A-105',
-    facilityId: 'fac-001', facilityName: 'Downtown Storage',
-    customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
-    unitType: 'Small Storage', areaM2: 2.25, volumeM3: 6.3,
-    startDate: demoDateOffset(-32), endDate: demoDateOffset(-2), nextDue: demoDateOffset(-2),
-    monthlyRate: 89, deposit: 89, securityDeposit: 89,
-    status: 'return_requested', paymentStatus: 'overdue', autoRenew: false, gateCode: '5105#',
-    initialCondition: 'Dữ liệu kiểm thử trả kho: quá hạn 2 ngày, phí nhỏ hơn tiền đảm bảo.', evidencePhotos: ['TEST · Trả kho quá hạn và khấu trừ trong cọc']
-  },
-  {
-    id: 'RNT-TEST-RETURN-EXCESS',
-    holdId: 'RSV-TEST-RETURN-EXCESS',
-    unitId: 'A-106',
-    facilityId: 'fac-001', facilityName: 'Downtown Storage',
-    customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
-    unitType: 'Small Storage', areaM2: 2.25, volumeM3: 6.3,
-    startDate: demoDateOffset(-95), endDate: demoDateOffset(-65), nextDue: demoDateOffset(-65),
-    monthlyRate: 89, deposit: 89, securityDeposit: 89,
-    status: 'return_requested', paymentStatus: 'overdue', autoRenew: false, gateCode: '5106#',
-    initialCondition: 'Dữ liệu kiểm thử trả kho: phí quá hạn vượt tiền đảm bảo.', evidencePhotos: ['TEST · Trả kho quá hạn vượt cọc']
-  }
-]
-
-const mergeRenewalTestRentals = (rentals: RentalRecord[]) => [
-  ...RENEWAL_TEST_RENTALS.filter(sample => !rentals.some(rental => rental.id === sample.id)),
-  ...rentals
-]
-
 const INITIAL_RENTALS: RentalRecord[] = [
-  ...RENEWAL_TEST_RENTALS,
   {
     id: 'RNT-INIT-PREV',
     holdId: 'RSV-INIT-PREV',
@@ -621,15 +536,7 @@ const INITIAL_RENTALS: RentalRecord[] = [
   }
 ]
 
-const RETURN_TEST_CASES: ReturnCase[] = [
-  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Downtown Storage', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
-  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Downtown Storage', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
-]
-
-const mergeReturnTestCases = (returns: ReturnCase[]) => [...RETURN_TEST_CASES.filter(sample => !returns.some(item => item.id === sample.id)), ...returns]
-
 const INITIAL_RETURNS: ReturnCase[] = [
-  ...RETURN_TEST_CASES,
   {
     id: 'RET-118',
     rentalId: 'RNT-INIT-PREV',
@@ -842,7 +749,7 @@ interface StorageHubContextValue extends StorageHubState {
   confirmReturnSettlement: (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => void
   payReturnBalance: (returnId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string) => void
   completeReturnRefund: (returnId: string, staffUser: User, transactionReference: string) => void
-  reviewReturnDispute: (returnId: string, manager: User, resolutionNote?: string) => void
+  reviewReturnDispute: (returnId: string, manager: User, adjustments: ReturnSettlementAdjustments) => void
   createMaintenanceTask: (unitId: string, reason: string, staffUser?: User) => MaintenanceTask
   completeMaintenanceTask: (taskId: string, managerUser: User) => void
   releaseMaintenanceUnit: (unitId: string, staffUser: User) => void
@@ -918,10 +825,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       if (saved) {
         const parsed = JSON.parse(saved)
         const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.map((hold: StorageReservation) => normalizeReservationPricing({ ...hold, appointmentDate: hold.appointmentDate || hold.moveInDate, appointmentTime: hold.appointmentTime || '09:00' })) : INITIAL_RESERVATIONS
+        const migratedUnits = Array.isArray(parsed.units) && parsed.units.length >= INITIAL_UNITS.length ? parsed.units : INITIAL_UNITS
+        const migratedRentals = sanitizeOperationalRentals(Array.isArray(parsed.rentals) ? parsed.rentals : INITIAL_RENTALS, migratedUnits)
+        const migratedReturns = sanitizeOperationalReturns(Array.isArray(parsed.returns) ? parsed.returns : INITIAL_RETURNS, migratedRentals)
         return {
           ...parsed,
           users: Array.isArray(parsed.users) ? parsed.users : USERS,
-          units: Array.isArray(parsed.units) && parsed.units.length >= INITIAL_UNITS.length ? parsed.units : INITIAL_UNITS,
+          units: migratedUnits,
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
           payments: parsed.payments || [],
@@ -930,8 +840,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           staffTasks: parsed.staffTasks || [],
           accessCredentials: parsed.accessCredentials || [],
           checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins : INITIAL_CHECKINS),
-          rentals: Array.isArray(parsed.rentals) ? mergeRenewalTestRentals(parsed.rentals) : INITIAL_RENTALS,
-          returns: Array.isArray(parsed.returns) ? mergeReturnTestCases(parsed.returns) : INITIAL_RETURNS,
+          rentals: migratedRentals,
+          returns: migratedReturns,
           activities: parsed.activities || INITIAL_ACTIVITIES,
           tickets: parsed.tickets || TICKETS,
           config: parsed.config || DEFAULT_BUSINESS_CONFIG
@@ -1269,19 +1179,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (reservation.payment.status !== 'paid') throw new Error('Đơn chưa thanh toán cọc giữ chỗ.')
     if (unit.facilityId !== reservation.facilityId) throw new Error('Gian kho không thuộc cơ sở của đơn đặt.')
     if (!unitMatchesReservation(unit, reservation)) throw new Error('Loại gian kho không khớp với loại khách đã đặt.')
-    if (reservation.assignedUnitId !== unit.id && unit.status !== 'available') {
-      throw new Error(`Gian kho ${unit.code} không còn ở trạng thái AVAILABLE.`)
-    }
+    if (unit.status === 'maintenance') throw new Error(`Gian kho ${unit.code} đang bảo trì.`)
 
     // Date-range overlap conflict check
-    const isConflicted = state.holds.some(
-      h => h.id !== reservationId && h.assignedUnitId === unitId &&
-           ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
-           checkDateOverlap(reservation.startDate, reservation.endDate, h.startDate, h.endDate)
-    ) || state.rentals.some(
-      r => r.unitId === unitId && r.status === 'active' &&
-           checkDateOverlap(reservation.startDate, reservation.endDate, r.startDate, r.endDate)
-    )
+    const isConflicted = unitHasAllocationConflict(unitId, reservation.startDate, reservation.endDate, reservationId, state.holds, state.rentals)
 
     if (isConflicted) {
       throw new Error(`Gian kho ${unit.code} đã có booking/hợp đồng khác trùng khoảng thời gian ${reservation.startDate} đến ${reservation.endDate}.`)
@@ -1319,46 +1220,45 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      return {
-        ...prev,
-        units: prev.units.map(u => {
+      const updatedHolds = prev.holds.map(h => {
+        if (h.id === reservationId) {
+          return {
+            ...h,
+            assignedUnitId: unitId,
+            unitId,
+            unitAssignedAt: now.toISOString(),
+            status: nextStatus,
+            generatedAccessPin: generatedPin,
+            evidence: [...h.evidence, `UNIT_RESERVED · Manager ${managerUser.name} đã phân kho ${unit.code} (${reservation.startDate} → ${reservation.endDate})`]
+          }
+        }
+        return h
+      })
+      const unitsWithPeriods = prev.units.map(u => {
           if (reservation.assignedUnitId && reservation.assignedUnitId !== unitId && u.id === reservation.assignedUnitId) {
             const remainingPeriods = (u.reservedPeriods || []).filter(period => period.reservationId !== reservation.id)
-            return {
-              ...u,
-              status: remainingPeriods.length ? 'reserved' : 'available',
-              reservedPeriods: remainingPeriods,
-              nextAvailableDate: remainingPeriods[remainingPeriods.length - 1]?.endDate
-            }
+            return { ...u, reservedPeriods: remainingPeriods }
           }
           if (u.id === unitId) {
-            return {
-              ...u,
-              status: 'reserved',
-              reservedPeriods: [...(u.reservedPeriods || []).filter(p => p.reservationId !== reservation.id), newPeriod],
-              nextAvailableDate: reservation.endDate
-            }
+            return { ...u, reservedPeriods: [...(u.reservedPeriods || []).filter(p => p.reservationId !== reservation.id), newPeriod] }
           }
           return u
-        }),
-        holds: prev.holds.map(h => {
-          if (h.id === reservationId) {
-            return {
-              ...h,
-              assignedUnitId: unitId,
-              unitId,
-              unitAssignedAt: now.toISOString(),
-              status: nextStatus,
-              generatedAccessPin: generatedPin,
-              evidence: [...h.evidence, `UNIT_RESERVED · Manager ${managerUser.name} đã phân kho ${unit.code} (${reservation.startDate} → ${reservation.endDate})`]
-            }
-          }
-          return h
-        }),
-        checkins: reservation.appointmentDate && reservation.appointmentTime && !prev.checkins.some(c => c.holdId === reservation.id)
-          ? [{ id: `CHK-${Date.now().toString().slice(-6)}`, holdId: reservation.id, unitId, facilityId: reservation.facilityId, customerId: reservation.customerId, customerName: reservation.customerName, staffId: '', staffName: 'Chưa phân công', scheduledDate: reservation.appointmentDate, scheduledTime: reservation.appointmentTime, status: 'scheduled', checklist: { identityVerified: false, termsAccepted: false, paymentConfirmed: reservation.payment.status === 'paid', unitWalkthrough: false, accessCodeIssued: false }, actualMeasurements: { lengthCm: reservation.goods.lengthCm, widthCm: reservation.goods.widthCm, heightCm: reservation.goods.heightCm, weightKg: reservation.goods.weightKg, actualVolumeM3: (reservation.goods.lengthCm * reservation.goods.widthCm * reservation.goods.heightCm * reservation.goods.packageCount) / 1000000, varianceAccepted: false }, initialCondition: '', evidencePhotos: [] }, ...prev.checkins]
-          : prev.checkins,
-        accessCredentials: newCred ? [...prev.accessCredentials, newCred] : prev.accessCredentials,
+        })
+      const synchronizedCheckins = prev.checkins.some(c => c.holdId === reservation.id)
+        ? prev.checkins.map(c => c.holdId === reservation.id ? { ...c, unitId } : c)
+        : reservation.appointmentDate && reservation.appointmentTime
+          ? [{ id: `CHK-${Date.now().toString().slice(-6)}`, holdId: reservation.id, unitId, facilityId: reservation.facilityId, customerId: reservation.customerId, customerName: reservation.customerName, staffId: '', staffName: 'Chưa phân công', scheduledDate: reservation.appointmentDate, scheduledTime: reservation.appointmentTime, status: 'scheduled' as const, checklist: { identityVerified: false, termsAccepted: false, paymentConfirmed: reservation.payment.status === 'paid', unitWalkthrough: false, accessCodeIssued: false }, actualMeasurements: { lengthCm: reservation.goods.lengthCm, widthCm: reservation.goods.widthCm, heightCm: reservation.goods.heightCm, weightKg: reservation.goods.weightKg, actualVolumeM3: (reservation.goods.lengthCm * reservation.goods.widthCm * reservation.goods.heightCm * reservation.goods.packageCount) / 1000000, varianceAccepted: false }, initialCondition: '', evidencePhotos: [] }, ...prev.checkins]
+          : prev.checkins
+      const synchronizedCredentials = prev.accessCredentials.map(credential => credential.reservationId === reservation.id && credential.status !== 'REVOKED' ? { ...credential, unitId } : credential)
+
+      return {
+        ...prev,
+        units: unitsWithPeriods.map(currentUnit => (currentUnit.id === unitId || currentUnit.id === reservation.assignedUnitId)
+          ? { ...currentUnit, ...unitStatusFromAllocations(currentUnit, updatedHolds, prev.rentals) }
+          : currentUnit),
+        holds: updatedHolds,
+        checkins: synchronizedCheckins,
+        accessCredentials: newCred ? [...synchronizedCredentials, newCred] : synchronizedCredentials,
         activities: [
           {
             id: `act-${Date.now()}`,
@@ -1389,31 +1289,23 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => {
       const assignedUnit = prev.units.find(u => u.id === reservation.assignedUnitId)
       const updatedPeriods = (assignedUnit?.reservedPeriods || []).filter(p => p.reservationId !== reservation.id)
-      const unitHasOtherCurrentReservations = updatedPeriods.some(p => checkDateOverlap(now.toISOString().split('T')[0], now.toISOString().split('T')[0], p.startDate, p.endDate))
+      const updatedHolds = prev.holds.map(h => h.id === reservationId ? {
+        ...h,
+        status: 'CANCELLED' as const,
+        expireReason: 'CUSTOMER_CANCELLED' as const,
+        evidence: [...h.evidence, `CANCELLED · Hủy bởi ${user.name}. Lý do: ${reason || 'Khách hủy đơn'}.${h.payment.status === 'paid' ? ' Cọc giữ chỗ không hoàn lại do hủy trước Check-in.' : ''}`]
+      } : h)
 
       return {
         ...prev,
         units: prev.units.map(u => {
           if (u.id === reservation.assignedUnitId) {
-            return {
-              ...u,
-              status: unitHasOtherCurrentReservations ? 'reserved' : 'available',
-              reservedPeriods: updatedPeriods
-            }
+            const withoutCancelledPeriod = { ...u, reservedPeriods: updatedPeriods }
+            return { ...withoutCancelledPeriod, ...unitStatusFromAllocations(withoutCancelledPeriod, updatedHolds, prev.rentals) }
           }
           return u
         }),
-        holds: prev.holds.map(h => {
-          if (h.id === reservationId) {
-            return {
-              ...h,
-              status: 'CANCELLED',
-              expireReason: 'CUSTOMER_CANCELLED',
-              evidence: [...h.evidence, `CANCELLED · Hủy bởi ${user.name}. Lý do: ${reason || 'Khách hủy đơn'}.${h.payment.status === 'paid' ? ' Cọc giữ chỗ không hoàn lại do hủy trước Check-in.' : ''}`]
-            }
-          }
-          return h
-        }),
+        holds: updatedHolds,
         checkins: prev.checkins.map(checkin => checkin.holdId === reservationId ? { ...checkin, status: 'cancelled' as const } : checkin),
         accessCredentials: prev.accessCredentials.map(credential => credential.reservationId === reservationId ? { ...credential, status: 'REVOKED' as const, revokedAt: now.toISOString() } : credential),
         activities: [
@@ -1443,30 +1335,23 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => {
       const assignedUnit = prev.units.find(u => u.id === reservation.assignedUnitId)
       const updatedPeriods = (assignedUnit?.reservedPeriods || []).filter(p => p.reservationId !== reservation.id)
+      const updatedHolds = prev.holds.map(h => h.id === reservationId ? {
+        ...h,
+        status: 'EXPIRED' as const,
+        expireReason: reason,
+        evidence: [...h.evidence, `EXPIRED · Quá hạn (${reason}). Giải phóng kho.`]
+      } : h)
 
       return {
         ...prev,
         units: prev.units.map(u => {
           if (u.id === reservation.assignedUnitId) {
-            return {
-              ...u,
-              status: 'available',
-              reservedPeriods: updatedPeriods
-            }
+            const withoutExpiredPeriod = { ...u, reservedPeriods: updatedPeriods }
+            return { ...withoutExpiredPeriod, ...unitStatusFromAllocations(withoutExpiredPeriod, updatedHolds, prev.rentals) }
           }
           return u
         }),
-        holds: prev.holds.map(h => {
-          if (h.id === reservationId) {
-            return {
-              ...h,
-              status: 'EXPIRED',
-              expireReason: reason,
-              evidence: [...h.evidence, `EXPIRED · Quá hạn (${reason}). Giải phóng kho.`]
-            }
-          }
-          return h
-        })
+        holds: updatedHolds
       }
     })
   }
@@ -1879,9 +1764,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const approveRenewal = (renewalId: string, managerUser: User) => {
     const renewal = state.renewals.find(r => r.id === renewalId)
-    if (!renewal || renewal.status !== 'pending') return
+    if (!renewal || renewal.status !== 'pending') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
+    if (!rental || rental.status !== 'active') throw new Error('Hợp đồng thuê không còn hoạt động nên không thể gia hạn.')
+    assertFacilityManager(managerUser, renewal.facilityId, rental.facilityName)
 
     // Conflict check on date range
     const isConflicted = state.holds.some(
@@ -1919,9 +1805,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const rejectRenewal = (renewalId: string, managerUser: User, reason: string) => {
     const renewal = state.renewals.find(r => r.id === renewalId)
-    if (!renewal || renewal.status !== 'pending') return
+    if (!renewal || renewal.status !== 'pending') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
+    if (!rental || rental.status !== 'active') throw new Error('Hợp đồng thuê không còn hoạt động nên không thể xử lý gia hạn.')
+    assertFacilityManager(managerUser, renewal.facilityId, rental.facilityName)
     if (!reason.trim()) throw new Error('Vui lòng nhập lý do từ chối yêu cầu gia hạn.')
     const now = new Date()
 
@@ -2278,19 +2165,17 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
     if (rental.status !== 'active') throw new Error('Chỉ ghi nhận thanh toán cho hợp đồng đang hoạt động.')
-    const expectedAmount = Math.round((rental.monthlyRate + (rental.lateFeeAmount || 0)) * 100) / 100
+    const expectedAmount = rentalAmountDue(rental)
     if (amount <= 0 || Math.abs(amount - expectedAmount) > 0.01) throw new Error(`Số tiền cần thu chính xác là $${expectedAmount}.`)
     if (!transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
     const now = new Date()
-    const baseDue = toValidDate(rental.nextDue)
-    const nextDueBase = baseDue.getTime() < now.getTime() ? now.toISOString().split('T')[0] : rental.nextDue
-    const nextDue = addCalendarMonths(nextDueBase, 1)
+    const nextDue = nextDueAfterPayment(rental.nextDue)
     const paymentId = `PAY-RENT-${Date.now().toString().slice(-8)}`
     const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId, type: 'RENT', amount, paymentMethod, transactionReference: transactionReference.trim(), receivedAt: now.toISOString(), receivedBy: manager.id, status: 'PAID', paidAt: now.toISOString(), recordedBy: manager.id, description: `Thu cước kho ${rental.unitId}${rental.lateFeeAmount ? ` gồm phí trễ $${rental.lateFeeAmount}` : ''}` }
     setState(prev => ({
       ...prev,
       payments: [payment, ...prev.payments],
-      rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, paymentStatus: 'paid', lateFeeAmount: 0, overlocked: false, nextDue } : item),
+      rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, paymentStatus: 'paid', lateFeeAmount: 0, lateFeeProcessedForDueDate: undefined, overlocked: false, nextDue } : item),
       accessCredentials: prev.accessCredentials.map(item => item.rentalId === rentalId && item.status === 'SUSPENDED' ? { ...item, status: 'ACTIVE' } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RENT_PAYMENT_RECORDED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu $${amount} cho hợp đồng ${rental.id}; kỳ tiếp theo ${nextDue}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
@@ -2302,8 +2187,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
     if (rental.paymentStatus !== 'overdue') throw new Error('Chỉ áp dụng phí trễ cho hợp đồng đang quá hạn.')
     if (amount <= 0) throw new Error('Phí trễ phải lớn hơn 0.')
+    if (rental.lateFeeProcessedForDueDate === rental.nextDue || (rental.lateFeeAmount || 0) > 0) throw new Error('Phí trễ của kỳ này đã được xử lý.')
     const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: Math.round(((item.lateFeeAmount || 0) + amount) * 100) / 100 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Áp dụng phí trễ $${amount}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: Math.round(amount * 100) / 100, lateFeeProcessedForDueDate: item.nextDue } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Áp dụng phí trễ $${amount}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   const waiveRentalLateFee = (rentalId: string, manager: User) => {
@@ -2312,7 +2198,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
     const previousFee = rental.lateFeeAmount || 0
     const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: 0 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Miễn phí trễ $${previousFee}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    if (previousFee <= 0) throw new Error('Kỳ này không có phí trễ để miễn.')
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: 0, lateFeeProcessedForDueDate: item.nextDue } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Miễn phí trễ $${previousFee}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   const setRentalOverlock = (rentalId: string, overlocked: boolean, manager: User) => {
@@ -2341,6 +2228,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const createFacilityTask = (task: Omit<FacilityTask, 'id' | 'createdAt' | 'status'>, manager: User): FacilityTask => {
     assertFacilityManager(manager, task.facilityId, task.facilityName)
     if (!task.title.trim() || !task.dueAt) throw new Error('Nhiệm vụ cần có tiêu đề và hạn xử lý.')
+    if (task.dueAt < new Date().toISOString().slice(0, 10)) throw new Error('Hạn xử lý không được nằm trong quá khứ.')
+    if (task.assignedStaffId) {
+      const assignee = STAFF_LIST.find(item => item.id === task.assignedStaffId)
+      if (!assignee || (assignee.facilityId !== task.facilityId && assignee.facilityName !== task.facilityName)) throw new Error('Nhân viên được chọn không thuộc cơ sở này.')
+    }
     const created: FacilityTask = { ...task, id: `TSK-${Date.now().toString().slice(-7)}`, title: task.title.trim(), notes: task.notes?.trim(), status: 'open', createdAt: new Date().toISOString() }
     setState(prev => ({ ...prev, staffTasks: [created, ...prev.staffTasks], activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_CREATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: created.id, notes: `Tạo nhiệm vụ "${created.title}"${created.assignedStaffName ? ` cho ${created.assignedStaffName}` : ''}.`, timestamp: created.createdAt }, ...prev.activities] }))
     return created
@@ -2350,6 +2242,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const task = state.staffTasks.find(item => item.id === taskId)
     if (!task) throw new Error('Không tìm thấy nhiệm vụ.')
     assertFacilityManager(manager, task.facilityId, task.facilityName)
+    if (updates.dueAt && updates.dueAt < new Date().toISOString().slice(0, 10)) throw new Error('Hạn xử lý không được nằm trong quá khứ.')
+    if (updates.assignedStaffId) {
+      const assignee = STAFF_LIST.find(item => item.id === updates.assignedStaffId)
+      if (!assignee || (assignee.facilityId !== task.facilityId && assignee.facilityName !== task.facilityName)) throw new Error('Nhân viên được chọn không thuộc cơ sở này.')
+    }
     const now = new Date()
     setState(prev => ({ ...prev, staffTasks: prev.staffTasks.map(item => item.id === taskId ? { ...item, ...updates, completedAt: updates.status === 'completed' ? now.toISOString() : item.completedAt } : item), activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_UPDATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: taskId, notes: updates.status === 'completed' ? 'Nhiệm vụ đã hoàn tất.' : `Cập nhật nhiệm vụ${updates.assignedStaffName ? ` cho ${updates.assignedStaffName}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
@@ -2640,15 +2537,21 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const reviewReturnDispute = (returnId: string, manager: User, resolutionNote?: string) => {
+  const reviewReturnDispute = (returnId: string, manager: User, adjustments: ReturnSettlementAdjustments) => {
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
     assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
+    const fees = [adjustments.damageFee, adjustments.cleaningFee, adjustments.overdueFee, adjustments.outstandingFee]
+    if (fees.some(value => !Number.isFinite(value) || value < 0)) throw new Error('Các khoản phí điều chỉnh phải là số không âm.')
+    if (!adjustments.resolutionNote.trim()) throw new Error('Vui lòng nhập căn cứ và kết luận xử lý khiếu nại.')
+    const totalDeductions = Math.round(fees.reduce((sum, value) => sum + value, 0) * 100) / 100
+    const netRefundAmount = Math.max(0, Math.round((returnCase.depositAmount - totalDeductions) * 100) / 100)
+    const amountDueFromCustomer = Math.max(0, Math.round((totalDeductions - returnCase.depositAmount) * 100) / 100)
     const now = new Date()
     setState(prev => ({
       ...prev,
-      returns: prev.returns.map(r => r.id === returnId ? { ...r, status: 'awaiting_customer_confirmation', staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager: ${resolutionNote?.trim() || 'Đã rà soát và giữ nguyên quyết toán.'}` } : r),
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_DISPUTE_REVIEWED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.', timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
+      returns: prev.returns.map(r => r.id === returnId ? { ...r, status: 'awaiting_customer_confirmation', damageFee: adjustments.damageFee, cleaningFee: adjustments.cleaningFee, overdueFee: adjustments.overdueFee, outstandingFee: adjustments.outstandingFee, netRefundAmount, amountDueFromCustomer, staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager: ${adjustments.resolutionNote.trim()}` } : r),
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_DISPUTE_REVIEWED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `${adjustments.resolutionNote.trim()} Tổng khấu trừ: $${totalDeductions}; hoàn cọc: $${netRefundAmount}; khách cần nộp thêm: $${amountDueFromCustomer}.`, timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
     }))
   }
 

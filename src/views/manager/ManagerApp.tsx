@@ -13,19 +13,20 @@ import ManagerRentalsPanel from './ManagerRentalsPanel'
 import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerUnitsPanel from './ManagerUnitsPanel'
+import { managerStatusLabel } from './managerI18n'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { lang } = useLanguage()
   const hub = useStorageHub()
   const nav = [
-    { id: 'dashboard', label: 'Dashboard', icon: Icon.home, group: lang === 'vi' ? 'Tổng quan' : 'Overview' },
-    { id: 'reservations', label: 'Reservations & Unit Assignment', icon: Icon.calendar, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
-    { id: 'inventory', label: 'Storage Inventory', icon: Icon.box, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
-    { id: 'rentals', label: 'Rentals', icon: Icon.policy, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
-    { id: 'moves', label: 'Move-ins & Move-outs', icon: Icon.truck, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
-    { id: 'payments', label: 'Payments & Delinquency', icon: Icon.dollar, group: lang === 'vi' ? 'Tài chính' : 'Finance' },
-    { id: 'staff-tasks', label: 'Staff & Tasks', icon: Icon.users, group: lang === 'vi' ? 'Điều phối' : 'Workforce' },
-    { id: 'reports', label: 'Facility Reports', icon: Icon.chart, group: lang === 'vi' ? 'Báo cáo' : 'Reporting' }
+    { id: 'dashboard', label: 'Dashboard', labelEn: 'Dashboard', labelVi: 'Bảng điều khiển', icon: Icon.home, group: lang === 'vi' ? 'Tổng quan' : 'Overview' },
+    { id: 'reservations', label: 'Reservations & Unit Assignment', labelEn: 'Reservations & Unit Assignment', labelVi: 'Đặt chỗ & Phân kho', icon: Icon.calendar, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
+    { id: 'inventory', label: 'Storage Inventory', labelEn: 'Storage Inventory', labelVi: 'Tồn kho gian kho', icon: Icon.box, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
+    { id: 'rentals', label: 'Rentals', labelEn: 'Rentals', labelVi: 'Hợp đồng thuê', icon: Icon.policy, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
+    { id: 'moves', label: 'Move-ins & Move-outs', labelEn: 'Move-ins & Move-outs', labelVi: 'Nhận kho & Trả kho', icon: Icon.truck, group: lang === 'vi' ? 'Vận hành' : 'Operations' },
+    { id: 'payments', label: 'Payments & Delinquency', labelEn: 'Payments & Delinquency', labelVi: 'Thanh toán & Công nợ', icon: Icon.dollar, group: lang === 'vi' ? 'Tài chính' : 'Finance' },
+    { id: 'staff-tasks', label: 'Staff & Tasks', labelEn: 'Staff & Tasks', labelVi: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: lang === 'vi' ? 'Điều phối' : 'Workforce' },
+    { id: 'reports', label: 'Facility Reports', labelEn: 'Facility Reports', labelVi: 'Báo cáo cơ sở', icon: Icon.chart, group: lang === 'vi' ? 'Báo cáo' : 'Reporting' }
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)
@@ -41,10 +42,10 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       requested: 'warning', inspected: 'warning', disputed: 'error', refund_pending: 'purple', payment_due: 'error', awaiting_customer_confirmation: 'warning',
       CREATED: 'info', DEPOSIT_PAID: 'success', UNIT_RESERVED: 'purple', READY_FOR_CHECKIN: 'success', COMPLETED: 'success', CANCELLED: 'error', EXPIRED: 'muted'
     }
-    return <Badge variant={variants[status] || 'muted'}>{status.replace(/_/g, ' ')}</Badge>
+    return <Badge variant={variants[status] || 'muted'}>{managerStatusLabel(status, lang)}</Badge>
   }
 
-  const facility = hub.facilities.find(item => item.name === user.facility || item.id === user.facility) || hub.facilities[0]
+  const facility = hub.facilities.find(item => item.name === user.facility || item.id === user.facility)
 
   return <Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} roleLabel={lang === 'vi' ? 'Quản Lý Cơ Sở' : 'Facility Manager'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && <ManagerDashboardPanel user={user} setPage={setPage} />}

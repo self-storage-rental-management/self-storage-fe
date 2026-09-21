@@ -4,6 +4,7 @@ import { Icon } from '../../components/Layout'
 import { useLanguage } from '../../i18n/LanguageContext'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
+import { managerTimeLabel } from './managerI18n'
 import type { CheckInRecord } from '../../types/storageHub'
 
 interface ManagerCheckinsPanelProps {
@@ -19,6 +20,12 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   const [search, setSearch] = useState('')
   const [selectedCheckin, setSelectedCheckin] = useState<CheckInRecord | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const checkinTabs = [
+    { key: 'All', label: lang === 'vi' ? 'Tất cả' : 'All' },
+    { key: 'scheduled', label: lang === 'vi' ? 'Chờ đến hẹn' : 'Scheduled' },
+    { key: 'completed', label: lang === 'vi' ? 'Đã bàn giao' : 'Completed' },
+    { key: 'cancelled', label: lang === 'vi' ? 'Đã hủy' : 'Cancelled' }
+  ]
 
   // Filter checkins by facility (either match checkin.facilityId or unit's facility)
   const facilityCheckins = storeCheckins.filter(c => {
@@ -63,7 +70,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={lang === 'vi' ? 'Giám Sát Quy Trình Check-in & Bàn Giao Kho' : 'Check-in & Handover Monitoring'}
+        title={lang === 'vi' ? 'Giám Sát Nhận Kho & Bàn Giao' : 'Move-in & Handover Monitoring'}
         subtitle={
           lang === 'vi'
             ? 'Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý 5 bước và biên bản kiểm đo thực tế'
@@ -74,7 +81,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       {/* KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title={lang === 'vi' ? 'Tổng lượt tiếp nhận' : 'Total Check-ins'}
+          title={lang === 'vi' ? 'Tổng lượt tiếp nhận' : 'Total move-ins'}
           value={facilityCheckins.length}
           icon={Icon.clipboard}
           iconBg="bg-blue-50 text-blue-700"
@@ -106,23 +113,10 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       {/* Filter & Search */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <Tabs
-          tabs={
-            lang === 'vi'
-              ? ['Tất cả', 'Chờ đến hẹn', 'Đã bàn giao', 'Đã hủy']
-              : ['All', 'scheduled', 'completed', 'cancelled']
-          }
-          active={
-            tab === 'All' && lang === 'vi' ? 'Tất cả' :
-            tab === 'scheduled' && lang === 'vi' ? 'Chờ đến hẹn' :
-            tab === 'completed' && lang === 'vi' ? 'Đã bàn giao' :
-            tab === 'cancelled' && lang === 'vi' ? 'Đã hủy' : tab
-          }
+          tabs={checkinTabs.map(item => item.label)}
+          active={checkinTabs.find(item => item.key === tab)?.label || checkinTabs[0].label}
           onChange={val => {
-            if (val === 'Tất cả') setTab('All')
-            else if (val === 'Chờ đến hẹn') setTab('scheduled')
-            else if (val === 'Đã bàn giao') setTab('completed')
-            else if (val === 'Đã hủy') setTab('cancelled')
-            else setTab(val)
+            setTab(checkinTabs.find(item => item.label === val)?.key || 'All')
           }}
         />
         <div className="w-full sm:w-72">
@@ -141,11 +135,11 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
         <Table>
           <Thead>
             <tr>
-              <Th>{lang === 'vi' ? 'Mã Tiếp Nhận' : 'Check-in ID'}</Th>
+              <Th>{lang === 'vi' ? 'Mã Tiếp Nhận' : 'Move-in ID'}</Th>
               <Th>{lang === 'vi' ? 'Khách Nhận Kho' : 'Tenant'}</Th>
               <Th>{lang === 'vi' ? 'Gian Kho' : 'Unit'}</Th>
               <Th>{lang === 'vi' ? 'Lịch Hẹn Bàn Giao' : 'Appointment'}</Th>
-              <Th>{lang === 'vi' ? 'Tiến Độ Checklist (5 Bước)' : 'Handover Checklist'}</Th>
+              <Th>{lang === 'vi' ? 'Tiến Độ Kiểm Tra (5 Bước)' : 'Handover Checklist'}</Th>
               <Th>{lang === 'vi' ? 'Nhân Viên Phụ Trách' : 'Staff In-charge'}</Th>
               <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
               <Th className="text-right">{lang === 'vi' ? 'Thao Tác' : 'Action'}</Th>
@@ -156,8 +150,8 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
               <tr>
                 <td colSpan={8} className="text-center py-12 text-stone-400 text-sm">
                   {lang === 'vi'
-                    ? 'Không có lịch hẹn check-in nào trong bộ lọc này.'
-                    : 'No check-in records found.'}
+                    ? 'Không có lịch hẹn nhận kho nào trong bộ lọc này.'
+                    : 'No move-in records found.'}
                 </td>
               </tr>
             ) : (
@@ -167,7 +161,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                   <Tr key={c.id}>
                     <Td>
                       <span className="font-mono text-xs font-bold text-stone-800">{c.id}</span>
-                      <p className="text-[11px] text-stone-400 font-mono">Đơn: {c.holdId}</p>
+                      <p className="text-[11px] text-stone-400 font-mono">{lang === 'vi' ? 'Đơn' : 'Reservation'}: {c.holdId}</p>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
@@ -186,7 +180,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     <Td>
                       <div className="text-xs">
                         <p className="font-medium text-stone-800">{c.scheduledDate}</p>
-                        <p className="text-stone-400 font-mono">{c.scheduledTime || '09:00 AM'}</p>
+                        <p className="text-stone-400 font-mono">{managerTimeLabel(c.scheduledTime || '09:00 AM', lang)}</p>
                       </div>
                     </Td>
                     <Td>
@@ -206,7 +200,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     </Td>
                     <Td>
                       <div className="text-xs">
-                        <p className="font-medium text-stone-800">{c.staffName || 'Chưa phân công'}</p>
+                        <p className="font-medium text-stone-800">{c.staffName || (lang === 'vi' ? 'Chưa phân công' : 'Unassigned')}</p>
                         <p className="text-[11px] text-stone-400">{c.staffId}</p>
                       </div>
                     </Td>
@@ -235,7 +229,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       <Modal
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
-        title={lang === 'vi' ? 'Hồ Sơ Tiếp Nhận & Bàn Giao Gian Kho' : 'Check-in Handover Dossier'}
+        title={lang === 'vi' ? 'Hồ Sơ Tiếp Nhận & Bàn Giao Gian Kho' : 'Move-in Handover Dossier'}
       >
         {selectedCheckin && (
           <div className="space-y-4">
@@ -251,7 +245,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     {lang === 'vi' ? `Gian Kho ${selectedCheckin.unitId}` : `Unit ${selectedCheckin.unitId}`}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {selectedCheckin.customerName} · {lang === 'vi' ? 'Lịch hẹn:' : 'Appt:'} {selectedCheckin.scheduledDate} {selectedCheckin.scheduledTime}
+                    {selectedCheckin.customerName} · {lang === 'vi' ? 'Lịch hẹn:' : 'Appt:'} {selectedCheckin.scheduledDate} {managerTimeLabel(selectedCheckin.scheduledTime, lang)}
                   </p>
                 </div>
                 <div className="text-right">
@@ -320,7 +314,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                   </div>
                 </div>
                 {selectedCheckin.actualMeasurements.varianceNotes && (
-                  <p className="text-stone-500 italic mt-1">Ghi chú: {selectedCheckin.actualMeasurements.varianceNotes}</p>
+                  <p className="text-stone-500 italic mt-1">{lang === 'vi' ? 'Ghi chú' : 'Notes'}: {selectedCheckin.actualMeasurements.varianceNotes}</p>
                 )}
               </div>
             )}
@@ -330,7 +324,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
               <div>
                 <span className="text-amber-900 font-semibold block">{lang === 'vi' ? 'Mã PIN số bảo mật gian kho' : 'Digital Access PIN'}</span>
                 <span className="font-mono text-sm font-bold text-amber-950 mt-0.5 inline-block">
-                  {selectedCheckin.accessCodeIssued || selectedCheckin.preparedAccessPin || '••••# (Kích hoạt khi hoàn tất)'}
+                  {selectedCheckin.accessCodeIssued || selectedCheckin.preparedAccessPin || (lang === 'vi' ? '••••# (Kích hoạt khi hoàn tất)' : '••••# (Activated upon completion)')}
                 </span>
               </div>
               <div className="text-right">

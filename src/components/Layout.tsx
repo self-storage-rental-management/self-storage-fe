@@ -8,6 +8,8 @@ import type { User, Role } from '../types'
 interface NavItem {
   id: string
   label: string
+  labelEn?: string
+  labelVi?: string
   icon: ReactNode
   group?: string
 }
@@ -132,6 +134,7 @@ export default function Layout({
 
   // Dynamic translated nav item helper with full portal coverage
   const getNavLabel = (item: NavItem) => {
+    if (item.labelEn && item.labelVi) return lang === 'vi' ? item.labelVi : item.labelEn
     const navItemTranslations: Record<string, { en: string; vi: string }> = {
       'overview': { en: 'Overview', vi: 'Tổng Quan' },
       'browse-facilities': { en: 'Find a Facility', vi: 'Tìm Cơ Sở Kho' },
@@ -331,7 +334,7 @@ export default function Layout({
                 ? 'bg-[#3a3933] border border-[#4b4940] shadow-sm'
                 : 'hover:bg-white/5'
             }`}
-            title="View Profile & Settings"
+            title={lang === 'vi' ? 'Xem hồ sơ và cài đặt' : 'View profile and settings'}
           >
             <Avatar name={user.name} size="md" />
             <div className="min-w-0 flex-1">
@@ -375,7 +378,7 @@ export default function Layout({
           <button
             className="lg:hidden text-slate-500 hover:text-slate-700 p-1"
             onClick={() => setSidebarOpen(true)}
-            aria-label="Open navigation menu"
+            aria-label={lang === 'vi' ? 'Mở menu điều hướng' : 'Open navigation menu'}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -444,7 +447,7 @@ export default function Layout({
           <button
             onClick={() => navigate('profile')}
             className={`p-0.5 rounded-full ring-offset-2 transition ${currentPage === 'profile' ? 'ring-2 ring-[#e9a12c]' : 'hover:opacity-80'}`}
-            title="Go to profile"
+            title={lang === 'vi' ? 'Mở hồ sơ' : 'Go to profile'}
           >
             <Avatar name={user.name} size="sm" />
           </button>
