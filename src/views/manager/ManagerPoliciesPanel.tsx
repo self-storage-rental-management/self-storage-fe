@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Badge, Button, Card, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Input } from '../../components/ui'
-import { useLanguage } from '../../i18n/LanguageContext'
+import { formatVnd, useLanguage } from '../../i18n/LanguageContext'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { POLICIES } from '../../data/demoDatabase'
 import type { User } from '../../types'
@@ -98,7 +98,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
             {lang === 'vi' ? 'Mức phạt trễ hạn cố định' : 'Fixed Late Fee'}
           </p>
           <p className="text-2xl font-bold text-red-600 mt-1">
-            ${storeConfig.lateFeeAmount}.00
+            {formatVnd(storeConfig.lateFeeAmount)}
           </p>
           <p className="text-[11px] text-stone-500 mt-1">
             {lang === 'vi' ? 'Áp dụng khi quá hạn thời gian ân hạn' : 'Charged after grace period expires'}
@@ -170,7 +170,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
           />
 
           <Input
-            label={lang === 'vi' ? 'Phí phạt quá hạn ($)' : 'Late Fee Amount ($)'}
+            label={lang === 'vi' ? 'Phí phạt quá hạn (VND)' : 'Late Fee Amount (VND)'}
             type="number"
             min="0"
             max="500"

@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
-import LanguageToggle from './LanguageToggle'
 import { useLanguage } from '../i18n/LanguageContext'
 import type { User, Role } from '../types'
 
@@ -293,9 +292,6 @@ export default function Layout({
           <span className="inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold bg-[#3a3933] text-[#f3c675] border border-[#4b4940]">
             {getTranslatedRole()}
           </span>
-          <div className="lg:hidden">
-            <LanguageToggle />
-          </div>
         </div>
 
         {/* Nav */}
@@ -387,11 +383,6 @@ export default function Layout({
             <p className="text-sm font-semibold text-stone-800">{t('header.tagline', 'StorageHub Intelligent Facility Management')}</p>
           </div>
           <div className="flex-1" />
-
-          {/* Language Switcher Button on Header */}
-          <div className="hidden sm:block">
-            <LanguageToggle />
-          </div>
 
           {/* Notifications */}
           <div className="relative">

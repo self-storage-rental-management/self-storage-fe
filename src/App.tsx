@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import type { User } from './types'
 import { LanguageProvider } from './i18n/LanguageContext'
-import { StorageHubProvider } from './store/StorageHubContext'
+import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
 
@@ -12,23 +12,29 @@ const BusinessApp = lazy(() => import('./views/business/BusinessApp'))
 const AdminApp = lazy(() => import('./views/admin/AdminApp'))
 
 function MainContent() {
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem('storagehub:user')
-      return saved ? JSON.parse(saved) as User : null
-    } catch {
-      return null
-    }
-  })
+  const { users } = useStorageHub()
+  // Keep only the session identity in memory. The role is always resolved
+  // from the canonical user record in StorageHubContext, never from storage,
+  // query parameters, or a form payload.
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const canonicalRecord = sessionUserId ? users.find(item => item.id === sessionUserId) : null
+  const accountStatus = canonicalRecord && 'status' in canonicalRecord ? String(canonicalRecord.status) : 'active'
+  const user: User | null = canonicalRecord && accountStatus !== 'suspended'
+    ? {
+        id: canonicalRecord.id,
+        name: canonicalRecord.name,
+        email: canonicalRecord.email,
+        role: canonicalRecord.role as User['role'],
+        facility: canonicalRecord.facility
+      }
+    : null
 
   const handleLogin = (nextUser: User) => {
-    localStorage.setItem('storagehub:user', JSON.stringify(nextUser))
-    setUser(nextUser)
+    setSessionUserId(nextUser.id)
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('storagehub:user')
-    setUser(null)
+    setSessionUserId(null)
     history.replaceState(null, '', window.location.pathname)
   }
 

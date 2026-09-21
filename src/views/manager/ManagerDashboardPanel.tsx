@@ -1,6 +1,6 @@
 import { Badge, Button, Card, ProgressBar, SectionHeader, StatCard } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { useLanguage } from '../../i18n/LanguageContext'
+import { formatVnd, useLanguage } from '../../i18n/LanguageContext'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 
@@ -39,7 +39,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
 
   return <div className="fade-in space-y-5">
     <SectionHeader eyebrow={lang === 'vi' ? 'Tổng quan cơ sở' : 'Facility overview'} title="Dashboard" subtitle={user.facility || (lang === 'vi' ? 'Chưa gán cơ sở' : 'No facility assigned')} action={<Button variant="outline" onClick={() => setPage('reports')}>{lang === 'vi' ? 'Mở báo cáo' : 'View reports'}</Button>} />
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><StatCard title={lang === 'vi' ? 'Tổng gian kho' : 'Total units'} value={facilityUnits.length} icon={Icon.box} /><StatCard title={lang === 'vi' ? 'Tỷ lệ lấp đầy' : 'Occupancy'} value={`${occupancy}%`} icon={Icon.chart} /><StatCard title={lang === 'vi' ? 'Doanh thu định kỳ' : 'Monthly recurring'} value={`$${monthlyRevenue.toFixed(2)}`} icon={Icon.dollar} /><StatCard title={lang === 'vi' ? 'Đã thu thực tế' : 'Collected payments'} value={`$${collected.toFixed(2)}`} icon={Icon.credit} /></div>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><StatCard title={lang === 'vi' ? 'Tổng gian kho' : 'Total units'} value={facilityUnits.length} icon={Icon.box} /><StatCard title={lang === 'vi' ? 'Tỷ lệ lấp đầy' : 'Occupancy'} value={`${occupancy}%`} icon={Icon.chart} /><StatCard title={lang === 'vi' ? 'Doanh thu định kỳ' : 'Monthly recurring'} value={formatVnd(monthlyRevenue)} icon={Icon.dollar} /><StatCard title={lang === 'vi' ? 'Đã thu thực tế' : 'Collected payments'} value={formatVnd(collected)} icon={Icon.credit} /></div>
     <Card className="p-5"><div className="mb-2 flex items-center justify-between"><h3 className="font-bold">{lang === 'vi' ? 'Công suất cơ sở' : 'Facility capacity'}</h3><b>{occupied}/{facilityUnits.length}</b></div><ProgressBar value={occupied} max={Math.max(1, facilityUnits.length)} /><div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"><span>Available: <b>{facilityUnits.filter(item => item.status === 'available').length}</b></span><span>Reserved: <b>{facilityUnits.filter(item => item.status === 'reserved').length}</b></span><span>Occupied: <b>{occupied}</b></span><span>Maintenance: <b>{facilityUnits.filter(item => item.status === 'maintenance').length}</b></span></div></Card>
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{queues.map(item => <Card key={item.page + item.label} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-stone-900">{item.label}</p><p className="mt-1 text-2xl font-extrabold">{item.count}</p></div><Badge variant={item.variant}>{item.count ? (lang === 'vi' ? 'Cần xử lý' : 'Action needed') : 'OK'}</Badge></div><Button className="mt-4 w-full" size="sm" variant="outline" onClick={() => setPage(item.page)}>{lang === 'vi' ? 'Mở hàng đợi' : 'Open queue'}</Button></Card>)}</div>
   </div>

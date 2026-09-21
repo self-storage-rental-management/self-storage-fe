@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
-import { useLanguage } from '../../i18n/LanguageContext'
+import { formatVnd, useLanguage } from '../../i18n/LanguageContext'
 import type { User } from '../../types'
 import type { RentalRecord, StorageReservation, StorageUnit } from '../../types/storageHub'
 import { checkDateOverlap } from '../../store/StorageHubContext'
@@ -104,7 +104,7 @@ export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeR
                 <Td><p className="font-semibold text-stone-900">{reservation.customerName}</p><p className="text-xs text-stone-400">{reservation.customerEmail}</p></Td>
                 <Td>{reservation.unitTypeName}</Td>
                 <Td><p>{reservation.startDate}</p><p className="text-xs text-stone-400">→ {reservation.endDate}</p></Td>
-                <Td><Badge variant={reservation.payment.status === 'paid' ? 'success' : 'warning'}>{reservation.payment.status === 'paid' ? (lang === 'vi' ? 'Đã cọc' : 'Deposit paid') : (lang === 'vi' ? 'Chưa thanh toán' : 'Unpaid')}</Badge>{reservation.remainingAmount > 0 && <p className="mt-1 text-xs text-stone-500">{lang === 'vi' ? `Còn $${reservation.remainingAmount}` : `$${reservation.remainingAmount} remaining`}</p>}</Td>
+                <Td><Badge variant={reservation.payment.status === 'paid' ? 'success' : 'warning'}>{reservation.payment.status === 'paid' ? (lang === 'vi' ? 'Đã cọc' : 'Deposit paid') : (lang === 'vi' ? 'Chưa thanh toán' : 'Unpaid')}</Badge>{reservation.remainingAmount > 0 && <p className="mt-1 text-xs text-stone-500">{lang === 'vi' ? `Còn ${formatVnd(reservation.remainingAmount)}` : `${formatVnd(reservation.remainingAmount)} remaining`}</p>}</Td>
                 <Td>{assignedUnit ? <span className="font-mono font-bold">{assignedUnit.code}</span> : <span className="text-stone-400">—</span>}</Td>
                 <Td><Badge variant={statusVariant(reservation.status)}>{reservation.status}</Badge></Td>
                 <Td className="text-right"><Button size="sm" variant={activeReservationStatuses.includes(reservation.status) && reservation.payment.status === 'paid' ? 'primary' : 'outline'} disabled={!activeReservationStatuses.includes(reservation.status) || reservation.payment.status !== 'paid'} onClick={() => openAssignment(reservation)}>{assignedUnit ? (lang === 'vi' ? 'Đổi gian' : 'Reassign') : (lang === 'vi' ? 'Phân kho' : 'Assign')}</Button></Td>

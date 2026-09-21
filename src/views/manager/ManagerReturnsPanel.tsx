@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { useLanguage } from '../../i18n/LanguageContext'
+import { formatVnd, useLanguage } from '../../i18n/LanguageContext'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
@@ -101,8 +101,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       completeReturnRefund(selectedReturn.id, user, refundTxnRef.trim())
       showToast(
         lang === 'vi'
-          ? `Đã xác nhận hoàn tiền cọc $${selectedReturn.netRefundAmount} cho ${selectedReturn.customerName}!`
-          : `Refund of $${selectedReturn.netRefundAmount} completed for ${selectedReturn.customerName}!`
+          ? `Đã xác nhận hoàn tiền cọc ${formatVnd(selectedReturn.netRefundAmount)} cho ${selectedReturn.customerName}!`
+          : `Refund of ${formatVnd(selectedReturn.netRefundAmount)} completed for ${selectedReturn.customerName}!`
       )
       setRefundModalOpen(false)
       setRefundTxnRef('')
@@ -277,7 +277,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                         </span>
                         {totalDeductions > 0 && (
                           <p className="text-[11px] text-red-600 font-medium">
-                            {lang === 'vi' ? `Khấu trừ: -$${totalDeductions}` : `Deduction: -$${totalDeductions}`}
+                            {lang === 'vi' ? `Khấu trừ: -${formatVnd(totalDeductions)}` : `Deduction: -${formatVnd(totalDeductions)}`}
                           </p>
                         )}
                       </div>
@@ -285,15 +285,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     <Td>
                       <div className="text-xs">
                         <p className="text-stone-500">
-                          {lang === 'vi' ? 'Cọc:' : 'Deposit:'} <span className="font-mono">${ret.depositAmount}</span>
+                          {lang === 'vi' ? 'Cọc:' : 'Deposit:'} <span className="font-mono">{formatVnd(ret.depositAmount)}</span>
                         </p>
                         {ret.amountDueFromCustomer && ret.amountDueFromCustomer > 0 ? (
                           <p className="font-bold text-rose-600">
-                            {lang === 'vi' ? `Khách nộp thêm: $${ret.amountDueFromCustomer}` : `Due: $${ret.amountDueFromCustomer}`}
+                            {lang === 'vi' ? `Khách nộp thêm: ${formatVnd(ret.amountDueFromCustomer ?? 0)}` : `Due: ${formatVnd(ret.amountDueFromCustomer ?? 0)}`}
                           </p>
                         ) : (
                           <p className="font-bold text-emerald-700">
-                            {lang === 'vi' ? `Hoàn lại: $${ret.netRefundAmount}` : `Refund: $${ret.netRefundAmount}`}
+                            {lang === 'vi' ? `Hoàn lại: ${formatVnd(ret.netRefundAmount)}` : `Refund: ${formatVnd(ret.netRefundAmount)}`}
                           </p>
                         )}
                       </div>
@@ -418,42 +418,42 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </p>
               <div className="flex justify-between py-0.5">
                 <span className="text-stone-500">{lang === 'vi' ? 'Tiền đặt cọc ban đầu' : 'Initial Security Deposit'}</span>
-                <span className="font-mono font-semibold text-stone-800">${selectedReturn.depositAmount}</span>
+                <span className="font-mono font-semibold text-stone-800">{formatVnd(selectedReturn.depositAmount)}</span>
               </div>
               {selectedReturn.damageFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? 'Phí sửa chữa hư hại' : 'Damage Repair Fee'}</span>
-                  <span className="font-mono">-${selectedReturn.damageFee}</span>
+                  <span className="font-mono">-{formatVnd(selectedReturn.damageFee)}</span>
                 </div>
               )}
               {selectedReturn.cleaningFee && selectedReturn.cleaningFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? 'Phí vệ sinh kho' : 'Cleaning Fee'}</span>
-                  <span className="font-mono">-${selectedReturn.cleaningFee}</span>
+                  <span className="font-mono">-{formatVnd(selectedReturn.cleaningFee)}</span>
                 </div>
               )}
               {selectedReturn.overdueFee && selectedReturn.overdueFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? `Phí phạt trễ hạn (${selectedReturn.overdueDays || 0} ngày)` : `Overdue Fee (${selectedReturn.overdueDays || 0}d)`}</span>
-                  <span className="font-mono">-${selectedReturn.overdueFee}</span>
+                  <span className="font-mono">-{formatVnd(selectedReturn.overdueFee)}</span>
                 </div>
               )}
               {selectedReturn.outstandingFee && selectedReturn.outstandingFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{lang === 'vi' ? 'Cước thuê còn nợ' : 'Outstanding Rent'}</span>
-                  <span className="font-mono">-${selectedReturn.outstandingFee}</span>
+                  <span className="font-mono">-{formatVnd(selectedReturn.outstandingFee)}</span>
                 </div>
               )}
               <div className="pt-2 border-t flex justify-between font-bold text-sm">
                 <span>{lang === 'vi' ? 'Thực hoàn lại cho khách' : 'Net Deposit Refund'}</span>
                 <span className={selectedReturn.netRefundAmount > 0 ? 'text-emerald-700 font-mono' : 'text-stone-600 font-mono'}>
-                  ${selectedReturn.netRefundAmount}
+                  {formatVnd(selectedReturn.netRefundAmount)}
                 </span>
               </div>
               {selectedReturn.amountDueFromCustomer && selectedReturn.amountDueFromCustomer > 0 && (
                 <div className="flex justify-between font-bold text-sm text-rose-600 pt-1">
                   <span>{lang === 'vi' ? 'Khách còn phải nộp thêm' : 'Additional Amount Due'}</span>
-                  <span className="font-mono">${selectedReturn.amountDueFromCustomer}</span>
+                  <span className="font-mono">{formatVnd(selectedReturn.amountDueFromCustomer ?? 0)}</span>
                 </div>
               )}
             </div>
@@ -585,7 +585,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-emerald-200 text-sm">
                 <span className="font-bold text-emerald-900">{lang === 'vi' ? 'Số tiền hoàn cọc' : 'Refund Amount'}</span>
-                <span className="font-mono font-extrabold text-emerald-700 text-lg">${selectedReturn.netRefundAmount}</span>
+                <span className="font-mono font-extrabold text-emerald-700 text-lg">{formatVnd(selectedReturn.netRefundAmount)}</span>
               </div>
             </div>
 

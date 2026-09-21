@@ -27,8 +27,46 @@ import type {
 import type { User } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
+import { formatVnd } from '../i18n/LanguageContext'
 
 const STORAGE_KEY = 'storagehub:v3:canonical'
+
+type CompanyRole = Exclude<User['role'], 'customer'>
+type AccountStatus = 'active' | 'inactive' | 'suspended'
+type StoredUser = (typeof USERS)[number] & {
+  passwordResetAt?: string
+  mustChangePassword?: boolean
+}
+
+/**
+ * Roles for pre-provisioned company accounts are authoritative seed data in
+ * the demo. Persisted client state may contain profile edits, but it must not
+ * be able to promote an account by changing its role field.
+ */
+function normalizeUsers(value: unknown): StoredUser[] {
+  if (!Array.isArray(value)) return USERS
+
+  return value
+    .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate && typeof candidate === 'object'))
+    .map(candidate => {
+      const id = typeof candidate.id === 'string' ? candidate.id : ''
+      const seeded = USERS.find(user => user.id === id)
+      if (!id || typeof candidate.email !== 'string' || typeof candidate.name !== 'string') return null
+      const provisionedRole = (['staff', 'manager', 'business', 'admin'] as const).find(role => id.startsWith(`${role}-`))
+
+      return {
+        ...candidate,
+        id,
+        name: candidate.name,
+        email: candidate.email,
+        // Unknown self-registered accounts are always customers. Company
+        // roles can only come from the provisioned account record/backend.
+        role: seeded?.role ?? provisionedRole ?? 'customer',
+        facility: seeded?.facility ?? candidate.facility,
+      } as StoredUser
+    })
+    .filter((candidate): candidate is StoredUser => candidate !== null)
+}
 
 export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   dimDivisor: 5000,
@@ -698,7 +736,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'hold',
     entityId: 'RSV-2048',
-    notes: 'Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 20% ($36) thành công.',
+    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 20% (${formatVnd(36)}) thành công.`,
     timestamp: '2026-09-17 08:30:00'
   },
   {
@@ -716,7 +754,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
 ]
 
 interface StorageHubState {
-  users: Array<(typeof USERS)[number]>
+  users: StoredUser[]
   facilities: Facility[]
   units: StorageUnit[]
   holds: StorageReservation[] // holds is alias for reservations
@@ -858,6 +896,13 @@ interface StorageHubContextValue extends StorageHubState {
   respondSupportTicket: (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => void
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
   createSupportTicket: (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string) => void
+  registerCustomer: (params: { name: string; email: string; phone?: string }) => User
+  createInternalAccount: (params: { name: string; email: string; phone?: string; role: CompanyRole; facility?: string }, actor: User) => User
+  createCustomerSupportAccount: (params: { name: string; email: string; phone?: string; facility?: string; reason: string }, actor: User) => User
+  updateUserAccount: (userId: string, updates: { name: string; email: string; phone?: string; role?: CompanyRole; facility?: string; status?: AccountStatus }, actor: User) => void
+  setUserAccountStatus: (userId: string, status: AccountStatus, actor: User) => void
+  deleteUserAccount: (userId: string, actor: User) => void
+  requestUserPasswordReset: (userId: string, actor: User) => void
   resetToDemoData: () => void
 }
 
@@ -920,7 +965,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.map((hold: StorageReservation) => normalizeReservationPricing({ ...hold, appointmentDate: hold.appointmentDate || hold.moveInDate, appointmentTime: hold.appointmentTime || '09:00' })) : INITIAL_RESERVATIONS
         return {
           ...parsed,
-          users: Array.isArray(parsed.users) ? parsed.users : USERS,
+          users: normalizeUsers(parsed.users),
           units: Array.isArray(parsed.units) && parsed.units.length >= INITIAL_UNITS.length ? parsed.units : INITIAL_UNITS,
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
@@ -959,6 +1004,34 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       config: DEFAULT_BUSINESS_CONFIG
     }
   })
+
+  const assertCanonicalAdmin = (actor: User): StoredUser => {
+    const canonicalActor = state.users.find(item => item.id === actor.id)
+    if (!canonicalActor || canonicalActor.role !== 'admin' || canonicalActor.status !== 'active') {
+      throw new Error('Chỉ Admin đang hoạt động được quản lý tài khoản.')
+    }
+    return canonicalActor
+  }
+
+  const toPublicUser = (account: StoredUser): User => ({
+    id: account.id,
+    name: account.name,
+    email: account.email,
+    role: account.role as User['role'],
+    facility: account.facility
+  })
+
+  const accountSnapshot = (account: StoredUser | null) => account ? {
+    id: account.id,
+    name: account.name,
+    email: account.email,
+    role: account.role,
+    facility: account.facility,
+    status: account.status,
+    phone: account.phone,
+    mustChangePassword: account.mustChangePassword ?? false,
+    passwordResetAt: account.passwordResetAt
+  } : null
 
   // Reconcile older locally saved demo data with the return lifecycle introduced later.
   useEffect(() => {
@@ -999,7 +1072,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(e.newValue)
           const holds = Array.isArray(parsed.holds) ? parsed.holds.map(normalizeReservationPricing) : []
           const checkins = reconcileReservationCheckins(holds, Array.isArray(parsed.checkins) ? parsed.checkins : [])
-          setState({ ...parsed, holds, checkins })
+          setState({ ...parsed, users: normalizeUsers(parsed.users), holds, checkins })
         } catch {}
       }
     }
@@ -1224,7 +1297,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: params.facilityId,
           entityType: 'hold',
           entityId: holdId,
-          notes: `Khách hàng xác nhận đặt cỡ kho ${unitType.name}. Chờ cọc 20% ($${reservationDepositAmount}) trong 12 giờ.`,
+          notes: `Khách hàng xác nhận đặt cỡ kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 12 giờ.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -1426,7 +1499,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Hủy đơn ${reservation.id}. Kho ${reservation.assignedUnitId || 'N/A'} đã được giải phóng.${reservation.payment.status === 'paid' ? ` Cọc giữ chỗ $${reservation.reservationDepositAmount} không hoàn lại.` : ''}`,
+            notes: `Hủy đơn ${reservation.id}. Kho ${reservation.assignedUnitId || 'N/A'} đã được giải phóng.${reservation.payment.status === 'paid' ? ` Cọc giữ chỗ ${formatVnd(reservation.reservationDepositAmount)} không hoàn lại.` : ''}`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -1560,7 +1633,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền đảm bảo kho: $${contract.securityDeposit}.`,
+            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền đảm bảo kho: ${formatVnd(contract.securityDeposit)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -1587,7 +1660,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!reservation) throw new Error('Không tìm thấy đơn đặt chỗ.')
     if (paymentDetails.amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.')
     if (Math.abs(paymentDetails.amount - reservation.remainingAmount) > 0.01) {
-      throw new Error(`Số tiền cần thu chính xác là $${reservation.remainingAmount}, gồm tiền thuê còn lại và tiền đảm bảo kho.`)
+      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền đảm bảo kho.`)
     }
     if (!paymentDetails.transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
 
@@ -1607,7 +1680,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       status: 'PAID',
       paidAt: now.toISOString(),
       recordedBy: staffUser.id,
-      description: `Tiền thuê còn lại và tiền đảm bảo kho $${reservation.securityDepositAmount}`
+      description: `Tiền thuê còn lại và tiền đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}`
     }
 
     setState(prev => {
@@ -1643,7 +1716,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               depositConvertedAt: now.toISOString(), // Booking deposit is credited toward rent; security deposit is collected separately.
               status: nextStatus,
               generatedAccessPin: generatedPin,
-              evidence: [...h.evidence, `PAYMENT_PAID · Thu $${paymentDetails.amount} qua ${paymentDetails.paymentMethod} (Mã: ${paymentDetails.transactionReference})`]
+              evidence: [...h.evidence, `PAYMENT_PAID · Thu ${formatVnd(paymentDetails.amount)} qua ${paymentDetails.paymentMethod} (Mã: ${paymentDetails.transactionReference})`]
             }
           }
           return h
@@ -1659,7 +1732,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'payment',
             entityId: txId,
-            notes: `Nhân viên ${staffUser.name} lập phiếu thu $${paymentDetails.amount} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền đảm bảo kho $${reservation.securityDepositAmount}.`,
+            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -1873,7 +1946,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'cancelled', cancelledAt, notes: depositWasPaid ? 'Customer hủy sau khi đã cọc; cọc gia hạn 20% không hoàn lại.' : wasApproved ? 'Customer hủy sau khi được duyệt; hóa đơn gia hạn đã mất hiệu lực.' : 'Customer chủ động hủy trước khi Manager xét duyệt.' } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_CANCELLED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: depositWasPaid ? `Khách đã hủy yêu cầu ${renewal.id} sau khi cọc; cọc $${renewal.bookingDepositAmount} không hoàn lại. Manager đã được thông báo.` : wasApproved ? `Khách đã hủy yêu cầu gia hạn ${renewal.id} sau khi duyệt. Hóa đơn ${renewal.invoiceNumber || 'gia hạn'} đã mất hiệu lực.` : `Khách đã hủy yêu cầu gia hạn ${renewal.id}. Manager không cần tiếp tục xét duyệt.`, timestamp: cancelledAt }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_CANCELLED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: depositWasPaid ? `Khách đã hủy yêu cầu ${renewal.id} sau khi cọc; cọc ${formatVnd(renewal.bookingDepositAmount ?? 0)} không hoàn lại. Manager đã được thông báo.` : wasApproved ? `Khách đã hủy yêu cầu gia hạn ${renewal.id} sau khi duyệt. Hóa đơn ${renewal.invoiceNumber || 'gia hạn'} đã mất hiệu lực.` : `Khách đã hủy yêu cầu gia hạn ${renewal.id}. Manager không cần tiếp tục xét duyệt.`, timestamp: cancelledAt }, ...prev.activities]
     }))
   }
 
@@ -2011,7 +2084,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         },
         ...prev.payments
       ],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 20% $${bookingDepositAmount}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn $${Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100}${lateFeeAmount ? ` và phụ thu trễ dự kiến $${lateFeeAmount}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 20% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -2055,8 +2128,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       rentals: prev.rentals.map(item => item.id === renewal.rentalId ? { ...item, endDate: renewal.newEndDate } : item),
       contracts: [{ id: renewalContractId, contractNumber: renewalContractNumber, reservationId: rental.holdId, customerId: rental.customerId, unitId: rental.unitId, signedAt, startDate: nextCalendarDay(renewal.oldEndDate), endDate: renewal.newEndDate, monthlyRent: renewal.originalMonthlyRate ?? rental.monthlyRate, securityDeposit: 0, scannedFileUrl, scannedFileName, uploadedAt: now.toISOString(), uploadedBy: staffUser.name, status: 'SIGNED', contractType: 'RENEWAL', renewalId }, ...prev.contracts],
       units: prev.units.map(unit => unit.id === renewal.unitId ? { ...unit, nextAvailableDate: renewal.newEndDate } : unit),
-      payments: [{ id: paymentId, reservationId: rental.holdId, rentalId: renewal.rentalId, renewalId, type: 'RENEWAL', amount: finalPayment, paymentMethod: 'CASH', transactionReference: transactionReference.trim(), status: 'PAID', paidAt: now.toISOString(), recordedBy: staffUser.id, invoiceNumber: renewal.invoiceNumber, description: `Thanh toán phần còn lại của kỳ gia hạn: $${remainingAmount}${lateFeeAmount ? ` + phụ thu trễ $${lateFeeAmount}` : ''}` }, ...prev.payments],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_COMPLETED_AT_FACILITY', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: `Đã đối chiếu hồ sơ, ký hợp đồng gia hạn ${renewalContractNumber}, thu $${finalPayment} và gia hạn đến ${renewal.newEndDate}.`, timestamp: now.toISOString() }, ...prev.activities]
+      payments: [{ id: paymentId, reservationId: rental.holdId, rentalId: renewal.rentalId, renewalId, type: 'RENEWAL', amount: finalPayment, paymentMethod: 'CASH', transactionReference: transactionReference.trim(), status: 'PAID', paidAt: now.toISOString(), recordedBy: staffUser.id, invoiceNumber: renewal.invoiceNumber, description: `Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(remainingAmount)}${lateFeeAmount ? ` + phụ thu trễ ${formatVnd(lateFeeAmount)}` : ''}` }, ...prev.payments],
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_COMPLETED_AT_FACILITY', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: `Đã đối chiếu hồ sơ, ký hợp đồng gia hạn ${renewalContractNumber}, thu ${formatVnd(finalPayment)} và gia hạn đến ${renewal.newEndDate}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -2174,7 +2247,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: unit.facilityId,
           entityType: 'return',
           entityId: returnCase.id,
-          notes: `Đã nghiệm thu kho ${unit.code}. Quá hạn ${overdueDays} ngày, phí trễ $${calculatedOverdueFee}. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm $${amountDueFromCustomer}.` : `Đề xuất hoàn $${netRefund}.`} Chờ khách hàng xác nhận quyết toán.`,
+          notes: `Đã nghiệm thu kho ${unit.code}. Quá hạn ${overdueDays} ngày, phí trễ ${formatVnd(calculatedOverdueFee)}. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -2279,20 +2352,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
     if (rental.status !== 'active') throw new Error('Chỉ ghi nhận thanh toán cho hợp đồng đang hoạt động.')
     const expectedAmount = Math.round((rental.monthlyRate + (rental.lateFeeAmount || 0)) * 100) / 100
-    if (amount <= 0 || Math.abs(amount - expectedAmount) > 0.01) throw new Error(`Số tiền cần thu chính xác là $${expectedAmount}.`)
+    if (amount <= 0 || Math.abs(amount - expectedAmount) > 0.01) throw new Error(`Số tiền cần thu chính xác là ${formatVnd(expectedAmount)}.`)
     if (!transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
     const now = new Date()
     const baseDue = toValidDate(rental.nextDue)
     const nextDueBase = baseDue.getTime() < now.getTime() ? now.toISOString().split('T')[0] : rental.nextDue
     const nextDue = addCalendarMonths(nextDueBase, 1)
     const paymentId = `PAY-RENT-${Date.now().toString().slice(-8)}`
-    const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId, type: 'RENT', amount, paymentMethod, transactionReference: transactionReference.trim(), receivedAt: now.toISOString(), receivedBy: manager.id, status: 'PAID', paidAt: now.toISOString(), recordedBy: manager.id, description: `Thu cước kho ${rental.unitId}${rental.lateFeeAmount ? ` gồm phí trễ $${rental.lateFeeAmount}` : ''}` }
+    const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId, type: 'RENT', amount, paymentMethod, transactionReference: transactionReference.trim(), receivedAt: now.toISOString(), receivedBy: manager.id, status: 'PAID', paidAt: now.toISOString(), recordedBy: manager.id, description: `Thu cước kho ${rental.unitId}${rental.lateFeeAmount ? ` gồm phí trễ ${formatVnd(rental.lateFeeAmount)}` : ''}` }
     setState(prev => ({
       ...prev,
       payments: [payment, ...prev.payments],
       rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, paymentStatus: 'paid', lateFeeAmount: 0, overlocked: false, nextDue } : item),
       accessCredentials: prev.accessCredentials.map(item => item.rentalId === rentalId && item.status === 'SUSPENDED' ? { ...item, status: 'ACTIVE' } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENT_PAYMENT_RECORDED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu $${amount} cho hợp đồng ${rental.id}; kỳ tiếp theo ${nextDue}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENT_PAYMENT_RECORDED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu ${formatVnd(amount)} cho hợp đồng ${rental.id}; kỳ tiếp theo ${nextDue}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -2303,7 +2376,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (rental.paymentStatus !== 'overdue') throw new Error('Chỉ áp dụng phí trễ cho hợp đồng đang quá hạn.')
     if (amount <= 0) throw new Error('Phí trễ phải lớn hơn 0.')
     const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: Math.round(((item.lateFeeAmount || 0) + amount) * 100) / 100 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Áp dụng phí trễ $${amount}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: Math.round(((item.lateFeeAmount || 0) + amount) * 100) / 100 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Áp dụng phí trễ ${formatVnd(amount)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   const waiveRentalLateFee = (rentalId: string, manager: User) => {
@@ -2312,7 +2385,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
     const previousFee = rental.lateFeeAmount || 0
     const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: 0 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Miễn phí trễ $${previousFee}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: 0 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Miễn phí trễ ${formatVnd(previousFee)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   const setRentalOverlock = (rentalId: string, overlocked: boolean, manager: User) => {
@@ -2417,6 +2490,221 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       tickets: [newTicket, ...prev.tickets]
+    }))
+  }
+
+  const registerCustomer = ({ name, email, phone = '' }: { name: string; email: string; phone?: string }): User => {
+    const normalizedName = name.trim()
+    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedPhone = phone.trim()
+    if (!normalizedName || !normalizedEmail) throw new Error('Vui lòng điền đầy đủ thông tin đăng ký.')
+
+    const existing = state.users.find(item => item.email.toLowerCase() === normalizedEmail)
+    if (existing) {
+      if (existing.role !== 'customer') throw new Error('Email này đã được công ty cấp cho tài khoản nội bộ.')
+      return {
+        id: existing.id,
+        name: existing.name,
+        email: existing.email,
+        role: 'customer',
+        facility: existing.facility
+      }
+    }
+
+    const created = {
+      id: `customer-${Date.now().toString(36)}`,
+      name: normalizedName,
+      email: normalizedEmail,
+      role: 'customer' as const,
+      facility: undefined,
+      phone: normalizedPhone,
+      status: 'active',
+      joined: new Date().toISOString().slice(0, 10)
+    } as StoredUser
+
+    setState(prev => ({ ...prev, users: [created, ...prev.users] }))
+    return {
+      id: created.id,
+      name: created.name,
+      email: created.email,
+      role: 'customer',
+      facility: created.facility
+    }
+  }
+
+  const createAccount = (params: { name: string; email: string; phone?: string; role: User['role']; facility?: string; supportReason?: string }, actor: User): User => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const name = params.name.trim()
+    const email = params.email.trim().toLowerCase()
+    const phone = params.phone?.trim() || ''
+    if (!name || !email) throw new Error('Họ tên và email là bắt buộc.')
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Email không hợp lệ.')
+    if (params.role === 'customer' && !params.supportReason?.trim()) throw new Error('Tài khoản Customer hỗ trợ phải có lý do và audit log.')
+    if (params.role !== 'customer' && !['staff', 'manager', 'business', 'admin'].includes(params.role)) throw new Error('Role tài khoản không hợp lệ.')
+    const requestedFacility = params.facility?.trim() || ''
+    if ((params.role === 'staff' || params.role === 'manager') && (!requestedFacility || requestedFacility === 'All facilities')) throw new Error('Staff và Manager phải được gán một cơ sở cụ thể.')
+
+    if (state.users.some(item => item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
+    const facility = requestedFacility || (params.role === 'business' || params.role === 'admin' ? 'All facilities' : undefined)
+    const created = {
+      id: `${params.role}-${Date.now().toString(36)}`,
+      name,
+      email,
+      role: params.role,
+      facility,
+      phone,
+      status: 'active',
+      joined: new Date().toISOString().slice(0, 10),
+      mustChangePassword: true
+    } as StoredUser
+    const now = new Date().toISOString()
+    const action = params.role === 'customer' ? 'CUSTOMER_ACCOUNT_CREATED_BY_SUPPORT' : 'INTERNAL_ACCOUNT_CREATED'
+    const notes = params.role === 'customer' ? `Customer được tạo bởi bộ phận hỗ trợ. Lý do: ${params.supportReason!.trim()}` : `Tạo tài khoản ${params.role} và gán cơ sở ${facility || 'chưa gán'}.`
+    setState(prev => ({
+      ...prev,
+      users: [created, ...prev.users],
+      activities: [{
+        id: `act-${Date.now()}`,
+        action,
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: facility || 'ALL',
+        entityType: 'user',
+        entityId: created.id,
+        beforeState: null,
+        afterState: accountSnapshot(created),
+        notes,
+        timestamp: now
+      }, ...prev.activities]
+    }))
+    return toPublicUser(created)
+  }
+
+  const createInternalAccount = (params: { name: string; email: string; phone?: string; role: CompanyRole; facility?: string }, actor: User): User => {
+    return createAccount({ ...params, role: params.role }, actor)
+  }
+
+  const createCustomerSupportAccount = (params: { name: string; email: string; phone?: string; facility?: string; reason: string }, actor: User): User => {
+    return createAccount({ ...params, role: 'customer', supportReason: params.reason }, actor)
+  }
+
+  const updateUserAccount = (userId: string, updates: { name: string; email: string; phone?: string; role?: CompanyRole; facility?: string; status?: AccountStatus }, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    const name = updates.name.trim()
+    const email = updates.email.trim().toLowerCase()
+    if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error('Họ tên và email hợp lệ là bắt buộc.')
+    if (state.users.some(item => item.id !== userId && item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
+    if (target.role === 'customer' && updates.role) throw new Error('Customer không được đổi sang role nội bộ từ màn hình này.')
+    const nextRole = target.role === 'customer' ? 'customer' : (updates.role ?? target.role) as CompanyRole
+    const nextStatus = updates.status ?? target.status
+    if (target.id === canonicalAdmin.id && nextStatus !== 'active') throw new Error('Không thể tự khóa tài khoản Admin hiện tại.')
+    if (target.role === 'admin' && nextRole !== 'admin' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Không thể hạ quyền Admin cuối cùng đang hoạt động.')
+    if (target.role === 'admin' && target.status === 'active' && nextStatus !== 'active' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Phải giữ lại ít nhất một Admin đang hoạt động.')
+    const nextFacility = updates.facility?.trim() || (nextRole === 'business' || nextRole === 'admin' ? 'All facilities' : target.facility)
+    if ((nextRole === 'staff' || nextRole === 'manager') && (!nextFacility || nextFacility === 'All facilities')) throw new Error('Staff và Manager phải được gán một cơ sở cụ thể.')
+    const updated = { ...target, name, email, phone: updates.phone?.trim() || '', role: nextRole, facility: nextFacility, status: nextStatus } as StoredUser
+    const now = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === userId ? updated : item),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'INTERNAL_ACCOUNT_UPDATED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: nextFacility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: accountSnapshot(updated),
+        notes: 'Admin cập nhật thông tin tài khoản.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const setUserAccountStatus = (userId: string, status: AccountStatus, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    if (target.id === canonicalAdmin.id && status !== 'active') throw new Error('Không thể tự khóa tài khoản Admin hiện tại.')
+    if (target.role === 'admin' && target.status === 'active' && status !== 'active' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Phải giữ lại ít nhất một Admin đang hoạt động.')
+    const updated = { ...target, status } as StoredUser
+    const now = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === userId ? updated : item),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: status === 'suspended' ? 'ACCOUNT_SUSPENDED' : status === 'active' ? 'ACCOUNT_REACTIVATED' : 'ACCOUNT_DEACTIVATED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: accountSnapshot(updated),
+        notes: `Trạng thái tài khoản chuyển sang ${status}.`,
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const deleteUserAccount = (userId: string, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    if (target.id === canonicalAdmin.id) throw new Error('Không thể xóa tài khoản Admin hiện tại.')
+    if (target.role === 'admin' && target.status === 'active' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Phải giữ lại ít nhất một Admin đang hoạt động.')
+    const now = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.filter(item => item.id !== userId),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'ACCOUNT_DELETED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: null,
+        notes: 'Admin xóa tài khoản khỏi hệ thống.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const requestUserPasswordReset = (userId: string, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    const now = new Date().toISOString()
+    const updated = { ...target, passwordResetAt: now, mustChangePassword: true } as StoredUser
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === userId ? updated : item),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'PASSWORD_RESET_REQUESTED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: accountSnapshot(updated),
+        notes: 'Đã tạo yêu cầu reset mật khẩu; mật khẩu mới phải được xử lý bởi auth backend/email service.',
+        timestamp: now
+      }, ...prev.activities]
     }))
   }
 
@@ -2598,7 +2886,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       returns: prev.returns.map(r => r.id === returnId ? { ...r, status: amountDueFromCustomer > 0 ? 'payment_due' : returnCase.netRefundAmount > 0 ? 'refund_pending' : 'completed', customerConfirmed: true, customerConfirmedAt: now.toISOString(), customerDecision: 'accepted', customerDecisionNote: note?.trim(), completedAt: amountDueFromCustomer > 0 || returnCase.netRefundAmount > 0 ? undefined : now.toISOString() } : r),
       accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === rental.id ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
       maintenanceTasks: prev.maintenanceTasks.some(task => task.unitId === unit.id && task.status !== 'completed') ? prev.maintenanceTasks : [maintenanceTask, ...prev.maintenanceTasks],
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_SETTLEMENT_CONFIRMED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `${amountDueFromCustomer > 0 ? `Khách xác nhận quyết toán và cần đóng thêm $${amountDueFromCustomer} do tổng phí vượt tiền đảm bảo.` : returnCase.netRefundAmount > 0 ? `Khách hàng xác nhận quyết toán. Chờ Staff xác nhận chuyển hoàn cọc $${returnCase.netRefundAmount}.` : 'Khách hàng xác nhận quyết toán; không phát sinh khoản hoàn cọc.'} Gian kho chuyển sang chờ Manager nghiệm thu trước khi mở lại.`, timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_SETTLEMENT_CONFIRMED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `${amountDueFromCustomer > 0 ? `Khách xác nhận quyết toán và cần đóng thêm ${formatVnd(amountDueFromCustomer)} do tổng phí vượt tiền đảm bảo.` : returnCase.netRefundAmount > 0 ? `Khách hàng xác nhận quyết toán. Chờ Staff xác nhận chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}.` : 'Khách hàng xác nhận quyết toán; không phát sinh khoản hoàn cọc.'} Gian kho chuyển sang chờ Manager nghiệm thu trước khi mở lại.`, timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
     }))
   }
 
@@ -2612,13 +2900,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!rental) throw new Error('Không tìm thấy hồ sơ thuê liên quan.')
     const now = new Date()
     const paymentId = `PAY-RET-BAL-${Date.now().toString().slice(-8)}`
-    const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId: rental.id, type: 'DAMAGE_FEE', amount: amountDue, paymentMethod, transactionReference: transactionReference.trim(), status: 'PAID', paidAt: now.toISOString(), recordedBy: customer.id, description: `Thanh toán phần quyết toán trả kho vượt tiền đảm bảo: $${amountDue}` }
+    const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId: rental.id, type: 'DAMAGE_FEE', amount: amountDue, paymentMethod, transactionReference: transactionReference.trim(), status: 'PAID', paidAt: now.toISOString(), recordedBy: customer.id, description: `Thanh toán phần quyết toán trả kho vượt tiền đảm bảo: ${formatVnd(amountDue)}` }
     setState(prev => ({
       ...prev,
       payments: [payment, ...prev.payments],
       rentals: prev.rentals.map(item => item.id === rental.id ? { ...item, status: 'completed', checkedOutAt: now.toISOString(), accessRevokedAt: item.accessRevokedAt || now.toISOString(), gateCode: '' } : item),
       returns: prev.returns.map(item => item.id === returnId ? { ...item, status: 'completed', settlementPaymentId: paymentId, settlementPaidAt: now.toISOString(), completedAt: now.toISOString() } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_BALANCE_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'payment', entityId: paymentId, notes: `Khách đã thanh toán thêm $${amountDue} do quyết toán trả kho vượt tiền đảm bảo. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_BALANCE_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'payment', entityId: paymentId, notes: `Khách đã thanh toán thêm ${formatVnd(amountDue)} do quyết toán trả kho vượt tiền đảm bảo. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -2636,7 +2924,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       ...prev,
       payments: prev.payments.map(item => item.id === refundPayment.id ? { ...item, status: 'PAID', transactionReference: transactionReference.trim(), paidAt: now.toISOString(), receivedBy: staffUser.id, recordedBy: staffUser.id } : item),
       returns: prev.returns.map(item => item.id === returnId ? { ...item, status: 'completed', completedAt: now.toISOString(), refundTransaction: { id: refundPayment.id, type: 'refund', amount: item.netRefundAmount, status: 'paid', recordedAt: now.toISOString() } } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_REFUND_COMPLETED', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `Đã chuyển hoàn cọc $${returnCase.netRefundAmount}. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_REFUND_COMPLETED', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `Đã chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -2824,6 +3112,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     respondSupportTicket,
     replySupportTicket,
     createSupportTicket,
+    registerCustomer,
+    createInternalAccount,
+    createCustomerSupportAccount,
+    updateUserAccount,
+    setUserAccountStatus,
+    deleteUserAccount,
+    requestUserPasswordReset,
     resetToDemoData
   }
 
