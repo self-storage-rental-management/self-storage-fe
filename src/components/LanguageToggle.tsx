@@ -24,7 +24,6 @@ export default function LanguageToggle({ className = '', variant = 'pill' }: Lan
         }`}
         title="Chuyển sang Tiếng Việt"
       >
-        <span className="text-sm leading-none" aria-hidden="true">🇻🇳</span>
         <span>VI</span>
       </button>
 
@@ -38,7 +37,6 @@ export default function LanguageToggle({ className = '', variant = 'pill' }: Lan
         }`}
         title="Switch to English"
       >
-        <span className="text-sm leading-none" aria-hidden="true">🇬🇧</span>
         <span>EN</span>
       </button>
     </div>

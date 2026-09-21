@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { User } from './types'
 import { LanguageProvider } from './i18n/LanguageContext'
+import { StorageHubProvider } from './store/StorageHubContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
 import CustomerApp from './views/customer/CustomerApp'
 import StaffApp from './views/staff/StaffApp'
@@ -42,9 +44,14 @@ function MainContent() {
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <MainContent />
-    </LanguageProvider>
+    <ErrorBoundary>
+      <LanguageProvider>
+        <StorageHubProvider>
+          <MainContent />
+        </StorageHubProvider>
+      </LanguageProvider>
+    </ErrorBoundary>
   )
 }
+
 

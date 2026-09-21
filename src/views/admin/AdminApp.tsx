@@ -4,7 +4,9 @@ import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, Section
 import type { User, Role } from '../../types'
 import { USERS, LOGIN_HISTORY, ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog, type SettingGroup } from "../../data/demoDatabase"
 import { useLanguage } from '../../i18n/LanguageContext'
+import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
+import { useMemo } from 'react'
 
 const PERMISSIONS: Partial<Record<Role, Record<string, boolean>>> = {}
 const permissionLabels: Array<{ key: string; label: string }> = []
@@ -304,11 +306,37 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
       {/* ── ACTIVITY LOGS ─────────────────────────────────────── */}
       {page === 'activity' && (() => {
-        const securityAlerts = logsList.filter(l => l.category === 'security').length
-        const errorCount = logsList.filter(l => l.severity === 'error').length
-        const adminActions = logsList.filter(l => l.role === 'admin' || l.category === 'admin').length
+        const { activities } = useStorageHub()
+        const combinedLogs: AuditActivityLog[] = [
+          ...activities.map(act => ({
+            id: act.id,
+            user: act.actorName,
+            actor: act.actorName,
+            role: act.actorRole,
+            action: act.notes || act.action,
+            target: `${act.entityType.toUpperCase()} · ${act.entityId}`,
+            time: 'Gần đây',
+            timestamp: act.timestamp,
+            type: 'info' as const,
+            severity: 'info' as const,
+            category: (act.entityType === 'rental' || act.entityType === 'hold' ? 'rental' : act.entityType === 'payment' ? 'billing' : 'security') as any,
+            ip: '192.168.1.25',
+            device: 'StorageHub Client',
+            details: {
+              actionType: act.action,
+              before: act.beforeState,
+              after: act.afterState,
+              evidence: act.evidence
+            }
+          })),
+          ...logsList
+        ]
 
-        const filteredLogs = logsList.filter(l => {
+        const securityAlerts = combinedLogs.filter(l => l.category === 'security').length
+        const errorCount = combinedLogs.filter(l => l.severity === 'error').length
+        const adminActions = combinedLogs.filter(l => l.role === 'admin' || l.category === 'admin').length
+
+        const filteredLogs = combinedLogs.filter(l => {
           const matchTab = logTab === 'All' || l.category === logTab.toLowerCase()
           const query = logSearch.toLowerCase().trim()
           const matchSearch =

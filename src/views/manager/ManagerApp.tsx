@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts'
 import Layout, { getInitialPage, Icon } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, ProgressBar, Avatar, Input, Tabs } from '../../components/ui'
 import type { User } from '../../types'
-import { OCCUPANCY_DATA, REVENUE_DATA, UNIT_TYPE_DATA, UNITS, RENTALS, STAFF_LIST, OVERDUE, UTILIZATION, SUPPORT_METRICS } from "../../data/demoDatabase"
+import { OCCUPANCY_DATA, REVENUE_DATA, UNIT_TYPE_DATA, UNITS, RENTALS, STAFF_LIST, OVERDUE, UTILIZATION, SUPPORT_METRICS, POLICIES } from "../../data/demoDatabase"
 import { useLanguage } from '../../i18n/LanguageContext'
+import { useStorageHub, UNIT_TYPES, checkDateOverlap } from '../../store/StorageHubContext'
 
 import ProfileView from '../ProfileView'
 import type { RentalRecord, OverdueAccount } from '../../data/demoDatabase'
@@ -16,7 +17,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'dashboard', label: lang === 'vi' ? 'Bảng điều khiển' : 'Dashboard', icon: Icon.home, group: lang === 'vi' ? 'Tổng quan' : 'Overview' },
     { id: 'reports', label: lang === 'vi' ? 'Báo cáo cơ sở' : 'Facility Reports', icon: Icon.chart, group: lang === 'vi' ? 'Tổng quan' : 'Overview' },
     { id: 'units', label: lang === 'vi' ? 'Quản lý gian kho' : 'Unit Management', icon: Icon.box, group: lang === 'vi' ? 'Vận hành cơ sở' : 'Facility Operations' },
+    { id: 'maintenance', label: lang === 'vi' ? 'Bảo trì & Nghiệm thu' : 'Maintenance Tasks', icon: Icon.clipboard, group: lang === 'vi' ? 'Vận hành cơ sở' : 'Facility Operations' },
     { id: 'staff', label: lang === 'vi' ? 'Phân công nhân viên' : 'Staff Assignment', icon: Icon.users, group: lang === 'vi' ? 'Vận hành cơ sở' : 'Facility Operations' },
+    { id: 'policies', label: lang === 'vi' ? 'Chính sách cơ sở' : 'Facility Policies', icon: Icon.policy, group: lang === 'vi' ? 'Vận hành cơ sở' : 'Facility Operations' },
     { id: 'rentals', label: lang === 'vi' ? 'Hợp đồng & Cước' : 'Rentals & Payments', icon: Icon.dollar, group: lang === 'vi' ? 'Hợp đồng & Tài chính' : 'Rentals & Finance' },
     { id: 'overdue', label: lang === 'vi' ? 'Quản lý nợ quá hạn' : 'Overdue Management', icon: Icon.alert, group: lang === 'vi' ? 'Hợp đồng & Tài chính' : 'Rentals & Finance' },
   ]
@@ -63,6 +66,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const [overdueSearch, setOverdueSearch] = useState('')
   const [overdueTab, setOverdueTab] = useState('All')
   const [reminderTemplate, setReminderTemplate] = useState('Friendly Reminder')
+  const [reportPeriod, setReportPeriod] = useState<'month' | 'quarter' | 'year'>('month')
 
   // Toast
   const [toast, setToast] = useState<string | null>(null)
@@ -71,16 +75,34 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     setTimeout(() => setToast(null), 3000)
   }
 
-  const filteredUnits = UNITS.filter(u => {
+  const {
+    units: storeUnits,
+    rentals: storeRentals,
+    holds: storeHolds,
+    contracts: storeContracts,
+    renewals: storeRenewals,
+    maintenanceTasks: storeMaintenanceTasks,
+    releaseMaintenanceUnit,
+    assignUnitToHold,
+    approveRenewal,
+    rejectRenewal,
+    completeMaintenanceTask
+  } = useStorageHub()
+  const [selectedHoldToAssign, setSelectedHoldToAssign] = useState<string | null>(null)
+  const [targetUnitForHold, setTargetUnitForHold] = useState<string>('')
+
+  const facilityUnits = storeUnits.filter(u => !user.facility || u.facilityName === user.facility || user.facility === 'All facilities')
+  const occupiedCount = facilityUnits.filter(u => u.status === 'occupied').length
+  const totalUnits = facilityUnits.length
+
+  const filteredUnits = facilityUnits.filter(u => {
     if (unitTab === 'All' || unitTab === 'Tất cả') return true
     if (unitTab === 'Available' || unitTab === 'Còn trống') return u.status === 'available'
     if (unitTab === 'Occupied' || unitTab === 'Đã thuê') return u.status === 'occupied'
     if (unitTab === 'Maintenance' || unitTab === 'Bảo trì') return u.status === 'maintenance'
-    if (unitTab === 'Reserved' || unitTab === 'Đã đặt') return u.status === 'reserved'
+    if (unitTab === 'Reserved' || unitTab === 'Đã đặt') return u.status === 'reserved' || u.status === 'held' || (u.reservedPeriods && u.reservedPeriods.length > 0)
     return u.status === unitTab.toLowerCase()
   })
-  const occupiedCount = UNITS.filter(u => u.status === 'occupied').length
-  const totalUnits = UNITS.length
 
   return (
     <Layout
@@ -95,6 +117,13 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
             subtitle={user.facility ?? (lang === 'vi' ? 'Chưa chỉ định cơ sở' : 'No facility assigned')}
             action={<Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đang kết xuất báo cáo cơ sở...' : 'Exporting facility report...')}>{lang === 'vi' ? 'Xuất báo cáo' : 'Export Report'}</Button>}
           />
+          <Card className="p-5">
+            <h3 className="font-semibold text-slate-800 mb-3">{lang === 'vi' ? 'Hợp đồng giấy đã ký' : 'Signed paper contracts'}</h3>
+            {storeContracts.filter(c => storeHolds.some(h => h.id === c.reservationId && (!user.facility || h.facilityName === user.facility || user.facility === 'All facilities'))).map(c => <p key={c.id} className="text-sm py-1">
+              {c.contractNumber} · {c.signedAt} · <a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="underline text-amber-800">{lang === 'vi' ? 'Xem bản scan' : 'View scan'}</a>
+            </p>)}
+            {!storeContracts.length && <p className="text-sm text-stone-500">{lang === 'vi' ? 'Chưa có hợp đồng đã ký.' : 'No signed contracts yet.'}</p>}
+          </Card>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard title={lang === 'vi' ? 'Tổng gian kho' : 'Total Units'} value={totalUnits} icon={Icon.box} iconBg="bg-blue-50" />
@@ -177,24 +206,424 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
         </div>
       )}
 
+      {/* ── FACILITY REPORTS ───────────────────────────────────── */}
+      {page === 'reports' && (() => {
+        const heldCount = facilityUnits.filter(u => u.status === 'held').length
+        const maintenanceCount = facilityUnits.filter(u => u.status === 'maintenance').length
+        const availableCount = facilityUnits.filter(u => u.status === 'available').length
+        const actualRevenue = storeRentals
+          .filter(r => (!user.facility || r.facilityName === user.facility || user.facility === 'All facilities') && r.status === 'active')
+          .reduce((sum, r) => sum + r.monthlyRate, 0)
+        const occupancyRate = totalUnits ? Math.round((occupiedCount / totalUnits) * 100) : 0
+
+        const monthlyFinancials = [
+          { month: lang === 'vi' ? 'Thg 4' : 'Apr', revenue: 11200, target: 12000, cost: 3200 },
+          { month: lang === 'vi' ? 'Thg 5' : 'May', revenue: 12400, target: 12500, cost: 3400 },
+          { month: lang === 'vi' ? 'Thg 6' : 'Jun', revenue: 13100, target: 13000, cost: 3300 },
+          { month: lang === 'vi' ? 'Thg 7' : 'Jul', revenue: 13800, target: 13500, cost: 3500 },
+          { month: lang === 'vi' ? 'Thg 8' : 'Aug', revenue: 14100, target: 14000, cost: 3600 },
+          { month: lang === 'vi' ? 'Thg 9' : 'Sep', revenue: actualRevenue || 14500, target: 14500, cost: 3650 },
+        ]
+
+        const turnoverData = [
+          { month: lang === 'vi' ? 'Thg 4' : 'Apr', moveIn: 12, moveOut: 4 },
+          { month: lang === 'vi' ? 'Thg 5' : 'May', moveIn: 15, moveOut: 6 },
+          { month: lang === 'vi' ? 'Thg 6' : 'Jun', moveIn: 14, moveOut: 5 },
+          { month: lang === 'vi' ? 'Thg 7' : 'Jul', moveIn: 18, moveOut: 7 },
+          { month: lang === 'vi' ? 'Thg 8' : 'Aug', moveIn: 16, moveOut: 6 },
+          { month: lang === 'vi' ? 'Thg 9' : 'Sep', moveIn: 19, moveOut: 8 },
+        ]
+
+        // Group by zone/floor
+        const zones = Array.from(new Set(facilityUnits.map(u => `Tầng ${u.floor} · ${u.zone}`))).map(zoneLabel => {
+          const zUnits = facilityUnits.filter(u => `Tầng ${u.floor} · ${u.zone}` === zoneLabel)
+          const zOcc = zUnits.filter(u => u.status === 'occupied').length
+          const zHeld = zUnits.filter(u => u.status === 'held').length
+          const zAvail = zUnits.filter(u => u.status === 'available').length
+          const zMaint = zUnits.filter(u => u.status === 'maintenance').length
+          const zRev = zUnits.filter(u => u.status === 'occupied').reduce((sum, u) => sum + u.price, 0)
+          return {
+            zone: zoneLabel,
+            total: zUnits.length,
+            occupied: zOcc,
+            held: zHeld,
+            available: zAvail,
+            maintenance: zMaint,
+            rate: zUnits.length ? Math.round((zOcc / zUnits.length) * 100) : 0,
+            revenue: zRev
+          }
+        })
+
+        return (
+          <div className="fade-in space-y-6">
+            <SectionHeader
+              eyebrow={lang === 'vi' ? 'BÁO CÁO CƠ SỞ · QUẢN LÝ VẬN HÀNH' : 'FACILITY REPORTS · OPERATIONAL ANALYTICS'}
+              title={lang === 'vi' ? 'Báo Cáo Hiệu Suất & Vận Hành Cơ Sở' : 'Facility Performance Reports'}
+              subtitle={`${user.facility ?? 'Downtown Storage'} · ${lang === 'vi' ? 'Số liệu lấp đầy, dòng tiền, tỷ lệ quay vòng và chỉ số dịch vụ' : 'Occupancy, cashflow, unit turnover and service benchmarks'}`}
+              action={
+                <div className="flex gap-2">
+                  <Select value={reportPeriod} onChange={e => setReportPeriod(e.target.value as any)} className="text-xs">
+                    <option value="month">{lang === 'vi' ? 'Tháng này (Thg 9/2026)' : 'Current Month'}</option>
+                    <option value="quarter">{lang === 'vi' ? 'Quý 3/2026' : 'Q3 2026'}</option>
+                    <option value="year">{lang === 'vi' ? 'Cả năm 2026' : 'Full Year 2026'}</option>
+                  </Select>
+                  <Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đã xuất báo cáo PDF & bảng biểu Excel!' : 'Report exported to PDF & Excel!')}>
+                     {lang === 'vi' ? 'Xuất báo cáo' : 'Export'}
+                  </Button>
+                </div>
+              }
+            />
+
+            {/* Top Stat Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                title={lang === 'vi' ? 'Tỷ lệ lấp đầy thực tế' : 'Occupancy Rate'}
+                value={`${occupancyRate}%`}
+                delta={`${occupiedCount}/${totalUnits} ${lang === 'vi' ? 'gian kho đang thuê' : 'units occupied'}`}
+                deltaPositive={occupancyRate >= 75}
+                icon={Icon.chart}
+                iconBg="bg-blue-50 text-blue-700"
+              />
+              <StatCard
+                title={lang === 'vi' ? 'Doanh thu tháng (MTD)' : 'Monthly Revenue'}
+                value={`$${(actualRevenue || 14280).toLocaleString()}`}
+                delta={`+$650 ${lang === 'vi' ? 'so với tháng trước' : 'vs last month'}`}
+                deltaPositive
+                icon={Icon.dollar}
+                iconBg="bg-emerald-50 text-emerald-700"
+              />
+              <StatCard
+                title={lang === 'vi' ? 'Kho đang giữ & chờ giao' : 'Held / Pending'}
+                value={heldCount}
+                delta={lang === 'vi' ? 'Chờ hoàn tất check-in' : 'Awaiting handover'}
+                deltaPositive={heldCount > 0}
+                icon={Icon.clock}
+                iconBg="bg-amber-50 text-amber-800"
+              />
+              <StatCard
+                title={lang === 'vi' ? 'Kho sẵn sàng cho thuê' : 'Available for Rent'}
+                value={availableCount}
+                delta={`${maintenanceCount} ${lang === 'vi' ? 'kho đang bảo trì' : 'under maintenance'}`}
+                deltaPositive={availableCount > 0}
+                icon={Icon.box}
+                iconBg="bg-purple-50 text-purple-700"
+              />
+            </div>
+
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <Card className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">{lang === 'vi' ? 'Doanh Thu vs Mục Tiêu Ngân Sách' : 'Revenue vs Budget Target'}</h3>
+                    <p className="text-xs text-slate-500">{lang === 'vi' ? 'So sánh dòng tiền thực tế và mục tiêu' : 'Actual revenue vs targeted goal'}</p>
+                  </div>
+                  <Badge variant="success">{lang === 'vi' ? 'Đạt 102% mục tiêu' : '102% of goal'}</Badge>
+                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={monthlyFinancials} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorTarget" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip formatter={((v: number) => [`$${v.toLocaleString()}`, '']) as any} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
+                    <Area type="monotone" dataKey="revenue" name={lang === 'vi' ? 'Thực tế' : 'Actual'} stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
+                    <Area type="monotone" dataKey="target" name={lang === 'vi' ? 'Mục tiêu' : 'Target'} stroke="#10b981" strokeWidth={2} strokeDasharray="4 4" fillOpacity={1} fill="url(#colorTarget)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Card>
+
+              <Card className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">{lang === 'vi' ? 'Lưu Chuyển Nhận Kho vs Trả Kho' : 'Move-in vs Move-out Velocity'}</h3>
+                    <p className="text-xs text-slate-500">{lang === 'vi' ? 'Tỷ lệ xoay vòng khách thuê theo tháng' : 'Monthly tenant turnover rate'}</p>
+                  </div>
+                  <Badge variant="info">{lang === 'vi' ? 'Tăng trưởng ròng dương' : 'Net positive'}</Badge>
+                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={turnoverData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
+                    <Bar dataKey="moveIn" name={lang === 'vi' ? 'Check-in mới' : 'Move-in'} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="moveOut" name={lang === 'vi' ? 'Trả kho' : 'Move-out'} fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            </div>
+
+            {/* Floor / Zone Breakdown Table */}
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">{lang === 'vi' ? 'Hiệu Suất Theo Tầng & Khu Vực' : 'Floor & Zone Performance Breakdown'}</h3>
+                  <p className="text-xs text-slate-500">{lang === 'vi' ? 'Chi tiết lấp đầy, số kho bảo trì và doanh thu đóng góp theo phân khu' : 'Granular breakdown by building section and floor'}</p>
+                </div>
+              </div>
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>{lang === 'vi' ? 'Khu Vực / Tầng' : 'Zone & Floor'}</Th>
+                    <Th>{lang === 'vi' ? 'Tổng Kho' : 'Total Units'}</Th>
+                    <Th>{lang === 'vi' ? 'Đang Thuê' : 'Occupied'}</Th>
+                    <Th>{lang === 'vi' ? 'Đang Giữ' : 'Held'}</Th>
+                    <Th>{lang === 'vi' ? 'Còn Trống' : 'Available'}</Th>
+                    <Th>{lang === 'vi' ? 'Bảo Trì' : 'Maintenance'}</Th>
+                    <Th>{lang === 'vi' ? 'Tỷ Lệ Lấp Đầy' : 'Occupancy'}</Th>
+                    <Th className="text-right">{lang === 'vi' ? 'Doanh Thu Tháng' : 'Revenue'}</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {zones.map(z => (
+                    <Tr key={z.zone}>
+                      <Td><span className="font-bold text-sm text-stone-900">{z.zone}</span></Td>
+                      <Td><span className="font-semibold">{z.total}</span></Td>
+                      <Td><span className="text-emerald-700 font-semibold">{z.occupied}</span></Td>
+                      <Td><span className="text-amber-700 font-semibold">{z.held}</span></Td>
+                      <Td><span className="text-blue-700 font-semibold">{z.available}</span></Td>
+                      <Td>
+                        {z.maintenance > 0 ? (
+                          <Badge variant="error">{z.maintenance} {lang === 'vi' ? 'kho' : 'units'}</Badge>
+                        ) : (
+                          <span className="text-slate-400">0</span>
+                        )}
+                      </Td>
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold w-9">{z.rate}%</span>
+                          <div className="w-20 bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-blue-600 h-full rounded-full" style={{ width: `${z.rate}%` }} />
+                          </div>
+                        </div>
+                      </Td>
+                      <Td className="text-right font-bold font-mono text-stone-900">${z.revenue.toLocaleString()}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Card>
+
+            {/* Operational Quality & Incident Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="rounded-xl border border-stone-200 bg-white p-4">
+                <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Thời gian Check-in trung bình' : 'Avg. Check-in Time'}</p>
+                <p className="text-2xl font-bold text-stone-900 mt-1">14.2 <span className="text-sm font-normal text-stone-500">{lang === 'vi' ? 'phút' : 'min'}</span></p>
+                <p className="text-[11px] text-emerald-600 mt-1 font-medium"> Nhanh hơn 18% so với KPI chuẩn</p>
+              </div>
+              <div className="rounded-xl border border-stone-200 bg-white p-4">
+                <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Tỷ lệ trả kho đạt chuẩn (Không hư hại)' : 'Clean Return Pass Rate'}</p>
+                <p className="text-2xl font-bold text-stone-900 mt-1">94.6%</p>
+                <p className="text-[11px] text-stone-500 mt-1">Hoàn cọc 100% trong vòng 24 giờ</p>
+              </div>
+              <div className="rounded-xl border border-stone-200 bg-white p-4">
+                <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Thời gian xử lý bảo trì/làm sạch kho' : 'Avg. Maintenance Turnaround'}</p>
+                <p className="text-2xl font-bold text-stone-900 mt-1">1.2 <span className="text-sm font-normal text-stone-500">{lang === 'vi' ? 'ngày' : 'days'}</span></p>
+                <p className="text-[11px] text-emerald-600 mt-1 font-medium"> Kho nhanh chóng sẵn sàng cho thuê lại</p>
+              </div>
+              <div className="rounded-xl border border-stone-200 bg-white p-4">
+                <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Điểm hài lòng dịch vụ khách hàng' : 'Customer Satisfaction (CSAT)'}</p>
+                <p className="text-2xl font-bold text-amber-600 mt-1">4.8 <span className="text-sm font-normal text-stone-400">/ 5.0 </span></p>
+                <p className="text-[11px] text-stone-500 mt-1">Dựa trên 142 lượt phản hồi khảo sát</p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── UNIT MANAGEMENT ───────────────────────────────────── */}
-      {page === 'units' && (
+      {(page === 'units' || page === 'browse-units') && (
         <div className="fade-in">
           <SectionHeader
             title={lang === 'vi' ? 'Quản Lý Gian Kho' : 'Unit Management'}
             subtitle={lang === 'vi' ? `Tổng cộng ${totalUnits} gian kho · ${occupiedCount} đang có khách thuê` : `${totalUnits} units total · ${occupiedCount} occupied`}
             action={<Button variant="primary" size="sm" onClick={() => setEditModal(true)}>{Icon.plus} {lang === 'vi' ? 'Thêm Gian Kho' : 'Add Unit'}</Button>}
           />
+
+          {/* 1. Unit Type DIM Pricing Breakdown (Standard Business Rule) */}
+          <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 pb-3">
+              <div>
+                <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
+                  <span></span>
+                  <span>{lang === 'vi' ? 'Quy Chuẩn Định Giá Thể Tích DIM Theo Loại Kho (Unit Type DIM Pricing)' : 'Unit Type DIM Pricing Configuration'}</span>
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  {lang === 'vi'
+                    ? 'Giá thuê cơ sở hàng tháng được cố định theo thể tích DIM (Dài × Rộng × Cao × Đơn giá/m³), tính 1 lần khi tạo loại kho.'
+                    : 'Base monthly rental price is determined once per unit type by multiplying DIM volume by price per cubic meter.'}
+                </p>
+              </div>
+              <Badge variant="info">
+                {lang === 'vi' ? 'Quy tắc định giá chuẩn SWP391' : 'Fixed UnitType DIM Rule'}
+              </Badge>
+            </div>
+
+            {/* Business Rule Formula Callout */}
+            <div className="rounded-lg bg-stone-50 border border-stone-200 p-3 text-xs text-stone-700 space-y-1">
+              <p className="font-semibold text-stone-900 font-mono">
+                DIM = Length × Width × Height (m) &nbsp;|&nbsp; Base Monthly Price = DIM × Price Per Cubic Meter
+              </p>
+              <p className="text-[11px] text-stone-500 leading-relaxed">
+                {lang === 'vi'
+                  ? 'Khách hàng chỉ nhìn thấy loại gian kho và giá thuê niêm yết cố định (ví dụ: Medium 15m³: $150/tháng). Khai báo hàng hóa chỉ sử dụng trong kiểm tra tương thích vật lý (DIM & Trọng tải sàn), không làm thay đổi giá thuê cơ sở.'
+                  : 'Customers only see the fixed package price. Cargo declaration is strictly evaluated for physical fit, not dynamic repricing.'}
+              </p>
+            </div>
+
+            {/* Unit Types Table */}
+            <div className="overflow-x-auto">
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>{lang === 'vi' ? 'Loại Gian Kho' : 'Unit Type'}</Th>
+                    <Th>{lang === 'vi' ? 'Kích Thước Chuẩn (D × R × C)' : 'Dimensions (L × W × H)'}</Th>
+                    <Th>{lang === 'vi' ? 'Thể Tích DIM (m³)' : 'DIM Volume (m³)'}</Th>
+                    <Th>{lang === 'vi' ? 'Đơn Giá Cơ Sở ($/m³)' : 'Price Per m³'}</Th>
+                    <Th className="text-right">{lang === 'vi' ? 'Giá Niêm Yết Cố Định / Tháng' : 'Base Monthly Price'}</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {UNIT_TYPES.map(ut => (
+                    <Tr key={ut.id}>
+                      <Td className="font-bold text-stone-900">
+                        {ut.name}
+                        <span className="block text-[11px] font-normal text-stone-500">ID: {ut.id}</span>
+                      </Td>
+                      <Td className="font-mono text-xs">{ut.length}m × {ut.width}m × {ut.height}m</Td>
+                      <Td className="font-bold text-stone-800">{ut.volumeM3} m³</Td>
+                      <Td className="font-mono">${ut.pricePerM3}/m³</Td>
+                      <Td className="text-right font-mono font-bold text-emerald-700 text-sm">
+                        ${ut.monthlyPrice} <span className="text-[11px] font-normal text-stone-500">/ {lang === 'vi' ? 'tháng' : 'mo'}</span>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </div>
+          </div>
+
+          {/* 2. Unassigned Units Queue (Holds paid & confirmed awaiting specific unit assignment) */}
+          {(() => {
+            const unassignedHolds = storeHolds.filter(
+              h => (h.status === 'DEPOSIT_PAID' || h.status === 'deposit_paid') && !h.assignedUnitId &&
+                   (!user.facility || h.facilityName === user.facility || user.facility === 'All facilities')
+            )
+            if (!unassignedHolds.length) return null
+
+            return (
+              <div className="mb-6 rounded-xl border-2 border-amber-400 bg-amber-50/70 p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-800 font-bold text-sm"> {lang === 'vi' ? 'Hàng Đợi Phân Bổ Gian Kho Cụ Thể (Unassigned Holds)' : 'Pending Unit Assignment Queue'}</span>
+                    <Badge variant="warning">{unassignedHolds.length} {lang === 'vi' ? 'đơn cần xếp kho' : 'pending'}</Badge>
+                  </div>
+                  <p className="text-[11px] text-amber-900">
+                    {lang === 'vi'
+                      ? 'Kiểm tra xung đột ngày: newStart < existingEnd AND newEnd > existingStart. Chỉ gán khi không có overlap.'
+                      : 'Date conflict rule: newStart < existingEnd AND newEnd > existingStart.'}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {unassignedHolds.map(hold => {
+                    // Filter suitable units at facility matching type, not in maintenance, and no date overlap
+                    const suitableAvailableUnits = facilityUnits.filter(u => {
+                      if (u.facilityId !== hold.facilityId) return false
+                      if (!u.type.toLowerCase().includes((hold.unitTypeName || '').split(' ')[0].toLowerCase())) return false
+                      if (u.status === 'maintenance') return false
+
+                      const hasReservationOverlap = storeHolds.some(
+                        h => h.id !== hold.id && h.assignedUnitId === u.id &&
+                             ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
+                             checkDateOverlap(hold.startDate, hold.endDate, h.startDate, h.endDate)
+                      )
+                      const hasRentalOverlap = storeRentals.some(
+                        r => r.unitId === u.id && r.status === 'active' &&
+                             checkDateOverlap(hold.startDate, hold.endDate, r.startDate, r.endDate)
+                      )
+                      return !hasReservationOverlap && !hasRentalOverlap
+                    })
+
+                    return (
+                      <div key={hold.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white p-3 text-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-amber-800">{hold.id}</span>
+                            <span className="font-semibold text-stone-900">{hold.customerName}</span>
+                            <Badge variant="purple">{hold.unitTypeName || 'Gian kho'}</Badge>
+                          </div>
+                          <p className="text-stone-500 text-[11px] mt-0.5">
+                            Cơ sở: <b>{hold.facilityName}</b> · Khoảng thuê: <b className="text-stone-800">{hold.startDate} → {hold.endDate}</b> ({hold.rentalMonths} tháng) · Đã cọc 20%: <b className="text-emerald-700">${hold.reservationDepositAmount ?? hold.payment.amount}</b>
+                          </p>
+                          <p className="text-amber-800 text-[11px]">
+                            {lang === 'vi' ? `Kho khả dụng không xung đột ngày: ${suitableAvailableUnits.length} gian kho` : `${suitableAvailableUnits.length} conflict-free units available`}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <select
+                            className="rounded border border-stone-300 bg-stone-50 px-2 py-1 text-xs"
+                            value={selectedHoldToAssign === hold.id ? targetUnitForHold : ''}
+                            onChange={e => {
+                              setSelectedHoldToAssign(hold.id)
+                              setTargetUnitForHold(e.target.value)
+                            }}
+                          >
+                            <option value="">-- {lang === 'vi' ? 'Chọn gian kho không xung đột' : 'Select conflict-free unit'} --</option>
+                            {suitableAvailableUnits.map(u => (
+                              <option key={u.id} value={u.id}>
+                                {u.code} ({u.type} · {u.areaM2} m² · Tầng {u.floor})
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            size="sm"
+                            disabled={selectedHoldToAssign !== hold.id || !targetUnitForHold}
+                            onClick={() => {
+                              if (selectedHoldToAssign && targetUnitForHold) {
+                                try {
+                                  assignUnitToHold(selectedHoldToAssign, targetUnitForHold, user)
+                                  showToast(lang === 'vi' ? `Đã phân kho ${targetUnitForHold} cho đơn ${selectedHoldToAssign}!` : `Unit assigned!`)
+                                  setSelectedHoldToAssign(null)
+                                  setTargetUnitForHold('')
+                                } catch (err: any) {
+                                  showToast(err?.message || 'Error assigning unit')
+                                }
+                              }
+                            }}
+                          >
+                             {lang === 'vi' ? 'Phân Bổ' : 'Assign'}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
           <div className="mb-4">
             <Tabs
-              tabs={lang === 'vi' ? ['Tất cả', 'Còn trống', 'Đã thuê', 'Bảo trì', 'Đã đặt'] : ['All', 'Available', 'Occupied', 'Maintenance', 'Reserved']}
+              tabs={lang === 'vi' ? ['Tất cả', 'Còn trống', 'Đã thuê', 'Bảo trì', 'Đã đặt giữ'] : ['All', 'Available', 'Occupied', 'Maintenance', 'Reserved']}
               active={unitTab === 'All' && lang === 'vi' ? 'Tất cả' : unitTab}
               onChange={val => {
                 if (val === 'Tất cả') setUnitTab('All')
                 else if (val === 'Còn trống') setUnitTab('Available')
                 else if (val === 'Đã thuê') setUnitTab('Occupied')
                 else if (val === 'Bảo trì') setUnitTab('Maintenance')
-                else if (val === 'Đã đặt') setUnitTab('Reserved')
+                else if (val === 'Đã đặt giữ') setUnitTab('Reserved')
                 else setUnitTab(val)
               }}
             />
@@ -204,39 +633,180 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
               <Thead>
                 <tr>
                   <Th>{lang === 'vi' ? 'Gian Kho' : 'Unit'}</Th>
-                  <Th>{lang === 'vi' ? 'Kích Thước' : 'Size'}</Th>
-                  <Th>{lang === 'vi' ? 'Tầng' : 'Floor'}</Th>
-                  <Th>{lang === 'vi' ? 'Điều Hòa' : 'Climate'}</Th>
-                  <Th>{lang === 'vi' ? 'Khách Thuê' : 'Tenant'}</Th>
-                  <Th>{lang === 'vi' ? 'Giá/tháng' : 'Price/mo'}</Th>
-                  <Th>{lang === 'vi' ? 'Kỳ Thu Tới' : 'Next Due'}</Th>
-                  <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
+                  <Th>{lang === 'vi' ? 'Kích Thước & Diện Tích' : 'Size & Dimensions'}</Th>
+                  <Th>{lang === 'vi' ? 'Tầng / Khu' : 'Floor / Zone'}</Th>
+                  <Th>{lang === 'vi' ? 'Giá / Tháng' : 'Price / Mo'}</Th>
+                  <Th>{lang === 'vi' ? 'Trạng Thái & Lịch Thuê / Đặt Kho' : 'Status & Reservation Schedule'}</Th>
+                  <Th>{lang === 'vi' ? 'Khách Hàng Hiện Tại' : 'Current Tenant / Booker'}</Th>
                   <Th className="text-right">{lang === 'vi' ? 'Thao Tác' : 'Action'}</Th>
                 </tr>
               </Thead>
               <Tbody>
-                {filteredUnits.map(u => (
-                  <Tr key={u.id}>
-                    <Td><span className="font-mono font-semibold text-slate-800">{u.id}</span></Td>
-                    <Td>{u.size} ft</Td>
-                    <Td>{lang === 'vi' ? `Tầng ${u.floor}` : `Floor ${u.floor}`}</Td>
-                    <Td>{u.climate ? <Badge variant="info">{lang === 'vi' ? 'Có' : 'Yes'}</Badge> : <span className="text-slate-400 text-xs">{lang === 'vi' ? 'Không' : 'No'}</span>}</Td>
-                    <Td>{u.tenant ?? <span className="text-slate-400">—</span>}</Td>
-                    <Td className="font-semibold">${u.price}</Td>
-                    <Td>{u.nextDue ?? <span className="text-slate-400">—</span>}</Td>
-                    <Td>{sb(u.status)}</Td>
-                    <Td className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => setEditModal(true)}>{lang === 'vi' ? 'Sửa' : 'Edit'}</Button>
-                    </Td>
-                  </Tr>
-                ))}
+                {filteredUnits.map(u => {
+                  const activeRental = storeRentals.find(r => r.unitId === u.id && r.status === 'active')
+                  const activeHold = storeHolds.find(h => h.assignedUnitId === u.id && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status))
+                  const periods = u.reservedPeriods || []
+
+                  return (
+                    <Tr key={u.id}>
+                      <Td>
+                        <span className="font-mono font-bold text-base text-stone-900">{u.code}</span>
+                      </Td>
+                      <Td>
+                        <p className="font-semibold text-sm text-stone-900">{u.type} · {u.areaM2} m²</p>
+                        <p className="font-mono text-xs text-stone-500">{u.dimensions.lengthM}m × {u.dimensions.widthM}m × {u.dimensions.heightM}m ({u.volumeM3} m³)</p>
+                      </Td>
+                      <Td>
+                        <p className="text-xs font-medium text-stone-700">{lang === 'vi' ? `Tầng ${u.floor}` : `Floor ${u.floor}`}</p>
+                        <p className="text-[11px] text-stone-400">{u.zone} · {u.climate ? 'Có điều hòa' : 'Thông gió'}</p>
+                      </Td>
+                      <Td className="font-mono font-bold text-stone-900">${u.price}</Td>
+                      <Td>
+                        {/* Canonical Time-bound status as requested by user */}
+                        {u.status === 'maintenance' ? (
+                          <Badge variant="error">{lang === 'vi' ? 'Đang bảo trì' : 'Maintenance'}</Badge>
+                        ) : activeRental ? (
+                          <div>
+                            <Badge variant="info">{lang === 'vi' ? 'Đang thuê (OCCUPIED)' : 'Occupied'}</Badge>
+                            <div className="mt-1 text-[11px] text-stone-700 bg-blue-50/70 p-1.5 rounded border border-blue-100">
+                              <p className="font-semibold text-blue-900">📅 {activeRental.startDate} → {activeRental.endDate}</p>
+                              <p className="text-stone-500 mt-0.5">{lang === 'vi' ? 'Hạn kế tiếp:' : 'Next due:'} {activeRental.nextDue}</p>
+                            </div>
+                          </div>
+                        ) : periods.length > 0 || u.status === 'reserved' || u.status === 'held' ? (
+                          <div>
+                            <Badge variant="purple">{lang === 'vi' ? 'Đã đặt giữ (RESERVED)' : 'Reserved'}</Badge>
+                            {periods.map((p, idx) => (
+                              <div key={idx} className="mt-1 text-[11px] text-stone-700 bg-purple-50 p-1.5 rounded border border-purple-100">
+                                <p className="font-semibold text-purple-900">📅 {p.startDate} → {p.endDate}</p>
+                                <p className="text-stone-600">👤 {p.customerName}</p>
+                                <p className="text-stone-500">{lang === 'vi' ? 'Trống tiếp theo:' : 'Next available:'} <b>{u.nextAvailableDate || p.endDate}</b></p>
+                              </div>
+                            ))}
+                            {!periods.length && activeHold && (
+                              <div className="mt-1 text-[11px] text-stone-700 bg-purple-50 p-1.5 rounded border border-purple-100">
+                                <p className="font-semibold text-purple-900">📅 {activeHold.startDate} → {activeHold.endDate}</p>
+                                <p className="text-stone-600">👤 {activeHold.customerName}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div>
+                            <Badge variant="success">{lang === 'vi' ? 'Còn trống (AVAILABLE)' : 'Available'}</Badge>
+                            <p className="text-[11px] text-stone-400 mt-0.5">{lang === 'vi' ? 'Sẵn sàng nhận khách' : 'Ready to assign'}</p>
+                          </div>
+                        )}
+                      </Td>
+                      <Td>
+                        {activeRental ? (
+                          <div>
+                            <p className="text-xs font-semibold text-stone-900">{activeRental.customerName}</p>
+                            <p className="text-[11px] text-stone-400">{activeRental.customerPhone}</p>
+                          </div>
+                        ) : activeHold ? (
+                          <div>
+                            <p className="text-xs font-semibold text-amber-900">{activeHold.customerName} <span className="text-[10px] font-normal text-amber-700">(Đã cọc 20%)</span></p>
+                            <p className="text-[11px] text-stone-400">{activeHold.customerPhone}</p>
+                          </div>
+                        ) : (
+                          <span className="text-stone-400 text-xs">—</span>
+                        )}
+                      </Td>
+                      <Td className="text-right">
+                        {u.status === 'maintenance' ? (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              releaseMaintenanceUnit(u.id, user)
+                              showToast(lang === 'vi' ? `Đã hoàn tất bảo trì cho kho ${u.id}!` : `Unit ${u.id} ready!`)
+                            }}
+                          >
+                             {lang === 'vi' ? 'Mở lại kho' : 'Clear'}
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" size="sm" onClick={() => setEditModal(true)}>{lang === 'vi' ? 'Sửa' : 'Edit'}</Button>
+                        )}
+                      </Td>
+                    </Tr>
+                  )
+                })}
               </Tbody>
             </Table>
           </Card>
         </div>
       )}
 
-      {/* ── RENTALS & PAYMENTS ───────────────────────────────── */}
+      {/* ── MAINTENANCE TASKS ─────────────────────────────────── */}
+      {page === 'maintenance' && (
+        <div className="fade-in space-y-4">
+          <SectionHeader
+            title={lang === 'vi' ? 'Quản Lý Nhiệm Vụ Bảo Trì Gian Kho' : 'Unit Maintenance Tasks'}
+            subtitle={lang === 'vi' ? 'Nghiệm thu chất lượng sửa chữa, vệ sinh sau trả kho và mở lại trạng thái AVAILABLE' : 'Inspect repair/cleaning quality post-checkout and restore AVAILABLE status'}
+          />
+
+          <Card>
+            <Table>
+              <Thead>
+                <tr>
+                  <Th>{lang === 'vi' ? 'Mã Nhiệm Vụ' : 'Task ID'}</Th>
+                  <Th>{lang === 'vi' ? 'Gian Kho' : 'Unit'}</Th>
+                  <Th>{lang === 'vi' ? 'Lý Do Bảo Trì / Hư Hại' : 'Reason / Damage'}</Th>
+                  <Th>{lang === 'vi' ? 'Phân Loại' : 'Classification'}</Th>
+                  <Th>{lang === 'vi' ? 'Thời Gian Tạo' : 'Created'}</Th>
+                  <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
+                  <Th className="text-right">{lang === 'vi' ? 'Thao Tác' : 'Action'}</Th>
+                </tr>
+              </Thead>
+              <Tbody>
+                {storeMaintenanceTasks.length === 0 ? (
+                  <Tr>
+                    <Td colSpan={7} className="text-center py-8 text-stone-500">
+                      {lang === 'vi' ? 'Không có nhiệm vụ bảo trì nào đang tồn đọng. Tất cả gian kho đều đạt chuẩn vận hành.' : 'No pending maintenance tasks.'}
+                    </Td>
+                  </Tr>
+                ) : (
+                  storeMaintenanceTasks.map(task => (
+                    <Tr key={task.id}>
+                      <Td><span className="font-mono font-bold text-xs text-amber-800">{task.id}</span></Td>
+                      <Td><span className="font-mono font-bold text-stone-900">{task.unitId}</span></Td>
+                      <Td><p className="text-xs text-stone-700 max-w-xs">{task.reason}</p></Td>
+                      <Td>
+                        <Badge variant={task.damageClassification === 'no_damage' ? 'muted' : 'warning'}>
+                          {task.damageClassification || 'Vệ sinh định kỳ'}
+                        </Badge>
+                      </Td>
+                      <Td><span className="text-xs text-stone-500">{new Date(task.createdAt).toLocaleDateString('vi-VN')}</span></Td>
+                      <Td>
+                        <Badge variant={task.status === 'completed' ? 'success' : 'warning'}>
+                          {task.status === 'completed' ? (lang === 'vi' ? 'Đã hoàn tất' : 'Completed') : (lang === 'vi' ? 'Chờ nghiệm thu' : 'Pending')}
+                        </Badge>
+                      </Td>
+                      <Td className="text-right">
+                        {task.status !== 'completed' ? (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => {
+                              completeMaintenanceTask(task.id, user)
+                              showToast(lang === 'vi' ? `Đã nghiệm thu xong kho ${task.unitId}! Trạng thái kho chuyển sang AVAILABLE.` : `Maintenance completed! Unit is now AVAILABLE.`)
+                            }}
+                          >
+                             {lang === 'vi' ? 'Nghiệm thu & Mở kho' : 'Complete & Open'}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-emerald-700 font-semibold"> Đạt chuẩn</span>
+                        )}
+                      </Td>
+                    </Tr>
+                  ))
+                )}
+              </Tbody>
+            </Table>
+          </Card>
+        </div>
+      )}
+
       {/* ── RENTALS & PAYMENTS ───────────────────────────────── */}
       {page === 'rentals' && (() => {
         const activeRentals = rentalsList.filter(r => r.status === 'active')
@@ -277,6 +847,88 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
                 </div>
               }
             />
+
+            {/* Pending Renewal Approval Queue */}
+            {(() => {
+              const pendingRenewals = storeRenewals.filter(r => r.status === 'pending')
+              if (!pendingRenewals.length) return null
+
+              return (
+                <div className="rounded-xl border-2 border-blue-400 bg-blue-50/70 p-4 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-900 font-bold text-sm"> {lang === 'vi' ? 'Hàng Đợi Duyệt Yêu Cầu Gia Hạn Thuê (Renewals Queue)' : 'Pending Renewal Approvals'}</span>
+                      <Badge variant="info">{pendingRenewals.length} {lang === 'vi' ? 'yêu cầu' : 'requests'}</Badge>
+                    </div>
+                    <p className="text-[11px] text-blue-800">
+                      {lang === 'vi' ? 'Manager kiểm tra xung đột ngày trước khi duyệt. Sau khi duyệt, khách thanh toán cước gia hạn.' : 'Check date conflicts before approving.'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {pendingRenewals.map(rnw => {
+                      const hasConflict = storeHolds.some(
+                        h => h.assignedUnitId === rnw.unitId &&
+                             ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
+                             checkDateOverlap(rnw.oldEndDate, rnw.newEndDate, h.startDate, h.endDate)
+                      )
+
+                      return (
+                        <div key={rnw.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-white p-3 text-xs">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-blue-900">{rnw.id}</span>
+                              <span className="font-semibold text-stone-900">{rnw.customerName}</span>
+                              <span className="font-mono font-bold text-emerald-800">Kho {rnw.unitId}</span>
+                            </div>
+                            <p className="text-stone-500 text-[11px] mt-0.5">
+                              Hạn cũ: <b>{rnw.oldEndDate}</b> → Hạn mới mong muốn: <b className="text-blue-900">{rnw.newEndDate}</b> · Cước: <b>${rnw.renewalFee}</b>
+                            </p>
+                            {hasConflict ? (
+                              <p className="text-red-600 font-bold text-[11px]">
+                                ⚠️ Cảnh báo: Trùng lịch với đơn đặt giữ kho khác trên kho {rnw.unitId}!
+                              </p>
+                            ) : (
+                              <p className="text-emerald-700 font-semibold text-[11px]">
+                                 Không có xung đột lịch. Đủ điều kiện phê duyệt.
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-700 hover:bg-red-50 border-red-300"
+                              onClick={() => {
+                                rejectRenewal(rnw.id, user, 'Trùng lịch đặt kho khác')
+                                showToast(lang === 'vi' ? `Đã từ chối yêu cầu gia hạn ${rnw.id}!` : `Renewal rejected.`)
+                              }}
+                            >
+                              ✕ {lang === 'vi' ? 'Từ chối' : 'Reject'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={hasConflict}
+                              onClick={() => {
+                                try {
+                                  approveRenewal(rnw.id, user)
+                                  showToast(lang === 'vi' ? `Đã phê duyệt gia hạn kho ${rnw.unitId} đến ${rnw.newEndDate}!` : `Renewal approved!`)
+                                } catch (err: any) {
+                                  showToast(err?.message || 'Error approving renewal')
+                                }
+                              }}
+                            >
+                               {lang === 'vi' ? 'Duyệt Gia Hạn' : 'Approve'}
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* KPI Stat Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -337,7 +989,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
               <div className="w-full sm:w-72">
                 <input
                   type="text"
-                  placeholder={lang === 'vi' ? 'Tìm theo khách, phòng, SĐT, mã...' : 'Search tenant, unit, phone, ID...'}
+                  placeholder={lang === 'vi' ? 'Tìm theo khách, kho, SĐT, mã...' : 'Search tenant, unit, phone, ID...'}
                   value={rentalSearch}
                   onChange={e => setRentalSearch(e.target.value)}
                   className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -390,7 +1042,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
                             </span>
                             <span className="text-xs text-stone-500">{r.unitType}</span>
                           </div>
-                          <p className="text-[11px] text-stone-400">{r.size} ft {lang === 'vi' ? 'kho' : 'unit'}</p>
+                          <p className="text-[11px] text-stone-400">{r.unitType || r.unit} · {r.areaM2 ? `${r.areaM2} m²` : ''}</p>
                         </Td>
                         <Td>
                           <div className="text-xs">
@@ -696,7 +1348,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
                             </Badge>
                             {o.overlocked && (
                               <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">
-                                🔒 {lang === 'vi' ? 'ĐÃ KHÓA CỔNG' : 'OVERLOCKED'}
+                                 {lang === 'vi' ? 'ĐÃ KHÓA CỔNG' : 'OVERLOCKED'}
                               </span>
                             )}
                           </div>
@@ -795,72 +1447,71 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
         )
       })()}
 
-      {/* ── REPORTS ───────────────────────────────────────────── */}
-      {page === 'reports' && (
-        <div className="fade-in space-y-5">
+      {/* ── FACILITY POLICIES & OPERATIONAL RULES ──────────────── */}
+      {page === 'policies' && (
+        <div className="fade-in space-y-6">
           <SectionHeader
-            title={lang === 'vi' ? 'Báo Cáo & Phân Tích Cơ Sở' : 'Facility Reports'}
-            subtitle={lang === 'vi' ? `Hiệu suất vận hành trong ${REVENUE_DATA.length} tháng qua` : `${REVENUE_DATA.length} months of facility performance`}
-            action={<Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đã tải xuống file PDF báo cáo cơ sở!' : 'Downloaded PDF report!')}>{lang === 'vi' ? 'Tải PDF' : 'Download PDF'}</Button>}
+            title={lang === 'vi' ? 'Quy Định & Chính Sách Vận Hành Cơ Sở' : 'Facility Operational Policies'}
+            subtitle={`${user.facility ?? 'Downtown Storage'} · ${lang === 'vi' ? 'Quy chế lưu kho, quy trình leo thang nợ, an toàn PCCC và chuẩn nghiệm thu bàn giao' : 'Storage terms, delinquency escalation, fire safety standards and move-out inspection protocol'}`}
+            action={
+              <Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đã tải cẩm nang chính sách vận hành (PDF)!' : 'Downloaded operational handbook (PDF)!')}>
+                 {lang === 'vi' ? 'Tải Cẩm Nang Vận Hành' : 'Download Handbook'}
+              </Button>
+            }
           />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title={lang === 'vi' ? 'Tỷ lệ lấp đầy TB' : 'Avg Occupancy'} value="88.5%" icon={Icon.chart} iconBg="bg-blue-50" />
-            <StatCard title={lang === 'vi' ? 'Doanh thu lũy kế' : 'YTD Revenue'} value="$168,400" icon={Icon.dollar} iconBg="bg-green-50" />
-            <StatCard title={lang === 'vi' ? 'Lượt nhận kho' : 'Move-ins'} value="34" icon={Icon.truck} iconBg="bg-purple-50" />
-            <StatCard title={lang === 'vi' ? 'Lượt trả kho' : 'Move-outs'} value="8" icon={Icon.refresh} iconBg="bg-amber-50" />
+
+          {/* Quick Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-stone-200 bg-white p-4">
+              <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Gia hạn thanh toán nợ' : 'Grace Period'}</p>
+              <p className="text-2xl font-bold text-stone-900 mt-1">7 <span className="text-sm font-normal text-stone-500">{lang === 'vi' ? 'ngày' : 'days'}</span></p>
+              <p className="text-[11px] text-stone-500 mt-1">{lang === 'vi' ? 'Sau ngày đến hạn mới áp dụng phí phạt' : 'Before late penalty applies'}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-white p-4">
+              <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Mức phạt trễ hạn cố định' : 'Fixed Late Fee'}</p>
+              <p className="text-2xl font-bold text-red-600 mt-1">$25.00</p>
+              <p className="text-[11px] text-stone-500 mt-1">{lang === 'vi' ? 'Áp dụng vào ngày thứ 8 quá hạn' : 'Charged on day 8 past due'}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-white p-4">
+              <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Thời gian khóa giữ kho' : 'Unit Hold TTL'}</p>
+              <p className="text-2xl font-bold text-amber-600 mt-1">24 <span className="text-sm font-normal text-stone-500">{lang === 'vi' ? 'giờ' : 'hours'}</span></p>
+              <p className="text-[11px] text-stone-500 mt-1">{lang === 'vi' ? 'Tự động nhả kho nếu chưa nộp cọc' : 'Auto-releases if unpaid'}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-white p-4">
+              <p className="text-xs text-stone-500 font-medium">{lang === 'vi' ? 'Thời gian cam kết hoàn cọc' : 'Deposit Refund SLA'}</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">24 <span className="text-sm font-normal text-stone-500">{lang === 'vi' ? 'giờ' : 'hours'}</span></p>
+              <p className="text-[11px] text-stone-500 mt-1">{lang === 'vi' ? 'Sau nghiệm thu trả kho đạt chuẩn' : 'Post clean move-out inspection'}</p>
+            </div>
           </div>
+
+          {/* Detailed Policies Table */}
           <Card className="p-5">
-            <h3 className="font-semibold text-slate-800 mb-4">{lang === 'vi' ? 'Doanh Thu Theo Từng Tháng' : 'Revenue by Month'}</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={REVENUE_DATA} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={((v: number) => [`$${v.toLocaleString()}`, lang === 'vi' ? 'Doanh thu' : 'Revenue']) as any} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                <Bar dataKey="revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">{lang === 'vi' ? 'Tỷ Lệ Lấp Đầy Theo Loại Gian' : 'Unit Utilization'}</h3>
-              {UTILIZATION.map(r => (
-                <div key={r.label} className="mb-4">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-slate-600">{r.label}</span>
-                    <span className="font-semibold text-slate-800">{r.used}/{r.total} <span className="text-slate-400 font-normal">({Math.round(r.used/r.total*100)}%)</span></span>
-                  </div>
-                  <ProgressBar value={r.used} max={r.total} color={r.color} />
-                </div>
-              ))}
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">{lang === 'vi' ? 'Chỉ Số Hỗ Trợ Khách Hàng' : 'Support Metrics'}</h3>
-              <div className="space-y-4">
-                {SUPPORT_METRICS.map(m => (
-                  <div key={m.label} className="flex justify-between items-start border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">
-                        {lang === 'vi' ? (
-                          m.label === 'Avg First Response' ? 'Thời gian phản hồi đầu tiên' :
-                          m.label === 'Resolution Rate' ? 'Tỷ lệ giải quyết dứt điểm' :
-                          m.label === 'Customer Satisfaction' ? 'Độ hài lòng của khách (CSAT)' : m.label
-                        ) : m.label}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {lang === 'vi' ? (
-                          m.sub.includes('target') ? 'Đạt mục tiêu SLA' :
-                          m.sub.includes('resolved') ? 'Trong vòng 24 giờ' :
-                          m.sub.includes('reviews') ? 'Dựa trên 48 đánh giá' : m.sub
-                        ) : m.sub}
-                      </p>
-                    </div>
-                    <span className="text-lg font-bold text-slate-900">{m.value}</span>
-                  </div>
+            <h3 className="font-bold text-stone-900 text-base mb-3">{lang === 'vi' ? 'Danh Mục Quy Định Áp Dụng Cho Khách Thuê & Nhân Viên' : 'Operational Policy Matrix'}</h3>
+            <Table>
+              <Thead>
+                <tr>
+                  <Th>{lang === 'vi' ? 'Chính Sách' : 'Policy'}</Th>
+                  <Th>{lang === 'vi' ? 'Mô Tả & Quy Chuẩn Áp Dụng' : 'Description & Enforcement'}</Th>
+                  <Th>{lang === 'vi' ? 'Giá Trị Chuẩn' : 'Standard Value'}</Th>
+                  <Th>{lang === 'vi' ? 'Quy Trình Kiểm Tra' : 'Enforcement Protocol'}</Th>
+                </tr>
+              </Thead>
+              <Tbody>
+                {POLICIES.map(p => (
+                  <Tr key={p.id}>
+                    <Td><span className="font-bold text-sm text-stone-900">{p.name}</span></Td>
+                    <Td><p className="text-xs text-stone-600 max-w-lg">{p.description}</p></Td>
+                    <Td><span className="font-mono font-bold text-amber-800">{p.value}</span></Td>
+                    <Td>
+                      <Badge variant={p.status === 'active' ? 'success' : 'muted'}>
+                        {lang === 'vi' ? 'Đang áp dụng' : 'Active'}
+                      </Badge>
+                    </Td>
+                  </Tr>
                 ))}
-              </div>
-            </Card>
-          </div>
+              </Tbody>
+            </Table>
+          </Card>
         </div>
       )}
 
@@ -925,7 +1576,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
               <div className="mt-3 flex items-end justify-between">
                 <div>
                   <p className="text-2xl font-bold font-mono">{lang === 'vi' ? `Kho ${selectedRental.unit}` : `Unit ${selectedRental.unit}`}</p>
-                  <p className="text-xs text-stone-300">{selectedRental.unitType} · {selectedRental.size} ft</p>
+                  <p className="text-xs text-stone-300">{selectedRental.unitType} · {selectedRental.areaM2 ? `${selectedRental.areaM2} m²` : ''}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xl font-bold text-amber-300">${selectedRental.amount}<span className="text-xs text-stone-400">/{lang === 'vi' ? 'th' : 'mo'}</span></p>
@@ -1065,9 +1716,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
               value={newTenantUnit}
               onChange={e => setNewTenantUnit(e.target.value)}
             >
-              <option value="A-104">{lang === 'vi' ? 'Gian A-104 (5 ft Nhỏ · $89/tháng)' : 'Unit A-104 (5 ft Small · $89/mo)'}</option>
-              <option value="C-301">{lang === 'vi' ? 'Gian C-301 (20 ft Lớn · $269/tháng)' : 'Unit C-301 (20 ft Large · $269/mo)'}</option>
-              <option value="B-112">{lang === 'vi' ? 'Gian B-112 (10 ft Vừa · $155/tháng)' : 'Unit B-112 (10 ft Medium · $155/mo)'}</option>
+              <option value="A-104">{lang === 'vi' ? 'Gian A-104 (Nhỏ · 2.25 m² · $89/tháng)' : 'Unit A-104 (Small · 2.25 m² · $89/mo)'}</option>
+              <option value="C-301">{lang === 'vi' ? 'Gian C-301 (Lớn · 12.0 m² · $270/tháng)' : 'Unit C-301 (Large · 12.0 m² · $270/mo)'}</option>
+              <option value="B-112">{lang === 'vi' ? 'Gian B-112 (Vừa · 6.0 m² · $150/tháng)' : 'Unit B-112 (Medium · 6.0 m² · $150/mo)'}</option>
             </Select>
             <Input
               label={lang === 'vi' ? 'Giá thuê/tháng ($)' : 'Monthly Rate ($)'}

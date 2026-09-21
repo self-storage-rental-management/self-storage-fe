@@ -1,4 +1,4 @@
-import { type ReactNode, type HTMLAttributes } from 'react'
+import { type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
 
 // ─── Badge ───────────────────────────────────────────────────────────────────
 
@@ -59,9 +59,9 @@ export function Button({ variant = 'primary', size = 'md', className = '', child
 
 // ─── Card ────────────────────────────────────────────────────────────────────
 
-export function Card({ children, className = '', onClick }: { children?: ReactNode; className?: string; onClick?: () => void }) {
+export function Card({ children, className = '', ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`app-card ${className}`} onClick={onClick}>
+    <div className={`app-card ${className}`} {...rest}>
       {children}
     </div>
   )
@@ -78,7 +78,7 @@ interface StatCardProps {
   iconBg?: string
 }
 
-export function StatCard({ title, value, delta, deltaPositive, icon, iconBg = 'bg-amber-50' }: StatCardProps) {
+export function StatCard({ title, value, delta, deltaPositive }: StatCardProps) {
   return (
     <Card className="p-5 stat-card-hover">
       <div className="flex items-start justify-between">
@@ -91,7 +91,6 @@ export function StatCard({ title, value, delta, deltaPositive, icon, iconBg = 'b
             </p>
           )}
         </div>
-        <div className={`${iconBg} p-2.5 rounded-lg`}>{icon}</div>
       </div>
     </Card>
   )
@@ -119,15 +118,15 @@ export function Th({ children, className = '' }: { children?: ReactNode; classNa
   return <th className={`px-4 py-3 font-mono text-[11px] font-semibold text-stone-500 uppercase tracking-[.06em] ${className}`}>{children}</th>
 }
 
-export function Td({ children, className = '' }: { children?: ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 text-stone-700 ${className}`}>{children}</td>
+export function Td({ children, className = '', ...rest }: TdHTMLAttributes<HTMLTableCellElement>) {
+  return <td className={`px-4 py-3 text-stone-700 ${className}`} {...rest}>{children}</td>
 }
 
-export function Tr({ children, onClick, className = '' }: { children: ReactNode; onClick?: () => void; className?: string }) {
+export function Tr({ children, className = '', ...rest }: HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={`hover:bg-[#fbfaf6] transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
-      onClick={onClick}
+      className={`hover:bg-[#fbfaf6] transition-colors ${rest.onClick ? 'cursor-pointer' : ''} ${className}`}
+      {...rest}
     >
       {children}
     </tr>
@@ -150,7 +149,7 @@ export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md'
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
-interface InputProps extends HTMLAttributes<HTMLInputElement> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   type?: string
   value?: string
@@ -209,12 +208,11 @@ export function SectionHeader({ title, subtitle, action, eyebrow }: { title: str
 
 // ─── Empty State ─────────────────────────────────────────────────────────────
 
-export function EmptyState({ icon, title, description, action }: {
+export function EmptyState({ title, description, action }: {
   icon: ReactNode; title: string; description?: string; action?: ReactNode
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="text-slate-300 mb-3">{icon}</div>
       <h3 className="text-slate-700 font-semibold">{title}</h3>
       {description && <p className="text-slate-500 text-sm mt-1 max-w-xs">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
@@ -235,6 +233,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: {
         <div className="flex items-center justify-between mb-5">
           <h2 id="modal-title" className="text-lg font-bold text-stone-900">{title}</h2>
           <button aria-label="Close dialog" className="text-stone-400 hover:text-stone-700 transition" onClick={onClose}>
+            Đóng
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
