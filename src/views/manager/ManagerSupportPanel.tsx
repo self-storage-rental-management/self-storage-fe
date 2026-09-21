@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { useLanguage } from '../../i18n/LanguageContext'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { TicketItem } from '../../data/demoDatabase'
@@ -13,8 +12,7 @@ interface ManagerSupportPanelProps {
 }
 
 export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupportPanelProps) {
-  const { lang } = useLanguage()
-  const { tickets: storeTickets, respondSupportTicket } = useStorageHub()
+    const { tickets: storeTickets, respondSupportTicket } = useStorageHub()
 
   const [tab, setTab] = useState('All')
   const [search, setSearch] = useState('')
@@ -55,24 +53,22 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
   })
 
   const getPriorityBadge = (p: TicketItem['priority']) => {
-    if (p === 'high') return <Badge variant="error">{lang === 'vi' ? 'Khẩn cấp' : 'High'}</Badge>
-    if (p === 'medium') return <Badge variant="warning">{lang === 'vi' ? 'Trung bình' : 'Medium'}</Badge>
-    return <Badge variant="info">{lang === 'vi' ? 'Bình thường' : 'Low'}</Badge>
+    if (p === 'high') return <Badge variant="error">{'Khẩn cấp'}</Badge>
+    if (p === 'medium') return <Badge variant="warning">{'Trung bình'}</Badge>
+    return <Badge variant="info">{'Bình thường'}</Badge>
   }
 
   const handleSendReply = () => {
     if (!selectedTicket) return
     if (!replyText.trim()) {
-      showToast(lang === 'vi' ? 'Vui lòng nhập nội dung phản hồi.' : 'Please write a reply message.')
+      showToast('Vui lòng nhập nội dung phản hồi.')
       return
     }
 
     try {
       respondSupportTicket(selectedTicket.id, replyText.trim(), newStatus, user)
       showToast(
-        lang === 'vi'
-          ? `Đã gửi phản hồi hỗ trợ cho ${selectedTicket.customer}!`
-          : `Reply sent to ${selectedTicket.customer} successfully!`
+        `Đã gửi phản hồi hỗ trợ cho ${selectedTicket.customer}!`
       )
       setReplyText('')
       setTicketModalOpen(false)
@@ -85,40 +81,38 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={lang === 'vi' ? 'Hỗ Trợ Khách Hàng & Xử Lý Sự Cố Kho' : 'Support Tickets & Facility Incidents'}
+        title={'Hỗ Trợ Khách Hàng & Xử Lý Sự Cố Kho'}
         subtitle={
-          lang === 'vi'
-            ? 'Tiếp nhận yêu cầu kỹ thuật, giải đáp thắc mắc mã khóa cổng và xử lý khiếu nại chất lượng dịch vụ'
-            : 'Track technical help requests, resolve gate access issues, and address tenant inquiries'
+          'Tiếp nhận yêu cầu kỹ thuật, giải đáp thắc mắc mã khóa cổng và xử lý khiếu nại chất lượng dịch vụ'
         }
       />
 
       {/* Bento Grid Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title={lang === 'vi' ? 'Tổng yêu cầu hỗ trợ' : 'Total Tickets'}
+          title={'Tổng yêu cầu hỗ trợ'}
           value={facilityTickets.length}
           icon={Icon.support}
           iconBg="bg-blue-50 text-blue-700"
         />
         <StatCard
-          title={lang === 'vi' ? 'Yêu cầu mở mới' : 'Open Tickets'}
+          title={'Yêu cầu mở mới'}
           value={openCount}
-          delta={openCount > 0 ? (lang === 'vi' ? 'Chưa phản hồi' : 'Awaiting response') : undefined}
+          delta={openCount > 0 ? ('Chưa phản hồi') : undefined}
           deltaPositive={openCount === 0}
           icon={Icon.alert}
           iconBg={openCount > 0 ? 'bg-amber-50 text-amber-700' : 'bg-stone-50 text-stone-600'}
         />
         <StatCard
-          title={lang === 'vi' ? 'Sự cố khẩn cấp' : 'High Priority'}
+          title={'Sự cố khẩn cấp'}
           value={highPriorityCount}
-          delta={highPriorityCount > 0 ? (lang === 'vi' ? 'Cần xử lý ngay' : 'Urgent attention') : undefined}
+          delta={highPriorityCount > 0 ? ('Cần xử lý ngay') : undefined}
           deltaPositive={highPriorityCount === 0}
           icon={Icon.key}
           iconBg={highPriorityCount > 0 ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-200' : 'bg-stone-50 text-stone-600'}
         />
         <StatCard
-          title={lang === 'vi' ? 'Đã giải quyết xong' : 'Resolved'}
+          title={'Đã giải quyết xong'}
           value={resolvedCount}
           icon={Icon.check}
           iconBg="bg-emerald-50 text-emerald-700"
@@ -129,16 +123,14 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <Tabs
           tabs={
-            lang === 'vi'
-              ? ['Tất cả', 'Chờ xử lý', 'Đang xử lý', 'Khẩn cấp', 'Đã xong']
-              : ['All', 'open', 'in-progress', 'high', 'resolved']
+            ['Tất cả', 'Chờ xử lý', 'Đang xử lý', 'Khẩn cấp', 'Đã xong']
           }
           active={
-            tab === 'All' && lang === 'vi' ? 'Tất cả' :
-            tab === 'open' && lang === 'vi' ? 'Chờ xử lý' :
-            tab === 'in-progress' && lang === 'vi' ? 'Đang xử lý' :
-            tab === 'high' && lang === 'vi' ? 'Khẩn cấp' :
-            tab === 'resolved' && lang === 'vi' ? 'Đã xong' : tab
+            tab === 'All' ? 'Tất cả' :
+            tab === 'open' ? 'Chờ xử lý' :
+            tab === 'in-progress' ? 'Đang xử lý' :
+            tab === 'high' ? 'Khẩn cấp' :
+            tab === 'resolved' ? 'Đã xong' : tab
           }
           onChange={val => {
             if (val === 'Tất cả') setTab('All')
@@ -152,7 +144,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
         <div className="w-full sm:w-72">
           <input
             type="text"
-            placeholder={lang === 'vi' ? 'Tìm theo mã, khách, tiêu đề, kho...' : 'Search ID, tenant, subject, unit...'}
+            placeholder={'Tìm theo mã, khách, tiêu đề, kho...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
@@ -165,23 +157,21 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
         <Table>
           <Thead>
             <tr>
-              <Th>{lang === 'vi' ? 'Mã Yêu Cầu' : 'Ticket ID'}</Th>
-              <Th>{lang === 'vi' ? 'Khách Hàng' : 'Customer'}</Th>
-              <Th>{lang === 'vi' ? 'Chủ Đề & Phân Loại' : 'Subject & Category'}</Th>
-              <Th>{lang === 'vi' ? 'Gian Kho' : 'Unit'}</Th>
-              <Th>{lang === 'vi' ? 'Mức Độ' : 'Priority'}</Th>
-              <Th>{lang === 'vi' ? 'Thời Gian Tạo' : 'Created'}</Th>
-              <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
-              <Th className="text-right">{lang === 'vi' ? 'Hành Động' : 'Action'}</Th>
+              <Th>{'Mã Yêu Cầu'}</Th>
+              <Th>{'Khách Hàng'}</Th>
+              <Th>{'Chủ Đề & Phân Loại'}</Th>
+              <Th>{'Gian Kho'}</Th>
+              <Th>{'Mức Độ'}</Th>
+              <Th>{'Thời Gian Tạo'}</Th>
+              <Th>{'Trạng Thái'}</Th>
+              <Th className="text-right">{'Hành Động'}</Th>
             </tr>
           </Thead>
           <Tbody>
             {filteredTickets.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-stone-400 text-sm">
-                  {lang === 'vi'
-                    ? 'Không tìm thấy yêu cầu hỗ trợ nào theo bộ lọc.'
-                    : 'No support tickets found.'}
+                  {'Không tìm thấy yêu cầu hỗ trợ nào theo bộ lọc.'}
                 </td>
               </tr>
             ) : (
@@ -235,7 +225,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
                         setTicketModalOpen(true)
                       }}
                     >
-                      {lang === 'vi' ? 'Xem & Phản hồi' : 'View & Reply'}
+                      {'Xem & Phản hồi'}
                     </Button>
                   </Td>
                 </Tr>
@@ -249,7 +239,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
       <Modal
         open={ticketModalOpen}
         onClose={() => setTicketModalOpen(false)}
-        title={lang === 'vi' ? 'Chi Tiết Yêu Cầu & Phản Hồi Khách Hàng' : 'Support Ticket Conversation'}
+        title={'Chi Tiết Yêu Cầu & Phản Hồi Khách Hàng'}
       >
         {selectedTicket && (
           <div className="space-y-4">
@@ -266,7 +256,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
                     {selectedTicket.customer} ({selectedTicket.email})
                   </p>
                   <p className="text-[11px] text-slate-400">
-                    {lang === 'vi' ? `Gian kho liên quan: ${selectedTicket.unit || 'Không xác định'}` : `Associated Unit: ${selectedTicket.unit || 'N/A'}`}
+                    {`Gian kho liên quan: ${selectedTicket.unit || 'Không xác định'}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -304,7 +294,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
                 })
               ) : (
                 <p className="text-center py-6 text-xs text-stone-400">
-                  {lang === 'vi' ? 'Chưa có trao đổi nào trong ticket này.' : 'No messages yet.'}
+                  {'Chưa có trao đổi nào trong ticket này.'}
                 </p>
               )}
             </div>
@@ -313,18 +303,18 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
             <div className="space-y-3 pt-2 border-t border-stone-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <label className="text-xs font-bold text-stone-800">
-                  {lang === 'vi' ? 'Nội dung phản hồi từ Facility Manager:' : 'Manager Response Message:'}
+                  {'Nội dung phản hồi từ Facility Manager:'}
                 </label>
                 <div className="flex items-center gap-2 justify-end">
-                  <span className="text-xs text-stone-500">{lang === 'vi' ? 'Cập nhật trạng thái:' : 'Set Status:'}</span>
+                  <span className="text-xs text-stone-500">{'Cập nhật trạng thái:'}</span>
                   <div className="w-40">
                     <Select
                       value={newStatus}
                       onChange={e => setNewStatus(e.target.value as TicketItem['status'])}
                     >
-                      <option value="in-progress">{lang === 'vi' ? 'Đang xử lý' : 'In Progress'}</option>
-                      <option value="resolved">{lang === 'vi' ? 'Đã giải quyết' : 'Resolved'}</option>
-                      <option value="open">{lang === 'vi' ? 'Mở lại ticket' : 'Open'}</option>
+                      <option value="in-progress">{'Đang xử lý'}</option>
+                      <option value="resolved">{'Đã giải quyết'}</option>
+                      <option value="open">{'Mở lại ticket'}</option>
                     </Select>
                   </div>
                 </div>
@@ -335,23 +325,21 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
                 value={replyText}
                 onChange={e => setReplyText(e.target.value)}
                 placeholder={
-                  lang === 'vi'
-                    ? 'Nhập giải đáp chi tiết cho khách hàng (ví dụ: Ban quản lý đã kiểm tra mã PIN và cấu hình lại chốt từ...)'
-                    : 'Enter helpful response for the tenant...'
+                  'Nhập giải đáp chi tiết cho khách hàng (ví dụ: Ban quản lý đã kiểm tra mã PIN và cấu hình lại chốt từ...)'
                 }
                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
               />
 
               <div className="flex justify-end gap-2 pt-1">
                 <Button variant="outline" onClick={() => setTicketModalOpen(false)}>
-                  {lang === 'vi' ? 'Đóng' : 'Close'}
+                  {'Đóng'}
                 </Button>
                 <Button
                   variant="primary"
                   onClick={handleSendReply}
                   disabled={!replyText.trim()}
                 >
-                  {lang === 'vi' ? 'Gửi phản hồi & Cập nhật' : 'Send Reply & Update'}
+                  {'Gửi phản hồi & Cập nhật'}
                 </Button>
               </div>
             </div>

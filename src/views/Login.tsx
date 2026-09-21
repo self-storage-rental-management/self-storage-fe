@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import type { Role, User } from '../types'
+import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
-import LanguageToggle from '../components/LanguageToggle'
-import { useLanguage } from '../i18n/LanguageContext'
 import { useStorageHub } from '../store/StorageHubContext'
 
 interface LoginProps { onLogin: (user: User) => void }
@@ -11,10 +9,6 @@ type ResetStep = 'identify' | 'verify' | 'new-password' | 'success'
 
 const DEMO_PASSWORD = 'demo123'
 const DEMO_CODE = '123456'
-const roleLabels: Record<Role, string> = {
-  customer: 'Customer', staff: 'Facility Staff', manager: 'Facility Manager',
-  business: 'Business Operations', admin: 'System Admin',
-}
 function GoogleIcon() {
   return (
     <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
@@ -28,8 +22,7 @@ function GoogleIcon() {
 
 
 export default function Login({ onLogin }: LoginProps) {
-  const { users } = useStorageHub()
-  const demoUsers: Array<User & { label: string }> = users.map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role as Role, facility: user.facility, label: roleLabels[user.role as Role] }))
+  const { users, registerCustomer } = useStorageHub()
   const [tab, setTab] = useState<AuthTab>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -46,60 +39,53 @@ export default function Login({ onLogin }: LoginProps) {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [googleModal, setGoogleModal] = useState(false)
 
-  const { lang, t } = useLanguage()
 
   function handleLogin(event: React.FormEvent) {
     event.preventDefault()
-    const demoUser = demoUsers.find(user => user.email === email.trim().toLowerCase())
+    const demoUser = users.find(user => user.status !== 'suspended' && user.email === email.trim().toLowerCase())
     if (!demoUser || password !== DEMO_PASSWORD) {
       setError(
-        lang === 'vi'
-          ? `Vui lòng chọn tài khoản trải nghiệm bên dưới với mật khẩu ${DEMO_PASSWORD}.`
-          : `Use a demo account below with password ${DEMO_PASSWORD}.`
+        'Email hoặc mật khẩu không đúng.'
       )
       return
     }
     onLogin(demoUser)
   }
 
-  function handleGoogleLoginUser(googleUser: { name: string; email: string; role: Role }) {
-    setGoogleModal(false)
-    onLogin({
-      id: `google-${Date.now()}`,
-      name: googleUser.name,
-      email: googleUser.email,
-      role: googleUser.role,
-      facility: 'StorageHub Central'
-    })
+  function handleGoogleCustomerLogin(googleUser: { name: string; email: string }) {
+    try {
+      const customer = registerCustomer({ name: googleUser.name, email: googleUser.email, phone: '' })
+      setGoogleModal(false)
+      onLogin(customer)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : ('Không thể tạo tài khoản Customer.'))
+    }
   }
 
   function handleRegister(event: React.FormEvent) {
     event.preventDefault()
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim() || !password || !confirmPassword) {
-      setError(lang === 'vi' ? 'Vui lòng điền đầy đủ các thông tin bắt buộc.' : 'Please complete all required fields.')
+      setError('Vui lòng điền đầy đủ các thông tin bắt buộc.')
       return
     }
     if (password.length < 8) {
-      setError(lang === 'vi' ? 'Mật khẩu phải có ít nhất 8 ký tự.' : 'Password must contain at least 8 characters.')
+      setError('Mật khẩu phải có ít nhất 8 ký tự.')
       return
     }
     if (password !== confirmPassword) {
-      setError(lang === 'vi' ? 'Mật khẩu nhập lại không khớp.' : 'Passwords do not match.')
+      setError('Mật khẩu nhập lại không khớp.')
       return
     }
-    onLogin({
-      id: Date.now().toString(),
-      name: `${firstName.trim()} ${lastName.trim()}`,
-      email: email.trim(),
-      role: 'customer',
-    })
-  }
-
-  function loginAsDemo(user: User) {
-    setEmail(user.email)
-    setPassword(DEMO_PASSWORD)
-    setError('')
-    onLogin(user)
+    try {
+      const customer = registerCustomer({
+        name: `${firstName.trim()} ${lastName.trim()}`,
+        email,
+        phone
+      })
+      onLogin(customer)
+    } catch (registrationError) {
+      setError(registrationError instanceof Error ? registrationError.message : ('Không thể tạo tài khoản Customer.'))
+    }
   }
 
   function switchTab(next: AuthTab) {
@@ -124,7 +110,7 @@ export default function Login({ onLogin }: LoginProps) {
   function findAccount(event: React.FormEvent) {
     event.preventDefault()
     if (!recoveryAccount.trim()) {
-      setError(lang === 'vi' ? 'Nhập số điện thoại hoặc địa chỉ email của bạn.' : 'Enter your mobile number or email address.')
+      setError('Nhập số điện thoại hoặc địa chỉ email của bạn.')
       return
     }
     setError('')
@@ -134,7 +120,7 @@ export default function Login({ onLogin }: LoginProps) {
   function verifyCode(event: React.FormEvent) {
     event.preventDefault()
     if (verificationCode !== DEMO_CODE) {
-      setError(lang === 'vi' ? `Nhập mã xác thực demo: ${DEMO_CODE}.` : `For this demo, enter the verification code ${DEMO_CODE}.`)
+      setError(`Nhập mã xác thực demo: ${DEMO_CODE}.`)
       return
     }
     setError('')
@@ -144,11 +130,11 @@ export default function Login({ onLogin }: LoginProps) {
   function saveNewPassword(event: React.FormEvent) {
     event.preventDefault()
     if (newPassword.length < 8) {
-      setError(lang === 'vi' ? 'Mật khẩu mới phải có ít nhất 8 ký tự.' : 'New password must contain at least 8 characters.')
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự.')
       return
     }
     if (newPassword !== newPasswordConfirm) {
-      setError(lang === 'vi' ? 'Mật khẩu xác nhận không khớp.' : 'Passwords do not match.')
+      setError('Mật khẩu xác nhận không khớp.')
       return
     }
     setError('')
@@ -161,7 +147,6 @@ export default function Login({ onLogin }: LoginProps) {
       <AuthShell compact>
         <div className="flex items-center justify-between mb-6">
           <BrandLogo />
-          <LanguageToggle />
         </div>
         <RecoveryFlow
           step={resetStep}
@@ -193,18 +178,16 @@ export default function Login({ onLogin }: LoginProps) {
         <BrandLogo light className="mb-8" />
         <p className="mb-2.5 text-xs font-semibold tracking-wider text-[#e9a12c]">SELF-STORAGE</p>
         <h1 className="mb-3.5 text-[30px] font-bold leading-tight">
-          {lang === 'vi' ? 'Nền Tảng Quản Lý Kho' : 'Management Platform'}
+          {'Nền Tảng Quản Lý Kho'}
         </h1>
         <p className="mb-7 max-w-[32ch] text-sm leading-relaxed text-[#aaa99e]">
-          {lang === 'vi'
-            ? 'Hệ thống hợp nhất giúp khách thuê và đội ngũ cơ sở quản lý kho bãi, thanh toán và kiểm soát ra vào bảo mật.'
-            : 'A unified system for customers and facility teams to manage rentals, payments and secure access.'}
+          {'Hệ thống hợp nhất giúp khách thuê và đội ngũ cơ sở quản lý kho bãi, thanh toán và kiểm soát ra vào bảo mật.'}
         </p>
         <div className="mb-8 flex gap-2.5">
           {[
-            ['500+', lang === 'vi' ? 'Cơ sở kho' : 'Facilities'],
-            ['98%', lang === 'vi' ? 'Độ ổn định SLA' : 'Uptime SLA'],
-            ['24/7', lang === 'vi' ? 'Hỗ trợ' : 'Support']
+            ['500+', 'Cơ sở kho'],
+            ['98%', 'Độ ổn định SLA'],
+            ['24/7', 'Hỗ trợ']
           ].map(([value, label]) => (
             <div key={label} className="flex-1 rounded-lg border border-[#44453f] bg-[#353630] px-2 py-2.5 text-center">
               <b className="block text-base">{value}</b>
@@ -213,14 +196,14 @@ export default function Login({ onLogin }: LoginProps) {
           ))}
         </div>
         <p className="mb-3.5 text-[11px] font-semibold tracking-wider text-[#aaa99e]">
-          {lang === 'vi' ? 'TÍNH NĂNG NỔI BẬT' : 'PLATFORM FEATURES'}
+          {'TÍNH NĂNG NỔI BẬT'}
         </p>
         <ul className="flex list-none flex-col gap-3 p-0">
           {[
-            lang === 'vi' ? 'Kiểm tra kho trống theo thời gian thực' : 'Real-time unit availability',
-            lang === 'vi' ? 'Mở cửa bằng mã PIN & thẻ từ điện tử' : 'Secure digital access',
-            lang === 'vi' ? 'Tự động hóa thanh toán và gia hạn' : 'Automated billing and renewals',
-            lang === 'vi' ? 'Hỗ trợ khách hàng đa kênh tập trung' : 'Customer support in one place'
+            'Kiểm tra kho trống theo thời gian thực',
+            'Mở cửa bằng mã PIN & thẻ từ điện tử',
+            'Tự động hóa thanh toán và gia hạn',
+            'Hỗ trợ khách hàng đa kênh tập trung'
           ].map(item => (
             <li key={item} className="flex items-center gap-2.5 text-[13.5px] text-[#e5e3da]">
               <i className="h-[7px] w-[7px] shrink-0 rotate-45 bg-[#e9a12c]" />
@@ -246,24 +229,21 @@ export default function Login({ onLogin }: LoginProps) {
                 }`}
               >
                 {item === 'login'
-                  ? (lang === 'vi' ? 'Đăng Nhập' : 'Sign In')
-                  : (lang === 'vi' ? 'Tạo Tài Khoản' : 'Create Account')}
+                  ? ('Đăng Nhập')
+                  : ('Tạo Tài Khoản')}
               </button>
             ))}
           </div>
-          <LanguageToggle />
         </div>
 
         {tab === 'login' ? (
           <>
             <div>
               <h2 className="mb-1.5 text-xl font-bold text-[#24241f]">
-                {lang === 'vi' ? 'Chào mừng trở lại' : 'Welcome back'}
+                {'Chào mừng trở lại'}
               </h2>
               <p className="mb-5 text-[13px] text-[#77766d]">
-                {lang === 'vi'
-                  ? 'Đăng nhập để truy cập bảng điều khiển StorageHub của bạn.'
-                  : 'Sign in to access your StorageHub dashboard.'}
+                {'Đăng nhập để truy cập bảng điều khiển StorageHub của bạn.'}
               </p>
 
               {/* Continue with Google button */}
@@ -273,7 +253,7 @@ export default function Login({ onLogin }: LoginProps) {
                 className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-stone-300 bg-white hover:bg-stone-50 hover:border-stone-400 text-stone-700 font-medium text-sm transition-all shadow-sm active:scale-[0.99] mb-4"
               >
                 <GoogleIcon />
-                <span>{lang === 'vi' ? 'Tiếp tục với Google' : 'Continue with Google'}</span>
+                <span>{'Tiếp tục với Google'}</span>
               </button>
 
               <div className="relative my-4">
@@ -282,14 +262,14 @@ export default function Login({ onLogin }: LoginProps) {
                 </div>
                 <div className="relative flex justify-center text-xs">
                   <span className="bg-[#fcfbf7] sm:bg-white px-2.5 text-stone-400 font-medium">
-                    {lang === 'vi' ? 'hoặc tiếp tục với email' : 'or continue with email'}
+                    {'hoặc tiếp tục với email'}
                   </span>
                 </div>
               </div>
             </div>
 
             <form onSubmit={handleLogin} noValidate>
-              <Field id="login-email" label={lang === 'vi' ? 'Địa chỉ email' : 'Email address'}>
+              <Field id="login-email" label={'Địa chỉ email'}>
                 <input
                   id="login-email"
                   value={email}
@@ -299,7 +279,7 @@ export default function Login({ onLogin }: LoginProps) {
                   placeholder="your@email.com"
                 />
               </Field>
-              <Field id="login-password" label={lang === 'vi' ? 'Mật khẩu' : 'Password'}>
+              <Field id="login-password" label={'Mật khẩu'}>
                 <PasswordInput
                   id="login-password"
                   value={password}
@@ -315,47 +295,21 @@ export default function Login({ onLogin }: LoginProps) {
                   onClick={startRecovery}
                   className="border-0 bg-transparent text-xs font-semibold text-[#9a5a05] hover:underline"
                 >
-                  {lang === 'vi' ? 'Quên mật khẩu?' : 'Forgot password?'}
+                  {'Quên mật khẩu?'}
                 </button>
               </div>
               <ErrorMessage message={error} />
-              <PrimaryButton>{lang === 'vi' ? 'Đăng Nhập' : 'Sign In'}</PrimaryButton>
+              <PrimaryButton>{'Đăng Nhập'}</PrimaryButton>
             </form>
 
-            <div className="my-5 flex items-center gap-3" aria-hidden="true">
-              <span className="h-px flex-1 bg-[#e5e3da]" />
-              <span className="text-[10.5px] font-semibold tracking-wider text-[#8b897f]">
-                {lang === 'vi' ? 'TÀI KHOẢN TRẢI NGHIỆM' : 'QUICK DEMO'}
-              </span>
-              <span className="h-px flex-1 bg-[#e5e3da]" />
-            </div>
-            <div className="grid grid-cols-2 gap-2" aria-label="Quick demo accounts">
-              {demoUsers.map(user => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => loginAsDemo(user)}
-                  className="min-h-10 rounded-lg border border-[#deddd2] bg-white px-2.5 py-2 text-left text-xs font-medium text-[#374151] transition-colors hover:border-[#e9a12c] hover:bg-[#fffaf0] last:col-span-2"
-                >
-                  <span className="block truncate font-semibold">{user.label}</span>
-                  <span className="block truncate text-[10px] font-normal text-[#8b897f]">{user.email}</span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-2.5 text-center text-[10.5px] text-[#8b897f]">
-              {lang === 'vi' ? 'Tất cả tài khoản demo dùng mật khẩu ' : 'All demo accounts use password '}
-              <strong className="font-semibold text-[#5f5e55]">{DEMO_PASSWORD}</strong>
-            </p>
           </>
         ) : (
           <form onSubmit={handleRegister} noValidate>
             <h2 className="mb-1.5 text-xl font-bold text-[#24241f]">
-              {lang === 'vi' ? 'Đăng ký tài khoản' : 'Create your account'}
+              {'Đăng ký tài khoản'}
             </h2>
             <p className="mb-5 text-[13px] text-[#77766d]">
-              {lang === 'vi'
-                ? 'Tạo tài khoản khách hàng để đặt giữ chỗ và quản lý kho lưu trữ.'
-                : 'Create a customer account to reserve and manage storage.'}
+              {'Tạo tài khoản khách hàng để đặt giữ chỗ và quản lý kho lưu trữ.'}
             </p>
 
             {/* Google sign up option */}
@@ -365,7 +319,7 @@ export default function Login({ onLogin }: LoginProps) {
               className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-stone-300 bg-white hover:bg-stone-50 hover:border-stone-400 text-stone-700 font-medium text-sm transition-all shadow-sm active:scale-[0.99] mb-4"
             >
               <GoogleIcon />
-              <span>{lang === 'vi' ? 'Đăng ký nhanh với Google' : 'Sign up with Google'}</span>
+              <span>{'Đăng ký nhanh với Google'}</span>
             </button>
 
             <div className="relative my-4">
@@ -374,37 +328,35 @@ export default function Login({ onLogin }: LoginProps) {
               </div>
               <div className="relative flex justify-center text-xs">
                 <span className="bg-[#fcfbf7] sm:bg-white px-2.5 text-stone-400 font-medium">
-                  {lang === 'vi' ? 'hoặc điền thông tin bên dưới' : 'or fill in details'}
+                  {'hoặc điền thông tin bên dưới'}
                 </span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-              <Field id="first-name" label={lang === 'vi' ? 'Tên' : 'First name'}>
+              <Field id="first-name" label={'Tên'}>
                 <input id="first-name" value={firstName} onChange={event => setFirstName(event.target.value)} autoComplete="given-name" />
               </Field>
-              <Field id="last-name" label={lang === 'vi' ? 'Họ và đệm' : 'Last name'}>
+              <Field id="last-name" label={'Họ và đệm'}>
                 <input id="last-name" value={lastName} onChange={event => setLastName(event.target.value)} autoComplete="family-name" />
               </Field>
             </div>
-            <Field id="register-email" label={lang === 'vi' ? 'Địa chỉ email' : 'Email address'}>
+            <Field id="register-email" label={'Địa chỉ email'}>
               <input id="register-email" value={email} onChange={event => setEmail(event.target.value)} type="email" autoComplete="email" />
             </Field>
-            <Field id="phone" label={lang === 'vi' ? 'Số điện thoại' : 'Phone number'}>
+            <Field id="phone" label={'Số điện thoại'}>
               <input id="phone" value={phone} onChange={event => setPhone(event.target.value)} type="tel" autoComplete="tel" placeholder="0901 234 567" />
             </Field>
-            <Field id="register-password" label={lang === 'vi' ? 'Mật khẩu' : 'Password'}>
+            <Field id="register-password" label={'Mật khẩu'}>
               <PasswordInput id="register-password" value={password} onChange={setPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" />
             </Field>
-            <Field id="confirm-password" label={lang === 'vi' ? 'Xác nhận mật khẩu' : 'Confirm password'}>
+            <Field id="confirm-password" label={'Xác nhận mật khẩu'}>
               <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" />
             </Field>
             <ErrorMessage message={error} />
-            <PrimaryButton>{lang === 'vi' ? 'Hoàn Tất Đăng Ký' : 'Create Account'}</PrimaryButton>
+            <PrimaryButton>{'Hoàn Tất Đăng Ký'}</PrimaryButton>
             <p className="mt-[18px] text-center text-[11.5px] leading-relaxed text-[#8b897f]">
-              {lang === 'vi'
-                ? 'Khi đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của StorageHub.'
-                : 'By creating an account you agree to our Terms of Service and Privacy Policy.'}
+              {'Khi đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của StorageHub.'}
             </p>
           </form>
         )}
@@ -420,10 +372,10 @@ export default function Login({ onLogin }: LoginProps) {
                 <GoogleIcon />
               </div>
               <h3 className="text-lg font-bold text-stone-900">
-                {lang === 'vi' ? 'Đăng nhập bằng Google' : 'Sign in with Google'}
+                {'Đăng nhập bằng Google'}
               </h3>
               <p className="text-xs text-stone-500 mt-1">
-                {lang === 'vi' ? 'để tiếp tục đến StorageHub Platform' : 'to continue to StorageHub Platform'}
+                {'để tiếp tục đến StorageHub Platform'}
               </p>
             </div>
 
@@ -431,7 +383,7 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="p-4 space-y-2 divide-y divide-stone-100">
               <button
                 type="button"
-                onClick={() => handleGoogleLoginUser({ name: 'Alex Morgan', email: 'alex.morgan@gmail.com', role: 'customer' })}
+                onClick={() => handleGoogleCustomerLogin({ name: 'Alex Morgan', email: 'alex.morgan@gmail.com' })}
                 className="w-full flex items-center gap-3.5 p-3 rounded-xl hover:bg-stone-50 transition text-left group"
               >
                 <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0">
@@ -442,30 +394,13 @@ export default function Login({ onLogin }: LoginProps) {
                   <p className="text-xs text-stone-400 truncate">alex.morgan@gmail.com</p>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {lang === 'vi' ? 'Khách Hàng' : 'Customer'}
+                  {'Khách Hàng'}
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleGoogleLoginUser({ name: 'Sarah Chen', email: 'sarah.chen@gmail.com', role: 'staff' })}
-                className="w-full flex items-center gap-3.5 p-3 rounded-xl hover:bg-stone-50 transition text-left group pt-3"
-              >
-                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center flex-shrink-0">
-                  S
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-stone-800 group-hover:text-emerald-600 truncate">Sarah Chen</p>
-                  <p className="text-xs text-stone-400 truncate">sarah.chen@gmail.com</p>
-                </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                  {lang === 'vi' ? 'Nhân Viên' : 'Staff'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleGoogleLoginUser({ name: 'Google Demo User', email: 'user.google@storagehub.vn', role: 'customer' })}
+                onClick={() => handleGoogleCustomerLogin({ name: 'Google Demo User', email: 'user.google@storagehub.vn' })}
                 className="w-full flex items-center gap-3.5 p-3 rounded-xl hover:bg-stone-50 transition text-left group pt-3"
               >
                 <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center flex-shrink-0">
@@ -473,7 +408,7 @@ export default function Login({ onLogin }: LoginProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-stone-800 group-hover:text-amber-600 truncate">
-                    {lang === 'vi' ? 'Tài khoản Google bất kỳ' : 'Any Google Account'}
+                    {'Tài khoản Google bất kỳ'}
                   </p>
                   <p className="text-xs text-stone-400 truncate">user.google@storagehub.vn</p>
                 </div>
@@ -487,7 +422,7 @@ export default function Login({ onLogin }: LoginProps) {
                 onClick={() => setGoogleModal(false)}
                 className="text-xs text-stone-500 hover:text-stone-800 font-medium px-3 py-1.5 rounded-lg hover:bg-stone-200/60"
               >
-                {lang === 'vi' ? 'Hủy' : 'Cancel'}
+                {'Hủy'}
               </button>
               <span className="text-[11px] text-stone-400">
                 StorageHub Google Identity Service
@@ -518,22 +453,19 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
   onBack: () => void
   onReturnToLogin: () => void
 }) {
-  const { lang } = useLanguage()
 
   if (step === 'success') {
     return (
       <div className="text-center">
         <StatusIcon />
         <h1 className="mt-5 text-2xl font-bold text-stone-900">
-          {lang === 'vi' ? 'Cập nhật mật khẩu thành công' : 'Password updated'}
+          {'Cập nhật mật khẩu thành công'}
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-stone-500">
-          {lang === 'vi'
-            ? 'Mật khẩu của bạn đã được thay đổi. Bạn có thể đăng nhập ngay bằng mật khẩu mới.'
-            : 'Your password has been changed successfully. You can now sign in with your new password.'}
+          {'Mật khẩu của bạn đã được thay đổi. Bạn có thể đăng nhập ngay bằng mật khẩu mới.'}
         </p>
         <PrimaryButton className="mt-6" onClick={onReturnToLogin}>
-          {lang === 'vi' ? 'Quay lại Đăng nhập' : 'Back to Sign In'}
+          {'Quay lại Đăng nhập'}
         </PrimaryButton>
       </div>
     )
@@ -541,23 +473,23 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
 
   const copy = {
     identify: {
-      title: lang === 'vi' ? 'Tìm tài khoản của bạn' : 'Find your account',
-      text: lang === 'vi' ? 'Nhập số điện thoại hoặc email liên kết với tài khoản StorageHub.' : 'Enter the mobile number or email address connected to your StorageHub account.'
+      title: 'Tìm tài khoản của bạn',
+      text: 'Nhập số điện thoại hoặc email liên kết với tài khoản StorageHub.'
     },
     verify: {
-      title: lang === 'vi' ? 'Nhập mã xác thực bảo mật' : 'Enter security code',
-      text: lang === 'vi' ? `Chúng tôi đã gửi mã 6 chữ số đến ${account}. Nhập mã bên dưới để tiếp tục.` : `We sent a 6-digit code to ${account}. Enter it below to continue.`
+      title: 'Nhập mã xác thực bảo mật',
+      text: `Chúng tôi đã gửi mã 6 chữ số đến ${account}. Nhập mã bên dưới để tiếp tục.`
     },
     'new-password': {
-      title: lang === 'vi' ? 'Tạo mật khẩu mới' : 'Choose a new password',
-      text: lang === 'vi' ? 'Tạo mật khẩu mạnh mà bạn chưa từng sử dụng trước đây.' : 'Create a strong password you have not used before.'
+      title: 'Tạo mật khẩu mới',
+      text: 'Tạo mật khẩu mạnh mà bạn chưa từng sử dụng trước đây.'
     },
   }[step]
 
   return (
     <div>
       <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#9a5a05]">
-        {lang === 'vi' ? 'KHÔI PHỤC TÀI KHOẢN' : 'ACCOUNT RECOVERY'}
+        {'KHÔI PHỤC TÀI KHOẢN'}
       </p>
       <h1 className="text-2xl font-bold text-stone-900">{copy.title}</h1>
       <p className="mt-2 text-sm leading-6 text-stone-500">{copy.text}</p>
@@ -574,24 +506,24 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
 
       {step === 'identify' && (
         <form onSubmit={onFindAccount}>
-          <Field id="recovery-account" label={lang === 'vi' ? 'Số điện thoại hoặc Email' : 'Mobile number or email'}>
+          <Field id="recovery-account" label={'Số điện thoại hoặc Email'}>
             <input
               id="recovery-account"
               value={account}
               onChange={event => setAccount(event.target.value)}
               autoFocus
-              placeholder={lang === 'vi' ? 'Nhập SĐT hoặc email...' : 'Mobile number or email'}
+              placeholder={'Nhập SĐT hoặc email...'}
             />
           </Field>
           <ErrorMessage message={error} />
-          <PrimaryButton>{lang === 'vi' ? 'Tiếp Tục' : 'Continue'}</PrimaryButton>
-          <SecondaryButton onClick={onReturnToLogin}>{lang === 'vi' ? 'Hủy Bỏ' : 'Cancel'}</SecondaryButton>
+          <PrimaryButton>{'Tiếp Tục'}</PrimaryButton>
+          <SecondaryButton onClick={onReturnToLogin}>{'Hủy Bỏ'}</SecondaryButton>
         </form>
       )}
 
       {step === 'verify' && (
         <form onSubmit={onVerify}>
-          <Field id="verification-code" label={lang === 'vi' ? 'Mã xác thực 6 số' : 'Security code'}>
+          <Field id="verification-code" label={'Mã xác thực 6 số'}>
             <input
               id="verification-code"
               value={code}
@@ -604,20 +536,20 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
             />
           </Field>
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            {lang === 'vi' ? 'Mã xác thực demo: ' : 'Demo code: '}
+            {'Mã xác thực demo: '}
             <strong className="font-mono">{DEMO_CODE}</strong>
           </div>
           <ErrorMessage message={error} />
-          <PrimaryButton>{lang === 'vi' ? 'Xác Nhận Mã' : 'Continue'}</PrimaryButton>
+          <PrimaryButton>{'Xác Nhận Mã'}</PrimaryButton>
           <SecondaryButton onClick={onBack}>
-            {lang === 'vi' ? 'Dùng tài khoản khác' : 'Use another account'}
+            {'Dùng tài khoản khác'}
           </SecondaryButton>
         </form>
       )}
 
       {step === 'new-password' && (
         <form onSubmit={onSavePassword}>
-          <Field id="new-password" label={lang === 'vi' ? 'Mật khẩu mới' : 'New password'}>
+          <Field id="new-password" label={'Mật khẩu mới'}>
             <PasswordInput
               id="new-password"
               value={newPassword}
@@ -628,7 +560,7 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
               hideToggle
             />
           </Field>
-          <Field id="new-password-confirm" label={lang === 'vi' ? 'Xác nhận mật khẩu mới' : 'Confirm new password'}>
+          <Field id="new-password-confirm" label={'Xác nhận mật khẩu mới'}>
             <PasswordInput
               id="new-password-confirm"
               value={confirmPassword}
@@ -640,11 +572,11 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
             />
           </Field>
           <p className="-mt-2 mb-4 text-xs text-stone-500">
-            {lang === 'vi' ? 'Sử dụng ít nhất 8 ký tự.' : 'Use at least 8 characters.'}
+            {'Sử dụng ít nhất 8 ký tự.'}
           </p>
           <ErrorMessage message={error} />
-          <PrimaryButton>{lang === 'vi' ? 'Lưu Mật Khẩu Mới' : 'Save new password'}</PrimaryButton>
-          <SecondaryButton onClick={onBack}>{lang === 'vi' ? 'Quay Lại' : 'Back'}</SecondaryButton>
+          <PrimaryButton>{'Lưu Mật Khẩu Mới'}</PrimaryButton>
+          <SecondaryButton onClick={onBack}>{'Quay Lại'}</SecondaryButton>
         </form>
       )}
     </div>

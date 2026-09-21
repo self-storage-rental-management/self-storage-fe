@@ -1,8 +1,8 @@
 /** Seed data for the frontend demo. Replace this module with API calls when the backend is connected. */
 
 export const FACILITIES = [
-  { id: 'fac-001', name: 'Downtown Storage', address: '125 Nguyen Hue, District 1', city: 'Ho Chi Minh City', rating: 4.8, available: 18, price: '$89', climate: true, security: '24/7', image: 'photo-1553413077-190dd305871c', units: 120, occupied: 96, revenue: 18450, growth: 8.4, manager: 'Demo Manager', status: 'active' },
-  { id: 'fac-002', name: 'Riverside Storage', address: '42 Bach Dang, Binh Thanh', city: 'Ho Chi Minh City', rating: 4.6, available: 9, price: '$75', climate: false, security: '24/7', image: 'photo-1586864387967-d02ef85d93e8', units: 80, occupied: 61, revenue: 10890, growth: 5.1, manager: 'Mai Tran', status: 'active' },
+  { id: 'fac-001', name: 'Downtown Storage', address: '125 Nguyen Hue, District 1', city: 'Ho Chi Minh City', rating: 4.8, available: 18, price: '89', climate: true, security: '24/7', image: 'photo-1553413077-190dd305871c', units: 120, occupied: 96, revenue: 18450, growth: 8.4, manager: 'Demo Manager', status: 'active' },
+  { id: 'fac-002', name: 'Riverside Storage', address: '42 Bach Dang, Binh Thanh', city: 'Ho Chi Minh City', rating: 4.6, available: 9, price: '75', climate: false, security: '24/7', image: 'photo-1586864387967-d02ef85d93e8', units: 80, occupied: 61, revenue: 10890, growth: 5.1, manager: 'Mai Tran', status: 'active' },
 ]
 
 export const UNITS = [
@@ -634,9 +634,9 @@ export const DISCOUNTS: PromotionItem[] = [
     id: 'DSC-103',
     code: 'FALLSTORAGE25',
     name: 'Autumn Move-In Special',
-    description: 'Instant $25 deduction on the first month invoice for any new storage unit reservation.',
-    value: '$25 OFF',
-    discount: '$25 one-time adjustment',
+    description: 'Instant 650.000 ₫ deduction on the first month invoice for any new storage unit reservation.',
+    value: '650.000 ₫ OFF',
+    discount: '650.000 ₫ one-time adjustment',
     type: 'fixed-amount',
     typeLabel: 'Fixed Amount',
     active: true,
@@ -673,8 +673,8 @@ export const DISCOUNTS: PromotionItem[] = [
     code: 'SUMMER2026',
     name: 'Summer Flash Promotion (Expired)',
     description: 'Summer seasonal campaign for student locker and mini storage.',
-    value: '$15 OFF',
-    discount: '$15 one-time off',
+    value: '390.000 ₫ OFF',
+    discount: '390.000 ₫ one-time off',
     type: 'seasonal',
     typeLabel: 'Seasonal Flash',
     active: false,
@@ -696,7 +696,7 @@ export const DISCOUNTS: PromotionItem[] = [
 
 export const POLICIES = [
   { id: 'pol-1', name: 'Grace Period', value: '5 days', scope: 'All Facilities', editable: true },
-  { id: 'pol-2', name: 'Late Fee', value: '$25 / month', scope: 'All Facilities', editable: true },
+  { id: 'pol-2', name: 'Late Fee', value: '650.000 ₫ / month', scope: 'All Facilities', editable: true },
   { id: 'pol-3', name: 'Security Deposit', value: '1 month', scope: 'All Facilities', editable: true },
   { id: 'pol-4', name: 'Notice to Vacate', value: '15 days', scope: 'All Facilities', editable: true },
   { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', editable: true }
@@ -704,10 +704,10 @@ export const POLICIES = [
 
 
 export const FEES = [
-  { type: 'Late payment fee', amount: '$25.00', trigger: 'Applied automatically 5 days after payment due date', applies: 'All tenants' },
-  { type: 'Digital lock replacement', amount: '$45.00', trigger: 'Upon tenant physical loss or key fob damage', applies: 'Tenant responsibility' },
-  { type: 'Unit cleaning & restoration', amount: '$80.00', trigger: 'Charged if unit returned with debris or biohazard', applies: 'Move-out inspection' },
-  { type: 'Emergency unlock assistance', amount: '$30.00', trigger: 'After-hours on-site manual lock release', applies: 'Per call-out' }
+  { type: 'Late payment fee', amount: '650.000 ₫', trigger: 'Applied automatically 5 days after payment due date', applies: 'All tenants' },
+  { type: 'Digital lock replacement', amount: '1.170.000 ₫', trigger: 'Upon tenant physical loss or key fob damage', applies: 'Tenant responsibility' },
+  { type: 'Unit cleaning & restoration', amount: '2.080.000 ₫', trigger: 'Charged if unit returned with debris or biohazard', applies: 'Move-out inspection' },
+  { type: 'Emergency unlock assistance', amount: '780.000 ₫', trigger: 'After-hours on-site manual lock release', applies: 'Per call-out' }
 ]
 
 export const USERS = [
@@ -833,7 +833,7 @@ export const ACTIVITY_LOGS: AuditActivityLog[] = [
     actor: 'Demo Customer',
     role: 'customer',
     action: 'Processed online credit card payment for September rent',
-    target: 'Invoice INV-2026-0081 · $149.00',
+    target: 'Invoice INV-2026-0081 · 3.874.000 ₫',
     time: '5 hours ago',
     timestamp: '2026-09-18 07:11:45',
     type: 'success',
@@ -871,7 +871,7 @@ export const SETTINGS_GROUPS: SettingGroup[] = [
       { id: 'businessName', label: 'Company / Facility Name', type: 'text', value: 'StorageHub Vietnam' },
       { id: 'contactEmail', label: 'Primary Support Email', type: 'text', value: 'support@storagehub.demo' },
       { id: 'hotline', label: 'Customer Hotline', type: 'text', value: '+84 28 3822 8888' },
-      { id: 'currency', label: 'Operating Currency', type: 'select', value: 'USD ($)', options: ['USD ($)', 'VND (₫)', 'EUR (€)', 'SGD ($)'] },
+      { id: 'currency', label: 'Operating Currency', type: 'select', value: 'VND (₫)', options: ['VND (₫)'] },
       { id: 'timezone', label: 'Facility Timezone', type: 'select', value: 'GMT+7 (Asia/Ho_Chi_Minh)', options: ['GMT+7 (Asia/Ho_Chi_Minh)', 'GMT+8 (Asia/Singapore)', 'GMT+0 (UTC)'] }
     ]
   },
@@ -880,7 +880,7 @@ export const SETTINGS_GROUPS: SettingGroup[] = [
     description: 'Automated invoice generation, grace periods, and late penalty triggers.',
     items: [
       { id: 'gracePeriod', label: 'Late Fee Grace Period (Days)', type: 'number', value: 5 },
-      { id: 'lateFeeAmount', label: 'Fixed Late Fee Amount ($)', type: 'number', value: 25 },
+      { id: 'lateFeeAmount', label: 'Fixed Late Fee Amount (VND)', type: 'number', value: 650000 },
       { id: 'autoInvoiceDays', label: 'Advance Invoice Generation (Days)', type: 'select', value: '7 days before due date', options: ['3 days before due date', '7 days before due date', '14 days before due date', '30 days before due date'] },
       { id: 'autoProrate', label: 'Prorate First Month Rent on Move-in', type: 'toggle', value: true }
     ]

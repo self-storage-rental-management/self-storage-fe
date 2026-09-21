@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { User } from '../types'
 import { Card, Button, Input, Badge, Avatar } from '../components/ui'
-import { useLanguage } from '../i18n/LanguageContext'
 
 interface ProfileViewProps {
   user: User
@@ -10,7 +9,6 @@ interface ProfileViewProps {
 
 export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile')
-  const { lang, t } = useLanguage()
 
   // Form states
   const [name, setName] = useState(user.name)
@@ -45,49 +43,32 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     if (onUpdateUser) {
       onUpdateUser({ name, email })
     }
-    // Update local user if possible
-    try {
-      const saved = localStorage.getItem('storagehub:user')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        localStorage.setItem('storagehub:user', JSON.stringify({ ...parsed, name, email }))
-      }
-    } catch {}
-    showToast(lang === 'vi' ? 'Đã lưu hồ sơ trên thiết bị demo; chưa đồng bộ backend.' : 'Profile saved on this demo device; backend sync is not connected.')
+    showToast('Đã lưu hồ sơ trên thiết bị demo; chưa đồng bộ backend.')
   }
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentPassword) {
-      alert(lang === 'vi' ? 'Vui lòng nhập mật khẩu hiện tại' : 'Please enter your current password')
+      alert('Vui lòng nhập mật khẩu hiện tại')
       return
     }
     if (newPassword.length < 6) {
-      alert(lang === 'vi' ? 'Mật khẩu mới phải có ít nhất 6 ký tự' : 'New password must be at least 6 characters')
+      alert('Mật khẩu mới phải có ít nhất 6 ký tự')
       return
     }
     if (newPassword !== confirmPassword) {
-      alert(lang === 'vi' ? 'Mật khẩu xác nhận không khớp' : 'New passwords do not match')
+      alert('Mật khẩu xác nhận không khớp')
       return
     }
-    showToast(lang === 'vi' ? 'Chưa thể đổi mật khẩu: frontend chưa kết nối API xác thực.' : 'Password was not changed because the authentication API is not connected.')
+    showToast('Chưa thể đổi mật khẩu: frontend chưa kết nối API xác thực.')
   }
 
-  const roleLabelMap: Record<string, Record<string, string>> = {
-    vi: {
-      customer: 'Khách Hàng Thuê Kho',
-      staff: 'Chuyên Viên Vận Hành Cơ Sở',
-      manager: 'Giám Đốc Quản Lý Cơ Sở',
-      business: 'Đối Tác Kinh Doanh',
-      admin: 'Quản Trị Viên Hệ Thống'
-    },
-    en: {
-      customer: 'Customer Tenant',
-      staff: 'On-Site Staff Specialist',
-      manager: 'Facility General Manager',
-      business: 'Business Operations Director',
-      admin: 'System Super Administrator'
-    }
+  const roleLabelMap: Record<string, string> = {
+    customer: 'Khách Hàng Thuê Kho',
+    staff: 'Chuyên Viên Vận Hành Cơ Sở',
+    manager: 'Giám Đốc Quản Lý Cơ Sở',
+    business: 'Đối Tác Kinh Doanh',
+    admin: 'Quản Trị Viên Hệ Thống'
   }
 
 
@@ -111,8 +92,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <button
                 type="button"
                 className="absolute -bottom-1 -right-1 bg-[#e9a12c] text-[#292a27] p-1.5 rounded-full hover:bg-amber-400 transition shadow"
-                title={lang === 'vi' ? 'Đổi ảnh đại diện' : 'Change profile avatar'}
-                onClick={() => showToast(lang === 'vi' ? 'Mô phỏng tải ảnh đại diện: Đã cập nhật ảnh mới!' : 'Avatar upload dialog simulation: image updated!')}
+                title={'Đổi ảnh đại diện'}
+                onClick={() => showToast('Mô phỏng tải ảnh đại diện: Đã cập nhật ảnh mới!')}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -124,16 +105,16 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <div className="flex flex-wrap items-center gap-2 mb-1">
                 <h1 className="text-2xl font-bold tracking-tight text-stone-100">{user.name}</h1>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-mono uppercase tracking-[.08em] font-semibold bg-[#e9a12c] text-[#3f2607]">
-                  {roleLabelMap[lang]?.[user.role] ?? user.role}
+                  {roleLabelMap[user.role] ?? user.role}
                 </span>
               </div>
               <p className="text-sm text-stone-300 flex items-center gap-3 flex-wrap">
                 <span>{user.email}</span>
                 <span>•</span>
-                <span>{lang === 'vi' ? 'Thành viên từ Th1 2026' : 'Member since Jan 2026'}</span>
+                <span>{'Thành viên từ Th1 2026'}</span>
                 <span>•</span>
                 <span className="text-amber-300 font-medium">
-                  {lang === 'vi' ? 'Trạng thái: Đã định danh CCCD' : 'Status: Active & Verified'}
+                  {'Trạng thái: Đã định danh CCCD'}
                 </span>
               </p>
             </div>
@@ -142,7 +123,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-xs font-mono tracking-wide text-stone-200 border border-white/15">
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              {lang === 'vi' ? 'PHIÊN HOẠT ĐỘNG' : 'SESSION ACTIVE'}
+              {'PHIÊN HOẠT ĐỘNG'}
             </span>
           </div>
         </div>
@@ -158,7 +139,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          {lang === 'vi' ? 'Thông Tin Cá Nhân' : 'General Information'}
+          {'Thông Tin Cá Nhân'}
         </button>
         <button
           onClick={() => setActiveTab('security')}
@@ -168,7 +149,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          {lang === 'vi' ? 'Bảo Mật & Mật Khẩu' : 'Security & Credentials'}
+          {'Bảo Mật & Mật Khẩu'}
         </button>
         <button
           onClick={() => setActiveTab('notifications')}
@@ -178,7 +159,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          {lang === 'vi' ? 'Tùy Chọn Thông Báo' : 'Notification Preferences'}
+          {'Tùy Chọn Thông Báo'}
         </button>
       </div>
 
@@ -190,27 +171,27 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
                 <div>
                   <h2 className="text-lg font-bold text-stone-900">
-                    {lang === 'vi' ? 'Chi Tiết Cá Nhân' : 'Personal Details'}
+                    {'Chi Tiết Cá Nhân'}
                   </h2>
                   <p className="text-xs text-stone-500">
-                    {lang === 'vi' ? 'Cập nhật thông tin liên hệ và định danh pháp lý của bạn' : 'Update your contact profile and legal verification data'}
+                    {'Cập nhật thông tin liên hệ và định danh pháp lý của bạn'}
                   </p>
                 </div>
                 <Badge variant="success">
-                  {lang === 'vi' ? 'Đã Định Danh' : 'Verified ID'}
+                  {'Đã Định Danh'}
                 </Badge>
               </div>
 
               <form onSubmit={handleSaveProfile} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
-                    label={lang === 'vi' ? 'Họ và Tên' : 'Full Name'}
+                    label={'Họ và Tên'}
                     value={name}
                     onChange={e => setName(e.target.value)}
                     required
                   />
                   <Input
-                    label={lang === 'vi' ? 'Địa Chỉ Email' : 'Email Address'}
+                    label={'Địa Chỉ Email'}
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
@@ -220,32 +201,32 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
-                    label={lang === 'vi' ? 'Số Điện Thoại Chính' : 'Primary Phone Number'}
+                    label={'Số Điện Thoại Chính'}
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
                   />
                   <Input
-                    label={lang === 'vi' ? 'Số CCCD / Hộ Chiếu' : 'National ID / Passport Number'}
+                    label={'Số CCCD / Hộ Chiếu'}
                     value={idCard}
                     onChange={e => setIdCard(e.target.value)}
                   />
                 </div>
 
                 <Input
-                  label={lang === 'vi' ? 'Địa Chỉ Thường Trú' : 'Registered Address'}
+                  label={'Địa Chỉ Thường Trú'}
                   value={address}
                   onChange={e => setAddress(e.target.value)}
                 />
 
                 <Input
-                  label={lang === 'vi' ? 'Người Liên Hệ Khẩn Cấp (Tên & SĐT)' : 'Emergency Contact (Name & Phone)'}
+                  label={'Người Liên Hệ Khẩn Cấp (Tên & SĐT)'}
                   value={emergencyContact}
                   onChange={e => setEmergencyContact(e.target.value)}
                 />
 
                 <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
                   <Button type="submit" variant="primary">
-                    {lang === 'vi' ? 'Lưu Thay Đổi' : 'Save Changes'}
+                    {'Lưu Thay Đổi'}
                   </Button>
                 </div>
               </form>
@@ -257,29 +238,29 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
             <Card className="p-5">
               <h3 className="font-semibold text-stone-900 mb-3 text-sm flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-amber-500" />
-                {lang === 'vi' ? 'Tổng Quan Tài Khoản' : 'Account Overview'}
+                {'Tổng Quan Tài Khoản'}
               </h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between py-1.5 border-b border-stone-100">
-                  <span className="text-stone-500">{lang === 'vi' ? 'Vai Trò' : 'User Role'}</span>
+                  <span className="text-stone-500">{'Vai Trò'}</span>
                   <span className="font-semibold uppercase font-mono text-xs text-stone-800">
-                    {roleLabelMap[lang]?.[user.role] ?? user.role}
+                    {roleLabelMap[user.role] ?? user.role}
                   </span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-stone-100">
-                  <span className="text-stone-500">{lang === 'vi' ? 'Cơ Sở Kho' : 'Default Facility'}</span>
+                  <span className="text-stone-500">{'Cơ Sở Kho'}</span>
                   <span className="font-medium text-stone-800">StorageHub Central</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-stone-100">
-                  <span className="text-stone-500">{lang === 'vi' ? 'Cấp Độ An Ninh' : 'Security Clearance'}</span>
+                  <span className="text-stone-500">{'Cấp Độ An Ninh'}</span>
                   <span className="font-medium text-emerald-700">
-                    {lang === 'vi' ? 'Cấp 1 · Đã Xác Thực' : 'Tier 1 · Verified'}
+                    {'Cấp 1 · Đã Xác Thực'}
                   </span>
                 </div>
                 <div className="flex justify-between py-1.5">
-                  <span className="text-stone-500">{lang === 'vi' ? 'Xác Thực 2 Bước' : 'Two-Factor Auth'}</span>
+                  <span className="text-stone-500">{'Xác Thực 2 Bước'}</span>
                   <Badge variant={twoFactorEnabled ? 'success' : 'warning'}>
-                    {twoFactorEnabled ? (lang === 'vi' ? 'Đang Bật' : 'Active') : (lang === 'vi' ? 'Đã Tắt' : 'Disabled')}
+                    {twoFactorEnabled ? ('Đang Bật') : ('Đã Tắt')}
                   </Badge>
                 </div>
               </div>
@@ -287,20 +268,18 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
 
             <Card className="p-5 bg-[#fbfaf6] border-dashed">
               <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-stone-500 mb-2">
-                {lang === 'vi' ? 'Thẻ Ra Vào Kho Kỹ Thuật Số' : 'StorageHub Digital Keycard'}
+                {'Thẻ Ra Vào Kho Kỹ Thuật Số'}
               </h3>
               <div className="rounded-lg bg-[#292a27] p-4 text-white">
                 <div className="flex justify-between items-center text-xs text-[#e9a12c] font-mono">
-                  <span>{lang === 'vi' ? 'QUYỀN TRUY CẬP STORAGEHUB' : 'STORAGEHUB ACCESS'}</span>
-                  <span>{lang === 'vi' ? 'ĐÃ ĐỒNG BỘ MÃ PIN' : 'PIN SYNCED'}</span>
+                  <span>{'QUYỀN TRUY CẬP STORAGEHUB'}</span>
+                  <span>{'ĐÃ ĐỒNG BỘ MÃ PIN'}</span>
                 </div>
                 <p className="mt-3 text-lg font-mono tracking-widest text-amber-200">
                   •••• 4921 #
                 </p>
                 <p className="mt-2 text-[11px] text-stone-400">
-                  {lang === 'vi'
-                    ? 'Ủy quyền mở cổng xe và cửa thông minh tại cơ sở StorageHub Central'
-                    : 'Authorized for vehicle & passenger gate entry at StorageHub Central'}
+                  {'Ủy quyền mở cổng xe và cửa thông minh tại cơ sở StorageHub Central'}
                 </p>
               </div>
             </Card>
@@ -316,40 +295,40 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
             <Card className="p-6">
               <div className="pb-4 mb-5 border-b border-stone-100">
                 <h2 className="text-lg font-bold text-stone-900">
-                  {lang === 'vi' ? 'Đổi Mật Khẩu Đăng Nhập' : 'Change Password'}
+                  {'Đổi Mật Khẩu Đăng Nhập'}
                 </h2>
                 <p className="text-xs text-stone-500">
-                  {lang === 'vi' ? 'Sử dụng mật khẩu mạnh có ít nhất 8 ký tự' : 'Use a strong password with at least 8 characters'}
+                  {'Sử dụng mật khẩu mạnh có ít nhất 8 ký tự'}
                 </p>
               </div>
 
               <form onSubmit={handleChangePassword} className="space-y-4">
                 <Input
-                  label={lang === 'vi' ? 'Mật Khẩu Hiện Tại' : 'Current Password'}
+                  label={'Mật Khẩu Hiện Tại'}
                   type="password"
-                  placeholder={lang === 'vi' ? 'Nhập mật khẩu hiện tại...' : 'Enter current password'}
+                  placeholder={'Nhập mật khẩu hiện tại...'}
                   value={currentPassword}
                   onChange={e => setCurrentPassword(e.target.value)}
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
-                    label={lang === 'vi' ? 'Mật Khẩu Mới' : 'New Password'}
+                    label={'Mật Khẩu Mới'}
                     type="password"
-                    placeholder={lang === 'vi' ? 'Ít nhất 6 ký tự...' : 'At least 6 characters'}
+                    placeholder={'Ít nhất 6 ký tự...'}
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                   />
                   <Input
-                    label={lang === 'vi' ? 'Xác Nhận Mật Khẩu Mới' : 'Confirm New Password'}
+                    label={'Xác Nhận Mật Khẩu Mới'}
                     type="password"
-                    placeholder={lang === 'vi' ? 'Nhập lại mật khẩu mới...' : 'Repeat new password'}
+                    placeholder={'Nhập lại mật khẩu mới...'}
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
                   />
                 </div>
                 <div className="flex justify-end pt-2">
                   <Button type="submit" variant="secondary">
-                    {lang === 'vi' ? 'Lưu Mật Khẩu Mới' : 'Update Password'}
+                    {'Lưu Mật Khẩu Mới'}
                   </Button>
                 </div>
               </form>
@@ -360,18 +339,18 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <div className="flex items-center justify-between pb-4 mb-4 border-b border-stone-100">
                 <div>
                   <h2 className="text-lg font-bold text-stone-900">
-                    {lang === 'vi' ? 'Phiên Đăng Nhập Đang Hoạt Động' : 'Active Login Sessions'}
+                    {'Phiên Đăng Nhập Đang Hoạt Động'}
                   </h2>
                   <p className="text-xs text-stone-500">
-                    {lang === 'vi' ? 'Các thiết bị hiện đang được xác thực với tài khoản này' : 'Devices currently authenticated with this account'}
+                    {'Các thiết bị hiện đang được xác thực với tài khoản này'}
                   </p>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => showToast(lang === 'vi' ? 'Đã hủy tất cả các phiên đăng nhập khác!' : 'Terminated all other active sessions!')}
+                  onClick={() => showToast('Đã hủy tất cả các phiên đăng nhập khác!')}
                 >
-                  {lang === 'vi' ? 'Đăng Xuất Thiết Bị Khác' : 'Sign Out Other Devices'}
+                  {'Đăng Xuất Thiết Bị Khác'}
                 </Button>
               </div>
 
@@ -384,17 +363,17 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold text-stone-900">
-                          {lang === 'vi' ? 'Thiết Bị Hiện Tại (Windows Chrome)' : 'Current Device (Windows Chrome)'}
+                          {'Thiết Bị Hiện Tại (Windows Chrome)'}
                         </p>
                         <Badge variant="success">
-                          {lang === 'vi' ? 'Phiên Này' : 'This Session'}
+                          {'Phiên Này'}
                         </Badge>
                       </div>
                       <p className="text-xs text-stone-500">192.168.1.20 · TP. Hồ Chí Minh, Việt Nam</p>
                     </div>
                   </div>
                   <span className="text-xs font-medium text-emerald-700">
-                    {lang === 'vi' ? 'Đang hoạt động' : 'Active now'}
+                    {'Đang hoạt động'}
                   </span>
                 </div>
 
@@ -406,16 +385,16 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     <div>
                       <p className="text-sm font-semibold text-stone-900">StorageHub Mobile (iPhone 15 Pro)</p>
                       <p className="text-xs text-stone-500">
-                        {lang === 'vi' ? 'Quận 1, TP.HCM · Hoạt động 2 giờ trước' : 'District 1, HCMC · Last active 2 hours ago'}
+                        {'Quận 1, TP.HCM · Hoạt động 2 giờ trước'}
                       </p>
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => showToast(lang === 'vi' ? 'Đã thu hồi phiên đăng nhập!' : 'Session revoked!')}
+                    onClick={() => showToast('Đã thu hồi phiên đăng nhập!')}
                   >
-                    {lang === 'vi' ? 'Thu Hồi' : 'Revoke'}
+                    {'Thu Hồi'}
                   </Button>
                 </div>
               </div>
@@ -427,16 +406,14 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
             <Card className="p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-stone-900 text-sm">
-                  {lang === 'vi' ? 'Xác Thực 2 Bước (2FA)' : 'Two-Factor Authentication'}
+                  {'Xác Thực 2 Bước (2FA)'}
                 </h3>
                 <Badge variant={twoFactorEnabled ? 'success' : 'muted'}>
-                  {twoFactorEnabled ? (lang === 'vi' ? 'Đang Bật' : 'Enabled') : (lang === 'vi' ? 'Đã Tắt' : 'Disabled')}
+                  {twoFactorEnabled ? ('Đang Bật') : ('Đã Tắt')}
                 </Badge>
               </div>
               <p className="text-xs text-stone-500 leading-relaxed mb-4">
-                {lang === 'vi'
-                  ? 'Bổ sung thêm lớp bảo mật bằng cách yêu cầu mã OTP từ ứng dụng Google Authenticator hoặc tin nhắn SMS khi đăng nhập.'
-                  : 'Adds an additional layer of security by requiring an OTP code from Google Authenticator or SMS upon login.'}
+                {'Bổ sung thêm lớp bảo mật bằng cách yêu cầu mã OTP từ ứng dụng Google Authenticator hoặc tin nhắn SMS khi đăng nhập.'}
               </p>
               <div className="pt-2">
                 <Button
@@ -448,14 +425,14 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     setTwoFactorEnabled(next)
                     showToast(
                       next
-                        ? (lang === 'vi' ? 'Đã kích hoạt bảo mật 2 bước!' : 'Two-Factor Authentication enabled!')
-                        : (lang === 'vi' ? 'Đã tắt bảo mật 2 bước.' : 'Two-Factor Authentication disabled.')
+                        ? ('Đã kích hoạt bảo mật 2 bước!')
+                        : ('Đã tắt bảo mật 2 bước.')
                     )
                   }}
                 >
                   {twoFactorEnabled
-                    ? (lang === 'vi' ? 'Tắt Xác Thực 2FA' : 'Disable 2FA')
-                    : (lang === 'vi' ? 'Kích Hoạt Bảo Mật 2FA' : 'Enable 2FA Protection')}
+                    ? ('Tắt Xác Thực 2FA')
+                    : ('Kích Hoạt Bảo Mật 2FA')}
                 </Button>
               </div>
             </Card>
@@ -468,10 +445,10 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
         <Card className="p-6 max-w-3xl">
           <div className="pb-4 mb-5 border-b border-stone-100">
             <h2 className="text-lg font-bold text-stone-900">
-              {lang === 'vi' ? 'Kênh Thông Báo & Cảnh Báo' : 'Communication & Alert Channels'}
+              {'Kênh Thông Báo & Cảnh Báo'}
             </h2>
             <p className="text-xs text-stone-500">
-              {lang === 'vi' ? 'Kiểm soát cách thức và thời điểm StorageHub gửi thông báo tự động cho bạn' : 'Control how and when StorageHub sends automated alerts'}
+              {'Kiểm soát cách thức và thời điểm StorageHub gửi thông báo tự động cho bạn'}
             </p>
           </div>
 
@@ -479,10 +456,10 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-stone-100">
               <div>
                 <p className="font-semibold text-stone-800 text-sm">
-                  {lang === 'vi' ? 'Cảnh Báo Hóa Đơn & Tiền Thuê Kho' : 'Monthly Rent & Invoicing Alerts'}
+                  {'Cảnh Báo Hóa Đơn & Tiền Thuê Kho'}
                 </p>
                 <p className="text-xs text-stone-500">
-                  {lang === 'vi' ? 'Nhận nhắc nhở hạn thanh toán và hóa đơn điện tử qua email' : 'Receive payment due reminders and digital receipts via email'}
+                  {'Nhận nhắc nhở hạn thanh toán và hóa đơn điện tử qua email'}
                 </p>
               </div>
               <input
@@ -490,7 +467,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 checked={notifEmailRent}
                 onChange={e => {
                   setNotifEmailRent(e.target.checked)
-                  showToast(lang === 'vi' ? 'Đã lưu tùy chọn thông báo!' : 'Notification preference saved!')
+                  showToast('Đã lưu tùy chọn thông báo!')
                 }}
                 className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
               />
@@ -499,10 +476,10 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-stone-100">
               <div>
                 <p className="font-semibold text-stone-800 text-sm">
-                  {lang === 'vi' ? 'Nhật Ký Mở Cổng & Khóa Cửa Điện Tử' : 'Gate Access & Digital Lock Events'}
+                  {'Nhật Ký Mở Cổng & Khóa Cửa Điện Tử'}
                 </p>
                 <p className="text-xs text-stone-500">
-                  {lang === 'vi' ? 'Nhận tin nhắn SMS tức thì khi cửa kho hoặc cổng phụ của bạn được mở ngoài giờ' : 'Get an instant SMS when your unit gate or keypad is opened after hours'}
+                  {'Nhận tin nhắn SMS tức thì khi cửa kho hoặc cổng phụ của bạn được mở ngoài giờ'}
                 </p>
               </div>
               <input
@@ -510,7 +487,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 checked={notifSmsGate}
                 onChange={e => {
                   setNotifSmsGate(e.target.checked)
-                  showToast(lang === 'vi' ? 'Đã lưu tùy chọn thông báo!' : 'Notification preference saved!')
+                  showToast('Đã lưu tùy chọn thông báo!')
                 }}
                 className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
               />
@@ -519,10 +496,10 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-stone-100">
               <div>
                 <p className="font-semibold text-stone-800 text-sm">
-                  {lang === 'vi' ? 'Bản Tin Bảo Trì Cơ Sở' : 'Facility Maintenance Bulletins'}
+                  {'Bản Tin Bảo Trì Cơ Sở'}
                 </p>
                 <p className="text-xs text-stone-500">
-                  {lang === 'vi' ? 'Các thông báo quan trọng về kiểm tra PCCC, bảo dưỡng thang máy hoặc giờ đóng cửa nghỉ lễ' : 'Important notices about elevator maintenance, power inspections, or holiday hours'}
+                  {'Các thông báo quan trọng về kiểm tra PCCC, bảo dưỡng thang máy hoặc giờ đóng cửa nghỉ lễ'}
                 </p>
               </div>
               <input
@@ -530,7 +507,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 checked={notifMaintenance}
                 onChange={e => {
                   setNotifMaintenance(e.target.checked)
-                  showToast(lang === 'vi' ? 'Đã lưu tùy chọn thông báo!' : 'Notification preference saved!')
+                  showToast('Đã lưu tùy chọn thông báo!')
                 }}
                 className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
               />
@@ -539,10 +516,10 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-semibold text-stone-800 text-sm">
-                  {lang === 'vi' ? 'Chương Trình Ưu Đãi & Điểm Thưởng' : 'Promotions & Referral Rewards'}
+                  {'Chương Trình Ưu Đãi & Điểm Thưởng'}
                 </p>
                 <p className="text-xs text-stone-500">
-                  {lang === 'vi' ? 'Nhận thông báo về thay đổi dịch vụ và lịch vận hành cơ sở' : 'Receive service updates and facility operating notices'}
+                  {'Nhận thông báo về thay đổi dịch vụ và lịch vận hành cơ sở'}
                 </p>
               </div>
               <input
@@ -550,7 +527,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 checked={notifMarketing}
                 onChange={e => {
                   setNotifMarketing(e.target.checked)
-                  showToast(lang === 'vi' ? 'Đã lưu tùy chọn thông báo!' : 'Notification preference saved!')
+                  showToast('Đã lưu tùy chọn thông báo!')
                 }}
                 className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
               />

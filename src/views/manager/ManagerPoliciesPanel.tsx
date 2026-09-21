@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Badge, Button, Card, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Input } from '../../components/ui'
-import { useLanguage } from '../../i18n/LanguageContext'
+import { formatVnd } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { POLICIES } from '../../data/demoDatabase'
 import type { User } from '../../types'
@@ -12,8 +12,7 @@ interface ManagerPoliciesPanelProps {
 }
 
 export default function ManagerPoliciesPanel({ user, showToast }: ManagerPoliciesPanelProps) {
-  const { lang } = useLanguage()
-  const { config: storeConfig, updateBusinessConfig } = useStorageHub()
+    const { config: storeConfig, updateBusinessConfig } = useStorageHub()
 
   // Local editable state for business configuration parameters
   const [formConfig, setFormConfig] = useState<BusinessConfig>(storeConfig)
@@ -28,9 +27,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
     try {
       updateBusinessConfig(formConfig, user)
       showToast(
-        lang === 'vi'
-          ? 'Đã cập nhật và áp dụng tham số vận hành cơ sở thành công!'
-          : 'Facility operating parameters updated and applied successfully!'
+        'Đã cập nhật và áp dụng tham số vận hành cơ sở thành công!'
       )
     } catch (err: any) {
       showToast(err?.message || 'Error updating config')
@@ -49,17 +46,15 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
     }
     setFormConfig(defaults)
     updateBusinessConfig(defaults, user)
-    showToast(lang === 'vi' ? 'Đã khôi phục thông số vận hành mặc định.' : 'Reset to default operating parameters.')
+    showToast('Đã khôi phục thông số vận hành mặc định.')
   }
 
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={lang === 'vi' ? 'Quy Định & Chính Sách Vận Hành Cơ Sở' : 'Facility Operational Policies'}
+        title={'Quy Định & Chính Sách Vận Hành Cơ Sở'}
         subtitle={`${user.facility ?? 'Downtown Storage'} · ${
-          lang === 'vi'
-            ? 'Quy chế lưu kho, quy trình leo thang nợ, an toàn PCCC và cấu hình thông số tự động hóa'
-            : 'Storage terms, delinquency escalation, fire safety standards and automated operating parameters'
+          'Quy chế lưu kho, quy trình leo thang nợ, an toàn PCCC và cấu hình thông số tự động hóa'
         }`}
         action={
           <Button
@@ -67,13 +62,11 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
             size="sm"
             onClick={() =>
               showToast(
-                lang === 'vi'
-                  ? 'Đã tải cẩm nang chính sách vận hành (PDF)!'
-                  : 'Downloaded operational handbook (PDF)!'
+                'Đã tải cẩm nang chính sách vận hành (PDF)!'
               )
             }
           >
-            {lang === 'vi' ? 'Tải Cẩm Nang Vận Hành' : 'Download Handbook'}
+            {'Tải Cẩm Nang Vận Hành'}
           </Button>
         }
       />
@@ -82,51 +75,51 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-stone-500 font-medium">
-            {lang === 'vi' ? 'Gia hạn thanh toán nợ' : 'Grace Period'}
+            {'Gia hạn thanh toán nợ'}
           </p>
           <p className="text-2xl font-bold text-stone-900 mt-1">
             {storeConfig.gracePeriodDays}{' '}
-            <span className="text-sm font-normal text-stone-500">{lang === 'vi' ? 'ngày' : 'days'}</span>
+            <span className="text-sm font-normal text-stone-500">{'ngày'}</span>
           </p>
           <p className="text-[11px] text-stone-500 mt-1">
-            {lang === 'vi' ? 'Sau ngày đến hạn mới áp dụng phí phạt' : 'Before late penalty applies'}
+            {'Sau ngày đến hạn mới áp dụng phí phạt'}
           </p>
         </div>
 
         <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-stone-500 font-medium">
-            {lang === 'vi' ? 'Mức phạt trễ hạn cố định' : 'Fixed Late Fee'}
+            {'Mức phạt trễ hạn cố định'}
           </p>
           <p className="text-2xl font-bold text-red-600 mt-1">
-            ${storeConfig.lateFeeAmount}.00
+            {formatVnd(storeConfig.lateFeeAmount)}
           </p>
           <p className="text-[11px] text-stone-500 mt-1">
-            {lang === 'vi' ? 'Áp dụng khi quá hạn thời gian ân hạn' : 'Charged after grace period expires'}
+            {'Áp dụng khi quá hạn thời gian ân hạn'}
           </p>
         </div>
 
         <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-stone-500 font-medium">
-            {lang === 'vi' ? 'Thời gian khóa giữ kho (TTL)' : 'Unit Hold TTL'}
+            {'Thời gian khóa giữ kho (TTL)'}
           </p>
           <p className="text-2xl font-bold text-amber-600 mt-1">
             {storeConfig.holdExpiryHours}{' '}
-            <span className="text-sm font-normal text-stone-500">{lang === 'vi' ? 'giờ' : 'hours'}</span>
+            <span className="text-sm font-normal text-stone-500">{'giờ'}</span>
           </p>
           <p className="text-[11px] text-stone-500 mt-1">
-            {lang === 'vi' ? 'Tự động nhả kho nếu chưa nộp cọc' : 'Auto-releases if unpaid'}
+            {'Tự động nhả kho nếu chưa nộp cọc'}
           </p>
         </div>
 
         <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-stone-500 font-medium">
-            {lang === 'vi' ? 'Tỷ lệ cọc giữ chỗ trực tuyến' : 'Online Booking Deposit'}
+            {'Tỷ lệ cọc giữ chỗ trực tuyến'}
           </p>
           <p className="text-2xl font-bold text-emerald-600 mt-1">
             {Math.round(storeConfig.defaultDepositRatio * 100)}%
           </p>
           <p className="text-[11px] text-stone-500 mt-1">
-            {lang === 'vi' ? 'Quy đổi thành cọc hợp đồng khi nhận kho' : 'Credited towards contract deposit'}
+            {'Quy đổi thành cọc hợp đồng khi nhận kho'}
           </p>
         </div>
       </div>
@@ -136,17 +129,15 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-amber-200/60">
           <div>
             <h3 className="font-bold text-stone-900 text-base">
-              {lang === 'vi' ? 'Cấu Hình Tham Số Vận Hành Tự Động' : 'Automated Operating Parameters Control'}
+              {'Cấu Hình Tham Số Vận Hành Tự Động'}
             </h3>
             <p className="text-xs text-stone-500 mt-0.5">
-              {lang === 'vi'
-                ? 'Thiết lập các ngưỡng thời gian, mức phí phạt và tỷ lệ tính toán cọc áp dụng cho toàn bộ cơ sở'
-                : 'Configure thresholds, penalty calculations, and deposit rules enforced facility-wide'}
+              {'Thiết lập các ngưỡng thời gian, mức phí phạt và tỷ lệ tính toán cọc áp dụng cho toàn bộ cơ sở'}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={handleResetDefault}>
-              {lang === 'vi' ? 'Mặc định' : 'Reset Defaults'}
+              {'Mặc định'}
             </Button>
             <Button
               variant="primary"
@@ -154,14 +145,14 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
               disabled={isSaving}
               onClick={handleSaveConfig}
             >
-              {lang === 'vi' ? 'Lưu cấu hình' : 'Save Parameters'}
+              {'Lưu cấu hình'}
             </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Input
-            label={lang === 'vi' ? 'Thời gian ân hạn (ngày)' : 'Grace Period (Days)'}
+            label={'Thời gian ân hạn (ngày)'}
             type="number"
             min="1"
             max="30"
@@ -170,7 +161,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
           />
 
           <Input
-            label={lang === 'vi' ? 'Phí phạt quá hạn ($)' : 'Late Fee Amount ($)'}
+            label={'Phí phạt quá hạn (VND)'}
             type="number"
             min="0"
             max="500"
@@ -179,7 +170,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
           />
 
           <Input
-            label={lang === 'vi' ? 'Tỷ lệ cọc giữ chỗ (0.1 - 0.5)' : 'Booking Deposit Ratio'}
+            label={'Tỷ lệ cọc giữ chỗ (0.1 - 0.5)'}
             type="number"
             step="0.05"
             min="0.1"
@@ -189,7 +180,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
           />
 
           <Input
-            label={lang === 'vi' ? 'Hạn giữ chỗ thanh toán (giờ)' : 'Hold Expiry (Hours)'}
+            label={'Hạn giữ chỗ thanh toán (giờ)'}
             type="number"
             min="1"
             max="72"
@@ -198,7 +189,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
           />
 
           <Input
-            label={lang === 'vi' ? 'Hệ số thể tích DIM' : 'DIM Divisor'}
+            label={'Hệ số thể tích DIM'}
             type="number"
             min="1000"
             max="10000"
@@ -211,17 +202,15 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
       {/* Detailed Policies Table */}
       <Card className="p-5 border border-stone-200 shadow-sm">
         <h3 className="font-bold text-stone-900 text-base mb-3">
-          {lang === 'vi'
-            ? 'Danh Mục Quy Định Áp Dụng Cho Khách Thuê & Nhân Viên'
-            : 'Operational Policy Matrix'}
+          {'Danh Mục Quy Định Áp Dụng Cho Khách Thuê & Nhân Viên'}
         </h3>
         <Table>
           <Thead>
             <tr>
-              <Th>{lang === 'vi' ? 'Chính Sách' : 'Policy'}</Th>
-              <Th>{lang === 'vi' ? 'Phạm Vi Áp Dụng' : 'Scope'}</Th>
-              <Th>{lang === 'vi' ? 'Giá Trị Chuẩn' : 'Standard Value'}</Th>
-              <Th>{lang === 'vi' ? 'Quy Trình Kiểm Tra' : 'Enforcement Protocol'}</Th>
+              <Th>{'Chính Sách'}</Th>
+              <Th>{'Phạm Vi Áp Dụng'}</Th>
+              <Th>{'Giá Trị Chuẩn'}</Th>
+              <Th>{'Quy Trình Kiểm Tra'}</Th>
             </tr>
           </Thead>
           <Tbody>
@@ -240,7 +229,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
                 </Td>
                 <Td>
                   <Badge variant={p.editable ? 'success' : 'muted'}>
-                    {lang === 'vi' ? (p.editable ? 'Cho phép sửa' : 'Cố định') : (p.editable ? 'Configurable' : 'Fixed')}
+                    {(p.editable ? 'Cho phép sửa' : 'Cố định')}
                   </Badge>
                 </Td>
               </Tr>

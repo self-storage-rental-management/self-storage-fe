@@ -582,7 +582,7 @@ export interface ActivityRecord {
   actorName: string
   actorRole: string
   facilityId: string
-  entityType: 'hold' | 'unit' | 'rental' | 'checkin' | 'return' | 'payment' | 'policy' | 'task' | 'system'
+  entityType: 'hold' | 'unit' | 'rental' | 'checkin' | 'return' | 'payment' | 'policy' | 'task' | 'user' | 'system'
   entityId: string
   beforeState?: any
   afterState?: any

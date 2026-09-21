@@ -1,6 +1,31 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
 @import 'tailwindcss';
 
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 36px;
+  --text-4xl: 36px;
+  --text-4xl--line-height: 40px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}
+
 /* The icon-free presentation keeps charts (Recharts SVG surfaces) visible. */
 svg:not(.recharts-surface) { display: none !important; }
 
@@ -61,7 +86,7 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: Inter, system-ui, sans-serif;
   color: var(--ink);
   background: var(--canvas);
   -webkit-font-smoothing: antialiased;
@@ -77,7 +102,7 @@ textarea {
 /* Customer portal typography stays consistent without recoloring content panels. */
 .customer-page,
 .customer-page * {
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif !important;
+  font-family: Inter, system-ui, sans-serif !important;
 }
 
 button:not(:disabled) { cursor: pointer; }
@@ -98,7 +123,7 @@ button:not(:disabled) { cursor: pointer; }
 }
 
 .font-mono-label {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .08em;
