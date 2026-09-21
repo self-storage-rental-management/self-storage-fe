@@ -42,3 +42,48 @@ export interface User {
   avatar?: string
   facility?: string
 }
+
+export type LoginEventStatus = 'success' | 'failed' | 'logout'
+
+export interface LoginHistoryRecord {
+  id: string
+  userId?: string
+  user: string
+  email: string
+  role?: Role
+  timestamp: string
+  ip: string
+  location: string
+  device: string
+  status: LoginEventStatus
+  reason?: string
+  suspicious?: boolean
+}
+
+export type SessionStatus = 'active' | 'signed_out' | 'revoked'
+
+export interface SessionRecord {
+  id: string
+  userId: string
+  userName: string
+  email: string
+  role: Role
+  createdAt: string
+  lastSeenAt: string
+  ip: string
+  location: string
+  device: string
+  status: SessionStatus
+  revokedAt?: string
+}
+
+export interface SecurityAlert {
+  id: string
+  userId?: string
+  email: string
+  type: 'failed_login_burst' | 'unknown_device'
+  severity: 'warning' | 'critical'
+  message: string
+  createdAt: string
+  resolvedAt?: string
+}

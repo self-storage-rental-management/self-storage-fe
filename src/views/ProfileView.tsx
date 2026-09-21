@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import type { User } from '../types'
 import { Card, Button, Input, Badge, Avatar } from '../components/ui'
+import { useStorageHub } from '../store/StorageHubContext'
 
 interface ProfileViewProps {
   user: User
   onUpdateUser?: (updated: Partial<User>) => void
 }
 
-export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
+export default function ProfileView({ user }: ProfileViewProps) {
+  const { sessions, revokeSession, revokeAllUserSessions } = useStorageHub()
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile')
 
   // Form states
@@ -22,13 +24,13 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(true)
+  const [twoFactorEnabled] = useState(true)
 
   // Notification states
-  const [notifEmailRent, setNotifEmailRent] = useState(true)
-  const [notifSmsGate, setNotifSmsGate] = useState(true)
-  const [notifMaintenance, setNotifMaintenance] = useState(true)
-  const [notifMarketing, setNotifMarketing] = useState(false)
+  const [notifEmailRent] = useState(true)
+  const [notifSmsGate] = useState(true)
+  const [notifMaintenance] = useState(true)
+  const [notifMarketing] = useState(false)
 
   // Feedback toast
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -40,27 +42,10 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault()
-    if (onUpdateUser) {
-      onUpdateUser({ name, email })
-    }
-    showToast('Đã lưu hồ sơ trên thiết bị demo; chưa đồng bộ backend.')
   }
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!currentPassword) {
-      alert('Vui lòng nhập mật khẩu hiện tại')
-      return
-    }
-    if (newPassword.length < 6) {
-      alert('Mật khẩu mới phải có ít nhất 6 ký tự')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      alert('Mật khẩu xác nhận không khớp')
-      return
-    }
-    showToast('Chưa thể đổi mật khẩu: frontend chưa kết nối API xác thực.')
   }
 
   const roleLabelMap: Record<string, string> = {
@@ -69,6 +54,16 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     manager: 'Giám Đốc Quản Lý Cơ Sở',
     business: 'Đối Tác Kinh Doanh',
     admin: 'Quản Trị Viên Hệ Thống'
+  }
+
+  const userSessions = sessions.filter(session => session.userId === user.id)
+  const handleRevokeAllSessions = () => {
+    try {
+      const count = revokeAllUserSessions(user.id, user)
+      if (count > 0) showToast(`Đã thu hồi ${count} phiên đăng nhập.`)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên đăng nhập.')
+    }
   }
 
 
@@ -93,9 +88,9 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 type="button"
                 className="absolute -bottom-1 -right-1 bg-[#e9a12c] text-[#292a27] p-1.5 rounded-full hover:bg-amber-400 transition shadow"
                 title={'Đổi ảnh đại diện'}
-                onClick={() => showToast('Mô phỏng tải ảnh đại diện: Đã cập nhật ảnh mới!')}
+                disabled
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="show-icon w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -183,11 +178,15 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               </div>
 
               <form onSubmit={handleSaveProfile} className="space-y-4">
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Hồ sơ đang ở chế độ chỉ xem; cập nhật thông tin cần kết nối API tài khoản.
+                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
                     label={'Họ và Tên'}
                     value={name}
                     onChange={e => setName(e.target.value)}
+                    disabled
                     required
                   />
                   <Input
@@ -195,6 +194,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
+                    disabled
                     required
                   />
                 </div>
@@ -204,11 +204,13 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     label={'Số Điện Thoại Chính'}
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
+                    disabled
                   />
                   <Input
                     label={'Số CCCD / Hộ Chiếu'}
                     value={idCard}
                     onChange={e => setIdCard(e.target.value)}
+                    disabled
                   />
                 </div>
 
@@ -216,17 +218,19 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                   label={'Địa Chỉ Thường Trú'}
                   value={address}
                   onChange={e => setAddress(e.target.value)}
+                  disabled
                 />
 
                 <Input
                   label={'Người Liên Hệ Khẩn Cấp (Tên & SĐT)'}
                   value={emergencyContact}
                   onChange={e => setEmergencyContact(e.target.value)}
+                  disabled
                 />
 
                 <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
-                  <Button type="submit" variant="primary">
-                    {'Lưu Thay Đổi'}
+                  <Button type="submit" variant="outline" disabled>
+                    {'Chỉ xem · Chưa kết nối backend'}
                   </Button>
                 </div>
               </form>
@@ -303,12 +307,16 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               </div>
 
               <form onSubmit={handleChangePassword} className="space-y-4">
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Đổi mật khẩu cần auth backend; biểu mẫu này hiện chỉ hiển thị trạng thái.
+                </p>
                 <Input
                   label={'Mật Khẩu Hiện Tại'}
                   type="password"
                   placeholder={'Nhập mật khẩu hiện tại...'}
                   value={currentPassword}
                   onChange={e => setCurrentPassword(e.target.value)}
+                  disabled
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
@@ -317,6 +325,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     placeholder={'Ít nhất 6 ký tự...'}
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
+                    disabled
                   />
                   <Input
                     label={'Xác Nhận Mật Khẩu Mới'}
@@ -324,11 +333,12 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     placeholder={'Nhập lại mật khẩu mới...'}
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
+                    disabled
                   />
                 </div>
                 <div className="flex justify-end pt-2">
-                  <Button type="submit" variant="secondary">
-                    {'Lưu Mật Khẩu Mới'}
+                  <Button type="submit" variant="outline" disabled>
+                    {'Chỉ xem · Chưa kết nối auth backend'}
                   </Button>
                 </div>
               </form>
@@ -348,55 +358,35 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => showToast('Đã hủy tất cả các phiên đăng nhập khác!')}
+                  onClick={handleRevokeAllSessions}
+                  disabled={!userSessions.some(session => session.status === 'active')}
                 >
-                  {'Đăng Xuất Thiết Bị Khác'}
+                  {'Đăng Xuất Tất Cả Thiết Bị'}
                 </Button>
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
-                      PC
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-stone-900">
-                          {'Thiết Bị Hiện Tại (Windows Chrome)'}
-                        </p>
-                        <Badge variant="success">
-                          {'Phiên Này'}
+                {!userSessions.length && <p className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-500">Chưa có phiên nào được ghi nhận cho tài khoản này.</p>}
+                {userSessions.map(session => (
+                  <div key={session.id} className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${session.status === 'active' ? 'border-emerald-200 bg-emerald-50/50' : 'border-stone-200 bg-white'}`}>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-stone-900">{session.device}</p>
+                        <Badge variant={session.status === 'active' ? 'success' : session.status === 'revoked' ? 'error' : 'muted'}>
+                          {session.status === 'active' ? 'Đang hoạt động' : session.status === 'revoked' ? 'Đã thu hồi' : 'Đã đăng xuất'}
                         </Badge>
                       </div>
-                      <p className="text-xs text-stone-500">192.168.1.20 · TP. Hồ Chí Minh, Việt Nam</p>
+                      <p className="text-xs text-stone-500">{session.location} · Bắt đầu {session.createdAt}</p>
                     </div>
+                    {session.status === 'active' && <Button variant="ghost" size="sm" onClick={() => {
+                      try {
+                        if (revokeSession(session.id, user)) showToast('Đã thu hồi phiên đăng nhập.')
+                      } catch (error) {
+                        showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên đăng nhập.')
+                      }
+                    }}>Thu hồi</Button>}
                   </div>
-                  <span className="text-xs font-medium text-emerald-700">
-                    {'Đang hoạt động'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-3 rounded-lg border border-stone-200 bg-white">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-stone-100 text-stone-700 flex items-center justify-center font-bold text-xs">
-                      iOS
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-stone-900">StorageHub Mobile (iPhone 15 Pro)</p>
-                      <p className="text-xs text-stone-500">
-                        {'Quận 1, TP.HCM · Hoạt động 2 giờ trước'}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => showToast('Đã thu hồi phiên đăng nhập!')}
-                  >
-                    {'Thu Hồi'}
-                  </Button>
-                </div>
+                ))}
               </div>
             </Card>
           </div>
@@ -417,22 +407,12 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               </p>
               <div className="pt-2">
                 <Button
-                  variant={twoFactorEnabled ? 'outline' : 'primary'}
+                  variant="outline"
                   size="sm"
                   className="w-full"
-                  onClick={() => {
-                    const next = !twoFactorEnabled
-                    setTwoFactorEnabled(next)
-                    showToast(
-                      next
-                        ? ('Đã kích hoạt bảo mật 2 bước!')
-                        : ('Đã tắt bảo mật 2 bước.')
-                    )
-                  }}
+                  disabled
                 >
-                  {twoFactorEnabled
-                    ? ('Tắt Xác Thực 2FA')
-                    : ('Kích Hoạt Bảo Mật 2FA')}
+                  {'Chỉ xem · Chưa kết nối auth backend'}
                 </Button>
               </div>
             </Card>
@@ -465,11 +445,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <input
                 type="checkbox"
                 checked={notifEmailRent}
-                onChange={e => {
-                  setNotifEmailRent(e.target.checked)
-                  showToast('Đã lưu tùy chọn thông báo!')
-                }}
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
+                disabled
+                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
               />
             </div>
 
@@ -485,11 +462,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <input
                 type="checkbox"
                 checked={notifSmsGate}
-                onChange={e => {
-                  setNotifSmsGate(e.target.checked)
-                  showToast('Đã lưu tùy chọn thông báo!')
-                }}
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
+                disabled
+                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
               />
             </div>
 
@@ -505,11 +479,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <input
                 type="checkbox"
                 checked={notifMaintenance}
-                onChange={e => {
-                  setNotifMaintenance(e.target.checked)
-                  showToast('Đã lưu tùy chọn thông báo!')
-                }}
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
+                disabled
+                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
               />
             </div>
 
@@ -525,11 +496,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               <input
                 type="checkbox"
                 checked={notifMarketing}
-                onChange={e => {
-                  setNotifMarketing(e.target.checked)
-                  showToast('Đã lưu tùy chọn thông báo!')
-                }}
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-pointer"
+                disabled
+                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
               />
             </div>
           </div>

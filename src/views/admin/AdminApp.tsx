@@ -4,7 +4,7 @@ import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, Section
 import type { User, Role } from '../../types'
 import type { PermissionKey } from '../../types'
 import { PERMISSION_DEFINITIONS, DEFAULT_ROLE_PERMISSIONS } from '../../auth/rbac'
-import { LOGIN_HISTORY, ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog, type SettingGroup } from "../../data/demoDatabase"
+import { ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog } from "../../data/demoDatabase"
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
 
@@ -77,7 +77,11 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
     requestUserPasswordReset,
     rolePermissions,
     updateRolePermissions,
-    can
+    can,
+    loginHistory,
+    sessions,
+    securityAlerts,
+    revokeAllUserSessions
   } = useStorageHub()
 
   const NAV: NavItem[] = [
@@ -94,6 +98,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
   const [logTab, setLogTab] = useState('Tất cả')
   const [logSearch, setLogSearch] = useState('')
   const [historyTab, setHistoryTab] = useState('Tất cả')
+  const [historyUserFilter, setHistoryUserFilter] = useState('all')
   const [selectedUser, setSelectedUser] = useState<typeof USERS[0] | null>(null)
   const [accountMode, setAccountMode] = useState<'internal' | 'customer-support'>('internal')
   const [accountForm, setAccountForm] = useState({ name: '', email: '', phone: '', role: 'staff' as Exclude<Role, 'customer'>, facility: '', status: 'active' as 'active' | 'inactive' | 'suspended', reason: '' })
@@ -125,7 +130,6 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
   const [logModalOpen, setLogModalOpen] = useState(false)
 
   // Settings interactive state
-  const [settingsGroups, setSettingsGroups] = useState<SettingGroup[]>(SETTINGS_GROUPS)
   const [activeSettingsTab, setActiveSettingsTab] = useState('Tất cả danh mục')
 
   // Toast
@@ -607,24 +611,31 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
       {/* ── LOGIN HISTORY ─────────────────────────────────────── */}
       {page === 'login-history' && (
-        <div className="fade-in">
+        <div className="fade-in space-y-5">
           <SectionHeader
             title="Lịch Sử Đăng Nhập Hệ Thống"
-            subtitle="Nhật ký kiểm toán an ninh các sự kiện xác thực tài khoản"
+            subtitle="Lịch sử xác thực, phiên đang mở và cảnh báo bất thường được lưu từ StorageHubContext"
           />
-          <div className="mb-4 flex gap-3 items-center">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <Tabs
               tabs={['Tất cả', 'Thành công', 'Thất bại']}
               active={historyTab}
               onChange={val => setHistoryTab(val)}
             />
-            {LOGIN_HISTORY.some(l => l.status === 'failed') && (
-              <div className="flex items-center gap-2 ml-auto bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-sm text-red-700">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" /></svg>
-                Phát hiện 1 lần đăng nhập thất bại khả nghi
-              </div>
-            )}
+            <label className="flex items-center gap-2 text-sm text-slate-600 lg:ml-auto">
+              <span className="font-medium">Tài khoản</span>
+              <select value={historyUserFilter} onChange={event => setHistoryUserFilter(event.target.value)} className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-none">
+                <option value="all">Tất cả tài khoản</option>
+                {USERS.map(account => <option key={account.id} value={account.id}>{account.name} · {account.email}</option>)}
+              </select>
+            </label>
           </div>
+          {securityAlerts.filter(alert => !alert.resolvedAt).length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <span aria-hidden="true">⚠</span>
+              <span>Phát hiện {securityAlerts.filter(alert => !alert.resolvedAt).length} cảnh báo an ninh chưa xử lý. Hãy kiểm tra các lần đăng nhập thất bại hoặc thiết bị mới.</span>
+            </div>
+          )}
           <Card>
             <Table>
               <Thead>
@@ -639,15 +650,16 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                 </tr>
               </Thead>
               <Tbody>
-                {LOGIN_HISTORY
+                {loginHistory
                   .filter(l => {
                     if (historyTab === 'Tất cả') return true
                     if (historyTab === 'Thành công') return l.status === 'success'
                     if (historyTab === 'Thất bại') return l.status === 'failed'
-                    return l.status === historyTab.toLowerCase()
+                    return false
                   })
+                  .filter(l => historyUserFilter === 'all' || l.userId === historyUserFilter || (!l.userId && USERS.find(account => account.email === l.email)?.id === historyUserFilter))
                   .map(l => (
-                    <Tr key={l.id} className={l.status === 'failed' ? 'bg-red-50' : ''}>
+                    <Tr key={l.id} className={l.status === 'failed' || l.suspicious ? 'bg-red-50' : ''}>
                       <Td>
                         <div>
                           <p className="font-medium text-sm text-slate-800">{l.user}</p>
@@ -655,17 +667,50 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                         </div>
                       </Td>
                       <Td>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[l.role as Role]}`}>{roleLabels[l.role as Role] ?? l.role}</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[l.role as Role] ?? 'bg-slate-100 text-slate-600'}`}>{l.role ? roleLabels[l.role] : 'Chưa xác định'}</span>
                       </Td>
                       <Td><code className="text-xs bg-slate-100 px-2 py-0.5 rounded">{l.ip}</code></Td>
                       <Td className="text-sm text-slate-500">{l.location}</Td>
                       <Td className="text-xs text-slate-400">{l.device}</Td>
-                      <Td className="text-xs text-slate-500">{l.time}</Td>
+                      <Td className="text-xs text-slate-500">{l.timestamp}</Td>
                       <Td>
                         {l.status === 'failed'
-                          ? <Badge variant="error">Thất bại</Badge>
-                          : <Badge variant="success">Thành công</Badge>}
+                          ? <Badge variant="error">{l.suspicious ? 'Khả nghi' : 'Thất bại'}</Badge>
+                          : l.status === 'logout' ? <Badge variant="muted">Đã đăng xuất</Badge> : <Badge variant="success">Thành công</Badge>}
                       </Td>
+                    </Tr>
+                  ))}
+              </Tbody>
+            </Table>
+          </Card>
+          <Card>
+            <div className="flex flex-col gap-2 border-b border-stone-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-stone-900">Phiên đăng nhập</h3>
+                <p className="text-xs text-stone-500">Chỉ phiên đang hoạt động mới có thể bị thu hồi.</p>
+              </div>
+              <span className="text-sm text-stone-500">{sessions.filter(session => session.status === 'active').length} phiên đang mở</span>
+            </div>
+            <Table>
+              <Thead><tr><Th>Tài khoản</Th><Th>Thiết bị</Th><Th>Vị trí</Th><Th>Bắt đầu</Th><Th>Trạng thái</Th><Th /></tr></Thead>
+              <Tbody>
+                {sessions
+                  .filter(session => historyUserFilter === 'all' || session.userId === historyUserFilter)
+                  .map(session => (
+                    <Tr key={session.id}>
+                      <Td><p className="font-medium text-sm text-slate-800">{session.userName}</p><p className="text-xs text-slate-400">{session.email}</p></Td>
+                      <Td className="text-xs text-slate-500">{session.device}</Td>
+                      <Td className="text-xs text-slate-500">{session.location}</Td>
+                      <Td className="text-xs text-slate-500">{session.createdAt}</Td>
+                      <Td>{session.status === 'active' ? <Badge variant="success">Đang hoạt động</Badge> : session.status === 'revoked' ? <Badge variant="error">Đã thu hồi</Badge> : <Badge variant="muted">Đã đăng xuất</Badge>}</Td>
+                      <Td className="text-right">{session.status === 'active' && can(user, 'manage_users') && <Button variant="outline" size="sm" onClick={() => {
+                        try {
+                          const count = revokeAllUserSessions(session.userId, user)
+                          showToast(count > 0 ? `Đã đăng xuất ${count} phiên của ${session.email}.` : 'Tài khoản này không còn phiên đang hoạt động.')
+                        } catch (error) {
+                          showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên.')
+                        }
+                      }}>Đăng xuất mọi thiết bị</Button>}</Td>
                     </Tr>
                   ))}
               </Tbody>
@@ -721,7 +766,10 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
             l.action.toLowerCase().includes(query) ||
             l.target.toLowerCase().includes(query) ||
             l.ip.includes(query)
-          return matchTab && matchSearch
+          const matchUser = historyUserFilter === 'all'
+            || activities.some(activity => activity.id === l.id && activity.actorId === historyUserFilter)
+            || USERS.some(account => account.id === historyUserFilter && (account.name === l.actor || account.email === l.actor))
+          return matchTab && matchSearch && matchUser
         })
 
         return (
@@ -787,6 +835,10 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                   className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
+              <select value={historyUserFilter} onChange={event => setHistoryUserFilter(event.target.value)} className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-none">
+                <option value="all">Tất cả tài khoản</option>
+                {USERS.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
+              </select>
             </div>
 
             {/* Audit Log Stream */}
@@ -862,18 +914,9 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
       {/* ── SYSTEM SETTINGS ───────────────────────────────────── */}
       {page === 'settings' && (() => {
-        const handleSaveSettings = () => {
-          showToast('Bản demo chỉ thay đổi biểu mẫu trong phiên hiện tại; chưa ghi cấu hình hệ thống.')
-        }
-
-        const handleResetDefaults = () => {
-          setSettingsGroups(SETTINGS_GROUPS)
-          showToast('Đã khôi phục biểu mẫu demo về giá trị ban đầu.')
-        }
-
         const filteredGroups = activeSettingsTab === 'Tất cả danh mục'
-          ? settingsGroups
-          : settingsGroups.filter(g => {
+          ? SETTINGS_GROUPS
+          : SETTINGS_GROUPS.filter(g => {
               return (
                 (activeSettingsTab === 'Cơ sở kho' && g.group === 'Facility Defaults') ||
                 (activeSettingsTab === 'Thanh toán' && g.group === 'Billing & Delinquency') ||
@@ -890,14 +933,9 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               title="Cấu Hình Hệ Thống & Cơ Sở Kho"
               subtitle="Tinh chỉnh các ngưỡng vận hành, thời gian ân hạn công nợ, quy tắc an ninh và thông báo tự động"
               action={
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleResetDefaults}>
-                    Khôi Phục Mặc Định
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={handleSaveSettings}>
-                    Lưu Toàn Bộ Cài Đặt
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" disabled>
+                  Chỉ xem · Chưa kết nối backend
+                </Button>
               }
             />
 
@@ -935,7 +973,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                             <input
                               type="checkbox"
                               defaultChecked={Boolean(item.value)}
-                              className="w-4 h-4 text-amber-600 rounded cursor-pointer"
+                              disabled
+                              className="w-4 h-4 text-amber-600 rounded cursor-not-allowed"
                             />
                             <span className="text-xs text-stone-600 font-medium">
                               Bật / Tự động áp dụng thiết lập này
@@ -944,7 +983,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                         ) : item.type === 'select' ? (
                           <select
                             defaultValue={item.value as string}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs bg-stone-100 text-stone-500 focus:outline-none"
                           >
                             {item.options ? item.options.map(opt => (
                               <option key={opt} value={opt}>{opt}</option>
@@ -956,13 +996,15 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                           <input
                             type="number"
                             defaultValue={item.value as number}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-500 bg-stone-100 focus:outline-none"
                           />
                         ) : (
                           <input
                             type="text"
                             defaultValue={item.value as string}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-500 bg-stone-100 focus:outline-none"
                           />
                         )}
                       </div>
@@ -972,9 +1014,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               ))}
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={handleResetDefaults}>Hủy Thay Đổi</Button>
-              <Button variant="primary" onClick={handleSaveSettings}>Lưu Toàn Bộ Cài Đặt</Button>
+            <div className="flex justify-end pt-2 text-xs text-stone-500">
+              Cấu hình đang ở chế độ chỉ xem; cần kết nối backend trước khi cho phép lưu thay đổi.
             </div>
           </div>
         )
