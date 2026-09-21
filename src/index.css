@@ -112,7 +112,9 @@ textarea {
 
 /* Customer portal typography stays consistent without recoloring content panels. */
 .customer-page,
-.customer-page * {
+.customer-page *,
+.customer-role-layout,
+.customer-role-layout * {
   font-family: Inter, system-ui, sans-serif !important;
 }
 
