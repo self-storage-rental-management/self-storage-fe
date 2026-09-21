@@ -1,24 +1,21 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, type ReactNode } from 'react'
 
 export type Language = 'en' | 'vi'
 export const USD_TO_VND_RATE = 26000
 
-// interface LanguageContextType {
-//   lang: Language
-//   setLang: (lang: Language) => void
-//   toggleLang: () => void
-//   t: (key: string, fallback?: string) => string
-// }
+/** Hiển thị mọi giá trị nghiệp vụ theo tiền Việt; state vẫn lưu số tiền cơ sở. */
+export const formatVnd = (baseAmount: number): string => {
+  const vnd = Math.round(baseAmount * USD_TO_VND_RATE)
+  return `${vnd.toLocaleString('vi-VN')} ₫`
+}
 
 interface LanguageContextType {
   lang: Language
   setLang: (lang: Language) => void
   toggleLang: () => void
   t: (key: string, fallback?: string) => string
-  formatCurrency: (usdAmount: number) => string
+  formatCurrency: (baseAmount: number) => string
 }
-
-const STORAGE_KEY = 'storagehub:lang'
 
 export const dictionary: Record<Language, Record<string, string>> = {
   en: {
@@ -366,36 +363,16 @@ const LanguageContext = createContext<LanguageContextType>({
 })
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Language>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved === 'en' || saved === 'vi') return saved
-    } catch { }
-    return 'vi' // Mặc định Tiếng Việt theo yêu cầu của user
-  })
-  // add new func
-  const formatCurrency = (usdAmount: number): string => {
-    if (lang === 'vi') {
-      const vnd = Math.round(usdAmount * USD_TO_VND_RATE)
-      return `${vnd.toLocaleString('vi-VN')} ₫` // hoặc 'VNĐ'
-    }
-    return `$${usdAmount.toLocaleString('en-US')}`
-  }
+  const lang: Language = 'vi'
+  const formatCurrency = formatVnd
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, lang)
-    } catch { }
-    document.documentElement.lang = lang
-  }, [lang])
+    document.documentElement.lang = 'vi'
+  }, [])
 
-  const setLang = (nextLang: Language) => {
-    setLangState(nextLang)
-  }
+  const setLang = (_nextLang: Language) => { }
 
-  const toggleLang = () => {
-    setLangState(prev => (prev === 'vi' ? 'en' : 'vi'))
-  }
+  const toggleLang = () => { }
 
   const t = (key: string, fallback?: string): string => {
     return dictionary[lang]?.[key] || fallback || key

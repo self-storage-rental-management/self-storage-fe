@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import type { Role, User } from '../types'
+import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
-import LanguageToggle from '../components/LanguageToggle'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useStorageHub } from '../store/StorageHubContext'
 
@@ -11,10 +10,6 @@ type ResetStep = 'identify' | 'verify' | 'new-password' | 'success'
 
 const DEMO_PASSWORD = 'demo123'
 const DEMO_CODE = '123456'
-const roleLabels: Record<Role, string> = {
-  customer: 'Customer', staff: 'Facility Staff', manager: 'Facility Manager',
-  business: 'Business Operations', admin: 'System Admin',
-}
 function GoogleIcon() {
   return (
     <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
@@ -29,9 +24,6 @@ function GoogleIcon() {
 
 export default function Login({ onLogin }: LoginProps) {
   const { users, registerCustomer } = useStorageHub()
-  const demoUsers: Array<User & { label: string }> = users
-    .filter(user => user.status !== 'suspended')
-    .map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role as Role, facility: user.facility, label: roleLabels[user.role as Role] }))
   const [tab, setTab] = useState<AuthTab>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -52,12 +44,12 @@ export default function Login({ onLogin }: LoginProps) {
 
   function handleLogin(event: React.FormEvent) {
     event.preventDefault()
-    const demoUser = demoUsers.find(user => user.email === email.trim().toLowerCase())
+    const demoUser = users.find(user => user.status !== 'suspended' && user.email === email.trim().toLowerCase())
     if (!demoUser || password !== DEMO_PASSWORD) {
       setError(
         lang === 'vi'
-          ? `Vui lòng chọn tài khoản trải nghiệm bên dưới với mật khẩu ${DEMO_PASSWORD}.`
-          : `Use a demo account below with password ${DEMO_PASSWORD}.`
+          ? 'Email hoặc mật khẩu không đúng.'
+          : 'Invalid email or password.'
       )
       return
     }
@@ -98,13 +90,6 @@ export default function Login({ onLogin }: LoginProps) {
     } catch (registrationError) {
       setError(registrationError instanceof Error ? registrationError.message : (lang === 'vi' ? 'Không thể tạo tài khoản Customer.' : 'Unable to create the customer account.'))
     }
-  }
-
-  function loginAsDemo(user: User) {
-    setEmail(user.email)
-    setPassword(DEMO_PASSWORD)
-    setError('')
-    onLogin(user)
   }
 
   function switchTab(next: AuthTab) {
@@ -166,7 +151,6 @@ export default function Login({ onLogin }: LoginProps) {
       <AuthShell compact>
         <div className="flex items-center justify-between mb-6">
           <BrandLogo />
-          <LanguageToggle />
         </div>
         <RecoveryFlow
           step={resetStep}
@@ -256,7 +240,6 @@ export default function Login({ onLogin }: LoginProps) {
               </button>
             ))}
           </div>
-          <LanguageToggle />
         </div>
 
         {tab === 'login' ? (
@@ -327,30 +310,6 @@ export default function Login({ onLogin }: LoginProps) {
               <PrimaryButton>{lang === 'vi' ? 'Đăng Nhập' : 'Sign In'}</PrimaryButton>
             </form>
 
-            <div className="my-5 flex items-center gap-3" aria-hidden="true">
-              <span className="h-px flex-1 bg-[#e5e3da]" />
-              <span className="text-[10.5px] font-semibold tracking-wider text-[#8b897f]">
-                {lang === 'vi' ? 'TÀI KHOẢN TRẢI NGHIỆM' : 'QUICK DEMO'}
-              </span>
-              <span className="h-px flex-1 bg-[#e5e3da]" />
-            </div>
-            <div className="grid grid-cols-2 gap-2" aria-label="Quick demo accounts">
-              {demoUsers.map(user => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => loginAsDemo(user)}
-                  className="min-h-10 rounded-lg border border-[#deddd2] bg-white px-2.5 py-2 text-left text-xs font-medium text-[#374151] transition-colors hover:border-[#e9a12c] hover:bg-[#fffaf0] last:col-span-2"
-                >
-                  <span className="block truncate font-semibold">{user.label}</span>
-                  <span className="block truncate text-[10px] font-normal text-[#8b897f]">{user.email}</span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-2.5 text-center text-[10.5px] text-[#8b897f]">
-              {lang === 'vi' ? 'Tất cả tài khoản demo dùng mật khẩu ' : 'All demo accounts use password '}
-              <strong className="font-semibold text-[#5f5e55]">{DEMO_PASSWORD}</strong>
-            </p>
           </>
         ) : (
           <form onSubmit={handleRegister} noValidate>
