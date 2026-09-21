@@ -22,11 +22,12 @@ function MainContent() {
 
   const canonicalRecord = sessionUserId ? users.find(item => item.id === sessionUserId) : null
   const accountStatus = canonicalRecord && 'status' in canonicalRecord ? String(canonicalRecord.status) : 'active'
-  const user: User | null = canonicalRecord && accountStatus !== 'suspended'
+  const user: User | null = canonicalRecord && accountStatus === 'active'
     ? {
         id: canonicalRecord.id,
         name: canonicalRecord.name,
         email: canonicalRecord.email,
+        phone: canonicalRecord.phone,
         role: canonicalRecord.role as User['role'],
         facility: canonicalRecord.facility
       }
@@ -40,6 +41,7 @@ function MainContent() {
       id: canonical.id,
       name: canonical.name,
       email: canonical.email,
+      phone: canonical.phone,
       role: canonical.role as User['role'],
       facility: canonical.facility
     })

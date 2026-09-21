@@ -38,6 +38,7 @@ export interface User {
   id: string
   name: string
   email: string
+  phone?: string
   role: Role
   avatar?: string
   facility?: string
@@ -86,4 +87,19 @@ export interface SecurityAlert {
   message: string
   createdAt: string
   resolvedAt?: string
+}
+
+export interface ProfileChangeRequest {
+  id: string
+  requesterId: string
+  requesterName: string
+  requesterEmail: string
+  requesterRole: Exclude<Role, 'customer'>
+  facility?: string
+  requestedFields: string[]
+  reason: string
+  status: 'pending' | 'resolved'
+  createdAt: string
+  resolvedAt?: string
+  resolvedBy?: string
 }
