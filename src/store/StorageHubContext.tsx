@@ -27,7 +27,7 @@ import type {
 import type { User } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
-import { formatVnd } from '../i18n/LanguageContext'
+import { formatVnd } from '../i18n/currency'
 
 const STORAGE_KEY = 'storagehub:v3:canonical'
 

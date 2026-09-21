@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { formatVnd, useLanguage } from '../../i18n/LanguageContext'
+import { formatVnd } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
@@ -13,8 +13,7 @@ interface ManagerReturnsPanelProps {
 }
 
 export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerReturnsPanelProps) {
-  const { lang } = useLanguage()
-  const { returns: storeReturns, reviewReturnDispute, completeReturnRefund } = useStorageHub()
+    const { returns: storeReturns, reviewReturnDispute, completeReturnRefund } = useStorageHub()
 
   const [returnTab, setReturnTab] = useState('All')
   const [returnSearch, setReturnSearch] = useState('')
@@ -62,15 +61,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const getDamageLabel = (d?: DamageClassification) => {
     switch (d) {
       case 'no_damage':
-        return lang === 'vi' ? 'Không hư hại' : 'No Damage'
+        return 'Không hư hại'
       case 'minor_damage':
-        return lang === 'vi' ? 'Hư hại nhẹ' : 'Minor Damage'
+        return 'Hư hại nhẹ'
       case 'major_damage':
-        return lang === 'vi' ? 'Hư hại nặng' : 'Major Damage'
+        return 'Hư hại nặng'
       case 'abandoned_goods':
-        return lang === 'vi' ? 'Bỏ lại hàng hóa' : 'Abandoned Goods'
+        return 'Bỏ lại hàng hóa'
       default:
-        return lang === 'vi' ? 'Chưa phân loại' : 'Unclassified'
+        return 'Chưa phân loại'
     }
   }
 
@@ -79,9 +78,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     try {
       reviewReturnDispute(selectedReturn.id, user, disputeResolutionNote)
       showToast(
-        lang === 'vi'
-          ? `Đã rà soát khiếu nại cho đơn ${selectedReturn.id} thành công!`
-          : `Dispute review submitted for ${selectedReturn.id}!`
+        `Đã rà soát khiếu nại cho đơn ${selectedReturn.id} thành công!`
       )
       setDisputeModalOpen(false)
       setDisputeResolutionNote('')
@@ -94,15 +91,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const handleCompleteRefund = () => {
     if (!selectedReturn) return
     if (!refundTxnRef.trim()) {
-      showToast(lang === 'vi' ? 'Vui lòng nhập mã giao dịch hoàn cọc.' : 'Please enter transaction reference.')
+      showToast('Vui lòng nhập mã giao dịch hoàn cọc.')
       return
     }
     try {
       completeReturnRefund(selectedReturn.id, user, refundTxnRef.trim())
       showToast(
-        lang === 'vi'
-          ? `Đã xác nhận hoàn tiền cọc ${formatVnd(selectedReturn.netRefundAmount)} cho ${selectedReturn.customerName}!`
-          : `Refund of ${formatVnd(selectedReturn.netRefundAmount)} completed for ${selectedReturn.customerName}!`
+        `Đã xác nhận hoàn tiền cọc ${formatVnd(selectedReturn.netRefundAmount)} cho ${selectedReturn.customerName}!`
       )
       setRefundModalOpen(false)
       setRefundTxnRef('')
@@ -115,40 +110,38 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={lang === 'vi' ? 'Quyết Toán Trả Kho & Xử Lý Khiếu Nại' : 'Move-Out Settlement & Disputes'}
+        title={'Quyết Toán Trả Kho & Xử Lý Khiếu Nại'}
         subtitle={
-          lang === 'vi'
-            ? 'Theo dõi biên bản nghiệm thu, phê duyệt quyết toán hoàn cọc và phân xử khiếu nại từ khách hàng'
-            : 'Track move-out inspections, resolve damage fee disputes, and process deposit refunds'
+          'Theo dõi biên bản nghiệm thu, phê duyệt quyết toán hoàn cọc và phân xử khiếu nại từ khách hàng'
         }
       />
 
       {/* Bento Grid Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title={lang === 'vi' ? 'Tổng yêu cầu trả kho' : 'Total Returns'}
+          title={'Tổng yêu cầu trả kho'}
           value={facilityReturns.length}
           icon={Icon.box}
           iconBg="bg-blue-50 text-blue-700"
         />
         <StatCard
-          title={lang === 'vi' ? 'Khiếu nại chờ xử lý' : 'Active Disputes'}
+          title={'Khiếu nại chờ xử lý'}
           value={disputedCount}
-          delta={disputedCount > 0 ? (lang === 'vi' ? 'Cần Manager giải quyết' : 'Requires Manager action') : undefined}
+          delta={disputedCount > 0 ? ('Cần Manager giải quyết') : undefined}
           deltaPositive={disputedCount === 0}
           icon={Icon.alert}
           iconBg={disputedCount > 0 ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-200' : 'bg-stone-50 text-stone-600'}
         />
         <StatCard
-          title={lang === 'vi' ? 'Chờ hoàn tiền cọc' : 'Refunds Pending'}
+          title={'Chờ hoàn tiền cọc'}
           value={refundPendingCount}
-          delta={lang === 'vi' ? 'Đã duyệt biên bản' : 'Inspection accepted'}
+          delta={'Đã duyệt biên bản'}
           deltaPositive
           icon={Icon.dollar}
           iconBg="bg-emerald-50 text-emerald-700"
         />
         <StatCard
-          title={lang === 'vi' ? 'Đã hoàn tất thanh lý' : 'Completed Returns'}
+          title={'Đã hoàn tất thanh lý'}
           value={completedCount}
           icon={Icon.check}
           iconBg="bg-purple-50 text-purple-700"
@@ -159,17 +152,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <Tabs
           tabs={
-            lang === 'vi'
-              ? ['Tất cả', 'Khiếu nại', 'Chờ hoàn cọc', 'Còn nợ phí', 'Đang xử lý', 'Đã hoàn tất']
-              : ['All', 'disputed', 'refund_pending', 'payment_due', 'in_progress', 'completed']
+            ['Tất cả', 'Khiếu nại', 'Chờ hoàn cọc', 'Còn nợ phí', 'Đang xử lý', 'Đã hoàn tất']
           }
           active={
-            returnTab === 'All' && lang === 'vi' ? 'Tất cả' :
-            returnTab === 'disputed' && lang === 'vi' ? 'Khiếu nại' :
-            returnTab === 'refund_pending' && lang === 'vi' ? 'Chờ hoàn cọc' :
-            returnTab === 'payment_due' && lang === 'vi' ? 'Còn nợ phí' :
-            returnTab === 'in_progress' && lang === 'vi' ? 'Đang xử lý' :
-            returnTab === 'completed' && lang === 'vi' ? 'Đã hoàn tất' : returnTab
+            returnTab === 'All' ? 'Tất cả' :
+            returnTab === 'disputed' ? 'Khiếu nại' :
+            returnTab === 'refund_pending' ? 'Chờ hoàn cọc' :
+            returnTab === 'payment_due' ? 'Còn nợ phí' :
+            returnTab === 'in_progress' ? 'Đang xử lý' :
+            returnTab === 'completed' ? 'Đã hoàn tất' : returnTab
           }
           onChange={val => {
             if (val === 'Tất cả') setReturnTab('All')
@@ -184,7 +175,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
         <div className="w-full sm:w-72">
           <input
             type="text"
-            placeholder={lang === 'vi' ? 'Tìm theo mã, khách, gian kho...' : 'Search return ID, tenant, unit...'}
+            placeholder={'Tìm theo mã, khách, gian kho...'}
             value={returnSearch}
             onChange={e => setReturnSearch(e.target.value)}
             className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
@@ -197,23 +188,21 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
         <Table>
           <Thead>
             <tr>
-              <Th>{lang === 'vi' ? 'Mã Trả Kho / HĐ' : 'Return ID / Lease'}</Th>
-              <Th>{lang === 'vi' ? 'Khách Hàng' : 'Customer'}</Th>
-              <Th>{lang === 'vi' ? 'Gian Kho' : 'Unit'}</Th>
-              <Th>{lang === 'vi' ? 'Ngày Hẹn' : 'Schedule'}</Th>
-              <Th>{lang === 'vi' ? 'Đánh Giá Nghiệm Thu' : 'Inspection'}</Th>
-              <Th>{lang === 'vi' ? 'Quyết Toán Tiền Cọc' : 'Deposit Settlement'}</Th>
-              <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
-              <Th className="text-right">{lang === 'vi' ? 'Hành Động' : 'Actions'}</Th>
+              <Th>{'Mã Trả Kho / HĐ'}</Th>
+              <Th>{'Khách Hàng'}</Th>
+              <Th>{'Gian Kho'}</Th>
+              <Th>{'Ngày Hẹn'}</Th>
+              <Th>{'Đánh Giá Nghiệm Thu'}</Th>
+              <Th>{'Quyết Toán Tiền Cọc'}</Th>
+              <Th>{'Trạng Thái'}</Th>
+              <Th className="text-right">{'Hành Động'}</Th>
             </tr>
           </Thead>
           <Tbody>
             {filteredReturns.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-stone-400 text-sm">
-                  {lang === 'vi'
-                    ? 'Không có hồ sơ trả kho nào trong danh mục này.'
-                    : 'No return requests found matching the current filter.'}
+                  {'Không có hồ sơ trả kho nào trong danh mục này.'}
                 </td>
               </tr>
             ) : (
@@ -258,7 +247,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                       <div className="text-xs">
                         <p className="text-stone-700 font-medium">{ret.scheduledDate}</p>
                         <p className="text-[11px] text-stone-400">
-                          {lang === 'vi' ? 'Yêu cầu:' : 'Req:'} {ret.requestedAt.slice(0, 10)}
+                          {'Yêu cầu:'} {ret.requestedAt.slice(0, 10)}
                         </p>
                       </div>
                     </Td>
@@ -277,7 +266,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                         </span>
                         {totalDeductions > 0 && (
                           <p className="text-[11px] text-red-600 font-medium">
-                            {lang === 'vi' ? `Khấu trừ: -${formatVnd(totalDeductions)}` : `Deduction: -${formatVnd(totalDeductions)}`}
+                            {`Khấu trừ: -${formatVnd(totalDeductions)}`}
                           </p>
                         )}
                       </div>
@@ -285,15 +274,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     <Td>
                       <div className="text-xs">
                         <p className="text-stone-500">
-                          {lang === 'vi' ? 'Cọc:' : 'Deposit:'} <span className="font-mono">{formatVnd(ret.depositAmount)}</span>
+                          {'Cọc:'} <span className="font-mono">{formatVnd(ret.depositAmount)}</span>
                         </p>
                         {ret.amountDueFromCustomer && ret.amountDueFromCustomer > 0 ? (
                           <p className="font-bold text-rose-600">
-                            {lang === 'vi' ? `Khách nộp thêm: ${formatVnd(ret.amountDueFromCustomer ?? 0)}` : `Due: ${formatVnd(ret.amountDueFromCustomer ?? 0)}`}
+                            {`Khách nộp thêm: ${formatVnd(ret.amountDueFromCustomer ?? 0)}`}
                           </p>
                         ) : (
                           <p className="font-bold text-emerald-700">
-                            {lang === 'vi' ? `Hoàn lại: ${formatVnd(ret.netRefundAmount)}` : `Refund: ${formatVnd(ret.netRefundAmount)}`}
+                            {`Hoàn lại: ${formatVnd(ret.netRefundAmount)}`}
                           </p>
                         )}
                       </div>
@@ -309,7 +298,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             setDetailModalOpen(true)
                           }}
                         >
-                          {lang === 'vi' ? 'Chi tiết' : 'Details'}
+                          {'Chi tiết'}
                         </Button>
 
                         {ret.status === 'disputed' && (
@@ -323,7 +312,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                               setDisputeModalOpen(true)
                             }}
                           >
-                            {lang === 'vi' ? 'Xử lý khiếu nại' : 'Resolve Dispute'}
+                            {'Xử lý khiếu nại'}
                           </Button>
                         )}
 
@@ -338,7 +327,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                               setRefundModalOpen(true)
                             }}
                           >
-                            {lang === 'vi' ? 'Hoàn cọc' : 'Refund'}
+                            {'Hoàn cọc'}
                           </Button>
                         )}
                       </div>
@@ -355,7 +344,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       <Modal
         open={detailModalOpen}
         onClose={() => setDetailModalOpen(false)}
-        title={lang === 'vi' ? 'Chi Tiết Hồ Sơ Trả Kho & Nghiệm Thu' : 'Return Dossier & Move-Out Inspection'}
+        title={'Chi Tiết Hồ Sơ Trả Kho & Nghiệm Thu'}
       >
         {selectedReturn && (
           <div className="space-y-4">
@@ -368,14 +357,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               <div className="mt-2 flex justify-between items-end">
                 <div>
                   <p className="text-xl font-bold font-mono">
-                    {lang === 'vi' ? `Gian Kho ${selectedReturn.unitId}` : `Unit ${selectedReturn.unitId}`}
+                    {`Gian Kho ${selectedReturn.unitId}`}
                   </p>
                   <p className="text-xs text-slate-400">
                     {selectedReturn.customerName} · {selectedReturn.customerPhone}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-slate-400">{lang === 'vi' ? 'Trạng thái' : 'Status'}</p>
+                  <p className="text-xs text-slate-400">{'Trạng thái'}</p>
                   {sb(selectedReturn.status)}
                 </div>
               </div>
@@ -384,25 +373,25 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             {/* Inspection & Fees Breakdown Bento Box */}
             <div className="grid grid-cols-2 gap-3 text-xs bg-stone-50 p-3.5 rounded-lg border border-stone-200">
               <div>
-                <span className="text-stone-400 block">{lang === 'vi' ? 'Mức độ hư hại' : 'Damage Level'}</span>
+                <span className="text-stone-400 block">{'Mức độ hư hại'}</span>
                 <span className="font-semibold text-stone-800 text-sm">
                   {getDamageLabel(selectedReturn.damageClassification)}
                 </span>
               </div>
               <div>
-                <span className="text-stone-400 block">{lang === 'vi' ? 'Khớp danh mục đồ gửi' : 'Inventory Match'}</span>
+                <span className="text-stone-400 block">{'Khớp danh mục đồ gửi'}</span>
                 <span className="font-semibold text-stone-800 text-sm capitalize">
                   {selectedReturn.inventoryMatch || 'N/A'}
                 </span>
               </div>
               <div>
-                <span className="text-stone-400 block">{lang === 'vi' ? 'Ngày nghiệm thu' : 'Inspected At'}</span>
+                <span className="text-stone-400 block">{'Ngày nghiệm thu'}</span>
                 <span className="font-medium text-stone-700">
                   {selectedReturn.inspectedAt ? selectedReturn.inspectedAt.slice(0, 16).replace('T', ' ') : 'Chưa nghiệm thu'}
                 </span>
               </div>
               <div>
-                <span className="text-stone-400 block">{lang === 'vi' ? 'Vật tư bàn giao lại' : 'Returned Items'}</span>
+                <span className="text-stone-400 block">{'Vật tư bàn giao lại'}</span>
                 <span className="font-medium text-stone-700">
                   {selectedReturn.returnedItems
                     ? `Chìa: ${selectedReturn.returnedItems.key ? '✓' : '✗'} · Thẻ: ${selectedReturn.returnedItems.card ? '✓' : '✗'} · Khóa: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`
@@ -414,45 +403,45 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             {/* Financial Calculation Matrix */}
             <div className="rounded-lg border border-stone-200 p-3.5 bg-white space-y-2 text-xs">
               <p className="font-semibold text-stone-900 border-b pb-1.5 text-sm">
-                {lang === 'vi' ? 'Chi Tiết Quyết Toán Tài Chính' : 'Financial Settlement Breakdown'}
+                {'Chi Tiết Quyết Toán Tài Chính'}
               </p>
               <div className="flex justify-between py-0.5">
-                <span className="text-stone-500">{lang === 'vi' ? 'Tiền đặt cọc ban đầu' : 'Initial Security Deposit'}</span>
+                <span className="text-stone-500">{'Tiền đặt cọc ban đầu'}</span>
                 <span className="font-mono font-semibold text-stone-800">{formatVnd(selectedReturn.depositAmount)}</span>
               </div>
               {selectedReturn.damageFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
-                  <span>{lang === 'vi' ? 'Phí sửa chữa hư hại' : 'Damage Repair Fee'}</span>
+                  <span>{'Phí sửa chữa hư hại'}</span>
                   <span className="font-mono">-{formatVnd(selectedReturn.damageFee)}</span>
                 </div>
               )}
               {selectedReturn.cleaningFee && selectedReturn.cleaningFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
-                  <span>{lang === 'vi' ? 'Phí vệ sinh kho' : 'Cleaning Fee'}</span>
+                  <span>{'Phí vệ sinh kho'}</span>
                   <span className="font-mono">-{formatVnd(selectedReturn.cleaningFee)}</span>
                 </div>
               )}
               {selectedReturn.overdueFee && selectedReturn.overdueFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
-                  <span>{lang === 'vi' ? `Phí phạt trễ hạn (${selectedReturn.overdueDays || 0} ngày)` : `Overdue Fee (${selectedReturn.overdueDays || 0}d)`}</span>
+                  <span>{`Phí phạt trễ hạn (${selectedReturn.overdueDays || 0} ngày)`}</span>
                   <span className="font-mono">-{formatVnd(selectedReturn.overdueFee)}</span>
                 </div>
               )}
               {selectedReturn.outstandingFee && selectedReturn.outstandingFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
-                  <span>{lang === 'vi' ? 'Cước thuê còn nợ' : 'Outstanding Rent'}</span>
+                  <span>{'Cước thuê còn nợ'}</span>
                   <span className="font-mono">-{formatVnd(selectedReturn.outstandingFee)}</span>
                 </div>
               )}
               <div className="pt-2 border-t flex justify-between font-bold text-sm">
-                <span>{lang === 'vi' ? 'Thực hoàn lại cho khách' : 'Net Deposit Refund'}</span>
+                <span>{'Thực hoàn lại cho khách'}</span>
                 <span className={selectedReturn.netRefundAmount > 0 ? 'text-emerald-700 font-mono' : 'text-stone-600 font-mono'}>
                   {formatVnd(selectedReturn.netRefundAmount)}
                 </span>
               </div>
               {selectedReturn.amountDueFromCustomer && selectedReturn.amountDueFromCustomer > 0 && (
                 <div className="flex justify-between font-bold text-sm text-rose-600 pt-1">
-                  <span>{lang === 'vi' ? 'Khách còn phải nộp thêm' : 'Additional Amount Due'}</span>
+                  <span>{'Khách còn phải nộp thêm'}</span>
                   <span className="font-mono">{formatVnd(selectedReturn.amountDueFromCustomer ?? 0)}</span>
                 </div>
               )}
@@ -461,7 +450,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             {/* Staff / Customer Notes */}
             {selectedReturn.staffNotes && (
               <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg text-xs">
-                <span className="font-semibold text-amber-900 block mb-1">{lang === 'vi' ? 'Ghi chú nghiệp vụ' : 'Operational Notes'}</span>
+                <span className="font-semibold text-amber-900 block mb-1">{'Ghi chú nghiệp vụ'}</span>
                 <p className="text-amber-800">{selectedReturn.staffNotes}</p>
               </div>
             )}
@@ -469,7 +458,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             {selectedReturn.customerDecisionNote && (
               <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-lg text-xs">
                 <span className="font-semibold text-rose-900 block mb-1">
-                  {lang === 'vi' ? 'Lý do khiếu nại của khách hàng' : 'Customer Dispute Argument'}
+                  {'Lý do khiếu nại của khách hàng'}
                 </span>
                 <p className="text-rose-800">{selectedReturn.customerDecisionNote}</p>
               </div>
@@ -477,7 +466,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
             <div className="flex justify-end gap-2 pt-2 border-t">
               <Button variant="outline" onClick={() => setDetailModalOpen(false)}>
-                {lang === 'vi' ? 'Đóng' : 'Close'}
+                {'Đóng'}
               </Button>
               {selectedReturn.status === 'disputed' && (
                 <Button
@@ -489,7 +478,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     setDisputeModalOpen(true)
                   }}
                 >
-                  {lang === 'vi' ? 'Xử lý khiếu nại' : 'Resolve Dispute'}
+                  {'Xử lý khiếu nại'}
                 </Button>
               )}
               {selectedReturn.status === 'refund_pending' && (
@@ -502,7 +491,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     setRefundModalOpen(true)
                   }}
                 >
-                  {lang === 'vi' ? 'Hoàn cọc ngay' : 'Process Refund'}
+                  {'Hoàn cọc ngay'}
                 </Button>
               )}
             </div>
@@ -514,37 +503,35 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       <Modal
         open={disputeModalOpen}
         onClose={() => setDisputeModalOpen(false)}
-        title={lang === 'vi' ? 'Phân Xử & Giải Quyết Khiếu Nại Quyết Toán' : 'Review & Adjudicate Dispute'}
+        title={'Phân Xử & Giải Quyết Khiếu Nại Quyết Toán'}
       >
         {selectedReturn && (
           <div className="space-y-4">
             <div className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-xs space-y-1.5">
               <p className="font-bold text-rose-900 text-sm">
-                {lang === 'vi' ? `Khiếu nại từ khách: ${selectedReturn.customerName}` : `Dispute by ${selectedReturn.customerName}`}
+                {`Khiếu nại từ khách: ${selectedReturn.customerName}`}
               </p>
               <p className="text-rose-800 font-mono">
-                {lang === 'vi' ? `Kho ${selectedReturn.unitId} · Hồ sơ ${selectedReturn.id}` : `Unit ${selectedReturn.unitId} · Case ${selectedReturn.id}`}
+                {`Kho ${selectedReturn.unitId} · Hồ sơ ${selectedReturn.id}`}
               </p>
               <div className="mt-2 pt-2 border-t border-rose-200/80">
-                <p className="text-stone-500">{lang === 'vi' ? 'Ý kiến phản ánh của khách:' : 'Customer dispute note:'}</p>
+                <p className="text-stone-500">{'Ý kiến phản ánh của khách:'}</p>
                 <p className="font-medium text-rose-950 mt-0.5">
-                  "{selectedReturn.customerDecisionNote || (lang === 'vi' ? 'Không đồng ý với phí khấu trừ nghiệm thu kho.' : 'Disagrees with move-out inspection fee deductions.')}"
+                  "{selectedReturn.customerDecisionNote || ('Không đồng ý với phí khấu trừ nghiệm thu kho.')}"
                 </p>
               </div>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-stone-700">
-                {lang === 'vi' ? 'Kết luận phân xử của Facility Manager' : 'Manager Resolution Decision & Notes'}
+                {'Kết luận phân xử của Facility Manager'}
               </label>
               <textarea
                 rows={4}
                 value={disputeResolutionNote}
                 onChange={e => setDisputeResolutionNote(e.target.value)}
                 placeholder={
-                  lang === 'vi'
-                    ? 'Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh hiện trạng camera ngày vào và ra; chấp thuận giảm 50% phí vệ sinh...)'
-                    : 'Enter adjudication rationale and adjusted fee resolution...'
+                  'Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh hiện trạng camera ngày vào và ra; chấp thuận giảm 50% phí vệ sinh...)'
                 }
                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
@@ -552,14 +539,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
             <div className="flex gap-2 justify-end pt-3 border-t">
               <Button variant="outline" onClick={() => setDisputeModalOpen(false)}>
-                {lang === 'vi' ? 'Hủy' : 'Cancel'}
+                {'Hủy'}
               </Button>
               <Button
                 variant="primary"
                 className="bg-rose-600 hover:bg-rose-700 text-white"
                 onClick={handleReviewDispute}
               >
-                {lang === 'vi' ? 'Gửi kết luận cho khách' : 'Submit Adjudication'}
+                {'Gửi kết luận cho khách'}
               </Button>
             </div>
           </div>
@@ -570,27 +557,27 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       <Modal
         open={refundModalOpen}
         onClose={() => setRefundModalOpen(false)}
-        title={lang === 'vi' ? 'Xác Nhận Hoàn Tiền Cọc Cho Khách' : 'Execute Deposit Refund'}
+        title={'Xác Nhận Hoàn Tiền Cọc Cho Khách'}
       >
         {selectedReturn && (
           <div className="space-y-4">
             <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-xs space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-emerald-800">{lang === 'vi' ? 'Khách thụ hưởng' : 'Beneficiary'}</span>
+                <span className="text-emerald-800">{'Khách thụ hưởng'}</span>
                 <span className="font-bold text-emerald-950 text-sm">{selectedReturn.customerName}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-emerald-800">{lang === 'vi' ? 'Mã gian kho thanh lý' : 'Move-out Unit'}</span>
+                <span className="text-emerald-800">{'Mã gian kho thanh lý'}</span>
                 <span className="font-mono font-bold text-emerald-950">{selectedReturn.unitId}</span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-emerald-200 text-sm">
-                <span className="font-bold text-emerald-900">{lang === 'vi' ? 'Số tiền hoàn cọc' : 'Refund Amount'}</span>
+                <span className="font-bold text-emerald-900">{'Số tiền hoàn cọc'}</span>
                 <span className="font-mono font-extrabold text-emerald-700 text-lg">{formatVnd(selectedReturn.netRefundAmount)}</span>
               </div>
             </div>
 
             <Input
-              label={lang === 'vi' ? 'Mã chứng từ / Tham chiếu chuyển khoản ngân hàng' : 'Bank Transfer Reference'}
+              label={'Mã chứng từ / Tham chiếu chuyển khoản ngân hàng'}
               value={refundTxnRef}
               onChange={e => setRefundTxnRef(e.target.value)}
               placeholder="e.g. VCB-REF-849204"
@@ -598,14 +585,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
             <div className="flex gap-2 justify-end pt-3 border-t">
               <Button variant="outline" onClick={() => setRefundModalOpen(false)}>
-                {lang === 'vi' ? 'Hủy' : 'Cancel'}
+                {'Hủy'}
               </Button>
               <Button
                 variant="primary"
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={handleCompleteRefund}
               >
-                {lang === 'vi' ? 'Xác nhận hoàn cọc' : 'Confirm Refund'}
+                {'Xác nhận hoàn cọc'}
               </Button>
             </div>
           </div>
