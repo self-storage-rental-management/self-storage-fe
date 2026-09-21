@@ -20,7 +20,17 @@ const roleColors: Record<Role, string> = {
 
 export default function AdminApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { lang } = useLanguage()
-  const { activities, users: USERS } = useStorageHub()
+  const {
+    activities,
+    users: USERS,
+    facilities,
+    createInternalAccount,
+    createCustomerSupportAccount,
+    updateUserAccount,
+    setUserAccountStatus,
+    deleteUserAccount,
+    requestUserPasswordReset
+  } = useStorageHub()
 
   const NAV = [
     { id: 'users', label: lang === 'vi' ? 'Quản lý người dùng' : 'User Management', icon: Icon.users, group: lang === 'vi' ? 'Quản trị' : 'Administration' },
@@ -37,6 +47,12 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
   const [logSearch, setLogSearch] = useState('')
   const [historyTab, setHistoryTab] = useState('All')
   const [selectedUser, setSelectedUser] = useState<typeof USERS[0] | null>(null)
+  const [accountMode, setAccountMode] = useState<'internal' | 'customer-support'>('internal')
+  const [accountForm, setAccountForm] = useState({ name: '', email: '', phone: '', role: 'staff' as Exclude<Role, 'customer'>, facility: '', status: 'active' as 'active' | 'inactive' | 'suspended', reason: '' })
+  const [accountSearch, setAccountSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [facilityFilter, setFacilityFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
 
   // Audit Logs interactive state
   const [logsList, setLogsList] = useState<AuditActivityLog[]>(ACTIVITY_LOGS)
@@ -54,14 +70,51 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
     setTimeout(() => setToast(null), 3000)
   }
 
+  const openCreateAccount = (mode: 'internal' | 'customer-support') => {
+    setSelectedUser(null)
+    setAccountMode(mode)
+    setAccountForm({ name: '', email: '', phone: '', role: 'staff', facility: mode === 'internal' ? '' : 'All facilities', status: 'active', reason: '' })
+    setUserModal(true)
+  }
+
+  const openEditAccount = (account: typeof USERS[0]) => {
+    setSelectedUser(account)
+    setAccountMode('internal')
+    setAccountForm({ name: account.name, email: account.email, phone: account.phone ?? '', role: account.role === 'customer' ? 'staff' : account.role as Exclude<Role, 'customer'>, facility: account.facility ?? '', status: account.status as 'active' | 'inactive' | 'suspended', reason: '' })
+    setUserModal(true)
+  }
+
+  const handleAccountSubmit = () => {
+    try {
+      if (selectedUser) {
+        updateUserAccount(selectedUser.id, selectedUser.role === 'customer' ? { ...accountForm, role: undefined } : accountForm, user)
+        showToast(lang === 'vi' ? 'Đã cập nhật tài khoản và ghi audit log.' : 'Account updated and audit logged.')
+      } else if (accountMode === 'customer-support') {
+        createCustomerSupportAccount({ name: accountForm.name, email: accountForm.email, phone: accountForm.phone, facility: accountForm.facility, reason: accountForm.reason }, user)
+        showToast(lang === 'vi' ? 'Đã tạo Customer theo yêu cầu hỗ trợ và ghi audit log.' : 'Support-created Customer account was saved and audited.')
+      } else {
+        createInternalAccount(accountForm, user)
+        showToast(lang === 'vi' ? 'Đã tạo tài khoản nội bộ và ghi audit log.' : 'Internal account was saved and audited.')
+      }
+      setUserModal(false)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : (lang === 'vi' ? 'Không thể lưu tài khoản.' : 'Unable to save account.'))
+    }
+  }
+
   const filteredUsers = USERS.filter(u => {
-    if (userTab === 'All' || userTab === 'Tất cả') return true
-    if (userTab === 'Customer' || userTab === 'Khách hàng') return u.role === 'customer'
-    if (userTab === 'Staff' || userTab === 'Nhân viên') return u.role === 'staff'
-    if (userTab === 'Manager' || userTab === 'Quản lý') return u.role === 'manager'
-    if (userTab === 'Admin' || userTab === 'Quản trị') return u.role === 'admin'
-    if (userTab === 'Suspended' || userTab === 'Tạm khóa') return u.status === 'suspended'
-    return u.role === userTab.toLowerCase() || u.status === userTab.toLowerCase()
+    const tabMatch = userTab === 'All' || userTab === 'Tất cả'
+      || (userTab === 'Customer' || userTab === 'Khách hàng') && u.role === 'customer'
+      || (userTab === 'Staff' || userTab === 'Nhân viên') && u.role === 'staff'
+      || (userTab === 'Manager' || userTab === 'Quản lý') && u.role === 'manager'
+      || (userTab === 'Admin' || userTab === 'Quản trị') && u.role === 'admin'
+      || (userTab === 'Suspended' || userTab === 'Tạm khóa') && u.status === 'suspended'
+    const query = accountSearch.trim().toLowerCase()
+    return tabMatch
+      && (roleFilter === 'all' || u.role === roleFilter)
+      && (facilityFilter === 'all' || (u.facility ?? '') === facilityFilter)
+      && (statusFilter === 'all' || u.status === statusFilter)
+      && (!query || u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query))
   })
 
   const sb = (v: string) => {
@@ -90,7 +143,12 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
           <SectionHeader
             title={lang === 'vi' ? 'Quản Lý Tài Khoản Người Dùng' : 'User Management'}
             subtitle={lang === 'vi' ? `Tổng cộng ${USERS.length} tài khoản người dùng` : `${USERS.length} total users`}
-            action={<Button variant="outline" size="sm" disabled>{lang === 'vi' ? 'Dữ liệu tài khoản chỉ đọc' : 'Accounts are read-only'}</Button>}
+            action={
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => openCreateAccount('customer-support')}>{lang === 'vi' ? 'Tạo Customer hỗ trợ' : 'Create support Customer'}</Button>
+                <Button variant="primary" size="sm" onClick={() => openCreateAccount('internal')}>{lang === 'vi' ? 'Tạo tài khoản nội bộ' : 'Create internal account'}</Button>
+              </div>
+            }
           />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
             <StatCard title={lang === 'vi' ? 'Tổng tài khoản' : 'Total Users'} value={USERS.length} icon={Icon.users} iconBg="bg-blue-50" />
@@ -120,6 +178,22 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               }}
             />
           </div>
+          <div className="mb-4 grid gap-3 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+            <Input aria-label={lang === 'vi' ? 'Tìm tài khoản' : 'Search accounts'} value={accountSearch} onChange={event => setAccountSearch(event.target.value)} placeholder={lang === 'vi' ? 'Tìm theo tên hoặc email…' : 'Search by name or email…'} />
+            <Select label={lang === 'vi' ? 'Role' : 'Role'} value={roleFilter} onChange={event => setRoleFilter(event.target.value)}>
+              <option value="all">{lang === 'vi' ? 'Tất cả role' : 'All roles'}</option>
+              <option value="customer">Customer</option><option value="staff">Staff</option><option value="manager">Manager</option><option value="business">Business</option><option value="admin">Admin</option>
+            </Select>
+            <Select label={lang === 'vi' ? 'Cơ sở' : 'Facility'} value={facilityFilter} onChange={event => setFacilityFilter(event.target.value)}>
+              <option value="all">{lang === 'vi' ? 'Tất cả cơ sở' : 'All facilities'}</option>
+              {facilities.map(facility => <option key={facility.id} value={facility.name}>{facility.name}</option>)}
+              <option value="All facilities">All facilities</option>
+            </Select>
+            <Select label={lang === 'vi' ? 'Trạng thái' : 'Status'} value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+              <option value="all">{lang === 'vi' ? 'Tất cả trạng thái' : 'All statuses'}</option>
+              <option value="active">{lang === 'vi' ? 'Hoạt động' : 'Active'}</option><option value="inactive">{lang === 'vi' ? 'Ngưng' : 'Inactive'}</option><option value="suspended">{lang === 'vi' ? 'Tạm khóa' : 'Suspended'}</option>
+            </Select>
+          </div>
           <Card>
             <Table>
               <Thead>
@@ -135,7 +209,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               </Thead>
               <Tbody>
                 {filteredUsers.map(u => (
-                  <Tr key={u.id} onClick={() => { setSelectedUser(u); setUserModal(true) }}>
+                  <Tr key={u.id} onClick={() => openEditAccount(u)}>
                     <Td>
                       <div className="flex items-center gap-3">
                         <Avatar name={u.name} size="sm" />
@@ -156,7 +230,15 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                     <Td className="text-sm text-slate-500">{u.joined}</Td>
                     <Td>
                       <div className="flex gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
-                        <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(u); setUserModal(true) }}>{lang === 'vi' ? 'Xem' : 'View'}</Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEditAccount(u)}>{lang === 'vi' ? 'Sửa' : 'Edit'}</Button>
+                        {u.id !== user.id && <Button variant="ghost" size="sm" onClick={() => {
+                          try {
+                            setUserAccountStatus(u.id, u.status === 'active' ? 'suspended' : 'active', user)
+                            showToast(lang === 'vi' ? 'Đã cập nhật trạng thái tài khoản.' : 'Account status updated.')
+                          } catch (error) {
+                            showToast(error instanceof Error ? error.message : (lang === 'vi' ? 'Không thể cập nhật trạng thái.' : 'Unable to update status.'))
+                          }
+                        }}>{u.status === 'active' ? (lang === 'vi' ? 'Khóa' : 'Suspend') : (lang === 'vi' ? 'Mở khóa' : 'Activate')}</Button>}
                       </div>
                     </Td>
                   </Tr>
@@ -653,7 +735,9 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
         title={
           selectedUser
             ? (lang === 'vi' ? `Chỉnh Sửa Người Dùng – ${selectedUser.name}` : `Edit User – ${selectedUser.name}`)
-            : (lang === 'vi' ? 'Thêm Người Dùng Mới' : 'Add New User')
+            : accountMode === 'customer-support'
+              ? (lang === 'vi' ? 'Tạo Customer theo yêu cầu hỗ trợ' : 'Create support Customer')
+              : (lang === 'vi' ? 'Tạo tài khoản nội bộ' : 'Create internal account')
         }
       >
         <div className="space-y-4">
@@ -669,28 +753,54 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Input label={lang === 'vi' ? 'Họ và Tên' : 'Full Name'} defaultValue={selectedUser?.name} placeholder="Jane Smith" />
-            <Input label="Email" type="email" defaultValue={selectedUser?.email} placeholder="jane@example.com" />
+            <Input label={lang === 'vi' ? 'Họ và Tên' : 'Full Name'} value={accountForm.name} onChange={event => setAccountForm(prev => ({ ...prev, name: event.target.value }))} placeholder="Jane Smith" />
+            <Input label="Email" type="email" value={accountForm.email} onChange={event => setAccountForm(prev => ({ ...prev, email: event.target.value }))} placeholder="jane@example.com" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Select label={lang === 'vi' ? 'Vai Trò' : 'Role'} value={selectedUser?.role}>
-              <option value="customer">{lang === 'vi' ? 'Khách hàng' : 'Customer'}</option>
+            <Select label={lang === 'vi' ? 'Vai Trò' : 'Role'} value={selectedUser?.role === 'customer' ? 'customer' : accountForm.role} disabled={selectedUser?.role === 'customer'} onChange={event => setAccountForm(prev => ({ ...prev, role: event.target.value as Exclude<Role, 'customer'> }))}>
+              {selectedUser?.role === 'customer' && <option value="customer">{lang === 'vi' ? 'Khách hàng' : 'Customer'}</option>}
               <option value="staff">{lang === 'vi' ? 'Nhân viên' : 'Staff'}</option>
               <option value="manager">{lang === 'vi' ? 'Quản lý cơ sở' : 'Manager'}</option>
               <option value="business">{lang === 'vi' ? 'Giám đốc kinh doanh' : 'Business Manager'}</option>
               <option value="admin">{lang === 'vi' ? 'Quản trị viên' : 'Admin'}</option>
             </Select>
-            <Select label={lang === 'vi' ? 'Trạng Thái' : 'Status'} value={selectedUser?.status}>
+            <Select label={lang === 'vi' ? 'Trạng Thái' : 'Status'} value={accountForm.status} onChange={event => setAccountForm(prev => ({ ...prev, status: event.target.value as 'active' | 'inactive' | 'suspended' }))}>
               <option value="active">{lang === 'vi' ? 'Hoạt động' : 'Active'}</option>
               <option value="inactive">{lang === 'vi' ? 'Ngưng hoạt động' : 'Inactive'}</option>
               <option value="suspended">{lang === 'vi' ? 'Đình chỉ' : 'Suspended'}</option>
             </Select>
           </div>
-          <Input label={lang === 'vi' ? 'Cơ sở kho (nếu có)' : 'Facility (if applicable)'} defaultValue={selectedUser?.facility} placeholder={lang === 'vi' ? 'Tên cơ sở kho' : 'Facility name'} />
-          {!selectedUser && <Input label={lang === 'vi' ? 'Mật Khẩu Tạm Thời' : 'Temporary Password'} type="password" placeholder={lang === 'vi' ? 'Sẽ được gửi tự động qua email' : 'Will be sent via email'} />}
+          <Input label={lang === 'vi' ? 'Số điện thoại' : 'Phone'} value={accountForm.phone} onChange={event => setAccountForm(prev => ({ ...prev, phone: event.target.value }))} placeholder="0901 234 567" />
+          <Select label={lang === 'vi' ? 'Cơ sở kho' : 'Facility'} value={accountForm.facility} onChange={event => setAccountForm(prev => ({ ...prev, facility: event.target.value }))}>
+            <option value="">{lang === 'vi' ? 'Chưa gán cơ sở' : 'Unassigned'}</option>
+            <option value="All facilities">All facilities</option>
+            {facilities.map(facility => <option key={facility.id} value={facility.name}>{facility.name}</option>)}
+          </Select>
+          {!selectedUser && accountMode === 'customer-support' && <Input label={lang === 'vi' ? 'Lý do hỗ trợ (bắt buộc)' : 'Support reason (required)'} value={accountForm.reason} onChange={event => setAccountForm(prev => ({ ...prev, reason: event.target.value }))} placeholder={lang === 'vi' ? 'Ví dụ: hỗ trợ khách không thể tự đăng ký' : 'Why support must create this Customer'} />}
+          {selectedUser && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <span>{lang === 'vi' ? 'Mật khẩu' : 'Password'}: {selectedUser.mustChangePassword ? (lang === 'vi' ? 'Bắt buộc đổi sau reset/cấp mới' : 'Change required after reset/provisioning') : (lang === 'vi' ? 'Đang hoạt động' : 'Active')}</span>
+            <Button variant="outline" size="sm" onClick={() => {
+              try {
+                requestUserPasswordReset(selectedUser.id, user)
+                showToast(lang === 'vi' ? 'Đã tạo yêu cầu reset mật khẩu và ghi audit log.' : 'Password reset request created and audited.')
+              } catch (error) {
+                showToast(error instanceof Error ? error.message : (lang === 'vi' ? 'Không thể reset mật khẩu.' : 'Unable to reset password.'))
+              }
+            }}>{lang === 'vi' ? 'Tạo yêu cầu reset' : 'Request reset'}</Button>
+          </div>}
           <div className="flex gap-2 justify-end pt-2">
+            {selectedUser && selectedUser.id !== user.id && <Button variant="outline" onClick={() => {
+              if (!window.confirm(lang === 'vi' ? 'Xóa tài khoản này khỏi hệ thống?' : 'Delete this account?')) return
+              try {
+                deleteUserAccount(selectedUser.id, user)
+                setUserModal(false)
+                showToast(lang === 'vi' ? 'Đã xóa tài khoản và ghi audit log.' : 'Account deleted and audited.')
+              } catch (error) {
+                showToast(error instanceof Error ? error.message : (lang === 'vi' ? 'Không thể xóa tài khoản.' : 'Unable to delete account.'))
+              }
+            }}>{lang === 'vi' ? 'Xóa tài khoản' : 'Delete account'}</Button>}
             <Button variant="outline" onClick={() => setUserModal(false)}>{lang === 'vi' ? 'Hủy Bỏ' : 'Cancel'}</Button>
-            <Button variant="primary" onClick={() => setUserModal(false)}>{lang === 'vi' ? 'Đóng' : 'Close'}</Button>
+            <Button variant="primary" onClick={handleAccountSubmit}>{selectedUser ? (lang === 'vi' ? 'Lưu thay đổi' : 'Save changes') : (lang === 'vi' ? 'Tạo tài khoản' : 'Create account')}</Button>
           </div>
         </div>
       </Modal>
