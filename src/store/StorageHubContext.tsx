@@ -30,7 +30,12 @@ import { transitionReservation } from '../domain/reservationFlow'
 
 const STORAGE_KEY = 'storagehub:v3:canonical'
 
-type StoredUser = (typeof USERS)[number]
+type CompanyRole = Exclude<User['role'], 'customer'>
+type AccountStatus = 'active' | 'inactive' | 'suspended'
+type StoredUser = (typeof USERS)[number] & {
+  passwordResetAt?: string
+  mustChangePassword?: boolean
+}
 
 /**
  * Roles for pre-provisioned company accounts are authoritative seed data in
@@ -46,6 +51,7 @@ function normalizeUsers(value: unknown): StoredUser[] {
       const id = typeof candidate.id === 'string' ? candidate.id : ''
       const seeded = USERS.find(user => user.id === id)
       if (!id || typeof candidate.email !== 'string' || typeof candidate.name !== 'string') return null
+      const provisionedRole = (['staff', 'manager', 'business', 'admin'] as const).find(role => id.startsWith(`${role}-`))
 
       return {
         ...candidate,
@@ -54,7 +60,7 @@ function normalizeUsers(value: unknown): StoredUser[] {
         email: candidate.email,
         // Unknown self-registered accounts are always customers. Company
         // roles can only come from the provisioned account record/backend.
-        role: seeded?.role ?? 'customer',
+        role: seeded?.role ?? provisionedRole ?? 'customer',
         facility: seeded?.facility ?? candidate.facility,
       } as StoredUser
     })
@@ -890,6 +896,12 @@ interface StorageHubContextValue extends StorageHubState {
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
   createSupportTicket: (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string) => void
   registerCustomer: (params: { name: string; email: string; phone?: string }) => User
+  createInternalAccount: (params: { name: string; email: string; phone?: string; role: CompanyRole; facility?: string }, actor: User) => User
+  createCustomerSupportAccount: (params: { name: string; email: string; phone?: string; facility?: string; reason: string }, actor: User) => User
+  updateUserAccount: (userId: string, updates: { name: string; email: string; phone?: string; role?: CompanyRole; facility?: string; status?: AccountStatus }, actor: User) => void
+  setUserAccountStatus: (userId: string, status: AccountStatus, actor: User) => void
+  deleteUserAccount: (userId: string, actor: User) => void
+  requestUserPasswordReset: (userId: string, actor: User) => void
   resetToDemoData: () => void
 }
 
@@ -991,6 +1003,34 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       config: DEFAULT_BUSINESS_CONFIG
     }
   })
+
+  const assertCanonicalAdmin = (actor: User): StoredUser => {
+    const canonicalActor = state.users.find(item => item.id === actor.id)
+    if (!canonicalActor || canonicalActor.role !== 'admin' || canonicalActor.status !== 'active') {
+      throw new Error('Chỉ Admin đang hoạt động được quản lý tài khoản.')
+    }
+    return canonicalActor
+  }
+
+  const toPublicUser = (account: StoredUser): User => ({
+    id: account.id,
+    name: account.name,
+    email: account.email,
+    role: account.role as User['role'],
+    facility: account.facility
+  })
+
+  const accountSnapshot = (account: StoredUser | null) => account ? {
+    id: account.id,
+    name: account.name,
+    email: account.email,
+    role: account.role,
+    facility: account.facility,
+    status: account.status,
+    phone: account.phone,
+    mustChangePassword: account.mustChangePassword ?? false,
+    passwordResetAt: account.passwordResetAt
+  } : null
 
   // Reconcile older locally saved demo data with the return lifecycle introduced later.
   useEffect(() => {
@@ -2491,6 +2531,182 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const createAccount = (params: { name: string; email: string; phone?: string; role: User['role']; facility?: string; supportReason?: string }, actor: User): User => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const name = params.name.trim()
+    const email = params.email.trim().toLowerCase()
+    const phone = params.phone?.trim() || ''
+    if (!name || !email) throw new Error('Họ tên và email là bắt buộc.')
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Email không hợp lệ.')
+    if (params.role === 'customer' && !params.supportReason?.trim()) throw new Error('Tài khoản Customer hỗ trợ phải có lý do và audit log.')
+    if (params.role !== 'customer' && !['staff', 'manager', 'business', 'admin'].includes(params.role)) throw new Error('Role tài khoản không hợp lệ.')
+    const requestedFacility = params.facility?.trim() || ''
+    if ((params.role === 'staff' || params.role === 'manager') && (!requestedFacility || requestedFacility === 'All facilities')) throw new Error('Staff và Manager phải được gán một cơ sở cụ thể.')
+
+    if (state.users.some(item => item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
+    const facility = requestedFacility || (params.role === 'business' || params.role === 'admin' ? 'All facilities' : undefined)
+    const created = {
+      id: `${params.role}-${Date.now().toString(36)}`,
+      name,
+      email,
+      role: params.role,
+      facility,
+      phone,
+      status: 'active',
+      joined: new Date().toISOString().slice(0, 10),
+      mustChangePassword: true
+    } as StoredUser
+    const now = new Date().toISOString()
+    const action = params.role === 'customer' ? 'CUSTOMER_ACCOUNT_CREATED_BY_SUPPORT' : 'INTERNAL_ACCOUNT_CREATED'
+    const notes = params.role === 'customer' ? `Customer được tạo bởi bộ phận hỗ trợ. Lý do: ${params.supportReason!.trim()}` : `Tạo tài khoản ${params.role} và gán cơ sở ${facility || 'chưa gán'}.`
+    setState(prev => ({
+      ...prev,
+      users: [created, ...prev.users],
+      activities: [{
+        id: `act-${Date.now()}`,
+        action,
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: facility || 'ALL',
+        entityType: 'user',
+        entityId: created.id,
+        beforeState: null,
+        afterState: accountSnapshot(created),
+        notes,
+        timestamp: now
+      }, ...prev.activities]
+    }))
+    return toPublicUser(created)
+  }
+
+  const createInternalAccount = (params: { name: string; email: string; phone?: string; role: CompanyRole; facility?: string }, actor: User): User => {
+    return createAccount({ ...params, role: params.role }, actor)
+  }
+
+  const createCustomerSupportAccount = (params: { name: string; email: string; phone?: string; facility?: string; reason: string }, actor: User): User => {
+    return createAccount({ ...params, role: 'customer', supportReason: params.reason }, actor)
+  }
+
+  const updateUserAccount = (userId: string, updates: { name: string; email: string; phone?: string; role?: CompanyRole; facility?: string; status?: AccountStatus }, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    const name = updates.name.trim()
+    const email = updates.email.trim().toLowerCase()
+    if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error('Họ tên và email hợp lệ là bắt buộc.')
+    if (state.users.some(item => item.id !== userId && item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
+    if (target.role === 'customer' && updates.role) throw new Error('Customer không được đổi sang role nội bộ từ màn hình này.')
+    const nextRole = target.role === 'customer' ? 'customer' : (updates.role ?? target.role) as CompanyRole
+    const nextStatus = updates.status ?? target.status
+    if (target.id === canonicalAdmin.id && nextStatus !== 'active') throw new Error('Không thể tự khóa tài khoản Admin hiện tại.')
+    if (target.role === 'admin' && nextRole !== 'admin' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Không thể hạ quyền Admin cuối cùng đang hoạt động.')
+    if (target.role === 'admin' && target.status === 'active' && nextStatus !== 'active' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Phải giữ lại ít nhất một Admin đang hoạt động.')
+    const nextFacility = updates.facility?.trim() || (nextRole === 'business' || nextRole === 'admin' ? 'All facilities' : target.facility)
+    if ((nextRole === 'staff' || nextRole === 'manager') && (!nextFacility || nextFacility === 'All facilities')) throw new Error('Staff và Manager phải được gán một cơ sở cụ thể.')
+    const updated = { ...target, name, email, phone: updates.phone?.trim() || '', role: nextRole, facility: nextFacility, status: nextStatus } as StoredUser
+    const now = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === userId ? updated : item),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'INTERNAL_ACCOUNT_UPDATED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: nextFacility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: accountSnapshot(updated),
+        notes: 'Admin cập nhật thông tin tài khoản.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const setUserAccountStatus = (userId: string, status: AccountStatus, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    if (target.id === canonicalAdmin.id && status !== 'active') throw new Error('Không thể tự khóa tài khoản Admin hiện tại.')
+    if (target.role === 'admin' && target.status === 'active' && status !== 'active' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Phải giữ lại ít nhất một Admin đang hoạt động.')
+    const updated = { ...target, status } as StoredUser
+    const now = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === userId ? updated : item),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: status === 'suspended' ? 'ACCOUNT_SUSPENDED' : status === 'active' ? 'ACCOUNT_REACTIVATED' : 'ACCOUNT_DEACTIVATED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: accountSnapshot(updated),
+        notes: `Trạng thái tài khoản chuyển sang ${status}.`,
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const deleteUserAccount = (userId: string, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    if (target.id === canonicalAdmin.id) throw new Error('Không thể xóa tài khoản Admin hiện tại.')
+    if (target.role === 'admin' && target.status === 'active' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Phải giữ lại ít nhất một Admin đang hoạt động.')
+    const now = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.filter(item => item.id !== userId),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'ACCOUNT_DELETED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: null,
+        notes: 'Admin xóa tài khoản khỏi hệ thống.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const requestUserPasswordReset = (userId: string, actor: User) => {
+    const canonicalAdmin = assertCanonicalAdmin(actor)
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    const now = new Date().toISOString()
+    const updated = { ...target, passwordResetAt: now, mustChangePassword: true } as StoredUser
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === userId ? updated : item),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'PASSWORD_RESET_REQUESTED',
+        actorId: canonicalAdmin.id,
+        actorName: canonicalAdmin.name,
+        actorRole: 'admin',
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: accountSnapshot(target),
+        afterState: accountSnapshot(updated),
+        notes: 'Đã tạo yêu cầu reset mật khẩu; mật khẩu mới phải được xử lý bởi auth backend/email service.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
   const resetToDemoData = () => {
     localStorage.removeItem(STORAGE_KEY)
     setState({
@@ -2896,6 +3112,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     replySupportTicket,
     createSupportTicket,
     registerCustomer,
+    createInternalAccount,
+    createCustomerSupportAccount,
+    updateUserAccount,
+    setUserAccountStatus,
+    deleteUserAccount,
+    requestUserPasswordReset,
     resetToDemoData
   }
 
