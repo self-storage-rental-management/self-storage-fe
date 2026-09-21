@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import Layout, { getInitialPage, Icon } from '../../components/Layout'
-import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input } from '../../components/ui'
-import ProfileView from '../ProfileView'
-import { useLanguage } from '../../i18n/LanguageContext'
+import { useState } from 'react'
+import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
+import { Card, StatCard } from '../../components/ui'
+import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
 
@@ -155,15 +154,13 @@ const statusLabelMap: Record<string, Record<string, string>> = {
 }
 
 export default function StaffApp({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const { lang, t } = useLanguage()
-
-  const NAV = [
-    { id: 'dashboard', label: lang === 'vi' ? 'Tổng quan ca làm việc' : 'Staff Dashboard', icon: Icon.home, group: lang === 'vi' ? 'Ca làm việc' : 'Work Queue' },
-    { id: 'tasks', label: lang === 'vi' ? 'Nhiệm vụ trong ngày' : 'Daily Tasks', icon: Icon.tasks, group: lang === 'vi' ? 'Ca làm việc' : 'Work Queue' },
-    { id: 'reservations', label: lang === 'vi' ? 'Xác nhận đặt kho' : 'Reservations', icon: Icon.calendar, group: lang === 'vi' ? 'Dịch vụ khách hàng' : 'Customer Service' },
-    { id: 'checkin', label: lang === 'vi' ? 'Bàn giao & Nhận kho' : 'Check-in / Handover', icon: Icon.truck, group: lang === 'vi' ? 'Dịch vụ khách hàng' : 'Customer Service' },
-    { id: 'return', label: lang === 'vi' ? 'Nghiệm thu trả kho' : 'Return Inspection', icon: Icon.clipboard, group: lang === 'vi' ? 'Dịch vụ khách hàng' : 'Customer Service' },
-    { id: 'support', label: lang === 'vi' ? 'Hỗ trợ khách hàng' : 'Support Tickets', icon: Icon.support, group: lang === 'vi' ? 'Chăm sóc & Hỗ trợ' : 'Support' },
+    const hub = useStorageHub()
+  const nav: NavItem[] = [
+    { id: 'dashboard', label: 'Tổng quan ca làm việc', icon: Icon.home, group: 'Ca làm việc', permission: 'view_dashboard' },
+    { id: 'reservations', label: 'Duyệt yêu cầu đặt kho', icon: Icon.calendar, group: 'Vận hành', permission: 'approve_reservations' },
+    { id: 'checkin', label: 'Check-in & bàn giao', icon: Icon.truck, group: 'Vận hành', permission: 'view_checkins' },
+    { id: 'return', label: 'Nghiệm thu trả kho', icon: Icon.clipboard, group: 'Vận hành', permission: 'view_returns' },
+    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Chăm sóc', permission: 'view_support' },
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, 'dashboard'))
@@ -223,25 +220,9 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [ticketEscalated, setTicketEscalated] = useState(false)
   const [ticketEscalationReason, setTicketEscalationReason] = useState('')
   const [toast, setToast] = useState<string | null>(null)
-  const chatEndRef = useRef<HTMLDivElement | null>(null)
-
-  const activeStaffTicket = selectedStaffTicket
-    ? staffTickets.find(ticket => ticket.id === selectedStaffTicket.id) ?? selectedStaffTicket
-    : null
-
-  useEffect(() => {
-    if (!respondModal || !activeStaffTicket) return
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [respondModal, activeStaffTicket?.messages.length])
-
-  const showToast = (msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3500)
-  }
-
-  const s = (v: string, map: Record<string, string>) => {
-    const label = statusLabelMap[lang]?.[v] || (v.charAt(0).toUpperCase() + v.slice(1).replace(/-/g, ' '))
-    return <Badge variant={map[v] ?? 'muted'}>{label}</Badge>
+  const showToast = (message: string) => {
+    setToast(message)
+    window.setTimeout(() => setToast(null), 3500)
   }
 
   const normalizedSearch = reservationSearch.trim().toLowerCase()
