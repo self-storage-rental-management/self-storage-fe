@@ -45,14 +45,6 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     if (onUpdateUser) {
       onUpdateUser({ name, email })
     }
-    // Update local user if possible
-    try {
-      const saved = localStorage.getItem('storagehub:user')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        localStorage.setItem('storagehub:user', JSON.stringify({ ...parsed, name, email }))
-      }
-    } catch {}
     showToast(lang === 'vi' ? 'Đã lưu hồ sơ trên thiết bị demo; chưa đồng bộ backend.' : 'Profile saved on this demo device; backend sync is not connected.')
   }
 

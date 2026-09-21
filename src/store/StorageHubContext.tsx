@@ -30,6 +30,37 @@ import { transitionReservation } from '../domain/reservationFlow'
 
 const STORAGE_KEY = 'storagehub:v3:canonical'
 
+type StoredUser = (typeof USERS)[number]
+
+/**
+ * Roles for pre-provisioned company accounts are authoritative seed data in
+ * the demo. Persisted client state may contain profile edits, but it must not
+ * be able to promote an account by changing its role field.
+ */
+function normalizeUsers(value: unknown): StoredUser[] {
+  if (!Array.isArray(value)) return USERS
+
+  return value
+    .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate && typeof candidate === 'object'))
+    .map(candidate => {
+      const id = typeof candidate.id === 'string' ? candidate.id : ''
+      const seeded = USERS.find(user => user.id === id)
+      if (!id || typeof candidate.email !== 'string' || typeof candidate.name !== 'string') return null
+
+      return {
+        ...candidate,
+        id,
+        name: candidate.name,
+        email: candidate.email,
+        // Unknown self-registered accounts are always customers. Company
+        // roles can only come from the provisioned account record/backend.
+        role: seeded?.role ?? 'customer',
+        facility: seeded?.facility ?? candidate.facility,
+      } as StoredUser
+    })
+    .filter((candidate): candidate is StoredUser => candidate !== null)
+}
+
 export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   dimDivisor: 5000,
   gracePeriodDays: 0,
@@ -716,7 +747,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
 ]
 
 interface StorageHubState {
-  users: Array<(typeof USERS)[number]>
+  users: StoredUser[]
   facilities: Facility[]
   units: StorageUnit[]
   holds: StorageReservation[] // holds is alias for reservations
@@ -858,6 +889,7 @@ interface StorageHubContextValue extends StorageHubState {
   respondSupportTicket: (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => void
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
   createSupportTicket: (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string) => void
+  registerCustomer: (params: { name: string; email: string; phone?: string }) => User
   resetToDemoData: () => void
 }
 
@@ -920,7 +952,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.map((hold: StorageReservation) => normalizeReservationPricing({ ...hold, appointmentDate: hold.appointmentDate || hold.moveInDate, appointmentTime: hold.appointmentTime || '09:00' })) : INITIAL_RESERVATIONS
         return {
           ...parsed,
-          users: Array.isArray(parsed.users) ? parsed.users : USERS,
+          users: normalizeUsers(parsed.users),
           units: Array.isArray(parsed.units) && parsed.units.length >= INITIAL_UNITS.length ? parsed.units : INITIAL_UNITS,
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
@@ -999,7 +1031,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(e.newValue)
           const holds = Array.isArray(parsed.holds) ? parsed.holds.map(normalizeReservationPricing) : []
           const checkins = reconcileReservationCheckins(holds, Array.isArray(parsed.checkins) ? parsed.checkins : [])
-          setState({ ...parsed, holds, checkins })
+          setState({ ...parsed, users: normalizeUsers(parsed.users), holds, checkins })
         } catch {}
       }
     }
@@ -2420,6 +2452,45 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
+  const registerCustomer = ({ name, email, phone = '' }: { name: string; email: string; phone?: string }): User => {
+    const normalizedName = name.trim()
+    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedPhone = phone.trim()
+    if (!normalizedName || !normalizedEmail) throw new Error('Vui lòng điền đầy đủ thông tin đăng ký.')
+
+    const existing = state.users.find(item => item.email.toLowerCase() === normalizedEmail)
+    if (existing) {
+      if (existing.role !== 'customer') throw new Error('Email này đã được công ty cấp cho tài khoản nội bộ.')
+      return {
+        id: existing.id,
+        name: existing.name,
+        email: existing.email,
+        role: 'customer',
+        facility: existing.facility
+      }
+    }
+
+    const created = {
+      id: `customer-${Date.now().toString(36)}`,
+      name: normalizedName,
+      email: normalizedEmail,
+      role: 'customer' as const,
+      facility: undefined,
+      phone: normalizedPhone,
+      status: 'active',
+      joined: new Date().toISOString().slice(0, 10)
+    } as StoredUser
+
+    setState(prev => ({ ...prev, users: [created, ...prev.users] }))
+    return {
+      id: created.id,
+      name: created.name,
+      email: created.email,
+      role: 'customer',
+      facility: created.facility
+    }
+  }
+
   const resetToDemoData = () => {
     localStorage.removeItem(STORAGE_KEY)
     setState({
@@ -2824,6 +2895,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     respondSupportTicket,
     replySupportTicket,
     createSupportTicket,
+    registerCustomer,
     resetToDemoData
   }
 
