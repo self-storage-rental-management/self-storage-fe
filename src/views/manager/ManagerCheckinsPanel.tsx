@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Avatar, ProgressBar, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { useLanguage } from '../../i18n/LanguageContext'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { CheckInRecord } from '../../types/storageHub'
@@ -12,8 +11,7 @@ interface ManagerCheckinsPanelProps {
 }
 
 export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelProps) {
-  const { lang } = useLanguage()
-  const { checkins: storeCheckins, units: storeUnits } = useStorageHub()
+    const { checkins: storeCheckins, units: storeUnits } = useStorageHub()
 
   const [tab, setTab] = useState('All')
   const [search, setSearch] = useState('')
@@ -63,40 +61,38 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={lang === 'vi' ? 'Giám Sát Quy Trình Check-in & Bàn Giao Kho' : 'Check-in & Handover Monitoring'}
+        title={'Giám Sát Quy Trình Check-in & Bàn Giao Kho'}
         subtitle={
-          lang === 'vi'
-            ? 'Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý 5 bước và biên bản kiểm đo thực tế'
-            : 'Supervise scheduled move-in appointments, 5-step verification checklist, and physical storage handover'
+          'Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý 5 bước và biên bản kiểm đo thực tế'
         }
       />
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title={lang === 'vi' ? 'Tổng lượt tiếp nhận' : 'Total Check-ins'}
+          title={'Tổng lượt tiếp nhận'}
           value={facilityCheckins.length}
           icon={Icon.clipboard}
           iconBg="bg-blue-50 text-blue-700"
         />
         <StatCard
-          title={lang === 'vi' ? 'Chờ tiếp nhận' : 'Scheduled Appointments'}
+          title={'Chờ tiếp nhận'}
           value={scheduledCount}
-          delta={scheduledCount > 0 ? (lang === 'vi' ? 'Hôm nay & sắp tới' : 'Upcoming') : undefined}
+          delta={scheduledCount > 0 ? ('Hôm nay & sắp tới') : undefined}
           deltaPositive
           icon={Icon.calendar}
           iconBg="bg-amber-50 text-amber-700"
         />
         <StatCard
-          title={lang === 'vi' ? 'Đã bàn giao thành công' : 'Completed Handover'}
+          title={'Đã bàn giao thành công'}
           value={completedCount}
-          delta={`${facilityCheckins.length ? Math.round((completedCount / facilityCheckins.length) * 100) : 0}% ${lang === 'vi' ? 'tỷ lệ hoàn tất' : 'completion'}`}
+          delta={`${facilityCheckins.length ? Math.round((completedCount / facilityCheckins.length) * 100) : 0}% ${'tỷ lệ hoàn tất'}`}
           deltaPositive
           icon={Icon.check}
           iconBg="bg-emerald-50 text-emerald-700"
         />
         <StatCard
-          title={lang === 'vi' ? 'Lượt hủy / Không đến' : 'Cancelled / No Show'}
+          title={'Lượt hủy / Không đến'}
           value={cancelledCount}
           icon={Icon.alert}
           iconBg="bg-stone-100 text-stone-600"
@@ -107,15 +103,13 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <Tabs
           tabs={
-            lang === 'vi'
-              ? ['Tất cả', 'Chờ đến hẹn', 'Đã bàn giao', 'Đã hủy']
-              : ['All', 'scheduled', 'completed', 'cancelled']
+            ['Tất cả', 'Chờ đến hẹn', 'Đã bàn giao', 'Đã hủy']
           }
           active={
-            tab === 'All' && lang === 'vi' ? 'Tất cả' :
-            tab === 'scheduled' && lang === 'vi' ? 'Chờ đến hẹn' :
-            tab === 'completed' && lang === 'vi' ? 'Đã bàn giao' :
-            tab === 'cancelled' && lang === 'vi' ? 'Đã hủy' : tab
+            tab === 'All' ? 'Tất cả' :
+            tab === 'scheduled' ? 'Chờ đến hẹn' :
+            tab === 'completed' ? 'Đã bàn giao' :
+            tab === 'cancelled' ? 'Đã hủy' : tab
           }
           onChange={val => {
             if (val === 'Tất cả') setTab('All')
@@ -128,7 +122,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
         <div className="w-full sm:w-72">
           <input
             type="text"
-            placeholder={lang === 'vi' ? 'Tìm theo mã, khách, gian kho, nhân viên...' : 'Search ID, tenant, unit, staff...'}
+            placeholder={'Tìm theo mã, khách, gian kho, nhân viên...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
@@ -141,23 +135,21 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
         <Table>
           <Thead>
             <tr>
-              <Th>{lang === 'vi' ? 'Mã Tiếp Nhận' : 'Check-in ID'}</Th>
-              <Th>{lang === 'vi' ? 'Khách Nhận Kho' : 'Tenant'}</Th>
-              <Th>{lang === 'vi' ? 'Gian Kho' : 'Unit'}</Th>
-              <Th>{lang === 'vi' ? 'Lịch Hẹn Bàn Giao' : 'Appointment'}</Th>
-              <Th>{lang === 'vi' ? 'Tiến Độ Checklist (5 Bước)' : 'Handover Checklist'}</Th>
-              <Th>{lang === 'vi' ? 'Nhân Viên Phụ Trách' : 'Staff In-charge'}</Th>
-              <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
-              <Th className="text-right">{lang === 'vi' ? 'Thao Tác' : 'Action'}</Th>
+              <Th>{'Mã Tiếp Nhận'}</Th>
+              <Th>{'Khách Nhận Kho'}</Th>
+              <Th>{'Gian Kho'}</Th>
+              <Th>{'Lịch Hẹn Bàn Giao'}</Th>
+              <Th>{'Tiến Độ Checklist (5 Bước)'}</Th>
+              <Th>{'Nhân Viên Phụ Trách'}</Th>
+              <Th>{'Trạng Thái'}</Th>
+              <Th className="text-right">{'Thao Tác'}</Th>
             </tr>
           </Thead>
           <Tbody>
             {filteredCheckins.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-stone-400 text-sm">
-                  {lang === 'vi'
-                    ? 'Không có lịch hẹn check-in nào trong bộ lọc này.'
-                    : 'No check-in records found.'}
+                  {'Không có lịch hẹn check-in nào trong bộ lọc này.'}
                 </td>
               </tr>
             ) : (
@@ -192,9 +184,9 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     <Td>
                       <div className="w-36 space-y-1">
                         <div className="flex justify-between text-[11px] font-mono">
-                          <span className="text-stone-500">{passedCount}/5 {lang === 'vi' ? 'bước' : 'steps'}</span>
+                          <span className="text-stone-500">{passedCount}/5 {'bước'}</span>
                           <span className={passedCount === 5 ? 'text-emerald-700 font-bold' : 'text-amber-700 font-semibold'}>
-                            {passedCount === 5 ? (lang === 'vi' ? 'Đầy đủ' : 'Complete') : (lang === 'vi' ? 'Đang xác minh' : 'In progress')}
+                            {passedCount === 5 ? ('Đầy đủ') : ('Đang xác minh')}
                           </span>
                         </div>
                         <ProgressBar
@@ -220,7 +212,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                           setDetailOpen(true)
                         }}
                       >
-                        {lang === 'vi' ? 'Chi tiết' : 'Details'}
+                        {'Chi tiết'}
                       </Button>
                     </Td>
                   </Tr>
@@ -235,7 +227,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       <Modal
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
-        title={lang === 'vi' ? 'Hồ Sơ Tiếp Nhận & Bàn Giao Gian Kho' : 'Check-in Handover Dossier'}
+        title={'Hồ Sơ Tiếp Nhận & Bàn Giao Gian Kho'}
       >
         {selectedCheckin && (
           <div className="space-y-4">
@@ -248,10 +240,10 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
               <div className="mt-2 flex justify-between items-end">
                 <div>
                   <p className="text-2xl font-bold font-mono">
-                    {lang === 'vi' ? `Gian Kho ${selectedCheckin.unitId}` : `Unit ${selectedCheckin.unitId}`}
+                    {`Gian Kho ${selectedCheckin.unitId}`}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {selectedCheckin.customerName} · {lang === 'vi' ? 'Lịch hẹn:' : 'Appt:'} {selectedCheckin.scheduledDate} {selectedCheckin.scheduledTime}
+                    {selectedCheckin.customerName} · {'Lịch hẹn:'} {selectedCheckin.scheduledDate} {selectedCheckin.scheduledTime}
                   </p>
                 </div>
                 <div className="text-right">
@@ -263,37 +255,37 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
             {/* Checklist items detailed grid */}
             <div className="rounded-xl border border-stone-200 p-4 bg-white space-y-2.5">
               <p className="text-xs font-bold uppercase tracking-wider text-stone-500 font-mono">
-                {lang === 'vi' ? 'Tiến Độ Xác Minh & Bàn Giao 5 Điểm' : '5-Point Verification Checklist'}
+                {'Tiến Độ Xác Minh & Bàn Giao 5 Điểm'}
               </p>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">1. {lang === 'vi' ? 'Đối chiếu CCCD/Hộ chiếu người nhận kho' : 'Identity Document Verification'}</span>
+                  <span className="font-medium text-stone-700">1. {'Đối chiếu CCCD/Hộ chiếu người nhận kho'}</span>
                   <Badge variant={selectedCheckin.checklist.identityVerified ? 'success' : 'muted'}>
-                    {selectedCheckin.checklist.identityVerified ? (lang === 'vi' ? 'Đã đối chiếu' : 'Verified') : (lang === 'vi' ? 'Chưa duyệt' : 'Pending')}
+                    {selectedCheckin.checklist.identityVerified ? ('Đã đối chiếu') : ('Chưa duyệt')}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">2. {lang === 'vi' ? 'Ký cam kết & quy chế lưu kho' : 'Terms & Storage Rules Acceptance'}</span>
+                  <span className="font-medium text-stone-700">2. {'Ký cam kết & quy chế lưu kho'}</span>
                   <Badge variant={selectedCheckin.checklist.termsAccepted ? 'success' : 'muted'}>
-                    {selectedCheckin.checklist.termsAccepted ? (lang === 'vi' ? 'Đã ký cam kết' : 'Accepted') : (lang === 'vi' ? 'Chưa ký' : 'Pending')}
+                    {selectedCheckin.checklist.termsAccepted ? ('Đã ký cam kết') : ('Chưa ký')}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">3. {lang === 'vi' ? 'Xác nhận thu đủ cước thuê & tiền đảm bảo kho' : 'Balance & Security Deposit Payment'}</span>
+                  <span className="font-medium text-stone-700">3. {'Xác nhận thu đủ cước thuê & tiền đảm bảo kho'}</span>
                   <Badge variant={selectedCheckin.checklist.paymentConfirmed ? 'success' : 'muted'}>
-                    {selectedCheckin.checklist.paymentConfirmed ? (lang === 'vi' ? 'Đã thanh toán đủ' : 'Confirmed') : (lang === 'vi' ? 'Còn thiếu' : 'Pending')}
+                    {selectedCheckin.checklist.paymentConfirmed ? ('Đã thanh toán đủ') : ('Còn thiếu')}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">4. {lang === 'vi' ? 'Dẫn khách nghiệm thu gian kho thực tế' : 'Unit Walkthrough & Physical Inspection'}</span>
+                  <span className="font-medium text-stone-700">4. {'Dẫn khách nghiệm thu gian kho thực tế'}</span>
                   <Badge variant={selectedCheckin.checklist.unitWalkthrough ? 'success' : 'muted'}>
-                    {selectedCheckin.checklist.unitWalkthrough ? (lang === 'vi' ? 'Đã nghiệm thu' : 'Inspected') : (lang === 'vi' ? 'Chưa xem' : 'Pending')}
+                    {selectedCheckin.checklist.unitWalkthrough ? ('Đã nghiệm thu') : ('Chưa xem')}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">5. {lang === 'vi' ? 'Cấp mã PIN cửa điện tử / Thẻ khóa từ' : 'Access Code & Key Credentials Issued'}</span>
+                  <span className="font-medium text-stone-700">5. {'Cấp mã PIN cửa điện tử / Thẻ khóa từ'}</span>
                   <Badge variant={selectedCheckin.checklist.accessCodeIssued ? 'success' : 'muted'}>
-                    {selectedCheckin.checklist.accessCodeIssued ? (lang === 'vi' ? 'Đã kích hoạt PIN' : 'Issued') : (lang === 'vi' ? 'Chưa cấp' : 'Pending')}
+                    {selectedCheckin.checklist.accessCodeIssued ? ('Đã kích hoạt PIN') : ('Chưa cấp')}
                   </Badge>
                 </div>
               </div>
@@ -302,20 +294,20 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
             {/* Actual Physical Measurements */}
             {selectedCheckin.actualMeasurements && (
               <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 text-xs space-y-2">
-                <p className="font-bold text-stone-900">{lang === 'vi' ? 'Thông Số Kiểm Đo Hàng Hóa Thực Tế' : 'Physical Verification Dimensions'}</p>
+                <p className="font-bold text-stone-900">{'Thông Số Kiểm Đo Hàng Hóa Thực Tế'}</p>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="bg-white p-2 rounded border">
-                    <span className="text-stone-400 block">{lang === 'vi' ? 'Thể tích đo' : 'Volume'}</span>
+                    <span className="text-stone-400 block">{'Thể tích đo'}</span>
                     <span className="font-bold text-stone-800">{selectedCheckin.actualMeasurements.actualVolumeM3} m³</span>
                   </div>
                   <div className="bg-white p-2 rounded border">
-                    <span className="text-stone-400 block">{lang === 'vi' ? 'Khối lượng' : 'Weight'}</span>
+                    <span className="text-stone-400 block">{'Khối lượng'}</span>
                     <span className="font-bold text-stone-800">{selectedCheckin.actualMeasurements.weightKg} kg</span>
                   </div>
                   <div className="bg-white p-2 rounded border">
-                    <span className="text-stone-400 block">{lang === 'vi' ? 'Độ lệch thể tích' : 'Variance'}</span>
+                    <span className="text-stone-400 block">{'Độ lệch thể tích'}</span>
                     <span className={selectedCheckin.actualMeasurements.varianceAccepted ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>
-                      {selectedCheckin.actualMeasurements.varianceAccepted ? (lang === 'vi' ? 'Hợp lệ' : 'Accepted') : (lang === 'vi' ? 'Cần rà soát' : 'Flagged')}
+                      {selectedCheckin.actualMeasurements.varianceAccepted ? ('Hợp lệ') : ('Cần rà soát')}
                     </span>
                   </div>
                 </div>
@@ -328,20 +320,20 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
             {/* Access Code & Handover Info */}
             <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs">
               <div>
-                <span className="text-amber-900 font-semibold block">{lang === 'vi' ? 'Mã PIN số bảo mật gian kho' : 'Digital Access PIN'}</span>
+                <span className="text-amber-900 font-semibold block">{'Mã PIN số bảo mật gian kho'}</span>
                 <span className="font-mono text-sm font-bold text-amber-950 mt-0.5 inline-block">
                   {selectedCheckin.accessCodeIssued || selectedCheckin.preparedAccessPin || '••••# (Kích hoạt khi hoàn tất)'}
                 </span>
               </div>
               <div className="text-right">
-                <span className="text-stone-500 block">{lang === 'vi' ? 'Nhân viên thực hiện:' : 'Staff handler:'}</span>
+                <span className="text-stone-500 block">{'Nhân viên thực hiện:'}</span>
                 <span className="font-semibold text-stone-800">{selectedCheckin.staffName}</span>
               </div>
             </div>
 
             <div className="flex justify-end pt-2 border-t">
               <Button variant="outline" onClick={() => setDetailOpen(false)}>
-                {lang === 'vi' ? 'Đóng' : 'Close'}
+                {'Đóng'}
               </Button>
             </div>
           </div>

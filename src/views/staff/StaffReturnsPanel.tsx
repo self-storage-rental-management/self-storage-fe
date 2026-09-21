@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
-import { useLanguage } from '../../i18n/LanguageContext'
 import type { User } from '../../types'
 import type { DamageClassification, ReturnCase } from '../../types/storageHub'
 
@@ -12,8 +11,7 @@ interface Props {
 }
 
 export default function StaffReturnsPanel({ user, returns, completeReturnInspection, showToast }: Props) {
-  const { lang } = useLanguage()
-  const [selected, setSelected] = useState<ReturnCase | null>(null)
+    const [selected, setSelected] = useState<ReturnCase | null>(null)
   const [notes, setNotes] = useState('Đã đối chiếu hiện trạng và thu hồi đầy đủ vật dụng bàn giao')
   const [evidence, setEvidence] = useState('return-inspection.jpg')
   const inspect = () => {
@@ -21,10 +19,10 @@ export default function StaffReturnsPanel({ user, returns, completeReturnInspect
     try {
       completeReturnInspection({ returnId: selected.id, staffUser: user, inventoryMatch: 'match', damageClassification: 'no_damage', damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0, staffNotes: notes.trim(), evidencePhotos: [evidence.trim()], returnedItems: { key: true, card: true, lock: true } })
       setSelected(null)
-      showToast(lang === 'vi' ? 'Đã lưu biên bản nghiệm thu và chuyển Customer xác nhận quyết toán.' : 'Inspection saved and sent to the customer for settlement confirmation.')
+      showToast('Đã lưu biên bản nghiệm thu và chuyển Customer xác nhận quyết toán.')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Không thể hoàn tất nghiệm thu.')
     }
   }
-  return <div className="fade-in space-y-5"><SectionHeader title={lang === 'vi' ? 'Nghiệm Thu Trả Kho' : 'Return Inspection'} subtitle={lang === 'vi' ? 'Biên bản, phí và bằng chứng được lưu vào dữ liệu dùng chung.' : 'Evidence, fees and settlement are stored in shared state.'} /><Card><Table><Thead><tr><Th>{lang === 'vi' ? 'Mã hồ sơ' : 'Case'}</Th><Th>Customer</Th><Th>{lang === 'vi' ? 'Gian kho' : 'Unit'}</Th><Th>{lang === 'vi' ? 'Ngày hẹn' : 'Scheduled'}</Th><Th>Status</Th><Th /></tr></Thead><Tbody>{returns.map(item => <Tr key={item.id}><Td className="font-mono">{item.id}</Td><Td>{item.customerName}</Td><Td>{item.unitId}</Td><Td>{item.scheduledDate}</Td><Td><Badge variant={item.status === 'completed' ? 'success' : 'warning'}>{item.status.replace(/_/g, ' ')}</Badge></Td><Td className="text-right">{item.status === 'requested' && <Button size="sm" onClick={() => setSelected(item)}>{lang === 'vi' ? 'Nghiệm thu' : 'Inspect'}</Button>}</Td></Tr>)}</Tbody></Table>{!returns.length && <div className="p-10 text-center text-sm text-stone-500">{lang === 'vi' ? 'Chưa có yêu cầu trả kho.' : 'No return requests.'}</div>}</Card><Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={lang === 'vi' ? 'Biên bản nghiệm thu' : 'Inspection record'}><div className="space-y-4"><Input label={lang === 'vi' ? 'Ghi chú hiện trạng' : 'Condition notes'} value={notes} onChange={event => setNotes(event.target.value)} /><Input label={lang === 'vi' ? 'Ảnh bằng chứng' : 'Evidence reference'} value={evidence} onChange={event => setEvidence(event.target.value)} /><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSelected(null)}>{lang === 'vi' ? 'Hủy' : 'Cancel'}</Button><Button disabled={!notes.trim() || !evidence.trim()} onClick={inspect}>{lang === 'vi' ? 'Lưu biên bản' : 'Save inspection'}</Button></div></div></Modal></div>
+  return <div className="fade-in space-y-5"><SectionHeader title={'Nghiệm Thu Trả Kho'} subtitle={'Biên bản, phí và bằng chứng được lưu vào dữ liệu dùng chung.'} /><Card><Table><Thead><tr><Th>{'Mã hồ sơ'}</Th><Th>Customer</Th><Th>{'Gian kho'}</Th><Th>{'Ngày hẹn'}</Th><Th>Status</Th><Th /></tr></Thead><Tbody>{returns.map(item => <Tr key={item.id}><Td className="font-mono">{item.id}</Td><Td>{item.customerName}</Td><Td>{item.unitId}</Td><Td>{item.scheduledDate}</Td><Td><Badge variant={item.status === 'completed' ? 'success' : 'warning'}>{item.status.replace(/_/g, ' ')}</Badge></Td><Td className="text-right">{item.status === 'requested' && <Button size="sm" onClick={() => setSelected(item)}>{'Nghiệm thu'}</Button>}</Td></Tr>)}</Tbody></Table>{!returns.length && <div className="p-10 text-center text-sm text-stone-500">{'Chưa có yêu cầu trả kho.'}</div>}</Card><Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={'Biên bản nghiệm thu'}><div className="space-y-4"><Input label={'Ghi chú hiện trạng'} value={notes} onChange={event => setNotes(event.target.value)} /><Input label={'Ảnh bằng chứng'} value={evidence} onChange={event => setEvidence(event.target.value)} /><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSelected(null)}>{'Hủy'}</Button><Button disabled={!notes.trim() || !evidence.trim()} onClick={inspect}>{'Lưu biên bản'}</Button></div></div></Modal></div>
 }
