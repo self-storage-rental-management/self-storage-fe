@@ -21,7 +21,8 @@ import type {
   AccessCredential,
   RenewalRecord,
   MaintenanceTask,
-  ReservedPeriod
+  ReservedPeriod,
+  FacilityTask
 } from '../types/storageHub'
 import type { User } from '../types'
 import { FACILITIES, UNITS, TICKETS, type TicketItem } from '../data/demoDatabase'
@@ -30,10 +31,10 @@ const STORAGE_KEY = 'storagehub:v3:canonical'
 
 export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   dimDivisor: 5000,
-  gracePeriodDays: 5,
+  gracePeriodDays: 0,
   lateFeeAmount: 25,
-  defaultDepositRatio: 1.0,
-  holdExpiryHours: 24
+  defaultDepositRatio: 0.2,
+  holdExpiryHours: 12
 }
 
 // 4 Standard Unit Types based on Metric DIM (m, m², m³)
@@ -126,6 +127,22 @@ function nextCalendarDay(value: string): string {
   const date = toValidDate(value)
   date.setDate(date.getDate() + 1)
   return toDateInputValue(date)
+}
+
+function assertFacilityManager(user: User, facilityId: string, facilityName: string) {
+  if (user.role !== 'manager' && user.role !== 'admin') {
+    throw new Error('Chỉ Facility Manager được thực hiện thao tác này.')
+  }
+  if (user.role === 'admin' || !user.facility || user.facility === 'All facilities') return
+  if (user.facility !== facilityName && user.facility !== facilityId) {
+    throw new Error('Bạn không có quyền thao tác dữ liệu của cơ sở khác.')
+  }
+}
+
+function unitMatchesReservation(unit: StorageUnit, reservation: StorageReservation) {
+  const expected = reservation.unitTypeId.toLowerCase().replace('xlarge', 'extra large')
+  const actual = unit.type.toLowerCase()
+  return actual === expected || actual.startsWith(expected) || expected.startsWith(actual)
 }
 
 // Map demo facilities
@@ -708,6 +725,7 @@ interface StorageHubState {
   returns: ReturnCase[]
   renewals: RenewalRecord[]
   maintenanceTasks: MaintenanceTask[]
+  staffTasks: FacilityTask[]
   accessCredentials: AccessCredential[]
   activities: ActivityRecord[]
   tickets: TicketItem[]
@@ -826,6 +844,14 @@ interface StorageHubContextValue extends StorageHubState {
   createMaintenanceTask: (unitId: string, reason: string, staffUser?: User) => MaintenanceTask
   completeMaintenanceTask: (taskId: string, managerUser: User) => void
   releaseMaintenanceUnit: (unitId: string, staffUser: User) => void
+  updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
+  recordRentalPayment: (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => void
+  applyRentalLateFee: (rentalId: string, amount: number, manager: User) => void
+  waiveRentalLateFee: (rentalId: string, manager: User) => void
+  setRentalOverlock: (rentalId: string, overlocked: boolean, manager: User) => void
+  sendDelinquencyReminder: (rentalId: string, manager: User) => void
+  createFacilityTask: (task: Omit<FacilityTask, 'id' | 'createdAt' | 'status'>, manager: User) => FacilityTask
+  updateFacilityTask: (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, manager: User) => void
   updateBusinessConfig: (newConfig: Partial<BusinessConfig>, actor: User) => void
   respondSupportTicket: (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => void
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
@@ -898,6 +924,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           payments: parsed.payments || [],
           renewals: Array.isArray(parsed.renewals) ? parsed.renewals.map((renewal: RenewalRecord) => ({ ...renewal, renewalMonths: renewal.renewalMonths || 1 })) : [],
           maintenanceTasks: parsed.maintenanceTasks || [],
+          staffTasks: parsed.staffTasks || [],
           accessCredentials: parsed.accessCredentials || [],
           checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins : INITIAL_CHECKINS),
           rentals: Array.isArray(parsed.rentals) ? mergeRenewalTestRentals(parsed.rentals) : INITIAL_RENTALS,
@@ -921,6 +948,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       returns: INITIAL_RETURNS,
       renewals: [],
       maintenanceTasks: [],
+      staffTasks: [],
       accessCredentials: [],
       activities: INITIAL_ACTIVITIES,
       tickets: TICKETS,
@@ -1201,14 +1229,19 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 2. Facility Manager: Assign specific Unit for date range
   const assignUnitToHold = (reservationId: string, unitId: string, managerUser: User) => {
-    if (managerUser.role !== 'manager' && managerUser.role !== 'admin') {
-      throw new Error('Chỉ Facility Manager được phân kho.')
-    }
     const reservation = state.holds.find(h => h.id === reservationId)
     const unit = state.units.find(u => u.id === unitId)
     if (!reservation || !unit) throw new Error('Không tìm thấy thông tin đơn đặt hoặc gian kho.')
+    assertFacilityManager(managerUser, reservation.facilityId, reservation.facilityName)
+    if (!['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(reservation.status)) {
+      throw new Error('Chỉ đơn đã thanh toán cọc và còn hiệu lực mới được phân kho.')
+    }
+    if (reservation.payment.status !== 'paid') throw new Error('Đơn chưa thanh toán cọc giữ chỗ.')
     if (unit.facilityId !== reservation.facilityId) throw new Error('Gian kho không thuộc cơ sở của đơn đặt.')
-    if (unit.status === 'maintenance') throw new Error('Gian kho đang trong diện bảo trì, không thể phân bổ.')
+    if (!unitMatchesReservation(unit, reservation)) throw new Error('Loại gian kho không khớp với loại khách đã đặt.')
+    if (reservation.assignedUnitId !== unit.id && unit.status !== 'available') {
+      throw new Error(`Gian kho ${unit.code} không còn ở trạng thái AVAILABLE.`)
+    }
 
     // Date-range overlap conflict check
     const isConflicted = state.holds.some(
@@ -1259,6 +1292,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       return {
         ...prev,
         units: prev.units.map(u => {
+          if (reservation.assignedUnitId && reservation.assignedUnitId !== unitId && u.id === reservation.assignedUnitId) {
+            const remainingPeriods = (u.reservedPeriods || []).filter(period => period.reservationId !== reservation.id)
+            return {
+              ...u,
+              status: remainingPeriods.length ? 'reserved' : 'available',
+              reservedPeriods: remainingPeriods,
+              nextAvailableDate: remainingPeriods[remainingPeriods.length - 1]?.endDate
+            }
+          }
           if (u.id === unitId) {
             return {
               ...u,
@@ -1806,9 +1848,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const approveRenewal = (renewalId: string, managerUser: User) => {
-    if (managerUser.role !== 'manager' && managerUser.role !== 'admin') throw new Error('Chỉ Facility Manager được duyệt gia hạn.')
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') return
+    const rental = state.rentals.find(item => item.id === renewal.rentalId)
+    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
 
     // Conflict check on date range
     const isConflicted = state.holds.some(
@@ -1845,9 +1888,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const rejectRenewal = (renewalId: string, managerUser: User, reason: string) => {
-    if (managerUser.role !== 'manager' && managerUser.role !== 'admin') throw new Error('Chỉ Facility Manager được từ chối gia hạn.')
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') return
+    const rental = state.rentals.find(item => item.id === renewal.rentalId)
+    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
     if (!reason.trim()) throw new Error('Vui lòng nhập lý do từ chối yêu cầu gia hạn.')
     const now = new Date()
 
@@ -2127,9 +2171,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const completeMaintenanceTask = (taskId: string, managerUser: User) => {
-    if (managerUser.role !== 'manager' && managerUser.role !== 'admin') throw new Error('Chỉ Manager được nghiệm thu và mở lại gian kho.')
     const task = state.maintenanceTasks.find(t => t.id === taskId)
     if (!task) return
+    const unit = state.units.find(item => item.id === task.unitId)
+    assertFacilityManager(managerUser, task.facilityId, unit?.facilityName || task.facilityId)
     const now = new Date()
 
     setState(prev => ({
@@ -2155,7 +2200,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const releaseMaintenanceUnit = (unitId: string, staffUser: User) => {
-    if (staffUser.role !== 'manager' && staffUser.role !== 'admin') throw new Error('Chỉ Manager được xác nhận mở lại gian kho.')
+    const unit = state.units.find(item => item.id === unitId)
+    if (!unit) throw new Error('Không tìm thấy gian kho.')
+    assertFacilityManager(staffUser, unit.facilityId, unit.facilityName)
     const task = state.maintenanceTasks.find(t => t.unitId === unitId && t.status !== 'completed')
     if (task) {
       completeMaintenanceTask(task.id, staffUser)
@@ -2165,6 +2212,116 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         units: prev.units.map(u => u.id === unitId ? { ...u, status: 'available' } : u)
       }))
     }
+  }
+
+  const updateUnitStatus = (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => {
+    const unit = state.units.find(item => item.id === unitId)
+    if (!unit) throw new Error('Không tìm thấy gian kho.')
+    assertFacilityManager(manager, unit.facilityId, unit.facilityName)
+    const hasActiveRental = state.rentals.some(rental => rental.unitId === unitId && rental.status === 'active')
+    const hasActiveReservation = state.holds.some(hold => hold.assignedUnitId === unitId && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status))
+    if (hasActiveRental || hasActiveReservation) throw new Error('Không thể đổi trạng thái gian kho đang có hợp đồng hoặc đặt chỗ hiệu lực.')
+    const now = new Date()
+    setState(prev => {
+      const openTask = prev.maintenanceTasks.find(task => task.unitId === unitId && task.status !== 'completed')
+      const maintenanceTask: MaintenanceTask | undefined = status === 'maintenance' && !openTask ? {
+        id: `MNT-${Date.now().toString().slice(-6)}`,
+        unitId,
+        facilityId: unit.facilityId,
+        reason: reason?.trim() || 'Manager chuyển gian kho sang bảo trì.',
+        status: 'pending',
+        createdAt: now.toISOString()
+      } : undefined
+      return {
+        ...prev,
+        units: prev.units.map(item => item.id === unitId ? { ...item, status, conditionNotes: reason?.trim() || item.conditionNotes, version: item.version + 1 } : item),
+        maintenanceTasks: status === 'available'
+          ? prev.maintenanceTasks.map(task => task.unitId === unitId && task.status !== 'completed' ? { ...task, status: 'completed', completedAt: now.toISOString(), notes: reason?.trim() || task.notes } : task)
+          : maintenanceTask ? [maintenanceTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
+        activities: [{ id: `act-${Date.now()}`, action: status === 'maintenance' ? 'UNIT_MAINTENANCE_STARTED' : 'UNIT_RELEASED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: unit.facilityId, entityType: 'unit', entityId: unit.id, notes: reason?.trim() || `Trạng thái gian kho chuyển sang ${status.toUpperCase()}.`, timestamp: now.toISOString() }, ...prev.activities]
+      }
+    })
+  }
+
+  const recordRentalPayment = (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => {
+    const rental = state.rentals.find(item => item.id === rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
+    if (rental.status !== 'active') throw new Error('Chỉ ghi nhận thanh toán cho hợp đồng đang hoạt động.')
+    const expectedAmount = Math.round((rental.monthlyRate + (rental.lateFeeAmount || 0)) * 100) / 100
+    if (amount <= 0 || Math.abs(amount - expectedAmount) > 0.01) throw new Error(`Số tiền cần thu chính xác là $${expectedAmount}.`)
+    if (!transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
+    const now = new Date()
+    const baseDue = toValidDate(rental.nextDue)
+    const nextDueBase = baseDue.getTime() < now.getTime() ? now.toISOString().split('T')[0] : rental.nextDue
+    const nextDue = addCalendarMonths(nextDueBase, 1)
+    const paymentId = `PAY-RENT-${Date.now().toString().slice(-8)}`
+    const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId, type: 'RENT', amount, paymentMethod, transactionReference: transactionReference.trim(), receivedAt: now.toISOString(), receivedBy: manager.id, status: 'PAID', paidAt: now.toISOString(), recordedBy: manager.id, description: `Thu cước kho ${rental.unitId}${rental.lateFeeAmount ? ` gồm phí trễ $${rental.lateFeeAmount}` : ''}` }
+    setState(prev => ({
+      ...prev,
+      payments: [payment, ...prev.payments],
+      rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, paymentStatus: 'paid', lateFeeAmount: 0, overlocked: false, nextDue } : item),
+      accessCredentials: prev.accessCredentials.map(item => item.rentalId === rentalId && item.status === 'SUSPENDED' ? { ...item, status: 'ACTIVE' } : item),
+      activities: [{ id: `act-${Date.now()}`, action: 'RENT_PAYMENT_RECORDED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu $${amount} cho hợp đồng ${rental.id}; kỳ tiếp theo ${nextDue}.`, timestamp: now.toISOString() }, ...prev.activities]
+    }))
+  }
+
+  const applyRentalLateFee = (rentalId: string, amount: number, manager: User) => {
+    const rental = state.rentals.find(item => item.id === rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
+    if (rental.paymentStatus !== 'overdue') throw new Error('Chỉ áp dụng phí trễ cho hợp đồng đang quá hạn.')
+    if (amount <= 0) throw new Error('Phí trễ phải lớn hơn 0.')
+    const now = new Date()
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: Math.round(((item.lateFeeAmount || 0) + amount) * 100) / 100 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Áp dụng phí trễ $${amount}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+  }
+
+  const waiveRentalLateFee = (rentalId: string, manager: User) => {
+    const rental = state.rentals.find(item => item.id === rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
+    const previousFee = rental.lateFeeAmount || 0
+    const now = new Date()
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: 0 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Miễn phí trễ $${previousFee}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+  }
+
+  const setRentalOverlock = (rentalId: string, overlocked: boolean, manager: User) => {
+    const rental = state.rentals.find(item => item.id === rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
+    if (overlocked && rental.paymentStatus !== 'overdue') throw new Error('Chỉ khóa truy cập đối với hợp đồng quá hạn.')
+    const now = new Date()
+    setState(prev => ({
+      ...prev,
+      rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, overlocked } : item),
+      accessCredentials: prev.accessCredentials.map(item => item.rentalId === rentalId && item.status !== 'REVOKED' ? { ...item, status: overlocked ? 'SUSPENDED' : 'ACTIVE' } : item),
+      activities: [{ id: `act-${Date.now()}`, action: overlocked ? 'RENTAL_ACCESS_SUSPENDED' : 'RENTAL_ACCESS_RESTORED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `${overlocked ? 'Khóa' : 'Khôi phục'} quyền truy cập gian kho ${rental.unitId}.`, timestamp: now.toISOString() }, ...prev.activities]
+    }))
+  }
+
+  const sendDelinquencyReminder = (rentalId: string, manager: User) => {
+    const rental = state.rentals.find(item => item.id === rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
+    if (rental.paymentStatus !== 'overdue') throw new Error('Hợp đồng không ở trạng thái quá hạn.')
+    const now = new Date()
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lastReminderAt: now.toISOString(), remindersSent: (item.remindersSent || 0) + 1 } : item), activities: [{ id: `act-${Date.now()}`, action: 'DELINQUENCY_REMINDER_SENT', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Đã ghi nhận gửi nhắc nợ cho ${rental.customerName}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+  }
+
+  const createFacilityTask = (task: Omit<FacilityTask, 'id' | 'createdAt' | 'status'>, manager: User): FacilityTask => {
+    assertFacilityManager(manager, task.facilityId, task.facilityName)
+    if (!task.title.trim() || !task.dueAt) throw new Error('Nhiệm vụ cần có tiêu đề và hạn xử lý.')
+    const created: FacilityTask = { ...task, id: `TSK-${Date.now().toString().slice(-7)}`, title: task.title.trim(), notes: task.notes?.trim(), status: 'open', createdAt: new Date().toISOString() }
+    setState(prev => ({ ...prev, staffTasks: [created, ...prev.staffTasks], activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_CREATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: created.id, notes: `Tạo nhiệm vụ "${created.title}"${created.assignedStaffName ? ` cho ${created.assignedStaffName}` : ''}.`, timestamp: created.createdAt }, ...prev.activities] }))
+    return created
+  }
+
+  const updateFacilityTask = (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, manager: User) => {
+    const task = state.staffTasks.find(item => item.id === taskId)
+    if (!task) throw new Error('Không tìm thấy nhiệm vụ.')
+    assertFacilityManager(manager, task.facilityId, task.facilityName)
+    const now = new Date()
+    setState(prev => ({ ...prev, staffTasks: prev.staffTasks.map(item => item.id === taskId ? { ...item, ...updates, completedAt: updates.status === 'completed' ? now.toISOString() : item.completedAt } : item), activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_UPDATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: taskId, notes: updates.status === 'completed' ? 'Nhiệm vụ đã hoàn tất.' : `Cập nhật nhiệm vụ${updates.assignedStaffName ? ` cho ${updates.assignedStaffName}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   // 10. Operations Config & Support Tickets
@@ -2242,6 +2399,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       returns: INITIAL_RETURNS,
       renewals: [],
       maintenanceTasks: [],
+      staffTasks: [],
       accessCredentials: [],
       activities: INITIAL_ACTIVITIES,
       tickets: TICKETS,
@@ -2428,9 +2586,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const completeReturnRefund = (returnId: string, staffUser: User, transactionReference: string) => {
-    if (staffUser.role !== 'staff' && staffUser.role !== 'manager') throw new Error('Chỉ nhân viên cơ sở được xác nhận chuyển hoàn cọc.')
+    if (staffUser.role !== 'staff' && staffUser.role !== 'manager' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được xác nhận chuyển hoàn cọc.')
     const returnCase = state.returns.find(item => item.id === returnId)
     if (!returnCase || returnCase.status !== 'refund_pending') throw new Error('Hồ sơ không ở trạng thái chờ hoàn cọc.')
+    if (staffUser.role === 'manager' || staffUser.role === 'admin') assertFacilityManager(staffUser, returnCase.facilityId, returnCase.facilityName)
+    if (staffUser.role === 'staff' && staffUser.facility && staffUser.facility !== 'All facilities' && staffUser.facility !== returnCase.facilityName && staffUser.facility !== returnCase.facilityId) throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
     if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã giao dịch hoàn cọc.')
     const refundPayment = state.payments.find(item => item.rentalId === returnCase.rentalId && item.type === 'REFUND' && item.status === 'PENDING')
     if (!refundPayment) throw new Error('Không tìm thấy lệnh hoàn cọc đang chờ xử lý.')
@@ -2444,9 +2604,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const reviewReturnDispute = (returnId: string, manager: User, resolutionNote?: string) => {
-    if (manager.role !== 'manager' && manager.role !== 'admin') throw new Error('Chỉ Facility Manager được xử lý khiếu nại quyết toán.')
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
+    assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
     const now = new Date()
     setState(prev => ({
       ...prev,
@@ -2643,6 +2803,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     createMaintenanceTask,
     completeMaintenanceTask,
     releaseMaintenanceUnit,
+    updateUnitStatus,
+    recordRentalPayment,
+    applyRentalLateFee,
+    waiveRentalLateFee,
+    setRentalOverlock,
+    sendDelinquencyReminder,
+    createFacilityTask,
+    updateFacilityTask,
     updateBusinessConfig,
     respondSupportTicket,
     replySupportTicket,

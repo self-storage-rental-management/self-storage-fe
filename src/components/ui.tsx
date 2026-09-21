@@ -223,13 +223,13 @@ export function EmptyState({ title, description, action }: {
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
 export function Modal({ open, onClose, title, children, size = 'md' }: {
-  open: boolean; onClose: () => void; title: string; children: ReactNode; size?: 'md' | 'xl'
+  open: boolean; onClose: () => void; title: string; children: ReactNode; size?: 'md' | 'lg' | 'xl'
 }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="modal-title" className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-stone-200 shadow-2xl w-full ${size === 'xl' ? 'max-w-4xl' : 'max-w-lg'} mx-4 p-6 fade-in`}>
+      <div role="dialog" aria-modal="true" aria-labelledby="modal-title" className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-stone-200 shadow-2xl w-full ${size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} mx-4 p-6 fade-in`}>
         <div className="flex items-center justify-between mb-5">
           <h2 id="modal-title" className="text-lg font-bold text-stone-900">{title}</h2>
           <button aria-label="Close dialog" className="text-stone-400 hover:text-stone-700 transition" onClick={onClose}>
