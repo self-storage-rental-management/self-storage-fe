@@ -2,11 +2,10 @@ import { useState } from 'react'
 import Layout, { getInitialPage, Icon } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Avatar, Tabs } from '../../components/ui'
 import type { User, Role } from '../../types'
-import { USERS, LOGIN_HISTORY, ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog, type SettingGroup } from "../../data/demoDatabase"
+import { LOGIN_HISTORY, ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog, type SettingGroup } from "../../data/demoDatabase"
 import { useLanguage } from '../../i18n/LanguageContext'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
-import { useMemo } from 'react'
 
 const PERMISSIONS: Partial<Record<Role, Record<string, boolean>>> = {}
 const permissionLabels: Array<{ key: string; label: string }> = []
@@ -21,6 +20,7 @@ const roleColors: Record<Role, string> = {
 
 export default function AdminApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { lang } = useLanguage()
+  const { activities, users: USERS } = useStorageHub()
 
   const NAV = [
     { id: 'users', label: lang === 'vi' ? 'Quản lý người dùng' : 'User Management', icon: Icon.users, group: lang === 'vi' ? 'Quản trị' : 'Administration' },
@@ -90,7 +90,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
           <SectionHeader
             title={lang === 'vi' ? 'Quản Lý Tài Khoản Người Dùng' : 'User Management'}
             subtitle={lang === 'vi' ? `Tổng cộng ${USERS.length} tài khoản người dùng` : `${USERS.length} total users`}
-            action={<Button variant="primary" size="sm" onClick={() => { setSelectedUser(null); setUserModal(true) }}>{Icon.plus} {lang === 'vi' ? 'Thêm Người Dùng' : 'Add User'}</Button>}
+            action={<Button variant="outline" size="sm" disabled>{lang === 'vi' ? 'Dữ liệu tài khoản chỉ đọc' : 'Accounts are read-only'}</Button>}
           />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
             <StatCard title={lang === 'vi' ? 'Tổng tài khoản' : 'Total Users'} value={USERS.length} icon={Icon.users} iconBg="bg-blue-50" />
@@ -156,9 +156,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                     <Td className="text-sm text-slate-500">{u.joined}</Td>
                     <Td>
                       <div className="flex gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
-                        <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(u); setUserModal(true) }}>{lang === 'vi' ? 'Sửa' : 'Edit'}</Button>
-                        {u.status === 'active' && <Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? `Tài khoản ${u.name} đã bị khóa.` : `Account ${u.name} suspended.`)}>{lang === 'vi' ? 'Khóa' : 'Suspend'}</Button>}
-                        {u.status === 'suspended' && <Button variant="primary" size="sm" onClick={() => showToast(lang === 'vi' ? `Đã khôi phục tài khoản ${u.name}.` : `Restored ${u.name}.`)}>{lang === 'vi' ? 'Mở' : 'Restore'}</Button>}
+                        <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(u); setUserModal(true) }}>{lang === 'vi' ? 'Xem' : 'View'}</Button>
                       </div>
                     </Td>
                   </Tr>
@@ -197,7 +195,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                   { key: 'checkin_out', label: lang === 'vi' ? 'Thực hiện thủ tục nhận/trả kho' : 'Process check-in / check-out' },
                   { key: 'manage_leases', label: lang === 'vi' ? 'Quản lý hợp đồng & cước phí' : 'Manage lease agreements' },
                   { key: 'overlock_units', label: lang === 'vi' ? 'Khóa cổng điện tử (Overlock)' : 'Execute digital overlock' },
-                  { key: 'manage_pricing', label: lang === 'vi' ? 'Điều chỉnh biểu giá & khuyến mãi' : 'Manage pricing & promotions' },
+                  { key: 'manage_pricing', label: lang === 'vi' ? 'Điều chỉnh biểu giá thuê' : 'Manage rental pricing' },
                   { key: 'system_admin', label: lang === 'vi' ? 'Toàn quyền cấu hình hệ thống' : 'Full system administration' },
                 ].map(p => (
                   <tr key={p.key} className="hover:bg-slate-50">
@@ -219,8 +217,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
             </table>
           </Card>
           <div className="mt-4 flex justify-end">
-            <Button variant="primary" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đã lưu cấu hình ma trận phân quyền!' : 'Permissions saved successfully!')}>
-              {lang === 'vi' ? 'Lưu Thay Đổi Phân Quyền' : 'Save Permission Changes'}
+            <Button variant="outline" size="sm" disabled>
+              {lang === 'vi' ? 'Ma trận chỉ đọc' : 'Read-only matrix'}
             </Button>
           </div>
         </div>
@@ -306,7 +304,6 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
       {/* ── ACTIVITY LOGS ─────────────────────────────────────── */}
       {page === 'activity' && (() => {
-        const { activities } = useStorageHub()
         const combinedLogs: AuditActivityLog[] = [
           ...activities.map(act => ({
             id: act.id,
@@ -354,8 +351,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               title={lang === 'vi' ? 'Nhật Ký Hoạt Động & Giám Sát Hệ Thống' : 'System Activity & Audit Trail'}
               subtitle={lang === 'vi' ? 'Dòng thời gian ghi nhận các thao tác người dùng, cảnh báo an ninh và thay đổi dữ liệu quản trị' : 'Real-time chronological journal of user operations, security alerts, and administrative data modifications'}
               action={
-                <Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đã xuất nhật ký kiểm toán sang tệp JSON & CSV!' : 'Audit logs exported to JSON & CSV archive!')}>
-                  {lang === 'vi' ? 'Xuất Nhật Ký' : 'Export Audit Trail'}
+                <Button variant="outline" size="sm" disabled>
+                  {lang === 'vi' ? 'Chưa kết nối xuất file' : 'Export not connected'}
                 </Button>
               }
             />
@@ -502,12 +499,12 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
       {/* ── SYSTEM SETTINGS ───────────────────────────────────── */}
       {page === 'settings' && (() => {
         const handleSaveSettings = () => {
-          showToast(lang === 'vi' ? 'Đã lưu cấu hình nền tảng và chính sách vận hành thành công!' : 'Platform configurations and operational policies saved successfully!')
+          showToast(lang === 'vi' ? 'Bản demo chỉ thay đổi biểu mẫu trong phiên hiện tại; chưa ghi cấu hình hệ thống.' : 'Demo only: form changes are session-local and are not saved as system configuration.')
         }
 
         const handleResetDefaults = () => {
           setSettingsGroups(SETTINGS_GROUPS)
-          showToast(lang === 'vi' ? 'Đã khôi phục toàn bộ cấu hình về mặc định ban đầu.' : 'Configuration restored to factory presets.')
+          showToast(lang === 'vi' ? 'Đã khôi phục biểu mẫu demo về giá trị ban đầu.' : 'The demo form was restored to its initial values.')
         }
 
         const filteredGroups = activeSettingsTab === 'All Categories' || activeSettingsTab === 'Tất cả danh mục'
@@ -693,14 +690,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
           {!selectedUser && <Input label={lang === 'vi' ? 'Mật Khẩu Tạm Thời' : 'Temporary Password'} type="password" placeholder={lang === 'vi' ? 'Sẽ được gửi tự động qua email' : 'Will be sent via email'} />}
           <div className="flex gap-2 justify-end pt-2">
             <Button variant="outline" onClick={() => setUserModal(false)}>{lang === 'vi' ? 'Hủy Bỏ' : 'Cancel'}</Button>
-            {selectedUser && (
-              <Button variant="danger" onClick={() => { setUserModal(false); showToast(lang === 'vi' ? 'Đã xóa tài khoản khỏi hệ thống!' : 'User removed!') }}>
-                {lang === 'vi' ? 'Xóa Tài Khoản' : 'Delete User'}
-              </Button>
-            )}
-            <Button variant="primary" onClick={() => { setUserModal(false); showToast(lang === 'vi' ? 'Đã cập nhật thông tin người dùng!' : 'User updated successfully!') }}>
-              {selectedUser ? (lang === 'vi' ? 'Lưu Thay Đổi' : 'Save Changes') : (lang === 'vi' ? 'Tạo Tài Khoản' : 'Create User')}
-            </Button>
+            <Button variant="primary" onClick={() => setUserModal(false)}>{lang === 'vi' ? 'Đóng' : 'Close'}</Button>
           </div>
         </div>
       </Modal>

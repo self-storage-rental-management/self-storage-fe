@@ -2,6 +2,9 @@ export type UnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' |
 
 export type ReservationStatus =
   | 'CREATED'
+  | 'awaiting_email'
+  | 'awaiting_review'
+  | 'awaiting_payment'
   | 'DEPOSIT_PAID'
   | 'UNIT_RESERVED'
   | 'READY_FOR_CHECKIN'
@@ -30,10 +33,7 @@ export type HoldStatus =
   | 'no_show'
   | 'held'
   | 'draft'
-  | 'awaiting_email'
-  | 'awaiting_review'
   | 'approved'
-  | 'awaiting_payment'
   | 'checked_in'
 
 export type RentalStatus = 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'

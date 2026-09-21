@@ -153,7 +153,6 @@ export default function Layout({
       'performance': { en: 'Performance Reports', vi: 'Hiệu Suất Vận Hành' },
       'policies': { en: 'Rental Policies', vi: 'Chính Sách Thuê' },
       'pricing': { en: 'Pricing & Fees', vi: 'Bảng Giá & Biểu Phí' },
-      'discounts': { en: 'Discounts & Promotions', vi: 'Khuyến Mãi & Voucher' },
       'revenue': { en: 'Revenue Reports', vi: 'Báo Cáo Doanh Thu' },
       'users': { en: 'User Management', vi: 'Quản Lý Người Dùng' },
       'roles': { en: 'Roles & Permissions', vi: 'Vai Trò & Phân Quyền' },

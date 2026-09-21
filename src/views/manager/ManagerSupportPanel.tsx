@@ -68,8 +68,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
     }
 
     try {
-      // Pass user as staff role to satisfy context validation
-      respondSupportTicket(selectedTicket.id, replyText.trim(), newStatus, { ...user, role: 'staff' as any })
+      respondSupportTicket(selectedTicket.id, replyText.trim(), newStatus, user)
       showToast(
         lang === 'vi'
           ? `Đã gửi phản hồi hỗ trợ cho ${selectedTicket.customer}!`

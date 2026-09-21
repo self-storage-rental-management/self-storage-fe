@@ -25,7 +25,8 @@ import type {
   FacilityTask
 } from '../types/storageHub'
 import type { User } from '../types'
-import { FACILITIES, UNITS, TICKETS, type TicketItem } from '../data/demoDatabase'
+import { FACILITIES, UNITS, USERS, TICKETS, type TicketItem } from '../data/demoDatabase'
+import { transitionReservation } from '../domain/reservationFlow'
 
 const STORAGE_KEY = 'storagehub:v3:canonical'
 
@@ -715,6 +716,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
 ]
 
 interface StorageHubState {
+  users: Array<(typeof USERS)[number]>
   facilities: Facility[]
   units: StorageUnit[]
   holds: StorageReservation[] // holds is alias for reservations
@@ -748,8 +750,7 @@ interface StorageHubContextValue extends StorageHubState {
   // Customer reservation & hold lifecycle actions
   payStorageHold: (holdId: string, paymentMethod?: string) => void
   verifyHoldEmail: (holdId: string, token: string) => boolean
-  resendHoldEmail: (holdId: string) => void
-  applyDiscountToReservation: (reservationId: string, discountCode: string) => boolean
+  resendHoldEmail: (holdId: string) => string
   scheduleCheckIn: (holdId: string, appointmentDate: string, appointmentTime: string) => void
   // Actions
   validateAndCreateReservation: (params: {
@@ -765,6 +766,7 @@ interface StorageHubContextValue extends StorageHubState {
     appointmentTime: string
     largestItemDimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number }
   }) => ReservationValidationResult
+  approveReservation: (reservationId: string, reviewer: User) => void
   assignUnitToHold: (reservationId: string, unitId: string, managerUser: User) => void
   cancelReservation: (reservationId: string, user: User, reason?: string) => void
   archiveReservationHistory: (reservationId: string, customer: User) => void
@@ -918,6 +920,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.map((hold: StorageReservation) => normalizeReservationPricing({ ...hold, appointmentDate: hold.appointmentDate || hold.moveInDate, appointmentTime: hold.appointmentTime || '09:00' })) : INITIAL_RESERVATIONS
         return {
           ...parsed,
+          users: Array.isArray(parsed.users) ? parsed.users : USERS,
           units: Array.isArray(parsed.units) && parsed.units.length >= INITIAL_UNITS.length ? parsed.units : INITIAL_UNITS,
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
@@ -938,6 +941,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       console.error('Failed to load storageHub state from localStorage', e)
     }
     return {
+      users: USERS,
       facilities: INITIAL_FACILITIES,
       units: INITIAL_UNITS,
       holds: INITIAL_RESERVATIONS,
@@ -1049,7 +1053,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       !hold.assignedUnitId &&
       hold.facilityId === params.facilityId &&
       hold.unitTypeId === unitType.id &&
-      (hold.status === 'DEPOSIT_PAID' || (hold.status === 'CREATED' && Boolean(hold.paymentExpiresAt) && new Date(hold.paymentExpiresAt!).getTime() > nowTime)) &&
+      (hold.status === 'DEPOSIT_PAID' || (['awaiting_email', 'awaiting_review', 'awaiting_payment'].includes(hold.status) && Boolean(hold.paymentExpiresAt) && new Date(hold.paymentExpiresAt!).getTime() > nowTime)) &&
       checkDateOverlap(startDate, endDate, hold.startDate, hold.endDate)
     )
     const availableUnit = dateAvailableUnits[unassignedCapacityHolds.length]
@@ -1142,6 +1146,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const holdId = `RSV-${Date.now().toString().slice(-4)}`
     const quoteId = `QUO-${Date.now().toString().slice(-4)}`
     const paymentExpiresAt = new Date(nowTime + 12 * 60 * 60 * 1000).toISOString()
+    const emailToken = crypto.getRandomValues(new Uint32Array(1))[0].toString().padStart(6, '0').slice(-6)
 
     const pricingQuote: PricingQuote = {
       quoteId,
@@ -1177,7 +1182,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       startDate,
       endDate,
       moveInDate: params.moveInDate,
-      status: 'CREATED',
+      status: 'awaiting_email',
       reservationDepositAmount,
       securityDepositAmount,
       remainingAmount,
@@ -1191,6 +1196,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       payment: {
         amount: reservationDepositAmount,
         status: 'pending'
+      },
+      emailVerification: {
+        token: emailToken,
+        verified: false,
+        sentAt: now.toISOString(),
+        expiresAt: new Date(nowTime + 24 * 60 * 60 * 1000).toISOString(),
+        attemptCount: 1
       },
       appointmentDate: params.moveInDate,
       appointmentTime: params.appointmentTime,
@@ -1222,9 +1234,27 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     return {
       outcome: 'PASS',
       hold: newReservation,
-      messageVi: `Đã xác nhận đặt kho. Vui lòng thanh toán cọc 20% ($${reservationDepositAmount}) trong 12 giờ.`,
-      messageEn: `Booking confirmed. Please pay the 20% deposit ($${reservationDepositAmount}) within 12 hours.`
+      messageVi: 'Yêu cầu đã được tạo. Vui lòng xác minh email để chuyển hồ sơ sang bước phê duyệt.',
+      messageEn: 'Request created. Verify your email before the facility review.'
     }
+  }
+
+  const approveReservation = (reservationId: string, reviewer: User) => {
+    const reservation = state.holds.find(item => item.id === reservationId)
+    if (!reservation) throw new Error('Không tìm thấy yêu cầu đặt giữ kho.')
+    if (reviewer.role !== 'staff' && reviewer.role !== 'manager' && reviewer.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được phê duyệt yêu cầu.')
+    if (reviewer.role === 'manager' || reviewer.role === 'admin') {
+      assertFacilityManager(reviewer, reservation.facilityId, reservation.facilityName)
+    } else if (reviewer.facility && reviewer.facility !== 'All facilities' && reviewer.facility !== reservation.facilityId && reviewer.facility !== reservation.facilityName) {
+      throw new Error('Bạn không có quyền phê duyệt yêu cầu của cơ sở khác.')
+    }
+    const nextStatus = transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
+    const approvedAt = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      holds: prev.holds.map(item => item.id === reservationId ? { ...item, status: nextStatus, evidence: [...item.evidence, `APPROVED · ${reviewer.name} đã duyệt hồ sơ lúc ${approvedAt}`] } : item),
+      activities: [{ id: `act-${Date.now()}`, action: 'RESERVATION_APPROVED', actorId: reviewer.id, actorName: reviewer.name, actorRole: reviewer.role, facilityId: reservation.facilityId, entityType: 'hold', entityId: reservation.id, notes: 'Hồ sơ đã được phê duyệt và mở bước thanh toán cọc.', timestamp: approvedAt }, ...prev.activities]
+    }))
   }
 
   // 2. Facility Manager: Assign specific Unit for date range
@@ -2326,6 +2356,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 10. Operations Config & Support Tickets
   const updateBusinessConfig = (newConfig: Partial<BusinessConfig>, actor: User) => {
+    if (actor.role !== 'manager' && actor.role !== 'admin') throw new Error('Chỉ Manager hoặc Admin được cập nhật cấu hình vận hành.')
     setState(prev => ({
       ...prev,
       config: { ...prev.config, ...newConfig }
@@ -2333,8 +2364,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const respondSupportTicket = (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => {
-    if (staffUser.role !== 'staff') throw new Error('Chỉ Staff được cập nhật trạng thái yêu cầu hỗ trợ.')
+    if (staffUser.role !== 'staff' && staffUser.role !== 'manager' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được cập nhật yêu cầu hỗ trợ.')
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung phản hồi.')
+    const ticket = state.tickets.find(item => item.id === ticketId)
+    if (!ticket) throw new Error('Không tìm thấy yêu cầu hỗ trợ.')
+    if (staffUser.facility && staffUser.facility !== 'All facilities' && staffUser.facility !== ticket.facility && staffUser.facility !== ticket.facilityId) throw new Error('Bạn không có quyền xử lý yêu cầu của cơ sở khác.')
     const now = new Date().toISOString()
     setState(prev => ({
       ...prev,
@@ -2389,6 +2423,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const resetToDemoData = () => {
     localStorage.removeItem(STORAGE_KEY)
     setState({
+      users: USERS,
       facilities: INITIAL_FACILITIES,
       units: INITIAL_UNITS,
       holds: INITIAL_RESERVATIONS,
@@ -2448,6 +2483,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const checkInDeadline = new Date(paidAt.getTime() + 14 * 24 * 60 * 60 * 1000)
     const targetHold = state.holds.find(hold => hold.id === holdId)
     if (!targetHold) throw new Error('Không tìm thấy đơn đặt giữ kho.')
+    if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
+    const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
     if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong 14 ngày sau khi thanh toán cọc. Vui lòng đổi lịch trước khi thanh toán.')
@@ -2458,7 +2495,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           const isAssigned = !!h.assignedUnitId
           return {
             ...h,
-            status: isAssigned ? 'UNIT_RESERVED' : 'DEPOSIT_PAID',
+            status: isAssigned ? 'UNIT_RESERVED' : paidStatus,
             depositPaidAt: paidAt.toISOString(),
             checkInDeadline: checkInDeadline.toISOString(),
             payment: {
@@ -2620,19 +2657,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       holds: prev.holds.map(h => {
-        if (h.id === holdId) {
-          if (!h.emailVerification || h.emailVerification.token === token || token === '123456') {
+        if (h.id === holdId && h.status === 'awaiting_email' && h.emailVerification) {
+          const isExpired = new Date(h.emailVerification.expiresAt).getTime() <= Date.now()
+          if (!isExpired && h.emailVerification.token === token.trim()) {
             success = true
             return {
               ...h,
-              status: 'awaiting_payment',
+              status: transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL'),
               emailVerification: {
-                ...(h.emailVerification || {
-                  token,
-                  sentAt: new Date().toISOString(),
-                  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                  attemptCount: 1
-                }),
+                ...h.emailVerification,
                 verified: true,
                 verifiedAt: new Date().toISOString()
               }
@@ -2646,7 +2679,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const resendHoldEmail = (holdId: string) => {
-    const newToken = Math.floor(100000 + Math.random() * 900000).toString()
+    const newToken = crypto.getRandomValues(new Uint32Array(1))[0].toString().padStart(6, '0').slice(-6)
     setState(prev => ({
       ...prev,
       holds: prev.holds.map(h => {
@@ -2665,31 +2698,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         return h
       })
     }))
-  }
-
-  const applyDiscountToReservation = (reservationId: string, discountCode: string): boolean => {
-    let success = false
-    setState(prev => ({
-      ...prev,
-      holds: prev.holds.map(h => {
-        if (h.id === reservationId) {
-          const upper = discountCode.trim().toUpperCase()
-          if (upper === 'WELCOME10' || upper === 'SAVE20' || upper === 'SUMMER2026') {
-            success = true
-            const discountAmt = upper === 'SAVE20' ? 20 : 10
-            return {
-              ...h,
-              discountCode: upper,
-              discountAmount: discountAmt,
-              discountType: 'PERCENT',
-              discountValue: discountAmt
-            }
-          }
-        }
-        return h
-      })
-    }))
-    return success
+    return newToken
   }
 
   const scheduleCheckIn = (holdId: string, appointmentDate: string, appointmentTime: string) => {
@@ -2772,9 +2781,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     payStorageHold,
     verifyHoldEmail,
     resendHoldEmail,
-    applyDiscountToReservation,
     scheduleCheckIn,
     validateAndCreateReservation,
+    approveReservation,
     assignUnitToHold,
     cancelReservation,
     archiveReservationHistory,

@@ -636,7 +636,7 @@ export const DISCOUNTS: PromotionItem[] = [
     name: 'Autumn Move-In Special',
     description: 'Instant $25 deduction on the first month invoice for any new storage unit reservation.',
     value: '$25 OFF',
-    discount: '$25 instant cash voucher',
+    discount: '$25 one-time adjustment',
     type: 'fixed-amount',
     typeLabel: 'Fixed Amount',
     active: true,
@@ -784,27 +784,6 @@ export const ACTIVITY_LOGS: AuditActivityLog[] = [
       tenantId: 'OD-12',
       pastDueAmount: 170,
       gatePinSuspended: true
-    }
-  },
-  {
-    id: 'act-103',
-    user: 'Demo Operations',
-    actor: 'Demo Operations',
-    role: 'business',
-    action: 'Published new promotional campaign WELCOME10',
-    target: 'Promotions · WELCOME10 (10% OFF)',
-    time: '1 hour ago',
-    timestamp: '2026-09-18 11:05:30',
-    type: 'success',
-    severity: 'info',
-    category: 'pricing',
-    ip: '192.168.1.44',
-    device: 'Chrome 128 / Windows 11',
-    details: {
-      actionType: 'PROMOTION_CREATE',
-      code: 'WELCOME10',
-      discountValue: '10%',
-      maxUses: 100
     }
   },
   {

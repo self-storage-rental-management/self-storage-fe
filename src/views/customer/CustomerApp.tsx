@@ -5,7 +5,6 @@ import { useLanguage } from '../../i18n/LanguageContext'
 import type { User } from '../../types'
 import type { Facility, StorageUnit, StorageHold, UnitType } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
-import { evaluatePromotion } from '../../utils/promotions'
 import ProfileView from '../ProfileView'
 import type { TicketItem } from '../../data/demoDatabase'
 
@@ -207,7 +206,6 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     payStorageHold,
     contracts,
     payments,
-    applyDiscountToReservation,
     scheduleCheckIn,
     requestReturn,
     requestRenewal,
@@ -254,19 +252,12 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   const [temporaryHoldTarget, setTemporaryHoldTarget] = useState<{ facilityId: string; unitTypeId: string } | null>(() => {
     try { return JSON.parse(localStorage.getItem('customerTemporaryHoldTarget') || 'null') } catch { return null }
   })
-  const [promoCode, setPromoCode] = useState('')
-  const [appliedPromoCode, setAppliedPromoCode] = useState('')
-  const [promoFeedback, setPromoFeedback] = useState<{ valid: boolean; message: string } | null>(null)
-
-  // Legacy email verification modal is intentionally kept closed; the current customer flow has no OTP step.
   const [emailModalOpen, setEmailModalOpen] = useState(false)
-  const [activeHoldForEmail] = useState<StorageHold | null>(null)
+  const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
   const [inputToken, setInputToken] = useState('')
 
   const [payModalOpen, setPayModalOpen] = useState(false)
   const [activeHoldForPayment, setActiveHoldForPayment] = useState<StorageHold | null>(null)
-  const [payDiscountCode, setPayDiscountCode] = useState('')
-  const [payDiscountMsg, setPayDiscountMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [paymentMethod, setPaymentMethod] = useState('Chuyển khoản VietQR')
 
   // Post-payment Digital Contract & Receipt Email Modal
@@ -439,7 +430,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   const unitTypeMatches = (unitTypeName: string, requestedTypeName: string) => unitTypeName.toLowerCase().startsWith(requestedTypeName.split(' ')[0].toLowerCase())
   const activeUnassignedCapacityHolds = holds.filter(hold => {
     if (hold.assignedUnitId || ['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)) return false
-    if (hold.status === 'CREATED') return Boolean(hold.paymentExpiresAt && new Date(hold.paymentExpiresAt).getTime() > now)
+    if (['awaiting_email', 'awaiting_review', 'awaiting_payment'].includes(hold.status)) return Boolean(hold.paymentExpiresAt && new Date(hold.paymentExpiresAt).getTime() > now)
     return hold.status === 'DEPOSIT_PAID'
   })
   const effectiveAvailableCount = (facilityId: string, unitTypeName?: string) => {
@@ -498,7 +489,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
   useEffect(() => {
     myHolds.forEach(hold => {
-      if (hold.status === 'CREATED' && hold.paymentExpiresAt && new Date(hold.paymentExpiresAt).getTime() <= now) {
+      if (['awaiting_email', 'awaiting_review', 'awaiting_payment'].includes(hold.status) && hold.paymentExpiresAt && new Date(hold.paymentExpiresAt).getTime() <= now) {
         expireReservation(hold.id, 'PAYMENT_EXPIRED')
       }
     })
@@ -578,9 +569,6 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       version: 1
     }
     setSelectedUnit(repUnit)
-    setPromoCode('')
-    setAppliedPromoCode('')
-    setPromoFeedback(null)
     setDetailOpen(false)
     setBookOpen(true)
   }
@@ -640,17 +628,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           })
     : null
 
-  const appliedPromotion = selectedUnit && currentQuote && appliedPromoCode
-    ? evaluatePromotion(appliedPromoCode, {
-        facilityName: selectedUnit.facilityName,
-        unitType: selectedUnit.type,
-        rentalMonths,
-        baseMonthlyPrice: currentQuote.baseMonthlyPrice,
-        dimSurcharge: currentQuote.dimSurcharge
-      })
-    : null
-  const promotionDiscount = appliedPromotion?.discountAmount ?? 0
-  const discountedFirstPayment = currentQuote ? Math.max(0, currentQuote.totalFirstPayment - promotionDiscount) : 0
+  const promotionDiscount = 0
   const hasValidPackageDimensions = [cargoLengthNumber, cargoWidthNumber, cargoHeightNumber].every(value => Number.isFinite(value) && value > 0)
   const largestPackageFitsDoor = Boolean(selectedUnit && hasValidPackageDimensions && [[0, 1], [0, 2], [1, 2]].some(([a, b]) => {
     const dimensionsM = [cargoLengthNumber / 100, cargoWidthNumber / 100, cargoHeightNumber / 100]
@@ -658,26 +636,6 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     const second = dimensionsM[b]
     return (first <= selectedUnit.doorDimensions.widthM && second <= selectedUnit.doorDimensions.heightM) || (second <= selectedUnit.doorDimensions.widthM && first <= selectedUnit.doorDimensions.heightM)
   }))
-
-  const applyPromotionCode = () => {
-    if (!selectedUnit || !currentQuote || !promoCode.trim()) {
-      setAppliedPromoCode('')
-      setPromoFeedback({ valid: false, message: lang === 'vi' ? 'Vui lòng nhập mã giảm giá.' : 'Enter a promotion code.' })
-      return
-    }
-
-    const result = evaluatePromotion(promoCode, {
-      facilityName: selectedUnit.facilityName,
-      unitType: selectedUnit.type,
-      rentalMonths,
-      baseMonthlyPrice: currentQuote.baseMonthlyPrice,
-      dimSurcharge: currentQuote.dimSurcharge
-    })
-    const valid = result.discountAmount > 0
-    setAppliedPromoCode(valid ? result.promotion?.code ?? '' : '')
-    setPromoCode(result.promotion?.code ?? promoCode.trim().toUpperCase())
-    setPromoFeedback({ valid, message: lang === 'vi' ? result.messageVi : result.messageEn })
-  }
 
   const handleNotificationClick = (notification: LayoutNotification) => {
     navigateTo(notification.page)
@@ -833,16 +791,17 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     setBookingReview(false)
     setBookOpen(false)
     setSelectedUnit(null)
-    setPromoCode('')
-    setAppliedPromoCode('')
-    setPromoFeedback(null)
-
     if (result.outcome === 'SOFT_EXCEPTION') {
       setPage('reservations')
       showToast(lang === 'vi' ? 'Cỡ kho này chưa phù hợp với thông tin hàng hóa. Vui lòng chọn cỡ khác.' : 'This storage size is not suitable for the declared goods.')
     } else {
       setPage('reservations')
-      showToast(lang === 'vi' ? 'Đã xác nhận đặt kho. Bạn có 12 giờ để thanh toán cọc 20%.' : 'Booking confirmed. You have 12 hours to pay the 20% deposit.')
+      if (result.hold) {
+        setActiveHoldForEmail(result.hold)
+        setInputToken(result.hold.emailVerification?.token || '')
+        setEmailModalOpen(true)
+      }
+      showToast(lang === 'vi' ? 'Đã tạo yêu cầu. Hãy xác minh email trước khi cơ sở phê duyệt.' : 'Request created. Verify your email before facility review.')
     }
   }
 
@@ -1246,26 +1205,27 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
                       {!['CANCELLED', 'EXPIRED'].includes(hold.status) && (() => {
                         const progressSteps = [
-                          { label: lang === 'vi' ? 'Xác nhận đơn' : 'Booking confirmed', detail: lang === 'vi' ? 'Yêu cầu đã được ghi nhận' : 'Request recorded' },
+                          { label: lang === 'vi' ? 'Xác minh email' : 'Email verification', detail: lang === 'vi' ? 'Xác nhận địa chỉ liên hệ' : 'Confirm contact address' },
+                          { label: lang === 'vi' ? 'Phê duyệt hồ sơ' : 'Facility review', detail: lang === 'vi' ? 'Cơ sở kiểm tra yêu cầu' : 'Facility reviews request' },
                           { label: lang === 'vi' ? 'Thanh toán cọc' : 'Deposit payment', detail: lang === 'vi' ? 'Hoàn tất cọc giữ chỗ 20%' : 'Complete the 20% deposit' },
                           { label: lang === 'vi' ? 'Cơ sở phân kho' : 'Unit assignment', detail: lang === 'vi' ? 'Cơ sở đang chọn gian kho phù hợp' : 'Facility assigns a suitable unit' },
                           { label: lang === 'vi' ? 'Check-in & ký' : 'Check-in & sign', detail: lang === 'vi' ? 'Đối chiếu và ký tại cơ sở' : 'Verify and sign on site' },
                           { label: lang === 'vi' ? 'Đã bàn giao' : 'Handed over', detail: lang === 'vi' ? 'Nhận kho và mã ra vào' : 'Receive unit and access code' }
                         ]
-                        const currentIndex = hold.status === 'CREATED' ? 0 : hold.status === 'DEPOSIT_PAID' ? 2 : hold.status === 'UNIT_RESERVED' ? 3 : hold.status === 'READY_FOR_CHECKIN' ? 3 : hold.status === 'COMPLETED' ? 4 : -1
+                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : hold.status === 'DEPOSIT_PAID' ? 3 : hold.status === 'UNIT_RESERVED' ? 4 : hold.status === 'READY_FOR_CHECKIN' ? 4 : hold.status === 'COMPLETED' ? 6 : -1
                         const activeStep = progressSteps[currentIndex]
 
                         return <div className="mt-4 border-t border-stone-200 pt-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="text-xs font-bold text-black">{lang === 'vi' ? 'Tiến trình đơn đặt kho' : 'Booking progress'}</p>
-                              <p className="mt-0.5 text-[11px] text-stone-500">{lang === 'vi' ? `Đã hoàn thành ${currentIndex}/5 bước` : `${currentIndex} of 5 steps completed`}</p>
+                              <p className="mt-0.5 text-[11px] text-stone-500">{lang === 'vi' ? `Đã hoàn thành ${Math.max(0, currentIndex)}/6 bước` : `${Math.max(0, currentIndex)} of 6 steps completed`}</p>
                             </div>
                             {activeStep && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">
                               {lang === 'vi' ? 'Đang thực hiện: ' : 'In progress: '} {activeStep.label}
                             </span>}
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-5">
+                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
                             {progressSteps.map((step, index) => {
                               const completed = index < currentIndex || hold.status === 'COMPLETED'
                               const current = index === currentIndex && hold.status !== 'COMPLETED'
@@ -1293,7 +1253,21 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                         </p>
                       </div>
 
-                      {hold.status === 'CREATED' && hold.payment.status !== 'paid' && (
+                      {hold.status === 'awaiting_email' && (
+                        <div className="min-w-[220px] rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950">
+                          <p className="font-bold">{lang === 'vi' ? 'Cần xác minh email' : 'Email verification required'}</p>
+                          <Button className="mt-2" size="sm" onClick={() => { setActiveHoldForEmail(hold); setInputToken(hold.emailVerification?.token || ''); setEmailModalOpen(true) }}>{lang === 'vi' ? 'Xác minh email' : 'Verify email'}</Button>
+                        </div>
+                      )}
+
+                      {hold.status === 'awaiting_review' && (
+                        <div className="min-w-[220px] rounded-lg border border-stone-300 bg-stone-50 p-3 text-right text-xs text-stone-700">
+                          <p className="font-bold">{lang === 'vi' ? 'Đang chờ cơ sở phê duyệt' : 'Awaiting facility approval'}</p>
+                          <p className="mt-1">{lang === 'vi' ? 'Thanh toán sẽ mở sau khi hồ sơ được duyệt.' : 'Payment opens after approval.'}</p>
+                        </div>
+                      )}
+
+                      {hold.status === 'awaiting_payment' && hold.payment.status !== 'paid' && (
                         <div className="min-w-[220px] rounded-lg border border-red-700 bg-red-700 p-3 text-right text-xs text-white shadow-sm">
                           <p className="font-bold text-white">{lang === 'vi' ? 'Cần thanh toán cọc trong 12 giờ' : 'Deposit due within 12 hours'}</p>
                           <p className="mt-1 font-mono text-lg font-bold text-white">{formatCountdown(hold.paymentExpiresAt).text}</p>
@@ -2412,6 +2386,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               <p className="text-[11px] text-stone-400">
                 {lang === 'vi' ? 'Token có hiệu lực trong 24 giờ. Hết hạn sẽ tự động giải phóng gian kho.' : 'Token is single-use and expires in 24 hours.'}
               </p>
+              <p className="text-[11px] font-medium text-amber-800">{lang === 'vi' ? 'Bản frontend demo: mã xác minh được điền sẵn vì chưa kết nối dịch vụ gửi email.' : 'Frontend demo: the code is prefilled because email delivery is not connected yet.'}</p>
             </div>
 
             <div className="flex items-center justify-between border-t border-stone-100 pt-3">
@@ -2419,7 +2394,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  resendHoldEmail(activeHoldForEmail.id)
+                  setInputToken(resendHoldEmail(activeHoldForEmail.id))
                   showToast(lang === 'vi' ? 'Đã cấp lại mã token và gửi email mới!' : 'New verification token generated!')
                 }}
               >

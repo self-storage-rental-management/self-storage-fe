@@ -53,7 +53,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
         localStorage.setItem('storagehub:user', JSON.stringify({ ...parsed, name, email }))
       }
     } catch {}
-    showToast(lang === 'vi' ? 'Đã cập nhật thông tin cá nhân thành công!' : 'Profile information updated successfully!')
+    showToast(lang === 'vi' ? 'Đã lưu hồ sơ trên thiết bị demo; chưa đồng bộ backend.' : 'Profile saved on this demo device; backend sync is not connected.')
   }
 
   const handleChangePassword = (e: React.FormEvent) => {
@@ -70,10 +70,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
       alert(lang === 'vi' ? 'Mật khẩu xác nhận không khớp' : 'New passwords do not match')
       return
     }
-    setCurrentPassword('')
-    setNewPassword('')
-    setConfirmPassword('')
-    showToast(lang === 'vi' ? 'Mật khẩu đã được đổi an toàn!' : 'Password changed securely!')
+    showToast(lang === 'vi' ? 'Chưa thể đổi mật khẩu: frontend chưa kết nối API xác thực.' : 'Password was not changed because the authentication API is not connected.')
   }
 
   const roleLabelMap: Record<string, Record<string, string>> = {
@@ -545,7 +542,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                   {lang === 'vi' ? 'Chương Trình Ưu Đãi & Điểm Thưởng' : 'Promotions & Referral Rewards'}
                 </p>
                 <p className="text-xs text-stone-500">
-                  {lang === 'vi' ? 'Nhận mã giảm giá độc quyền nâng cấp gói kho và ưu đãi dịch vụ xe tải chuyển dọn' : 'Receive exclusive discounts on unit upgrades and partner moving services'}
+                  {lang === 'vi' ? 'Nhận thông báo về thay đổi dịch vụ và lịch vận hành cơ sở' : 'Receive service updates and facility operating notices'}
                 </p>
               </div>
               <input
@@ -564,4 +561,3 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     </div>
   )
 }
-

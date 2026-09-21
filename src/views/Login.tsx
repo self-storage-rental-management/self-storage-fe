@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import type { Role, User } from '../types'
-import { USERS } from '../data/demoDatabase'
 import BrandLogo from '../components/BrandLogo'
 import LanguageToggle from '../components/LanguageToggle'
 import { useLanguage } from '../i18n/LanguageContext'
+import { useStorageHub } from '../store/StorageHubContext'
 
 interface LoginProps { onLogin: (user: User) => void }
 type AuthTab = 'login' | 'register'
@@ -15,15 +15,6 @@ const roleLabels: Record<Role, string> = {
   customer: 'Customer', staff: 'Facility Staff', manager: 'Facility Manager',
   business: 'Business Operations', admin: 'System Admin',
 }
-const DEMO_USERS: Array<User & { label: string }> = USERS.map(user => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role as Role,
-  facility: user.facility,
-  label: roleLabels[user.role as Role],
-}))
-
 function GoogleIcon() {
   return (
     <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
@@ -37,6 +28,8 @@ function GoogleIcon() {
 
 
 export default function Login({ onLogin }: LoginProps) {
+  const { users } = useStorageHub()
+  const demoUsers: Array<User & { label: string }> = users.map(user => ({ id: user.id, name: user.name, email: user.email, role: user.role as Role, facility: user.facility, label: roleLabels[user.role as Role] }))
   const [tab, setTab] = useState<AuthTab>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -57,7 +50,7 @@ export default function Login({ onLogin }: LoginProps) {
 
   function handleLogin(event: React.FormEvent) {
     event.preventDefault()
-    const demoUser = DEMO_USERS.find(user => user.email === email.trim().toLowerCase())
+    const demoUser = demoUsers.find(user => user.email === email.trim().toLowerCase())
     if (!demoUser || password !== DEMO_PASSWORD) {
       setError(
         lang === 'vi'
@@ -337,7 +330,7 @@ export default function Login({ onLogin }: LoginProps) {
               <span className="h-px flex-1 bg-[#e5e3da]" />
             </div>
             <div className="grid grid-cols-2 gap-2" aria-label="Quick demo accounts">
-              {DEMO_USERS.map(user => (
+              {demoUsers.map(user => (
                 <button
                   key={user.id}
                   type="button"
