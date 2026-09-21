@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import Layout, { getInitialPage, Icon } from '../../components/Layout'
+import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
 import { Badge } from '../../components/ui'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
@@ -15,15 +15,15 @@ import ManagerUnitsPanel from './ManagerUnitsPanel'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
-  const nav = [
-    { id: 'dashboard', label: 'Dashboard', icon: Icon.home, group: 'Tổng quan' },
-    { id: 'reservations', label: 'Reservations & Unit Assignment', icon: Icon.calendar, group: 'Vận hành' },
-    { id: 'inventory', label: 'Storage Inventory', icon: Icon.box, group: 'Vận hành' },
-    { id: 'rentals', label: 'Rentals', icon: Icon.policy, group: 'Vận hành' },
-    { id: 'moves', label: 'Move-ins & Move-outs', icon: Icon.truck, group: 'Vận hành' },
-    { id: 'payments', label: 'Payments & Delinquency', icon: Icon.dollar, group: 'Tài chính' },
-    { id: 'staff-tasks', label: 'Staff & Tasks', icon: Icon.users, group: 'Điều phối' },
-    { id: 'reports', label: 'Facility Reports', icon: Icon.chart, group: 'Báo cáo' }
+  const nav: NavItem[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: Icon.home, group: 'Tổng quan', permission: 'view_dashboard' },
+    { id: 'reservations', label: 'Reservations & Unit Assignment', icon: Icon.calendar, group: 'Vận hành', permission: 'assign_units' },
+    { id: 'inventory', label: 'Storage Inventory', icon: Icon.box, group: 'Vận hành', permission: 'manage_inventory' },
+    { id: 'rentals', label: 'Rentals', icon: Icon.policy, group: 'Vận hành', permission: 'manage_rentals' },
+    { id: 'moves', label: 'Move-ins & Move-outs', icon: Icon.truck, group: 'Vận hành', permission: 'view_checkins' },
+    { id: 'payments', label: 'Payments & Delinquency', icon: Icon.dollar, group: 'Tài chính', permission: 'manage_payments' },
+    { id: 'staff-tasks', label: 'Staff & Tasks', icon: Icon.users, group: 'Điều phối', permission: 'manage_staff_tasks' },
+    { id: 'reports', label: 'Facility Reports', icon: Icon.chart, group: 'Báo cáo', permission: 'view_reports' }
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)
@@ -44,7 +44,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
 
   const facility = hub.facilities.find(item => item.name === user.facility || item.id === user.facility) || hub.facilities[0]
 
-  return <Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
+  return <Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} canAccess={permission => hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && <ManagerDashboardPanel user={user} setPage={setPage} />}
     {page === 'reservations' && <ManagerUnitsPanel user={user} storeHolds={hub.holds} storeUnits={hub.units} storeRentals={hub.rentals} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />}
     {page === 'inventory' && <ManagerInventoryPanel user={user} units={hub.units} maintenanceTasks={hub.maintenanceTasks} updateUnitStatus={hub.updateUnitStatus} showToast={showToast} />}

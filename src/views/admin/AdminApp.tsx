@@ -1,13 +1,12 @@
 import { useState } from 'react'
-import Layout, { getInitialPage, Icon } from '../../components/Layout'
+import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Avatar, Tabs } from '../../components/ui'
 import type { User, Role } from '../../types'
+import type { PermissionKey } from '../../types'
+import { PERMISSION_DEFINITIONS } from '../../auth/rbac'
 import { LOGIN_HISTORY, ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog, type SettingGroup } from "../../data/demoDatabase"
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
-
-const PERMISSIONS: Partial<Record<Role, Record<string, boolean>>> = {}
-const permissionLabels: Array<{ key: string; label: string }> = []
 
 const roleColors: Record<Role, string> = {
   customer: 'bg-blue-100 text-blue-700',
@@ -35,15 +34,18 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
     updateUserAccount,
     setUserAccountStatus,
     deleteUserAccount,
-    requestUserPasswordReset
+    requestUserPasswordReset,
+    rolePermissions,
+    updateRolePermissions,
+    can
   } = useStorageHub()
 
-  const NAV = [
-    { id: 'users', label: 'Quản lý người dùng', icon: Icon.users, group: 'Quản trị' },
-    { id: 'roles', label: 'Vai trò & Phân quyền', icon: Icon.shield, group: 'Quản trị' },
-    { id: 'login-history', label: 'Lịch sử đăng nhập', icon: Icon.login, group: 'Bảo mật & Giám sát' },
-    { id: 'activity', label: 'Nhật ký hoạt động', icon: Icon.log, group: 'Bảo mật & Giám sát' },
-    { id: 'settings', label: 'Cài đặt hệ thống', icon: Icon.cog, group: 'Hệ thống' },
+  const NAV: NavItem[] = [
+    { id: 'users', label: 'Quản lý người dùng', icon: Icon.users, group: 'Quản trị', permission: 'manage_users' as PermissionKey },
+    { id: 'roles', label: 'Vai trò & Phân quyền', icon: Icon.shield, group: 'Quản trị', permission: 'manage_roles' as PermissionKey },
+    { id: 'login-history', label: 'Lịch sử đăng nhập', icon: Icon.login, group: 'Bảo mật & Giám sát', permission: 'view_audit_logs' as PermissionKey },
+    { id: 'activity', label: 'Nhật ký hoạt động', icon: Icon.log, group: 'Bảo mật & Giám sát', permission: 'view_audit_logs' as PermissionKey },
+    { id: 'settings', label: 'Cài đặt hệ thống', icon: Icon.cog, group: 'Hệ thống', permission: 'manage_settings' as PermissionKey },
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, 'users'))
@@ -142,6 +144,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
     <Layout
       user={user} navItems={NAV} currentPage={page} onNavigate={setPage} onLogout={onLogout}
       roleLabel="Quản Trị Viên Hệ Thống" roleColor="bg-red-100 text-red-700"
+      canAccess={permission => can(user, permission)}
     >
       {/* Ensure notification bell icon is displayed in Admin portal */}
       <style>{`
@@ -258,7 +261,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
       )}
 
       {/* ── ROLES & PERMISSIONS ───────────────────────────────── */}
-      {page === 'roles' && (
+      {page === 'roles' && can(user, 'manage_roles') && (
         <div className="fade-in">
           <SectionHeader
             title="Vai Trò & Ma Trận Phân Quyền"
@@ -279,25 +282,26 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {[
-                  { key: 'view_facilities', label: 'Xem danh mục cơ sở' },
-                  { key: 'book_unit', label: 'Đặt thuê gian kho' },
-                  { key: 'checkin_out', label: 'Thực hiện thủ tục nhận/trả kho' },
-                  { key: 'manage_leases', label: 'Quản lý hợp đồng & cước phí' },
-                  { key: 'overlock_units', label: 'Khóa cổng điện tử (Overlock)' },
-                  { key: 'manage_pricing', label: 'Điều chỉnh biểu giá thuê' },
-                  { key: 'system_admin', label: 'Toàn quyền cấu hình hệ thống' },
-                ].map(p => (
+                {PERMISSION_DEFINITIONS.map(p => (
                   <tr key={p.key} className="hover:bg-slate-50">
-                    <td className="px-5 py-3 font-medium text-slate-700">{p.label}</td>
+                    <td className="px-5 py-3 font-medium text-slate-700"><div>{p.label}</div><div className="mt-0.5 text-[10px] font-normal uppercase tracking-wide text-slate-400">{p.group}</div></td>
                     {(Object.keys(roleColors) as Role[]).map(r => {
-                      const has = r === 'admin' || (r === 'business' && ['view_facilities', 'manage_pricing'].includes(p.key)) || (r === 'manager' && ['view_facilities', 'manage_leases', 'overlock_units', 'checkin_out'].includes(p.key)) || (r === 'staff' && ['checkin_out', 'view_facilities'].includes(p.key)) || (r === 'customer' && ['view_facilities', 'book_unit'].includes(p.key))
+                      const has = rolePermissions[r][p.key]
+                      const locked = r === 'admin' && (p.key === 'manage_roles' || p.key === 'manage_users')
                       return (
                         <td key={r} className="px-4 py-3 text-center">
-                          {has
-                            ? <span className="inline-flex items-center justify-center w-6 h-6 bg-green-100 rounded-full"><svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg></span>
-                            : <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 rounded-full"><svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg></span>
-                          }
+                          <button type="button" disabled={locked} aria-label={`${has ? 'Tắt' : 'Bật'} ${p.label} cho ${roleLabels[r]}`} onClick={() => {
+                            try {
+                              updateRolePermissions(r, { [p.key]: !has }, user)
+                              showToast(`Đã ${has ? 'tắt' : 'bật'} quyền ${p.label} cho ${roleLabels[r]}.`)
+                            } catch (error) {
+                              showToast(error instanceof Error ? error.message : 'Không thể cập nhật quyền.')
+                            }
+                          }} className={`inline-flex items-center justify-center w-7 h-7 rounded-full transition ${has ? 'bg-green-100 hover:bg-green-200' : 'bg-slate-100 hover:bg-slate-200'} ${locked ? 'cursor-not-allowed opacity-60' : ''}`}>
+                            {has
+                              ? <svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                              : <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>}
+                          </button>
                         </td>
                       )
                     })}
@@ -306,11 +310,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               </tbody>
             </table>
           </Card>
-          <div className="mt-4 flex justify-end">
-            <Button variant="outline" size="sm" disabled>
-              Ma trận chỉ đọc
-            </Button>
-          </div>
+          <p className="mt-3 text-xs text-slate-500">Thay đổi được lưu ngay vào StorageHubContext và áp dụng tức thời cho menu, route và thao tác nghiệp vụ. Hai quyền lõi của Admin được khóa để tránh tự khóa hệ thống.</p>
         </div>
       )}
 

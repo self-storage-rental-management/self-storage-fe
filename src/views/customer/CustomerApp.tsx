@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import Layout, { getInitialPage, Icon, type LayoutNotification } from '../../components/Layout'
+import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar, ProgressBar } from '../../components/ui'
 import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
@@ -173,16 +173,16 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     replySupportTicket
   } = useStorageHub()
 
-  const NAV = [
-    { id: 'overview', label: 'Tổng quan', icon: Icon.home, group: 'Kho của tôi' },
-    { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho' },
-    { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho' },
-    { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho' },
-    { id: 'rental-records', label: 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho' },
-    { id: 'contracts', label: 'Hợp đồng của tôi', icon: Icon.policy, group: 'Đặt giữ kho' },
-    { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản' },
-    { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản' },
-    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ' }
+  const NAV: NavItem[] = [
+    { id: 'overview', label: 'Tổng quan', icon: Icon.home, group: 'Kho của tôi', permission: 'view_dashboard' },
+    { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'view_facilities' },
+    { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'view_units' },
+    { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'view_reservations' },
+    { id: 'rental-records', label: 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'view_rentals' },
+    { id: 'contracts', label: 'Hợp đồng của tôi', icon: Icon.policy, group: 'Đặt giữ kho', permission: 'view_contracts' },
+    { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'view_payments' },
+    { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'view_policies' },
+    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'view_support' }
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, 'overview'))
@@ -763,6 +763,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       roleColor=""
       notifications={customerNotifications}
       onNotificationClick={handleNotificationClick}
+      canAccess={permission => hub.can(user, permission)}
     >
       <div className="customer-page font-sans">
       {/* ── OVERVIEW ───────────────────────────────────────────── */}
@@ -2336,7 +2337,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setInputToken(resendHoldEmail(activeHoldForEmail.id))
+                  setInputToken(resendHoldEmail(activeHoldForEmail.id, user))
                   showToast('Đã cấp lại mã token và gửi email mới!')
                 }}
               >
@@ -2349,7 +2350,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <Button
                   size="sm"
                   onClick={() => {
-                    const success = verifyHoldEmail(activeHoldForEmail.id, inputToken)
+                    const success = verifyHoldEmail(activeHoldForEmail.id, inputToken, user)
                     if (success) {
                       setEmailModalOpen(false)
                       showToast('Email đã được xác nhận thành công! Hồ sơ đã gửi tới nhân viên ca trực.')
@@ -2420,7 +2421,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <Button variant="outline" onClick={() => setPayModalOpen(false)}>{'Hủy'}</Button>
                 <Button
                   onClick={() => {
-                    payStorageHold(activeHoldForPayment.id, paymentMethod)
+                    payStorageHold(activeHoldForPayment.id, paymentMethod, user)
                     setPayModalOpen(false)
                     setActiveHoldForPayment(null)
                     showToast('Đã thanh toán cọc. Đơn đã chuyển sang bước xem điều khoản và chờ cơ sở phân kho.')
@@ -2611,7 +2612,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 disabled={!appointmentDate || !appointmentTime}
                 onClick={() => {
                   try {
-                    scheduleCheckIn(activeHoldForSchedule.id, appointmentDate, appointmentTime)
+                    scheduleCheckIn(activeHoldForSchedule.id, appointmentDate, appointmentTime, user)
                     setScheduleModalOpen(false)
                     showToast(`Đã lên lịch check-in vào ${appointmentTime} ngày ${appointmentDate}!`)
                   } catch (error) {
@@ -2920,7 +2921,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     facilityId: relatedRental?.facilityId || relatedHold?.facilityId,
                     relatedType: relatedType as 'rental' | 'reservation' | 'general',
                     relatedId: relatedId || undefined
-                  }, ticketDescription.trim())
+                  }, ticketDescription.trim(), user)
                   setTicketOpen(false)
                   setTicketSubject('')
                   setTicketDescription('')

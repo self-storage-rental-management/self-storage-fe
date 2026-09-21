@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
-import type { User, Role } from '../types'
+import type { PermissionKey, User, Role } from '../types'
 
-interface NavItem {
+export interface NavItem {
   id: string
   label: string
   icon: ReactNode
   group?: string
+  permission?: PermissionKey
 }
 
 export interface LayoutNotification {
@@ -76,12 +77,14 @@ interface LayoutProps {
   roleColor: string
   notifications?: LayoutNotification[]
   onNotificationClick?: (notification: LayoutNotification) => void
+  canAccess?: (permission: PermissionKey) => boolean
 }
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, onNotificationClick
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, onNotificationClick, canAccess
 }: LayoutProps) {
+  const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const notificationReadKey = `storagehub-opened-notifications-v2-${user.id}`
@@ -104,14 +107,20 @@ export default function Layout({
   useEffect(() => {
     const restorePage = () => {
       const requestedPage = new URLSearchParams(window.location.search).get('page')
-      const target = resolveNavPage(navItems, requestedPage)
+      const target = resolveNavPage(visibleNavItems, requestedPage)
       if (target) {
         onNavigate(target)
       }
     }
     window.addEventListener('popstate', restorePage)
     return () => window.removeEventListener('popstate', restorePage)
-  }, [navItems, onNavigate])
+  }, [visibleNavItems, onNavigate])
+
+  useEffect(() => {
+    if (currentPage !== 'profile' && !visibleNavItems.some(item => item.id === currentPage)) {
+      onNavigate(visibleNavItems[0]?.id ?? 'profile')
+    }
+  }, [currentPage, visibleNavItems, onNavigate])
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -229,7 +238,7 @@ export default function Layout({
     { page: 'units', vi: 'Trạng thái gian kho vừa được cập nhật', timeVi: '3 giờ trước' },
   ]
   const fallbackNotifications: LayoutNotification[] = notificationCandidates
-    .filter(item => navItems.some(nav => nav.id === item.page))
+    .filter(item => visibleNavItems.some(nav => nav.id === item.page))
     .slice(0, 3)
     .map(item => ({
       id: `${roleLabel}-${item.page}`,
@@ -293,9 +302,9 @@ export default function Layout({
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 overflow-y-auto" aria-label={`${roleLabel} navigation`}>
-          {navItems.map((item, index) => {
+          {visibleNavItems.map((item, index) => {
             const groupText = getNavGroup(item.group)
-            const prevGroupText = getNavGroup(navItems[index - 1]?.group)
+            const prevGroupText = getNavGroup(visibleNavItems[index - 1]?.group)
             return (
               <Fragment key={item.id}>
                 {groupText && groupText !== prevGroupText && (
