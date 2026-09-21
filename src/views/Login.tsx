@@ -1,9 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
 import { useStorageHub } from '../store/StorageHubContext'
 
-interface LoginProps { onLogin: (user: User) => void }
+interface LoginProps {
+  onLogin: (user: User) => void
+  onBackToHome?: () => void
+  initialTab?: 'login' | 'register'
+}
 type AuthTab = 'login' | 'register'
 type ResetStep = 'identify' | 'verify' | 'new-password' | 'success'
 
@@ -11,7 +15,7 @@ const DEMO_PASSWORD = 'demo123'
 const DEMO_CODE = '123456'
 function GoogleIcon() {
   return (
-    <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
+    <svg className="show-icon w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
       <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
       <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
       <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
@@ -21,9 +25,15 @@ function GoogleIcon() {
 }
 
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
   const { users, registerCustomer } = useStorageHub()
-  const [tab, setTab] = useState<AuthTab>('login')
+  const [tab, setTab] = useState<AuthTab>(initialTab)
+
+  useEffect(() => {
+    if (initialTab) {
+      setTab(initialTab)
+    }
+  }, [initialTab])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -147,6 +157,15 @@ export default function Login({ onLogin }: LoginProps) {
       <AuthShell compact>
         <div className="flex items-center justify-between mb-6">
           <BrandLogo />
+          {onBackToHome && (
+            <button
+              type="button"
+              onClick={onBackToHome}
+              className="text-xs font-semibold text-stone-500 hover:text-[#e9a12c] transition-colors"
+            >
+              ← Về Trang Chủ
+            </button>
+          )}
         </div>
         <RecoveryFlow
           step={resetStep}
@@ -214,7 +233,19 @@ export default function Login({ onLogin }: LoginProps) {
       </section>
 
       <section className="p-7 sm:p-9 md:px-11 md:py-10 relative">
-        {/* Top Header with Language Switcher */}
+        {onBackToHome && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={onBackToHome}
+              className="group inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-stone-500 hover:text-[#e9a12c] transition-colors"
+            >
+              <span className="text-sm font-bold transition-transform group-hover:-translate-x-0.5">←</span>
+              <span>Về Trang Chủ</span>
+            </button>
+          </div>
+        )}
+        {/* Auth tabs */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex gap-6 border-b border-[#e5e3da] flex-1 mr-4">
             {(['login', 'register'] as const).map(item => (

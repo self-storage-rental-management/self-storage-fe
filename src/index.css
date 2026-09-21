@@ -26,8 +26,19 @@
   --font-weight-bold: 700;
 }
 
-/* The icon-free presentation keeps charts (Recharts SVG surfaces) visible. */
-svg:not(.recharts-surface) { display: none !important; }
+/* The icon-free presentation keeps charts (Recharts SVG surfaces) and designated icons visible. */
+svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
+
+/* Allow explicit icon classes or containers */
+.show-icon,
+.show-svg,
+.show-svg svg:not(.show-icon),
+.rbac-matrix svg:not(.show-icon),
+.home-page svg:not(.show-icon),
+.brand-logo svg:not(.show-icon),
+.app-icon svg:not(.show-icon) {
+  display: inline-block !important;
+}
 
 /* The customer notification control keeps its functional bell icon. */
 .customer-notification-bell svg {

@@ -3,6 +3,7 @@ import type { User } from './types'
 import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
+import HomePage from './views/home/HomePage'
 
 const CustomerApp = lazy(() => import('./views/customer/CustomerApp'))
 const StaffApp = lazy(() => import('./views/staff/StaffApp'))
@@ -16,6 +17,8 @@ function MainContent() {
   // from the canonical user record in StorageHubContext, never from storage,
   // query parameters, or a form payload.
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [guestView, setGuestView] = useState<'home' | 'login' | 'register'>('home')
+
   const canonicalRecord = sessionUserId ? users.find(item => item.id === sessionUserId) : null
   const accountStatus = canonicalRecord && 'status' in canonicalRecord ? String(canonicalRecord.status) : 'active'
   const user: User | null = canonicalRecord && accountStatus !== 'suspended'
@@ -34,10 +37,27 @@ function MainContent() {
 
   const handleLogout = () => {
     setSessionUserId(null)
+    setGuestView('home')
     history.replaceState(null, '', window.location.pathname)
   }
 
-  if (!user) return <Login onLogin={handleLogin} />
+  if (!user) {
+    if (guestView === 'home') {
+      return (
+        <HomePage
+          onOpenLogin={() => setGuestView('login')}
+          onOpenRegister={() => setGuestView('register')}
+        />
+      )
+    }
+    return (
+      <Login
+        onLogin={handleLogin}
+        initialTab={guestView === 'register' ? 'register' : 'login'}
+        onBackToHome={() => setGuestView('home')}
+      />
+    )
+  }
 
   const roleApp = (() => {
     switch (user.role) {
@@ -61,5 +81,3 @@ export default function App() {
     </ErrorBoundary>
   )
 }
-
-
