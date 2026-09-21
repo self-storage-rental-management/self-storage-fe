@@ -201,7 +201,7 @@ export interface AccessCredential {
   unitId: string
   type: 'PIN' | 'KEY' | 'CARD'
   pinCode?: string
-  status: 'PENDING' | 'ACTIVE' | 'REVOKED'
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED'
   generatedAt?: string
   activatedAt?: string
   revokedAt?: string
@@ -382,7 +382,7 @@ export interface StoragePayment {
   reservationId: string
   rentalId?: string
   renewalId?: string
-  type: 'RESERVATION_DEPOSIT' | 'INITIAL_RENT' | 'RENEWAL' | 'DAMAGE_FEE' | 'REFUND'
+  type: 'RESERVATION_DEPOSIT' | 'INITIAL_RENT' | 'RENT' | 'RENEWAL' | 'DAMAGE_FEE' | 'REFUND'
   amount: number
   paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY'
   transactionReference?: string
@@ -494,9 +494,30 @@ export interface RentalRecord {
   receiptConfirmedAt?: string
   receiptConfirmedBy?: string
   customerArchivedAt?: string
+  lateFeeAmount?: number
+  overlocked?: boolean
+  lastReminderAt?: string
+  remindersSent?: number
   // Optional legacy fields for backward-compatibility during refactoring
   size?: number
   sqft?: number
+}
+
+export interface FacilityTask {
+  id: string
+  facilityId: string
+  facilityName: string
+  type: 'checkin' | 'return' | 'maintenance' | 'support' | 'general'
+  title: string
+  referenceId?: string
+  assignedStaffId?: string
+  assignedStaffName?: string
+  dueAt: string
+  priority: 'high' | 'medium' | 'low'
+  status: 'open' | 'in_progress' | 'completed'
+  notes?: string
+  createdAt: string
+  completedAt?: string
 }
 
 export interface ReturnCase {
@@ -552,7 +573,7 @@ export interface ActivityRecord {
   actorName: string
   actorRole: string
   facilityId: string
-  entityType: 'hold' | 'unit' | 'rental' | 'checkin' | 'return' | 'payment' | 'policy' | 'system'
+  entityType: 'hold' | 'unit' | 'rental' | 'checkin' | 'return' | 'payment' | 'policy' | 'task' | 'system'
   entityId: string
   beforeState?: any
   afterState?: any

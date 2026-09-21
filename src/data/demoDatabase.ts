@@ -46,7 +46,12 @@ export interface TicketItem {
   status: 'open' | 'in-progress' | 'resolved'
   created: string
   facility: string
+  facilityId?: string
   unit: string
+  assignedStaff?: string
+  updatedAt?: string
+  relatedType?: 'rental' | 'reservation' | 'general'
+  relatedId?: string
   messages: TicketMessage[]
 }
 

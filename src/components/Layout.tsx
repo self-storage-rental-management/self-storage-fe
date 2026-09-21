@@ -24,13 +24,14 @@ export interface LayoutNotification {
 function resolveNavPage(navItems: NavItem[], requested: string | null): string | null {
   if (!requested) return null
   if (requested === 'profile') return 'profile'
-  if (requested === 'policies') return 'policies'
+  if (requested === 'policies' && navItems.some(item => item.id === 'policies')) return 'policies'
   if (navItems.some(item => item.id === requested)) return requested
 
   // Cross-role page alias resolution
   if (requested === 'browse-units' || requested === 'units') {
     if (navItems.some(item => item.id === 'browse-units')) return 'browse-units'
     if (navItems.some(item => item.id === 'units')) return 'units'
+    if (navItems.some(item => item.id === 'inventory')) return 'inventory'
     if (navItems.some(item => item.id === 'portfolio')) return 'portfolio'
   }
   if (requested === 'browse-facilities' || requested === 'facilities' || requested === 'portfolio') {
@@ -48,6 +49,15 @@ function resolveNavPage(navItems: NavItem[], requested: string | null): string |
   if (requested === 'my-rentals' || requested === 'rentals' || requested === 'leases') {
     if (navItems.some(item => item.id === 'my-rentals')) return 'my-rentals'
     if (navItems.some(item => item.id === 'rentals')) return 'rentals'
+  }
+  if (requested === 'checkins' || requested === 'checkin' || requested === 'returns' || requested === 'return') {
+    if (navItems.some(item => item.id === 'moves')) return 'moves'
+  }
+  if (requested === 'overdue' || requested === 'billing' || requested === 'payments') {
+    if (navItems.some(item => item.id === 'payments')) return 'payments'
+  }
+  if (requested === 'staff' || requested === 'tasks') {
+    if (navItems.some(item => item.id === 'staff-tasks')) return 'staff-tasks'
   }
   return null
 }

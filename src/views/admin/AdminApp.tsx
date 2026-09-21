@@ -146,14 +146,14 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                       </div>
                     </Td>
                     <Td>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[u.role]}`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[u.role as Role]}`}>
                         {u.role}
                       </span>
                     </Td>
                     <Td className="text-slate-500 text-sm">{u.facility ?? '—'}</Td>
                     <Td>{sb(u.status)}</Td>
                     <Td className="text-sm text-slate-500">{u.lastLogin}</Td>
-                    <Td className="text-sm text-slate-500">{u.createdAt}</Td>
+                    <Td className="text-sm text-slate-500">{u.joined}</Td>
                     <Td>
                       <div className="flex gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
                         <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(u); setUserModal(true) }}>{lang === 'vi' ? 'Sửa' : 'Edit'}</Button>
