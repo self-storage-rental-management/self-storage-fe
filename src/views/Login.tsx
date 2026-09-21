@@ -26,7 +26,7 @@ function GoogleIcon() {
 
 
 export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
-  const { users, registerCustomer } = useStorageHub()
+  const { users, registerCustomer, recordLoginAttempt } = useStorageHub()
   const [tab, setTab] = useState<AuthTab>(initialTab)
 
   useEffect(() => {
@@ -52,19 +52,23 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   function handleLogin(event: React.FormEvent) {
     event.preventDefault()
-    const demoUser = users.find(user => user.status !== 'suspended' && user.email === email.trim().toLowerCase())
+    const normalizedEmail = email.trim().toLowerCase()
+    const demoUser = users.find(user => user.status === 'active' && user.email === normalizedEmail)
     if (!demoUser || password !== DEMO_PASSWORD) {
+      recordLoginAttempt({ email: normalizedEmail, success: false, reason: 'Email hoặc mật khẩu không đúng.' })
       setError(
         'Email hoặc mật khẩu không đúng.'
       )
       return
     }
+    recordLoginAttempt({ email: normalizedEmail, userId: demoUser.id, success: true })
     onLogin(demoUser)
   }
 
   function handleGoogleCustomerLogin(googleUser: { name: string; email: string }) {
     try {
       const customer = registerCustomer({ name: googleUser.name, email: googleUser.email, phone: '' })
+      recordLoginAttempt({ email: customer.email, userId: customer.id, success: true })
       setGoogleModal(false)
       onLogin(customer)
     } catch (error) {
@@ -92,6 +96,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
         email,
         phone
       })
+      recordLoginAttempt({ email: customer.email, userId: customer.id, success: true })
       onLogin(customer)
     } catch (registrationError) {
       setError(registrationError instanceof Error ? registrationError.message : ('Không thể tạo tài khoản Customer.'))
