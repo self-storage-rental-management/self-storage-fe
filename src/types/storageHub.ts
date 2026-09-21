@@ -442,6 +442,14 @@ export interface RenewalRecord {
   notes?: string
 }
 
+export interface ReturnSettlementAdjustments {
+  damageFee: number
+  cleaningFee: number
+  overdueFee: number
+  outstandingFee: number
+  resolutionNote: string
+}
+
 export interface MaintenanceTask {
   id: string
   unitId: string
@@ -495,6 +503,7 @@ export interface RentalRecord {
   receiptConfirmedBy?: string
   customerArchivedAt?: string
   lateFeeAmount?: number
+  lateFeeProcessedForDueDate?: string
   overlocked?: boolean
   lastReminderAt?: string
   remindersSent?: number
