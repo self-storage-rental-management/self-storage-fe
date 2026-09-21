@@ -38,7 +38,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
         <StatCard title={'Yêu cầu trả kho'} value={returns.filter(item => item.status === 'requested').length} icon={Icon.clipboard} />
         <StatCard title={'Ticket đang mở'} value={tickets.filter(item => item.status !== 'resolved').length} icon={Icon.support} />
       </div>
-      <Card className="p-5"><h2 className="font-bold text-stone-900">{'Dữ liệu ca làm việc đã đồng bộ'}</h2><p className="mt-2 text-sm text-stone-600">{'Mọi thao tác tại đây cập nhật cùng dữ liệu mà Customer và Manager đang sử dụng.'}</p></Card>
+      <Card className="p-5"><h2 className="font-bold text-stone-900">{'Dữ liệu ca làm việc đã đồng bộ'}</h2><p className="mt-2 text-sm text-stone-600">{'Mọi thao tác tại đây cập nhật cùng dữ liệu mà khách hàng và quản lý đang sử dụng.'}</p></Card>
     </div>}
     {page === 'reservations' && <StaffReservationsPanel user={user} reservations={reservations} approveReservation={hub.approveReservation} showToast={showToast} />}
     {page === 'checkin' && <StaffCheckinsPanel user={user} checkins={checkins} holds={hub.holds} signPaperContract={hub.signPaperContract} payRemainingBalance={hub.payRemainingBalance} completeCheckIn={hub.completeCheckIn} showToast={showToast} />}
