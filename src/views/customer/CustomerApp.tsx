@@ -6,20 +6,11 @@ import type { User } from '../../types'
 import type { Facility, StorageUnit, StorageHold, UnitType } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
-import type { TicketItem } from '../../data/demoDatabase'
+import { FACILITIES, type TicketItem } from '../../data/demoDatabase'
 
-const CUSTOMER_FACILITY_DISPLAY: Record<string, { code: string; name: string; address: string }> = {
-  'fac-001': {
-    code: 'HCM-Q1-F01',
-    name: 'Kho Việt – Cơ sở Quận 1',
-    address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-  },
-  'fac-002': {
-    code: 'BD-F01',
-    name: 'Kho Việt – Cơ sở Bình Dương',
-    address: '468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
-  },
-}
+const CUSTOMER_FACILITY_DISPLAY: Record<string, { code: string; name: string; address: string }> = Object.fromEntries(
+  FACILITIES.map(facility => [facility.id, { code: facility.code, name: facility.name, address: facility.address }])
+)
 type CustomerCatalogUnit = StorageUnit & {
   sizeCode: 'S' | 'M' | 'L' | 'XL'
   rackCount: number
@@ -163,7 +154,7 @@ const statusLabelMap: Record<string, string> = {
     active: 'Đang hoạt động',
     available: 'Còn trống',
     held: 'Đang giữ kho',
-    assigned: 'Đã phân kho',
+    assigned: 'Đã xác định gian kho',
     occupied: 'Đã thuê',
     inspection: 'Đang kiểm tra',
     maintenance: 'Bảo trì',
@@ -181,7 +172,7 @@ const statusLabelMap: Record<string, string> = {
     deposit_paid: 'Đã cọc giữ chỗ',
     contract_signed: 'Đã ký hợp đồng',
     fully_paid: 'Đã thanh toán đủ',
-    unit_assigned: 'Đã phân kho',
+    unit_assigned: 'Đã xác định gian kho',
     scheduled: 'Đã lên lịch check-in',
     checked_in: 'Đã bàn giao kho',
     rejected: 'Đã từ chối',
@@ -202,7 +193,7 @@ const statusLabelMap: Record<string, string> = {
     low: 'Tiêu chuẩn',
     CREATED: 'Chờ xác nhận',
     DEPOSIT_PAID: 'Đã thanh toán cọc',
-    UNIT_RESERVED: 'Đã phân kho vật lý',
+    UNIT_RESERVED: 'Đã giữ gian kho',
     READY_FOR_CHECKIN: 'Sẵn sàng Check-in',
     COMPLETED: 'Đã hoàn tất Check-in',
     CANCELLED: 'Đã hủy',
@@ -601,7 +592,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     ...contractExpiryNotifications,
     ...visibleMyHolds.filter(h => h.assignedUnitId).map(h => {
       const assignmentActivity = activities.find(activity => activity.action === 'UNIT_ASSIGNED' && activity.entityId === h.id)
-      return { id: `unit-${h.id}-${h.assignedUnitId}`, date: h.unitAssignedAt || assignmentActivity?.timestamp || h.reviewedAt || h.createdAt, title: 'Đã phân gian kho', message: `${h.assignedUnitId} · ${h.facilityName}`, page: 'reservations', targetId: h.id }
+      return { id: `unit-${h.id}-${h.assignedUnitId}`, date: h.unitAssignedAt || assignmentActivity?.timestamp || h.reviewedAt || h.createdAt, title: 'Gian kho đã được xác định', message: `${h.assignedUnitId} · ${h.facilityName}`, page: 'reservations', targetId: h.id }
     }),
     ...visibleMyRentals.filter(rental => rental.status !== 'completed').map(rental => {
       const hold = myHolds.find(item => item.id === rental.holdId)
@@ -670,6 +661,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     ...holds.filter(item => !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && item.assignedUnitId).map(item => item.assignedUnitId as string),
   ])
   const customerRentedUnitIds = new Set(rentals.filter(item => ['active', 'return_requested', 'return_inspection', 'closing'].includes(item.status)).map(item => item.unitId))
+  const physicalUnitByCode = new Map(units.map(unit => [unit.code, unit]))
 
   const releaseTemporaryReservationSlot = () => {
     localStorage.removeItem('customerTemporaryHoldExpiresAt')
@@ -701,6 +693,13 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   }
 
   const handleStartReservation = (facility: Facility, unitType: UnitType, exactUnit?: StorageUnit) => {
+    const hasAvailablePhysicalUnit = exactUnit
+      ? exactUnit.status === 'available' || customerHeldUnitIds.has(exactUnit.id)
+      : effectiveAvailableCount(facility.id, unitType.name) > 0
+    if (!hasAvailablePhysicalUnit) {
+      showToast('Cơ sở hiện không còn gian kho trống cho loại này trong thời gian đã chọn.')
+      return
+    }
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
     const suggestedCheckIn = new Date()
     suggestedCheckIn.setDate(suggestedCheckIn.getDate() + 2)
@@ -987,6 +986,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       customerPhone,
       customerAddress,
       appointmentTime: bookingAppointmentTime,
+      discountAmount: promotionDiscount,
       largestItemDimensionsCm: {
         lengthCm: cargoLengthNumber,
         widthCm: cargoWidthNumber,
@@ -998,6 +998,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         facilityName: selectedUnit.facilityName,
         doorWidthM: selectedUnit.doorDimensions.widthM,
         doorHeightM: selectedUnit.doorDimensions.heightM,
+        physicalUnitId: physicalUnitByCode.get(selectedUnit.code)?.id || selectedUnit.id,
       }
     })
 
@@ -1033,7 +1034,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           setActiveHoldForEmail(result.hold)
           setInputToken(result.hold.emailVerification?.token || '')
           setEmailModalOpen(true)
-          showToast('Đã tạo yêu cầu. Hãy xác minh email trước khi cơ sở phê duyệt.')
+          showToast('Đã tạo yêu cầu. Hãy xác minh email để mở bước thanh toán cọc.')
         }
       }
     }
@@ -1175,7 +1176,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                   <span className="text-amber-700 group-hover:text-white">{Icon.calendar}</span>
                   <span>
                     <b className="block text-sm">{'2. Tiến độ đơn đặt giữ kho'}</b>
-                    <small className="text-stone-500 group-hover:text-white">{'Cọc 20% trong 12 giờ, sau đó cơ sở phân kho vật lý'}</small>
+                    <small className="text-stone-500 group-hover:text-white">{'Cọc 20% trong 12 giờ, sau đó Check-in tại gian kho đã chọn'}</small>
                   </span>
                 </button>
                 <button onClick={() => setTicketOpen(true)} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
@@ -1212,9 +1213,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             {matchingFacilities.map(facility => {
-              const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => unit.facilityId === facility.id)
-              const availCount = facilityCatalogUnits.filter(unit => !customerHeldUnitIds.has(unit.id) && !customerRentedUnitIds.has(unit.id)).length
-              const minimumMonthlyPrice = Math.min(...facilityCatalogUnits.map(unit => unit.price))
+               const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => unit.facilityId === facility.id && physicalUnitByCode.has(unit.code))
+               const availCount = effectiveAvailableCount(facility.id)
+              const minimumMonthlyPrice = facilityCatalogUnits.length ? Math.min(...facilityCatalogUnits.map(unit => unit.price)) : null
               const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
               const displayCode = display?.code ?? facility.id.toUpperCase()
               const displayName = display?.name ?? facility.name
@@ -1246,7 +1247,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     <div className="flex items-end justify-between border-t border-stone-100 pt-4">
                       <div>
                         <p className="text-xs text-stone-500">{'Giá chỉ từ'}</p>
-                        <p className="text-xl font-bold text-stone-900">{formatVnd(minimumMonthlyPrice)}<span className="text-xs font-normal text-stone-500">/{'tháng'}</span></p>
+                        <p className="text-xl font-bold text-stone-900">{minimumMonthlyPrice === null ? 'Chưa có gian kho' : <>{formatVnd(minimumMonthlyPrice)}<span className="text-xs font-normal text-stone-500">/{'tháng'}</span></>}</p>
                       </div>
                       <Button size="sm" onClick={() => navigateTo('browse-units', { facilityId: facility.id })}>
                         {'Xem các gian kho'}
@@ -1305,8 +1306,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 const heldIds = customerHeldUnitIds
                 const rentedIds = customerRentedUnitIds
                 const matchingCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit =>
-                  unit.facilityId === facility.id &&
-                  !rentedIds.has(unit.id) &&
+                   unit.facilityId === facility.id &&
+                   Boolean(physicalUnitByCode.get(unit.code)) &&
+                   (physicalUnitByCode.get(unit.code)?.status === 'available' || heldIds.has(unit.id)) &&
+                   !rentedIds.has(unit.id) &&
                   (sizeFilter === 'All' || unit.type === sizeFilter) &&
                   `${unit.code} ${unit.sizeCode} ${unit.type}`.toLowerCase().includes(unitSearch.trim().toLowerCase())
                 )
@@ -1344,6 +1347,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                         const isHeld = heldIds.has(unit.id)
                         const displayUnit: CustomerCatalogUnit = { ...catalogUnit, status: isHeld ? 'held' : 'available' }
                         const unitType = unitTypes.find(item => item.id === (catalogUnit.sizeCode === 'XL' ? 'xlarge' : catalogUnit.sizeCode.toLowerCase())) ?? unitTypes[0]
+                        const typeAvailableCount = effectiveAvailableCount(facility.id, unitType.name)
                         return <article key={unit.id} className="group flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-1 hover:border-amber-300 hover:shadow-xl">
                           <div className="relative h-44 overflow-hidden bg-stone-800">
                             <img src={CUSTOMER_UNIT_IMAGE_BY_SIZE[catalogUnit.sizeCode]} alt={`Kho size ${catalogUnit.sizeCode} - ${unit.code}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
@@ -1359,7 +1363,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                             <div className="mt-5 border-t border-stone-200 pt-4"><p className="text-xs text-stone-500">Giá thuê mỗi tháng</p><p className="mt-0.5 text-2xl font-extrabold text-stone-950">{formatVnd(unit.price)}<span className="text-xs font-normal text-stone-500">/tháng</span></p><p className="mt-1 text-[11px] font-medium text-amber-800">Cọc trước 20% tổng giá trị kỳ thuê</p></div>
                           <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
                             <Button size="sm" variant="outline" onClick={() => handleOpenSpecs(facility, unitType, isHeld ? 0 : 1, displayUnit)}>Xem chi tiết</Button>
-                            <Button size="sm" disabled={isHeld} onClick={() => handleStartReservation(facility, unitType, displayUnit)}>{isHeld ? 'Đang được giữ' : 'Chọn kho này'}</Button>
+                            <Button size="sm" disabled={isHeld || typeAvailableCount === 0} onClick={() => handleStartReservation(facility, unitType, displayUnit)}>{isHeld ? 'Đang được giữ' : typeAvailableCount === 0 ? 'Hết kho' : 'Chọn kho này'}</Button>
                           </div>
                           </div>
                         </article>
@@ -1380,7 +1384,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         <div className="fade-in space-y-4">
           <SectionHeader
             title={'Đơn Đặt Giữ Kho Của Tôi'}
-            subtitle={'Tạm giữ 30 phút → Chờ cọc 12 giờ → Phân kho vật lý → Check-in trong 14 ngày'}
+            subtitle={'Giữ đúng gian kho đã chọn → Chờ cọc 12 giờ → Check-in trong 14 ngày'}
             action={<Button size="sm" onClick={() => navigateTo('browse-units')}>{Icon.plus} {'Đặt giữ kho mới'}</Button>}
           />
 
@@ -1403,6 +1407,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                       <h2 className="mt-1 text-lg font-bold text-stone-900">
                         {hold.unitTypeName || hold.unitId} · {hold.facilityName}
                       </h2>
+                      <p className="text-xs font-semibold text-blue-800">{'Gian kho đã chọn:'} {units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.unitId || '—'}</p>
                       <p className="text-xs text-stone-500">
                         {'Lịch Check-in hiện tại:'} <b>{hold.appointmentDate || hold.moveInDate}{hold.appointmentTime ? ` · ${hold.appointmentTime}` : ''}</b> · {'Thời hạn:'} {hold.rentalMonths} {'tháng'}
                       </p>
@@ -1429,25 +1434,28 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                             </span>
                           ) : (
                             <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">
-                              Chờ Facility Manager phân kho theo khoảng ngày
+                              Gian kho đã được xác định theo lựa chọn của bạn
                             </span>
                           )}
                         </div>
                         <p><b>{'Kích thước kiện & Thể tích:'}</b> {hold.goods.lengthCm}×{hold.goods.widthCm}×{hold.goods.heightCm}cm (~{Math.round((hold.goods.lengthCm * hold.goods.widthCm * hold.goods.heightCm * hold.goods.packageCount) / 1000) / 1000} m³)</p>
-                        {(() => { const unitSpec = units.find(unit => unit.id === hold.assignedUnitId) || units.find(unit => unit.facilityId === hold.facilityId && unitTypeMatches(unit.type, hold.unitTypeName)); return unitSpec ? <p><b>{'Cửa kho thông thủy:'}</b> {unitSpec.doorDimensions.widthM}m × {unitSpec.doorDimensions.heightM}m ({'rộng × cao'}) · <span className="font-semibold text-emerald-700">✓ {'Kiện đã qua kiểm tra lọt cửa'}</span></p> : null })()}
+                        {(() => { const unitSpec = units.find(unit => unit.id === hold.assignedUnitId) || units.find(unit => unit.facilityId === hold.facilityId && unitTypeMatches(unit.type, hold.unitTypeName)); return unitSpec ? <p><b>{'Cửa kho thông thủy:'}</b> {unitSpec.doorDimensions.widthM}m × {unitSpec.doorDimensions.heightM}m ({'rộng × cao'})</p> : null })()}
                         
                         {/* Financial breakdown: Reservation Deposit vs Security Deposit */}
                         {(() => {
-                          const rentTotal = hold.quote.baseMonthlyPrice * hold.rentalMonths
+                          const grossRent = hold.quote.baseMonthlyPrice * hold.rentalMonths
+                          const discountAmount = hold.discountAmount ?? 0
+                          const rentTotal = Math.max(0, grossRent - discountAmount)
+                          const rentBeforeDiscount = grossRent
                           const bookingDeposit = hold.reservationDepositAmount ?? Math.round(rentTotal * 0.2 * 100) / 100
                           const rentBalance = Math.max(0, rentTotal - bookingDeposit)
                           return <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
-                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và cọc giữ chỗ'}</p><p>{`Tiền thuê: ${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng = ${formatVnd(rentTotal)}`}</p><p>{`Cọc 20%: ${formatVnd(rentTotal)} × 20% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
+                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và cọc giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 20%: ${formatVnd(rentTotal)} × 20% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
                             <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">{'Khoản thu tại Check-in'}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentBalance)}`}</p><p>{`+ Tiền đảm bảo kho: ${formatVnd(hold.securityDepositAmount)}`}</p><p className="border-t border-amber-200 pt-1 font-bold">{`Tổng thu tại Check-in: ${formatVnd(hold.remainingAmount)}`}</p></div>
                           </div>
                         })()}
 
-                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{'Cọc đã thanh toán. Cơ sở sẽ phân kho vật lý trước Check-in; hạn hoàn tất Check-in là 14 ngày từ ngày cọc.'}</p>}
+                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{'Cọc đã thanh toán. Bạn cần hoàn tất Check-in tại gian kho đã chọn trong 14 ngày từ ngày cọc.'}</p>}
 
                         {hold.generatedAccessPin && !holdInactive && (
                           <div className="mt-2 rounded bg-[#292a27] p-2 text-white text-xs flex items-center justify-between">
@@ -1460,28 +1468,26 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                       {!['CANCELLED', 'EXPIRED'].includes(hold.status) && (() => {
                         const progressSteps = [
                           { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
-                          { label: 'Phê duyệt hồ sơ', detail: 'Cơ sở kiểm tra yêu cầu' },
+                          { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Manager kiểm tra hàng hóa trong 24 giờ' : 'Hồ sơ được duyệt tự động' },
                           { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ 20%' },
-                          { label: 'Cơ sở phân kho', detail: 'Cơ sở đang chọn gian kho phù hợp' },
                           { label: 'Check-in & ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
                         ]
-                        // COMPLETED + chưa xác nhận nhận kho → bước 5 ("Đã bàn giao" = Hiện tại)
-                        // COMPLETED + đã xác nhận → 6 (tất cả Đã xong)
-                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : hold.status === 'DEPOSIT_PAID' ? 3 : hold.status === 'UNIT_RESERVED' ? 4 : hold.status === 'READY_FOR_CHECKIN' ? 4 : hold.status === 'COMPLETED' ? (receiptConfirmed ? 6 : 5) : -1
+                        // Gian kho đã được khách chọn từ đầu; sau khi cọc chỉ còn Check-in và bàn giao.
+                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status) ? 3 : hold.status === 'COMPLETED' ? (receiptConfirmed ? 5 : 4) : -1
                         const activeStep = progressSteps[currentIndex]
 
                         return <div className="mt-4 border-t border-stone-200 pt-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="text-xs font-bold text-black">{'Tiến trình đơn đặt kho'}</p>
-                              <p className="mt-0.5 text-[11px] text-stone-500">{`Đã hoàn thành ${Math.max(0, currentIndex)}/6 bước`}</p>
+                              <p className="mt-0.5 text-[11px] text-stone-500">{`Đã hoàn thành ${Math.max(0, currentIndex)}/5 bước`}</p>
                             </div>
                             {activeStep && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">
                               {'Đang thực hiện: '} {activeStep.label}
                             </span>}
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
                             {progressSteps.map((step, index) => {
                               const completed = index < currentIndex || currentIndex === progressSteps.length
                               const current = index === currentIndex && currentIndex < progressSteps.length
@@ -1502,7 +1508,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     {/* Action buttons based on canonical status */}
                     <div className="flex min-w-0 flex-col items-stretch gap-3 lg:items-end">
                       <div className="text-right">
-                        {hold.goodsReviewStatus === 'PENDING' ? <><p className="text-xs text-stone-500">Tiền cọc</p><p className="text-lg font-bold text-blue-900">Chưa yêu cầu</p><p className="text-xs text-blue-800">Chỉ tính và mở thanh toán sau khi Staff chấp thuận.</p></> : <><p className="text-xs text-stone-500">{'Tổng thu cả kỳ (gồm tiền đảm bảo kho):'}</p><p className="text-xl font-bold text-stone-900">{formatVnd(hold.totalInitialAmount ?? hold.quote.totalFirstPayment)}</p><p className="text-xs text-amber-800">{'Trả lúc giữ chỗ'}: {formatVnd(hold.reservationDepositAmount ?? hold.payment.amount)} · {'Thu tại Check-in'}: {formatVnd(hold.remainingAmount)}</p></>}
+                        {hold.goodsReviewStatus === 'PENDING' ? <><p className="text-xs text-stone-500">Tiền cọc</p><p className="text-lg font-bold text-blue-900">Chưa yêu cầu</p><p className="text-xs text-blue-800">Chỉ tính và mở thanh toán sau khi Manager chấp thuận.</p></> : <><p className="text-xs text-stone-500">{'Tổng thu cả kỳ (gồm tiền đảm bảo kho):'}</p><p className="text-xl font-bold text-stone-900">{formatVnd(hold.totalInitialAmount ?? hold.quote.totalFirstPayment)}</p><p className="text-xs text-amber-800">{'Trả lúc giữ chỗ'}: {formatVnd(hold.reservationDepositAmount ?? hold.payment.amount)} · {'Thu tại Check-in'}: {formatVnd(hold.remainingAmount)}</p></>}
                       </div>
 
                       {hold.status === 'awaiting_email' && (
@@ -2275,7 +2281,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     'Chọn cỡ kho phù hợp',
                     'Tạm giữ suất trong 30 phút',
                     'Thanh toán cọc 20% trong 12 giờ',
-                    'Cơ sở phân kho và Check-in trong 14 ngày'
+                    'Check-in tại gian kho đã chọn trong 14 ngày'
                   ].map((item, index) => <div key={item} className="flex gap-2 rounded-xl bg-stone-50 p-3"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white">{index + 1}</span><span className="font-medium leading-4 text-stone-700">{item}</span></div>)}
                 </div>
               </div>
@@ -2283,7 +2289,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               <div className="order-7 flex justify-end gap-2 border-t border-stone-100 pt-4">
                 <Button variant="outline" onClick={() => setDetailOpen(false)}>{'Đóng lại'}</Button>
                 <Button
-                  disabled={selectedUnit.status !== 'available'}
+                  disabled={selectedUnit.status !== 'available' || effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0}
                   onClick={() => {
                     if (selectedTarget) {
                       handleStartReservation(selectedTarget.facility, selectedTarget.unitType, selectedUnit)
@@ -2293,7 +2299,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     }
                   }}
                 >
-                  {selectedUnit.status === 'available' ? ('Khai báo hàng & Đặt kho này') : ('Kho đang được giữ')}
+                  {selectedUnit.status !== 'available' ? ('Kho đang được giữ') : effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0 ? ('Hết kho') : ('Khai báo hàng & Đặt kho này')}
                 </Button>
               </div>
             </div>
@@ -2521,7 +2527,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     <div><p className="text-xs text-stone-500">Tiền cọc đảm bảo kho</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
                     <div><p className="text-xs text-stone-500">{'Thu tại Check-in'}</p><p className="mt-1 font-bold">{formatVnd(dueAtCheckIn)}</p></div>
                   </div>}
-                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi Staff chấp thuận, hệ thống mới mở bước thanh toán cọc 20%. Nếu bị từ chối, kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hủy trước Check-in. Tiền đảm bảo kho được thu riêng tại Check-in để bảo đảm nghĩa vụ về hư hại, vệ sinh và công nợ; khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
+                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi Manager chấp thuận, hệ thống mới mở bước thanh toán cọc 20%. Nếu bị từ chối, gian kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hủy trước Check-in. Tiền đảm bảo kho được thu riêng tại Check-in để bảo đảm nghĩa vụ về hư hại, vệ sinh và công nợ; khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
                 </div>
               )
             })()}
@@ -2550,7 +2556,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-700 bg-amber-700 p-4 text-xs text-white">
               <p className="font-bold text-sm mb-1"> {'Địa chỉ nhận xác minh:'} {activeHoldForEmail.customerEmail}</p>
-              <p>{'Để tránh tình trạng giữ kho ảo, hệ thống yêu cầu xác nhận email trước khi nhân viên tiếp nhận phê duyệt hồ sơ.'}</p>
+              <p>{'Để tránh tình trạng giữ kho ảo, hệ thống yêu cầu xác nhận email trước khi mở bước thanh toán cọc.'}</p>
             </div>
 
             <div className="space-y-2">
@@ -2589,7 +2595,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     const success = verifyHoldEmail(activeHoldForEmail.id, inputToken, user)
                     if (success) {
                       setEmailModalOpen(false)
-                      showToast('Email đã được xác nhận thành công! Hồ sơ đã gửi tới nhân viên ca trực.')
+                      showToast('Email đã được xác nhận thành công! Bước thanh toán cọc đã được mở.')
                     } else {
                       showToast('Mã token không hợp lệ hoặc đã hết hạn!')
                     }
@@ -2611,7 +2617,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       >
         {activeHoldForPayment && (() => {
           const originalRent = activeHoldForPayment.originalMonthlyRate ?? activeHoldForPayment.quote.baseMonthlyPrice
-          const totalDue = originalRent * activeHoldForPayment.rentalMonths
+          const grossTotal = originalRent * activeHoldForPayment.rentalMonths
+          const discountAmount = activeHoldForPayment.discountAmount ?? 0
+          const totalDue = Math.max(0, grossTotal - discountAmount)
           const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round(totalDue * 0.2 * 100) / 100
           const securityDeposit = activeHoldForPayment.securityDepositAmount ?? originalRent
           const dueAtCheckIn = activeHoldForPayment.remainingAmount ?? totalDue - reservationDeposit + securityDeposit
@@ -2631,6 +2639,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <div className="space-y-1.5 pt-1">
                   <div className="flex justify-between"><span className="text-stone-600">{'Giá thuê mỗi tháng:'}</span><span className="font-semibold text-black">{formatVnd(originalRent)}</span></div>
                   <div className="flex justify-between"><span className="text-stone-600">{'Thời hạn thuê:'}</span><span className="font-semibold text-black">{activeHoldForPayment.rentalMonths} {'tháng'}</span></div>
+                  <div className="flex justify-between text-emerald-700"><span>{'Giảm giá:'}</span><span className="font-semibold">− {formatVnd(discountAmount)}</span></div>
 
                   <div className="flex justify-between text-base font-bold text-black pt-2 border-t border-stone-300">
                     <span>{'Tổng giá trị kỳ thuê:'}</span>
@@ -2660,7 +2669,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     payStorageHold(activeHoldForPayment.id, paymentMethod, user)
                     setPayModalOpen(false)
                     setActiveHoldForPayment(null)
-                    showToast('Đã thanh toán cọc. Đơn đã chuyển sang bước xem điều khoản và chờ cơ sở phân kho.')
+                    showToast('Đã thanh toán cọc. Đơn đã chuyển sang bước xem điều khoản và Check-in tại gian kho đã chọn.')
                   }}
                 >
                    {'Xác nhận thanh toán'}

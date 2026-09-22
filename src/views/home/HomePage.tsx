@@ -41,6 +41,23 @@ function KeyIcon({ className = "w-5 h-5" }: { className?: string }) {
   )
 }
 
+function TruckIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8h4l3 3v5a1 1 0 01-1 1h-1m-4 0h-2" />
+    </svg>
+  )
+}
+
+function LayersIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+    </svg>
+  )
+}
+
 function ArrowRightIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -91,7 +108,7 @@ function XMarkIcon({ className = "w-5 h-5" }: { className?: string }) {
 }
 
 export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps) {
-  const { facilities: contextFacilities } = useStorageHub()
+  const { facilities: contextFacilities, units, rentals, holds } = useStorageHub()
   const [activeModal, setActiveModal] = useState<'facilities' | 'unit_types' | 'how_it_works' | null>(null)
 
   const scrollToSection = (sectionId: string) => {
@@ -110,45 +127,62 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   }, [])
   const [selectedFacilityTab, setSelectedFacilityTab] = useState('all')
 
-  // Combine demo database and context facilities
-  const facilitiesList = (contextFacilities && contextFacilities.length > 0) ? contextFacilities : FACILITIES
+  // Keep live availability from the shared store while sourcing all display
+  // metadata from the canonical demo catalog.
+  const facilitiesList = FACILITIES.map(seed => {
+    const runtime = contextFacilities.find(item => item.id === seed.id)
+    const physicalAvailable = units.filter(unit => unit.facilityId === seed.id && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
+    const activeCapacityHolds = holds.filter(hold => hold.facilityId === seed.id && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
+    return {
+      ...seed,
+      ...runtime,
+      code: seed.code,
+      name: seed.name,
+      address: seed.address,
+      city: seed.city,
+      price: seed.price,
+      available: Math.max(0, physicalAvailable - activeCapacityHolds),
+    }
+  })
+  const availableUnitCount = facilitiesList.reduce((total, facility) => total + (facility.available ?? 0), 0)
+  const totalUnitCount = facilitiesList.reduce((total, facility) => total + (facility.units ?? 0), 0)
 
   const unitCategories = [
     {
       id: 'small',
-      name: 'Tủ Đồ Mini & Gian Nhỏ (Small Locker)',
-      size: 'Kho nhỏ · khoảng 2,3 m² · 7 m³',
-      desc: 'Phù hợp để tài liệu cá nhân, vali du lịch, quần áo theo mùa, đồ trượt tuyết hoặc 5-8 thùng carton tiêu chuẩn.',
-      estRate: 'Từ 850.000 ₫ / tháng',
+      name: 'Gian Kho Nhỏ (Small Storage)',
+      size: '5,6 × 6 × 3,2 m · 33,6 m² · 107,52 m³',
+      desc: 'Phù hợp để lưu trữ đồ gia dụng, thiết bị văn phòng và hàng hóa đóng kiện.',
+      estRate: 'Từ 5.500.000 ₫ / tháng',
       badge: 'Cá nhân & Gia đình',
       highlight: 'Khóa mã PIN 24/7'
     },
     {
       id: 'medium',
-      name: 'Gian Kho Tiêu Chuẩn (Medium Unit)',
-      size: 'Kho vừa · khoảng 9,3 m² · 28 m³',
-      desc: 'Lưu trữ toàn bộ nội thất căn hộ 1-2 phòng ngủ, thiết bị văn phòng, bàn ghế, tủ lạnh và hàng mẫu kinh doanh online.',
-      estRate: 'Từ 2.200.000 ₫ / tháng',
+      name: 'Gian Kho Vừa (Medium Storage)',
+      size: '9 × 6,4 × 3,4 m · 57,6 m² · 195,84 m³',
+      desc: 'Phù hợp với đồ đạc gia đình, thiết bị văn phòng và hàng kinh doanh.',
+      estRate: 'Từ 9.500.000 ₫ / tháng',
       badge: 'Phổ biến nhất',
       highlight: 'Kiểm soát nhiệt độ 24°C'
     },
     {
       id: 'large',
-      name: 'Kho Thương Mại & Doanh Nghiệp (Large Unit)',
-      size: 'Kho lớn · khoảng 18,6–37 m²',
-      desc: 'Dành cho tồn kho thương mại điện tử, máy móc cơ khí, thiết bị sự kiện và toàn bộ nội thất biệt thự/nhà lớn.',
-      estRate: 'Từ 4.500.000 ₫ / tháng',
+      name: 'Gian Kho Lớn (Large Storage)',
+      size: '13,5 × 6,8 × 3,6 m · 91,8 m² · 330,48 m³',
+      desc: 'Phù hợp với đồ chuyển nhà, pallet và tồn kho kinh doanh quy mô lớn.',
+      estRate: 'Từ 15.000.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
       highlight: 'Xe tải bốc dỡ tận cửa'
     },
     {
-      id: 'climate',
-      name: 'Kho Kiểm Soát Vi Khí Hậu (Climate-Controlled)',
-      size: 'Đa dạng diện tích từ 5m² đến 30m²',
-      desc: 'Duy trì nhiệt độ 20-23°C và độ ẩm ổn định 50-60%. Chuyên dụng cho rượu vang, tranh nghệ thuật, hồ sơ lưu trữ lâu năm.',
-      estRate: 'Liên hệ báo giá chi tiết',
-      badge: 'Cao cấp',
-      highlight: 'Cảm biến độ ẩm thông minh'
+      id: 'xlarge',
+      name: 'Gian Kho Rất Lớn (Extra Large)',
+      size: '19 × 7,2 × 4 m · 136,8 m² · 547,2 m³',
+      desc: 'Dành cho kho thương mại, pallet số lượng lớn và máy móc.',
+      estRate: 'Từ 22.500.000 ₫ / tháng',
+      badge: 'Doanh nghiệp',
+      highlight: 'Xe tải bốc dỡ tận cửa'
     }
   ]
 
@@ -170,7 +204,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     },
     {
       num: '04',
-      title: 'Thanh toán & nhận kho (ACTIVE)',
+      title: 'Thanh toán & nhận kho',
       desc: 'Hoàn tất thanh toán, nhận mã PIN khóa điện tử thông minh và bắt đầu lưu trữ tự do 24/7.'
     }
   ]
@@ -294,12 +328,12 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               {/* Quick Trust Badges */}
               <div className="grid grid-cols-3 gap-3 pt-4 border-t border-stone-100 text-center sm:text-left">
                 <div>
-                  <div className="text-xl sm:text-2xl font-black text-stone-900">500+</div>
-                  <div className="text-xs text-stone-500 mt-0.5">Gian kho sẵn sàng</div>
+                   <div className="text-xl sm:text-2xl font-black text-stone-900">{availableUnitCount}</div>
+                   <div className="text-xs text-stone-500 mt-0.5">Gian kho còn trống</div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-black text-stone-900">24/7</div>
-                  <div className="text-xs text-stone-500 mt-0.5">Camera & Khóa mã số</div>
+                   <div className="text-xl sm:text-2xl font-black text-stone-900">{totalUnitCount}</div>
+                   <div className="text-xs text-stone-500 mt-0.5">Tổng gian kho</div>
                 </div>
                 <div>
                   <div className="text-xl sm:text-2xl font-black text-emerald-600">99.8%</div>
@@ -309,66 +343,162 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             </div>
 
             {/* Right Column: Live Operational Graphic */}
-            <div className="lg:col-span-5 bg-gradient-to-br from-stone-900 to-[#2A2B26] text-white rounded-xl border border-stone-700 p-6 flex flex-col justify-between shadow-2xl">
+            <div className="lg:col-span-5 relative overflow-hidden bg-gradient-to-br from-[#1C1D20] via-[#18191C] to-[#121315] text-white rounded-2xl border border-stone-700/80 p-5 sm:p-6 flex flex-col justify-between shadow-2xl">
+              {/* Decorative ambient glows */}
+              <div className="absolute -top-16 -right-16 w-44 h-44 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
               {/* Graphic Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-stone-700 text-xs font-mono">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-semibold text-stone-200 uppercase tracking-wide">MẠNG LƯỚI VẬN HÀNH KHO</span>
+              <div className="relative flex items-center justify-between pb-3.5 border-b border-stone-800 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </span>
+                  <span className="font-bold text-stone-200 uppercase tracking-wider text-xs">MẠNG LƯỚI VẬN HÀNH KHO</span>
                 </div>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-bold border border-emerald-500/30">HOẠT ĐỘNG</span>
+                <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold border border-emerald-500/30 flex items-center gap-1.5 tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  HOẠT ĐỘNG
+                </span>
               </div>
 
               {/* Graphic Unit Tiers */}
-              <div className="my-5 space-y-3 font-mono">
-                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[#E89520]">
+              <div className="relative my-4 space-y-2.5">
+                {/* Small */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-amber-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
                       <BoxIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-white">Gian Nhỏ (Small · 2,3 m²)</div>
-                      <div className="text-[11px] text-stone-400">98% Khả dụng · Khóa PIN điện tử</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors whitespace-nowrap">
+                          Gian Nhỏ (Small)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          33,6 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        107,52 m³ · Khóa PIN điện tử
+                      </div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 850.000 ₫</span>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 5.500.000 ₫
+                    </span>
+                  </div>
                 </div>
 
-                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                {/* Medium */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-sky-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-105 transition-transform">
                       <WarehouseIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-white">Gian Vừa (Medium · 9,3 m²)</div>
-                      <div className="text-[11px] text-stone-400">Điều hòa nhiệt độ · 24/7 Ra vào</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors whitespace-nowrap">
+                          Gian Vừa (Medium)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          57,6 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        195,84 m³ · 24/7 ra vào tự do
+                      </div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 2.200.000 ₫</span>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 9.500.000 ₫
+                    </span>
+                  </div>
                 </div>
 
-                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                      <KeyIcon className="w-5 h-5" />
+                {/* Large */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-indigo-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <TruckIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-white">Kho Lớn (Large · 18,6 m²)</div>
-                      <div className="text-[11px] text-stone-400">Xe tải bốc dỡ · Cửa cuốn tự động</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-indigo-300 transition-colors whitespace-nowrap">
+                          Kho Lớn (Large)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          91,8 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        330,48 m³ · Cửa xe tải bốc dỡ
+                      </div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 4.500.000 ₫</span>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 15.000.000 ₫
+                    </span>
+                  </div>
+                </div>
+
+                {/* Extra Large */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-purple-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <LayersIcon className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-purple-300 transition-colors whitespace-nowrap">
+                          Gian Rất Lớn (XL)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          136,8 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        547,2 m³ · Pallet & tải trọng nặng
+                      </div>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 22.500.000 ₫
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Graphic Bottom Status */}
-              <div className="pt-3 border-t border-stone-700 flex items-center justify-between text-[11px] text-stone-400">
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheckIcon className="w-4 h-4 text-emerald-400" />
-                  <span>Bảo vệ & Giám sát CCTV</span>
+              <div className="relative pt-3.5 border-t border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
+                <span className="flex items-center gap-1.5 text-stone-300 font-medium">
+                  <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Bảo vệ & Giám sát CCTV 24/7</span>
                 </span>
-                <span className="font-mono font-semibold text-stone-300">Downtown & Riverside</span>
+                <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60">
+                  HCM-Q1 · BD-F01
+                </span>
               </div>
             </div>
 
@@ -503,7 +633,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 Hệ Thống Cơ Sở StorageHub
               </h2>
               <p className="mt-1 text-sm text-stone-600">
-                Vị trí đắc địa tại trung tâm các thành phố lớn, thuận tiện di chuyển và vận chuyển hàng hóa.
+                 Hai cơ sở tại Quận 1 và Bình Dương, thuận tiện di chuyển và vận chuyển hàng hóa.
               </p>
             </div>
             <div className="mt-4 md:mt-0 flex gap-2">
@@ -517,23 +647,23 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
             {facilitiesList.map(fac => (
               <div key={fac.id} className="rounded-xl border border-stone-200 bg-stone-50 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between">
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] font-mono font-bold bg-amber-100 text-[#9A5A05] px-2 py-0.5 rounded">
-                      MÃ: {fac.id}
+                       MÃ: {fac.code ?? fac.id}
                     </span>
                     <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span>{fac.available ?? 18} gian khả dụng</span>
+                      <span>{fac.available ?? 0} gian còn trống</span>
                     </span>
                   </div>
                   <h3 className="text-lg font-bold text-stone-900">{fac.name}</h3>
                   <p className="text-xs text-stone-600 mt-1 flex items-start gap-1.5">
                     <MapPinIcon className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" />
-                    <span>{fac.address}, {fac.city}</span>
+                     <span>{fac.address}</span>
                   </p>
 
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-mono bg-white p-2.5 rounded-lg border border-stone-200">
@@ -550,7 +680,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
 
                 <div className="p-4 bg-stone-100 border-t border-stone-200 flex items-center justify-between">
                   <span className="text-xs text-stone-600 font-medium">
-                    Giá từ <strong className="text-stone-900">{fac.price ?? '850.000'} đ</strong>/tháng
+                     Giá từ <strong className="text-stone-900">{fac.price ?? '5.500.000'} đ</strong>/tháng
                   </span>
                   <button
                     type="button"
@@ -631,10 +761,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">DỊCH VỤ LƯU TRỮ</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Tủ đồ mini & cá nhân</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Kho đồ gia đình & chuyển nhà</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Kho hàng thương mại điện tử</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Kho kiểm soát vi khí hậu</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho nhỏ · Small</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho vừa · Medium</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho lớn · Large</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho rất lớn · Extra Large</button></li>
               </ul>
             </div>
 
@@ -642,10 +772,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">CƠ SỞ TRỌNG ĐIỂM</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li>Downtown Storage – 125 Nguyễn Huệ, Q.1</li>
-                <li>Riverside Storage – 42 Bạch Đằng, Bình Thạnh</li>
-                <li>Westside Storage – KCN Tân Bình, Tân Phú</li>
-                <li>Hệ thống cơ sở đối tác toàn quốc</li>
+                <li>Kho Việt – Cơ sở Quận 1 · 125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1</li>
+                <li>Kho Việt – Cơ sở Bình Dương · 468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An</li>
+                <li>2 cơ sở đang hoạt động · hỗ trợ đặt giữ kho trực tuyến</li>
               </ul>
             </div>
 
@@ -711,18 +840,18 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   {facilitiesList.map(f => (
                     <div key={f.id} className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex flex-col justify-between">
                       <div>
-                        <div className="flex items-center justify-between font-bold text-stone-900 text-sm">
-                          <span>{f.name}</span>
-                          <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.id}</span>
-                        </div>
-                        <p className="text-xs text-stone-500 mt-1 flex items-start gap-1">
-                          <MapPinIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400" />
-                          <span>{f.address}, {f.city}</span>
+                         <div className="flex items-center justify-between font-bold text-stone-900 text-sm">
+                           <span>{f.name}</span>
+                           <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.code ?? f.id}</span>
+                         </div>
+                         <p className="text-xs text-stone-500 mt-1 flex items-start gap-1">
+                           <MapPinIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400" />
+                           <span>{f.address}</span>
                         </p>
                       </div>
                       <div className="mt-3 pt-2 border-t border-stone-200 flex items-center justify-between text-[11px] text-stone-600">
                         <span>{f.units ?? 100} đơn vị</span>
-                        <span className="font-semibold text-emerald-700">Khả dụng: {f.available ?? 18}</span>
+                        <span className="font-semibold text-emerald-700">Còn trống: {f.available ?? 0}</span>
                       </div>
                     </div>
                   ))}

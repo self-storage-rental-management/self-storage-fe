@@ -61,7 +61,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={'Giám Sát Quy Trình Check-in & Bàn Giao Kho'}
+        title={'Giám sát quy trình nhận kho & bàn giao kho'}
         subtitle={
           'Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý 5 bước và biên bản kiểm đo thực tế'
         }

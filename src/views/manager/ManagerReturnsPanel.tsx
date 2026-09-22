@@ -524,7 +524,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-stone-700">
-                {'Kết luận phân xử của Facility Manager'}
+                {'Kết luận xử lý của quản lý cơ sở'}
               </label>
               <textarea
                 rows={4}

@@ -53,7 +53,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   ),
   manager: makePermissions(
     'view_dashboard', 'view_facilities', 'view_units', 'view_reservations', 'approve_reservations',
-    'assign_units', 'view_contracts', 'view_checkins', 'perform_checkin', 'view_rentals', 'manage_rentals',
+    'view_contracts', 'view_checkins', 'perform_checkin', 'view_rentals', 'manage_rentals',
     'view_returns', 'process_returns', 'view_payments', 'manage_payments', 'view_support', 'manage_support',
     'manage_inventory', 'manage_policies', 'manage_staff_tasks', 'view_reports'
   ),
@@ -74,5 +74,7 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
       if (typeof candidate[key] === 'boolean') normalized[role][key] = candidate[key] as boolean
     }
   }
+  // Manager chỉ duyệt hồ sơ hàng hóa; gian cụ thể do khách chọn từ đầu.
+  normalized.manager.assign_units = false
   return normalized
 }

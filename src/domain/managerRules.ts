@@ -3,7 +3,7 @@ import type { User } from '../types'
 
 /** Facility scope is keyed by ID; names remain a legacy fallback for old records. */
 export function isFacilityVisible(user: Pick<User, 'facility' | 'facilityId'>, facilityId?: string, facilityName?: string) {
-  if (!user.facility || user.facility === 'All facilities') return true
+  if (user.facility === 'All facilities' || (!user.facility && !user.facilityId)) return true
   return facilityId === user.facilityId || facilityId === user.facility || facilityName === user.facility
 }
 

@@ -27,6 +27,7 @@ import type {
 import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
+import { isFacilityVisible } from '../domain/managerRules'
 import { formatVnd } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
 
@@ -96,58 +97,58 @@ export const UNIT_TYPES: UnitType[] = [
   {
     id: 'small',
     name: 'Small Storage',
-    lengthM: 1.5,
-    widthM: 1.5,
-    heightM: 2.8,
-    areaM2: 2.25,
-    volumeM3: 6.3,
-    pricePerM3: 14,
-    monthlyPrice: 89,
+    lengthM: 5.6,
+    widthM: 6,
+    heightM: 3.2,
+    areaM2: 33.6,
+    volumeM3: 107.52,
+    pricePerM3: (5_500_000 / 26_000) / 107.52,
+    monthlyPrice: 5_500_000 / 26_000,
     maxLoadKg: 600,
-    descriptionVi: 'Phù hợp: 20–30 thùng hàng, 1 xe máy, vali đồ đạc cá nhân (~2.25 m²)',
-    descriptionEn: 'Fits: 20–30 storage boxes, 1 motorbike, luggage & personal items (~2.25 m²)'
+    descriptionVi: 'Phù hợp: đồ gia dụng, thiết bị văn phòng và hàng hóa đóng kiện (~33,6 m²)',
+    descriptionEn: 'Fits household goods, office equipment and boxed inventory (~33.6 m²)'
   },
   {
     id: 'medium',
     name: 'Medium Storage',
-    lengthM: 3.0,
-    widthM: 2.0,
-    heightM: 2.5,
-    areaM2: 6.0,
-    volumeM3: 15.0,
-    pricePerM3: 10,
-    monthlyPrice: 150,
+    lengthM: 9,
+    widthM: 6.4,
+    heightM: 3.4,
+    areaM2: 57.6,
+    volumeM3: 195.84,
+    pricePerM3: (9_500_000 / 26_000) / 195.84,
+    monthlyPrice: 9_500_000 / 26_000,
     maxLoadKg: 1200,
-    descriptionVi: 'Phù hợp: 50–70 thùng hàng, đồ đạc gia đình, thiết bị văn phòng (~6.0 m²)',
-    descriptionEn: 'Fits: 50–70 storage boxes, household furniture, office equipment (~6.0 m²)'
+    descriptionVi: 'Phù hợp: đồ đạc gia đình, thiết bị văn phòng và hàng kinh doanh (~57,6 m²)',
+    descriptionEn: 'Fits household furniture, office equipment and business inventory (~57.6 m²)'
   },
   {
     id: 'large',
     name: 'Large Storage',
-    lengthM: 4.0,
-    widthM: 3.0,
-    heightM: 2.5,
-    areaM2: 12.0,
-    volumeM3: 30.0,
-    pricePerM3: 9,
-    monthlyPrice: 270,
+    lengthM: 13.5,
+    widthM: 6.8,
+    heightM: 3.6,
+    areaM2: 91.8,
+    volumeM3: 330.48,
+    pricePerM3: (15_000_000 / 26_000) / 330.48,
+    monthlyPrice: 15_000_000 / 26_000,
     maxLoadKg: 2400,
-    descriptionVi: 'Phù hợp: 100–150 thùng hàng, đồ đạc chuyển nhà, tồn kho kinh doanh (~12.0 m²)',
-    descriptionEn: 'Fits: 100–150 boxes, apartment relocation, e-commerce business inventory (~12.0 m²)'
+    descriptionVi: 'Phù hợp: đồ chuyển nhà, pallet và tồn kho kinh doanh (~91,8 m²)',
+    descriptionEn: 'Fits relocation goods, pallets and business inventory (~91.8 m²)'
   },
   {
     id: 'xlarge',
     name: 'Extra Large Commercial',
-    lengthM: 6.0,
-    widthM: 3.0,
-    heightM: 2.5,
-    areaM2: 18.0,
-    volumeM3: 45.0,
-    pricePerM3: 8,
-    monthlyPrice: 360,
+    lengthM: 19,
+    widthM: 7.2,
+    heightM: 4,
+    areaM2: 136.8,
+    volumeM3: 547.2,
+    pricePerM3: (22_500_000 / 26_000) / 547.2,
+    monthlyPrice: 22_500_000 / 26_000,
     maxLoadKg: 3600,
-    descriptionVi: 'Phù hợp: Kho thương mại, pallet hàng hóa số lượng lớn, máy móc công nghiệp (~18.0 m²)',
-    descriptionEn: 'Fits: Commercial pallets, large volume freight, machinery (~18.0 m²)'
+    descriptionVi: 'Phù hợp: kho thương mại, pallet số lượng lớn và máy móc (~136,8 m²)',
+    descriptionEn: 'Fits commercial pallets, high-volume inventory and machinery (~136.8 m²)'
   }
 ]
 
@@ -187,10 +188,8 @@ function assertFacilityManager(user: User, facilityId: string, facilityName: str
   if (user.role !== 'manager' && user.role !== 'admin') {
     throw new Error('Chỉ Facility Manager được thực hiện thao tác này.')
   }
-  if (user.role === 'admin' || !user.facility || user.facility === 'All facilities') return
-  if (user.facility !== facilityName && user.facility !== facilityId) {
-    throw new Error('Bạn không có quyền thao tác dữ liệu của cơ sở khác.')
-  }
+  if (user.role === 'admin' || isFacilityVisible(user, facilityId, facilityName)) return
+  throw new Error('Bạn không có quyền thao tác dữ liệu của cơ sở khác.')
 }
 
 function unitMatchesReservation(unit: StorageUnit, reservation: StorageReservation) {
@@ -202,6 +201,7 @@ function unitMatchesReservation(unit: StorageUnit, reservation: StorageReservati
 // Map demo facilities
 const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
   id: f.id,
+  code: f.code,
   name: f.name,
   address: f.address,
   city: f.city,
@@ -221,20 +221,56 @@ const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
   timezone: 'Asia/Ho_Chi_Minh'
 }))
 
+const LEGACY_FACILITY_NAMES: Record<string, string> = {
+  'Downtown Storage': 'Kho Việt – Cơ sở Quận 1',
+  'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
+}
+
+const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
+  const normalizedName = facilityName ? LEGACY_FACILITY_NAMES[facilityName] || facilityName : undefined
+  return INITIAL_FACILITIES.find(item => item.id === facilityId || item.code === facilityId || item.name === normalizedName)
+}
+
+const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => facilities.map(stored => {
+  const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
+  if (!canonical) return stored
+  return {
+    ...canonical,
+    ...stored,
+    id: canonical.id,
+    code: canonical.code,
+    name: canonical.name,
+    address: canonical.address,
+    city: canonical.city,
+    price: canonical.price
+  }
+})
+
+const normalizeStoredTickets = (tickets: TicketItem[]): TicketItem[] => tickets.map(ticket => ({
+  ...ticket,
+  facility: ticket.facility === 'Downtown Storage' ? 'Kho Việt – Cơ sở Quận 1' : ticket.facility === 'Riverside Storage' ? 'Kho Việt – Cơ sở Bình Dương' : ticket.facility
+}))
+
 // Map demo units to typed StorageUnit using purely metric dimensions
 const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
-  const facilityId = u.facility === 'Downtown Storage' ? 'fac-001' : 'fac-002'
-  let lengthM = 1.5, widthM = 1.5, heightM = 2.8, volumeM3 = 6.3, price = 89, maxLoadKg = 600, areaM2 = 2.25
+  const facilityId = u.customerCode?.startsWith('HCM-Q1-F01') ? 'fac-001' : 'fac-002'
+  let lengthM = u.dimensionsM?.[0] ?? 1.5
+  let widthM = u.dimensionsM?.[1] ?? 1.5
+  let heightM = u.dimensionsM?.[2] ?? 2.8
+  let volumeM3 = u.volumeM3 ?? 6.3
+  let price = u.price ?? 89
+  let maxLoadKg = u.maxLoadKg ?? 600
+  let areaM2 = u.areaM2 ?? 2.25
   if (u.type === 'Medium') {
-    lengthM = 3.0; widthM = 2.0; heightM = 2.5; volumeM3 = 15.0; price = 150; maxLoadKg = 1200; areaM2 = 6.0
+    lengthM = u.dimensionsM?.[0] ?? 3.0; widthM = u.dimensionsM?.[1] ?? 2.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 15.0; price = u.price ?? 150; maxLoadKg = u.maxLoadKg ?? 1200; areaM2 = u.areaM2 ?? 6.0
   } else if (u.type === 'Large') {
-    lengthM = 4.0; widthM = 3.0; heightM = 2.5; volumeM3 = 30.0; price = 270; maxLoadKg = 2400; areaM2 = 12.0
+    lengthM = u.dimensionsM?.[0] ?? 4.0; widthM = u.dimensionsM?.[1] ?? 3.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 30.0; price = u.price ?? 270; maxLoadKg = u.maxLoadKg ?? 2400; areaM2 = u.areaM2 ?? 12.0
   } else if (u.type === 'Extra Large') {
-    lengthM = 6.0; widthM = 3.0; heightM = 2.5; volumeM3 = 45.0; price = 360; maxLoadKg = 3600; areaM2 = 18.0
+    lengthM = u.dimensionsM?.[0] ?? 6.0; widthM = u.dimensionsM?.[1] ?? 3.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 45.0; price = u.price ?? 360; maxLoadKg = u.maxLoadKg ?? 3600; areaM2 = u.areaM2 ?? 18.0
   }
 
-  // Only active rentals occupy a physical unit. Old demo reservations were
-  // removed, so no unit is kept in a reserved state without a live hold.
+  // Customer test inventory: demo reservations lock their selected physical units; every other unit is bookable.
+  const isReservedDemo = u.id === 'A-104' || u.id === 'B-112'
   const demoRentalByUnit: Record<string, string> = {
     'B-209': 'RNT-TEST-RENEW-BEFORE-2D',
     'B-210': 'RNT-TEST-RENEW-AFTER-2D',
@@ -243,10 +279,25 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
   }
   const isOccupiedDemo = Boolean(demoRentalByUnit[u.id])
   const reservedPeriods: ReservedPeriod[] = []
+  if (u.id === 'A-104') {
+    reservedPeriods.push({
+      reservationId: 'RSV-2048',
+      customerName: 'Nguyen Minh Anh',
+      startDate: '2026-09-20',
+      endDate: '2027-03-20'
+    })
+  } else if (u.id === 'B-112') {
+    reservedPeriods.push({
+      reservationId: 'RSV-2049',
+      customerName: 'Hoang Van Bach',
+      startDate: '2026-09-22',
+      endDate: '2026-12-22'
+    })
+  }
 
   return {
     id: u.id,
-    code: u.id,
+    code: u.customerCode || u.id,
     facilityId,
     facilityName: u.facility,
     floor: u.floor,
@@ -254,7 +305,7 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     type: u.type as any,
     areaM2,
     dimensions: { lengthM, widthM, heightM },
-    doorDimensions: { widthM: 1.1, heightM: 2.2 },
+    doorDimensions: { widthM: 2, heightM: 2.4 },
     volumeM3,
     maxLoadKg,
     allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
@@ -264,13 +315,43 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     climate: u.climate,
     status: isOccupiedDemo ? 'occupied' : 'available',
     reservedPeriods,
-    nextAvailableDate: undefined,
+    nextAvailableDate: u.id === 'A-104' ? '2027-03-21' : u.id === 'B-112' ? '2026-12-23' : u.id === 'B-208' ? '2027-01-13' : undefined,
     currentRentalId: demoRentalByUnit[u.id],
     version: 1
   }
 })
 
-// Initial reservations demonstrating the canonical lifecycle
+// Keep runtime state (status, reservations, next available date) while
+// upgrading older browser snapshots to the current Customer catalog metadata.
+const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
+  const normalized = units.map(stored => {
+    const canonical = INITIAL_UNITS.find(unit => unit.id === stored.id || unit.code === stored.code)
+    if (!canonical) return stored
+    return {
+      ...stored,
+      id: canonical.id,
+      code: canonical.code,
+      facilityId: canonical.facilityId,
+      facilityName: canonical.facilityName,
+      type: canonical.type,
+      areaM2: canonical.areaM2,
+      dimensions: canonical.dimensions,
+      doorDimensions: canonical.doorDimensions,
+      volumeM3: canonical.volumeM3,
+      maxLoadKg: canonical.maxLoadKg,
+      price: canonical.price,
+      deposit: canonical.deposit
+    }
+  })
+  const existingIds = new Set(normalized.map(unit => unit.id))
+  return [...normalized, ...INITIAL_UNITS.filter(unit => !existingIds.has(unit.id))]
+}
+
+const DEMO_SMALL_MONTHLY = UNIT_TYPES.find(item => item.id === 'small')!.monthlyPrice
+const DEMO_MEDIUM_MONTHLY = UNIT_TYPES.find(item => item.id === 'medium')!.monthlyPrice
+
+// Initial reservations demonstrating the canonical lifecycle. The values use
+// the same metric catalog and monthly prices shown on Customer's browse-units.
 const INITIAL_RESERVATIONS: StorageReservation[] = [
   {
     id: 'RSV-2048',
@@ -280,7 +361,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     customerPhone: '090 123 4567',
     identityId: '079203001234',
     facilityId: 'fac-001',
-    facilityName: 'Downtown Storage',
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
     unitId: 'A-104',
     unitTypeId: 'small',
     unitTypeName: 'Small Storage',
@@ -291,12 +372,12 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     moveInDate: '2026-09-20',
     status: 'READY_FOR_CHECKIN',
     approvalType: 'AUTO',
-    reservationDepositAmount: 36, // 20% of (89 + 89)
-    securityDepositAmount: 89,    // 1-month rent
+    reservationDepositAmount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
+    securityDepositAmount: DEMO_SMALL_MONTHLY,
     depositConvertedAt: '2026-09-17T10:00:00Z',
     remainingAmount: 0,
-    firstMonthRent: 89,
-    totalInitialAmount: 178,
+    firstMonthRent: DEMO_SMALL_MONTHLY,
+    totalInitialAmount: DEMO_SMALL_MONTHLY * 7,
     largestItemDimensionsCm: { lengthCm: 80, widthCm: 60, heightCm: 70 },
     goods: {
       category: 'Tài liệu và đồ gia dụng',
@@ -315,10 +396,10 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       quoteId: 'QUO-2048',
       unitId: 'A-104',
       facilityId: 'fac-001',
-      baseMonthlyPrice: 89,
-      depositAmount: 89,
+      baseMonthlyPrice: DEMO_SMALL_MONTHLY,
+      depositAmount: DEMO_SMALL_MONTHLY,
       dimSurcharge: 0,
-      totalFirstPayment: 178,
+      totalFirstPayment: DEMO_SMALL_MONTHLY * 7,
       dimWeightKg: 67,
       actualWeightKg: 180,
       billableWeightKg: 180,
@@ -327,7 +408,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: '2026-09-21T08:30:00Z'
     },
     payment: {
-      amount: 178,
+      amount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
       status: 'paid',
       method: 'Chuyển khoản VietQR',
       transactionId: 'VNPAY-204899',
@@ -349,22 +430,22 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     customerPhone: '091 999 8811',
     identityId: '079198004567',
     facilityId: 'fac-001',
-    facilityName: 'Downtown Storage',
-    unitId: '',
-    unitTypeId: 'small',
-    unitTypeName: 'Small Storage',
-    assignedUnitId: undefined, // Unassigned - Manager needs to assign!
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    unitId: 'B-112',
+    unitTypeId: 'medium',
+    unitTypeName: 'Medium Storage',
+    assignedUnitId: 'B-112',
     rentalMonths: 3,
     startDate: '2026-09-22',
     endDate: '2026-12-22',
     moveInDate: '2026-09-22',
     status: 'DEPOSIT_PAID',
     approvalType: 'AUTO',
-    reservationDepositAmount: 36,
-    securityDepositAmount: 89,
-    remainingAmount: 142,
-    firstMonthRent: 89,
-    totalInitialAmount: 178,
+    reservationDepositAmount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
+    securityDepositAmount: DEMO_MEDIUM_MONTHLY,
+    remainingAmount: Math.round((DEMO_MEDIUM_MONTHLY * 3 * 0.8 + DEMO_MEDIUM_MONTHLY) * 100) / 100,
+    firstMonthRent: DEMO_MEDIUM_MONTHLY,
+    totalInitialAmount: DEMO_MEDIUM_MONTHLY * 4,
     paymentExpiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString(),
     largestItemDimensionsCm: { lengthCm: 60, widthCm: 50, heightCm: 50 },
     goods: {
@@ -383,10 +464,10 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       quoteId: 'QUO-2049',
       unitId: '',
       facilityId: 'fac-001',
-      baseMonthlyPrice: 89,
-      depositAmount: 89,
+      baseMonthlyPrice: DEMO_MEDIUM_MONTHLY,
+      depositAmount: DEMO_MEDIUM_MONTHLY,
       dimSurcharge: 0,
-      totalFirstPayment: 178,
+      totalFirstPayment: DEMO_MEDIUM_MONTHLY * 4,
       dimWeightKg: 36,
       actualWeightKg: 90,
       billableWeightKg: 90,
@@ -395,14 +476,14 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString()
     },
     payment: {
-      amount: 36,
+      amount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
       status: 'paid',
       method: 'Cọc giữ chỗ qua VietQR',
       transactionId: 'TX-DEP-2049',
       paidAt: new Date().toISOString()
     },
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    evidence: ['RSV-2049 · Đã cọc giữ chỗ 20%, chờ Facility Manager phân kho'],
+    evidence: ['RSV-2049 · Đã cọc giữ chỗ 20%, gian kho đã được xác định từ lúc đặt'],
     createdAt: new Date().toISOString()
   }
 ]
@@ -507,7 +588,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     holdId: 'RSV-TEST-RENEW-BEFORE-2D',
     unitId: 'B-209',
     facilityId: 'fac-001',
-    facilityName: 'Downtown Storage',
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'demo-customer',
     customerName: 'Demo Customer',
     customerEmail: 'customer@storagehub.demo',
@@ -533,7 +614,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     holdId: 'RSV-TEST-RENEW-AFTER-2D',
     unitId: 'B-210',
     facilityId: 'fac-001',
-    facilityName: 'Downtown Storage',
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'demo-customer',
     customerName: 'Demo Customer',
     customerEmail: 'customer@storagehub.demo',
@@ -587,13 +668,93 @@ const mergeRenewalTestRentals = (rentals: RentalRecord[]) => [
 // customer profile. The physical unit is the authoritative source for the
 // facility, so reconcile persisted rentals before renewal filtering/approval.
 const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(rental => {
-  const unit = INITIAL_UNITS.find(item => item.id === rental.unitId)
-  return unit
-    ? { ...rental, facilityId: unit.facilityId, facilityName: unit.facilityName }
-    : rental
+  const unit = INITIAL_UNITS.find(item => item.id === rental.unitId || item.code === rental.unitId)
+  if (unit) return { ...rental, unitId: unit.id, facilityId: unit.facilityId, facilityName: unit.facilityName }
+  const facility = findCanonicalFacility(rental.facilityId, rental.facilityName)
+  return facility ? { ...rental, facilityId: facility.id, facilityName: facility.name } : rental
 })
 
-const INITIAL_RENTALS: RentalRecord[] = [...RENEWAL_TEST_RENTALS]
+const INITIAL_RENTALS: RentalRecord[] = [
+  ...RENEWAL_TEST_RENTALS,
+  {
+    id: 'RNT-INIT-PREV',
+    holdId: 'RSV-INIT-PREV',
+    unitId: 'C-301',
+    facilityId: 'fac-001',
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    customerId: 'cust-ha-pham',
+    customerName: 'Pham Thu Ha',
+    customerEmail: 'ha.pham@gmail.com',
+    customerPhone: '093 555 0128',
+    unitType: 'Large Storage',
+    areaM2: 12.0,
+    volumeM3: 30.0,
+    startDate: 'Mar 18, 2026',
+    endDate: 'Sep 18, 2026',
+    nextDue: 'Sep 18, 2026',
+    monthlyRate: 269,
+    deposit: 269,
+    securityDeposit: 269,
+    status: 'return_requested',
+    paymentStatus: 'paid',
+    autoRenew: false,
+    gateCode: '7318#',
+    initialCondition: 'Kho sạch, tường và khóa nguyên vẹn; 6 kiện đồ gia dụng gỗ và vải.',
+    evidencePhotos: ['EV-IN-118 · 6 ảnh hiện trạng lúc nhận kho']
+  },
+  {
+    id: 'RNT-2026-001',
+    holdId: 'RSV-INIT-001',
+    unitId: 'B-208',
+    facilityId: 'fac-001',
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    customerId: 'demo-customer',
+    customerName: 'Demo Customer',
+    customerEmail: 'customer@storagehub.demo',
+    customerPhone: '+84 908 123 456',
+    unitType: 'Medium Storage',
+    areaM2: 6.0,
+    volumeM3: 15.0,
+    startDate: 'Jan 12, 2026',
+    endDate: 'Jan 12, 2027',
+    nextDue: 'Oct 12, 2026',
+    monthlyRate: 149,
+    deposit: 149,
+    securityDeposit: 149,
+    status: 'active',
+    paymentStatus: 'paid',
+    autoRenew: true,
+    gateCode: '4921#',
+    initialCondition: 'Sàn sạch, ổ khóa thông minh đã test hoạt động, không có vết nứt tường.',
+    evidencePhotos: ['EV-INIT-B208-01 · Biên bản bàn giao kho ban đầu']
+  },
+  {
+    id: 'RNT-2026-002',
+    holdId: 'RSV-INIT-002',
+    unitId: 'D-402',
+    facilityId: 'fac-001',
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    customerId: 'demo-customer-2',
+    customerName: 'Saigon Logistics Co.',
+    customerEmail: 'contact@sg-logistics.vn',
+    customerPhone: '+84 28 3822 9999',
+    unitType: 'Extra Large Commercial',
+    areaM2: 18.0,
+    volumeM3: 45.0,
+    startDate: 'May 01, 2026',
+    endDate: 'May 01, 2027',
+    nextDue: 'Oct 01, 2026',
+    monthlyRate: 349,
+    deposit: 349,
+    securityDeposit: 349,
+    status: 'active',
+    paymentStatus: 'paid',
+    autoRenew: true,
+    gateCode: '9004#',
+    initialCondition: 'Kho pallet thương mại, cửa cuốn cơ điện hoạt động bình thường.',
+    evidencePhotos: ['EV-INIT-D402-01 · Biên bản bàn giao kho pallet']
+  }
+]
 
 // Demo record requested for validating the final customer handover step.
 // It intentionally has no receiptConfirmedAt so Customer sees
@@ -692,8 +853,8 @@ const mergeReceiptConfirmationDemo = <T extends { id: string }>(items: T[], samp
 }
 
 const RETURN_TEST_CASES: ReturnCase[] = [
-  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Downtown Storage', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
-  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Downtown Storage', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
+  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
+  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
 ]
 
 const mergeReturnTestCases = (returns: ReturnCase[]) => [...RETURN_TEST_CASES.filter(sample => !returns.some(item => item.id === sample.id)), ...returns]
@@ -705,7 +866,7 @@ const INITIAL_RETURNS: ReturnCase[] = [
     rentalId: 'RNT-INIT-PREV',
     unitId: 'C-301',
     facilityId: 'fac-001',
-    facilityName: 'Downtown Storage',
+    facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'cust-ha-pham',
     customerName: 'Pham Thu Ha',
     customerEmail: 'ha.pham@gmail.com',
@@ -736,8 +897,8 @@ const INITIAL_CONTRACTS: StorageContract[] = [
     signedAt: '2026-09-17',
     startDate: '2026-09-20',
     endDate: '2027-03-20',
-    monthlyRent: 89,
-    securityDeposit: 89,
+    monthlyRent: DEMO_SMALL_MONTHLY,
+    securityDeposit: DEMO_SMALL_MONTHLY,
     scannedFileUrl: 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXr...',
     scannedFileName: 'HopDong_HD-2026-001_signed.pdf',
     uploadedAt: '2026-09-17T09:45:00Z',
@@ -780,7 +941,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'unit',
     entityId: 'A-104',
-    notes: 'Facility Manager phân kho A-104 cho đơn RSV-2048 (20/09/2026 - 20/03/2027).',
+    notes: 'Gian A-104 đã được khách chọn cho đơn RSV-2048 (20/09/2026 - 20/03/2027).',
     timestamp: '2026-09-17 09:00:00'
   }
 ]
@@ -897,7 +1058,8 @@ interface StorageHubContextValue extends StorageHubState {
     appointmentTime: string
     largestItemDimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number }
     capacityValidatedByFrames?: boolean
-    customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number }
+    discountAmount?: number
+    customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number; physicalUnitId?: string }
   }) => ReservationValidationResult
   approveReservation: (reservationId: string, reviewer: User) => void
   rejectGoodsReview: (reservationId: string, reviewer: User, note: string) => void
@@ -1005,25 +1167,50 @@ interface StorageHubContextValue extends StorageHubState {
 const StorageHubContext = createContext<StorageHubContextValue | null>(null)
 
 const normalizeReservationPricing = (hold: StorageReservation): StorageReservation => {
-  const monthlyRent = hold.firstMonthRent || hold.quote.baseMonthlyPrice
-  const rentalTermAmount = monthlyRent * hold.rentalMonths
-  const securityDepositAmount = hold.securityDepositAmount || monthlyRent
+  const normalizedTypeValue = (hold.unitTypeId || hold.unitTypeName || '').toLowerCase().replace(/[-_]/g, ' ').trim()
+  const canonicalType = normalizedTypeValue
+    ? UNIT_TYPES.find(item => item.id === hold.unitTypeId || item.name.toLowerCase() === normalizedTypeValue || item.name.toLowerCase().startsWith(normalizedTypeValue))
+    : undefined
+  const canonicalAssignedUnit = hold.assignedUnitId
+    ? INITIAL_UNITS.find(item => item.id === hold.assignedUnitId || item.code === hold.assignedUnitId)
+    : undefined
+  const normalizedHold = {
+    ...hold,
+    unitTypeId: canonicalType?.id || hold.unitTypeId,
+    unitTypeName: canonicalType?.name || hold.unitTypeName,
+    assignedUnitId: canonicalAssignedUnit?.id || hold.assignedUnitId
+  }
+  if (!canonicalType) return normalizedHold
+  const storedMonthlyRent = normalizedHold.firstMonthRent || normalizedHold.quote.baseMonthlyPrice
+  const monthlyRent = canonicalType?.monthlyPrice || storedMonthlyRent
+  const shouldReprice = Boolean(Math.abs(monthlyRent - storedMonthlyRent) > 0.01 && !['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(normalizedHold.status))
+  const grossRentalTermAmount = monthlyRent * normalizedHold.rentalMonths
+  const discountAmount = Math.min(grossRentalTermAmount, Math.max(0, normalizedHold.discountAmount || 0))
+  const rentalTermAmount = grossRentalTermAmount - discountAmount
+  const securityDepositAmount = shouldReprice ? monthlyRent : (normalizedHold.securityDepositAmount || monthlyRent)
   const expectedTotal = rentalTermAmount + securityDepositAmount
-  if (hold.remainingAmount <= 0 || Math.abs((hold.totalInitialAmount || 0) - expectedTotal) <= 0.01) return hold
+  if (!shouldReprice && (normalizedHold.remainingAmount <= 0 || Math.abs((normalizedHold.totalInitialAmount || 0) - expectedTotal) <= 0.01)) return normalizedHold
 
   const calculatedBookingDeposit = Math.round(rentalTermAmount * 0.2 * 100) / 100
-  const bookingDeposit = hold.payment.status === 'paid' ? hold.reservationDepositAmount : calculatedBookingDeposit
+  const bookingDeposit = shouldReprice || normalizedHold.payment.status !== 'paid' ? calculatedBookingDeposit : normalizedHold.reservationDepositAmount
+  const isPaidInFull = normalizedHold.payment.status === 'paid' && normalizedHold.remainingAmount <= 0
   return {
-    ...hold,
+    ...normalizedHold,
     reservationDepositAmount: bookingDeposit,
+    discountAmount,
     securityDepositAmount,
-    remainingAmount: rentalTermAmount - bookingDeposit + securityDepositAmount,
+    remainingAmount: isPaidInFull ? 0 : rentalTermAmount - bookingDeposit + securityDepositAmount,
     totalInitialAmount: rentalTermAmount + securityDepositAmount,
+    firstMonthRent: monthlyRent,
     quote: {
-      ...hold.quote,
+      ...normalizedHold.quote,
+      baseMonthlyPrice: monthlyRent,
       depositAmount: securityDepositAmount,
       totalFirstPayment: rentalTermAmount + securityDepositAmount
-    }
+    },
+    payment: shouldReprice && normalizedHold.payment.status === 'paid'
+      ? { ...normalizedHold.payment, amount: bookingDeposit }
+      : normalizedHold.payment
   }
 }
 
@@ -1031,7 +1218,7 @@ const reconcileReservationCheckins = (holds: StorageReservation[], records: Chec
   const normalized = records.map(normalizeCheckin)
   const existingHoldIds = new Set(normalized.map(record => record.holdId))
   const recovered = holds
-    .filter(hold => hold.assignedUnitId && hold.appointmentDate && hold.appointmentTime && !existingHoldIds.has(hold.id) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status))
+    .filter(hold => hold.assignedUnitId && hold.payment.status === 'paid' && hold.appointmentDate && hold.appointmentTime && !existingHoldIds.has(hold.id) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status))
     .map(hold => normalizeCheckin({
       id: `CHK-${hold.id}`,
       holdId: hold.id,
@@ -1058,7 +1245,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.map((hold: StorageReservation) => {
+        const normalizedHolds = mergeReceiptConfirmationDemo(
+          Array.isArray(parsed.holds) ? parsed.holds.filter((hold: StorageReservation) => !['RSV-6618', 'RSV-2104'].includes(hold.id)).map((hold: StorageReservation) => {
             const facility = findCanonicalFacility(hold.facilityId, hold.facilityName)
             return normalizeReservationPricing({
               ...hold,
@@ -1067,12 +1255,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               appointmentDate: hold.appointmentDate || hold.moveInDate,
               appointmentTime: hold.appointmentTime || '09:00'
             })
-          }) : []
+          }) : INITIAL_RESERVATIONS,
+          RECEIPT_CONFIRMATION_DEMO_HOLD
+        )
         return {
           ...parsed,
+          facilities: Array.isArray(parsed.facilities) && parsed.facilities.length ? normalizeStoredFacilities(parsed.facilities as Facility[]) : INITIAL_FACILITIES,
           users: normalizeUsers(parsed.users),
           rolePermissions: normalizeRolePermissions(parsed.rolePermissions),
-          units: Array.isArray(parsed.units) && parsed.units.length >= INITIAL_UNITS.length ? parsed.units : INITIAL_UNITS,
+          units: Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS,
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
 payments: Array.isArray(parsed.payments) ? parsed.payments : [],
@@ -1108,7 +1299,7 @@ rentals: Array.isArray(parsed.rentals)
           sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
           securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : INITIAL_SECURITY_ALERTS,
           profileChangeRequests: Array.isArray(parsed.profileChangeRequests) ? parsed.profileChangeRequests : INITIAL_PROFILE_CHANGE_REQUESTS,
-          tickets: parsed.tickets || TICKETS,
+          tickets: Array.isArray(parsed.tickets) ? normalizeStoredTickets(parsed.tickets as TicketItem[]) : TICKETS,
           config: parsed.config || DEFAULT_BUSINESS_CONFIG
         }
       }
@@ -1430,6 +1621,7 @@ rentals: Array.isArray(parsed.rentals)
             ...parsed,
             users: normalizeUsers(parsed.users),
             rolePermissions: normalizeRolePermissions(parsed.rolePermissions),
+            units: Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS,
             holds,
             checkins,
             loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
@@ -1458,7 +1650,8 @@ rentals: Array.isArray(parsed.rentals)
     appointmentTime: string
     largestItemDimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number }
     capacityValidatedByFrames?: boolean
-    customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number }
+    discountAmount?: number
+    customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number; physicalUnitId?: string }
   }): ReservationValidationResult => {
     assertPermission(params.customer, 'book_storage')
     const unitType = UNIT_TYPES.find(ut => ut.id === params.unitTypeId) || UNIT_TYPES[1]
@@ -1472,22 +1665,29 @@ rentals: Array.isArray(parsed.rentals)
     endObj.setMonth(endObj.getMonth() + params.rentalMonths)
     const endDate = endObj.toISOString().split('T')[0]
 
+    // Customer đã chọn đúng mã gian kho trên trang browse-units. Chỉ giữ đúng gian
+    // đó; không còn để Manager chọn lại một gian khác sau khi khách đặt.
+    const requestedPhysicalUnit = params.customerCatalogUnit
+      ? state.units.find(unit => unit.id === params.customerCatalogUnit?.physicalUnitId || unit.id === params.customerCatalogUnit?.id || unit.code === params.customerCatalogUnit?.id)
+      : undefined
+
     // Availability check: check units of this type in facility that don't have overlapping reservedPeriods or rentals
     const candidateUnits = state.units.filter(
-      u => u.facilityId === params.facilityId && u.type.toLowerCase().includes(unitType.name.split(' ')[0].toLowerCase()) && u.status !== 'maintenance'
+      u => u.facilityId === params.facilityId && u.type.toLowerCase().includes(unitType.name.split(' ')[0].toLowerCase()) && u.status === 'available'
     )
 
     const dateAvailableUnits = candidateUnits.filter(u => {
+      const overlapsReservedPeriod = (u.reservedPeriods || []).some(period => checkDateOverlap(startDate, endDate, period.startDate, period.endDate))
       // Check if any reservation or rental overlaps on this unit
       const overlapsReservation = state.holds.some(
-        h => h.assignedUnitId === u.id && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
+        h => h.assignedUnitId === u.id && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status) &&
              checkDateOverlap(startDate, endDate, h.startDate, h.endDate)
       )
       const overlapsRental = state.rentals.some(
-        r => r.unitId === u.id && r.status === 'active' &&
+        r => r.unitId === u.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status) &&
              checkDateOverlap(startDate, endDate, r.startDate, r.endDate)
       )
-      return !overlapsReservation && !overlapsRental
+      return !overlapsReservedPeriod && !overlapsReservation && !overlapsRental
     })
     const unassignedCapacityHolds = state.holds.filter(hold =>
       !hold.assignedUnitId &&
@@ -1496,13 +1696,9 @@ rentals: Array.isArray(parsed.rentals)
       (hold.status === 'DEPOSIT_PAID' || (hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING') || (['awaiting_email', 'awaiting_review', 'awaiting_payment'].includes(hold.status) && Boolean(hold.paymentExpiresAt) && new Date(hold.paymentExpiresAt!).getTime() > nowTime)) &&
       checkDateOverlap(startDate, endDate, hold.startDate, hold.endDate)
     )
-    const availableUnit = dateAvailableUnits[unassignedCapacityHolds.length] || (params.customerCatalogUnit ? {
-      id: params.customerCatalogUnit.id,
-      code: params.customerCatalogUnit.id,
-      facilityId: params.facilityId,
-      facilityName: params.customerCatalogUnit.facilityName,
-      doorDimensions: { widthM: params.customerCatalogUnit.doorWidthM, heightM: params.customerCatalogUnit.doorHeightM },
-    } as StorageUnit : undefined)
+    const availableUnit = requestedPhysicalUnit
+      ? dateAvailableUnits.find(unit => unit.id === requestedPhysicalUnit.id)
+      : dateAvailableUnits[unassignedCapacityHolds.length]
 
     if (!availableUnit) {
       return {
@@ -1583,7 +1779,9 @@ rentals: Array.isArray(parsed.rentals)
     // separate one-month security deposit is collected at check-in and may be
     // refunded only after the move-out inspection and settlement.
     const firstMonthRent = unitType.monthlyPrice
-    const rentalTermAmount = unitType.monthlyPrice * params.rentalMonths
+    const grossRentalTermAmount = unitType.monthlyPrice * params.rentalMonths
+    const discountAmount = Math.min(grossRentalTermAmount, Math.max(0, params.discountAmount || 0))
+    const rentalTermAmount = grossRentalTermAmount - discountAmount
     const securityDepositAmount = unitType.monthlyPrice
     const reservationDepositAmount = Math.round(rentalTermAmount * 0.2 * 100) / 100
     const remainingAmount = rentalTermAmount - reservationDepositAmount + securityDepositAmount
@@ -1599,7 +1797,7 @@ rentals: Array.isArray(parsed.rentals)
 
     const pricingQuote: PricingQuote = {
       quoteId,
-      unitId: '',
+      unitId: availableUnit.id,
       facilityId: params.facilityId,
       baseMonthlyPrice: unitType.monthlyPrice,
       depositAmount: securityDepositAmount,
@@ -1623,10 +1821,10 @@ rentals: Array.isArray(parsed.rentals)
       identityId: params.identityId,
       facilityId: params.facilityId,
       facilityName: availableUnit.facilityName,
-      unitId: '',
+      unitId: availableUnit.id,
       unitTypeId: unitType.id,
       unitTypeName: unitType.name,
-      assignedUnitId: undefined, // Manager will assign!
+      assignedUnitId: availableUnit.id,
       rentalMonths: params.rentalMonths,
       startDate,
       endDate,
@@ -1637,7 +1835,8 @@ rentals: Array.isArray(parsed.rentals)
       remainingAmount,
       firstMonthRent,
       totalInitialAmount,
-      approvalType: 'AUTO',
+      approvalType: requiresGoodsReview ? 'MANUAL' : 'AUTO',
+      discountAmount,
       paymentExpiresAt,
       goodsReviewStatus: requiresGoodsReview ? 'PENDING' : 'NOT_REQUIRED',
       goodsReviewSubmittedAt,
@@ -1668,6 +1867,19 @@ rentals: Array.isArray(parsed.rentals)
 
     setState(prev => ({
       ...prev,
+      units: prev.units.map(unit => unit.id === availableUnit.id
+        ? {
+            ...unit,
+            status: 'reserved',
+            reservedPeriods: [...(unit.reservedPeriods || []).filter(period => period.reservationId !== holdId), {
+              reservationId: holdId,
+              customerName: params.customer.name,
+              startDate,
+              endDate
+            }],
+            nextAvailableDate: endDate
+          }
+        : unit),
       holds: [newReservation, ...prev.holds],
       activities: [
         {
@@ -1703,13 +1915,14 @@ rentals: Array.isArray(parsed.rentals)
     if (reviewer.role !== 'staff' && reviewer.role !== 'manager' && reviewer.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được phê duyệt yêu cầu.')
     if (reviewer.role === 'manager' || reviewer.role === 'admin') {
       assertFacilityManager(reviewer, reservation.facilityId, reservation.facilityName)
-    } else if (reviewer.facility && reviewer.facility !== 'All facilities' && reviewer.facility !== reservation.facilityId && reviewer.facility !== reservation.facilityName) {
+    } else if (!isFacilityVisible(reviewer, reservation.facilityId, reservation.facilityName)) {
       throw new Error('Bạn không có quyền phê duyệt yêu cầu của cơ sở khác.')
     }
     const approvedAt = new Date().toISOString()
     const isGoodsReview = reservation.goodsReviewStatus === 'PENDING'
-    // The 24-hour mark is an SLA for Staff, not an automatic rejection or
-    // expiration. Overdue requests remain approvable while the unit stays held.
+    if (isGoodsReview && reservation.goodsReviewDueAt && new Date(reservation.goodsReviewDueAt).getTime() < Date.now()) {
+      throw new Error('Thời hạn duyệt hàng hóa 24 giờ đã hết. Vui lòng thông báo khách tạo yêu cầu mới.')
+    }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
     const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
     const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
@@ -1727,7 +1940,8 @@ rentals: Array.isArray(parsed.rentals)
         payment: isGoodsReview ? { ...item.payment, amount: reservationDepositAmount } : item.payment,
         reviewedByStaffId: reviewer.id,
         reviewedAt: approvedAt,
-        evidence: [...item.evidence, `APPROVED · ${reviewer.name} đã duyệt hàng hóa lúc ${approvedAt}`]
+        reviewExpiresAt: undefined,
+        evidence: [...item.evidence, `APPROVED · ${reviewer.name} đã duyệt hàng hóa lúc ${approvedAt}. Khách được mở bước thanh toán cọc.`]
       } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RESERVATION_APPROVED', actorId: reviewer.id, actorName: reviewer.name, actorRole: reviewer.role, facilityId: reservation.facilityId, entityType: 'hold', entityId: reservation.id, notes: 'Hồ sơ đã được phê duyệt và mở bước thanh toán cọc.', timestamp: approvedAt }, ...prev.activities]
     }))
@@ -1737,9 +1951,24 @@ rentals: Array.isArray(parsed.rentals)
     assertPermission(reviewer, 'approve_reservations')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || reservation.goodsReviewStatus !== 'PENDING') throw new Error('Không tìm thấy yêu cầu hàng hóa đang chờ duyệt.')
+    if (reviewer.role === 'manager' || reviewer.role === 'admin') {
+      assertFacilityManager(reviewer, reservation.facilityId, reservation.facilityName)
+    } else if (!isFacilityVisible(reviewer, reservation.facilityId, reservation.facilityName)) {
+      throw new Error('Bạn không có quyền xử lý yêu cầu của cơ sở khác.')
+    }
+    if (reservation.goodsReviewDueAt && new Date(reservation.goodsReviewDueAt).getTime() < Date.now()) {
+      throw new Error('Thời hạn duyệt hàng hóa 24 giờ đã hết. Vui lòng thông báo khách tạo yêu cầu mới.')
+    }
     const rejectedAt = new Date().toISOString()
     setState(prev => ({
       ...prev,
+      units: prev.units.map(unit => {
+        if (unit.id !== reservation.assignedUnitId) return unit
+        const reservedPeriods = (unit.reservedPeriods || []).filter(period => period.reservationId !== reservation.id)
+        const hasCurrentReservation = prev.holds.some(hold => hold.id !== reservation.id && hold.assignedUnitId === unit.id && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status) && checkDateOverlap(hold.startDate, hold.endDate, reservation.startDate, reservation.endDate))
+        const hasActiveRental = prev.rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))
+        return { ...unit, status: hasActiveRental ? 'occupied' : hasCurrentReservation ? 'reserved' : 'available', reservedPeriods, nextAvailableDate: reservedPeriods[reservedPeriods.length - 1]?.endDate }
+      }),
       holds: prev.holds.map(item => item.id === reservationId ? {
         ...item,
         status: 'CANCELLED',
@@ -1750,6 +1979,7 @@ rentals: Array.isArray(parsed.rentals)
         staffReviewNotes: note,
         reviewedByStaffId: reviewer.id,
         reviewedAt: rejectedAt,
+        reviewExpiresAt: undefined,
         evidence: [...item.evidence, `REJECTED · ${reviewer.name}: ${note}`],
       } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'GOODS_REVIEW_REJECTED', actorId: reviewer.id, actorName: reviewer.name, actorRole: reviewer.role, facilityId: reservation.facilityId, entityType: 'hold', entityId: reservation.id, notes: note, timestamp: rejectedAt }, ...prev.activities]
@@ -1770,16 +2000,20 @@ rentals: Array.isArray(parsed.rentals)
     if (unit.facilityId !== reservation.facilityId) throw new Error('Gian kho không thuộc cơ sở của đơn đặt.')
     if (!unitMatchesReservation(unit, reservation)) throw new Error('Loại gian kho không khớp với loại khách đã đặt.')
     if (reservation.assignedUnitId !== unit.id && unit.status !== 'available') {
-      throw new Error(`Gian kho ${unit.code} không còn ở trạng thái AVAILABLE.`)
+      throw new Error(`Gian kho ${unit.code} không còn ở trạng thái còn trống.`)
     }
 
     // Date-range overlap conflict check
-    const isConflicted = state.holds.some(
+    const reservedPeriodConflict = (unit.reservedPeriods || []).some(period =>
+      period.reservationId !== reservationId &&
+      checkDateOverlap(reservation.startDate, reservation.endDate, period.startDate, period.endDate)
+    )
+    const isConflicted = reservedPeriodConflict || state.holds.some(
       h => h.id !== reservationId && h.assignedUnitId === unitId &&
            ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
            checkDateOverlap(reservation.startDate, reservation.endDate, h.startDate, h.endDate)
     ) || state.rentals.some(
-      r => r.unitId === unitId && r.status === 'active' &&
+      r => r.unitId === unitId && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status) &&
            checkDateOverlap(reservation.startDate, reservation.endDate, r.startDate, r.endDate)
     )
 
@@ -2901,7 +3135,7 @@ rentals: Array.isArray(parsed.rentals)
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung phản hồi.')
     const ticket = state.tickets.find(item => item.id === ticketId)
     if (!ticket) throw new Error('Không tìm thấy yêu cầu hỗ trợ.')
-    if (staffUser.facility && staffUser.facility !== 'All facilities' && staffUser.facilityId !== ticket.facilityId && staffUser.facility !== ticket.facility && staffUser.facility !== ticket.facilityId) throw new Error('Bạn không có quyền xử lý yêu cầu của cơ sở khác.')
+    if (!isFacilityVisible(staffUser, ticket.facilityId, ticket.facility)) throw new Error('Bạn không có quyền xử lý yêu cầu của cơ sở khác.')
     const now = new Date().toISOString()
     setState(prev => ({
       ...prev,
@@ -3531,7 +3765,7 @@ rentals: Array.isArray(parsed.rentals)
     const returnCase = state.returns.find(item => item.id === returnId)
     if (!returnCase || returnCase.status !== 'refund_pending') throw new Error('Hồ sơ không ở trạng thái chờ hoàn cọc.')
     if (staffUser.role === 'manager' || staffUser.role === 'admin') assertFacilityManager(staffUser, returnCase.facilityId, returnCase.facilityName)
-    if (staffUser.role === 'staff' && staffUser.facility && staffUser.facility !== 'All facilities' && staffUser.facility !== returnCase.facilityName && staffUser.facility !== returnCase.facilityId) throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
+    if (staffUser.role === 'staff' && !isFacilityVisible(staffUser, returnCase.facilityId, returnCase.facilityName)) throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
     if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã giao dịch hoàn cọc.')
     const refundPayment = state.payments.find(item => item.rentalId === returnCase.rentalId && item.type === 'REFUND' && item.status === 'PENDING')
     if (!refundPayment) throw new Error('Không tìm thấy lệnh hoàn cọc đang chờ xử lý.')
@@ -3571,7 +3805,9 @@ rentals: Array.isArray(parsed.rentals)
             success = true
             return {
               ...h,
-              status: transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL'),
+              status: h.goodsReviewStatus === 'NOT_REQUIRED'
+                ? 'awaiting_payment'
+                : transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL'),
               emailVerification: {
                 ...h.emailVerification,
                 verified: true,
