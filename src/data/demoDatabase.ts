@@ -1,25 +1,25 @@
 /** Seed data for the frontend demo. Replace this module with API calls when the backend is connected. */
 
 export const FACILITIES = [
-  { id: 'fac-001', name: 'Downtown Storage', address: '125 Nguyen Hue, District 1', city: 'Ho Chi Minh City', rating: 4.8, available: 18, price: '$89', climate: true, security: '24/7', image: 'photo-1553413077-190dd305871c', units: 120, occupied: 96, revenue: 18450, growth: 8.4, manager: 'Demo Manager', status: 'active' },
-  { id: 'fac-002', name: 'Riverside Storage', address: '42 Bach Dang, Binh Thanh', city: 'Ho Chi Minh City', rating: 4.6, available: 9, price: '$75', climate: false, security: '24/7', image: 'photo-1586864387967-d02ef85d93e8', units: 80, occupied: 61, revenue: 10890, growth: 5.1, manager: 'Mai Tran', status: 'active' },
+  { id: 'fac-001', name: 'Downtown Storage', address: '125 Nguyen Hue, District 1', city: 'Ho Chi Minh City', rating: 4.8, available: 18, price: '89', climate: true, security: '24/7', image: 'photo-1553413077-190dd305871c', units: 120, occupied: 96, revenue: 18450, growth: 8.4, manager: 'Demo Manager', status: 'active' },
+  { id: 'fac-002', name: 'Riverside Storage', address: '42 Bach Dang, Binh Thanh', city: 'Ho Chi Minh City', rating: 4.6, available: 9, price: '75', climate: false, security: '24/7', image: 'photo-1586864387967-d02ef85d93e8', units: 80, occupied: 61, revenue: 10890, growth: 5.1, manager: 'Mai Tran', status: 'active' },
 ]
 
 export const UNITS = [
-  { id: 'A-104', areaM2: 2.25, volumeM3: 6.3, floor: 1, type: 'Small', price: 89, climate: true, status: 'available', facility: 'Downtown Storage', dimensions: { lengthM: 1.5, widthM: 1.5, heightM: 2.8 } },
-  { id: 'B-208', areaM2: 6.0, volumeM3: 15.0, floor: 2, type: 'Medium', price: 149, climate: true, status: 'occupied', facility: 'Downtown Storage', dimensions: { lengthM: 3.0, widthM: 2.0, heightM: 2.5 } },
-  { id: 'C-301', areaM2: 12.0, volumeM3: 30.0, floor: 3, type: 'Large', price: 269, climate: false, status: 'available', facility: 'Downtown Storage', dimensions: { lengthM: 4.0, widthM: 3.0, heightM: 2.5 } },
-  { id: 'A-115', areaM2: 2.25, volumeM3: 6.3, floor: 1, type: 'Small', price: 85, climate: false, status: 'reserved', facility: 'Riverside Storage', dimensions: { lengthM: 1.5, widthM: 1.5, heightM: 2.8 } },
-  { id: 'R-106', areaM2: 2.25, volumeM3: 6.3, floor: 1, type: 'Small', price: 75, climate: false, status: 'available', facility: 'Riverside Storage', dimensions: { lengthM: 1.5, widthM: 1.5, heightM: 2.8 } },
-  { id: 'R-214', areaM2: 6.0, volumeM3: 15.0, floor: 2, type: 'Medium', price: 135, climate: false, status: 'available', facility: 'Riverside Storage', dimensions: { lengthM: 3.0, widthM: 2.0, heightM: 2.5 } },
-  { id: 'R-305', areaM2: 12.0, volumeM3: 30.0, floor: 3, type: 'Large', price: 245, climate: true, status: 'available', facility: 'Riverside Storage', dimensions: { lengthM: 4.0, widthM: 3.0, heightM: 2.5 } },
-  { id: 'B-112', areaM2: 6.0, volumeM3: 15.0, floor: 1, type: 'Medium', price: 155, climate: true, status: 'available', facility: 'Downtown Storage', dimensions: { lengthM: 3.0, widthM: 2.0, heightM: 2.5 } },
-  { id: 'D-402', areaM2: 18.0, volumeM3: 45.0, floor: 4, type: 'Extra Large', price: 349, climate: true, status: 'occupied', facility: 'Downtown Storage', dimensions: { lengthM: 6.0, widthM: 3.0, heightM: 2.5 } },
+  { id: 'A-104', size: 5, sqft: 25, floor: 1, type: 'Small', price: 89, climate: true, status: 'available', facility: 'Downtown Storage' },
+  { id: 'B-208', size: 10, sqft: 100, floor: 2, type: 'Medium', price: 149, climate: true, status: 'occupied', facility: 'Downtown Storage' },
+  { id: 'C-301', size: 20, sqft: 400, floor: 3, type: 'Large', price: 269, climate: false, status: 'available', facility: 'Downtown Storage' },
+  { id: 'A-115', size: 5, sqft: 25, floor: 1, type: 'Small', price: 85, climate: false, status: 'reserved', facility: 'Riverside Storage' },
+  { id: 'R-106', size: 5, sqft: 25, floor: 1, type: 'Small', price: 75, climate: false, status: 'available', facility: 'Riverside Storage' },
+  { id: 'R-214', size: 10, sqft: 100, floor: 2, type: 'Medium', price: 135, climate: false, status: 'available', facility: 'Riverside Storage' },
+  { id: 'R-305', size: 20, sqft: 400, floor: 3, type: 'Large', price: 245, climate: true, status: 'available', facility: 'Riverside Storage' },
+  { id: 'B-112', size: 10, sqft: 100, floor: 1, type: 'Medium', price: 155, climate: true, status: 'available', facility: 'Downtown Storage' },
+  { id: 'D-402', size: 25, sqft: 500, floor: 4, type: 'Extra Large', price: 349, climate: true, status: 'occupied', facility: 'Downtown Storage' },
 ]
 
 export const MY_RENTALS = [
-  { id: 'rent-001', unit: 'B-208', facility: 'Downtown Storage', areaM2: 6.0, status: 'active', paid: true, amount: 149, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
-  { id: 'rent-002', unit: 'A-104', facility: 'Downtown Storage', areaM2: 2.25, status: 'active', paid: false, amount: 89, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
+  { id: 'rent-001', unit: 'B-208', facility: 'Downtown Storage', size: 10, status: 'active', paid: true, amount: 149, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
+  { id: 'rent-002', unit: 'A-104', facility: 'Downtown Storage', size: 5, status: 'active', paid: false, amount: 89, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
 ]
 
 export const PAYMENTS = [
@@ -46,7 +46,12 @@ export interface TicketItem {
   status: 'open' | 'in-progress' | 'resolved'
   created: string
   facility: string
+  facilityId?: string
   unit: string
+  assignedStaff?: string
+  updatedAt?: string
+  relatedType?: 'rental' | 'reservation' | 'general'
+  relatedId?: string
   messages: TicketMessage[]
 }
 
@@ -392,9 +397,9 @@ export const RENTALS: RentalRecord[] = [
 ]
 
 export const STAFF_LIST = [
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', shift: 'Morning', tasks: 3, status: 'on-duty', phone: '090 555 0101' },
-  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', shift: 'Day', tasks: 5, status: 'on-duty', phone: '090 555 0102' },
-  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', shift: 'Night', tasks: 1, status: 'off-duty', phone: '090 555 0103' }
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'fac-001', facilityName: 'Downtown Storage' },
+  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'fac-001', facilityName: 'Downtown Storage' },
+  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'fac-002', facilityName: 'Riverside Storage' }
 ]
 
 export interface OverdueAccount {
@@ -527,12 +532,44 @@ export const CONVERSION_DATA = [
   { month: 'Sep', visits: 760, bookings: 84 }
 ]
 
-export const PRICING_TIERS = [
-  { id: 'tier-1', name: 'Nhỏ (Small)', type: 'Small', sizes: '2.25 m² (6.3 m³)', size: '2.25 m²', basePrice: 89, climateAdder: 20, highDemandMultiplier: 1.15, facility: 'All facilities' },
-  { id: 'tier-2', name: 'Vừa (Medium)', type: 'Medium', sizes: '6.0 m² (15.0 m³)', size: '6.0 m²', basePrice: 150, climateAdder: 30, highDemandMultiplier: 1.2, facility: 'All facilities' },
-  { id: 'tier-3', name: 'Lớn (Large)', type: 'Large', sizes: '12.0 m² (30.0 m³)', size: '12.0 m²', basePrice: 270, climateAdder: 45, highDemandMultiplier: 1.25, facility: 'All facilities' },
-  { id: 'tier-4', name: 'Cực lớn (Extra Large)', type: 'Extra Large', sizes: '18.0 m² (45.0 m³)', size: '18.0 m²', basePrice: 360, climateAdder: 50, highDemandMultiplier: 1.3, facility: 'All facilities' }
-]
+// export const PRICING_TIERS = [
+//   { id: 'tier-1', name: 'Small Unit', size: '5 ft (25 sq ft)', basePrice: 89, climateAdder: 20, highDemandMultiplier: 1.15, facility: 'All facilities' },
+//   { id: 'tier-2', name: 'Medium Unit', size: '10 ft (100 sq ft)', basePrice: 149, climateAdder: 30, highDemandMultiplier: 1.2, facility: 'All facilities' },
+//   { id: 'tier-3', name: 'Large Unit', size: '20 ft (400 sq ft)', basePrice: 269, climateAdder: 45, highDemandMultiplier: 1.25, facility: 'All facilities' }
+// ]
+
+export const PRICING_TIERS =
+  [
+    {
+      id: 'tier-1',
+      name: 'Small Unit',
+      size: '7,500,000 cm³',
+      basePrice: 89,
+      climateAdder: 20,
+      highDemandMultiplier: 1.15,
+      facility: 'All facilities'
+    },
+
+    {
+      id: 'tier-2',
+      name: 'Medium Unit',
+      size: '18,750,000 cm³',
+      basePrice: 149,
+      climateAdder: 30,
+      highDemandMultiplier: 1.2,
+      facility: 'All facilities'
+    },
+
+    {
+      id: 'tier-3',
+      name: 'Large Unit',
+      size: '60,000,000 cm³',
+      basePrice: 269,
+      climateAdder: 45,
+      highDemandMultiplier: 1.25,
+      facility: 'All facilities'
+    }
+  ];
 
 export interface PromotionItem {
   id: string
@@ -597,9 +634,9 @@ export const DISCOUNTS: PromotionItem[] = [
     id: 'DSC-103',
     code: 'FALLSTORAGE25',
     name: 'Autumn Move-In Special',
-    description: 'Instant $25 deduction on the first month invoice for any new storage unit reservation.',
-    value: '$25 OFF',
-    discount: '$25 instant cash voucher',
+    description: 'Instant 650.000 ₫ deduction on the first month invoice for any new storage unit reservation.',
+    value: '650.000 ₫ OFF',
+    discount: '650.000 ₫ one-time adjustment',
     type: 'fixed-amount',
     typeLabel: 'Fixed Amount',
     active: true,
@@ -636,8 +673,8 @@ export const DISCOUNTS: PromotionItem[] = [
     code: 'SUMMER2026',
     name: 'Summer Flash Promotion (Expired)',
     description: 'Summer seasonal campaign for student locker and mini storage.',
-    value: '$15 OFF',
-    discount: '$15 one-time off',
+    value: '390.000 ₫ OFF',
+    discount: '390.000 ₫ one-time off',
     type: 'seasonal',
     typeLabel: 'Seasonal Flash',
     active: false,
@@ -652,101 +689,31 @@ export const DISCOUNTS: PromotionItem[] = [
   }
 ]
 
-export interface PolicyItem {
-  id: string
-  name: string
-  value: string
-  scope: string
-  description: string
-  descriptionVi: string
-  editable: boolean
-  status: 'active' | 'draft' | 'archived'
-}
+// export const POLICIES = [
+//   { id: 'pol-1', name: 'Standard monthly rental', description: 'Month-to-month rental with 30-day notice.', status: 'active' },
+//   { id: 'pol-2', name: 'Annual corporate lease', description: '12-month fixed commitment with discounted base rate.', status: 'active' }
+// ]
 
-export const POLICIES: PolicyItem[] = [
-  {
-    id: 'pol-1',
-    name: 'Grace Period',
-    value: '7 days',
-    scope: 'All Facilities',
-    description: 'Debt grace period before late fees are charged or electronic gate access is suspended.',
-    descriptionVi: 'Thời gian gia hạn nợ trước khi tính phí phạt trễ hạn hoặc áp dụng khóa cổng điện tử.',
-    editable: true,
-    status: 'active'
-  },
-  {
-    id: 'pol-2',
-    name: 'Late Fee',
-    value: '$25.00',
-    scope: 'All Facilities',
-    description: 'Fixed late fee applied automatically after the payment grace period ends.',
-    descriptionVi: 'Mức phí phạt cố định áp dụng tự động sau khi kết thúc thời gian gia hạn thanh toán.',
-    editable: true,
-    status: 'active'
-  },
-  {
-    id: 'pol-3',
-    name: 'Security Deposit',
-    value: '1 month',
-    scope: 'All Facilities',
-    description: 'Security deposit retained during the lease and refunded in full within 24 hours when the unit is returned undamaged.',
-    descriptionVi: 'Tiền đặt cọc an ninh, bảo lưu và hoàn trả 100% trong 24h khi khách trả kho nguyên vẹn.',
-    editable: true,
-    status: 'active'
-  },
-  {
-    id: 'pol-4',
-    name: 'Notice to Vacate',
-    value: '15 days',
-    scope: 'All Facilities',
-    description: 'Minimum notice the tenant must provide before vacating at the end of the lease term.',
-    descriptionVi: 'Thời hạn tối thiểu khách hàng cần gửi yêu cầu thông báo trả kho trước khi hết kỳ thuê.',
-    editable: true,
-    status: 'active'
-  },
-  {
-    id: 'pol-5',
-    name: 'Minimum Lease',
-    value: '1 month',
-    scope: 'All Facilities',
-    description: 'Minimum storage-unit lease term applied to all individual customers.',
-    descriptionVi: 'Thời hạn hợp đồng thuê gian kho tối thiểu được áp dụng cho toàn bộ khách hàng cá nhân.',
-    editable: true,
-    status: 'active'
-  },
-  {
-    id: 'pol-6',
-    name: 'Hold Reservation TTL',
-    value: '24 hours',
-    scope: 'All Facilities',
-    description: 'The storage unit is held for 24 hours while the customer completes verification and pays the deposit.',
-    descriptionVi: 'Thời gian giữ khóa kho tạm thời 24h để khách hàng hoàn tất xác minh và đóng tiền cọc.',
-    editable: true,
-    status: 'active'
-  },
-  {
-    id: 'pol-7',
-    name: 'Digital Gate Access',
-    value: '24/7 Access',
-    scope: 'All Facilities',
-    description: '24/7 facility access using a personalized digital PIN issued after the deposit is paid.',
-    descriptionVi: 'Quyền ra vào cơ sở 24/7 bằng mã PIN số cá nhân hóa được cấp ngay sau khi thanh toán cọc.',
-    editable: false,
-    status: 'active'
-  }
+export const POLICIES = [
+  { id: 'pol-1', name: 'Grace Period', value: '5 days', scope: 'All Facilities', editable: true },
+  { id: 'pol-2', name: 'Late Fee', value: '650.000 ₫ / month', scope: 'All Facilities', editable: true },
+  { id: 'pol-3', name: 'Security Deposit', value: '1 month', scope: 'All Facilities', editable: true },
+  { id: 'pol-4', name: 'Notice to Vacate', value: '15 days', scope: 'All Facilities', editable: true },
+  { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', editable: true }
 ]
 
+
 export const FEES = [
-  { type: 'Late payment fee', amount: '$25.00', trigger: 'Applied automatically 5 days after payment due date', applies: 'All tenants' },
-  { type: 'Digital lock replacement', amount: '$45.00', trigger: 'Upon tenant physical loss or key fob damage', applies: 'Tenant responsibility' },
-  { type: 'Unit cleaning & restoration', amount: '$80.00', trigger: 'Charged if unit returned with debris or biohazard', applies: 'Move-out inspection' },
-  { type: 'Emergency unlock assistance', amount: '$30.00', trigger: 'After-hours on-site manual lock release', applies: 'Per call-out' }
+  { type: 'Late payment fee', amount: '650.000 ₫', trigger: 'Applied automatically 5 days after payment due date', applies: 'All tenants' },
+  { type: 'Digital lock replacement', amount: '1.170.000 ₫', trigger: 'Upon tenant physical loss or key fob damage', applies: 'Tenant responsibility' },
+  { type: 'Unit cleaning & restoration', amount: '2.080.000 ₫', trigger: 'Charged if unit returned with debris or biohazard', applies: 'Move-out inspection' },
+  { type: 'Emergency unlock assistance', amount: '780.000 ₫', trigger: 'After-hours on-site manual lock release', applies: 'Per call-out' }
 ]
 
 export const USERS = [
-  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Downtown Storage', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Downtown Storage', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
-  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Downtown Storage', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
+  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Downtown Storage', facilityId: 'fac-001', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Downtown Storage', facilityId: 'fac-001', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
+  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Downtown Storage', facilityId: 'fac-001', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
   { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'All facilities', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
   { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'All facilities', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
 ]
@@ -820,27 +787,6 @@ export const ACTIVITY_LOGS: AuditActivityLog[] = [
     }
   },
   {
-    id: 'act-103',
-    user: 'Demo Operations',
-    actor: 'Demo Operations',
-    role: 'business',
-    action: 'Published new promotional campaign WELCOME10',
-    target: 'Promotions · WELCOME10 (10% OFF)',
-    time: '1 hour ago',
-    timestamp: '2026-09-18 11:05:30',
-    type: 'success',
-    severity: 'info',
-    category: 'pricing',
-    ip: '192.168.1.44',
-    device: 'Chrome 128 / Windows 11',
-    details: {
-      actionType: 'PROMOTION_CREATE',
-      code: 'WELCOME10',
-      discountValue: '10%',
-      maxUses: 100
-    }
-  },
-  {
     id: 'act-104',
     user: 'Demo Staff',
     actor: 'Demo Staff',
@@ -887,7 +833,7 @@ export const ACTIVITY_LOGS: AuditActivityLog[] = [
     actor: 'Demo Customer',
     role: 'customer',
     action: 'Processed online credit card payment for September rent',
-    target: 'Invoice INV-2026-0081 · $149.00',
+    target: 'Invoice INV-2026-0081 · 3.874.000 ₫',
     time: '5 hours ago',
     timestamp: '2026-09-18 07:11:45',
     type: 'success',
@@ -925,7 +871,7 @@ export const SETTINGS_GROUPS: SettingGroup[] = [
       { id: 'businessName', label: 'Company / Facility Name', type: 'text', value: 'StorageHub Vietnam' },
       { id: 'contactEmail', label: 'Primary Support Email', type: 'text', value: 'support@storagehub.demo' },
       { id: 'hotline', label: 'Customer Hotline', type: 'text', value: '+84 28 3822 8888' },
-      { id: 'currency', label: 'Operating Currency', type: 'select', value: 'USD ($)', options: ['USD ($)', 'VND (₫)', 'EUR (€)', 'SGD ($)'] },
+      { id: 'currency', label: 'Operating Currency', type: 'select', value: 'VND (₫)', options: ['VND (₫)'] },
       { id: 'timezone', label: 'Facility Timezone', type: 'select', value: 'GMT+7 (Asia/Ho_Chi_Minh)', options: ['GMT+7 (Asia/Ho_Chi_Minh)', 'GMT+8 (Asia/Singapore)', 'GMT+0 (UTC)'] }
     ]
   },
@@ -934,7 +880,7 @@ export const SETTINGS_GROUPS: SettingGroup[] = [
     description: 'Automated invoice generation, grace periods, and late penalty triggers.',
     items: [
       { id: 'gracePeriod', label: 'Late Fee Grace Period (Days)', type: 'number', value: 5 },
-      { id: 'lateFeeAmount', label: 'Fixed Late Fee Amount ($)', type: 'number', value: 25 },
+      { id: 'lateFeeAmount', label: 'Fixed Late Fee Amount (VND)', type: 'number', value: 650000 },
       { id: 'autoInvoiceDays', label: 'Advance Invoice Generation (Days)', type: 'select', value: '7 days before due date', options: ['3 days before due date', '7 days before due date', '14 days before due date', '30 days before due date'] },
       { id: 'autoProrate', label: 'Prorate First Month Rent on Move-in', type: 'toggle', value: true }
     ]

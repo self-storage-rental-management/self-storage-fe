@@ -2,6 +2,9 @@ export type UnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' |
 
 export type ReservationStatus =
   | 'CREATED'
+  | 'awaiting_email'
+  | 'awaiting_review'
+  | 'awaiting_payment'
   | 'DEPOSIT_PAID'
   | 'UNIT_RESERVED'
   | 'READY_FOR_CHECKIN'
@@ -30,17 +33,14 @@ export type HoldStatus =
   | 'no_show'
   | 'held'
   | 'draft'
-  | 'awaiting_email'
-  | 'awaiting_review'
   | 'approved'
-  | 'awaiting_payment'
   | 'checked_in'
 
 export type RentalStatus = 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
 
 export type PaymentStatus = 'pending' | 'paid' | 'overdue' | 'refunded' | 'cancelled'
 
-export type ReturnStatus = 'requested' | 'scheduled' | 'inspected' | 'completed'
+export type ReturnStatus = 'requested' | 'scheduled' | 'inspected' | 'awaiting_customer_confirmation' | 'disputed' | 'payment_due' | 'refund_pending' | 'completed'
 
 export type DamageClassification =
   | 'no_damage'
@@ -143,6 +143,24 @@ export interface GoodsDeclaration {
   fragile: boolean
   specialHandling?: string
   notes?: string
+  items?: Array<{
+    id: string
+    category: string
+    materialType?: 'NORMAL' | 'FRAGILE' | ''
+    materialName?: string
+    customGoodsName?: string
+    description?: string
+    customMaterial?: string
+    quantity?: number
+    dimensions?: { lengthCm?: number; widthCm?: number; heightCm?: number }
+    weightKg?: number
+    fragile?: boolean
+    customerNote?: string
+    images?: string[]
+    requiresStaffReview?: boolean
+    reviewStatus?: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
+    staffReviewNote?: string
+  }>
 }
 
 export interface PricingQuote {
@@ -163,7 +181,7 @@ export interface PricingQuote {
   expiresAt: string
 }
 
-export interface DiscountRule = {
+export interface DiscountRule {
   code: string
   type: 'PERCENT' | 'FIXED'
   value: number
@@ -201,7 +219,7 @@ export interface AccessCredential {
   unitId: string
   type: 'PIN' | 'KEY' | 'CARD'
   pinCode?: string
-  status: 'PENDING' | 'ACTIVE' | 'REVOKED'
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED'
   generatedAt?: string
   activatedAt?: string
   revokedAt?: string
@@ -213,6 +231,8 @@ export interface StorageReservation {
   customerName: string
   customerEmail: string
   customerPhone: string
+  customerAddress?: string
+  customerArchivedAt?: string
   identityId: string
   facilityId: string
   facilityName: string
@@ -237,7 +257,13 @@ export interface StorageReservation {
   exceptionDetails?: string
   suggestedUnitType?: string
   paymentExpiresAt?: string
+  depositPaidAt?: string
+  checkInDeadline?: string
   reviewExpiresAt?: string
+  goodsReviewStatus?: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  goodsReviewSubmittedAt?: string
+  goodsReviewDueAt?: string
+  depositRequired?: boolean
   largestItemDimensionsCm?: {
     lengthCm: number
     widthCm: number
@@ -271,6 +297,7 @@ export interface StorageReservation {
   appointmentDate?: string
   appointmentTime?: string
   generatedAccessPin?: string
+  unitAssignedAt?: string
   checkedInAt?: string
   checkedInBy?: string
   handoverCompleted?: boolean
@@ -367,13 +394,17 @@ export interface StorageContract {
   uploadedAt: string
   uploadedBy: string
   status: 'SIGNED'
+  contractType?: 'INITIAL' | 'RENEWAL'
+  renewalId?: string
+  customerArchivedAt?: string
 }
 
 export interface StoragePayment {
   id: string
   reservationId: string
   rentalId?: string
-  type: 'RESERVATION_DEPOSIT' | 'INITIAL_RENT' | 'RENEWAL' | 'DAMAGE_FEE' | 'REFUND'
+  renewalId?: string
+  type: 'RESERVATION_DEPOSIT' | 'INITIAL_RENT' | 'RENT' | 'RENEWAL' | 'DAMAGE_FEE' | 'REFUND'
   amount: number
   paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY'
   transactionReference?: string
@@ -383,6 +414,9 @@ export interface StoragePayment {
   status: 'PAID' | 'PENDING'
   paidAt?: string
   recordedBy: string
+  invoiceNumber?: string
+  description?: string
+  gatewayVerifiedAt?: string
 }
 
 export interface RenewalRecord {
@@ -394,16 +428,48 @@ export interface RenewalRecord {
   customerName: string
   oldEndDate: string
   newEndDate: string
+  renewalMonths: number
   renewalFee: number
-  status: 'pending' | 'approved' | 'rejected' | 'completed'
+  status: 'pending' | 'approved' | 'deposit_paid' | 'appointment_scheduled' | 'payment_processing' | 'payment_failed' | 'payment_expired' | 'rejected' | 'cancelled' | 'completed'
   requestedAt: string
+  updatedAt?: string
+  cancelledAt?: string
   approvedBy?: string
   approvedAt?: string
+  paymentDueAt?: string
+  invoiceNumber?: string
+  invoiceIssuedAt?: string
   paidAt?: string
   paymentMethod?: string
   transactionReference?: string
+  paymentId?: string
+  addendumNumber?: string
+  addendumIssuedAt?: string
+  renewalContractId?: string
+  renewalContractNumber?: string
+  effectiveAt?: string
+  originalMonthlyRate?: number
+  totalAmount?: number
+  bookingDepositAmount?: number
+  remainingAmount?: number
+  appointmentDate?: string
+  appointmentTime?: string
+  signingDeadline?: string
+  overdueDays?: number
+  lateFeePerDay?: number
+  lateFeeAmount?: number
+  signedAt?: string
+  completedBy?: string
   attachmentUrl?: string
   notes?: string
+}
+
+export interface ReturnSettlementAdjustments {
+  damageFee: number
+  cleaningFee: number
+  overdueFee: number
+  outstandingFee: number
+  resolutionNote: string
 }
 
 export interface MaintenanceTask {
@@ -455,9 +521,34 @@ export interface RentalRecord {
   discountAmount?: number
   checkedOutAt?: string
   accessRevokedAt?: string
+  receiptConfirmedAt?: string
+  receiptConfirmedBy?: string
+  customerArchivedAt?: string
+  lateFeeAmount?: number
+  lateFeeProcessedForDueDate?: string
+  overlocked?: boolean
+  lastReminderAt?: string
+  remindersSent?: number
   // Optional legacy fields for backward-compatibility during refactoring
   size?: number
   sqft?: number
+}
+
+export interface FacilityTask {
+  id: string
+  facilityId: string
+  facilityName: string
+  type: 'checkin' | 'return' | 'maintenance' | 'support' | 'general'
+  title: string
+  referenceId?: string
+  assignedStaffId?: string
+  assignedStaffName?: string
+  dueAt: string
+  priority: 'high' | 'medium' | 'low'
+  status: 'open' | 'in_progress' | 'completed'
+  notes?: string
+  createdAt: string
+  completedAt?: string
 }
 
 export interface ReturnCase {
@@ -487,13 +578,22 @@ export interface ReturnCase {
   overdueFee?: number
   depositAmount: number // Security deposit to be refunded from
   netRefundAmount: number
+  amountDueFromCustomer?: number
+  overdueDays?: number
+  settlementPaymentId?: string
+  settlementPaidAt?: string
   staffNotes?: string
   evidence: string[]
   customerConfirmed: boolean
+  customerConfirmedAt?: string
+  customerDecision?: 'accepted' | 'disputed'
+  customerDecisionNote?: string
+  proposedUnitStatus?: 'available' | 'maintenance'
+  inspectedAt?: string
   completedAt?: string
   staffId?: string
   returnedItems?: { key: boolean; card: boolean; lock: boolean }
-  refundTransaction?: { id: string; type: 'refund'; amount: number; status: 'pending'; recordedAt: string }
+  refundTransaction?: { id: string; type: 'refund'; amount: number; status: 'pending' | 'paid'; recordedAt: string }
 }
 
 export interface ActivityRecord {
@@ -504,7 +604,7 @@ export interface ActivityRecord {
   actorName: string
   actorRole: string
   facilityId: string
-  entityType: 'hold' | 'unit' | 'rental' | 'checkin' | 'return' | 'payment' | 'policy' | 'system'
+  entityType: 'hold' | 'unit' | 'rental' | 'checkin' | 'return' | 'payment' | 'policy' | 'task' | 'user' | 'system'
   entityId: string
   beforeState?: any
   afterState?: any

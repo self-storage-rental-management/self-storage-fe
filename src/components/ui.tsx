@@ -1,4 +1,4 @@
-import { type ReactNode, type HTMLAttributes } from 'react'
+import { type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
 
 // ─── Badge ───────────────────────────────────────────────────────────────────
 
@@ -59,9 +59,9 @@ export function Button({ variant = 'primary', size = 'md', className = '', child
 
 // ─── Card ────────────────────────────────────────────────────────────────────
 
-export function Card({ children, className = '', onClick }: { children?: ReactNode; className?: string; onClick?: () => void }) {
+export function Card({ children, className = '', ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`app-card ${className}`} onClick={onClick}>
+    <div className={`app-card ${className}`} {...rest}>
       {children}
     </div>
   )
@@ -118,15 +118,15 @@ export function Th({ children, className = '' }: { children?: ReactNode; classNa
   return <th className={`px-4 py-3 font-mono text-[11px] font-semibold text-stone-500 uppercase tracking-[.06em] ${className}`}>{children}</th>
 }
 
-export function Td({ children, className = '' }: { children?: ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 text-stone-700 ${className}`}>{children}</td>
+export function Td({ children, className = '', ...rest }: TdHTMLAttributes<HTMLTableCellElement>) {
+  return <td className={`px-4 py-3 text-stone-700 ${className}`} {...rest}>{children}</td>
 }
 
-export function Tr({ children, onClick, className = '' }: { children: ReactNode; onClick?: () => void; className?: string }) {
+export function Tr({ children, className = '', ...rest }: HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={`hover:bg-[#fbfaf6] transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
-      onClick={onClick}
+      className={`hover:bg-[#fbfaf6] transition-colors ${rest.onClick ? 'cursor-pointer' : ''} ${className}`}
+      {...rest}
     >
       {children}
     </tr>
@@ -149,7 +149,7 @@ export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md'
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
-interface InputProps extends HTMLAttributes<HTMLInputElement> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   type?: string
   value?: string
@@ -170,12 +170,13 @@ export function Input({ label, className = '', ...props }: InputProps) {
   )
 }
 
-export function Select({ label, children, className = '', value, onChange }: {
+export function Select({ label, children, className = '', value, onChange, disabled = false }: {
   label?: string
   children?: ReactNode
   className?: string
   value?: string
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void
+  disabled?: boolean
 }) {
   return (
     <div className="space-y-1">
@@ -184,6 +185,7 @@ export function Select({ label, children, className = '', value, onChange }: {
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition bg-white ${className}`}
         value={value}
         onChange={onChange}
+        disabled={disabled}
       >
         {children}
       </select>
@@ -223,18 +225,21 @@ export function EmptyState({ title, description, action }: {
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
 export function Modal({ open, onClose, title, children, size = 'md' }: {
-  open: boolean; onClose: () => void; title: string; children: ReactNode; size?: 'md' | 'xl'
+  open: boolean; onClose: () => void; title: string; children: ReactNode; size?: 'md' | 'lg' | 'xl'
 }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="modal-title" className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-stone-200 shadow-2xl w-full ${size === 'xl' ? 'max-w-4xl' : 'max-w-lg'} mx-4 p-6 fade-in`}>
+      <div role="dialog" aria-modal="true" aria-labelledby="modal-title" className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-stone-200 shadow-2xl w-full ${size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} mx-4 p-6 fade-in`}>
         <div className="flex items-center justify-between mb-5">
           <h2 id="modal-title" className="text-lg font-bold text-stone-900">{title}</h2>
-          <button aria-label="Close dialog" className="text-stone-400 hover:text-stone-700 transition" onClick={onClose}>
-            Đóng
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <button
+            aria-label="Close dialog"
+            className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
+            onClick={onClose}
+          >
+            <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>

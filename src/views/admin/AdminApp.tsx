@@ -1,15 +1,52 @@
-import { useState } from 'react'
-import Layout, { getInitialPage, Icon } from '../../components/Layout'
+import React, { useState, Fragment } from 'react'
+import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Avatar, Tabs } from '../../components/ui'
 import type { User, Role } from '../../types'
-import { USERS, LOGIN_HISTORY, ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog, type SettingGroup } from "../../data/demoDatabase"
-import { useLanguage } from '../../i18n/LanguageContext'
+import type { PermissionKey } from '../../types'
+import { PERMISSION_DEFINITIONS, DEFAULT_ROLE_PERMISSIONS } from '../../auth/rbac'
+import { ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog } from "../../data/demoDatabase"
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
-import { useMemo } from 'react'
 
-const PERMISSIONS: Partial<Record<Role, Record<string, boolean>>> = {}
-const permissionLabels: Array<{ key: string; label: string }> = []
+function CheckIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+function MinusIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M18 12H6" />
+    </svg>
+  )
+}
+
+function LockIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  )
+}
+
+function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  )
+}
+
+function RefreshIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+  )
+}
 
 const roleColors: Record<Role, string> = {
   customer: 'bg-blue-100 text-blue-700',
@@ -19,24 +56,73 @@ const roleColors: Record<Role, string> = {
   admin: 'bg-red-100 text-red-700',
 }
 
-export default function AdminApp({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const { lang } = useLanguage()
+const roleLabels: Record<Role, string> = {
+  customer: 'Khách hàng',
+  staff: 'Nhân viên',
+  manager: 'Quản lý',
+  business: 'Kinh doanh',
+  admin: 'Quản trị viên',
+}
 
-  const NAV = [
-    { id: 'users', label: lang === 'vi' ? 'Quản lý người dùng' : 'User Management', icon: Icon.users, group: lang === 'vi' ? 'Quản trị' : 'Administration' },
-    { id: 'roles', label: lang === 'vi' ? 'Vai trò & Phân quyền' : 'Roles & Permissions', icon: Icon.shield, group: lang === 'vi' ? 'Quản trị' : 'Administration' },
-    { id: 'login-history', label: lang === 'vi' ? 'Lịch sử đăng nhập' : 'Login History', icon: Icon.login, group: lang === 'vi' ? 'Bảo mật & Giám sát' : 'Security & Audit' },
-    { id: 'activity', label: lang === 'vi' ? 'Nhật ký hoạt động' : 'Activity Logs', icon: Icon.log, group: lang === 'vi' ? 'Bảo mật & Giám sát' : 'Security & Audit' },
-    { id: 'settings', label: lang === 'vi' ? 'Cài đặt hệ thống' : 'System Settings', icon: Icon.cog, group: lang === 'vi' ? 'Hệ thống' : 'System' },
+export default function AdminApp({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const {
+    activities,
+    users: USERS,
+    facilities,
+    createInternalAccount,
+    createCustomerSupportAccount,
+    updateUserAccount,
+    setUserAccountStatus,
+    deleteUserAccount,
+    requestUserPasswordReset,
+    rolePermissions,
+    updateRolePermissions,
+    can,
+    loginHistory,
+    sessions,
+    securityAlerts,
+    revokeAllUserSessions
+  } = useStorageHub()
+
+  const NAV: NavItem[] = [
+    { id: 'users', label: 'Quản lý người dùng', icon: Icon.users, group: 'Quản trị', permission: 'manage_users' as PermissionKey },
+    { id: 'roles', label: 'Vai trò & Phân quyền', icon: Icon.shield, group: 'Quản trị', permission: 'manage_roles' as PermissionKey },
+    { id: 'login-history', label: 'Lịch sử đăng nhập', icon: Icon.login, group: 'Bảo mật & Giám sát', permission: 'view_audit_logs' as PermissionKey },
+    { id: 'activity', label: 'Nhật ký hoạt động', icon: Icon.log, group: 'Bảo mật & Giám sát', permission: 'view_audit_logs' as PermissionKey },
+    { id: 'settings', label: 'Cài đặt hệ thống', icon: Icon.cog, group: 'Hệ thống', permission: 'manage_settings' as PermissionKey },
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, 'users'))
   const [userModal, setUserModal] = useState(false)
-  const [userTab, setUserTab] = useState('All')
-  const [logTab, setLogTab] = useState('All')
+  const [userTab, setUserTab] = useState('Tất cả')
+  const [logTab, setLogTab] = useState('Tất cả')
   const [logSearch, setLogSearch] = useState('')
-  const [historyTab, setHistoryTab] = useState('All')
+  const [historyTab, setHistoryTab] = useState('Tất cả')
+  const [historyUserFilter, setHistoryUserFilter] = useState('all')
   const [selectedUser, setSelectedUser] = useState<typeof USERS[0] | null>(null)
+  const [accountMode, setAccountMode] = useState<'internal' | 'customer-support'>('internal')
+  const [accountForm, setAccountForm] = useState({ name: '', email: '', phone: '', role: 'staff' as Exclude<Role, 'customer'>, facility: '', status: 'active' as 'active' | 'inactive' | 'suspended', reason: '' })
+  const [accountSearch, setAccountSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [facilityFilter, setFacilityFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  // RBAC interactive state
+  const [rbacSearch, setRbacSearch] = useState('')
+  const [rbacGroupFilter, setRbacGroupFilter] = useState<'all' | 'Điều hướng' | 'Nghiệp vụ' | 'Quản trị'>('all')
+  const [showResetModal, setShowResetModal] = useState(false)
+
+  const handleResetDefaultPermissions = () => {
+    try {
+      for (const r of (Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[])) {
+        updateRolePermissions(r, DEFAULT_ROLE_PERMISSIONS[r], user)
+      }
+      showToast('Đã khôi phục toàn bộ phân quyền về trạng thái mặc định.')
+      setShowResetModal(false)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể khôi phục phân quyền.')
+    }
+  }
 
   // Audit Logs interactive state
   const [logsList, setLogsList] = useState<AuditActivityLog[]>(ACTIVITY_LOGS)
@@ -44,8 +130,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
   const [logModalOpen, setLogModalOpen] = useState(false)
 
   // Settings interactive state
-  const [settingsGroups, setSettingsGroups] = useState<SettingGroup[]>(SETTINGS_GROUPS)
-  const [activeSettingsTab, setActiveSettingsTab] = useState('All Categories')
+  const [activeSettingsTab, setActiveSettingsTab] = useState('Tất cả danh mục')
 
   // Toast
   const [toast, setToast] = useState<string | null>(null)
@@ -54,14 +139,51 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
     setTimeout(() => setToast(null), 3000)
   }
 
+  const openCreateAccount = (mode: 'internal' | 'customer-support') => {
+    setSelectedUser(null)
+    setAccountMode(mode)
+    setAccountForm({ name: '', email: '', phone: '', role: 'staff', facility: mode === 'internal' ? '' : 'All facilities', status: 'active', reason: '' })
+    setUserModal(true)
+  }
+
+  const openEditAccount = (account: typeof USERS[0]) => {
+    setSelectedUser(account)
+    setAccountMode('internal')
+    setAccountForm({ name: account.name, email: account.email, phone: account.phone ?? '', role: account.role === 'customer' ? 'staff' : account.role as Exclude<Role, 'customer'>, facility: account.facility ?? '', status: account.status as 'active' | 'inactive' | 'suspended', reason: '' })
+    setUserModal(true)
+  }
+
+  const handleAccountSubmit = () => {
+    try {
+      if (selectedUser) {
+        updateUserAccount(selectedUser.id, selectedUser.role === 'customer' ? { ...accountForm, role: undefined } : accountForm, user)
+        showToast('Đã cập nhật tài khoản và ghi audit log.')
+      } else if (accountMode === 'customer-support') {
+        createCustomerSupportAccount({ name: accountForm.name, email: accountForm.email, phone: accountForm.phone, facility: accountForm.facility, reason: accountForm.reason }, user)
+        showToast('Đã tạo khách hàng theo yêu cầu hỗ trợ và ghi nhật ký kiểm toán.')
+      } else {
+        createInternalAccount(accountForm, user)
+        showToast('Đã tạo tài khoản nội bộ và ghi audit log.')
+      }
+      setUserModal(false)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể lưu tài khoản.')
+    }
+  }
+
   const filteredUsers = USERS.filter(u => {
-    if (userTab === 'All' || userTab === 'Tất cả') return true
-    if (userTab === 'Customer' || userTab === 'Khách hàng') return u.role === 'customer'
-    if (userTab === 'Staff' || userTab === 'Nhân viên') return u.role === 'staff'
-    if (userTab === 'Manager' || userTab === 'Quản lý') return u.role === 'manager'
-    if (userTab === 'Admin' || userTab === 'Quản trị') return u.role === 'admin'
-    if (userTab === 'Suspended' || userTab === 'Tạm khóa') return u.status === 'suspended'
-    return u.role === userTab.toLowerCase() || u.status === userTab.toLowerCase()
+    const tabMatch = userTab === 'Tất cả'
+      || userTab === 'Khách hàng' && u.role === 'customer'
+      || userTab === 'Nhân viên' && u.role === 'staff'
+      || userTab === 'Quản lý' && u.role === 'manager'
+      || userTab === 'Quản trị' && u.role === 'admin'
+      || userTab === 'Tạm khóa' && u.status === 'suspended'
+    const query = accountSearch.trim().toLowerCase()
+    return tabMatch
+      && (roleFilter === 'all' || u.role === roleFilter)
+      && (facilityFilter === 'all' || (u.facility ?? '') === facilityFilter)
+      && (statusFilter === 'all' || u.status === statusFilter)
+      && (!query || u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query))
   })
 
   const sb = (v: string) => {
@@ -76,66 +198,90 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
       success: 'Thành công', failed: 'Thất bại',
       admin: 'Quản trị viên', manager: 'Quản lý kho', staff: 'Nhân viên', business: 'Thương mại', customer: 'Khách hàng',
     }
-    return <Badge variant={m[v] ?? 'muted'}>{lang === 'vi' && viLabels[v] ? viLabels[v] : v.charAt(0).toUpperCase() + v.slice(1)}</Badge>
+    return <Badge variant={m[v] ?? 'muted'}>{viLabels[v] ? viLabels[v] : v.charAt(0).toUpperCase() + v.slice(1)}</Badge>
   }
 
   return (
     <Layout
       user={user} navItems={NAV} currentPage={page} onNavigate={setPage} onLogout={onLogout}
-      roleLabel={lang === 'vi' ? 'Quản Trị Viên Hệ Thống' : 'System Administrator'} roleColor="bg-red-100 text-red-700"
+      roleLabel="Quản Trị Viên Hệ Thống" roleColor="bg-red-100 text-red-700"
+      canAccess={permission => can(user, permission)}
     >
+      {/* Ensure notification bell icon is displayed in Admin portal */}
+      <style>{`
+        header button[title*="Thông báo" i] svg,
+        header button[title*="Notification" i] svg,
+        header button[aria-label*="thông báo" i] svg,
+        header button[aria-label*="notification" i] svg,
+        header .relative > button > svg {
+          display: block !important;
+        }
+      `}</style>
       {/* ── USER MANAGEMENT ───────────────────────────────────── */}
       {page === 'users' && (
         <div className="fade-in">
           <SectionHeader
-            title={lang === 'vi' ? 'Quản Lý Tài Khoản Người Dùng' : 'User Management'}
-            subtitle={lang === 'vi' ? `Tổng cộng ${USERS.length} tài khoản người dùng` : `${USERS.length} total users`}
-            action={<Button variant="primary" size="sm" onClick={() => { setSelectedUser(null); setUserModal(true) }}>{Icon.plus} {lang === 'vi' ? 'Thêm Người Dùng' : 'Add User'}</Button>}
+            title="Quản Lý Tài Khoản Người Dùng"
+            subtitle={`Tổng cộng ${USERS.length} tài khoản người dùng`}
+            action={
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => openCreateAccount('customer-support')}>Tạo khách hàng hỗ trợ</Button>
+                <Button variant="primary" size="sm" onClick={() => openCreateAccount('internal')}>Tạo tài khoản nội bộ</Button>
+              </div>
+            }
           />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-            <StatCard title={lang === 'vi' ? 'Tổng tài khoản' : 'Total Users'} value={USERS.length} icon={Icon.users} iconBg="bg-blue-50" />
-            <StatCard title={lang === 'vi' ? 'Đang hoạt động' : 'Active'} value={USERS.filter(u => u.status === 'active').length} icon={Icon.check} iconBg="bg-green-50" />
-            <StatCard title={lang === 'vi' ? 'Khách hàng' : 'Customers'} value={USERS.filter(u => u.role === 'customer').length} icon={Icon.box} iconBg="bg-purple-50" />
-            <StatCard title={lang === 'vi' ? 'Bị tạm khóa' : 'Suspended'} value={USERS.filter(u => u.status === 'suspended').length} icon={Icon.alert} iconBg="bg-red-50" />
+            <StatCard title="Tổng tài khoản" value={USERS.length} icon={Icon.users} iconBg="bg-blue-50" />
+            <StatCard title="Đang hoạt động" value={USERS.filter(u => u.status === 'active').length} icon={Icon.check} iconBg="bg-green-50" />
+            <StatCard title="Khách hàng" value={USERS.filter(u => u.role === 'customer').length} icon={Icon.box} iconBg="bg-purple-50" />
+            <StatCard title="Bị tạm khóa" value={USERS.filter(u => u.status === 'suspended').length} icon={Icon.alert} iconBg="bg-red-50" />
           </div>
           <div className="mb-4">
             <Tabs
-              tabs={lang === 'vi' ? ['Tất cả', 'Khách hàng', 'Nhân viên', 'Quản lý', 'Quản trị', 'Tạm khóa'] : ['All', 'Customer', 'Staff', 'Manager', 'Admin', 'Suspended']}
-              active={
-                userTab === 'All' && lang === 'vi' ? 'Tất cả' :
-                userTab === 'Customer' && lang === 'vi' ? 'Khách hàng' :
-                userTab === 'Staff' && lang === 'vi' ? 'Nhân viên' :
-                userTab === 'Manager' && lang === 'vi' ? 'Quản lý' :
-                userTab === 'Admin' && lang === 'vi' ? 'Quản trị' :
-                userTab === 'Suspended' && lang === 'vi' ? 'Tạm khóa' : userTab
-              }
-              onChange={val => {
-                if (val === 'Tất cả') setUserTab('All')
-                else if (val === 'Khách hàng') setUserTab('Customer')
-                else if (val === 'Nhân viên') setUserTab('Staff')
-                else if (val === 'Quản lý') setUserTab('Manager')
-                else if (val === 'Quản trị') setUserTab('Admin')
-                else if (val === 'Tạm khóa') setUserTab('Suspended')
-                else setUserTab(val)
-              }}
+              tabs={['Tất cả', 'Khách hàng', 'Nhân viên', 'Quản lý', 'Quản trị', 'Tạm khóa']}
+              active={userTab}
+              onChange={val => setUserTab(val)}
             />
+          </div>
+          <div className="mb-4 grid items-end gap-3 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+            <Input
+              label="Tìm kiếm"
+              aria-label="Tìm tài khoản"
+              value={accountSearch}
+              onChange={event => setAccountSearch(event.target.value)}
+              placeholder="Tìm theo tên hoặc email…"
+              className="h-10"
+            />
+            <Select label="Vai trò" value={roleFilter} onChange={event => setRoleFilter(event.target.value)} className="h-10">
+              <option value="all">Tất cả vai trò</option>
+              <option value="customer">Khách hàng</option><option value="staff">Nhân viên</option><option value="manager">Quản lý</option><option value="business">Kinh doanh</option><option value="admin">Quản trị viên</option>
+            </Select>
+            <Select label="Cơ sở" value={facilityFilter} onChange={event => setFacilityFilter(event.target.value)} className="h-10">
+              <option value="all">Tất cả cơ sở</option>
+              {facilities.map(facility => <option key={facility.id} value={facility.name}>{facility.name}</option>)}
+              <option value="All facilities">Tất cả cơ sở</option>
+            </Select>
+            <Select label="Trạng thái" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10">
+              <option value="all">Tất cả trạng thái</option>
+              <option value="active">Hoạt động</option><option value="inactive">Ngưng</option><option value="suspended">Tạm khóa</option>
+            </Select>
           </div>
           <Card>
             <Table>
               <Thead>
                 <tr>
-                  <Th>{lang === 'vi' ? 'Người Dùng' : 'User'}</Th>
-                  <Th>{lang === 'vi' ? 'Vai Trò' : 'Role'}</Th>
-                  <Th>{lang === 'vi' ? 'Cơ Sở' : 'Facility'}</Th>
-                  <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
-                  <Th>{lang === 'vi' ? 'Đăng Nhập Cuối' : 'Last Login'}</Th>
-                  <Th>{lang === 'vi' ? 'Ngày Tạo' : 'Joined'}</Th>
-                  <Th className="text-right">{lang === 'vi' ? 'Thao Tác' : 'Actions'}</Th>
+                  <Th>Người Dùng</Th>
+                  <Th>Vai Trò</Th>
+                  <Th>Cơ Sở</Th>
+                  <Th>Trạng Thái</Th>
+                  <Th>Đăng Nhập Cuối</Th>
+                  <Th>Ngày Tạo</Th>
+                  <Th className="text-right">Thao Tác</Th>
                 </tr>
               </Thead>
               <Tbody>
                 {filteredUsers.map(u => (
-                  <Tr key={u.id} onClick={() => { setSelectedUser(u); setUserModal(true) }}>
+                  <Tr key={u.id} onClick={() => openEditAccount(u)}>
                     <Td>
                       <div className="flex items-center gap-3">
                         <Avatar name={u.name} size="sm" />
@@ -146,19 +292,25 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                       </div>
                     </Td>
                     <Td>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[u.role]}`}>
-                        {u.role}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[u.role as Role]}`}>
+                        {roleLabels[u.role as Role]}
                       </span>
                     </Td>
                     <Td className="text-slate-500 text-sm">{u.facility ?? '—'}</Td>
                     <Td>{sb(u.status)}</Td>
                     <Td className="text-sm text-slate-500">{u.lastLogin}</Td>
-                    <Td className="text-sm text-slate-500">{u.createdAt}</Td>
+                    <Td className="text-sm text-slate-500">{u.joined}</Td>
                     <Td>
                       <div className="flex gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
-                        <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(u); setUserModal(true) }}>{lang === 'vi' ? 'Sửa' : 'Edit'}</Button>
-                        {u.status === 'active' && <Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? `Tài khoản ${u.name} đã bị khóa.` : `Account ${u.name} suspended.`)}>{lang === 'vi' ? 'Khóa' : 'Suspend'}</Button>}
-                        {u.status === 'suspended' && <Button variant="primary" size="sm" onClick={() => showToast(lang === 'vi' ? `Đã khôi phục tài khoản ${u.name}.` : `Restored ${u.name}.`)}>{lang === 'vi' ? 'Mở' : 'Restore'}</Button>}
+                        <Button variant="ghost" size="sm" onClick={() => openEditAccount(u)}>Sửa</Button>
+                        {u.id !== user.id && <Button variant="ghost" size="sm" onClick={() => {
+                          try {
+                            setUserAccountStatus(u.id, u.status === 'active' ? 'suspended' : 'active', user)
+                            showToast('Đã cập nhật trạng thái tài khoản.')
+                          } catch (error) {
+                            showToast(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái.')
+                          }
+                        }}>{u.status === 'active' ? 'Khóa' : 'Mở khóa'}</Button>}
                       </div>
                     </Td>
                   </Tr>
@@ -169,115 +321,345 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
         </div>
       )}
 
-      {/* ── ROLES & PERMISSIONS ───────────────────────────────── */}
-      {page === 'roles' && (
-        <div className="fade-in">
-          <SectionHeader
-            title={lang === 'vi' ? 'Vai Trò & Ma Trận Phân Quyền' : 'Roles & Permissions'}
-            subtitle={lang === 'vi' ? 'Ma trận kiểm soát quyền truy cập dựa trên vai trò (RBAC)' : 'Role-based access control matrix'}
-          />
-          <Card className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50">
-                <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide min-w-48">
-                    {lang === 'vi' ? 'Quyền Hạn' : 'Permission'}
-                  </th>
-                  {(Object.keys(roleColors) as Role[]).map(r => (
-                    <th key={r} className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${roleColors[r]}`}>{r}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {[
-                  { key: 'view_facilities', label: lang === 'vi' ? 'Xem danh mục cơ sở' : 'View facilities' },
-                  { key: 'book_unit', label: lang === 'vi' ? 'Đặt thuê gian kho' : 'Book storage units' },
-                  { key: 'checkin_out', label: lang === 'vi' ? 'Thực hiện thủ tục nhận/trả kho' : 'Process check-in / check-out' },
-                  { key: 'manage_leases', label: lang === 'vi' ? 'Quản lý hợp đồng & cước phí' : 'Manage lease agreements' },
-                  { key: 'overlock_units', label: lang === 'vi' ? 'Khóa cổng điện tử (Overlock)' : 'Execute digital overlock' },
-                  { key: 'manage_pricing', label: lang === 'vi' ? 'Điều chỉnh biểu giá & khuyến mãi' : 'Manage pricing & promotions' },
-                  { key: 'system_admin', label: lang === 'vi' ? 'Toàn quyền cấu hình hệ thống' : 'Full system administration' },
-                ].map(p => (
-                  <tr key={p.key} className="hover:bg-slate-50">
-                    <td className="px-5 py-3 font-medium text-slate-700">{p.label}</td>
-                    {(Object.keys(roleColors) as Role[]).map(r => {
-                      const has = r === 'admin' || (r === 'business' && ['view_facilities', 'manage_pricing'].includes(p.key)) || (r === 'manager' && ['view_facilities', 'manage_leases', 'overlock_units', 'checkin_out'].includes(p.key)) || (r === 'staff' && ['checkin_out', 'view_facilities'].includes(p.key)) || (r === 'customer' && ['view_facilities', 'book_unit'].includes(p.key))
-                      return (
-                        <td key={r} className="px-4 py-3 text-center">
-                          {has
-                            ? <span className="inline-flex items-center justify-center w-6 h-6 bg-green-100 rounded-full"><svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg></span>
-                            : <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 rounded-full"><svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg></span>
-                          }
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-          <div className="mt-4 flex justify-end">
-            <Button variant="primary" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đã lưu cấu hình ma trận phân quyền!' : 'Permissions saved successfully!')}>
-              {lang === 'vi' ? 'Lưu Thay Đổi Phân Quyền' : 'Save Permission Changes'}
+      {/* ── ROLES & PERMISSIONS (RBAC) ────────────────────────── */}
+      {page === 'roles' && can(user, 'manage_roles') && (
+        <div className="fade-in rbac-matrix space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <SectionHeader
+              title="Phân Quyền & Kiểm Soát Truy Cập Doanh Nghiệp"
+              subtitle="Thiết lập quyền hạn truy cập, phân công trách nhiệm và kiểm soát an toàn vận hành cho từng bộ phận trong tổ chức"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResetModal(true)}
+              className="shrink-0 flex items-center gap-2 border-slate-300 text-slate-700 hover:bg-slate-100 self-start sm:self-center cursor-pointer"
+            >
+              <RefreshIcon className="w-4 h-4 text-slate-500" />
+              <span>Khôi phục mặc định</span>
             </Button>
           </div>
+
+          {/* Executive KPI Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Tổng Quyền Hạn</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">27 <span className="text-sm font-normal text-slate-500">quyền</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">13 Giám sát · 11 Nghiệp vụ · 3 Quản trị</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-base">
+                🛡️
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Nhóm Vai Trò</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">5 <span className="text-sm font-normal text-slate-500">vai trò</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Admin, Quản lý, Nhân viên, KH, KD</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-base">
+                👥
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Khối Chức Năng</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">3 <span className="text-sm font-normal text-slate-500">khối</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Điều hướng · Vận hành · Hệ thống</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-base">
+                ⚙️
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Bảo Vệ Cốt Lõi</p>
+                <p className="text-2xl font-bold text-emerald-700 mt-1">2 <span className="text-sm font-normal text-slate-500">quyền khóa</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Ngăn ngừa tự khóa quyền Admin</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-base">
+                🔒
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Tìm kiếm quyền hạn (theo tên, mã key)..."
+                value={rbacSearch}
+                onChange={e => setRbacSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#e9a12c] focus:border-transparent"
+              />
+              <div className="absolute left-3 top-2.5 text-slate-400 pointer-events-none">
+                <SearchIcon className="w-4 h-4" />
+              </div>
+              {rbacSearch && (
+                <button
+                  type="button"
+                  onClick={() => setRbacSearch('')}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+              {[
+                { id: 'all', label: 'Tất cả', count: 27 },
+                { id: 'Điều hướng', label: 'Điều hướng & Giám sát', count: 13 },
+                { id: 'Nghiệp vụ', label: 'Nghiệp vụ vận hành', count: 11 },
+                { id: 'Quản trị', label: 'Quản trị hệ thống', count: 3 },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setRbacGroupFilter(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    rbacGroupFilter === tab.id
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    rbacGroupFilter === tab.id ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Matrix Table */}
+          <Card className="overflow-hidden border border-slate-200/90 shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-900 text-white">
+                    <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider min-w-[280px]">
+                      Quyền Hạn Doanh Nghiệp
+                    </th>
+                    {(Object.keys(roleColors) as Role[]).map(r => (
+                      <th key={r} className="px-4 py-3.5 text-center text-xs font-bold uppercase tracking-wider min-w-[130px]">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold shadow-2xs ${roleColors[r]}`}>
+                          {roleLabels[r]}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {['Điều hướng', 'Nghiệp vụ', 'Quản trị'].map(groupKey => {
+                    const groupPermissions = PERMISSION_DEFINITIONS.filter(p => {
+                      const matchesGroup = rbacGroupFilter === 'all' || rbacGroupFilter === groupKey
+                      const matchesSearch = !rbacSearch.trim() ||
+                        p.label.toLowerCase().includes(rbacSearch.trim().toLowerCase()) ||
+                        p.key.toLowerCase().includes(rbacSearch.trim().toLowerCase())
+                      return p.group === groupKey && matchesGroup && matchesSearch
+                    })
+
+                    if (groupPermissions.length === 0) return null
+
+                    const groupMeta = {
+                      'Điều hướng': { title: 'Khối Điều Hướng & Giám Sát Dữ Liệu', badge: 'Xem & Tra cứu', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+                      'Nghiệp vụ': { title: 'Khối Nghiệp Vụ Vận Hành & Giao Dịch Kho', badge: 'Thao tác & Phê duyệt', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+                      'Quản trị': { title: 'Khối Quản Trị Hệ Thống & Bảo Mật', badge: 'Quản trị cấp cao', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+                    }[groupKey] || { title: groupKey, badge: 'Phân hệ', color: 'bg-slate-50 text-slate-700 border-slate-200' }
+
+                    return (
+                      <Fragment key={groupKey}>
+                        {/* Section Header Row */}
+                        <tr className="bg-slate-100/90 border-t border-b border-slate-200/80">
+                          <td colSpan={6} className="px-6 py-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-xs uppercase tracking-wider text-slate-800">
+                                {groupMeta.title}
+                              </span>
+                              <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded border ${groupMeta.color}`}>
+                                {groupMeta.badge} ({groupPermissions.length})
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Permission Rows */}
+                        {groupPermissions.map(p => (
+                          <tr key={p.key} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-6 py-3.5">
+                              <div className="font-semibold text-slate-800 text-sm">{p.label}</div>
+                              <div className="mt-0.5 text-[11px] font-mono text-slate-400">{p.key}</div>
+                            </td>
+                            {(Object.keys(roleColors) as Role[]).map(r => {
+                              const has = rolePermissions[r][p.key]
+                              const locked = r === 'admin' && (p.key === 'manage_roles' || p.key === 'manage_users')
+
+                              return (
+                                <td key={r} className="px-4 py-3 text-center align-middle">
+                                  {locked ? (
+                                    <div
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold cursor-not-allowed select-none shadow-2xs"
+                                      title="Quyền lõi quản trị được bảo vệ hệ thống, không thể tắt"
+                                    >
+                                      <LockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      <span className="text-[11px]">Bảo vệ</span>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      aria-label={`${has ? 'Thu hồi' : 'Cấp'} quyền ${p.label} cho ${roleLabels[r]}`}
+                                      onClick={() => {
+                                        try {
+                                          updateRolePermissions(r, { [p.key]: !has }, user)
+                                          showToast(`Đã ${has ? 'thu hồi' : 'cấp'} quyền "${p.label}" cho ${roleLabels[r]}.`)
+                                        } catch (error) {
+                                          showToast(error instanceof Error ? error.message : 'Không thể cập nhật quyền.')
+                                        }
+                                      }}
+                                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs ${
+                                        has
+                                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                          : 'bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 border border-slate-200'
+                                      }`}
+                                      title={has ? 'Đã cấp quyền (Nhấn để thu hồi)' : 'Chưa cấp quyền (Nhấn để cấp)'}
+                                    >
+                                      {has ? (
+                                        <>
+                                          <CheckIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                          <span className="text-[11.5px]">Đã cấp</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <MinusIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                          <span className="text-[11.5px]">Chưa cấp</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {/* Footer Guide Note */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+              i
+            </div>
+            <div className="space-y-1 leading-relaxed">
+              <p className="font-semibold text-slate-800">Cơ chế áp dụng quyền hạn tức thời:</p>
+              <p>Mọi thay đổi trên ma trận quyền hạn sẽ được cập nhật trực tiếp vào hệ thống và có hiệu lực ngay đối với các thanh điều hướng, quyền truy cập trang và thao tác nghiệp vụ của người dùng tương ứng mà không cần khởi động lại dịch vụ.</p>
+              <p className="text-amber-700 font-medium">Lưu ý: Hai quyền cốt lõi của Quản trị viên (Quản lý tài khoản & Quản lý bảng quyền) được khóa an toàn vĩnh viễn để bảo vệ tính toàn vẹn của hệ thống.</p>
+            </div>
+          </div>
+
+          {/* Modal Khôi phục mặc định */}
+          {showResetModal && (
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+                <div className="flex items-center gap-3 text-amber-600">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                    <RefreshIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">Khôi Phục Phân Quyền Mặc Định</h3>
+                    <p className="text-xs text-slate-500">Cài đặt lại cấu hình RBAC tiêu chuẩn</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Bạn có chắc chắn muốn khôi phục toàn bộ bảng phân quyền của 5 nhóm vai trò (Khách hàng, Nhân viên, Quản lý, Kinh doanh, Quản trị viên) về cấu hình chuẩn ban đầu không? Mọi tùy biến trước đó sẽ được thiết lập lại.
+                </p>
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowResetModal(false)}
+                    className="cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleResetDefaultPermissions}
+                    className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                  >
+                    Xác nhận khôi phục
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ── LOGIN HISTORY ─────────────────────────────────────── */}
       {page === 'login-history' && (
-        <div className="fade-in">
+        <div className="fade-in space-y-5">
           <SectionHeader
-            title={lang === 'vi' ? 'Lịch Sử Đăng Nhập Hệ Thống' : 'Login History'}
-            subtitle={lang === 'vi' ? 'Nhật ký kiểm toán an ninh các sự kiện xác thực tài khoản' : 'Security audit log of authentication events'}
+            title="Lịch Sử Đăng Nhập Hệ Thống"
+            subtitle="Lịch sử xác thực, phiên đang mở và cảnh báo bất thường được lưu từ StorageHubContext"
           />
-          <div className="mb-4 flex gap-3 items-center">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <Tabs
-              tabs={lang === 'vi' ? ['Tất cả', 'Thành công', 'Thất bại'] : ['All', 'Success', 'Failed']}
-              active={
-                historyTab === 'All' && lang === 'vi' ? 'Tất cả' :
-                historyTab === 'Success' && lang === 'vi' ? 'Thành công' :
-                historyTab === 'Failed' && lang === 'vi' ? 'Thất bại' : historyTab
-              }
-              onChange={val => {
-                if (val === 'Tất cả') setHistoryTab('All')
-                else if (val === 'Thành công') setHistoryTab('Success')
-                else if (val === 'Thất bại') setHistoryTab('Failed')
-                else setHistoryTab(val)
-              }}
+              tabs={['Tất cả', 'Thành công', 'Thất bại']}
+              active={historyTab}
+              onChange={val => setHistoryTab(val)}
             />
-            {LOGIN_HISTORY.some(l => l.status === 'failed') && (
-              <div className="flex items-center gap-2 ml-auto bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-sm text-red-700">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" /></svg>
-                {lang === 'vi' ? 'Phát hiện 1 lần đăng nhập thất bại khả nghi' : '1 suspicious login attempt detected'}
-              </div>
-            )}
+            <label className="flex items-center gap-2 text-sm text-slate-600 lg:ml-auto">
+              <span className="font-medium">Tài khoản</span>
+              <select value={historyUserFilter} onChange={event => setHistoryUserFilter(event.target.value)} className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-none">
+                <option value="all">Tất cả tài khoản</option>
+                {USERS.map(account => <option key={account.id} value={account.id}>{account.name} · {account.email}</option>)}
+              </select>
+            </label>
           </div>
+          {securityAlerts.filter(alert => !alert.resolvedAt).length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <span aria-hidden="true">⚠</span>
+              <span>Phát hiện {securityAlerts.filter(alert => !alert.resolvedAt).length} cảnh báo an ninh chưa xử lý. Hãy kiểm tra các lần đăng nhập thất bại hoặc thiết bị mới.</span>
+            </div>
+          )}
           <Card>
             <Table>
               <Thead>
                 <tr>
-                  <Th>{lang === 'vi' ? 'Người Dùng' : 'User'}</Th>
-                  <Th>{lang === 'vi' ? 'Vai Trò' : 'Role'}</Th>
-                  <Th>{lang === 'vi' ? 'Địa Chỉ IP' : 'IP Address'}</Th>
-                  <Th>{lang === 'vi' ? 'Vị Trí' : 'Location'}</Th>
-                  <Th>{lang === 'vi' ? 'Thiết Bị' : 'Device'}</Th>
-                  <Th>{lang === 'vi' ? 'Thời Gian' : 'Time'}</Th>
-                  <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
+                  <Th>Người Dùng</Th>
+                  <Th>Vai Trò</Th>
+                  <Th>Địa Chỉ IP</Th>
+                  <Th>Vị Trí</Th>
+                  <Th>Thiết Bị</Th>
+                  <Th>Thời Gian</Th>
+                  <Th>Trạng Thái</Th>
                 </tr>
               </Thead>
               <Tbody>
-                {LOGIN_HISTORY
+                {loginHistory
                   .filter(l => {
-                    if (historyTab === 'All' || historyTab === 'Tất cả') return true
-                    if (historyTab === 'Success' || historyTab === 'Thành công') return l.status === 'success'
-                    if (historyTab === 'Failed' || historyTab === 'Thất bại') return l.status === 'failed'
-                    return l.status === historyTab.toLowerCase()
+                    if (historyTab === 'Tất cả') return true
+                    if (historyTab === 'Thành công') return l.status === 'success'
+                    if (historyTab === 'Thất bại') return l.status === 'failed'
+                    return false
                   })
+                  .filter(l => historyUserFilter === 'all' || l.userId === historyUserFilter || (!l.userId && USERS.find(account => account.email === l.email)?.id === historyUserFilter))
                   .map(l => (
-                    <Tr key={l.id} className={l.status === 'failed' ? 'bg-red-50' : ''}>
+                    <Tr key={l.id} className={l.status === 'failed' || l.suspicious ? 'bg-red-50' : ''}>
                       <Td>
                         <div>
                           <p className="font-medium text-sm text-slate-800">{l.user}</p>
@@ -285,17 +667,50 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                         </div>
                       </Td>
                       <Td>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[l.role as Role]}`}>{l.role}</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[l.role as Role] ?? 'bg-slate-100 text-slate-600'}`}>{l.role ? roleLabels[l.role] : 'Chưa xác định'}</span>
                       </Td>
                       <Td><code className="text-xs bg-slate-100 px-2 py-0.5 rounded">{l.ip}</code></Td>
                       <Td className="text-sm text-slate-500">{l.location}</Td>
                       <Td className="text-xs text-slate-400">{l.device}</Td>
-                      <Td className="text-xs text-slate-500">{l.time}</Td>
+                      <Td className="text-xs text-slate-500">{l.timestamp}</Td>
                       <Td>
                         {l.status === 'failed'
-                          ? <Badge variant="error">{lang === 'vi' ? 'Thất bại' : 'Failed'}</Badge>
-                          : <Badge variant="success">{lang === 'vi' ? 'Thành công' : 'Success'}</Badge>}
+                          ? <Badge variant="error">{l.suspicious ? 'Khả nghi' : 'Thất bại'}</Badge>
+                          : l.status === 'logout' ? <Badge variant="muted">Đã đăng xuất</Badge> : <Badge variant="success">Thành công</Badge>}
                       </Td>
+                    </Tr>
+                  ))}
+              </Tbody>
+            </Table>
+          </Card>
+          <Card>
+            <div className="flex flex-col gap-2 border-b border-stone-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-stone-900">Phiên đăng nhập</h3>
+                <p className="text-xs text-stone-500">Chỉ phiên đang hoạt động mới có thể bị thu hồi.</p>
+              </div>
+              <span className="text-sm text-stone-500">{sessions.filter(session => session.status === 'active').length} phiên đang mở</span>
+            </div>
+            <Table>
+              <Thead><tr><Th>Tài khoản</Th><Th>Thiết bị</Th><Th>Vị trí</Th><Th>Bắt đầu</Th><Th>Trạng thái</Th><Th /></tr></Thead>
+              <Tbody>
+                {sessions
+                  .filter(session => historyUserFilter === 'all' || session.userId === historyUserFilter)
+                  .map(session => (
+                    <Tr key={session.id}>
+                      <Td><p className="font-medium text-sm text-slate-800">{session.userName}</p><p className="text-xs text-slate-400">{session.email}</p></Td>
+                      <Td className="text-xs text-slate-500">{session.device}</Td>
+                      <Td className="text-xs text-slate-500">{session.location}</Td>
+                      <Td className="text-xs text-slate-500">{session.createdAt}</Td>
+                      <Td>{session.status === 'active' ? <Badge variant="success">Đang hoạt động</Badge> : session.status === 'revoked' ? <Badge variant="error">Đã thu hồi</Badge> : <Badge variant="muted">Đã đăng xuất</Badge>}</Td>
+                      <Td className="text-right">{session.status === 'active' && can(user, 'manage_users') && <Button variant="outline" size="sm" onClick={() => {
+                        try {
+                          const count = revokeAllUserSessions(session.userId, user)
+                          showToast(count > 0 ? `Đã đăng xuất ${count} phiên của ${session.email}.` : 'Tài khoản này không còn phiên đang hoạt động.')
+                        } catch (error) {
+                          showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên.')
+                        }
+                      }}>Đăng xuất mọi thiết bị</Button>}</Td>
                     </Tr>
                   ))}
               </Tbody>
@@ -306,7 +721,6 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
       {/* ── ACTIVITY LOGS ─────────────────────────────────────── */}
       {page === 'activity' && (() => {
-        const { activities } = useStorageHub()
         const combinedLogs: AuditActivityLog[] = [
           ...activities.map(act => ({
             id: act.id,
@@ -337,7 +751,14 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
         const adminActions = combinedLogs.filter(l => l.role === 'admin' || l.category === 'admin').length
 
         const filteredLogs = combinedLogs.filter(l => {
-          const matchTab = logTab === 'All' || l.category === logTab.toLowerCase()
+          const matchTab = logTab === 'Tất cả' || (
+            logTab === 'An ninh' ? l.category === 'security' :
+            logTab === 'Thuê kho' ? l.category === 'rental' :
+            logTab === 'Thanh toán' ? l.category === 'billing' :
+            logTab === 'Bảng giá' ? l.category === 'pricing' :
+            logTab === 'Ra vào' ? l.category === 'access' :
+            l.category === logTab.toLowerCase()
+          )
           const query = logSearch.toLowerCase().trim()
           const matchSearch =
             !query ||
@@ -345,17 +766,20 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
             l.action.toLowerCase().includes(query) ||
             l.target.toLowerCase().includes(query) ||
             l.ip.includes(query)
-          return matchTab && matchSearch
+          const matchUser = historyUserFilter === 'all'
+            || activities.some(activity => activity.id === l.id && activity.actorId === historyUserFilter)
+            || USERS.some(account => account.id === historyUserFilter && (account.name === l.actor || account.email === l.actor))
+          return matchTab && matchSearch && matchUser
         })
 
         return (
           <div className="fade-in space-y-6">
             <SectionHeader
-              title={lang === 'vi' ? 'Nhật Ký Hoạt Động & Giám Sát Hệ Thống' : 'System Activity & Audit Trail'}
-              subtitle={lang === 'vi' ? 'Dòng thời gian ghi nhận các thao tác người dùng, cảnh báo an ninh và thay đổi dữ liệu quản trị' : 'Real-time chronological journal of user operations, security alerts, and administrative data modifications'}
+              title="Nhật Ký Hoạt Động & Giám Sát Hệ Thống"
+              subtitle="Dòng thời gian ghi nhận các thao tác người dùng, cảnh báo an ninh và thay đổi dữ liệu quản trị"
               action={
-                <Button variant="outline" size="sm" onClick={() => showToast(lang === 'vi' ? 'Đã xuất nhật ký kiểm toán sang tệp JSON & CSV!' : 'Audit logs exported to JSON & CSV archive!')}>
-                  {lang === 'vi' ? 'Xuất Nhật Ký' : 'Export Audit Trail'}
+                <Button variant="outline" size="sm" disabled>
+                  Chưa kết nối xuất file
                 </Button>
               }
             />
@@ -363,32 +787,32 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
             {/* Audit Metrics */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
-                title={lang === 'vi' ? 'Sự Kiện Hôm Nay' : 'Logged Events Today'}
+                title="Sự Kiện Hôm Nay"
                 value={logsList.length}
-                delta={lang === 'vi' ? '+14 sự kiện so với hôm qua' : '+14 events vs yesterday'}
+                delta="+14 sự kiện so với hôm qua"
                 deltaPositive
                 icon={Icon.log}
                 iconBg="bg-blue-50 text-blue-700"
               />
               <StatCard
-                title={lang === 'vi' ? 'Ngoại Lệ An Ninh' : 'Security Exceptions'}
+                title="Ngoại Lệ An Ninh"
                 value={errorCount}
-                delta={errorCount > 0 ? (lang === 'vi' ? 'Cần kiểm tra ngay' : 'Requires inspection') : (lang === 'vi' ? 'Hệ thống an toàn' : 'System nominal')}
+                delta={errorCount > 0 ? 'Cần kiểm tra ngay' : 'Hệ thống an toàn'}
                 deltaPositive={errorCount === 0}
                 icon={Icon.shield}
                 iconBg={errorCount > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}
               />
               <StatCard
-                title={lang === 'vi' ? 'Thao Tác Quản Trị' : 'Admin Modifications'}
+                title="Thao Tác Quản Trị"
                 value={adminActions}
-                delta={lang === 'vi' ? 'Cập nhật tài khoản & chính sách' : 'Policy & user updates'}
+                delta="Cập nhật tài khoản & chính sách"
                 icon={Icon.cog}
                 iconBg="bg-amber-50 text-amber-800"
               />
               <StatCard
-                title={lang === 'vi' ? 'Lượt Truy Cập Cửa/Cổng' : 'Gate Access Events'}
+                title="Lượt Truy Cập Cửa/Cổng"
                 value={logsList.filter(l => l.category === 'access' || l.category === 'security').length}
-                delta={lang === 'vi' ? 'Bộ điều khiển phần cứng ổn định' : 'Hardware controller link active'}
+                delta="Bộ điều khiển phần cứng ổn định"
                 deltaPositive
                 icon={Icon.key}
                 iconBg="bg-purple-50 text-purple-700"
@@ -398,42 +822,31 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
             {/* Filter & Search */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <Tabs
-                tabs={lang === 'vi' ? ['Tất cả', 'An ninh', 'Thuê kho', 'Thanh toán', 'Bảng giá', 'Ra vào'] : ['All', 'security', 'rental', 'billing', 'pricing', 'access']}
-                active={
-                  logTab === 'All' && lang === 'vi' ? 'Tất cả' :
-                  logTab === 'security' && lang === 'vi' ? 'An ninh' :
-                  logTab === 'rental' && lang === 'vi' ? 'Thuê kho' :
-                  logTab === 'billing' && lang === 'vi' ? 'Thanh toán' :
-                  logTab === 'pricing' && lang === 'vi' ? 'Bảng giá' :
-                  logTab === 'access' && lang === 'vi' ? 'Ra vào' : logTab
-                }
-                onChange={val => {
-                  if (val === 'Tất cả') setLogTab('All')
-                  else if (val === 'An ninh') setLogTab('security')
-                  else if (val === 'Thuê kho') setLogTab('rental')
-                  else if (val === 'Thanh toán') setLogTab('billing')
-                  else if (val === 'Bảng giá') setLogTab('pricing')
-                  else if (val === 'Ra vào') setLogTab('access')
-                  else setLogTab(val)
-                }}
+                tabs={['Tất cả', 'An ninh', 'Thuê kho', 'Thanh toán', 'Bảng giá', 'Ra vào']}
+                active={logTab}
+                onChange={val => setLogTab(val)}
               />
               <div className="w-full sm:w-72">
                 <input
                   type="text"
-                  placeholder={lang === 'vi' ? 'Tìm người dùng, thao tác, đối tượng, IP...' : 'Search actor, action, target, IP...'}
+                  placeholder="Tìm người dùng, thao tác, đối tượng, IP..."
                   value={logSearch}
                   onChange={e => setLogSearch(e.target.value)}
                   className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
+              <select value={historyUserFilter} onChange={event => setHistoryUserFilter(event.target.value)} className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-none">
+                <option value="all">Tất cả tài khoản</option>
+                {USERS.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
+              </select>
             </div>
 
             {/* Audit Log Stream */}
             <Card className="divide-y divide-stone-100 overflow-hidden">
               {filteredLogs.length === 0 ? (
                 <div className="p-10 text-center text-stone-400">
-                  <p className="font-semibold text-stone-700">{lang === 'vi' ? 'Chưa ghi nhận sự kiện hoạt động nào' : 'No activity events recorded'}</p>
-                  <p className="text-xs mt-1">{lang === 'vi' ? 'Không tìm thấy mục nhật ký nào phù hợp với bộ lọc này.' : 'No matching log entries found for this category or filter.'}</p>
+                  <p className="font-semibold text-stone-700">Chưa ghi nhận sự kiện hoạt động nào</p>
+                  <p className="text-xs mt-1">Không tìm thấy mục nhật ký nào phù hợp với bộ lọc này.</p>
                 </div>
               ) : (
                 filteredLogs.map(l => (
@@ -462,7 +875,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                           <span className="text-xs text-stone-600 font-medium">{l.action}</span>
                         </div>
                         <p className="text-xs text-stone-500 mt-0.5">
-                          {lang === 'vi' ? 'Đối tượng:' : 'Target:'} <strong className="font-mono text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[11px]">{l.target}</strong>
+                          Đối tượng: <strong className="font-mono text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded text-[11px]">{l.target}</strong>
                         </p>
                         <div className="flex items-center gap-3 text-[11px] text-stone-400 mt-1 font-mono">
                           <span>IP: {l.ip}</span>
@@ -488,7 +901,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                           setLogModalOpen(true)
                         }}
                       >
-                        {lang === 'vi' ? 'Chi Tiết' : 'Payload'}
+                        Chi Tiết
                       </Button>
                     </div>
                   </div>
@@ -501,65 +914,36 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
       {/* ── SYSTEM SETTINGS ───────────────────────────────────── */}
       {page === 'settings' && (() => {
-        const handleSaveSettings = () => {
-          showToast(lang === 'vi' ? 'Đã lưu cấu hình nền tảng và chính sách vận hành thành công!' : 'Platform configurations and operational policies saved successfully!')
-        }
-
-        const handleResetDefaults = () => {
-          setSettingsGroups(SETTINGS_GROUPS)
-          showToast(lang === 'vi' ? 'Đã khôi phục toàn bộ cấu hình về mặc định ban đầu.' : 'Configuration restored to factory presets.')
-        }
-
-        const filteredGroups = activeSettingsTab === 'All Categories' || activeSettingsTab === 'Tất cả danh mục'
-          ? settingsGroups
-          : settingsGroups.filter(g => {
-              const query = activeSettingsTab.toLowerCase().slice(0, 4)
-              return g.group.toLowerCase().includes(query) || (
+        const filteredGroups = activeSettingsTab === 'Tất cả danh mục'
+          ? SETTINGS_GROUPS
+          : SETTINGS_GROUPS.filter(g => {
+              return (
                 (activeSettingsTab === 'Cơ sở kho' && g.group === 'Facility Defaults') ||
                 (activeSettingsTab === 'Thanh toán' && g.group === 'Billing & Delinquency') ||
                 (activeSettingsTab === 'Bảo mật' && g.group === 'Security & Access') ||
                 (activeSettingsTab === 'Thông báo' && g.group === 'Automated Notifications') ||
-                (activeSettingsTab === 'Bảo trì' && g.group === 'System & Maintenance')
+                (activeSettingsTab === 'Bảo trì' && g.group === 'System & Maintenance') ||
+                g.group.toLowerCase().includes(activeSettingsTab.toLowerCase().slice(0, 4))
               )
             })
 
         return (
           <div className="fade-in space-y-6">
             <SectionHeader
-              title={lang === 'vi' ? 'Cấu Hình Hệ Thống & Cơ Sở Kho' : 'System & Facility Configurations'}
-              subtitle={lang === 'vi' ? 'Tinh chỉnh các ngưỡng vận hành, thời gian ân hạn công nợ, quy tắc an ninh và thông báo tự động' : 'Fine-tune operational thresholds, billing grace periods, security rules, and alert dispatchers'}
+              title="Cấu Hình Hệ Thống & Cơ Sở Kho"
+              subtitle="Tinh chỉnh các ngưỡng vận hành, thời gian ân hạn công nợ, quy tắc an ninh và thông báo tự động"
               action={
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleResetDefaults}>
-                    {lang === 'vi' ? 'Khôi Phục Mặc Định' : 'Reset Defaults'}
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={handleSaveSettings}>
-                    {lang === 'vi' ? 'Lưu Toàn Bộ Cài Đặt' : 'Save All Settings'}
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" disabled>
+                  Chỉ xem · Chưa kết nối backend
+                </Button>
               }
             />
 
             {/* Category Tabs */}
             <Tabs
-              tabs={lang === 'vi' ? ['Tất cả danh mục', 'Cơ sở kho', 'Thanh toán', 'Bảo mật', 'Thông báo', 'Bảo trì'] : ['All Categories', 'Facility', 'Billing', 'Security', 'Notifications', 'Maintenance']}
-              active={
-                activeSettingsTab === 'All Categories' && lang === 'vi' ? 'Tất cả danh mục' :
-                activeSettingsTab === 'Facility' && lang === 'vi' ? 'Cơ sở kho' :
-                activeSettingsTab === 'Billing' && lang === 'vi' ? 'Thanh toán' :
-                activeSettingsTab === 'Security' && lang === 'vi' ? 'Bảo mật' :
-                activeSettingsTab === 'Notifications' && lang === 'vi' ? 'Thông báo' :
-                activeSettingsTab === 'Maintenance' && lang === 'vi' ? 'Bảo trì' : activeSettingsTab
-              }
-              onChange={val => {
-                if (val === 'Tất cả danh mục') setActiveSettingsTab('All Categories')
-                else if (val === 'Cơ sở kho') setActiveSettingsTab('Facility')
-                else if (val === 'Thanh toán') setActiveSettingsTab('Billing')
-                else if (val === 'Bảo mật') setActiveSettingsTab('Security')
-                else if (val === 'Thông báo') setActiveSettingsTab('Notifications')
-                else if (val === 'Bảo trì') setActiveSettingsTab('Maintenance')
-                else setActiveSettingsTab(val)
-              }}
+              tabs={['Tất cả danh mục', 'Cơ sở kho', 'Thanh toán', 'Bảo mật', 'Thông báo', 'Bảo trì']}
+              active={activeSettingsTab}
+              onChange={val => setActiveSettingsTab(val)}
             />
 
             {/* Settings Cards */}
@@ -574,7 +958,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                       )}
                     </div>
                     <span className="text-[10px] font-mono uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      {lang === 'vi' ? 'ĐANG ÁP DỤNG' : 'Active'}
+                      ĐANG ÁP DỤNG
                     </span>
                   </div>
 
@@ -589,16 +973,18 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                             <input
                               type="checkbox"
                               defaultChecked={Boolean(item.value)}
-                              className="w-4 h-4 text-amber-600 rounded cursor-pointer"
+                              disabled
+                              className="w-4 h-4 text-amber-600 rounded cursor-not-allowed"
                             />
                             <span className="text-xs text-stone-600 font-medium">
-                              {lang === 'vi' ? 'Bật / Tự động áp dụng thiết lập này' : 'Enable / Enforce this setting automatically'}
+                              Bật / Tự động áp dụng thiết lập này
                             </span>
                           </label>
                         ) : item.type === 'select' ? (
                           <select
                             defaultValue={item.value as string}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs bg-stone-100 text-stone-500 focus:outline-none"
                           >
                             {item.options ? item.options.map(opt => (
                               <option key={opt} value={opt}>{opt}</option>
@@ -610,13 +996,15 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                           <input
                             type="number"
                             defaultValue={item.value as number}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-500 bg-stone-100 focus:outline-none"
                           />
                         ) : (
                           <input
                             type="text"
                             defaultValue={item.value as string}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-500 bg-stone-100 focus:outline-none"
                           />
                         )}
                       </div>
@@ -626,9 +1014,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               ))}
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={handleResetDefaults}>{lang === 'vi' ? 'Hủy Thay Đổi' : 'Discard Changes'}</Button>
-              <Button variant="primary" onClick={handleSaveSettings}>{lang === 'vi' ? 'Lưu Toàn Bộ Cài Đặt' : 'Save All Settings'}</Button>
+            <div className="flex justify-end pt-2 text-xs text-stone-500">
+              Cấu hình đang ở chế độ chỉ xem; cần kết nối backend trước khi cho phép lưu thay đổi.
             </div>
           </div>
         )
@@ -655,8 +1042,10 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
         onClose={() => setUserModal(false)}
         title={
           selectedUser
-            ? (lang === 'vi' ? `Chỉnh Sửa Người Dùng – ${selectedUser.name}` : `Edit User – ${selectedUser.name}`)
-            : (lang === 'vi' ? 'Thêm Người Dùng Mới' : 'Add New User')
+            ? `Chỉnh Sửa Người Dùng – ${selectedUser.name}`
+            : accountMode === 'customer-support'
+              ? 'Tạo khách hàng theo yêu cầu hỗ trợ'
+              : 'Tạo tài khoản nội bộ'
         }
       >
         <div className="space-y-4">
@@ -666,41 +1055,60 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               <div>
                 <p className="font-semibold text-slate-800">{selectedUser.name}</p>
                 <p className="text-xs text-slate-400">
-                  {selectedUser.id} · {lang === 'vi' ? `Tham gia ${selectedUser.joined ?? 'Gần đây'}` : `Joined ${selectedUser.joined ?? 'Recently'}`}
+                  {selectedUser.id} · Tham gia {selectedUser.joined ?? 'Gần đây'}
                 </p>
               </div>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Input label={lang === 'vi' ? 'Họ và Tên' : 'Full Name'} defaultValue={selectedUser?.name} placeholder="Jane Smith" />
-            <Input label="Email" type="email" defaultValue={selectedUser?.email} placeholder="jane@example.com" />
+            <Input label="Họ và Tên" value={accountForm.name} onChange={event => setAccountForm(prev => ({ ...prev, name: event.target.value }))} placeholder="Jane Smith" />
+            <Input label="Email" type="email" value={accountForm.email} onChange={event => setAccountForm(prev => ({ ...prev, email: event.target.value }))} placeholder="jane@example.com" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Select label={lang === 'vi' ? 'Vai Trò' : 'Role'} value={selectedUser?.role}>
-              <option value="customer">{lang === 'vi' ? 'Khách hàng' : 'Customer'}</option>
-              <option value="staff">{lang === 'vi' ? 'Nhân viên' : 'Staff'}</option>
-              <option value="manager">{lang === 'vi' ? 'Quản lý cơ sở' : 'Manager'}</option>
-              <option value="business">{lang === 'vi' ? 'Giám đốc kinh doanh' : 'Business Manager'}</option>
-              <option value="admin">{lang === 'vi' ? 'Quản trị viên' : 'Admin'}</option>
+            <Select label="Vai Trò" value={selectedUser?.role === 'customer' ? 'customer' : accountForm.role} disabled={selectedUser?.role === 'customer'} onChange={event => setAccountForm(prev => ({ ...prev, role: event.target.value as Exclude<Role, 'customer'> }))}>
+              {selectedUser?.role === 'customer' && <option value="customer">Khách hàng</option>}
+              <option value="staff">Nhân viên</option>
+              <option value="manager">Quản lý cơ sở</option>
+              <option value="business">Giám đốc kinh doanh</option>
+              <option value="admin">Quản trị viên</option>
             </Select>
-            <Select label={lang === 'vi' ? 'Trạng Thái' : 'Status'} value={selectedUser?.status}>
-              <option value="active">{lang === 'vi' ? 'Hoạt động' : 'Active'}</option>
-              <option value="inactive">{lang === 'vi' ? 'Ngưng hoạt động' : 'Inactive'}</option>
-              <option value="suspended">{lang === 'vi' ? 'Đình chỉ' : 'Suspended'}</option>
+            <Select label="Trạng Thái" value={accountForm.status} onChange={event => setAccountForm(prev => ({ ...prev, status: event.target.value as 'active' | 'inactive' | 'suspended' }))}>
+              <option value="active">Hoạt động</option>
+              <option value="inactive">Ngưng hoạt động</option>
+              <option value="suspended">Đình chỉ</option>
             </Select>
           </div>
-          <Input label={lang === 'vi' ? 'Cơ sở kho (nếu có)' : 'Facility (if applicable)'} defaultValue={selectedUser?.facility} placeholder={lang === 'vi' ? 'Tên cơ sở kho' : 'Facility name'} />
-          {!selectedUser && <Input label={lang === 'vi' ? 'Mật Khẩu Tạm Thời' : 'Temporary Password'} type="password" placeholder={lang === 'vi' ? 'Sẽ được gửi tự động qua email' : 'Will be sent via email'} />}
+          <Input label="Số điện thoại" value={accountForm.phone} onChange={event => setAccountForm(prev => ({ ...prev, phone: event.target.value }))} placeholder="0901 234 567" />
+          <Select label="Cơ sở kho" value={accountForm.facility} onChange={event => setAccountForm(prev => ({ ...prev, facility: event.target.value }))}>
+            <option value="">Chưa gán cơ sở</option>
+            <option value="All facilities">Tất cả cơ sở</option>
+            {facilities.map(facility => <option key={facility.id} value={facility.name}>{facility.name}</option>)}
+          </Select>
+          {!selectedUser && accountMode === 'customer-support' && <Input label="Lý do hỗ trợ (bắt buộc)" value={accountForm.reason} onChange={event => setAccountForm(prev => ({ ...prev, reason: event.target.value }))} placeholder="Ví dụ: hỗ trợ khách không thể tự đăng ký" />}
+          {selectedUser && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <span>Mật khẩu: {selectedUser.mustChangePassword ? 'Bắt buộc đổi sau reset/cấp mới' : 'Đang hoạt động'}</span>
+            <Button variant="outline" size="sm" onClick={() => {
+              try {
+                requestUserPasswordReset(selectedUser.id, user)
+                showToast('Đã tạo yêu cầu reset mật khẩu và ghi audit log.')
+              } catch (error) {
+                showToast(error instanceof Error ? error.message : 'Không thể reset mật khẩu.')
+              }
+            }}>Tạo yêu cầu reset</Button>
+          </div>}
           <div className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" onClick={() => setUserModal(false)}>{lang === 'vi' ? 'Hủy Bỏ' : 'Cancel'}</Button>
-            {selectedUser && (
-              <Button variant="danger" onClick={() => { setUserModal(false); showToast(lang === 'vi' ? 'Đã xóa tài khoản khỏi hệ thống!' : 'User removed!') }}>
-                {lang === 'vi' ? 'Xóa Tài Khoản' : 'Delete User'}
-              </Button>
-            )}
-            <Button variant="primary" onClick={() => { setUserModal(false); showToast(lang === 'vi' ? 'Đã cập nhật thông tin người dùng!' : 'User updated successfully!') }}>
-              {selectedUser ? (lang === 'vi' ? 'Lưu Thay Đổi' : 'Save Changes') : (lang === 'vi' ? 'Tạo Tài Khoản' : 'Create User')}
-            </Button>
+            {selectedUser && selectedUser.id !== user.id && <Button variant="outline" onClick={() => {
+              if (!window.confirm('Xóa tài khoản này khỏi hệ thống?')) return
+              try {
+                deleteUserAccount(selectedUser.id, user)
+                setUserModal(false)
+                showToast('Đã xóa tài khoản và ghi audit log.')
+              } catch (error) {
+                showToast(error instanceof Error ? error.message : 'Không thể xóa tài khoản.')
+              }
+            }}>Xóa tài khoản</Button>}
+            <Button variant="outline" onClick={() => setUserModal(false)}>Hủy Bỏ</Button>
+            <Button variant="primary" onClick={handleAccountSubmit}>{selectedUser ? 'Lưu thay đổi' : 'Tạo tài khoản'}</Button>
           </div>
         </div>
       </Modal>
@@ -709,35 +1117,35 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
       <Modal
         open={logModalOpen}
         onClose={() => setLogModalOpen(false)}
-        title={lang === 'vi' ? 'Chi Tiết & Siêu Dữ Liệu Sự Kiện Kiểm Toán' : 'Audit Event Data & Metadata Inspector'}
+        title="Chi Tiết & Siêu Dữ Liệu Sự Kiện Kiểm Toán"
       >
         {selectedLog && (
           <div className="space-y-4">
             <div className="p-3 rounded-lg bg-[#292a27] text-white">
               <div className="flex justify-between items-center text-xs font-mono text-[#e9a12c]">
-                <span>{lang === 'vi' ? 'MÃ SỰ KIỆN' : 'EVENT ID'}: {selectedLog.id}</span>
+                <span>MÃ SỰ KIỆN: {selectedLog.id}</span>
                 <span className="uppercase">{selectedLog.category}</span>
               </div>
               <p className="font-bold text-stone-100 text-sm mt-1">{selectedLog.action}</p>
               <p className="text-xs text-stone-400 mt-0.5">
-                {selectedLog.timestamp} · {lang === 'vi' ? 'Người thực hiện' : 'Actor'}: {selectedLog.actor} ({selectedLog.role})
+                {selectedLog.timestamp} · Người thực hiện: {selectedLog.actor} ({selectedLog.role})
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs bg-stone-50 p-3 rounded-lg border border-stone-200">
               <div>
-                <span className="text-stone-400 block">{lang === 'vi' ? 'Địa Chỉ IP Nguồn' : 'Origin IP Address'}</span>
+                <span className="text-stone-400 block">Địa Chỉ IP Nguồn</span>
                 <code className="font-mono text-stone-800 font-bold">{selectedLog.ip}</code>
               </div>
               <div>
-                <span className="text-stone-400 block">{lang === 'vi' ? 'Thiết Bị / Trình Duyệt' : 'User-Agent / Device'}</span>
+                <span className="text-stone-400 block">Thiết Bị / Trình Duyệt</span>
                 <span className="text-stone-800 font-medium truncate block">{selectedLog.device}</span>
               </div>
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-semibold text-stone-700">
-                {lang === 'vi' ? 'Dữ Liệu Thay Đổi (Payload JSON)' : 'Raw Mutation Payload (JSON)'}
+                Dữ Liệu Thay Đổi (Payload JSON)
               </label>
               <pre className="p-3 bg-[#1e1f1d] text-emerald-300 font-mono text-xs rounded-lg overflow-x-auto max-h-48">
                 {JSON.stringify(selectedLog.details, null, 2)}
@@ -746,7 +1154,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
             <div className="flex justify-end pt-2 border-t border-stone-100">
               <Button variant="outline" onClick={() => setLogModalOpen(false)}>
-                {lang === 'vi' ? 'Đóng Cửa Sổ' : 'Close Inspector'}
+                Đóng Cửa Sổ
               </Button>
             </div>
           </div>

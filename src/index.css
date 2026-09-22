@@ -1,8 +1,76 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
 @import 'tailwindcss';
 
-/* The icon-free presentation keeps charts (Recharts SVG surfaces) visible. */
-svg:not(.recharts-surface) { display: none !important; }
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 36px;
+  --text-4xl: 36px;
+  --text-4xl--line-height: 40px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}
+
+/* The icon-free presentation keeps charts (Recharts SVG surfaces) and designated icons visible. */
+svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
+
+/* Allow explicit icon classes or containers */
+.show-icon,
+.show-svg,
+.show-svg svg:not(.show-icon),
+.rbac-matrix svg:not(.show-icon),
+.home-page svg:not(.show-icon),
+.brand-logo svg:not(.show-icon),
+.app-icon svg:not(.show-icon) {
+  display: inline-block !important;
+}
+
+/* The customer notification control keeps its functional bell icon. */
+.customer-notification-bell svg {
+  display: block !important;
+}
+
+@keyframes notification-target-reveal {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+  18% {
+    transform: translateY(-18px) scale(1.012);
+    box-shadow: 0 18px 38px rgba(120, 78, 8, 0.22), 0 0 0 5px rgba(251, 191, 36, 0.72);
+  }
+  68% {
+    transform: translateY(-8px) scale(1.006);
+    box-shadow: 0 12px 28px rgba(120, 78, 8, 0.16), 0 0 0 4px rgba(251, 191, 36, 0.55);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 2px rgba(251, 191, 36, 0);
+  }
+}
+
+.notification-target-reveal {
+  position: relative;
+  z-index: 10;
+  animation: notification-target-reveal 2.6s cubic-bezier(0.22, 1, 0.36, 1);
+  border-color: rgb(245 158 11) !important;
+  will-change: transform, box-shadow;
+}
 
 :root {
   --ink: #24241f;
@@ -29,7 +97,7 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: Inter, system-ui, sans-serif;
   color: var(--ink);
   background: var(--canvas);
   -webkit-font-smoothing: antialiased;
@@ -40,6 +108,14 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* Customer portal typography stays consistent without recoloring content panels. */
+.customer-page,
+.customer-page *,
+.customer-role-layout,
+.customer-role-layout * {
+  font-family: Inter, system-ui, sans-serif !important;
 }
 
 button:not(:disabled) { cursor: pointer; }
@@ -60,7 +136,7 @@ button:not(:disabled) { cursor: pointer; }
 }
 
 .font-mono-label {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .08em;
@@ -155,7 +231,7 @@ button:not(:disabled) { cursor: pointer; }
   transform: translateY(-1px);
 }
 
-main input,
+main input:not([type="checkbox"]):not([type="radio"]),
 main select,
 main textarea {
   width: 100%;
@@ -167,6 +243,13 @@ main textarea {
   font-size: 13.5px;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
+}
+
+main input[type="checkbox"],
+main input[type="radio"] {
+  width: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 main input:focus,
@@ -188,4 +271,24 @@ main textarea:focus {
   .auth-page { padding: 16px; }
   .auth-main-card { display: block; max-width: 520px; }
   .auth-recovery-card { padding: 28px 24px; }
+}
+.inactive-record-card :where(*:not(.inactive-record-alert):not(.inactive-record-alert *)) {
+  color: #78716c !important;
+  border-color: #d6d3d1 !important;
+  box-shadow: none !important;
+}
+
+.inactive-record-card :where(*:not(.inactive-record-alert):not(.inactive-record-alert *)) {
+  --tw-ring-color: #d6d3d1 !important;
+}
+
+.inactive-record-card :where([class*="bg-"]:not(.inactive-record-alert):not(.inactive-record-alert *)) {
+  background-color: #f5f5f4 !important;
+}
+
+.inactive-record-card .inactive-record-alert,
+.inactive-record-card .inactive-record-alert * {
+  color: #991b1b !important;
+  border-color: #f87171 !important;
+  background-color: #fee2e2 !important;
 }
