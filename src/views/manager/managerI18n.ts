@@ -3,7 +3,7 @@
 export type Language = 'en' | 'vi'
 
 const statusLabels: Record<string, { en: string; vi: string }> = {
-  available: { en: 'Available', vi: 'Khả dụng' },
+  available: { en: 'Available', vi: 'Còn trống' },
   reserved: { en: 'Reserved', vi: 'Đã giữ chỗ' },
   occupied: { en: 'Occupied', vi: 'Đang sử dụng' },
   maintenance: { en: 'Maintenance', vi: 'Bảo trì' },
@@ -18,6 +18,10 @@ const statusLabels: Record<string, { en: string; vi: string }> = {
   scheduled: { en: 'Scheduled', vi: 'Đã lên lịch' },
   open: { en: 'Open', vi: 'Đang mở' },
   in_progress: { en: 'In progress', vi: 'Đang thực hiện' },
+  'in-progress': { en: 'In progress', vi: 'Đang thực hiện' },
+  resolved: { en: 'Resolved', vi: 'Đã xử lý' },
+  'on-duty': { en: 'On duty', vi: 'Đang trực' },
+  no_show: { en: 'No-show', vi: 'Không đến' },
   return_requested: { en: 'Return requested', vi: 'Đã yêu cầu trả kho' },
   return_inspection: { en: 'Return inspection', vi: 'Đang nghiệm thu trả kho' },
   closing: { en: 'Closing', vi: 'Đang tất toán' },
@@ -29,7 +33,7 @@ const statusLabels: Record<string, { en: string; vi: string }> = {
   awaiting_customer_confirmation: { en: 'Awaiting customer confirmation', vi: 'Chờ khách xác nhận' },
   CREATED: { en: 'Created', vi: 'Đã tạo' },
   DEPOSIT_PAID: { en: 'Deposit paid', vi: 'Đã thanh toán cọc' },
-  UNIT_RESERVED: { en: 'Unit reserved', vi: 'Đã phân gian kho' },
+  UNIT_RESERVED: { en: 'Unit reserved', vi: 'Đã giữ gian kho' },
   READY_FOR_CHECKIN: { en: 'Ready for move-in', vi: 'Sẵn sàng nhận kho' },
   COMPLETED: { en: 'Completed', vi: 'Hoàn tất' },
   CANCELLED: { en: 'Cancelled', vi: 'Đã hủy' },
@@ -45,7 +49,10 @@ const statusLabels: Record<string, { en: string; vi: string }> = {
   appointment_scheduled: { en: 'Appointment scheduled', vi: 'Đã hẹn lịch' },
   payment_processing: { en: 'Payment processing', vi: 'Đang xử lý thanh toán' },
   payment_failed: { en: 'Payment failed', vi: 'Thanh toán thất bại' },
-  payment_expired: { en: 'Payment expired', vi: 'Thanh toán hết hạn' }
+  payment_expired: { en: 'Payment expired', vi: 'Thanh toán hết hạn' },
+  awaiting_email: { en: 'Awaiting email verification', vi: 'Chờ xác minh email' },
+  awaiting_review: { en: 'Awaiting review', vi: 'Chờ duyệt hồ sơ' },
+  awaiting_payment: { en: 'Awaiting deposit payment', vi: 'Chờ thanh toán cọc' },
 }
 
 const unitTypes: Record<string, { en: string; vi: string }> = {
@@ -89,7 +96,7 @@ const activities: Record<string, { en: string; vi: string }> = {
   RESERVATION_CREATED: { en: 'Reservation created', vi: 'Đã tạo đơn đặt chỗ' },
   RESERVATION_APPROVED: { en: 'Reservation approved', vi: 'Đã duyệt đơn đặt chỗ' },
   RESERVATION_CANCELLED: { en: 'Reservation cancelled', vi: 'Đã hủy đơn đặt chỗ' },
-  UNIT_ASSIGNED: { en: 'Unit assigned', vi: 'Đã phân gian kho' },
+  UNIT_ASSIGNED: { en: 'Unit selected', vi: 'Gian kho đã được xác định' },
   UNIT_MAINTENANCE_STARTED: { en: 'Maintenance started', vi: 'Đã đưa gian kho vào bảo trì' },
   UNIT_RELEASED: { en: 'Unit released', vi: 'Đã mở lại gian kho' },
   PAPER_CONTRACT_SIGNED: { en: 'Paper contract signed', vi: 'Đã ký hợp đồng giấy' },

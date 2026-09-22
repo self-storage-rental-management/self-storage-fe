@@ -91,7 +91,7 @@ function XMarkIcon({ className = "w-5 h-5" }: { className?: string }) {
 }
 
 export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps) {
-  const { facilities: contextFacilities } = useStorageHub()
+  const { facilities: contextFacilities, units, rentals, holds } = useStorageHub()
   const [activeModal, setActiveModal] = useState<'facilities' | 'unit_types' | 'how_it_works' | null>(null)
 
   const scrollToSection = (sectionId: string) => {
@@ -110,45 +110,62 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   }, [])
   const [selectedFacilityTab, setSelectedFacilityTab] = useState('all')
 
-  // Combine demo database and context facilities
-  const facilitiesList = (contextFacilities && contextFacilities.length > 0) ? contextFacilities : FACILITIES
+  // Keep live availability from the shared store while sourcing all display
+  // metadata from the canonical demo catalog.
+  const facilitiesList = FACILITIES.map(seed => {
+    const runtime = contextFacilities.find(item => item.id === seed.id)
+    const physicalAvailable = units.filter(unit => unit.facilityId === seed.id && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
+    const activeCapacityHolds = holds.filter(hold => hold.facilityId === seed.id && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
+    return {
+      ...seed,
+      ...runtime,
+      code: seed.code,
+      name: seed.name,
+      address: seed.address,
+      city: seed.city,
+      price: seed.price,
+      available: Math.max(0, physicalAvailable - activeCapacityHolds),
+    }
+  })
+  const availableUnitCount = facilitiesList.reduce((total, facility) => total + (facility.available ?? 0), 0)
+  const totalUnitCount = facilitiesList.reduce((total, facility) => total + (facility.units ?? 0), 0)
 
   const unitCategories = [
     {
       id: 'small',
-      name: 'Tủ Đồ Mini & Gian Nhỏ (Small Locker)',
-      size: 'Kho nhỏ · khoảng 2,3 m² · 7 m³',
-      desc: 'Phù hợp để tài liệu cá nhân, vali du lịch, quần áo theo mùa, đồ trượt tuyết hoặc 5-8 thùng carton tiêu chuẩn.',
-      estRate: 'Từ 850.000 ₫ / tháng',
+      name: 'Gian Kho Nhỏ (Small Storage)',
+      size: '5,6 × 6 × 3,2 m · 33,6 m² · 107,52 m³',
+      desc: 'Phù hợp để lưu trữ đồ gia dụng, thiết bị văn phòng và hàng hóa đóng kiện.',
+      estRate: 'Từ 5.500.000 ₫ / tháng',
       badge: 'Cá nhân & Gia đình',
       highlight: 'Khóa mã PIN 24/7'
     },
     {
       id: 'medium',
-      name: 'Gian Kho Tiêu Chuẩn (Medium Unit)',
-      size: 'Kho vừa · khoảng 9,3 m² · 28 m³',
-      desc: 'Lưu trữ toàn bộ nội thất căn hộ 1-2 phòng ngủ, thiết bị văn phòng, bàn ghế, tủ lạnh và hàng mẫu kinh doanh online.',
-      estRate: 'Từ 2.200.000 ₫ / tháng',
+      name: 'Gian Kho Vừa (Medium Storage)',
+      size: '9 × 6,4 × 3,4 m · 57,6 m² · 195,84 m³',
+      desc: 'Phù hợp với đồ đạc gia đình, thiết bị văn phòng và hàng kinh doanh.',
+      estRate: 'Từ 9.500.000 ₫ / tháng',
       badge: 'Phổ biến nhất',
       highlight: 'Kiểm soát nhiệt độ 24°C'
     },
     {
       id: 'large',
-      name: 'Kho Thương Mại & Doanh Nghiệp (Large Unit)',
-      size: 'Kho lớn · khoảng 18,6–37 m²',
-      desc: 'Dành cho tồn kho thương mại điện tử, máy móc cơ khí, thiết bị sự kiện và toàn bộ nội thất biệt thự/nhà lớn.',
-      estRate: 'Từ 4.500.000 ₫ / tháng',
+      name: 'Gian Kho Lớn (Large Storage)',
+      size: '13,5 × 6,8 × 3,6 m · 91,8 m² · 330,48 m³',
+      desc: 'Phù hợp với đồ chuyển nhà, pallet và tồn kho kinh doanh quy mô lớn.',
+      estRate: 'Từ 15.000.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
       highlight: 'Xe tải bốc dỡ tận cửa'
     },
     {
-      id: 'climate',
-      name: 'Kho Kiểm Soát Vi Khí Hậu (Climate-Controlled)',
-      size: 'Đa dạng diện tích từ 5m² đến 30m²',
-      desc: 'Duy trì nhiệt độ 20-23°C và độ ẩm ổn định 50-60%. Chuyên dụng cho rượu vang, tranh nghệ thuật, hồ sơ lưu trữ lâu năm.',
-      estRate: 'Liên hệ báo giá chi tiết',
-      badge: 'Cao cấp',
-      highlight: 'Cảm biến độ ẩm thông minh'
+      id: 'xlarge',
+      name: 'Gian Kho Rất Lớn (Extra Large)',
+      size: '19 × 7,2 × 4 m · 136,8 m² · 547,2 m³',
+      desc: 'Dành cho kho thương mại, pallet số lượng lớn và máy móc.',
+      estRate: 'Từ 22.500.000 ₫ / tháng',
+      badge: 'Doanh nghiệp',
+      highlight: 'Xe tải bốc dỡ tận cửa'
     }
   ]
 
@@ -170,7 +187,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     },
     {
       num: '04',
-      title: 'Thanh toán & nhận kho (ACTIVE)',
+      title: 'Thanh toán & nhận kho',
       desc: 'Hoàn tất thanh toán, nhận mã PIN khóa điện tử thông minh và bắt đầu lưu trữ tự do 24/7.'
     }
   ]
@@ -294,12 +311,12 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               {/* Quick Trust Badges */}
               <div className="grid grid-cols-3 gap-3 pt-4 border-t border-stone-100 text-center sm:text-left">
                 <div>
-                  <div className="text-xl sm:text-2xl font-black text-stone-900">500+</div>
-                  <div className="text-xs text-stone-500 mt-0.5">Gian kho sẵn sàng</div>
+                   <div className="text-xl sm:text-2xl font-black text-stone-900">{availableUnitCount}</div>
+                   <div className="text-xs text-stone-500 mt-0.5">Gian kho còn trống</div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-black text-stone-900">24/7</div>
-                  <div className="text-xs text-stone-500 mt-0.5">Camera & Khóa mã số</div>
+                   <div className="text-xl sm:text-2xl font-black text-stone-900">{totalUnitCount}</div>
+                   <div className="text-xs text-stone-500 mt-0.5">Tổng gian kho</div>
                 </div>
                 <div>
                   <div className="text-xl sm:text-2xl font-black text-emerald-600">99.8%</div>
@@ -328,11 +345,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                       <BoxIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-white">Gian Nhỏ (Small · 2,3 m²)</div>
-                      <div className="text-[11px] text-stone-400">98% Khả dụng · Khóa PIN điện tử</div>
+                       <div className="text-xs font-bold text-white">Gian Nhỏ (Small · 33,6 m²)</div>
+                       <div className="text-[11px] text-stone-400">107,52 m³ · Khóa PIN điện tử</div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 850.000 ₫</span>
+                   <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 5.500.000 ₫</span>
                 </div>
 
                 <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
@@ -341,11 +358,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                       <WarehouseIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-white">Gian Vừa (Medium · 9,3 m²)</div>
-                      <div className="text-[11px] text-stone-400">Điều hòa nhiệt độ · 24/7 Ra vào</div>
+                       <div className="text-xs font-bold text-white">Gian Vừa (Medium · 57,6 m²)</div>
+                       <div className="text-[11px] text-stone-400">195,84 m³ · 24/7 ra vào</div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 2.200.000 ₫</span>
+                   <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 9.500.000 ₫</span>
                 </div>
 
                 <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
@@ -354,11 +371,24 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                       <KeyIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-white">Kho Lớn (Large · 18,6 m²)</div>
-                      <div className="text-[11px] text-stone-400">Xe tải bốc dỡ · Cửa cuốn tự động</div>
+                       <div className="text-xs font-bold text-white">Kho Lớn (Large · 91,8 m²)</div>
+                       <div className="text-[11px] text-stone-400">330,48 m³ · Xe tải bốc dỡ</div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 4.500.000 ₫</span>
+                   <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 15.000.000 ₫</span>
+                </div>
+
+                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                      <KeyIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white">Gian Rất Lớn (Extra Large · 136,8 m²)</div>
+                      <div className="text-[11px] text-stone-400">547,2 m³ · Pallet và máy móc</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 22.500.000 ₫</span>
                 </div>
               </div>
 
@@ -368,7 +398,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   <ShieldCheckIcon className="w-4 h-4 text-emerald-400" />
                   <span>Bảo vệ & Giám sát CCTV</span>
                 </span>
-                <span className="font-mono font-semibold text-stone-300">Downtown & Riverside</span>
+                 <span className="font-mono font-semibold text-stone-300">HCM-Q1-F01 · BD-F01</span>
               </div>
             </div>
 
@@ -503,7 +533,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 Hệ Thống Cơ Sở StorageHub
               </h2>
               <p className="mt-1 text-sm text-stone-600">
-                Vị trí đắc địa tại trung tâm các thành phố lớn, thuận tiện di chuyển và vận chuyển hàng hóa.
+                 Hai cơ sở tại Quận 1 và Bình Dương, thuận tiện di chuyển và vận chuyển hàng hóa.
               </p>
             </div>
             <div className="mt-4 md:mt-0 flex gap-2">
@@ -517,23 +547,23 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
             {facilitiesList.map(fac => (
               <div key={fac.id} className="rounded-xl border border-stone-200 bg-stone-50 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between">
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] font-mono font-bold bg-amber-100 text-[#9A5A05] px-2 py-0.5 rounded">
-                      MÃ: {fac.id}
+                       MÃ: {fac.code ?? fac.id}
                     </span>
                     <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span>{fac.available ?? 18} gian khả dụng</span>
+                      <span>{fac.available ?? 0} gian còn trống</span>
                     </span>
                   </div>
                   <h3 className="text-lg font-bold text-stone-900">{fac.name}</h3>
                   <p className="text-xs text-stone-600 mt-1 flex items-start gap-1.5">
                     <MapPinIcon className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" />
-                    <span>{fac.address}, {fac.city}</span>
+                     <span>{fac.address}</span>
                   </p>
 
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-mono bg-white p-2.5 rounded-lg border border-stone-200">
@@ -550,7 +580,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
 
                 <div className="p-4 bg-stone-100 border-t border-stone-200 flex items-center justify-between">
                   <span className="text-xs text-stone-600 font-medium">
-                    Giá từ <strong className="text-stone-900">{fac.price ?? '850.000'} đ</strong>/tháng
+                     Giá từ <strong className="text-stone-900">{fac.price ?? '5.500.000'} đ</strong>/tháng
                   </span>
                   <button
                     type="button"
@@ -631,10 +661,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">DỊCH VỤ LƯU TRỮ</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Tủ đồ mini & cá nhân</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Kho đồ gia đình & chuyển nhà</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Kho hàng thương mại điện tử</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Kho kiểm soát vi khí hậu</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho nhỏ · Small</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho vừa · Medium</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho lớn · Large</button></li>
+                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho rất lớn · Extra Large</button></li>
               </ul>
             </div>
 
@@ -642,10 +672,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">CƠ SỞ TRỌNG ĐIỂM</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li>Downtown Storage – 125 Nguyễn Huệ, Q.1</li>
-                <li>Riverside Storage – 42 Bạch Đằng, Bình Thạnh</li>
-                <li>Westside Storage – KCN Tân Bình, Tân Phú</li>
-                <li>Hệ thống cơ sở đối tác toàn quốc</li>
+                <li>Kho Việt – Cơ sở Quận 1 · 125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1</li>
+                <li>Kho Việt – Cơ sở Bình Dương · 468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An</li>
+                <li>2 cơ sở đang hoạt động · hỗ trợ đặt giữ kho trực tuyến</li>
               </ul>
             </div>
 
@@ -711,18 +740,18 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   {facilitiesList.map(f => (
                     <div key={f.id} className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex flex-col justify-between">
                       <div>
-                        <div className="flex items-center justify-between font-bold text-stone-900 text-sm">
-                          <span>{f.name}</span>
-                          <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.id}</span>
-                        </div>
-                        <p className="text-xs text-stone-500 mt-1 flex items-start gap-1">
-                          <MapPinIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400" />
-                          <span>{f.address}, {f.city}</span>
+                         <div className="flex items-center justify-between font-bold text-stone-900 text-sm">
+                           <span>{f.name}</span>
+                           <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.code ?? f.id}</span>
+                         </div>
+                         <p className="text-xs text-stone-500 mt-1 flex items-start gap-1">
+                           <MapPinIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400" />
+                           <span>{f.address}</span>
                         </p>
                       </div>
                       <div className="mt-3 pt-2 border-t border-stone-200 flex items-center justify-between text-[11px] text-stone-600">
                         <span>{f.units ?? 100} đơn vị</span>
-                        <span className="font-semibold text-emerald-700">Khả dụng: {f.available ?? 18}</span>
+                        <span className="font-semibold text-emerald-700">Còn trống: {f.available ?? 0}</span>
                       </div>
                     </div>
                   ))}
