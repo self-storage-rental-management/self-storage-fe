@@ -135,6 +135,7 @@ function addMonthsForPreview(value: string, months: number): string {
 }
 
 export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
+  const hub = useStorageHub()
     const {
     facilities,
     units,
@@ -1554,7 +1555,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                               {renewal.updatedAt && <p className="mt-1 text-stone-500">{'Cập nhật gần nhất'}: {new Date(renewal.updatedAt).toLocaleString('vi-VN')}</p>}
                               {renewal.status === 'payment_expired' && <p className="mt-1 text-red-700">{'Yêu cầu đã hết hiệu lực. Hãy gửi yêu cầu mới để Manager kiểm tra lại khả dụng.'}</p>}
                               {renewal.status === 'rejected' && renewal.notes && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">{'Lý do Manager từ chối'}: {renewal.notes}</p>}
-                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Đã cọc 20% · Hẹn ký ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Còn thu tại cơ sở: ${formatVnd(renewal.remainingAmount)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
+                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Đã cọc 20% · Hẹn ký ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Còn thu tại cơ sở: ${formatVnd(renewal.remainingAmount ?? 0)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
                               {renewal.status === 'completed' && <p className="mt-1 text-emerald-700">{`Phụ lục ${renewal.addendumNumber} · Hiệu lực từ ${renewal.effectiveAt ? new Date(renewal.effectiveAt).toLocaleString('vi-VN') : renewal.paidAt}`}</p>}
                             </div>
                             <div className="flex items-center gap-3">
@@ -2313,7 +2314,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         {activeHoldForEmail && (
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-700 bg-amber-700 p-4 text-xs text-white">
-              <p className="font-bold text-sm mb-1"> {'Email xác minh đã được gửi tới:'} {activeHoldForEmail.customerEmail}</p>
+              <p className="font-bold text-sm mb-1"> {'Địa chỉ nhận xác minh:'} {activeHoldForEmail.customerEmail}</p>
               <p>{'Để tránh tình trạng giữ kho ảo, hệ thống yêu cầu xác nhận email trước khi nhân viên tiếp nhận phê duyệt hồ sơ.'}</p>
             </div>
 
@@ -2338,10 +2339,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 size="sm"
                 onClick={() => {
                   setInputToken(resendHoldEmail(activeHoldForEmail.id, user))
-                  showToast('Đã cấp lại mã token và gửi email mới!')
+                  showToast('Đã tạo lại mã demo trên phiên hiện tại; chưa gửi email thật.')
                 }}
               >
-                 {'Gửi lại email'}
+                 {'Tạo lại mã demo'}
               </Button>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setEmailModalOpen(false)}>

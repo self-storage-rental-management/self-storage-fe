@@ -26,8 +26,19 @@
   --font-weight-bold: 700;
 }
 
-/* The icon-free presentation keeps charts (Recharts SVG surfaces) visible. */
-svg:not(.recharts-surface) { display: none !important; }
+/* The icon-free presentation keeps charts (Recharts SVG surfaces) and designated icons visible. */
+svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
+
+/* Allow explicit icon classes or containers */
+.show-icon,
+.show-svg,
+.show-svg svg:not(.show-icon),
+.rbac-matrix svg:not(.show-icon),
+.home-page svg:not(.show-icon),
+.brand-logo svg:not(.show-icon),
+.app-icon svg:not(.show-icon) {
+  display: inline-block !important;
+}
 
 /* The customer notification control keeps its functional bell icon. */
 .customer-notification-bell svg {
@@ -218,7 +229,7 @@ button:not(:disabled) { cursor: pointer; }
   transform: translateY(-1px);
 }
 
-main input,
+main input:not([type="checkbox"]):not([type="radio"]),
 main select,
 main textarea {
   width: 100%;
@@ -230,6 +241,13 @@ main textarea {
   font-size: 13.5px;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
+}
+
+main input[type="checkbox"],
+main input[type="radio"] {
+  width: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 main input:focus,

@@ -24,13 +24,26 @@ import type {
   ReservedPeriod,
   FacilityTask
 } from '../types/storageHub'
-import type { PermissionKey, Role, RolePermissionsState, User } from '../types'
-import { FACILITIES, UNITS, USERS, TICKETS, type TicketItem } from '../data/demoDatabase'
+import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
+import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
 import { formatVnd } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
 
 const STORAGE_KEY = 'storagehub:v3:canonical'
+
+const createRecordId = (prefix: string) => {
+  const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10)
+  return `${prefix}-${Date.now()}-${random}`
+}
+
+const clientSecurityContext = () => ({
+  ip: 'Không xác định từ trình duyệt',
+  location: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone || 'Không xác định' : 'Không xác định',
+  device: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 140) : 'Không xác định'
+})
 
 type CompanyRole = Exclude<User['role'], 'customer'>
 type AccountStatus = 'active' | 'inactive' | 'suspended'
@@ -765,6 +778,51 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
   }
 ]
 
+const INITIAL_LOGIN_HISTORY: LoginHistoryRecord[] = LOGIN_HISTORY.map(item => ({
+  id: item.id,
+  userId: USERS.find(user => user.email === item.email)?.id,
+  user: item.user,
+  email: item.email,
+  role: item.role as Role,
+  timestamp: item.time,
+  ip: item.ip,
+  location: item.location,
+  device: item.device,
+  status: item.status === 'failed' ? 'failed' : 'success',
+  suspicious: item.status === 'failed',
+  reason: item.status === 'failed' ? 'Thông tin xác thực không hợp lệ.' : undefined
+}))
+
+const INITIAL_SESSIONS: SessionRecord[] = INITIAL_LOGIN_HISTORY
+  .filter(item => item.status === 'success' && item.userId)
+  .map(item => ({
+    id: `session-${item.id}`,
+    userId: item.userId!,
+    userName: item.user,
+    email: item.email,
+    role: item.role || 'customer',
+    createdAt: item.timestamp,
+    lastSeenAt: item.timestamp,
+    ip: item.ip,
+    location: item.location,
+    device: item.device,
+    status: 'active'
+  }))
+
+const INITIAL_SECURITY_ALERTS: SecurityAlert[] = INITIAL_LOGIN_HISTORY
+  .filter(item => item.suspicious)
+  .map(item => ({
+    id: `alert-${item.id}`,
+    userId: item.userId,
+    email: item.email,
+    type: 'failed_login_burst',
+    severity: 'warning',
+    message: `Đăng nhập thất bại cho ${item.email} từ ${item.location}.`,
+    createdAt: item.timestamp
+  }))
+
+const INITIAL_PROFILE_CHANGE_REQUESTS: ProfileChangeRequest[] = []
+
 interface StorageHubState {
   users: StoredUser[]
   rolePermissions: RolePermissionsState
@@ -781,6 +839,10 @@ interface StorageHubState {
   staffTasks: FacilityTask[]
   accessCredentials: AccessCredential[]
   activities: ActivityRecord[]
+  loginHistory: LoginHistoryRecord[]
+  sessions: SessionRecord[]
+  securityAlerts: SecurityAlert[]
+  profileChangeRequests: ProfileChangeRequest[]
   tickets: TicketItem[]
   config: BusinessConfig
 }
@@ -789,6 +851,15 @@ interface StorageHubContextValue extends StorageHubState {
   unitTypes: UnitType[]
   can: (actor: User | Role, permission: PermissionKey) => boolean
   updateRolePermissions: (role: Role, permissions: Partial<Record<PermissionKey, boolean>>, actor: User) => void
+  recordLoginAttempt: (params: { email: string; userId?: string; success: boolean; reason?: string }) => void
+  startSession: (user: User) => string
+  endSession: (sessionId: string, user: User) => void
+  revokeSession: (sessionId: string, actor: User) => boolean
+  revokeAllUserSessions: (userId: string, actor: User) => number
+  updateCustomerProfile: (updates: { name: string; email: string; phone?: string }, customer: User) => void
+  requestOwnPasswordReset: (customer: User) => void
+  submitProfileChangeRequest: (params: { requestedFields: string[]; reason: string }, requester: User) => ProfileChangeRequest
+  deleteOwnCustomerAccount: (customer: User) => void
   // Pricing & DIM calculation
   calculateDIMAndQuote: (
     unit: StorageUnit,
@@ -1002,6 +1073,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           rentals: Array.isArray(parsed.rentals) ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals)) : INITIAL_RENTALS,
           returns: Array.isArray(parsed.returns) ? mergeReturnTestCases(parsed.returns) : INITIAL_RETURNS,
           activities: parsed.activities || INITIAL_ACTIVITIES,
+          loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
+          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
+          securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : INITIAL_SECURITY_ALERTS,
+          profileChangeRequests: Array.isArray(parsed.profileChangeRequests) ? parsed.profileChangeRequests : INITIAL_PROFILE_CHANGE_REQUESTS,
           tickets: parsed.tickets || TICKETS,
           config: parsed.config || DEFAULT_BUSINESS_CONFIG
         }
@@ -1025,6 +1100,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       staffTasks: [],
       accessCredentials: [],
       activities: INITIAL_ACTIVITIES,
+      loginHistory: INITIAL_LOGIN_HISTORY,
+      sessions: INITIAL_SESSIONS,
+      securityAlerts: INITIAL_SECURITY_ALERTS,
+      profileChangeRequests: INITIAL_PROFILE_CHANGE_REQUESTS,
       tickets: TICKETS,
       config: DEFAULT_BUSINESS_CONFIG
     }
@@ -1061,19 +1140,175 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         actorId: canonicalActor.id,
         actorName: canonicalActor.name,
         actorRole: canonicalActor.role,
-        facilityId: canonicalActor.facility,
+        facilityId: canonicalActor.facility || 'ALL',
         entityType: 'user',
         entityId: role,
+        beforeState: { role, permissions: current },
+        afterState: { role, permissions: next },
         notes: `Cập nhật bảng quyền cho vai trò ${role}.`,
         timestamp
       }, ...prev.activities]
     }))
   }
 
+  const recordLoginAttempt = ({ email, userId, success, reason }: { email: string; userId?: string; success: boolean; reason?: string }) => {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail) return
+    const account = state.users.find(item => item.id === userId || item.email.toLowerCase() === normalizedEmail)
+    const timestamp = new Date().toISOString()
+    const metadata = clientSecurityContext()
+    const recentFailures = state.loginHistory.filter(item => {
+      if (item.email !== normalizedEmail || item.status !== 'failed') return false
+      const eventTime = Date.parse(item.timestamp)
+      return Number.isFinite(eventTime) && Date.now() - eventTime <= 15 * 60 * 1000
+    }).length
+    const suspicious = !success && recentFailures >= 2
+    const event: LoginHistoryRecord = {
+      id: createRecordId('login'),
+      userId: account?.id || userId,
+      user: account?.name || 'Không xác định',
+      email: normalizedEmail,
+      role: account?.role,
+      timestamp,
+      ...metadata,
+      status: success ? 'success' : 'failed',
+      reason: success ? undefined : reason || 'Thông tin xác thực không hợp lệ.',
+      suspicious
+    }
+    const alert: SecurityAlert | null = suspicious ? {
+      id: createRecordId('alert'),
+      userId: account?.id || userId,
+      email: normalizedEmail,
+      type: 'failed_login_burst',
+      severity: 'critical',
+      message: `Phát hiện ${recentFailures + 1} lần đăng nhập thất bại trong 15 phút cho ${normalizedEmail}.`,
+      createdAt: timestamp
+    } : null
+    setState(prev => ({
+      ...prev,
+      loginHistory: [event, ...prev.loginHistory],
+      securityAlerts: alert ? [alert, ...prev.securityAlerts] : prev.securityAlerts
+    }))
+  }
+
+  const startSession = (user: User): string => {
+    const canonical = resolveCanonicalActor(user)
+    const sessionId = createRecordId('session')
+    const timestamp = new Date().toISOString()
+    const metadata = clientSecurityContext()
+    const hasKnownDevice = state.sessions.some(item => item.userId === canonical.id && item.device === metadata.device && item.location === metadata.location)
+    const session: SessionRecord = {
+      id: sessionId,
+      userId: canonical.id,
+      userName: canonical.name,
+      email: canonical.email,
+      role: canonical.role,
+      createdAt: timestamp,
+      lastSeenAt: timestamp,
+      ...metadata,
+      status: 'active'
+    }
+    const alert: SecurityAlert | null = !hasKnownDevice && state.sessions.some(item => item.userId === canonical.id) ? {
+      id: createRecordId('alert'),
+      userId: canonical.id,
+      email: canonical.email,
+      type: 'unknown_device',
+      severity: 'warning',
+      message: `Tài khoản ${canonical.email} vừa mở phiên từ thiết bị hoặc vị trí mới.`,
+      createdAt: timestamp
+    } : null
+    setState(prev => ({
+      ...prev,
+      sessions: [session, ...prev.sessions],
+      securityAlerts: alert ? [alert, ...prev.securityAlerts] : prev.securityAlerts
+    }))
+    return sessionId
+  }
+
+  const endSession = (sessionId: string, user: User) => {
+    const canonical = resolveCanonicalActor(user)
+    const session = state.sessions.find(item => item.id === sessionId && item.userId === canonical.id)
+    if (!session || session.status !== 'active') return
+    const timestamp = new Date().toISOString()
+    const event: LoginHistoryRecord = {
+      id: createRecordId('logout'),
+      userId: canonical.id,
+      user: canonical.name,
+      email: canonical.email,
+      role: canonical.role,
+      timestamp,
+      ...clientSecurityContext(),
+      status: 'logout'
+    }
+    setState(prev => ({
+      ...prev,
+      sessions: prev.sessions.map(item => item.id === sessionId ? { ...item, status: 'signed_out', lastSeenAt: timestamp } : item),
+      loginHistory: [event, ...prev.loginHistory]
+    }))
+  }
+
+  const revokeSession = (sessionId: string, actor: User): boolean => {
+    const session = state.sessions.find(item => item.id === sessionId)
+    if (!session || session.status !== 'active') return false
+    const target = state.users.find(item => item.id === session.userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản của phiên đăng nhập.')
+    const canonicalActor = actor.id === session.userId ? resolveCanonicalActor(actor) : assertCanonicalAdmin(actor)
+    const timestamp = new Date().toISOString()
+    const revokedSession = { ...session, status: 'revoked' as const, revokedAt: timestamp, lastSeenAt: timestamp }
+    setState(prev => ({
+      ...prev,
+      sessions: prev.sessions.map(item => item.id === sessionId ? revokedSession : item),
+      activities: [{
+        id: createRecordId('act'),
+        action: 'SESSION_REVOKED',
+        actorId: canonicalActor.id,
+        actorName: canonicalActor.name,
+        actorRole: canonicalActor.role,
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: target.id,
+        beforeState: session,
+        afterState: revokedSession,
+        notes: `Thu hồi phiên ${session.id} của ${target.email}.`,
+        timestamp
+      }, ...prev.activities]
+    }))
+    return true
+  }
+
+  const revokeAllUserSessions = (userId: string, actor: User): number => {
+    const target = state.users.find(item => item.id === userId)
+    if (!target) throw new Error('Không tìm thấy tài khoản.')
+    const canonicalActor = actor.id === userId ? resolveCanonicalActor(actor) : assertCanonicalAdmin(actor)
+    const activeSessions = state.sessions.filter(item => item.userId === userId && item.status === 'active')
+    if (!activeSessions.length) return 0
+    const timestamp = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      sessions: prev.sessions.map(item => item.userId === userId && item.status === 'active' ? { ...item, status: 'revoked', revokedAt: timestamp, lastSeenAt: timestamp } : item),
+      activities: [{
+        id: createRecordId('act'),
+        action: 'ALL_SESSIONS_REVOKED',
+        actorId: canonicalActor.id,
+        actorName: canonicalActor.name,
+        actorRole: canonicalActor.role,
+        facilityId: target.facility || 'ALL',
+        entityType: 'user',
+        entityId: userId,
+        beforeState: activeSessions,
+        afterState: activeSessions.map(session => ({ ...session, status: 'revoked', revokedAt: timestamp, lastSeenAt: timestamp })),
+        notes: `Đăng xuất toàn bộ ${activeSessions.length} phiên của ${target.email}.`,
+        timestamp
+      }, ...prev.activities]
+    }))
+    return activeSessions.length
+  }
+
   const toPublicUser = (account: StoredUser): User => ({
     id: account.id,
     name: account.name,
     email: account.email,
+    phone: account.phone,
     role: account.role as User['role'],
     facility: account.facility
   })
@@ -1160,7 +1395,17 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(e.newValue)
           const holds = Array.isArray(parsed.holds) ? parsed.holds.map(normalizeReservationPricing) : []
           const checkins = reconcileReservationCheckins(holds, Array.isArray(parsed.checkins) ? parsed.checkins : [])
-          setState({ ...parsed, users: normalizeUsers(parsed.users), rolePermissions: normalizeRolePermissions(parsed.rolePermissions), holds, checkins })
+          setState({
+            ...parsed,
+            users: normalizeUsers(parsed.users),
+            rolePermissions: normalizeRolePermissions(parsed.rolePermissions),
+            holds,
+            checkins,
+            loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
+            sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
+            securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : INITIAL_SECURITY_ALERTS,
+            profileChangeRequests: Array.isArray(parsed.profileChangeRequests) ? parsed.profileChangeRequests : INITIAL_PROFILE_CHANGE_REQUESTS
+          })
         } catch {}
       }
     }
@@ -2736,6 +2981,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       users: prev.users.map(item => item.id === userId ? updated : item),
+      sessions: nextStatus === 'active' ? prev.sessions : prev.sessions.map(session => session.userId === userId && session.status === 'active' ? { ...session, status: 'revoked' as const, revokedAt: now, lastSeenAt: now } : session),
       activities: [{
         id: `act-${Date.now()}`,
         action: 'INTERNAL_ACCOUNT_UPDATED',
@@ -2764,6 +3010,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       users: prev.users.map(item => item.id === userId ? updated : item),
+      sessions: status === 'active' ? prev.sessions : prev.sessions.map(session => session.userId === userId && session.status === 'active' ? { ...session, status: 'revoked' as const, revokedAt: now, lastSeenAt: now } : session),
       activities: [{
         id: `act-${Date.now()}`,
         action: status === 'suspended' ? 'ACCOUNT_SUSPENDED' : status === 'active' ? 'ACCOUNT_REACTIVATED' : 'ACCOUNT_DEACTIVATED',
@@ -2791,6 +3038,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       users: prev.users.filter(item => item.id !== userId),
+      sessions: prev.sessions.map(session => session.userId === userId && session.status === 'active' ? { ...session, status: 'revoked' as const, revokedAt: now, lastSeenAt: now } : session),
       activities: [{
         id: `act-${Date.now()}`,
         action: 'ACCOUNT_DELETED',
@@ -2834,6 +3082,146 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
+  const updateCustomerProfile = (updates: { name: string; email: string; phone?: string }, customer: User) => {
+    const canonicalCustomer = resolveCanonicalActor(customer)
+    if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Customer được tự cập nhật thông tin cá nhân.')
+    const name = updates.name.trim()
+    const email = updates.email.trim().toLowerCase()
+    const phone = updates.phone?.trim() || ''
+    if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error('Họ tên và email hợp lệ là bắt buộc.')
+    if (state.users.some(item => item.id !== canonicalCustomer.id && item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
+    const updated = { ...canonicalCustomer, name, email, phone } as StoredUser
+    const before = accountSnapshot(canonicalCustomer)
+    const after = accountSnapshot(updated)
+    if (JSON.stringify(before) === JSON.stringify(after)) throw new Error('Thông tin cá nhân chưa có thay đổi.')
+    const now = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === canonicalCustomer.id ? updated : item),
+      sessions: prev.sessions.map(session => session.userId === canonicalCustomer.id ? { ...session, userName: name, email } : session),
+      activities: [{
+        id: createRecordId('act'),
+        action: 'CUSTOMER_PROFILE_UPDATED',
+        actorId: canonicalCustomer.id,
+        actorName: canonicalCustomer.name,
+        actorRole: canonicalCustomer.role,
+        facilityId: canonicalCustomer.facility || 'ALL',
+        entityType: 'user',
+        entityId: canonicalCustomer.id,
+        beforeState: before,
+        afterState: after,
+        notes: 'Customer tự cập nhật thông tin cá nhân.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const requestOwnPasswordReset = (customer: User) => {
+    const canonicalCustomer = resolveCanonicalActor(customer)
+    if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Customer được yêu cầu đổi mật khẩu qua email.')
+    const now = new Date().toISOString()
+    const updated = { ...canonicalCustomer, passwordResetAt: now, mustChangePassword: true } as StoredUser
+    setState(prev => ({
+      ...prev,
+      users: prev.users.map(item => item.id === canonicalCustomer.id ? updated : item),
+      activities: [{
+        id: createRecordId('act'),
+        action: 'CUSTOMER_PASSWORD_RESET_REQUESTED',
+        actorId: canonicalCustomer.id,
+        actorName: canonicalCustomer.name,
+        actorRole: canonicalCustomer.role,
+        facilityId: canonicalCustomer.facility || 'ALL',
+        entityType: 'user',
+        entityId: canonicalCustomer.id,
+        beforeState: accountSnapshot(canonicalCustomer),
+        afterState: accountSnapshot(updated),
+        notes: 'Customer yêu cầu auth backend gửi email đổi mật khẩu; frontend không tự đặt mật khẩu mới.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+  }
+
+  const submitProfileChangeRequest = ({ requestedFields, reason }: { requestedFields: string[]; reason: string }, requester: User): ProfileChangeRequest => {
+    const canonicalRequester = resolveCanonicalActor(requester)
+    if (canonicalRequester.role === 'customer') throw new Error('Customer không dùng luồng yêu cầu chỉnh sửa nội bộ.')
+    const fields = [...new Set(requestedFields.map(field => field.trim()).filter(Boolean))].slice(0, 10)
+    const cleanReason = reason.trim()
+    if (!fields.length) throw new Error('Vui lòng chọn ít nhất một nội dung cần chỉnh sửa.')
+    if (cleanReason.length < 10) throw new Error('Lý do yêu cầu phải có ít nhất 10 ký tự.')
+    const now = new Date().toISOString()
+    const request: ProfileChangeRequest = {
+      id: createRecordId('profile-request'),
+      requesterId: canonicalRequester.id,
+      requesterName: canonicalRequester.name,
+      requesterEmail: canonicalRequester.email,
+      requesterRole: canonicalRequester.role as Exclude<Role, 'customer'>,
+      facility: canonicalRequester.facility,
+      requestedFields: fields,
+      reason: cleanReason,
+      status: 'pending',
+      createdAt: now
+    }
+    setState(prev => ({
+      ...prev,
+      profileChangeRequests: [request, ...prev.profileChangeRequests],
+      activities: [{
+        id: createRecordId('act'),
+        action: 'PROFILE_CHANGE_REQUESTED',
+        actorId: canonicalRequester.id,
+        actorName: canonicalRequester.name,
+        actorRole: canonicalRequester.role,
+        facilityId: canonicalRequester.facility || 'ALL',
+        entityType: 'user',
+        entityId: canonicalRequester.id,
+        beforeState: accountSnapshot(canonicalRequester),
+        afterState: request,
+        notes: 'Gửi yêu cầu chỉnh sửa thông tin tới Admin/HR.',
+        timestamp: now
+      }, ...prev.activities]
+    }))
+    return request
+  }
+
+  const deleteOwnCustomerAccount = (customer: User) => {
+    const canonicalCustomer = resolveCanonicalActor(customer)
+    if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Customer được tự xoá tài khoản.')
+    const nowMs = Date.now()
+    const closedHoldStatuses = ['CANCELLED', 'COMPLETED', 'cancelled', 'completed', 'REJECTED', 'rejected', 'NO_SHOW', 'no_show']
+    const activeHolds = state.holds.filter(hold => hold.customerId === canonicalCustomer.id && ![...closedHoldStatuses, 'EXPIRED', 'expired'].includes(String(hold.status)))
+    const overdueHolds = state.holds.filter(hold => hold.customerId === canonicalCustomer.id && !closedHoldStatuses.includes(String(hold.status)) && Boolean(hold.expiresAt) && Date.parse(hold.expiresAt) < nowMs)
+    const unpaidHolds = state.holds.filter(hold => hold.customerId === canonicalCustomer.id && !closedHoldStatuses.includes(String(hold.status)) && hold.payment.status !== 'paid')
+    const activeRentals = state.rentals.filter(rental => rental.customerId === canonicalCustomer.id && rental.status !== 'completed')
+    const overdueRentals = activeRentals.filter(rental => rental.paymentStatus === 'overdue' || (rental.paymentStatus !== 'paid' && Boolean(rental.nextDue) && Date.parse(rental.nextDue) < nowMs))
+    const unpaidRentals = activeRentals.filter(rental => rental.paymentStatus !== 'paid')
+    const activeRenewals = state.renewals.filter(renewal => renewal.customerId === canonicalCustomer.id && !['completed', 'cancelled', 'rejected', 'payment_expired'].includes(renewal.status))
+    const blockers: string[] = []
+    if (activeHolds.length || activeRentals.length || activeRenewals.length) blockers.push('đơn/hồ sơ đang xử lý')
+    if (overdueHolds.length || overdueRentals.length) blockers.push('đơn quá hạn')
+    if (unpaidHolds.length || unpaidRentals.length || activeRenewals.some(renewal => renewal.status !== 'cancelled' && renewal.status !== 'completed')) blockers.push('đơn chưa thanh toán')
+    if (blockers.length) throw new Error(`Không thể xoá tài khoản khi còn ${blockers.join(', ')}. Vui lòng hoàn tất hoặc huỷ các hồ sơ trước.`)
+    const before = accountSnapshot(canonicalCustomer)
+    const timestamp = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      users: prev.users.filter(item => item.id !== canonicalCustomer.id),
+      sessions: prev.sessions.map(session => session.userId === canonicalCustomer.id && session.status === 'active' ? { ...session, status: 'revoked' as const, revokedAt: timestamp, lastSeenAt: timestamp } : session),
+      activities: [{
+        id: createRecordId('act'),
+        action: 'CUSTOMER_ACCOUNT_DELETED',
+        actorId: canonicalCustomer.id,
+        actorName: canonicalCustomer.name,
+        actorRole: canonicalCustomer.role,
+        facilityId: canonicalCustomer.facility || 'ALL',
+        entityType: 'user',
+        entityId: canonicalCustomer.id,
+        beforeState: before,
+        afterState: null,
+        notes: 'Customer tự xoá tài khoản sau khi vượt qua kiểm tra hồ sơ, quá hạn và thanh toán.',
+        timestamp
+      }, ...prev.activities]
+    }))
+  }
+
   const resetToDemoData = () => {
     localStorage.removeItem(STORAGE_KEY)
     setState({
@@ -2852,6 +3240,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       staffTasks: [],
       accessCredentials: [],
       activities: INITIAL_ACTIVITIES,
+      loginHistory: INITIAL_LOGIN_HISTORY,
+      sessions: INITIAL_SESSIONS,
+      securityAlerts: INITIAL_SECURITY_ALERTS,
+      profileChangeRequests: INITIAL_PROFILE_CHANGE_REQUESTS,
       tickets: TICKETS,
       config: DEFAULT_BUSINESS_CONFIG
     })
@@ -3212,6 +3604,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     unitTypes: UNIT_TYPES,
     can,
     updateRolePermissions,
+    recordLoginAttempt,
+    startSession,
+    endSession,
+    revokeSession,
+    revokeAllUserSessions,
+    updateCustomerProfile,
+    requestOwnPasswordReset,
+    submitProfileChangeRequest,
+    deleteOwnCustomerAccount,
     calculateDIMAndQuote,
     payStorageHold,
     verifyHoldEmail,
