@@ -31,7 +31,7 @@ import { isFacilityVisible } from '../domain/managerRules'
 import { formatVnd } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
 
-const STORAGE_KEY = 'storagehub:v3:canonical'
+const STORAGE_KEY = 'storagehub:v5:released-orphan-holds'
 
 const createRecordId = (prefix: string) => {
   const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -272,9 +272,10 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
   // Customer test inventory: demo reservations lock their selected physical units; every other unit is bookable.
   const isReservedDemo = u.id === 'A-104' || u.id === 'B-112'
   const demoRentalByUnit: Record<string, string> = {
-    'B-208': 'RNT-2026-001',
-    'C-301': 'RNT-INIT-PREV',
-    'D-402': 'RNT-2026-002'
+    'B-209': 'RNT-TEST-RENEW-BEFORE-2D',
+    'B-210': 'RNT-TEST-RENEW-AFTER-2D',
+    'B-112': 'RNT-CUSTOMER-UPCOMING-02',
+    'A-115': 'RNT-CUSTOMER-OVERDUE-02'
   }
   const isOccupiedDemo = Boolean(demoRentalByUnit[u.id])
   const reservedPeriods: ReservedPeriod[] = []
@@ -312,7 +313,7 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     price,
     deposit: price,
     climate: u.climate,
-    status: isOccupiedDemo ? 'occupied' : isReservedDemo ? 'reserved' : 'available',
+    status: isOccupiedDemo ? 'occupied' : 'available',
     reservedPeriods,
     nextAvailableDate: u.id === 'A-104' ? '2027-03-21' : u.id === 'B-112' ? '2026-12-23' : u.id === 'B-208' ? '2027-01-13' : undefined,
     currentRentalId: demoRentalByUnit[u.id],
@@ -655,30 +656,6 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     status: 'active', paymentStatus: 'overdue', autoRenew: false, gateCode: '5202#',
     initialCondition: 'Hồ sơ kiểm thử: hợp đồng đã hết hạn đúng 2 ngày.', evidencePhotos: ['TEST · Đã hết hạn 2 ngày'],
     receiptConfirmedAt: new Date().toISOString(), receiptConfirmedBy: 'demo-customer'
-  },
-  {
-    id: 'RNT-TEST-RETURN-DEDUCT',
-    holdId: 'RSV-TEST-RETURN-DEDUCT',
-    unitId: 'A-105',
-    facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1',
-    customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
-    unitType: 'Small Storage', areaM2: 2.25, volumeM3: 6.3,
-    startDate: demoDateOffset(-32), endDate: demoDateOffset(-2), nextDue: demoDateOffset(-2),
-    monthlyRate: 89, deposit: 89, securityDeposit: 89,
-    status: 'return_requested', paymentStatus: 'overdue', autoRenew: false, gateCode: '5105#',
-    initialCondition: 'Dữ liệu kiểm thử trả kho: quá hạn 2 ngày, phí nhỏ hơn tiền đảm bảo.', evidencePhotos: ['TEST · Trả kho quá hạn và khấu trừ trong cọc']
-  },
-  {
-    id: 'RNT-TEST-RETURN-EXCESS',
-    holdId: 'RSV-TEST-RETURN-EXCESS',
-    unitId: 'A-106',
-    facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1',
-    customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
-    unitType: 'Small Storage', areaM2: 2.25, volumeM3: 6.3,
-    startDate: demoDateOffset(-95), endDate: demoDateOffset(-65), nextDue: demoDateOffset(-65),
-    monthlyRate: 89, deposit: 89, securityDeposit: 89,
-    status: 'return_requested', paymentStatus: 'overdue', autoRenew: false, gateCode: '5106#',
-    initialCondition: 'Dữ liệu kiểm thử trả kho: phí quá hạn vượt tiền đảm bảo.', evidencePhotos: ['TEST · Trả kho quá hạn vượt cọc']
   }
 ]
 
@@ -1289,15 +1266,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           units: Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS,
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
-payments: RECEIPT_CONFIRMATION_DEMO_PAYMENTS.reduce(
-  (items, sample) => mergeReceiptConfirmationDemo(items, sample),
-  Array.isArray(parsed.payments)
-    ? parsed.payments.filter(
-        (payment: StoragePayment) =>
-          !['RSV-6618', 'RSV-2104'].includes(payment.reservationId)
-      )
-    : []
-),
+payments: Array.isArray(parsed.payments) ? parsed.payments : [],
 renewals: Array.isArray(parsed.renewals)
   ? parsed.renewals.map((renewal: RenewalRecord) => {
       const rental = Array.isArray(parsed.rentals)
@@ -1320,20 +1289,11 @@ renewals: Array.isArray(parsed.renewals)
 maintenanceTasks: parsed.maintenanceTasks || [],
 staffTasks: parsed.staffTasks || [],
 accessCredentials: parsed.accessCredentials || [],
-checkins: reconcileReservationCheckins(
-  normalizedHolds,
-  mergeReceiptConfirmationDemo(
-    Array.isArray(parsed.checkins) ? parsed.checkins : INITIAL_CHECKINS,
-    RECEIPT_CONFIRMATION_DEMO_CHECKIN
-  )
-),
-rentals: mergeReceiptConfirmationDemo(
-  Array.isArray(parsed.rentals)
-    ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals))
-    : INITIAL_RENTALS,
-  RECEIPT_CONFIRMATION_DEMO_RENTAL
-),
-          returns: Array.isArray(parsed.returns) ? mergeReturnTestCases(parsed.returns) : INITIAL_RETURNS,
+checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins : []),
+rentals: Array.isArray(parsed.rentals)
+  ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals))
+  : INITIAL_RENTALS,
+          returns: Array.isArray(parsed.returns) ? parsed.returns : [],
           activities: parsed.activities || INITIAL_ACTIVITIES,
           loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
           sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
@@ -1351,12 +1311,12 @@ rentals: mergeReceiptConfirmationDemo(
       rolePermissions: normalizeRolePermissions(undefined),
       facilities: INITIAL_FACILITIES,
       units: INITIAL_UNITS,
-      holds: mergeReceiptConfirmationDemo(INITIAL_RESERVATIONS, RECEIPT_CONFIRMATION_DEMO_HOLD),
-      contracts: INITIAL_CONTRACTS,
-      payments: RECEIPT_CONFIRMATION_DEMO_PAYMENTS,
-      checkins: mergeReceiptConfirmationDemo(INITIAL_CHECKINS, RECEIPT_CONFIRMATION_DEMO_CHECKIN),
-      rentals: mergeReceiptConfirmationDemo(INITIAL_RENTALS, RECEIPT_CONFIRMATION_DEMO_RENTAL),
-      returns: INITIAL_RETURNS,
+      holds: [],
+      contracts: [],
+      payments: [],
+      checkins: [],
+      rentals: INITIAL_RENTALS,
+      returns: [],
       renewals: [],
       maintenanceTasks: [],
       staffTasks: [],
@@ -1900,7 +1860,7 @@ rentals: mergeReceiptConfirmationDemo(
       appointmentTime: params.appointmentTime,
       expiresAt: paymentExpiresAt || goodsReviewDueAt || new Date(nowTime + 12 * 60 * 60 * 1000).toISOString(),
       evidence: [requiresGoodsReview
-        ? `${holdId} · Yêu cầu hàng hóa “Khác” đã gửi Manager duyệt trong 24 giờ. Gian ${availableUnit.code} được giữ và chưa yêu cầu tiền cọc.`
+        ? `${holdId} · Yêu cầu hàng hóa “Khác” đã gửi Staff cơ sở duyệt trong 24 giờ. Gian ${availableUnit.code} được giữ và chưa yêu cầu tiền cọc.`
         : `${holdId} · Đã xác nhận thông tin và giữ gian ${availableUnit.code}. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
       createdAt: now.toISOString()
     }
@@ -1932,7 +1892,7 @@ rentals: mergeReceiptConfirmationDemo(
           entityType: 'hold',
           entityId: holdId,
           notes: requiresGoodsReview
-            ? `Khách hàng gửi hàng hóa “Khác” để Manager duyệt trong 24 giờ. Gian ${availableUnit.code} được giữ, chưa thu cọc.`
+            ? `Khách hàng gửi hàng hóa “Khác” để Staff cơ sở duyệt trong 24 giờ. Gian ${availableUnit.code} được giữ, chưa thu cọc.`
             : `Khách hàng xác nhận gian ${availableUnit.code}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 12 giờ.`,
           timestamp: now.toLocaleString('vi-VN')
         },
@@ -1943,7 +1903,7 @@ rentals: mergeReceiptConfirmationDemo(
     return {
       outcome: 'PASS',
       hold: newReservation,
-      messageVi: requiresGoodsReview ? 'Yêu cầu hàng hóa đã được gửi Manager duyệt trong 24 giờ. Gian kho đang được giữ và chưa yêu cầu tiền cọc.' : 'Yêu cầu đã được tạo. Vui lòng xác minh email để chuyển sang bước thanh toán cọc.',
+      messageVi: requiresGoodsReview ? 'Yêu cầu hàng hóa đã được gửi Staff cơ sở duyệt trong 24 giờ. Gian kho đang được giữ và chưa yêu cầu tiền cọc.' : 'Yêu cầu đã được tạo. Vui lòng xác minh email để chuyển sang bước thanh toán cọc.',
       messageEn: 'Request created. Verify your email before the facility review.'
     }
   }
@@ -3594,12 +3554,12 @@ rentals: mergeReceiptConfirmationDemo(
       rolePermissions: normalizeRolePermissions(undefined),
       facilities: INITIAL_FACILITIES,
       units: INITIAL_UNITS,
-      holds: mergeReceiptConfirmationDemo(INITIAL_RESERVATIONS, RECEIPT_CONFIRMATION_DEMO_HOLD),
-      contracts: INITIAL_CONTRACTS,
-      payments: RECEIPT_CONFIRMATION_DEMO_PAYMENTS,
-      checkins: mergeReceiptConfirmationDemo(INITIAL_CHECKINS, RECEIPT_CONFIRMATION_DEMO_CHECKIN),
-      rentals: mergeReceiptConfirmationDemo(INITIAL_RENTALS, RECEIPT_CONFIRMATION_DEMO_RENTAL),
-      returns: INITIAL_RETURNS,
+      holds: [],
+      contracts: [],
+      payments: [],
+      checkins: [],
+      rentals: INITIAL_RENTALS,
+      returns: [],
       renewals: [],
       maintenanceTasks: [],
       staffTasks: [],
@@ -3656,7 +3616,7 @@ rentals: mergeReceiptConfirmationDemo(
     const targetHold = assertHoldPermission(holdId, 'book_storage')
     if (targetHold.customerId !== customer.id && targetHold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
     assertPermission(customer, 'book_storage')
-    if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Manager duyệt; chưa thể thanh toán tiền cọc.')
+    if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified && targetHold.goodsReviewStatus !== 'APPROVED') throw new Error('Bạn cần xác minh email trước khi thanh toán.')
     const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
