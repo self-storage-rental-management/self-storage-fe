@@ -65,7 +65,6 @@ const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = Object.entries({ 'fac-001'
   )
 )
 
-const CUSTOMER_DEMO_HELD_UNIT_ID = 'HCM-Q1-F01-S-001'
 const CUSTOMER_UNITS_PER_PAGE = 6
 type GoodsDeclarationItem = {
   id: string
@@ -163,7 +162,7 @@ const statusLabelMap: Record<string, string> = {
     resolved: 'Đã xử lý thành công',
     pending: 'Chờ xử lý',
     awaiting_email: 'Chờ xác nhận email',
-    awaiting_review: 'Chờ Manager duyệt',
+    awaiting_review: 'Chờ Staff cơ sở duyệt',
     awaiting_payment: 'Chờ thanh toán cọc',
     approved: 'Đã duyệt',
     payment_processing: 'Đang xác minh thanh toán',
@@ -341,12 +340,15 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   const [temporaryHoldTarget, setTemporaryHoldTarget] = useState<{ facilityId: string; unitTypeId: string } | null>(() => {
     try { return JSON.parse(localStorage.getItem('customerTemporaryHoldTarget') || 'null') } catch { return null }
   })
-  const [bookedCustomerUnitIds, setBookedCustomerUnitIds] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('customerBookedUnitIds') || '[]') } catch { return [] }
-  })
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
   const [inputToken, setInputToken] = useState('')
+
+  useEffect(() => {
+    // Remove the retired client-only hold list. Live holds in shared state are
+    // now the only source allowed to mark a physical unit as “Được giữ”.
+    localStorage.removeItem('customerBookedUnitIds')
+  }, [])
 
   const [payModalOpen, setPayModalOpen] = useState(false)
   const [activeHoldForPayment, setActiveHoldForPayment] = useState<StorageHold | null>(null)
@@ -656,8 +658,6 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       .includes(searchFacility.toLowerCase())
   })
   const customerHeldUnitIds = new Set([
-    CUSTOMER_DEMO_HELD_UNIT_ID,
-    ...bookedCustomerUnitIds,
     ...holds.filter(item => !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && item.assignedUnitId).map(item => item.assignedUnitId as string),
   ])
   const customerRentedUnitIds = new Set(rentals.filter(item => ['active', 'return_requested', 'return_inspection', 'closing'].includes(item.status)).map(item => item.unitId))
@@ -800,9 +800,19 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   const packageCapacityResults = allPackageSamplesValid ? capacitySamples.map(sample => {
     const capacityPerFrame = selectedUnit ? packageCapacityPerFrame(sample, selectedUnit.dimensions.heightM) : 0
     const quantity = Number(sample.quantity)
-    return { ...sample, capacityPerFrame, framesRequired: capacityPerFrame > 0 && quantity > 0 ? Math.ceil(quantity / capacityPerFrame) : 0 }
+    return {
+      ...sample,
+      capacityPerFrame,
+      canFitFrame: capacityPerFrame > 0,
+      framesRequired: capacityPerFrame > 0 && quantity > 0
+        ? Math.ceil(quantity / capacityPerFrame)
+        : Number.POSITIVE_INFINITY
+    }
   }) : []
-  const totalFramesRequired = packageCapacityResults.reduce((sum, sample) => sum + sample.framesRequired, 0)
+  const hasUnplaceablePackage = packageCapacityResults.some(sample => !sample.canFitFrame)
+  const totalFramesRequired = hasUnplaceablePackage
+    ? Number.POSITIVE_INFINITY
+    : packageCapacityResults.reduce((sum, sample) => sum + sample.framesRequired, 0)
   const warehouseRecommendation = allPackageSamplesValid
     ? (Object.entries(CUSTOMER_UNIT_SPECS) as [CustomerCatalogUnit['sizeCode'], (typeof CUSTOMER_UNIT_SPECS)[keyof typeof CUSTOMER_UNIT_SPECS]][]).find(([, spec]) => {
         const framesRequired = capacitySamples.reduce((sum, sample) => {
@@ -893,7 +903,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       if (isPackageSampleValid(sample) && packageCapacityPerFrame(sample, selectedUnit.dimensions.heightM) === 0) errors[`packageFit-${sample.id}`] = `Mẫu hàng ${index + 1} không thể xếp vào khung 0,8 × 2,0 × ${selectedUnit.dimensions.heightM} m theo bất kỳ hướng xoay nào.`
     })
     if (capacitySamples.length === 0) errors.packageSamples = 'Vui lòng khai báo ít nhất một mẫu hàng với số lượng và kích thước đầy đủ.'
-    if (allPackageSamplesValid && totalFramesRequired > selectedRackCount) errors.capacity = `Kho không chứa vừa: cần ${totalFramesRequired} khung nhưng kho chỉ có ${selectedRackCount} khung.`
+    if (allPackageSamplesValid && !hasUnplaceablePackage && totalFramesRequired > selectedRackCount) errors.capacity = `Kho không chứa vừa: cần ${totalFramesRequired} khung nhưng kho chỉ có ${selectedRackCount} khung.`
     if (!goodsWeight.trim() || !Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Cân nặng phải lớn hơn 0.'
     if (goodsWeightNumber > selectedUnit.maxLoadKg) errors.weightLimit = `${'Tổng cân nặng vượt tải trọng sàn'} (${selectedUnit.maxLoadKg} kg).`
     if (!requestedDate || Number.isNaN(requestedDate.getTime()) || requestedDate < today || requestedDate > latestCheckIn) errors.moveInDate = 'Ngày dự kiến Check-in phải từ hôm nay đến tối đa 14 ngày tới.'
@@ -1016,13 +1026,6 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       setPage('reservations')
       showToast('Cỡ kho này chưa phù hợp với thông tin hàng hóa. Vui lòng chọn cỡ khác.')
     } else {
-      if (selectedUnit.id) {
-        setBookedCustomerUnitIds(previous => {
-          const next = previous.includes(selectedUnit.id) ? previous : [...previous, selectedUnit.id]
-          localStorage.setItem('customerBookedUnitIds', JSON.stringify(next))
-          return next
-        })
-      }
       setPage('reservations')
       if (result.hold) {
         if (result.hold.goodsReviewStatus === 'PENDING') {
@@ -1415,11 +1418,11 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           {hold.assignedUnitId ? (
                             <div className="flex flex-wrap justify-end gap-1">
                               <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Gian kho đã chọn: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
-                              {hold.goodsReviewStatus === 'PENDING' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ Manager duyệt hàng hóa</span>}
+                              {hold.goodsReviewStatus === 'PENDING' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ Staff cơ sở duyệt hàng hóa</span>}
                             </div>
                           ) : hold.goodsReviewStatus === 'PENDING' ? (
                             <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-semibold text-white">
-                              Chờ Manager duyệt hàng hóa
+                              Chờ Staff cơ sở duyệt hàng hóa
                             </span>
                           ) : hold.status === 'awaiting_email' ? (
                             <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">
@@ -1517,7 +1520,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
                       {hold.status === 'awaiting_review' && (
                         <div className="min-w-[260px] rounded-lg border border-blue-200 bg-blue-50 p-3 text-right text-xs text-blue-950">
-                          <p className="font-bold">{hold.goodsReviewStatus === 'PENDING' ? 'Đang chờ Manager duyệt hàng hóa' : 'Đang chờ xác nhận hồ sơ'}</p>
+                          <p className="font-bold">{hold.goodsReviewStatus === 'PENDING' ? 'Đang chờ Staff cơ sở duyệt hàng hóa' : 'Đang chờ xác nhận hồ sơ'}</p>
                           <p className="mt-1">Kho đang được giữ cho bạn · Tiền cọc: Chưa yêu cầu</p>
                           {hold.goodsReviewSubmittedAt && <p className="mt-1">Gửi lúc: {new Date(hold.goodsReviewSubmittedAt).toLocaleString('vi-VN')}</p>}
                           {hold.goodsReviewDueAt && <p className="mt-1">{new Date(hold.goodsReviewDueAt).getTime() < now ? 'Yêu cầu đang được xử lý lâu hơn dự kiến; kho vẫn được giữ.' : `Dự kiến xử lý trước: ${new Date(hold.goodsReviewDueAt).toLocaleString('vi-VN')}`}</p>}
@@ -2364,7 +2367,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 {goodsItems.map((item, index) => <div key={item.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3">
                   <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-start">
                     <div><Select label="Loại hàng hóa" value={item.category} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, category: e.target.value, materialType: '', materialName: '' } : row))}><option value="">Chọn loại hàng hóa</option>{GOODS_CATEGORY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{bookingErrors[`goodsCategory-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsCategory-${item.id}`]}</p>}</div>
-                    {item.category !== 'OTHER' ? <div><Select label="Chất liệu chính" value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const categoryMaterials = MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]; const materialType: GoodsDeclarationItem['materialType'] = categoryMaterials?.fragile.includes(materialName) ? 'FRAGILE' : materialName ? 'NORMAL' : ''; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, materialType } : row)) }}><option value="">Chọn chất liệu cụ thể</option>{item.category && MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]?.normal.length > 0 && <optgroup label="Chất liệu thông thường">{MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>].normal.map(material => <option key={`normal-${material}`} value={material}>{material}</option>)}</optgroup>}{item.category && <optgroup label="Chất liệu dễ bể / dễ vỡ">{MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]?.fragile.map(material => <option key={`fragile-${material}`} value={material}>{material}</option>)}</optgroup>}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div> : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần Manager duyệt trước khi thu cọc</div>}
+                    {item.category !== 'OTHER' ? <div><Select label="Chất liệu chính" value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const categoryMaterials = MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]; const materialType: GoodsDeclarationItem['materialType'] = categoryMaterials?.fragile.includes(materialName) ? 'FRAGILE' : materialName ? 'NORMAL' : ''; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, materialType } : row)) }}><option value="">Chọn chất liệu cụ thể</option>{item.category && MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]?.normal.length > 0 && <optgroup label="Chất liệu thông thường">{MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>].normal.map(material => <option key={`normal-${material}`} value={material}>{material}</option>)}</optgroup>}{item.category && <optgroup label="Chất liệu dễ bể / dễ vỡ">{MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]?.fragile.map(material => <option key={`fragile-${material}`} value={material}>{material}</option>)}</optgroup>}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div> : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần Staff cơ sở duyệt trước khi thu cọc</div>}
                     <Button type="button" size="sm" variant="outline" onClick={() => setGoodsItems(items => items.length === 1 ? [createGoodsDeclarationItem('goods-1')] : items.filter(row => row.id !== item.id))}>Xóa</Button>
                   </div>
                   {item.category === 'OTHER' && <div className="mt-4 space-y-3 border-t border-stone-200 pt-4">
@@ -2378,7 +2381,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     <div><p className="text-sm font-medium text-stone-700">Hàng có dễ bể / dễ vỡ không? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row))} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row))} />Có</label></div>{bookingErrors[`customFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customFragile-${item.id}`]}</p>}</div>
                     <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
                     <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><input type="file" accept="image/*" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={e => { const names = Array.from(e.target.files || []).map(file => file.name); setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, images: names } : row)) }} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">{item.images.join(', ')}</p>}</div>
-                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>ℹ Yêu cầu cần Manager duyệt</b><p className="mt-1 leading-5">Yêu cầu sẽ được xem xét trong vòng 24 giờ. Gian kho đã chọn vẫn được tạm giữ và bạn chưa cần thanh toán tiền cọc. Sau khi được chấp thuận, hệ thống sẽ thông báo để bạn tiếp tục thanh toán.</p></div>
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>ℹ Yêu cầu cần Staff cơ sở duyệt</b><p className="mt-1 leading-5">Yêu cầu sẽ được xem xét trong vòng 24 giờ. Gian kho đã chọn vẫn được tạm giữ và bạn chưa cần thanh toán tiền cọc. Sau khi được chấp thuận, hệ thống sẽ thông báo để bạn tiếp tục thanh toán.</p></div>
                   </div>}
                 </div>)}
               </div>
@@ -2427,12 +2430,12 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                       <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
                       <p className="text-[11px] text-stone-500">Mỗi khung rộng 0,8 m × dài 2,0 m × cao theo kho; hệ thống thử đủ 6 hướng xoay.</p>
                     </div>
-                    {capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${capacityStatus === 'fits' && !isOverload ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{capacityStatus === 'fits' ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
+                    {capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
                   </div>
 
                   {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
-                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm</span><b>Xếp {Math.min(Number(sample.quantity), sample.capacityPerFrame)} kiện/khung đầu · cần {sample.framesRequired} khung</b></div>)}
-                    <div className="flex justify-between pt-1 text-sm"><b>Tổng khung cần dùng</b><b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{totalFramesRequired} / {selectedRackCount} khung</b></div>
+                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm</span>{sample.canFitFrame ? <b>Xếp {Math.min(Number(sample.quantity), sample.capacityPerFrame)} kiện/khung đầu · cần {sample.framesRequired} khung</b> : <b className="text-red-700">Không thể xếp vào khung 0,8 × 2,0 m</b>}</div>)}
+                    <div className="flex justify-between pt-1 text-sm"><b>Tổng khung cần dùng</b><b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</b></div>
                     {warehouseRecommendation && <p className="border-t border-stone-100 pt-2 text-emerald-700">Cỡ kho nhỏ nhất phù hợp: <b>{warehouseRecommendation[0]}</b></p>}
                   </div>}
 
@@ -2442,9 +2445,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeight || '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
                   </div>
 
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Booking có hàng hóa “Khác” sẽ được giữ kho và chuyển cho Manager duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div><div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi {Math.round(discountRate * 100)}%</span><b>− {formatVnd(promotionDiscount)}</b></div><div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại Check-in (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng nghĩa vụ kỳ thuê và cọc đảm bảo</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
+                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Booking có hàng hóa “Khác” sẽ được giữ kho và chuyển cho Staff cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div><div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi {Math.round(discountRate * 100)}%</span><b>− {formatVnd(promotionDiscount)}</b></div><div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại Check-in (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng nghĩa vụ kỳ thuê và cọc đảm bảo</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
 
-                    <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Tạm giữ đúng gian kho bạn đã chọn trong 30 phút để hoàn tất thông tin.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được Manager xét duyệt trong 24 giờ; chưa thu cọc trong thời gian chờ.' : 'Sau khi xác nhận email, bạn có 12 giờ để thanh toán cọc 20%.'}</li><li>Sau khi cọc, bạn cần hoàn tất Check-in tại gian kho đã chọn trong 14 ngày.</li></ul></div>
+                    <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Tạm giữ đúng gian kho bạn đã chọn trong 30 phút để hoàn tất thông tin.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được Staff cơ sở xét duyệt trong 24 giờ; chưa thu cọc trong thời gian chờ.' : 'Sau khi xác nhận email, bạn có 12 giờ để thanh toán cọc 20%.'}</li><li>Sau khi cọc, bạn cần hoàn tất Check-in tại gian kho đã chọn trong 14 ngày.</li></ul></div>
                 </div>
               )
             })()}
@@ -2514,10 +2517,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                   <div className="divide-y divide-stone-200 border-y border-stone-200">
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · 0,8 × 2,0 × {selectedUnit.dimensions.heightM} m/khung</p></section>
-                    <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa</p><ul className="list-disc space-y-1 pl-5">{goodsItems.map((item, index) => <li key={item.id}><b>Dòng {index + 1}:</b> {GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]} · {item.category === 'OTHER' ? item.customMaterial : item.materialName}</li>)}</ul><ul className="mt-3 list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · cần {sample.framesRequired} khung</li>)}</ul><p className="mt-3"><b>Tổng số kiện tính sức chứa:</b> {packageCountNumber}</p><p><b>Tổng cân nặng:</b> {goodsWeight} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
+                    <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa</p><ul className="list-disc space-y-1 pl-5">{goodsItems.map((item, index) => <li key={item.id}><b>Dòng {index + 1}:</b> {GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]} · {item.category === 'OTHER' ? item.customMaterial : item.materialName}</li>)}</ul><ul className="mt-3 list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.canFitFrame ? `cần ${sample.framesRequired} khung` : 'không thể xếp vào khung 0,8 × 2,0 m'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện tính sức chứa:</b> {packageCountNumber}</p><p><b>Tổng cân nặng:</b> {goodsWeight} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch Check-in:</b> {moveInDate} · {bookingAppointmentTime}</p><p><b>Kỳ thuê:</b> {rentalMonths} tháng</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, ngày mới vẫn phải nằm trong 14 ngày sau khi thanh toán cọc.</p></section>
                   </div>
-                  {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Gửi Manager duyệt hàng hóa · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Gian kho đã chọn sẽ được giữ cho bạn trong thời gian xét duyệt, dự kiến trong vòng 24 giờ.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
+                  {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Gửi Staff cơ sở duyệt hàng hóa · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Gian kho đã chọn sẽ được giữ cho bạn trong thời gian xét duyệt, dự kiến trong vòng 24 giờ.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
                     <div><p className="text-xs text-stone-500">Giảm giá ({Math.round(discountRate * 100)}%)</p><p className="mt-1 font-bold text-emerald-700">− {formatVnd(promotionDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
                     <div><p className="text-xs text-stone-500">Tiền thuê sau giảm</p><p className="mt-1 font-bold">{formatVnd(totalValue)}</p></div>
                     <div><p className="text-xs text-stone-500">{'Cọc giữ chỗ 20%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
@@ -2536,7 +2539,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <Button variant="outline" onClick={() => { releaseTemporaryReservationSlot(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác, xóa thông tin form và trả lại suất kho.'); }}>{'Hủy và trả lại suất kho'}</Button>
               )}
               <Button onClick={confirmReservation}>
-                {bookingReview ? (hasOtherGoods ? 'Gửi yêu cầu Manager duyệt' : 'Xác nhận đặt kho') : ('Xác nhận thông tin')}
+                {bookingReview ? (hasOtherGoods ? 'Gửi yêu cầu Staff cơ sở duyệt' : 'Xác nhận đặt kho') : ('Xác nhận thông tin')}
               </Button>
             </div>
           </div>
@@ -3047,7 +3050,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               <p className="mt-1">{`Thời hạn thuê hiện tại kết thúc ngày ${activeRenewalForPayment.oldEndDate}. Nếu hợp đồng gia hạn được ký sau ngày này, phụ thu được tính từ ngày kế tiếp sau khi hết hạn đến ngày ký thực tế.`}</p>
               <p className="mt-2 font-semibold">{`Mức phụ thu: ${formatVnd(lateFeePerDay)} cho mỗi ngày quá hạn (tương đương 50% đơn giá thuê ngày: ${formatVnd(renewalMonthlyRate)} ÷ 30 ngày = ${formatVnd(dailyRentalRate)}/ngày).`}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 sm:items-end">
               <Input label={'Ngày đến cơ sở ký hợp đồng gia hạn'} type="date" min={dateInputValue(new Date(now))} max={dateInputValue(latestAppointment)} value={renewalAppointmentDate} onChange={event => setRenewalAppointmentDate(event.target.value)} />
               <Input label={'Giờ hẹn'} type="time" min="08:00" max="17:00" value={renewalAppointmentTime} onChange={event => setRenewalAppointmentTime(event.target.value)} />
             </div>
