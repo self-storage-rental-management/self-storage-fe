@@ -65,6 +65,20 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       page: 'rentals',
       targetId: renewal.rentalId
     }))
+  const reviewNotifications: LayoutNotification[] = hub.holds
+    .filter(hold => hold.goodsReviewStatus === 'PENDING' && isFacilityVisible({ ...user, facilityId: managerFacilityId }, hold.facilityId, hold.facilityName))
+    .map(hold => ({
+      id: `manager-goods-review-${hold.id}-${hold.goodsReviewSubmittedAt}`,
+      date: hold.goodsReviewSubmittedAt || hold.createdAt,
+      title: 'Có hồ sơ hàng hóa cần duyệt',
+      message: `${hold.id} · ${hold.customerName} · Hạn xử lý 24 giờ`,
+      page: 'reservations',
+      targetId: hold.id
+    }))
+  const returnDisputeNotifications: LayoutNotification[] = hub.returns
+    .filter(item => item.status === 'disputed' && isFacilityVisible({ ...user, facilityId: managerFacilityId }, item.facilityId, item.facilityName))
+    .map(item => ({ id: `manager-return-dispute-${item.id}`, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, title: 'Customer yêu cầu xem xét lại quyết toán', message: `${item.customerName} · ${item.unitId} · ${item.customerDecisionNote || 'Cần Manager xử lý'}`, page: 'moves', targetId: item.id }))
+  const managerNotifications = [...reviewNotifications, ...renewalNotifications, ...returnDisputeNotifications]
 
   return <Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={renewalNotifications} canAccess={permission => hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && <ManagerDashboardPanel user={user} setPage={setPage} />}

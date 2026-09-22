@@ -6,15 +6,19 @@ export const FACILITIES = [
 ]
 
 export const UNITS = [
-  { id: 'A-104', size: 5, sqft: 25, floor: 1, type: 'Small', price: 89, climate: true, status: 'available', facility: 'Downtown Storage' },
-  { id: 'B-208', size: 10, sqft: 100, floor: 2, type: 'Medium', price: 149, climate: true, status: 'occupied', facility: 'Downtown Storage' },
-  { id: 'C-301', size: 20, sqft: 400, floor: 3, type: 'Large', price: 269, climate: false, status: 'available', facility: 'Downtown Storage' },
-  { id: 'A-115', size: 5, sqft: 25, floor: 1, type: 'Small', price: 85, climate: false, status: 'reserved', facility: 'Riverside Storage' },
-  { id: 'R-106', size: 5, sqft: 25, floor: 1, type: 'Small', price: 75, climate: false, status: 'available', facility: 'Riverside Storage' },
-  { id: 'R-214', size: 10, sqft: 100, floor: 2, type: 'Medium', price: 135, climate: false, status: 'available', facility: 'Riverside Storage' },
-  { id: 'R-305', size: 20, sqft: 400, floor: 3, type: 'Large', price: 245, climate: true, status: 'available', facility: 'Riverside Storage' },
-  { id: 'B-112', size: 10, sqft: 100, floor: 1, type: 'Medium', price: 155, climate: true, status: 'available', facility: 'Downtown Storage' },
-  { id: 'D-402', size: 25, sqft: 500, floor: 4, type: 'Extra Large', price: 349, climate: true, status: 'occupied', facility: 'Downtown Storage' },
+  { id: 'A-104', customerCode: 'HCM-Q1-F01-S-001', sizeCode: 'S', size: 33.6, sqft: 361.67, floor: 1, type: 'Small', dimensionsM: [5.6, 6, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5_500_000 / 26_000, climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'A-105', customerCode: 'HCM-Q1-F01-S-002', sizeCode: 'S', size: 33.6, sqft: 361.67, floor: 1, type: 'Small', dimensionsM: [5.6, 6, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5_500_000 / 26_000, climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'A-106', customerCode: 'HCM-Q1-F01-S-003', sizeCode: 'S', size: 33.6, sqft: 361.67, floor: 1, type: 'Small', dimensionsM: [5.6, 6, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5_500_000 / 26_000, climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'B-208', customerCode: 'HCM-Q1-F01-M-001', sizeCode: 'M', size: 57.6, sqft: 619.79, floor: 2, type: 'Medium', dimensionsM: [9, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9_500_000 / 26_000, climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'C-301', customerCode: 'HCM-Q1-F01-L-001', sizeCode: 'L', size: 91.8, sqft: 988.54, floor: 3, type: 'Large', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15_000_000 / 26_000, climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'A-115', customerCode: 'BD-F01-S-001', sizeCode: 'S', size: 33.6, sqft: 361.67, floor: 1, type: 'Small', dimensionsM: [5.6, 6, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5_500_000 / 26_000, climate: false, status: 'reserved', facility: 'Kho Việt – Cơ sở Bình Dương' },
+  { id: 'R-106', customerCode: 'BD-F01-S-002', sizeCode: 'S', size: 33.6, sqft: 361.67, floor: 1, type: 'Small', dimensionsM: [5.6, 6, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5_500_000 / 26_000, climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương' },
+  { id: 'R-214', customerCode: 'BD-F01-M-001', sizeCode: 'M', size: 57.6, sqft: 619.79, floor: 2, type: 'Medium', dimensionsM: [9, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9_500_000 / 26_000, climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương' },
+  { id: 'R-305', customerCode: 'BD-F01-L-001', sizeCode: 'L', size: 91.8, sqft: 988.54, floor: 3, type: 'Large', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15_000_000 / 26_000, climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương' },
+  { id: 'B-112', customerCode: 'HCM-Q1-F01-M-002', sizeCode: 'M', size: 57.6, sqft: 619.79, floor: 1, type: 'Medium', dimensionsM: [9, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9_500_000 / 26_000, climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'B-209', customerCode: 'HCM-Q1-F01-M-003', sizeCode: 'M', size: 57.6, sqft: 619.79, floor: 2, type: 'Medium', dimensionsM: [9, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9_500_000 / 26_000, climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'B-210', customerCode: 'HCM-Q1-F01-M-004', sizeCode: 'M', size: 57.6, sqft: 619.79, floor: 2, type: 'Medium', dimensionsM: [9, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9_500_000 / 26_000, climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'D-402', customerCode: 'HCM-Q1-F01-XL-001', sizeCode: 'XL', size: 136.8, sqft: 1472.5, floor: 4, type: 'Extra Large', dimensionsM: [19, 7.2, 4], areaM2: 136.8, volumeM3: 547.2, maxLoadKg: 3600, price: 22_500_000 / 26_000, climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1' },
 ]
 
 export const MY_RENTALS = [

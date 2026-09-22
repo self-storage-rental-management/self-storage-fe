@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
-import { Card, StatCard } from '../../components/ui'
+import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input } from '../../components/ui'
+import ProfileView from '../ProfileView'
+import type { User } from '../../types'
+import type { CheckInRecord, Facility, ReturnCase, StorageReservation, StorageUnit } from '../../types/storageHub'
+import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
@@ -37,6 +41,73 @@ const addDays = (dateLabel: string, days: number) => {
   date.setDate(date.getDate() + days)
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
+
+const mapSharedCheckin = (record: CheckInRecord, reservation: StorageReservation | undefined, units: StorageUnit[], facilities: Facility[]): StaffCheckin => {
+  const unit = units.find(item => item.id === record.unitId || item.code === record.unitId)
+  const facility = facilities.find(item => item.id === record.facilityId)
+  const lengthCm = record.actualMeasurements.lengthCm || reservation?.goods.lengthCm || 0
+  const widthCm = record.actualMeasurements.widthCm || reservation?.goods.widthCm || 0
+  const heightCm = record.actualMeasurements.heightCm || reservation?.goods.heightCm || 0
+  const status: StaffCheckin['status'] = record.status === 'completed' ? 'completed' : 'scheduled'
+
+  return {
+    id: record.id,
+    reservationId: record.holdId,
+    customer: record.customerName,
+    email: reservation?.customerEmail || '—',
+    phone: reservation?.customerPhone || '—',
+    identityId: reservation?.identityId || '—',
+    unit: unit?.code || record.unitId,
+    facility: reservation?.facilityName || facility?.name || record.facilityId,
+    date: record.scheduledDate,
+    time: record.scheduledTime,
+    status,
+    goodsType: reservation?.goods.category || record.goodsHandover?.category || 'Hàng hóa đã khai báo',
+    material: reservation?.goods.material || '—',
+    packageCount: reservation?.goods.packageCount || record.goodsHandover?.packageCount || 0,
+    weightKg: record.actualMeasurements.weightKg || reservation?.goods.weightKg || 0,
+    dimensionsCm: `${lengthCm} × ${widthCm} × ${heightCm}`,
+    dimWeightKg: record.actualMeasurements.dimWeightKg || reservation?.goods.dimWeightKg || 0,
+    initialCondition: record.initialCondition || reservation?.goods.condition || 'Chờ kiểm tra khi nhận kho',
+    evidence: record.evidencePhotos,
+    appointmentDate: record.scheduledDate,
+    appointmentTime: record.scheduledTime,
+    checkInDeadline: reservation?.checkInDeadline || addDays(record.scheduledDate, 14),
+    scheduleChanged: false,
+    customerHandoverStatus: record.customerConfirmationTimestamp ? 'confirmed' : 'pending',
+  }
+}
+
+const mapSharedReturn = (item: ReturnCase): StaffReturn => ({
+  id: item.id,
+  customer: item.customerName,
+  email: item.customerEmail,
+  phone: item.customerPhone,
+  unit: item.unitId,
+  facility: item.facilityName,
+  date: item.requestedAt,
+  returnDate: item.scheduledDate,
+  condition: item.damageClassification && item.damageClassification !== 'no_damage' ? 'damaged' : 'good',
+  status: item.status === 'requested' || item.status === 'scheduled'
+    ? 'pending'
+    : item.status === 'completed'
+      ? 'refunded'
+      : 'waiting-customer',
+  deposit: item.depositAmount,
+  damageNotes: item.staffNotes || '',
+  goodsType: 'Hàng hóa trong hồ sơ thuê',
+  material: 'Theo biên bản Check-in',
+  packageCount: item.packageCount,
+  initialWeightKg: item.initialWeightKg,
+  finalWeightKg: item.initialWeightKg,
+  initialCondition: item.initialConditionSnapshot,
+  finalCondition: item.staffNotes || 'Chờ kiểm kê',
+  classification: item.damageClassification || 'Chờ phân loại',
+  evidence: item.evidence,
+  contractStart: item.requestedAt,
+  contractEnd: item.scheduledDate,
+  requestReason: 'Customer yêu cầu trả kho',
+})
 
 const reservationSeed: StaffReservation[] = RESERVATIONS.map((item, index) => ({
   ...item,
@@ -189,6 +260,13 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [contractFile, setContractFile] = useState('')
   const [paymentReference, setPaymentReference] = useState('')
   const [paymentEvidence, setPaymentEvidence] = useState('')
+  const [selectedRenewal, setSelectedRenewal] = useState<(typeof hub.renewals)[number] | null>(null)
+  const [renewalContractFile, setRenewalContractFile] = useState('')
+  const [renewalContractNumber, setRenewalContractNumber] = useState('')
+  const [renewalPaymentReference, setRenewalPaymentReference] = useState('')
+  const [renewalIdentityVerified, setRenewalIdentityVerified] = useState(false)
+  const [renewalTermsVerified, setRenewalTermsVerified] = useState(false)
+  const [pendingCheckinCompletionId, setPendingCheckinCompletionId] = useState<string | null>(null)
   const [scheduleOverrideReason, setScheduleOverrideReason] = useState('')
   const [noShowTarget, setNoShowTarget] = useState<StaffCheckin | null>(null)
   const [noShowReason, setNoShowReason] = useState('')
@@ -198,11 +276,11 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [returnNotes, setReturnNotes] = useState('')
   const [returnActualPackages, setReturnActualPackages] = useState('')
   const [returnKeys, setReturnKeys] = useState('')
-  const [returnDamageFee, setReturnDamageFee] = useState('0')
-  const [returnCleaningFee, setReturnCleaningFee] = useState('0')
-  const [returnLostItemFee, setReturnLostItemFee] = useState('0')
-  const [returnOverdueFee, setReturnOverdueFee] = useState('0')
-  const [returnOtherDebt, setReturnOtherDebt] = useState('0')
+  const [returnDamageFee, setReturnDamageFee] = useState('')
+  const [returnCleaningFee, setReturnCleaningFee] = useState('')
+  const [returnLostItemFee, setReturnLostItemFee] = useState('')
+  const [returnOverdueFee, setReturnOverdueFee] = useState('')
+  const [returnOtherDebt, setReturnOtherDebt] = useState('')
 
   // Support Tickets state
   const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(SUPPORT_TICKETS)
@@ -220,9 +298,86 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [ticketEscalated, setTicketEscalated] = useState(false)
   const [ticketEscalationReason, setTicketEscalationReason] = useState('')
   const [toast, setToast] = useState<string | null>(null)
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
+  const activeStaffTicket = selectedStaffTicket
+    ? staffTickets.find(ticket => ticket.id === selectedStaffTicket.id) ?? selectedStaffTicket
+    : null
+
+  useEffect(() => {
+    if (!respondModal || !activeStaffTicket) return
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [respondModal, activeStaffTicket?.messages.length])
+
+  useEffect(() => {
+    const sharedReservations = hub.holds
+      .filter(reservation => isFacilityVisible(user, reservation.facilityId, reservation.facilityName))
+      .map(reservation => mapSharedReservation(reservation, hub.units, hub.facilities))
+    const sharedIds = new Set(sharedReservations.map(reservation => reservation.id))
+    setReservations(previous => [...sharedReservations, ...previous.filter(reservation => !sharedIds.has(reservation.id) && isFacilityVisible(user, undefined, reservation.facility))])
+  }, [hub.holds, hub.units, user.facility, user.facilityId])
+
+  useEffect(() => {
+    const sharedCheckins = hub.checkins
+      .filter(record => record.status !== 'cancelled')
+      .map(record => {
+        const reservation = hub.holds.find(item => item.id === record.holdId)
+        return { record, reservation }
+      })
+      .filter(({ record, reservation }) => isFacilityVisible(user, record.facilityId, reservation?.facilityName))
+      .map(({ record, reservation }) => mapSharedCheckin(record, reservation, hub.units, hub.facilities))
+    const sharedIds = new Set(sharedCheckins.map(checkin => checkin.id))
+    setCheckins(previous => [...sharedCheckins, ...previous.filter(checkin => !sharedIds.has(checkin.id))])
+  }, [hub.checkins, hub.holds, hub.units, hub.facilities, user.facility, user.facilityId])
+
+  useEffect(() => {
+    const sharedReturns = hub.returns
+      .filter(item => isFacilityVisible(user, item.facilityId, item.facilityName))
+      .map(mapSharedReturn)
+    const sharedIds = new Set(sharedReturns.map(item => item.id))
+    setReturns(previous => [...sharedReturns, ...previous.filter(item => !sharedIds.has(item.id))])
+  }, [hub.returns, user.facility, user.facilityId])
+
   const showToast = (message: string) => {
     setToast(message)
     window.setTimeout(() => setToast(null), 3500)
+  }
+
+  useEffect(() => {
+    if (!pendingCheckinCompletionId || !selectedCheckin || selectedCheckin.id !== pendingCheckinCompletionId) return
+    const sharedHold = hub.holds.find(item => item.id === selectedCheckin.reservationId)
+    if (!sharedHold || sharedHold.status !== 'READY_FOR_CHECKIN') return
+    const dimensions = parseDimensions(actualDimensions)
+    if (!dimensions) {
+      setPendingCheckinCompletionId(null)
+      showToast('Kích thước thực tế chưa hợp lệ.')
+      return
+    }
+    const evidence = [checkinEvidence.trim(), contractFile.trim(), paymentEvidence.trim(), `RECEIPT-${Date.now()} · ${paymentReference.trim()} · ${user.name} thu phần còn lại`, `CHECKIN-${Date.now()} · ${user.name} xác nhận đối chiếu, cấp credential và bàn giao${scheduleOverrideReason.trim() ? ` · Override: ${scheduleOverrideReason.trim()}` : ''}${checkinNotes.trim() ? ` · ${checkinNotes.trim()}` : ''}`]
+    try {
+      hub.completeCheckIn({
+        holdId: selectedCheckin.reservationId,
+        staffUser: user,
+        checklist: { identityVerified: Boolean(checkinChecks.identity), termsAccepted: Boolean(checkinChecks.contract), paymentConfirmed: Boolean(checkinChecks.payment), unitWalkthrough: Boolean(checkinChecks.walkthrough), accessCodeIssued: Boolean(checkinChecks.credential) },
+        actualMeasurements: { lengthCm: dimensions[0], widthCm: dimensions[1], heightCm: dimensions[2], weightKg: Number(actualWeight), actualVolumeM3: (dimensions[0] * dimensions[1] * dimensions[2] * Math.max(1, selectedCheckin.packageCount)) / 1_000_000, dimWeightKg: selectedCheckin.dimWeightKg, varianceAccepted: true, varianceNotes: checkinNotes.trim() || undefined },
+        initialCondition: actualCondition.trim(),
+        evidencePhotos: evidence,
+        goodsHandover: { packageCount: selectedCheckin.packageCount, category: selectedCheckin.goodsType, estimatedWeightKg: Number(actualWeight), notes: `${actualMaterial.trim()}${checkinNotes.trim() ? ` · ${checkinNotes.trim()}` : ''}` },
+        handedOverItems: [`PIN/thẻ/chìa khóa kho ${selectedCheckin.unit}`, contractFile.trim(), paymentEvidence.trim()],
+      })
+      setCheckins(items => items.map(item => item.id === selectedCheckin.id ? { ...item, status: 'completed', customerHandoverStatus: 'pending', dimensionsCm: actualDimensions.trim(), weightKg: Number(actualWeight), material: actualMaterial.trim(), initialCondition: actualCondition.trim(), evidence: [...item.evidence, ...evidence] } : item))
+      setReservations(items => items.map(item => item.id === selectedCheckin.reservationId ? { ...item, status: 'COMPLETED' } : item))
+      setPendingCheckinCompletionId(null)
+      setCheckinModal(false)
+      showToast('Đã kích hoạt rental; Customer có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.')
+    } catch (error) {
+      setPendingCheckinCompletionId(null)
+      showToast(error instanceof Error ? error.message : 'Không thể hoàn tất Check-in.')
+    }
+  }, [pendingCheckinCompletionId, hub.holds])
+
+  const s = (value: string, variants: Record<string, string>) => {
+    const label = statusLabelMap[value] || value.charAt(0).toUpperCase() + value.slice(1).replace(/-/g, ' ')
+    return <Badge variant={variants[value] ?? 'muted'}>{label}</Badge>
   }
 
   const normalizedSearch = reservationSearch.trim().toLowerCase()
@@ -258,6 +413,10 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const reservation = reservations.find(item => item.id === checkin.reservationId)
     return !reservation || (reservation.status !== 'CANCELLED' && reservation.status !== 'EXPIRED')
   })
+  const scheduledRenewals = hub.renewals.filter(renewal =>
+    renewal.status === 'appointment_scheduled' &&
+    isFacilityVisible(user, renewal.facilityId, hub.rentals.find(rental => rental.id === renewal.rentalId)?.facilityName)
+  )
   const openCheckinRecord = (checkin: StaffCheckin) => {
     setSelectedCheckin(checkin)
     setCheckinChecks({ identity: false, reservation: false, contract: false, payment: checkin.status !== 'pending-payment', measurement: false, walkthrough: false, condition: false, credential: false })
@@ -464,6 +623,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
               )
             })}
           </div>
+          {scheduledRenewals.length > 0 && <div className="mt-8 space-y-3"><SectionHeader title="Lịch ký phụ lục gia hạn" subtitle="Thu phần tiền còn lại, tải phụ lục đã ký và kích hoạt thời hạn mới" />{scheduledRenewals.map(renewal => <Card key={renewal.id} className="p-5"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="font-semibold text-slate-900">{renewal.unitId} · {renewal.customerName}</p><p className="text-xs text-slate-500">Hẹn {renewal.appointmentDate} lúc {renewal.appointmentTime} · Gia hạn đến {renewal.newEndDate}</p><p className="mt-1 text-xs font-medium text-amber-800">Còn thu tại cơ sở: {renewal.remainingAmount ?? 0}</p></div><Button size="sm" onClick={() => { setSelectedRenewal(renewal); setRenewalContractFile(''); setRenewalContractNumber(`PL-${renewal.id}`); setRenewalPaymentReference(''); setRenewalIdentityVerified(false); setRenewalTermsVerified(false) }}>Hoàn tất gia hạn</Button></div></Card>)}</div>}
         </div>
       )}
 
@@ -510,10 +670,9 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                     <Td className="font-semibold">${r.deposit}</Td>
                     <Td>{s(r.status, { pending: 'warning', 'waiting-customer': 'info', refunded: 'success' })}</Td>
                     <Td>
-                      {r.status === 'pending' && !scheduledReturnIds.has(r.id) && <Button variant="primary" size="sm" onClick={() => { setScheduledReturnIds(previous => new Set(previous).add(r.id)); showToast(lang === 'vi' ? 'Đã xác nhận lịch kiểm tra trả kho.' : 'Return inspection schedule confirmed.') }}>{lang === 'vi' ? 'Xác nhận lịch' : 'Confirm schedule'}</Button>}
-                      {r.status === 'pending' && scheduledReturnIds.has(r.id) && (
-                        <Button variant="primary" size="sm" onClick={() => { setSelectedReturn(r); setReturnDetailsOnly(false); setReturnInventory('match'); setReturnClassification('no-damage'); setReturnEvidence(''); setReturnNotes(r.finalCondition); setReturnActualPackages(String(r.packageCount)); setReturnKeys('Đã thu hồi đủ PIN/thẻ/chìa khóa'); setReturnDamageFee('0'); setReturnCleaningFee('0'); setReturnLostItemFee('0'); setReturnOverdueFee('0'); setReturnOtherDebt('0'); setInspectModal(true) }}>
-                          {t('return.action.inspect', 'Inspect')}
+                      {r.status === 'pending' && (
+                        <Button variant="primary" size="sm" onClick={() => { setSelectedReturn(r); setReturnDetailsOnly(false); setReturnInventory('match'); setReturnClassification('no-damage'); setReturnEvidence(''); setReturnNotes(r.finalCondition); setReturnActualPackages(r.packageCount > 0 ? String(r.packageCount) : ''); setReturnKeys('Đã thu hồi đủ PIN/thẻ/chìa khóa'); setReturnDamageFee(''); setReturnCleaningFee(''); setReturnLostItemFee(''); setReturnOverdueFee(''); setReturnOtherDebt(''); setInspectModal(true) }}>
+                          {'Nghiệm thu'}
                         </Button>
                       )}
                       {r.status !== 'pending' && <Button variant="ghost" size="sm" onClick={() => { setSelectedReturn(r); setReturnDetailsOnly(true); setReturnInventory('match'); setReturnClassification(r.classification === 'Chờ phân loại' ? 'no-damage' : r.classification); setReturnEvidence(r.evidence[r.evidence.length - 1] ?? ''); setReturnNotes(r.finalCondition); setReturnActualPackages(String(r.packageCount)); setReturnKeys('Đã thu hồi đủ PIN/thẻ/chìa khóa'); setInspectModal(true) }}>{t('return.action.details', 'Details')}</Button>}
@@ -754,9 +913,33 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                 variant="primary"
                 disabled={!returnEvidence.trim() || !returnNotes.trim() || !returnKeys.trim() || Number(returnActualPackages) < 0}
                 onClick={() => {
-                  setReturns(items => items.map(item => item.id === selectedReturn.id ? { ...item, status: 'waiting-customer', finalCondition: returnNotes.trim(), packageCount: Number(returnActualPackages), classification: returnClassification, evidence: [...item.evidence, returnEvidence.trim(), `EV-OUT-${Date.now()} · ${user.name} lập biên bản ${returnInventory}, ${returnClassification}; thu hồi ${returnKeys}; khấu trừ $${returnTotalDeductions}; hoàn đề xuất $${returnRefund}`] } : item))
-                  setInspectModal(false)
-                  showToast(lang === 'vi' ? 'Đã gửi biên bản; đang chờ Customer xác nhận trước khi hoàn cọc.' : 'Inspection submitted; waiting for customer confirmation before refund.')
+                  const damageClassification = returnClassification === 'minor-damage'
+                    ? 'minor_damage'
+                    : returnClassification === 'major-damage'
+                      ? 'major_damage'
+                      : returnClassification === 'requires-maintenance'
+                        ? 'major_damage'
+                        : 'no_damage'
+                  try {
+                    hub.completeReturnInspection({
+                      returnId: selectedReturn.id,
+                      staffUser: user,
+                      inventoryMatch: returnInventory as 'match' | 'missing' | 'excess',
+                      damageClassification,
+                      damageFee: Number(returnDamageFee) || 0,
+                      cleaningFee: Number(returnCleaningFee) || 0,
+                      lostItemFee: Number(returnLostItemFee) || 0,
+                      overdueFee: Number(returnOverdueFee) || 0,
+                      outstandingFee: Number(returnOtherDebt) || 0,
+                      staffNotes: returnNotes.trim(),
+                      evidencePhotos: [returnEvidence.trim(), `EV-OUT-${Date.now()} · ${user.name} lập biên bản; thu hồi ${returnKeys}`],
+                      returnedItems: { key: true, card: true, lock: true },
+                    })
+                    setInspectModal(false)
+                    showToast('Đã gửi biên bản; Customer đã nhận được yêu cầu xác nhận quyết toán.')
+                  } catch (error) {
+                    showToast(error instanceof Error ? error.message : 'Không thể hoàn tất nghiệm thu trả kho.')
+                  }
                 }}
               >
                 {t('return.submit', 'Submit Inspection')}
@@ -786,12 +969,12 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                 <span><b>{lang === 'vi' ? 'Lịch hiện tại' : 'Current appointment'}:</b> {selectedCheckin.appointmentDate} · {selectedCheckin.appointmentTime}</span><span><b>{lang === 'vi' ? 'Hạn Check-in' : 'Check-in deadline'}:</b> {selectedCheckin.checkInDeadline}</span>
               </div>
             </div>
-            {selectedCheckin.scheduleChanged && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>{lang === 'vi' ? 'Customer đã đổi lịch.' : 'Customer rescheduled.'}</b> {selectedCheckin.previousAppointment && `${lang === 'vi' ? 'Lịch cũ' : 'Previous'}: ${selectedCheckin.previousAppointment}. `}{lang === 'vi' ? 'Hãy dùng lịch mới nhất và kiểm tra lại xung đột gian kho.' : 'Use the latest appointment and recheck unit conflicts.'}</div>}
-            {isOutsideAppointmentDate && <Input label={lang === 'vi' ? 'Lý do override ngoài ngày hẹn (bắt buộc)' : 'Out-of-schedule override reason (required)'} value={scheduleOverrideReason} onChange={event => setScheduleOverrideReason(event.target.value)} />}
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><b>{lang === 'vi' ? 'Khai báo cần đối chiếu' : 'Declared goods'}:</b> {selectedCheckin.dimensionsCm} cm · {selectedCheckin.weightKg} kg · {selectedCheckin.material} · {selectedCheckin.initialCondition}</div>
-            <div className="rounded-lg border border-stone-200 p-3 space-y-3"><p className="font-semibold text-sm">{lang === 'vi' ? 'Số đo và tình trạng thực tế' : 'Actual goods measurement & condition'}</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Input label={lang === 'vi' ? 'Kích thước thực tế (D × R × C cm)' : 'Actual dimensions (L × W × H cm)'} value={actualDimensions} onChange={event => setActualDimensions(event.target.value)} /><Input label={lang === 'vi' ? 'Khối lượng thực tế (kg)' : 'Actual weight (kg)'} type="number" value={actualWeight} onChange={event => setActualWeight(event.target.value)} /><Input label={lang === 'vi' ? 'Vật liệu thực tế' : 'Actual material'} value={actualMaterial} onChange={event => setActualMaterial(event.target.value)} /><Input label={lang === 'vi' ? 'Hiện trạng kho ban đầu / hư hại có sẵn' : 'Initial unit condition / existing damage'} value={actualCondition} onChange={event => setActualCondition(event.target.value)} /></div><Input label={lang === 'vi' ? 'Ảnh/bằng chứng bàn giao (mã tệp hoặc đường dẫn)' : 'Handover evidence (file reference or URL)'} value={checkinEvidence} onChange={event => setCheckinEvidence(event.target.value)} /></div>
-            {fitEvaluation && <div className="rounded-lg border border-stone-200 p-3 text-sm"><p className="font-semibold">{lang === 'vi' ? 'Kiểm tra khả năng tiếp nhận thực tế' : 'Actual fit validation'}</p><div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"><span>{lang === 'vi' ? 'Cửa kho' : 'Door'}: {fitEvaluation.spec.doorWidth} × {fitEvaluation.spec.doorHeight} cm</span><span>{lang === 'vi' ? 'Lọt lòng' : 'Interior'}: {fitEvaluation.spec.inner.join(' × ')} cm</span><span>{lang === 'vi' ? 'Tải trọng tối đa' : 'Maximum load'}: {fitEvaluation.spec.maxWeight} kg</span><span>{lang === 'vi' ? 'Kích thước kiện lớn nhất' : 'Largest package'}: {actualDimensions || '—'} cm</span></div><div className="mt-3 flex flex-wrap gap-2"><Badge variant={fitEvaluation.doorFits ? 'success' : 'error'}>{fitEvaluation.doorFits ? (lang === 'vi' ? 'Đã kiểm tra lọt cửa khi xoay' : 'Fits door when rotated') : (lang === 'vi' ? 'Không lọt cửa' : 'Does not fit door')}</Badge><Badge variant={fitEvaluation.weightFits ? 'success' : 'error'}>{fitEvaluation.weightFits ? (lang === 'vi' ? 'Đạt tải trọng' : 'Within load') : (lang === 'vi' ? 'Vượt tải trọng' : 'Overweight')}</Badge><Badge variant={fitEvaluation.volumeFits ? 'success' : 'error'}>{fitEvaluation.volumeFits ? (lang === 'vi' ? 'Đạt thể tích/kích thước' : 'Fits interior') : (lang === 'vi' ? 'Vượt thể tích' : 'Exceeds interior')}</Badge></div>{(!fitEvaluation.doorFits || !fitEvaluation.weightFits || !fitEvaluation.volumeFits) && <p className="mt-2 font-medium text-red-700">{lang === 'vi' ? 'Không thể hoàn tất Check-in. Hãy yêu cầu Manager đổi cỡ kho hoặc gian kho khác.' : 'Check-in is blocked. Request a different size or unit from the manager.'}</p>}</div>}
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-sm"><p className="font-semibold text-emerald-900">{lang === 'vi' ? 'Hợp đồng và thanh toán phần còn lại' : 'Contract and remaining payment'}</p><div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"><span><b>{lang === 'vi' ? 'Mã đơn' : 'Reservation'}:</b> {selectedCheckin.reservationId}</span><span><b>{lang === 'vi' ? 'Mã hợp đồng' : 'Contract'}:</b> CTR-{selectedCheckin.reservationId}</span><span><b>{lang === 'vi' ? 'Cơ sở / gian kho' : 'Facility / unit'}:</b> {selectedCheckin.facility} · {selectedCheckin.unit}</span><span><b>{lang === 'vi' ? 'Ngày bàn giao' : 'Handover'}:</b> {selectedCheckin.appointmentDate} · {selectedCheckin.appointmentTime}</span><span><b>{lang === 'vi' ? 'Tiền cọc' : 'Deposit'}:</b> {reservationForCheckin?.paid ? '20% · đã thu' : 'Chưa xác nhận'}</span><span><b>{lang === 'vi' ? 'Người thu' : 'Collected by'}:</b> {user.name}</span></div><div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3"><Input label={lang === 'vi' ? 'File scan hợp đồng đã ký' : 'Signed contract scan'} value={contractFile} onChange={event => setContractFile(event.target.value)} /><Input label={lang === 'vi' ? 'Mã giao dịch phần còn lại' : 'Remaining-payment reference'} value={paymentReference} onChange={event => setPaymentReference(event.target.value)} /><Input label={lang === 'vi' ? 'Ảnh/chứng từ thanh toán' : 'Payment evidence'} value={paymentEvidence} onChange={event => setPaymentEvidence(event.target.value)} /></div></div>
+            {selectedCheckin.scheduleChanged && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>{'Customer đã đổi lịch.'}</b> {selectedCheckin.previousAppointment && `${'Lịch cũ'}: ${selectedCheckin.previousAppointment}. `}{'Hãy dùng lịch mới nhất và kiểm tra lại xung đột gian kho.'}</div>}
+            {isOutsideAppointmentDate && <Input label={'Lý do override ngoài ngày hẹn (bắt buộc)'} value={scheduleOverrideReason} onChange={event => setScheduleOverrideReason(event.target.value)} />}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><b>{'Khai báo cần đối chiếu'}:</b> {selectedCheckin.dimensionsCm} cm · {selectedCheckin.weightKg} kg · {selectedCheckin.material} · {selectedCheckin.initialCondition}</div>
+            <div className="rounded-lg border border-stone-200 p-3 space-y-3"><p className="font-semibold text-sm">{'Số đo và tình trạng thực tế'}</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Input label={'Kích thước thực tế (D × R × C cm)'} value={actualDimensions} onChange={event => setActualDimensions(event.target.value)} /><Input label={'Khối lượng thực tế (kg)'} type="number" value={actualWeight} onChange={event => setActualWeight(event.target.value)} /><Input label={'Vật liệu thực tế'} value={actualMaterial} onChange={event => setActualMaterial(event.target.value)} /><Input label={'Hiện trạng kho ban đầu / hư hại có sẵn'} value={actualCondition} onChange={event => setActualCondition(event.target.value)} /></div><Input label={'Ảnh/bằng chứng bàn giao (mã tệp hoặc đường dẫn)'} value={checkinEvidence} onChange={event => setCheckinEvidence(event.target.value)} /></div>
+            {fitEvaluation && <div className="rounded-lg border border-stone-200 p-3 text-sm"><p className="font-semibold">{'Kiểm tra khả năng tiếp nhận thực tế'}</p><div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"><span>{'Cửa kho'}: {fitEvaluation.spec.doorWidth} × {fitEvaluation.spec.doorHeight} cm</span><span>{'Lọt lòng'}: {fitEvaluation.spec.inner.join(' × ')} cm</span><span>{'Tải trọng tối đa'}: {fitEvaluation.spec.maxWeight} kg</span><span>{'Kích thước kiện lớn nhất'}: {actualDimensions || '—'} cm</span></div><div className="mt-3 flex flex-wrap gap-2"><Badge variant={fitEvaluation.doorFits ? 'success' : 'error'}>{fitEvaluation.doorFits ? ('Đã kiểm tra lọt cửa khi xoay') : ('Không lọt cửa')}</Badge><Badge variant={fitEvaluation.weightFits ? 'success' : 'error'}>{fitEvaluation.weightFits ? ('Đạt tải trọng') : ('Vượt tải trọng')}</Badge><Badge variant={fitEvaluation.volumeFits ? 'success' : 'error'}>{fitEvaluation.volumeFits ? ('Đạt thể tích/kích thước') : ('Vượt thể tích')}</Badge></div>{(!fitEvaluation.doorFits || !fitEvaluation.weightFits || !fitEvaluation.volumeFits) && <p className="mt-2 font-medium text-red-700">{'Không thể hoàn tất Check-in. Hãy yêu cầu Manager đổi cỡ kho hoặc gian kho khác.'}</p>}</div>}
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-sm"><p className="font-semibold text-emerald-900">{'Hợp đồng và thanh toán phần còn lại'}</p><div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"><span><b>{'Mã đơn'}:</b> {selectedCheckin.reservationId}</span><span><b>{'Mã hợp đồng'}:</b> CTR-{selectedCheckin.reservationId}</span><span><b>{'Cơ sở / gian kho'}:</b> {selectedCheckin.facility} · {selectedCheckin.unit}</span><span><b>{'Ngày bàn giao'}:</b> {selectedCheckin.appointmentDate} · {selectedCheckin.appointmentTime}</span><span><b>{'Tiền cọc'}:</b> {reservationForCheckin?.paid ? '20% · đã thu' : 'Chưa xác nhận'}</span><span><b>{'Người thu'}:</b> {user.name}</span></div><div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3"><label className="block text-sm"><span className="mb-1 block font-medium text-slate-700">File scan hợp đồng đã ký</span><input type="file" accept="application/pdf,image/*" onChange={event => setContractFile(event.target.files?.[0]?.name || '')} className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-emerald-700 file:px-3 file:py-1.5 file:font-semibold file:text-white" />{contractFile && <span className="mt-1 block text-xs text-emerald-800">Đã chọn: {contractFile}</span>}</label><Input label={'Mã giao dịch phần còn lại'} value={paymentReference} onChange={event => setPaymentReference(event.target.value)} /><Input label={'Ảnh/chứng từ thanh toán'} value={paymentEvidence} onChange={event => setPaymentEvidence(event.target.value)} /></div></div>
             <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
               {([
                 ['identity', lang === 'vi' ? 'Đã đối chiếu CCCD/Hộ chiếu gốc' : 'Original ID/passport verified'],
@@ -813,10 +996,17 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                 variant="primary"
                 disabled={!checkinCanComplete}
                 onClick={() => {
-                  setCheckins(items => items.map(item => item.id === selectedCheckin.id ? { ...item, status: 'completed', customerHandoverStatus: 'pending', dimensionsCm: actualDimensions.trim(), weightKg: Number(actualWeight), material: actualMaterial.trim(), initialCondition: actualCondition.trim(), evidence: [...item.evidence, checkinEvidence.trim(), contractFile.trim(), paymentEvidence.trim(), `RECEIPT-${Date.now()} · ${paymentReference.trim()} · ${user.name} thu phần còn lại`, `CHECKIN-${Date.now()} · ${user.name} xác nhận đối chiếu, cấp credential và bàn giao${scheduleOverrideReason.trim() ? ` · Override: ${scheduleOverrideReason.trim()}` : ''}${checkinNotes.trim() ? ` · ${checkinNotes.trim()}` : ''}`] } : item))
-                  setReservations(items => items.map(item => item.id === selectedCheckin.reservationId ? { ...item, status: 'COMPLETED' } : item))
-                  setCheckinModal(false)
-                  showToast(lang === 'vi' ? 'Đã kích hoạt rental; đang chờ Customer tự xác nhận đã nhận kho.' : 'Rental activated; awaiting the customer’s own handover confirmation.')
+                  const sharedHold = hub.holds.find(item => item.id === selectedCheckin.reservationId)
+                  if (!sharedHold) { showToast('Không tìm thấy đơn đặt kho dùng chung.'); return }
+                  try {
+                    const hasSignedContract = hub.contracts.some(item => item.reservationId === sharedHold.id && item.status === 'SIGNED')
+                    if (!hasSignedContract) hub.signPaperContract({ holdId: sharedHold.id, staffUser: user, identityVerified: Boolean(checkinChecks.identity), contractNumber: `CTR-${sharedHold.id}`, signedAt: new Date().toISOString(), startDate: sharedHold.startDate, endDate: sharedHold.endDate, scannedFileUrl: `local-upload://${encodeURIComponent(contractFile.trim())}`, scannedFileName: contractFile.trim() })
+                    if (sharedHold.remainingAmount > 0) hub.recordRemainingPayment(sharedHold.id, user, { amount: sharedHold.remainingAmount, paymentMethod: 'BANK_TRANSFER', transactionReference: paymentReference.trim(), proofImage: paymentEvidence.trim() })
+                    setPendingCheckinCompletionId(selectedCheckin.id)
+                    showToast('Đã ghi nhận hợp đồng và thanh toán. Hệ thống đang hoàn tất Check-in…')
+                  } catch (error) {
+                    showToast(error instanceof Error ? error.message : 'Không thể chuẩn bị hồ sơ Check-in.')
+                  }
                 }}
               >
                 {t('checkin.complete', 'Complete Check-in')}
@@ -826,8 +1016,12 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
         )}
       </Modal>
 
-      <Modal open={Boolean(noShowTarget)} onClose={() => setNoShowTarget(null)} title={lang === 'vi' ? 'Xác nhận Customer No-show' : 'Confirm Customer No-show'}>
-        {noShowTarget && <div className="space-y-4"><div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>{noShowTarget.customer}</b> · {noShowTarget.unit}<br />{lang === 'vi' ? 'Lịch Check-in' : 'Appointment'}: {noShowTarget.appointmentDate} · {noShowTarget.appointmentTime}<br />{lang === 'vi' ? 'Hạn cuối' : 'Deadline'}: {noShowTarget.checkInDeadline}</div><Input label={lang === 'vi' ? 'Lý do No-show (bắt buộc)' : 'No-show reason (required)'} value={noShowReason} onChange={event => setNoShowReason(event.target.value)} /><p className="text-xs text-stone-500">{lang === 'vi' ? 'Thao tác này hủy Check-in và ghi nhận yêu cầu giải phóng gian kho/thu hồi credential chờ kích hoạt.' : 'This cancels check-in and records the unit release and pending credential revocation.'}</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setNoShowTarget(null)}>{lang === 'vi' ? 'Hủy' : 'Cancel'}</Button><Button variant="danger" disabled={!noShowReason.trim()} onClick={() => { setCheckins(items => items.map(item => item.id === noShowTarget.id ? { ...item, status: 'no-show', evidence: [...item.evidence, `NO-SHOW-${Date.now()} · ${user.name}: ${noShowReason.trim()} · hủy Check-in, giải phóng kho, thu hồi credential`] } : item)); setNoShowTarget(null); showToast(lang === 'vi' ? 'Đã ghi nhận No-show và yêu cầu giải phóng gian kho.' : 'No-show recorded and unit release requested.') }}>{lang === 'vi' ? 'Xác nhận No-show' : 'Confirm No-show'}</Button></div></div>}
+      <Modal open={Boolean(selectedRenewal)} onClose={() => setSelectedRenewal(null)} title="Hoàn tất gia hạn tại cơ sở">
+        {selectedRenewal && <div className="space-y-4"><div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm"><b>{selectedRenewal.unitId}</b> · {selectedRenewal.customerName}<br />Thời hạn mới: {selectedRenewal.newEndDate}</div><Input label="Số phụ lục / hợp đồng gia hạn" value={renewalContractNumber} onChange={event => setRenewalContractNumber(event.target.value)} /><Input label="Mã phiếu thu phần còn lại" value={renewalPaymentReference} onChange={event => setRenewalPaymentReference(event.target.value)} /><label className="block text-sm"><span className="mb-1 block font-medium text-slate-700">File scan phụ lục đã ký</span><input type="file" accept="application/pdf,image/*" onChange={event => setRenewalContractFile(event.target.files?.[0]?.name || '')} className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-700 file:px-3 file:py-1.5 file:font-semibold file:text-white" />{renewalContractFile && <span className="mt-1 block text-xs text-emerald-700">Đã chọn: {renewalContractFile}</span>}</label><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={renewalIdentityVerified} onChange={event => setRenewalIdentityVerified(event.target.checked)} />Đã đối chiếu giấy tờ khách hàng</label><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={renewalTermsVerified} onChange={event => setRenewalTermsVerified(event.target.checked)} />Đã đối chiếu gian kho và điều khoản gia hạn</label><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSelectedRenewal(null)}>Hủy</Button><Button disabled={!renewalContractFile || !renewalContractNumber.trim() || !renewalPaymentReference.trim() || !renewalIdentityVerified || !renewalTermsVerified} onClick={() => { try { hub.completeRenewalAtFacility({ renewalId: selectedRenewal.id, staffUser: user, transactionReference: renewalPaymentReference.trim(), identityVerified: renewalIdentityVerified, unitAndTermsVerified: renewalTermsVerified, contractNumber: renewalContractNumber.trim(), signedAt: new Date().toISOString(), scannedFileUrl: `local-upload://${encodeURIComponent(renewalContractFile)}`, scannedFileName: renewalContractFile }); setSelectedRenewal(null); showToast('Đã hoàn tất gia hạn. Customer đã nhận thời hạn hợp đồng và biên nhận mới.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hoàn tất gia hạn.') } }}>Xác nhận hoàn tất</Button></div></div>}
+      </Modal>
+
+      <Modal open={Boolean(noShowTarget)} onClose={() => setNoShowTarget(null)} title={'Xác nhận Customer No-show'}>
+        {noShowTarget && <div className="space-y-4"><div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>{noShowTarget.customer}</b> · {noShowTarget.unit}<br />{'Lịch Check-in'}: {noShowTarget.appointmentDate} · {noShowTarget.appointmentTime}<br />{'Hạn cuối'}: {noShowTarget.checkInDeadline}</div><Input label={'Lý do No-show (bắt buộc)'} value={noShowReason} onChange={event => setNoShowReason(event.target.value)} /><p className="text-xs text-stone-500">{'Thao tác này hủy Check-in và ghi nhận yêu cầu giải phóng gian kho/thu hồi credential chờ kích hoạt.'}</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setNoShowTarget(null)}>{'Hủy'}</Button><Button variant="danger" disabled={!noShowReason.trim()} onClick={() => { try { hub.expireReservation(noShowTarget.reservationId, 'NO_SHOW'); setCheckins(items => items.map(item => item.id === noShowTarget.id ? { ...item, status: 'no-show', evidence: [...item.evidence, `NO-SHOW-${Date.now()} · ${user.name}: ${noShowReason.trim()} · hủy Check-in, giải phóng kho, thu hồi credential`] } : item)); setNoShowTarget(null); showToast('Đã ghi nhận No-show; Customer và kho đã được cập nhật.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể ghi nhận No-show.') } }}>{'Xác nhận No-show'}</Button></div></div>}
       </Modal>
 
       {/* Staff Ticket Resolution Modal */}
