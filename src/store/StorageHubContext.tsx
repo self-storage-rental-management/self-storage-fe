@@ -3622,9 +3622,8 @@ rentals: Array.isArray(parsed.rentals)
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
     if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong 14 ngày sau khi thanh toán cọc. Vui lòng đổi lịch trước khi thanh toán.')
-    setState(prev => ({
-      ...prev,
-      holds: prev.holds.map(h => {
+    setState(prev => {
+      const nextHolds = prev.holds.map(h => {
         if (h.id === holdId) {
           const isAssigned = !!h.assignedUnitId
           return {
@@ -3634,16 +3633,28 @@ rentals: Array.isArray(parsed.rentals)
             checkInDeadline: checkInDeadline.toISOString(),
             payment: {
               amount: h.reservationDepositAmount,
-              status: 'paid',
+              status: 'paid' as const,
               method: paymentMethod,
               paidAt: paidAt.toISOString(),
               transactionId: `TX-DEP-${Date.now().toString().slice(-6)}`
-            }
+            },
+            evidence: [...h.evidence, `DEPOSIT_PAID · Đã thanh toán cọc 20% qua ${paymentMethod}.`]
           }
         }
         return h
-      }),
-      payments: (() => {
+      })
+      const nextCheckins = reconcileReservationCheckins(nextHolds, prev.checkins).map(checkin => checkin.holdId === holdId
+        ? { ...checkin, checklist: { ...checkin.checklist, paymentConfirmed: true } }
+        : checkin)
+
+      return {
+        ...prev,
+        holds: nextHolds,
+        // A customer-created hold already has its selected unit and appointment.
+        // Create the shared Check-in record at deposit time so Staff sees it
+        // immediately without requiring a reload or a second tab.
+        checkins: nextCheckins,
+        payments: (() => {
         const hold = prev.holds.find(h => h.id === holdId)
         if (!hold || hold.payment.status === 'paid') return prev.payments
         const transactionId = `TX-DEP-${Date.now().toString().slice(-6)}`
@@ -3658,8 +3669,9 @@ rentals: Array.isArray(parsed.rentals)
           paidAt: paidAt.toISOString(),
           recordedBy: hold.customerId
         }, ...prev.payments]
-      })()
-    }))
+        })()
+      }
+    })
   }
 
   const replySupportTicket = (ticketId: string, replyText: string, customer: User) => {
