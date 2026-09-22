@@ -3,7 +3,7 @@ import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Lay
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input } from '../../components/ui'
 import ProfileView from '../ProfileView'
 import type { User } from '../../types'
-import type { Facility, StorageReservation, StorageUnit } from '../../types/storageHub'
+import type { CheckInRecord, Facility, StorageReservation, StorageUnit } from '../../types/storageHub'
 import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
 import { useStorageHub } from '../../store/StorageHubContext'
 import { isFacilityVisible } from '../../domain/managerRules'
@@ -98,6 +98,49 @@ const mapSharedReservation = (reservation: StorageReservation, units: StorageUni
     appointmentDate,
     appointmentTime: reservation.appointmentTime || '09:00',
     checkInDeadline: reservation.checkInDeadline || addDays(appointmentDate, 14),
+  }
+}
+
+const mapSharedCheckin = (
+  checkin: CheckInRecord,
+  reservation: StorageReservation | undefined,
+  unit: StorageUnit | undefined,
+  facility: Facility | undefined,
+): StaffCheckin | null => {
+  if (!reservation) return null
+  const appointmentDate = checkin.scheduledDate || reservation.appointmentDate || reservation.moveInDate
+  if (!appointmentDate) return null
+  const appointmentTime = checkin.scheduledTime || reservation.appointmentTime || '09:00'
+  const goods = reservation.goods
+  return {
+    id: checkin.id,
+    reservationId: checkin.holdId,
+    customer: checkin.customerName || reservation.customerName,
+    email: reservation.customerEmail,
+    phone: reservation.customerPhone,
+    identityId: reservation.identityId,
+    unit: unit?.code || checkin.unitId,
+    facility: facility?.name || reservation.facilityName,
+    date: appointmentDate,
+    time: appointmentTime,
+    status: checkin.status === 'completed'
+      ? 'completed'
+      : checkin.status === 'cancelled'
+        ? 'no-show'
+        : reservation.payment.status === 'paid' ? 'scheduled' : 'pending-payment',
+    goodsType: goods.category,
+    material: goods.material,
+    packageCount: goods.packageCount,
+    weightKg: goods.weightKg,
+    dimensionsCm: `${goods.lengthCm} × ${goods.widthCm} × ${goods.heightCm}`,
+    dimWeightKg: goods.dimWeightKg,
+    initialCondition: checkin.initialCondition || goods.condition,
+    evidence: [...reservation.evidence, ...checkin.evidencePhotos],
+    appointmentDate,
+    appointmentTime,
+    checkInDeadline: reservation.checkInDeadline || addDays(appointmentDate, 14),
+    scheduleChanged: false,
+    customerHandoverStatus: checkin.customerConfirmationTimestamp ? 'confirmed' : 'pending',
   }
 }
 
@@ -277,6 +320,26 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const sharedIds = new Set(sharedReservations.map(reservation => reservation.id))
     setReservations(previous => [...sharedReservations, ...previous.filter(reservation => !sharedIds.has(reservation.id) && isFacilityVisible(user, undefined, reservation.facility))])
   }, [hub.holds, hub.units, user.facility, user.facilityId])
+
+  useEffect(() => {
+    const sharedCheckins = hub.checkins
+      .filter(checkin => {
+        const facility = hub.facilities.find(item => item.id === checkin.facilityId)
+        return isFacilityVisible(user, checkin.facilityId, facility?.name)
+      })
+      .map(checkin => {
+        const reservation = hub.holds.find(item => item.id === checkin.holdId)
+        const unit = hub.units.find(item => item.id === checkin.unitId)
+        const facility = hub.facilities.find(item => item.id === checkin.facilityId)
+        return mapSharedCheckin(checkin, reservation, unit, facility)
+      })
+      .filter((item): item is StaffCheckin => Boolean(item))
+    const sharedIds = new Set(sharedCheckins.map(checkin => checkin.id))
+    setCheckins(previous => [
+      ...sharedCheckins,
+      ...previous.filter(checkin => !sharedIds.has(checkin.id) && isFacilityVisible(user, undefined, checkin.facility)),
+    ])
+  }, [hub.checkins, hub.holds, hub.units, hub.facilities, user.facility, user.facilityId])
 
   const showToast = (message: string) => {
     setToast(message)
