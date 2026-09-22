@@ -65,6 +65,7 @@ export interface UnitType {
 
 export interface Facility {
   id: string
+  code?: string
   name: string
   address: string
   city: string
