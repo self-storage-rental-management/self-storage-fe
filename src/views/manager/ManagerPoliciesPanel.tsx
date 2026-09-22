@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Badge, Button, Card, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Input } from '../../components/ui'
 import { formatVnd } from '../../i18n/currency'
-import { useStorageHub } from '../../store/StorageHubContext'
+import { DEFAULT_BUSINESS_CONFIG, useStorageHub } from '../../store/StorageHubContext'
 import { POLICIES } from '../../data/demoDatabase'
 import type { User } from '../../types'
 import type { BusinessConfig } from '../../types/storageHub'
@@ -37,13 +37,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
   }
 
   const handleResetDefault = () => {
-    const defaults: BusinessConfig = {
-      dimDivisor: 5000,
-      gracePeriodDays: 7,
-      lateFeeAmount: 25,
-      defaultDepositRatio: 0.2,
-      holdExpiryHours: 24
-    }
+    const defaults: BusinessConfig = DEFAULT_BUSINESS_CONFIG
     setFormConfig(defaults)
     updateBusinessConfig(defaults, user)
     showToast('Đã khôi phục thông số vận hành mặc định.')

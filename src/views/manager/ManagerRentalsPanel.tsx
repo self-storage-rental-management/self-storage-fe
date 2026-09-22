@@ -4,6 +4,7 @@ import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
 import type { RenewalRecord, RentalRecord, StorageContract } from '../../types/storageHub'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface Props {
   user: User
@@ -22,7 +23,7 @@ export default function ManagerRentalsPanel({ user, rentals, contracts, renewals
   const [filter, setFilter] = useState('all')
   const [selectedRental, setSelectedRental] = useState<RentalRecord | null>(null)
 
-  const facilityRentals = useMemo(() => rentals.filter(rental => !user.facility || user.facility === 'All facilities' || rental.facilityName === user.facility || rental.facilityId === user.facility), [rentals, user.facility])
+  const facilityRentals = useMemo(() => rentals.filter(rental => isFacilityVisible(user, rental.facilityId, rental.facilityName)), [rentals, user])
   const facilityRenewals = renewals.filter(renewal => facilityRentals.some(rental => rental.id === renewal.rentalId))
   const visibleRentals = facilityRentals.filter(rental => {
     const normalized = query.trim().toLowerCase()

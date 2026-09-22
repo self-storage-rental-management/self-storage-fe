@@ -4,6 +4,7 @@ import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
 import type { BusinessConfig, RentalRecord, StoragePayment } from '../../types/storageHub'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface Props {
   user: User
@@ -29,7 +30,7 @@ export default function ManagerPaymentsPanel({ user, rentals, payments, config, 
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY'>('BANK_TRANSFER')
   const [reference, setReference] = useState('')
 
-  const facilityRentals = useMemo(() => rentals.filter(rental => !user.facility || user.facility === 'All facilities' || rental.facilityName === user.facility || rental.facilityId === user.facility), [rentals, user.facility])
+  const facilityRentals = useMemo(() => rentals.filter(rental => isFacilityVisible(user, rental.facilityId, rental.facilityName)), [rentals, user])
   const facilityRentalIds = new Set(facilityRentals.map(rental => rental.id))
   const facilityPayments = payments.filter(payment => payment.rentalId ? facilityRentalIds.has(payment.rentalId) : facilityRentals.some(rental => rental.holdId === payment.reservationId))
   const overdueRentals = facilityRentals.filter(rental => rental.status === 'active' && rental.paymentStatus === 'overdue')

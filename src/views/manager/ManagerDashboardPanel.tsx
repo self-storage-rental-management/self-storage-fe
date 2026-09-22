@@ -3,12 +3,13 @@ import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface Props { user: User; setPage: (page: string) => void }
 
 export default function ManagerDashboardPanel({ user, setPage }: Props) {
     const { units, holds, rentals, checkins, returns, payments, maintenanceTasks, staffTasks } = useStorageHub()
-  const facilityUnits = units.filter(unit => !user.facility || user.facility === 'All facilities' || unit.facilityName === user.facility || unit.facilityId === user.facility)
+  const facilityUnits = units.filter(unit => isFacilityVisible(user, unit.facilityId, unit.facilityName))
   const facilityIds = new Set(facilityUnits.map(unit => unit.facilityId))
   const facilityHolds = holds.filter(item => facilityIds.has(item.facilityId))
   const facilityRentals = rentals.filter(item => facilityIds.has(item.facilityId))

@@ -231,7 +231,7 @@ button:not(:disabled) { cursor: pointer; }
   transform: translateY(-1px);
 }
 
-main input,
+main input:not([type="checkbox"]):not([type="radio"]),
 main select,
 main textarea {
   width: 100%;
@@ -243,6 +243,13 @@ main textarea {
   font-size: 13.5px;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
+}
+
+main input[type="checkbox"],
+main input[type="radio"] {
+  width: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 main input:focus,

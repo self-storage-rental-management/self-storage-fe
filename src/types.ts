@@ -38,9 +38,12 @@ export interface User {
   id: string
   name: string
   email: string
+  phone?: string
   role: Role
   avatar?: string
   facility?: string
+  /** Stable facility key used for authorization and cross-screen filtering. */
+  facilityId?: string
 }
 
 export type LoginEventStatus = 'success' | 'failed' | 'logout'
@@ -86,4 +89,19 @@ export interface SecurityAlert {
   message: string
   createdAt: string
   resolvedAt?: string
+}
+
+export interface ProfileChangeRequest {
+  id: string
+  requesterId: string
+  requesterName: string
+  requesterEmail: string
+  requesterRole: Exclude<Role, 'customer'>
+  facility?: string
+  requestedFields: string[]
+  reason: string
+  status: 'pending' | 'resolved'
+  createdAt: string
+  resolvedAt?: string
+  resolvedBy?: string
 }

@@ -5,6 +5,7 @@ import { formatVnd } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface ManagerReturnsPanelProps {
   user: User
@@ -25,9 +26,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const [refundTxnRef, setRefundTxnRef] = useState('')
 
   // Filter returns by facility
-  const facilityReturns = storeReturns.filter(
-    r => !user.facility || r.facilityName === user.facility || user.facility === 'All facilities'
-  )
+  const facilityReturns = storeReturns.filter(r => isFacilityVisible(user, r.facilityId, r.facilityName))
 
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length

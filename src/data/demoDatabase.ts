@@ -397,9 +397,9 @@ export const RENTALS: RentalRecord[] = [
 ]
 
 export const STAFF_LIST = [
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', shift: 'Morning', tasks: 3, status: 'on-duty', phone: '090 555 0101' },
-  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', shift: 'Day', tasks: 5, status: 'on-duty', phone: '090 555 0102' },
-  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', shift: 'Night', tasks: 1, status: 'off-duty', phone: '090 555 0103' }
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'fac-001', facilityName: 'Downtown Storage' },
+  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'fac-001', facilityName: 'Downtown Storage' },
+  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'fac-002', facilityName: 'Riverside Storage' }
 ]
 
 export interface OverdueAccount {
@@ -711,9 +711,9 @@ export const FEES = [
 ]
 
 export const USERS = [
-  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Downtown Storage', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Downtown Storage', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
-  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Downtown Storage', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
+  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Downtown Storage', facilityId: 'fac-001', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Downtown Storage', facilityId: 'fac-001', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
+  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Downtown Storage', facilityId: 'fac-001', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
   { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'All facilities', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
   { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'All facilities', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
 ]

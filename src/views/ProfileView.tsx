@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { User } from '../types'
-import { Card, Button, Input, Badge, Avatar } from '../components/ui'
+import { Card, Button, Input, Badge, Avatar, Modal } from '../components/ui'
 import { useStorageHub } from '../store/StorageHubContext'
 
 interface ProfileViewProps {
@@ -8,14 +8,56 @@ interface ProfileViewProps {
   onUpdateUser?: (updated: Partial<User>) => void
 }
 
+function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  id
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label?: string
+  id?: string
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#e9a12c] focus:ring-offset-2 ${
+        checked ? 'bg-[#e9a12c]' : 'bg-stone-300'
+      }`}
+    >
+      <span className="sr-only">{label}</span>
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+}
+
 export default function ProfileView({ user }: ProfileViewProps) {
-  const { sessions, revokeSession, revokeAllUserSessions } = useStorageHub()
+  const {
+    sessions,
+    revokeSession,
+    revokeAllUserSessions,
+    updateCustomerProfile,
+    requestOwnPasswordReset,
+    submitProfileChangeRequest,
+    deleteOwnCustomerAccount
+  } = useStorageHub()
+  const isCustomer = user.role === 'customer'
+  const isInternal = !isCustomer
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile')
 
   // Form states
   const [name, setName] = useState(user.name)
   const [email, setEmail] = useState(user.email)
-  const [phone, setPhone] = useState('+84 908 123 456')
+  const [phone, setPhone] = useState(user.phone || '')
   const [address, setAddress] = useState('125 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh')
   const [emergencyContact, setEmergencyContact] = useState('Nguyễn Văn An (+84 909 777 888)')
   const [idCard, setIdCard] = useState('079098001234')
@@ -26,26 +68,86 @@ export default function ProfileView({ user }: ProfileViewProps) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [twoFactorEnabled] = useState(true)
 
-  // Notification states
-  const [notifEmailRent] = useState(true)
-  const [notifSmsGate] = useState(true)
-  const [notifMaintenance] = useState(true)
-  const [notifMarketing] = useState(false)
+  // Notification states (interactive toggles)
+  const [notifEmailRent, setNotifEmailRent] = useState(true)
+  const [notifSmsGate, setNotifSmsGate] = useState(true)
+  const [notifMaintenance, setNotifMaintenance] = useState(true)
+  const [notifMarketing, setNotifMarketing] = useState(false)
 
   // Feedback toast
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [requestModalOpen, setRequestModalOpen] = useState(false)
+  const [requestReason, setRequestReason] = useState('')
+  const [requestFields, setRequestFields] = useState<string[]>(['Họ và Tên', 'Email liên hệ'])
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(null), 3500)
   }
 
+  const handleToggleNotif = (key: string, nextVal: boolean, setter: (val: boolean) => void) => {
+    setter(nextVal)
+    showToast(`Đã ${nextVal ? 'bật' : 'tắt'} ${key}.`)
+  }
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isCustomer) return
+    try {
+      updateCustomerProfile({ name, email, phone }, user)
+      showToast('Đã cập nhật thông tin cá nhân.')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể cập nhật thông tin cá nhân.')
+    }
   }
+
+  useEffect(() => {
+    setName(user.name)
+    setEmail(user.email)
+    setPhone(user.phone || '')
+  }, [user.id, user.name, user.email, user.phone])
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isCustomer) return
+    if (newPassword && newPassword.length < 6) {
+      showToast('Mật khẩu mới phải có ít nhất 6 ký tự.')
+      return
+    }
+    if (newPassword && newPassword !== confirmPassword) {
+      showToast('Mật khẩu xác nhận không khớp.')
+      return
+    }
+    try {
+      requestOwnPasswordReset(user)
+      showToast('Đã gửi yêu cầu đặt lại mật khẩu tới email của bạn.')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể tạo yêu cầu đổi mật khẩu.')
+    }
+  }
+
+  const handleSubmitProfileRequest = () => {
+    try {
+      submitProfileChangeRequest({ requestedFields: requestFields, reason: requestReason }, user)
+      setRequestModalOpen(false)
+      setRequestReason('')
+      showToast('Đã gửi yêu cầu chỉnh sửa tới Admin/HR.')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể gửi yêu cầu chỉnh sửa.')
+    }
+  }
+
+  const handleDeleteAccount = () => {
+    if (!isCustomer || !window.confirm('Bạn chắc chắn muốn xoá tài khoản? Chỉ được xoá khi không còn đơn hiện tại, đơn quá hạn hoặc khoản chưa thanh toán.')) return
+    try {
+      deleteOwnCustomerAccount(user)
+      showToast('Đã xoá tài khoản. Phiên đăng nhập sẽ kết thúc.')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể xoá tài khoản.')
+    }
   }
 
   const roleLabelMap: Record<string, string> = {
@@ -66,7 +168,6 @@ export default function ProfileView({ user }: ProfileViewProps) {
     }
   }
 
-
   return (
     <div className="fade-in max-w-5xl mx-auto space-y-6">
       {/* Toast Notification */}
@@ -86,7 +187,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
               <Avatar name={user.name} size="lg" />
               <button
                 type="button"
-                className="absolute -bottom-1 -right-1 bg-[#e9a12c] text-[#292a27] p-1.5 rounded-full hover:bg-amber-400 transition shadow"
+                className="absolute -bottom-1 -right-1 bg-[#e9a12c] text-[#292a27] p-1.5 rounded-full hover:bg-amber-400 transition shadow cursor-pointer"
                 title={'Đổi ảnh đại diện'}
                 disabled
               >
@@ -99,9 +200,11 @@ export default function ProfileView({ user }: ProfileViewProps) {
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
                 <h1 className="text-2xl font-bold tracking-tight text-stone-100">{user.name}</h1>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-mono uppercase tracking-[.08em] font-semibold bg-[#e9a12c] text-[#3f2607]">
-                  {roleLabelMap[user.role] ?? user.role}
-                </span>
+                {isInternal && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-mono uppercase tracking-[.08em] font-semibold bg-[#e9a12c] text-[#3f2607]">
+                    {roleLabelMap[user.role] ?? user.role}
+                  </span>
+                )}
               </div>
               <p className="text-sm text-stone-300 flex items-center gap-3 flex-wrap">
                 <span>{user.email}</span>
@@ -128,7 +231,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
       <div className="flex border-b border-[#deddd2] gap-2 pb-1">
         <button
           onClick={() => setActiveTab('profile')}
-          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
+          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === 'profile'
               ? 'border-[#e9a12c] text-stone-900 bg-white shadow-xs'
               : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -138,7 +241,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
         </button>
         <button
           onClick={() => setActiveTab('security')}
-          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
+          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === 'security'
               ? 'border-[#e9a12c] text-stone-900 bg-white shadow-xs'
               : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -148,7 +251,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
         </button>
         <button
           onClick={() => setActiveTab('notifications')}
-          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
+          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === 'notifications'
               ? 'border-[#e9a12c] text-stone-900 bg-white shadow-xs'
               : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -162,79 +265,122 @@ export default function ProfileView({ user }: ProfileViewProps) {
       {activeTab === 'profile' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <Card className="p-6">
-              <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
-                <div>
-                  <h2 className="text-lg font-bold text-stone-900">
-                    {'Chi Tiết Cá Nhân'}
-                  </h2>
-                  <p className="text-xs text-stone-500">
-                    {'Cập nhật thông tin liên hệ và định danh pháp lý của bạn'}
-                  </p>
-                </div>
-                <Badge variant="success">
-                  {'Đã Định Danh'}
-                </Badge>
-              </div>
-
-              <form onSubmit={handleSaveProfile} className="space-y-4">
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Hồ sơ đang ở chế độ chỉ xem; cập nhật thông tin cần kết nối API tài khoản.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label={'Họ và Tên'}
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    disabled
-                    required
-                  />
-                  <Input
-                    label={'Địa Chỉ Email'}
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    disabled
-                    required
-                  />
+            {isInternal ? (
+              /* Internal Staff / Manager / Business / Admin: Clean Key-Value Profile Card */
+              <Card className="p-6">
+                <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-100">
+                  <div>
+                    <h2 className="text-lg font-bold text-stone-900">Chi Tiết Hồ Sơ Nhân Sự</h2>
+                    <p className="text-xs text-stone-500">Thông tin định danh và liên hệ chính thức trong hệ thống</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="success">✓ Đã Định Danh</Badge>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded bg-stone-100 text-stone-700">Hồ sơ nội bộ</span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label={'Số Điện Thoại Chính'}
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    disabled
-                  />
-                  <Input
-                    label={'Số CCCD / Hộ Chiếu'}
-                    value={idCard}
-                    onChange={e => setIdCard(e.target.value)}
-                    disabled
-                  />
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Họ và Tên</span>
+                    <span className="font-bold text-stone-900 text-base">{name}</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Địa Chỉ Email Công Tác</span>
+                    <span className="font-semibold text-stone-900 text-sm">{email}</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Số Điện Thoại Chính</span>
+                    <span className="font-semibold text-stone-900 text-sm">{phone || 'Chưa cập nhật'}</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Số CCCD / Hộ Chiếu</span>
+                    <span className="font-mono font-bold text-stone-900 text-sm">{idCard}</span>
+                  </div>
+
+                  <div className="sm:col-span-2 p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Địa Chỉ Thường Trú</span>
+                    <span className="text-stone-800 text-sm leading-relaxed">{address}</span>
+                  </div>
+
+                  <div className="sm:col-span-2 p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Người Liên Hệ Khẩn Cấp (Tên & SĐT)</span>
+                    <span className="text-stone-800 text-sm font-medium">{emergencyContact}</span>
+                  </div>
                 </div>
 
-                <Input
-                  label={'Địa Chỉ Thường Trú'}
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  disabled
-                />
-
-                <Input
-                  label={'Người Liên Hệ Khẩn Cấp (Tên & SĐT)'}
-                  value={emergencyContact}
-                  onChange={e => setEmergencyContact(e.target.value)}
-                  disabled
-                />
-
-                <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
-                  <Button type="submit" variant="outline" disabled>
-                    {'Chỉ xem · Chưa kết nối backend'}
+                <div className="mt-6 pt-4 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-500">
+                  <span>Thông tin nhân sự được đồng bộ tập trung. Khi cần thay đổi, hãy gửi yêu cầu tới Admin/HR.</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRequestModalOpen(true)}
+                    className="shrink-0 border-stone-300 hover:bg-stone-100 text-stone-800 cursor-pointer"
+                  >
+                    Gửi Yêu Cầu Chỉnh Sửa
                   </Button>
                 </div>
-              </form>
-            </Card>
+              </Card>
+            ) : (
+              /* Customer: Editable Profile Form */
+              <Card className="p-6">
+                <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
+                  <div>
+                    <h2 className="text-lg font-bold text-stone-900">Chi Tiết Cá Nhân</h2>
+                    <p className="text-xs text-stone-500">Cập nhật thông tin liên hệ và định danh pháp lý của bạn</p>
+                  </div>
+                  <Badge variant="success">Đã Định Danh</Badge>
+                </div>
+
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      label="Họ và Tên"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      required
+                    />
+                    <Input
+                      label="Địa Chỉ Email"
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      label="Số Điện Thoại Chính"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                    />
+                    <div className="p-3 rounded-lg bg-stone-50 border border-stone-200">
+                      <span className="text-xs font-medium text-stone-500 block mb-1">Số CCCD / Hộ Chiếu (Đã xác minh)</span>
+                      <span className="font-mono font-bold text-stone-800 text-sm">{idCard}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-stone-50 border border-stone-200">
+                    <span className="text-xs font-medium text-stone-500 block mb-1">Địa Chỉ Thường Trú</span>
+                    <span className="text-stone-800 text-sm">{address}</span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-stone-50 border border-stone-200">
+                    <span className="text-xs font-medium text-stone-500 block mb-1">Người Liên Hệ Khẩn Cấp (Tên & SĐT)</span>
+                    <span className="text-stone-800 text-sm font-medium">{emergencyContact}</span>
+                  </div>
+
+                  <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
+                    <Button type="submit" variant="primary" className="cursor-pointer">
+                      Lưu Thay Đổi
+                    </Button>
+                  </div>
+                </form>
+              </Card>
+            )}
           </div>
 
           {/* Quick Account Summary */}
@@ -245,16 +391,20 @@ export default function ProfileView({ user }: ProfileViewProps) {
                 {'Tổng Quan Tài Khoản'}
               </h3>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between py-1.5 border-b border-stone-100">
-                  <span className="text-stone-500">{'Vai Trò'}</span>
-                  <span className="font-semibold uppercase font-mono text-xs text-stone-800">
-                    {roleLabelMap[user.role] ?? user.role}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-stone-100">
-                  <span className="text-stone-500">{'Cơ Sở Kho'}</span>
-                  <span className="font-medium text-stone-800">StorageHub Central</span>
-                </div>
+                {isInternal && (
+                  <>
+                    <div className="flex justify-between py-1.5 border-b border-stone-100">
+                      <span className="text-stone-500">{'Vai Trò'}</span>
+                      <span className="font-semibold uppercase font-mono text-xs text-stone-800">
+                        {roleLabelMap[user.role] ?? user.role}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-stone-100">
+                      <span className="text-stone-500">{'Cơ Sở Kho'}</span>
+                      <span className="font-medium text-stone-800">{user.facility || 'Toàn hệ thống'}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between py-1.5 border-b border-stone-100">
                   <span className="text-stone-500">{'Cấp Độ An Ninh'}</span>
                   <span className="font-medium text-emerald-700">
@@ -270,23 +420,24 @@ export default function ProfileView({ user }: ProfileViewProps) {
               </div>
             </Card>
 
-            <Card className="p-5 bg-[#fbfaf6] border-dashed">
-              <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-stone-500 mb-2">
-                {'Thẻ Ra Vào Kho Kỹ Thuật Số'}
-              </h3>
-              <div className="rounded-lg bg-[#292a27] p-4 text-white">
-                <div className="flex justify-between items-center text-xs text-[#e9a12c] font-mono">
-                  <span>{'QUYỀN TRUY CẬP STORAGEHUB'}</span>
-                  <span>{'ĐÃ ĐỒNG BỘ MÃ PIN'}</span>
-                </div>
-                <p className="mt-3 text-lg font-mono tracking-widest text-amber-200">
-                  •••• 4921 #
-                </p>
-                <p className="mt-2 text-[11px] text-stone-400">
-                  {'Ủy quyền mở cổng xe và cửa thông minh tại cơ sở StorageHub Central'}
-                </p>
-              </div>
-            </Card>
+            {isInternal && (
+              <Card className="p-5 bg-[#fbfaf6] border-stone-200">
+                <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông Tin Tổ Chức</h3>
+                <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu audit log.</p>
+                <Button className="mt-4 w-full cursor-pointer" size="sm" onClick={() => setRequestModalOpen(true)}>
+                  Gửi Yêu Cầu Chỉnh Sửa
+                </Button>
+              </Card>
+            )}
+
+            {isCustomer && (
+              <Card className="p-5 bg-[#fbfaf6] border-stone-200">
+                <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-stone-500 mb-2">
+                  Bảo vệ tài khoản Khách hàng
+                </h3>
+                <p className="text-xs text-stone-600 leading-relaxed">Hồ sơ khách hàng được mã hóa và bảo mật theo tiêu chuẩn StorageHub. Bạn có thể yêu cầu đổi mật khẩu ở tab Bảo mật.</p>
+              </Card>
+            )}
           </div>
         </div>
       )}
@@ -295,54 +446,86 @@ export default function ProfileView({ user }: ProfileViewProps) {
       {activeTab === 'security' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* Password change */}
-            <Card className="p-6">
-              <div className="pb-4 mb-5 border-b border-stone-100">
-                <h2 className="text-lg font-bold text-stone-900">
-                  {'Đổi Mật Khẩu Đăng Nhập'}
-                </h2>
-                <p className="text-xs text-stone-500">
-                  {'Sử dụng mật khẩu mạnh có ít nhất 8 ký tự'}
-                </p>
-              </div>
+            {isInternal ? (
+              /* Internal Staff / Manager / Business / Admin: Enterprise Security Card */
+              <Card className="p-6">
+                <div className="pb-4 mb-5 border-b border-stone-100">
+                  <h2 className="text-lg font-bold text-stone-900">Chính Sách Bảo Mật Tài Khoản Nội Bộ</h2>
+                  <p className="text-xs text-stone-500">Tài khoản công tác được quản trị tập trung bởi bộ phận Quản Trị & Nhân Sự (Admin/HR)</p>
+                </div>
 
-              <form onSubmit={handleChangePassword} className="space-y-4">
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Đổi mật khẩu cần auth backend; biểu mẫu này hiện chỉ hiển thị trạng thái.
-                </p>
-                <Input
-                  label={'Mật Khẩu Hiện Tại'}
-                  type="password"
-                  placeholder={'Nhập mật khẩu hiện tại...'}
-                  value={currentPassword}
-                  onChange={e => setCurrentPassword(e.target.value)}
-                  disabled
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label={'Mật Khẩu Mới'}
-                    type="password"
-                    placeholder={'Ít nhất 6 ký tự...'}
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    disabled
-                  />
-                  <Input
-                    label={'Xác Nhận Mật Khẩu Mới'}
-                    type="password"
-                    placeholder={'Nhập lại mật khẩu mới...'}
-                    value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
-                    disabled
-                  />
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <p className="font-bold text-stone-900 text-sm">Mật Khẩu Đăng Nhập</p>
+                      <p className="text-xs text-stone-500 mt-0.5">Mật khẩu được đồng bộ và quản lý theo chính sách bảo mật nội bộ.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-stone-500 bg-white px-3 py-1.5 rounded-lg border border-stone-200">••••••••</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setRequestReason('Đề nghị cấp lại mật khẩu tài khoản nội bộ')
+                          setRequestFields(['Mật khẩu'])
+                          setRequestModalOpen(true)
+                        }}
+                        className="text-xs whitespace-nowrap cursor-pointer"
+                      >
+                        Yêu Cầu Cấp Lại Mật Khẩu
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <p className="font-bold text-stone-900 text-sm">Giám Sát Truy Cập & Phiên Làm Việc</p>
+                      <p className="text-xs text-stone-500 mt-0.5">Tất cả phiên đăng nhập được kiểm toán và tự động khóa khi có dấu hiệu bất thường.</p>
+                    </div>
+                    <Badge variant="success">An Toàn · Đang Giám Sát</Badge>
+                  </div>
                 </div>
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" variant="outline" disabled>
-                    {'Chỉ xem · Chưa kết nối auth backend'}
-                  </Button>
+              </Card>
+            ) : (
+              /* Customer: Password Reset & Change Card */
+              <Card className="p-6">
+                <div className="pb-4 mb-5 border-b border-stone-100">
+                  <h2 className="text-lg font-bold text-stone-900">Đổi Mật Khẩu Đăng Nhập</h2>
+                  <p className="text-xs text-stone-500">Sử dụng mật khẩu mạnh có ít nhất 6 ký tự để bảo vệ tài khoản</p>
                 </div>
-              </form>
-            </Card>
+
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <Input
+                    label="Mật Khẩu Hiện Tại"
+                    type="password"
+                    placeholder="Nhập mật khẩu hiện tại..."
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      label="Mật Khẩu Mới"
+                      type="password"
+                      placeholder="Ít nhất 6 ký tự..."
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                    />
+                    <Input
+                      label="Xác Nhận Mật Khẩu Mới"
+                      type="password"
+                      placeholder="Nhập lại mật khẩu mới..."
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex justify-end pt-2">
+                    <Button type="submit" variant="primary" className="cursor-pointer">
+                      Gửi Email Đặt Lại Mật Khẩu
+                    </Button>
+                  </div>
+                </form>
+              </Card>
+            )}
 
             {/* Active Sessions */}
             <Card className="p-6">
@@ -360,6 +543,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
                   size="sm"
                   onClick={handleRevokeAllSessions}
                   disabled={!userSessions.some(session => session.status === 'active')}
+                  className="cursor-pointer"
                 >
                   {'Đăng Xuất Tất Cả Thiết Bị'}
                 </Button>
@@ -378,17 +562,36 @@ export default function ProfileView({ user }: ProfileViewProps) {
                       </div>
                       <p className="text-xs text-stone-500">{session.location} · Bắt đầu {session.createdAt}</p>
                     </div>
-                    {session.status === 'active' && <Button variant="ghost" size="sm" onClick={() => {
-                      try {
-                        if (revokeSession(session.id, user)) showToast('Đã thu hồi phiên đăng nhập.')
-                      } catch (error) {
-                        showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên đăng nhập.')
-                      }
-                    }}>Thu hồi</Button>}
+                    {session.status === 'active' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          try {
+                            if (revokeSession(session.id, user)) showToast('Đã thu hồi phiên đăng nhập.')
+                          } catch (error) {
+                            showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên đăng nhập.')
+                          }
+                        }}
+                      >
+                        Thu hồi
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
             </Card>
+
+            {isCustomer && (
+              <Card className="border-red-200 bg-red-50/40 p-6">
+                <h2 className="text-lg font-bold text-red-900">Xoá tài khoản Customer</h2>
+                <p className="mt-2 text-xs leading-relaxed text-red-800">Không thể xoá khi còn đơn đặt hiện tại, đơn quá hạn, đơn chưa thanh toán hoặc hợp đồng thuê chưa hoàn tất. Hệ thống sẽ kiểm tra dữ liệu trước khi xoá.</p>
+                <Button type="button" variant="danger" className="mt-4 cursor-pointer" onClick={handleDeleteAccount}>
+                  Xoá tài khoản
+                </Button>
+              </Card>
+            )}
           </div>
 
           {/* 2FA Sidebar Card */}
@@ -406,14 +609,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
                 {'Bổ sung thêm lớp bảo mật bằng cách yêu cầu mã OTP từ ứng dụng Google Authenticator hoặc tin nhắn SMS khi đăng nhập.'}
               </p>
               <div className="pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  disabled
-                >
-                  {'Chỉ xem · Chưa kết nối auth backend'}
-                </Button>
+                <span className="text-xs text-stone-500 block">Liên hệ Admin/HR để kích hoạt xác thực 2 bước.</span>
               </div>
             </Card>
           </div>
@@ -423,7 +619,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
       {/* TAB 3: Notifications */}
       {activeTab === 'notifications' && (
         <Card className="p-6 max-w-3xl">
-          <div className="pb-4 mb-5 border-b border-stone-100">
+          <div className="pb-4 mb-6 border-b border-stone-100">
             <h2 className="text-lg font-bold text-stone-900">
               {'Kênh Thông Báo & Cảnh Báo'}
             </h2>
@@ -432,77 +628,160 @@ export default function ProfileView({ user }: ProfileViewProps) {
             </p>
           </div>
 
-          <div className="space-y-5">
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-stone-100">
-              <div>
-                <p className="font-semibold text-stone-800 text-sm">
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/60 transition">
+              <div className="space-y-1">
+                <p className="font-bold text-stone-900 text-sm">
                   {'Cảnh Báo Hóa Đơn & Tiền Thuê Kho'}
                 </p>
-                <p className="text-xs text-stone-500">
-                  {'Nhận nhắc nhở hạn thanh toán và hóa đơn điện tử qua email'}
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  {'Nhận nhắc nhở hạn thanh toán và hóa đơn điện tử tự động qua email đã đăng ký'}
                 </p>
               </div>
-              <input
-                type="checkbox"
+              <ToggleSwitch
                 checked={notifEmailRent}
-                disabled
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
+                onChange={val => handleToggleNotif('Cảnh báo hóa đơn', val, setNotifEmailRent)}
+                label="Cảnh Báo Hóa Đơn & Tiền Thuê Kho"
               />
             </div>
 
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-stone-100">
-              <div>
-                <p className="font-semibold text-stone-800 text-sm">
+            <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/60 transition">
+              <div className="space-y-1">
+                <p className="font-bold text-stone-900 text-sm">
                   {'Nhật Ký Mở Cổng & Khóa Cửa Điện Tử'}
                 </p>
-                <p className="text-xs text-stone-500">
-                  {'Nhận tin nhắn SMS tức thì khi cửa kho hoặc cổng phụ của bạn được mở ngoài giờ'}
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  {'Nhận tin nhắn SMS tức thì khi mã PIN hoặc thẻ khóa kho của bạn được kích hoạt'}
                 </p>
               </div>
-              <input
-                type="checkbox"
+              <ToggleSwitch
                 checked={notifSmsGate}
-                disabled
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
+                onChange={val => handleToggleNotif('Nhật ký mở cổng', val, setNotifSmsGate)}
+                label="Nhật Ký Mở Cổng & Khóa Cửa Điện Tử"
               />
             </div>
 
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-stone-100">
-              <div>
-                <p className="font-semibold text-stone-800 text-sm">
+            <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/60 transition">
+              <div className="space-y-1">
+                <p className="font-bold text-stone-900 text-sm">
                   {'Bản Tin Bảo Trì Cơ Sở'}
                 </p>
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-stone-500 leading-relaxed">
                   {'Các thông báo quan trọng về kiểm tra PCCC, bảo dưỡng thang máy hoặc giờ đóng cửa nghỉ lễ'}
                 </p>
               </div>
-              <input
-                type="checkbox"
+              <ToggleSwitch
                 checked={notifMaintenance}
-                disabled
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
+                onChange={val => handleToggleNotif('Bản tin bảo trì', val, setNotifMaintenance)}
+                label="Bản Tin Bảo Trì Cơ Sở"
               />
             </div>
 
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-semibold text-stone-800 text-sm">
+            <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/60 transition">
+              <div className="space-y-1">
+                <p className="font-bold text-stone-900 text-sm">
                   {'Chương Trình Ưu Đãi & Điểm Thưởng'}
                 </p>
-                <p className="text-xs text-stone-500">
-                  {'Nhận thông báo về thay đổi dịch vụ và lịch vận hành cơ sở'}
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  {'Nhận thông báo về các ưu đãi chiết khấu gia hạn, mở rộng kho bãi và quyền lợi thành viên'}
                 </p>
               </div>
-              <input
-                type="checkbox"
+              <ToggleSwitch
                 checked={notifMarketing}
-                disabled
-                className="w-4 h-4 text-amber-600 rounded mt-1 cursor-not-allowed"
+                onChange={val => handleToggleNotif('Chương trình ưu đãi', val, setNotifMarketing)}
+                label="Chương Trình Ưu Đãi & Điểm Thưởng"
               />
             </div>
           </div>
         </Card>
       )}
+
+      <Modal open={requestModalOpen && isInternal} onClose={() => setRequestModalOpen(false)} title="Gửi Yêu Cầu Chỉnh Sửa Hồ Sơ">
+        <div className="space-y-5">
+          <p className="text-xs text-stone-500 leading-relaxed">
+            Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (audit log).
+          </p>
+
+          <div>
+            <span className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-2.5">
+              Hạng mục cần cập nhật <span className="text-amber-600">*</span>
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {[
+                { id: 'Họ và Tên', label: 'Họ và Tên' },
+                { id: 'Email liên hệ', label: 'Email công tác' },
+                { id: 'Số điện thoại', label: 'Số điện thoại' },
+                { id: 'Mật khẩu', label: 'Mật khẩu đăng nhập' },
+                { id: 'Vai trò', label: 'Vai trò chức danh' },
+                { id: 'Cơ sở phụ trách', label: 'Cơ sở phụ trách' },
+              ].map(({ id, label }) => {
+                const isSelected = requestFields.includes(id)
+                return (
+                  <label
+                    key={id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-medium cursor-pointer transition select-none ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-50/80 text-amber-950 font-semibold shadow-xs'
+                        : 'border-stone-200 bg-white hover:bg-stone-50 text-stone-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={event =>
+                        setRequestFields(current =>
+                          event.target.checked
+                            ? [...new Set([...current, id])]
+                            : current.filter(item => item !== id)
+                        )
+                      }
+                      className="w-4 h-4 shrink-0 rounded border-stone-300 accent-amber-600 cursor-pointer"
+                    />
+                    <span className="truncate">{label}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
+              Nội dung đề nghị chi tiết <span className="text-amber-600">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={requestReason}
+              onChange={event => setRequestReason(event.target.value)}
+              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456; Điều chuyển cơ sở sang Downtown Storage...)"
+              className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none transition"
+            />
+            <div className="flex justify-between items-center mt-1 text-[11px] text-stone-400">
+              <span>Tối thiểu 10 ký tự</span>
+              <span className={requestReason.trim().length >= 10 ? 'text-emerald-600 font-semibold' : 'text-stone-400'}>
+                {requestReason.trim().length}/10 ký tự
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">
+            <Button
+              variant="outline"
+              className="cursor-pointer border-stone-300 text-stone-700 hover:bg-stone-100"
+              onClick={() => setRequestModalOpen(false)}
+            >
+              Hủy Bỏ
+            </Button>
+            <Button
+              variant="primary"
+              className="cursor-pointer bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              disabled={!requestFields.length || requestReason.trim().length < 10}
+              onClick={handleSubmitProfileRequest}
+            >
+              Gửi Yêu Cầu Tới Admin/HR
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

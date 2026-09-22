@@ -4,6 +4,7 @@ import { Icon } from '../../components/Layout'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { TicketItem } from '../../data/demoDatabase'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface ManagerSupportPanelProps {
   user: User
@@ -22,9 +23,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
   const [newStatus, setNewStatus] = useState<TicketItem['status']>('in-progress')
 
   // Filter tickets by facility
-  const facilityTickets = storeTickets.filter(
-    t => !user.facility || user.facility === 'All facilities' || t.facility === user.facility
-  )
+  const facilityTickets = storeTickets.filter(t => isFacilityVisible(user, t.facilityId, t.facility))
 
   const openCount = facilityTickets.filter(t => t.status === 'open').length
   const inProgressCount = facilityTickets.filter(t => t.status === 'in-progress').length
