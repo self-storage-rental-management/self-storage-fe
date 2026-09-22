@@ -562,6 +562,28 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     evidencePhotos: ['TEST · Gia hạn muộn sau hạn 2 ngày']
   },
   {
+    id: 'RNT-CUSTOMER-UPCOMING-02', holdId: 'RSV-CUSTOMER-UPCOMING-02', unitId: 'B-112',
+    facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer',
+    customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
+    unitType: 'Medium Storage', areaM2: 6, volumeM3: 15,
+    startDate: demoDateOffset(-28), endDate: demoDateOffset(2), nextDue: demoDateOffset(2),
+    monthlyRate: 2200000 / 26000, deposit: 2200000 / 26000, securityDeposit: 2200000 / 26000,
+    status: 'active', paymentStatus: 'paid', autoRenew: false, gateCode: '4202#',
+    initialCondition: 'Hồ sơ kiểm thử: hợp đồng còn đúng 2 ngày.', evidencePhotos: ['TEST · Sắp hết hạn sau 2 ngày'],
+    receiptConfirmedAt: new Date().toISOString(), receiptConfirmedBy: 'demo-customer'
+  },
+  {
+    id: 'RNT-CUSTOMER-OVERDUE-02', holdId: 'RSV-CUSTOMER-OVERDUE-02', unitId: 'A-115',
+    facilityId: 'fac-002', facilityName: 'Kho Việt – Cơ sở Bình Dương', customerId: 'demo-customer',
+    customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
+    unitType: 'Small Storage', areaM2: 2.25, volumeM3: 6.3,
+    startDate: demoDateOffset(-32), endDate: demoDateOffset(-2), nextDue: demoDateOffset(-2),
+    monthlyRate: 850000 / 26000, deposit: 850000 / 26000, securityDeposit: 850000 / 26000,
+    status: 'active', paymentStatus: 'overdue', autoRenew: false, gateCode: '5202#',
+    initialCondition: 'Hồ sơ kiểm thử: hợp đồng đã hết hạn đúng 2 ngày.', evidencePhotos: ['TEST · Đã hết hạn 2 ngày'],
+    receiptConfirmedAt: new Date().toISOString(), receiptConfirmedBy: 'demo-customer'
+  },
+  {
     id: 'RNT-TEST-RETURN-DEDUCT',
     holdId: 'RSV-TEST-RETURN-DEDUCT',
     unitId: 'A-105',
@@ -683,6 +705,102 @@ const INITIAL_RENTALS: RentalRecord[] = [
     evidencePhotos: ['EV-INIT-D402-01 · Biên bản bàn giao kho pallet']
   }
 ]
+
+// Demo record requested for validating the final customer handover step.
+// It intentionally has no receiptConfirmedAt so Customer sees
+// “Xác nhận đã nhận kho” after Staff has completed check-in.
+const RECEIPT_CONFIRMATION_DEMO_HOLD: StorageReservation = {
+  id: 'RSV-9654',
+  customerId: 'demo-customer',
+  customerName: 'Demo Customer',
+  customerEmail: 'customer@storagehub.demo',
+  customerPhone: '+84 908 123 456',
+  identityId: '079203009988',
+  facilityId: 'HCM-Q1-F01',
+  facilityName: 'Kho Việt – Cơ sở Quận 1',
+  unitId: 'HCM-Q1-F01-S01',
+  assignedUnitId: 'HCM-Q1-F01-S01',
+  unitTypeId: 'S',
+  unitTypeName: 'Small Storage',
+  rentalMonths: 3,
+  startDate: demoDateOffset(0),
+  endDate: demoDateOffset(90),
+  moveInDate: demoDateOffset(0),
+  status: 'COMPLETED',
+  approvalType: 'AUTO',
+  reservationDepositAmount: 19.6153846154,
+  securityDepositAmount: 32.6923076923,
+  depositConvertedAt: new Date().toISOString(),
+  remainingAmount: 111.1538461538,
+  firstMonthRent: 32.6923076923,
+  totalInitialAmount: 130.7692307692,
+  goods: {
+    category: 'Đồ gia dụng & nội thất', packageCount: 6,
+    lengthCm: 60, widthCm: 50, heightCm: 50, weightKg: 80,
+    dimWeightKg: 36, material: 'Gỗ, nhựa, kim loại, vải, da, cao su',
+    condition: 'Đã đóng gói và bàn giao tại cơ sở', fragile: false
+  },
+  quote: {
+    quoteId: 'QUO-9654', unitId: 'HCM-Q1-F01-S01', facilityId: 'HCM-Q1-F01',
+    baseMonthlyPrice: 32.6923076923, depositAmount: 32.6923076923, dimSurcharge: 0,
+    totalFirstPayment: 130.7692307692, dimWeightKg: 36, actualWeightKg: 80,
+    billableWeightKg: 80, dimDivisor: 5000,
+    quotedAt: new Date().toISOString(), expiresAt: demoDateOffset(1)
+  },
+  payment: { amount: 3323500, status: 'paid', method: 'VietQR', transactionId: 'TX-RSV-9654', paidAt: new Date().toISOString() },
+  contractId: 'CTR-9654', appointmentDate: demoDateOffset(0), appointmentTime: '09:00',
+  generatedAccessPin: '9654#', checkedInAt: new Date().toISOString(), checkedInBy: 'demo-staff',
+  handoverCompleted: true, expiresAt: demoDateOffset(90),
+  evidence: ['CHK-9654 · Staff đã hoàn tất Check-in và bàn giao kho'], createdAt: new Date().toISOString()
+}
+
+const RECEIPT_CONFIRMATION_DEMO_RENTAL: RentalRecord = {
+  id: 'RNT-9654', holdId: 'RSV-9654', unitId: 'HCM-Q1-F01-S01',
+  facilityId: 'HCM-Q1-F01', facilityName: 'Kho Việt – Cơ sở Quận 1',
+  customerId: 'demo-customer', customerName: 'Demo Customer',
+  customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
+  unitType: 'Small Storage', areaM2: 33.6, volumeM3: 107.52,
+  startDate: demoDateOffset(0), endDate: demoDateOffset(90), nextDue: demoDateOffset(30),
+  monthlyRate: 32.6923076923, deposit: 32.6923076923, securityDeposit: 32.6923076923,
+  status: 'active', paymentStatus: 'paid', autoRenew: false, gateCode: '9654#',
+  initialCondition: 'Kho sạch, khóa và hệ thống an ninh hoạt động bình thường.',
+  evidencePhotos: ['CHK-9654 · Biên bản bàn giao tại cơ sở']
+}
+
+const RECEIPT_CONFIRMATION_DEMO_CHECKIN: CheckInRecord = {
+  id: 'CHK-9654', holdId: 'RSV-9654', unitId: 'HCM-Q1-F01-S01', facilityId: 'HCM-Q1-F01',
+  customerId: 'demo-customer', customerName: 'Demo Customer', staffId: 'demo-staff', staffName: 'Demo Staff',
+  scheduledDate: demoDateOffset(0), scheduledTime: '09:00', completedAt: new Date().toISOString(), status: 'completed',
+  checklist: { identityVerified: true, termsAccepted: true, paymentConfirmed: true, unitWalkthrough: true, accessCodeIssued: true },
+  actualMeasurements: { lengthCm: 60, widthCm: 50, heightCm: 50, weightKg: 80, actualVolumeM3: 0.9, varianceAccepted: true },
+  initialCondition: 'Đã đối chiếu hàng hóa và hoàn tất bàn giao.', evidencePhotos: ['CHK-9654 · Biên bản Check-in']
+}
+
+const RECEIPT_CONFIRMATION_DEMO_PAYMENTS: StoragePayment[] = [
+  {
+    id: 'PAY-DEP-9654', reservationId: 'RSV-9654', rentalId: 'RNT-9654', type: 'RESERVATION_DEPOSIT',
+    amount: 19.6153846154, paymentMethod: 'ONLINE_GATEWAY', transactionReference: 'TX-DEP-9654',
+    status: 'PAID', paidAt: new Date().toISOString(), recordedBy: 'StorageHub System',
+    invoiceNumber: 'BL-COC-9654', description: 'Biên lai cọc giữ chỗ 20%'
+  },
+  {
+    id: 'PAY-CHECKIN-9654', reservationId: 'RSV-9654', rentalId: 'RNT-9654', type: 'INITIAL_RENT',
+    amount: 111.1538461538, paymentMethod: 'BANK_TRANSFER', transactionReference: 'TX-CHECKIN-9654',
+    status: 'PAID', paidAt: new Date().toISOString(), recordedBy: 'demo-staff', receivedBy: 'Demo Staff',
+    invoiceNumber: 'BL-CHECKIN-9654', description: 'Biên lai thanh toán tại Check-in gồm tiền thuê còn lại và tiền đảm bảo kho'
+  }
+]
+
+const mergeReceiptConfirmationDemo = <T extends { id: string }>(items: T[], sample: T): T[] => {
+  const existing = items.find(item => item.id === sample.id)
+  if (!existing) return [sample, ...items]
+  const preservedLifecycle = Object.fromEntries(
+    ['receiptConfirmedAt', 'receiptConfirmedBy', 'customerConfirmationTimestamp', 'customerArchivedAt']
+      .filter(key => (existing as Record<string, unknown>)[key] != null)
+      .map(key => [key, (existing as Record<string, unknown>)[key]])
+  )
+  return items.map(item => item.id === sample.id ? { ...item, ...sample, ...preservedLifecycle } : item)
+}
 
 const RETURN_TEST_CASES: ReturnCase[] = [
   { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Downtown Storage', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
@@ -889,8 +1007,11 @@ interface StorageHubContextValue extends StorageHubState {
     customerAddress?: string
     appointmentTime: string
     largestItemDimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number }
+    capacityValidatedByFrames?: boolean
+    customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number }
   }) => ReservationValidationResult
   approveReservation: (reservationId: string, reviewer: User) => void
+  rejectGoodsReview: (reservationId: string, reviewer: User, note: string) => void
   assignUnitToHold: (reservationId: string, unitId: string, managerUser: User) => void
   cancelReservation: (reservationId: string, user: User, reason?: string) => void
   archiveReservationHistory: (reservationId: string, customer: User) => void
@@ -1048,7 +1169,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.map((hold: StorageReservation) => normalizeReservationPricing({ ...hold, appointmentDate: hold.appointmentDate || hold.moveInDate, appointmentTime: hold.appointmentTime || '09:00' })) : INITIAL_RESERVATIONS
+        const normalizedHolds = mergeReceiptConfirmationDemo(
+          Array.isArray(parsed.holds) ? parsed.holds.filter((hold: StorageReservation) => !['RSV-6618', 'RSV-2104'].includes(hold.id)).map((hold: StorageReservation) => normalizeReservationPricing({ ...hold, appointmentDate: hold.appointmentDate || hold.moveInDate, appointmentTime: hold.appointmentTime || '09:00' })) : INITIAL_RESERVATIONS,
+          RECEIPT_CONFIRMATION_DEMO_HOLD
+        )
         return {
           ...parsed,
           users: normalizeUsers(parsed.users),
@@ -1056,21 +1180,50 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           units: Array.isArray(parsed.units) && parsed.units.length >= INITIAL_UNITS.length ? parsed.units : INITIAL_UNITS,
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
-          payments: parsed.payments || [],
-          renewals: Array.isArray(parsed.renewals) ? parsed.renewals.map((renewal: RenewalRecord) => {
-            const rental = Array.isArray(parsed.rentals) ? parsed.rentals.find((item: RentalRecord) => item.id === renewal.rentalId) : undefined
-            const unit = INITIAL_UNITS.find(item => item.id === (rental?.unitId || renewal.unitId))
-            return {
-              ...renewal,
-              renewalMonths: renewal.renewalMonths || 1,
-              facilityId: unit?.facilityId || rental?.facilityId || renewal.facilityId
-            }
-          }) : [],
-          maintenanceTasks: parsed.maintenanceTasks || [],
-          staffTasks: parsed.staffTasks || [],
-          accessCredentials: parsed.accessCredentials || [],
-          checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins : INITIAL_CHECKINS),
-          rentals: Array.isArray(parsed.rentals) ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals)) : INITIAL_RENTALS,
+payments: RECEIPT_CONFIRMATION_DEMO_PAYMENTS.reduce(
+  (items, sample) => mergeReceiptConfirmationDemo(items, sample),
+  Array.isArray(parsed.payments)
+    ? parsed.payments.filter(
+        (payment: StoragePayment) =>
+          !['RSV-6618', 'RSV-2104'].includes(payment.reservationId)
+      )
+    : []
+),
+renewals: Array.isArray(parsed.renewals)
+  ? parsed.renewals.map((renewal: RenewalRecord) => {
+      const rental = Array.isArray(parsed.rentals)
+        ? parsed.rentals.find(
+            (item: RentalRecord) => item.id === renewal.rentalId
+          )
+        : undefined
+      const unit = INITIAL_UNITS.find(
+        item => item.id === (rental?.unitId || renewal.unitId)
+      )
+
+      return {
+        ...renewal,
+        renewalMonths: renewal.renewalMonths || 1,
+        facilityId:
+          unit?.facilityId || rental?.facilityId || renewal.facilityId
+      }
+    })
+  : [],
+maintenanceTasks: parsed.maintenanceTasks || [],
+staffTasks: parsed.staffTasks || [],
+accessCredentials: parsed.accessCredentials || [],
+checkins: reconcileReservationCheckins(
+  normalizedHolds,
+  mergeReceiptConfirmationDemo(
+    Array.isArray(parsed.checkins) ? parsed.checkins : INITIAL_CHECKINS,
+    RECEIPT_CONFIRMATION_DEMO_CHECKIN
+  )
+),
+rentals: mergeReceiptConfirmationDemo(
+  Array.isArray(parsed.rentals)
+    ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals))
+    : INITIAL_RENTALS,
+  RECEIPT_CONFIRMATION_DEMO_RENTAL
+),
           returns: Array.isArray(parsed.returns) ? mergeReturnTestCases(parsed.returns) : INITIAL_RETURNS,
           activities: parsed.activities || INITIAL_ACTIVITIES,
           loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
@@ -1089,11 +1242,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       rolePermissions: normalizeRolePermissions(undefined),
       facilities: INITIAL_FACILITIES,
       units: INITIAL_UNITS,
-      holds: INITIAL_RESERVATIONS,
+      holds: mergeReceiptConfirmationDemo(INITIAL_RESERVATIONS, RECEIPT_CONFIRMATION_DEMO_HOLD),
       contracts: INITIAL_CONTRACTS,
-      payments: [],
-      checkins: INITIAL_CHECKINS,
-      rentals: INITIAL_RENTALS,
+      payments: RECEIPT_CONFIRMATION_DEMO_PAYMENTS,
+      checkins: mergeReceiptConfirmationDemo(INITIAL_CHECKINS, RECEIPT_CONFIRMATION_DEMO_CHECKIN),
+      rentals: mergeReceiptConfirmationDemo(INITIAL_RENTALS, RECEIPT_CONFIRMATION_DEMO_RENTAL),
       returns: INITIAL_RETURNS,
       renewals: [],
       maintenanceTasks: [],
@@ -1426,6 +1579,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     customerAddress?: string
     appointmentTime: string
     largestItemDimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number }
+    capacityValidatedByFrames?: boolean
+    customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number }
   }): ReservationValidationResult => {
     assertPermission(params.customer, 'book_storage')
     const unitType = UNIT_TYPES.find(ut => ut.id === params.unitTypeId) || UNIT_TYPES[1]
@@ -1460,10 +1615,16 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       !hold.assignedUnitId &&
       hold.facilityId === params.facilityId &&
       hold.unitTypeId === unitType.id &&
-      (hold.status === 'DEPOSIT_PAID' || (['awaiting_email', 'awaiting_review', 'awaiting_payment'].includes(hold.status) && Boolean(hold.paymentExpiresAt) && new Date(hold.paymentExpiresAt!).getTime() > nowTime)) &&
+      (hold.status === 'DEPOSIT_PAID' || (hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING') || (['awaiting_email', 'awaiting_review', 'awaiting_payment'].includes(hold.status) && Boolean(hold.paymentExpiresAt) && new Date(hold.paymentExpiresAt!).getTime() > nowTime)) &&
       checkDateOverlap(startDate, endDate, hold.startDate, hold.endDate)
     )
-    const availableUnit = dateAvailableUnits[unassignedCapacityHolds.length]
+    const availableUnit = dateAvailableUnits[unassignedCapacityHolds.length] || (params.customerCatalogUnit ? {
+      id: params.customerCatalogUnit.id,
+      code: params.customerCatalogUnit.id,
+      facilityId: params.facilityId,
+      facilityName: params.customerCatalogUnit.facilityName,
+      doorDimensions: { widthM: params.customerCatalogUnit.doorWidthM, heightM: params.customerCatalogUnit.doorHeightM },
+    } as StorageUnit : undefined)
 
     if (!availableUnit) {
       return {
@@ -1511,7 +1672,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const weightExceeds = params.goods.weightKg > unitType.maxLoadKg
     const volumeExceeds = totalGoodsVolM3 > unitType.volumeM3
 
-    if (!fitsThroughDoor || boxDoesNotFit || weightExceeds || volumeExceeds) {
+    if (!params.capacityValidatedByFrames && (!fitsThroughDoor || boxDoesNotFit || weightExceeds || volumeExceeds)) {
       const suggested = UNIT_TYPES.find(ut => {
         const su = [ut.lengthM, ut.widthM, ut.heightM].sort((a, b) => b - a)
         return (
@@ -1552,7 +1713,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
     const holdId = `RSV-${Date.now().toString().slice(-4)}`
     const quoteId = `QUO-${Date.now().toString().slice(-4)}`
-    const paymentExpiresAt = new Date(nowTime + 12 * 60 * 60 * 1000).toISOString()
+    const requiresGoodsReview = Boolean(params.goods.items?.some(item => item.category === 'OTHER' || item.requiresStaffReview))
+    const goodsReviewSubmittedAt = requiresGoodsReview ? now.toISOString() : undefined
+    const goodsReviewDueAt = requiresGoodsReview ? new Date(nowTime + 24 * 60 * 60 * 1000).toISOString() : undefined
+    const paymentExpiresAt = requiresGoodsReview ? undefined : new Date(nowTime + 12 * 60 * 60 * 1000).toISOString()
     const emailToken = crypto.getRandomValues(new Uint32Array(1))[0].toString().padStart(6, '0').slice(-6)
 
     const pricingQuote: PricingQuote = {
@@ -1568,7 +1732,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       billableWeightKg: params.goods.weightKg,
       dimDivisor: 5000,
       quotedAt: now.toISOString(),
-      expiresAt: paymentExpiresAt
+      expiresAt: paymentExpiresAt || goodsReviewDueAt || new Date(nowTime + 12 * 60 * 60 * 1000).toISOString()
     }
 
     const newReservation: StorageReservation = {
@@ -1589,19 +1753,23 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       startDate,
       endDate,
       moveInDate: params.moveInDate,
-      status: 'awaiting_email',
-      reservationDepositAmount,
+      status: requiresGoodsReview ? 'awaiting_review' : 'awaiting_email',
+      reservationDepositAmount: requiresGoodsReview ? 0 : reservationDepositAmount,
       securityDepositAmount,
       remainingAmount,
       firstMonthRent,
       totalInitialAmount,
       approvalType: 'AUTO',
       paymentExpiresAt,
+      goodsReviewStatus: requiresGoodsReview ? 'PENDING' : 'NOT_REQUIRED',
+      goodsReviewSubmittedAt,
+      goodsReviewDueAt,
+      depositRequired: !requiresGoodsReview,
       largestItemDimensionsCm: { lengthCm: itemL, widthCm: itemW, heightCm: itemH },
       goods: params.goods,
       quote: pricingQuote,
       payment: {
-        amount: reservationDepositAmount,
+        amount: requiresGoodsReview ? 0 : reservationDepositAmount,
         status: 'pending'
       },
       emailVerification: {
@@ -1613,8 +1781,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       },
       appointmentDate: params.moveInDate,
       appointmentTime: params.appointmentTime,
-      expiresAt: paymentExpiresAt,
-      evidence: [`${holdId} · Đã xác nhận thông tin. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
+      expiresAt: paymentExpiresAt || goodsReviewDueAt || new Date(nowTime + 12 * 60 * 60 * 1000).toISOString(),
+      evidence: [requiresGoodsReview
+        ? `${holdId} · Yêu cầu hàng hóa khác đã gửi Staff duyệt. Kho được giữ và chưa yêu cầu tiền cọc.`
+        : `${holdId} · Đã xác nhận thông tin. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
       createdAt: now.toISOString()
     }
 
@@ -1631,7 +1801,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: params.facilityId,
           entityType: 'hold',
           entityId: holdId,
-          notes: `Khách hàng xác nhận đặt cỡ kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 12 giờ.`,
+          notes: requiresGoodsReview
+            ? `Khách hàng gửi hàng hóa “Khác” để Staff duyệt. Kho được giữ, chưa thu cọc.`
+            : `Khách hàng xác nhận đặt cỡ kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 12 giờ.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -1641,7 +1813,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     return {
       outcome: 'PASS',
       hold: newReservation,
-      messageVi: 'Yêu cầu đã được tạo. Vui lòng xác minh email để chuyển hồ sơ sang bước phê duyệt.',
+      messageVi: requiresGoodsReview ? 'Yêu cầu hàng hóa đã được gửi Staff duyệt. Kho đang được giữ và chưa yêu cầu tiền cọc.' : 'Yêu cầu đã được tạo. Vui lòng xác minh email để chuyển hồ sơ sang bước phê duyệt.',
       messageEn: 'Request created. Verify your email before the facility review.'
     }
   }
@@ -1656,12 +1828,51 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } else if (reviewer.facility && reviewer.facility !== 'All facilities' && reviewer.facility !== reservation.facilityId && reviewer.facility !== reservation.facilityName) {
       throw new Error('Bạn không có quyền phê duyệt yêu cầu của cơ sở khác.')
     }
-    const nextStatus = transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
     const approvedAt = new Date().toISOString()
+    const isGoodsReview = reservation.goodsReviewStatus === 'PENDING'
+    const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
+    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
+    const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
-      holds: prev.holds.map(item => item.id === reservationId ? { ...item, status: nextStatus, evidence: [...item.evidence, `APPROVED · ${reviewer.name} đã duyệt hồ sơ lúc ${approvedAt}`] } : item),
+      holds: prev.holds.map(item => item.id === reservationId ? {
+        ...item,
+        status: nextStatus,
+        goodsReviewStatus: isGoodsReview ? 'APPROVED' : item.goodsReviewStatus,
+        goods: isGoodsReview ? { ...item.goods, items: item.goods.items?.map(goodsItem => goodsItem.requiresStaffReview ? { ...goodsItem, reviewStatus: 'APPROVED' as const } : goodsItem) } : item.goods,
+        depositRequired: isGoodsReview ? true : item.depositRequired,
+        paymentExpiresAt,
+        expiresAt: paymentExpiresAt || item.expiresAt,
+        reservationDepositAmount,
+        payment: isGoodsReview ? { ...item.payment, amount: reservationDepositAmount } : item.payment,
+        reviewedByStaffId: reviewer.id,
+        reviewedAt: approvedAt,
+        evidence: [...item.evidence, `APPROVED · ${reviewer.name} đã duyệt hàng hóa lúc ${approvedAt}`]
+      } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RESERVATION_APPROVED', actorId: reviewer.id, actorName: reviewer.name, actorRole: reviewer.role, facilityId: reservation.facilityId, entityType: 'hold', entityId: reservation.id, notes: 'Hồ sơ đã được phê duyệt và mở bước thanh toán cọc.', timestamp: approvedAt }, ...prev.activities]
+    }))
+  }
+
+  const rejectGoodsReview = (reservationId: string, reviewer: User, note: string) => {
+    assertPermission(reviewer, 'approve_reservations')
+    const reservation = state.holds.find(item => item.id === reservationId)
+    if (!reservation || reservation.goodsReviewStatus !== 'PENDING') throw new Error('Không tìm thấy yêu cầu hàng hóa đang chờ duyệt.')
+    const rejectedAt = new Date().toISOString()
+    setState(prev => ({
+      ...prev,
+      holds: prev.holds.map(item => item.id === reservationId ? {
+        ...item,
+        status: 'CANCELLED',
+        goodsReviewStatus: 'REJECTED',
+        goods: { ...item.goods, items: item.goods.items?.map(goodsItem => goodsItem.requiresStaffReview ? { ...goodsItem, reviewStatus: 'REJECTED' as const, staffReviewNote: note } : goodsItem) },
+        depositRequired: false,
+        paymentExpiresAt: undefined,
+        staffReviewNotes: note,
+        reviewedByStaffId: reviewer.id,
+        reviewedAt: rejectedAt,
+        evidence: [...item.evidence, `REJECTED · ${reviewer.name}: ${note}`],
+      } : item),
+      activities: [{ id: `act-${Date.now()}`, action: 'GOODS_REVIEW_REJECTED', actorId: reviewer.id, actorName: reviewer.name, actorRole: reviewer.role, facilityId: reservation.facilityId, entityType: 'hold', entityId: reservation.id, notes: note, timestamp: rejectedAt }, ...prev.activities]
     }))
   }
 
@@ -3229,11 +3440,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       rolePermissions: normalizeRolePermissions(undefined),
       facilities: INITIAL_FACILITIES,
       units: INITIAL_UNITS,
-      holds: INITIAL_RESERVATIONS,
+      holds: mergeReceiptConfirmationDemo(INITIAL_RESERVATIONS, RECEIPT_CONFIRMATION_DEMO_HOLD),
       contracts: INITIAL_CONTRACTS,
-      payments: [],
-      checkins: INITIAL_CHECKINS,
-      rentals: INITIAL_RENTALS,
+      payments: RECEIPT_CONFIRMATION_DEMO_PAYMENTS,
+      checkins: mergeReceiptConfirmationDemo(INITIAL_CHECKINS, RECEIPT_CONFIRMATION_DEMO_CHECKIN),
+      rentals: mergeReceiptConfirmationDemo(INITIAL_RENTALS, RECEIPT_CONFIRMATION_DEMO_RENTAL),
       returns: INITIAL_RETURNS,
       renewals: [],
       maintenanceTasks: [],
@@ -3291,7 +3502,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const targetHold = assertHoldPermission(holdId, 'book_storage')
     if (targetHold.customerId !== customer.id && targetHold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
     assertPermission(customer, 'book_storage')
-    if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
+    if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff duyệt; chưa thể thanh toán tiền cọc.')
+    if (!targetHold.emailVerification?.verified && targetHold.goodsReviewStatus !== 'APPROVED') throw new Error('Bạn cần xác minh email trước khi thanh toán.')
     const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
@@ -3577,7 +3789,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || (reservation.customerId !== customer.id && reservation.customerEmail !== customer.email)) throw new Error('Không tìm thấy lịch sử giữ kho thuộc tài khoản này.')
     const linkedRental = state.rentals.find(item => item.holdId === reservationId)
-    const canArchive = ['CANCELLED', 'EXPIRED'].includes(reservation.status) || (reservation.status === 'COMPLETED' && linkedRental?.status === 'completed')
+    const canArchive = ['CANCELLED', 'EXPIRED'].includes(reservation.status) || (reservation.status === 'COMPLETED' && Boolean(linkedRental))
     if (!canArchive) throw new Error('Chỉ có thể xóa khỏi danh sách những hồ sơ giữ kho đã hết hiệu lực.')
     setState(prev => ({ ...prev, holds: prev.holds.map(item => item.id === reservationId ? { ...item, customerArchivedAt: new Date().toISOString() } : item) }))
   }
@@ -3620,6 +3832,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     scheduleCheckIn,
     validateAndCreateReservation,
     approveReservation,
+    rejectGoodsReview,
     assignUnitToHold,
     cancelReservation,
     archiveReservationHistory,
