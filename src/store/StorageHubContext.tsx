@@ -97,58 +97,58 @@ export const UNIT_TYPES: UnitType[] = [
   {
     id: 'small',
     name: 'Small Storage',
-    lengthM: 5.6,
-    widthM: 6,
-    heightM: 3.2,
-    areaM2: 33.6,
-    volumeM3: 107.52,
-    pricePerM3: (5_500_000 / 26_000) / 107.52,
+    lengthM: 8,
+    widthM: 10,
+    heightM: 5,
+    areaM2: 80,
+    volumeM3: 400,
+    pricePerM3: (5_500_000 / 26_000) / 400,
     monthlyPrice: 5_500_000 / 26_000,
-    maxLoadKg: 600,
-    descriptionVi: 'Phù hợp: đồ gia dụng, thiết bị văn phòng và hàng hóa đóng kiện (~33,6 m²)',
-    descriptionEn: 'Fits household goods, office equipment and boxed inventory (~33.6 m²)'
+    maxLoadKg: 1000,
+    descriptionVi: 'Phù hợp: đồ gia dụng, thiết bị văn phòng và hàng hóa đóng kiện (80 m²)',
+    descriptionEn: 'Fits household goods, office equipment and boxed inventory (80 m²)'
   },
   {
     id: 'medium',
     name: 'Medium Storage',
-    lengthM: 9,
-    widthM: 6.4,
-    heightM: 3.4,
-    areaM2: 57.6,
-    volumeM3: 195.84,
-    pricePerM3: (9_500_000 / 26_000) / 195.84,
+    lengthM: 12.6,
+    widthM: 10.4,
+    heightM: 5,
+    areaM2: 131.04,
+    volumeM3: 655.2,
+    pricePerM3: (9_500_000 / 26_000) / 655.2,
     monthlyPrice: 9_500_000 / 26_000,
-    maxLoadKg: 1200,
-    descriptionVi: 'Phù hợp: đồ đạc gia đình, thiết bị văn phòng và hàng kinh doanh (~57,6 m²)',
-    descriptionEn: 'Fits household furniture, office equipment and business inventory (~57.6 m²)'
+    maxLoadKg: 1600,
+    descriptionVi: 'Phù hợp: đồ đạc gia đình, thiết bị văn phòng và hàng kinh doanh (131,04 m²)',
+    descriptionEn: 'Fits household furniture, office equipment and business inventory (131.04 m²)'
   },
   {
     id: 'large',
     name: 'Large Storage',
-    lengthM: 13.5,
-    widthM: 6.8,
-    heightM: 3.6,
-    areaM2: 91.8,
-    volumeM3: 330.48,
-    pricePerM3: (15_000_000 / 26_000) / 330.48,
+    lengthM: 18.3,
+    widthM: 10.8,
+    heightM: 5,
+    areaM2: 197.64,
+    volumeM3: 988.2,
+    pricePerM3: (15_000_000 / 26_000) / 988.2,
     monthlyPrice: 15_000_000 / 26_000,
-    maxLoadKg: 2400,
-    descriptionVi: 'Phù hợp: đồ chuyển nhà, pallet và tồn kho kinh doanh (~91,8 m²)',
-    descriptionEn: 'Fits relocation goods, pallets and business inventory (~91.8 m²)'
+    maxLoadKg: 2800,
+    descriptionVi: 'Phù hợp: đồ chuyển nhà, pallet và tồn kho kinh doanh (197,64 m²)',
+    descriptionEn: 'Fits relocation goods, pallets and business inventory (197.64 m²)'
   },
   {
     id: 'xlarge',
     name: 'Extra Large Commercial',
-    lengthM: 19,
-    widthM: 7.2,
-    heightM: 4,
-    areaM2: 136.8,
-    volumeM3: 547.2,
-    pricePerM3: (22_500_000 / 26_000) / 547.2,
+    lengthM: 25,
+    widthM: 11.2,
+    heightM: 5,
+    areaM2: 280,
+    volumeM3: 1400,
+    pricePerM3: (22_500_000 / 26_000) / 1400,
     monthlyPrice: 22_500_000 / 26_000,
-    maxLoadKg: 3600,
-    descriptionVi: 'Phù hợp: kho thương mại, pallet số lượng lớn và máy móc (~136,8 m²)',
-    descriptionEn: 'Fits commercial pallets, high-volume inventory and machinery (~136.8 m²)'
+    maxLoadKg: 4000,
+    descriptionVi: 'Phù hợp: kho thương mại, pallet số lượng lớn và máy móc (280 m²)',
+    descriptionEn: 'Fits commercial pallets, high-volume inventory and machinery (280 m²)'
   }
 ]
 
@@ -269,13 +269,21 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     lengthM = u.dimensionsM?.[0] ?? 6.0; widthM = u.dimensionsM?.[1] ?? 3.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 45.0; price = u.price ?? 360; maxLoadKg = u.maxLoadKg ?? 3600; areaM2 = u.areaM2 ?? 18.0
   }
 
+  // Customer catalog is normalized from the approved spreadsheet. Keep the
+  // monetary state in base currency because formatVnd performs the conversion.
+  const canonicalTypeId = u.type === 'Small' ? 'small' : u.type === 'Medium' ? 'medium' : u.type === 'Large' ? 'large' : 'xlarge'
+  const canonicalType = UNIT_TYPES.find(item => item.id === canonicalTypeId)!
+  lengthM = canonicalType.lengthM
+  widthM = canonicalType.widthM
+  heightM = canonicalType.heightM
+  areaM2 = canonicalType.areaM2
+  volumeM3 = canonicalType.volumeM3
+  price = canonicalType.monthlyPrice
+  maxLoadKg = canonicalType.maxLoadKg
+
   // Customer test inventory: demo reservations lock their selected physical units; every other unit is bookable.
   const isReservedDemo = u.id === 'A-104' || u.id === 'B-112'
   const demoRentalByUnit: Record<string, string> = {
-    'B-209': 'RNT-TEST-RENEW-BEFORE-2D',
-    'B-210': 'RNT-TEST-RENEW-AFTER-2D',
-    'B-112': 'RNT-CUSTOMER-UPCOMING-02',
-    'A-115': 'RNT-CUSTOMER-OVERDUE-02'
   }
   const isOccupiedDemo = Boolean(demoRentalByUnit[u.id])
   const reservedPeriods: ReservedPeriod[] = []
@@ -586,7 +594,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
   {
     id: 'RNT-TEST-RENEW-BEFORE-2D',
     holdId: 'RSV-TEST-RENEW-BEFORE-2D',
-    unitId: 'B-209',
+    unitId: 'HCM-Q1-F01-M-003',
     facilityId: 'fac-001',
     facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'demo-customer',
@@ -606,13 +614,14 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     paymentStatus: 'paid',
     autoRenew: false,
     gateCode: '2202#',
+    contractId: 'CTR-TEST-RENEW-BEFORE-2D',
     initialCondition: 'Dữ liệu kiểm thử: hợp đồng còn đúng 2 ngày trước khi hết hạn.',
     evidencePhotos: ['TEST · Gia hạn trước hạn 2 ngày']
   },
   {
     id: 'RNT-TEST-RENEW-AFTER-2D',
     holdId: 'RSV-TEST-RENEW-AFTER-2D',
-    unitId: 'B-210',
+    unitId: 'HCM-Q1-F01-M-004',
     facilityId: 'fac-001',
     facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'demo-customer',
@@ -659,10 +668,9 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
   }
 ]
 
-const mergeRenewalTestRentals = (rentals: RentalRecord[]) => [
-  ...RENEWAL_TEST_RENTALS.filter(sample => !rentals.some(rental => rental.id === sample.id)),
-  ...rentals
-]
+const RETIRED_EXPIRY_TEST_RENTAL_IDS = new Set(RENEWAL_TEST_RENTALS.map(rental => rental.id))
+const RETIRED_EXPIRY_TEST_RESERVATION_IDS = new Set(RENEWAL_TEST_RENTALS.map(rental => rental.holdId))
+const mergeRenewalTestRentals = (rentals: RentalRecord[]) => rentals.filter(rental => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(rental.id))
 
 // Older browser snapshots may contain a facility display name copied from a
 // customer profile. The physical unit is the authoritative source for the
@@ -675,7 +683,6 @@ const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(renta
 })
 
 const INITIAL_RENTALS: RentalRecord[] = [
-  ...RENEWAL_TEST_RENTALS,
   {
     id: 'RNT-INIT-PREV',
     holdId: 'RSV-INIT-PREV',
@@ -790,6 +797,8 @@ const INITIAL_RETURNS: ReturnCase[] = [
     customerConfirmed: false
   }
 ]
+
+const mergeRenewalTestContracts = (contracts: StorageContract[]) => contracts.filter(contract => !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(contract.reservationId))
 
 const INITIAL_CONTRACTS: StorageContract[] = [
   {
@@ -1058,6 +1067,7 @@ interface StorageHubContextValue extends StorageHubState {
   respondSupportTicket: (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => void
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
   createSupportTicket: (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string, customer: User) => void
+  deleteResolvedSupportTicket: (ticketId: string, customer: User) => void
   registerCustomer: (params: { name: string; email: string; phone?: string }) => User
   createInternalAccount: (params: { name: string; email: string; phone?: string; role: CompanyRole; facility?: string }, actor: User) => User
   createCustomerSupportAccount: (params: { name: string; email: string; phone?: string; facility?: string; reason: string }, actor: User) => User
@@ -1164,12 +1174,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilities: Array.isArray(parsed.facilities) && parsed.facilities.length ? normalizeStoredFacilities(parsed.facilities as Facility[]) : INITIAL_FACILITIES,
           users: normalizeUsers(parsed.users),
           rolePermissions: normalizeRolePermissions(parsed.rolePermissions),
-          units: (Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS).map(unit => unit.currentRentalId === 'RNT-9654' ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654') } : unit),
+          units: (Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS).map(unit => unit.currentRentalId === 'RNT-9654' || (unit.currentRentalId && RETIRED_EXPIRY_TEST_RENTAL_IDS.has(unit.currentRentalId)) ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(period.reservationId)) } : unit),
           holds: normalizedHolds,
-          contracts: Array.isArray(parsed.contracts) ? parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654') : INITIAL_CONTRACTS,
-payments: Array.isArray(parsed.payments) ? parsed.payments.filter((payment: StoragePayment) => payment.reservationId !== 'RSV-9654' && payment.rentalId !== 'RNT-9654') : [],
+          contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654')) : INITIAL_CONTRACTS,
+payments: Array.isArray(parsed.payments) ? parsed.payments.filter((payment: StoragePayment) => payment.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(payment.reservationId) && payment.rentalId !== 'RNT-9654' && (!payment.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(payment.rentalId))) : [],
 renewals: Array.isArray(parsed.renewals)
-  ? parsed.renewals.map((renewal: RenewalRecord) => {
+  ? parsed.renewals.filter((renewal: RenewalRecord) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(renewal.rentalId)).map((renewal: RenewalRecord) => {
       const rental = Array.isArray(parsed.rentals)
         ? parsed.rentals.find(
             (item: RentalRecord) => item.id === renewal.rentalId
@@ -1189,13 +1199,13 @@ renewals: Array.isArray(parsed.renewals)
   : [],
 maintenanceTasks: parsed.maintenanceTasks || [],
 staffTasks: parsed.staffTasks || [],
-accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && credential.rentalId !== 'RNT-9654') : [],
+accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
 checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654') : []),
 rentals: Array.isArray(parsed.rentals)
   ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654')))
   : INITIAL_RENTALS,
-          returns: Array.isArray(parsed.returns) ? parsed.returns : [],
-          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId)) : INITIAL_ACTIVITIES,
+          returns: Array.isArray(parsed.returns) ? parsed.returns.filter((returnCase: ReturnCase) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(returnCase.rentalId)) : [],
+          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId) && !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(activity.entityId) && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(activity.entityId)) : INITIAL_ACTIVITIES,
           loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
           sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
           securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : INITIAL_SECURITY_ALERTS,
@@ -2497,6 +2507,10 @@ rentals: Array.isArray(parsed.rentals)
     if (![1, 3, 6, 12].includes(renewalMonths)) throw new Error('Gói gia hạn không hợp lệ.')
     if (state.renewals.some(item => item.rentalId === rentalId && ['pending', 'approved', 'deposit_paid', 'appointment_scheduled', 'payment_processing'].includes(item.status))) throw new Error('Hợp đồng đã có một yêu cầu gia hạn đang chờ xử lý.')
     const requestedEndDate = addCalendarMonths(rental.endDate, renewalMonths)
+    const grossRenewalAmount = rental.monthlyRate * renewalMonths
+    const discountRate = renewalMonths === 6 ? 0.03 : renewalMonths === 12 ? 0.05 : 0
+    const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
+    const renewalTotal = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
 
     const renewalRecord: RenewalRecord = {
       id: `RNW-${Date.now().toString().slice(-6)}`,
@@ -2508,11 +2522,13 @@ rentals: Array.isArray(parsed.rentals)
       oldEndDate: rental.endDate,
       newEndDate: requestedEndDate,
       renewalMonths,
-      renewalFee: rental.monthlyRate * renewalMonths,
+      renewalFee: renewalTotal,
       originalMonthlyRate: rental.monthlyRate,
-      totalAmount: rental.monthlyRate * renewalMonths,
-      bookingDepositAmount: Math.round(rental.monthlyRate * renewalMonths * 0.2 * 100) / 100,
-      remainingAmount: Math.round(rental.monthlyRate * renewalMonths * 0.8 * 100) / 100,
+      discountRate,
+      discountAmount,
+      totalAmount: renewalTotal,
+      bookingDepositAmount: Math.round(renewalTotal * 0.2 * 100) / 100,
+      remainingAmount: Math.round(renewalTotal * 0.8 * 100) / 100,
       status: 'pending',
       requestedAt: new Date().toISOString()
     }
@@ -2550,10 +2566,13 @@ rentals: Array.isArray(parsed.rentals)
     if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn ở trạng thái hoạt động.')
     const updatedAt = new Date().toISOString()
     const newEndDate = addCalendarMonths(rental.endDate, renewalMonths)
-    const totalAmount = rental.monthlyRate * renewalMonths
+    const grossRenewalAmount = rental.monthlyRate * renewalMonths
+    const discountRate = renewalMonths === 6 ? 0.03 : renewalMonths === 12 ? 0.05 : 0
+    const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
+    const totalAmount = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, oldEndDate: rental.endDate, newEndDate, renewalMonths, renewalFee: totalAmount, totalAmount, bookingDepositAmount: Math.round(totalAmount * 0.2 * 100) / 100, remainingAmount: Math.round(totalAmount * 0.8 * 100) / 100, originalMonthlyRate: rental.monthlyRate, updatedAt } : item),
+      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, oldEndDate: rental.endDate, newEndDate, renewalMonths, renewalFee: totalAmount, discountRate, discountAmount, totalAmount, bookingDepositAmount: Math.round(totalAmount * 0.2 * 100) / 100, remainingAmount: Math.round(totalAmount * 0.8 * 100) / 100, originalMonthlyRate: rental.monthlyRate, updatedAt } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_UPDATED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: `Khách đã sửa yêu cầu ${renewal.id}: gia hạn ${renewalMonths} tháng, đến ${newEndDate}. Manager cần xét duyệt theo thông tin mới.`, timestamp: updatedAt }, ...prev.activities]
     }))
   }
@@ -3640,6 +3659,18 @@ rentals: Array.isArray(parsed.rentals)
     }))
   }
 
+  const deleteResolvedSupportTicket = (ticketId: string, customer: User) => {
+    assertPermission(customer, 'view_support')
+    if (customer.role !== 'customer') throw new Error('Chỉ khách hàng được xóa yêu cầu hỗ trợ của mình.')
+    const ticket = state.tickets.find(item => item.id === ticketId)
+    if (!ticket || (ticket.email !== customer.email && ticket.customer !== customer.name)) throw new Error('Không tìm thấy yêu cầu hỗ trợ thuộc tài khoản này.')
+    if (ticket.status !== 'resolved') throw new Error('Chỉ có thể xóa yêu cầu đã được giải quyết.')
+    setState(prev => ({
+      ...prev,
+      tickets: prev.tickets.filter(item => item.id !== ticketId)
+    }))
+  }
+
   const confirmReturnSettlement = (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => {
     assertPermission(customer, 'process_returns')
     const returnCase = state.returns.find(r => r.id === returnId)
@@ -3958,6 +3989,7 @@ rentals: Array.isArray(parsed.rentals)
     respondSupportTicket,
     replySupportTicket,
     createSupportTicket,
+    deleteResolvedSupportTicket,
     registerCustomer,
     createInternalAccount,
     createCustomerSupportAccount,
