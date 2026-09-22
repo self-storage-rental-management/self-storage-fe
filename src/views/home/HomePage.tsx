@@ -129,18 +129,20 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
 
   // Keep live availability from the shared store while sourcing all display
   // metadata from the canonical demo catalog.
-  const facilitiesList = FACILITIES.map(seed => {
-    const runtime = contextFacilities.find(item => item.id === seed.id)
-    const physicalAvailable = units.filter(unit => unit.facilityId === seed.id && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
-    const activeCapacityHolds = holds.filter(hold => hold.facilityId === seed.id && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
+  const facilitiesList = contextFacilities.map(f => {
+    const seed = FACILITIES.find(item => item.id === f.id)
+    const facCode = f.code || seed?.code || f.id.toUpperCase()
+    const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
+    const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
     return {
       ...seed,
-      ...runtime,
-      code: seed.code,
-      name: seed.name,
-      address: seed.address,
-      city: seed.city,
-      price: seed.price,
+      ...f,
+      code: facCode,
+      name: f.name,
+      address: f.address,
+      city: f.city,
+      price: f.price ?? seed?.price ?? 150,
+      units: f.units ?? seed?.units ?? units.filter(u => u.facilityId === f.id || (f.code && u.facilityId === f.code)).length,
       available: Math.max(0, physicalAvailable - activeCapacityHolds),
     }
   })

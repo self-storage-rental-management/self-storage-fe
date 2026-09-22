@@ -62,7 +62,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       return
     }
     recordLoginAttempt({ email: normalizedEmail, userId: demoUser.id, success: true })
-    onLogin(demoUser)
+    onLogin(demoUser as unknown as User)
   }
 
   function handleGoogleCustomerLogin(googleUser: { name: string; email: string }) {
