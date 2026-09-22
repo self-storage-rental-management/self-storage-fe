@@ -41,6 +41,23 @@ function KeyIcon({ className = "w-5 h-5" }: { className?: string }) {
   )
 }
 
+function TruckIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8h4l3 3v5a1 1 0 01-1 1h-1m-4 0h-2" />
+    </svg>
+  )
+}
+
+function LayersIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+    </svg>
+  )
+}
+
 function ArrowRightIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -326,79 +343,162 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             </div>
 
             {/* Right Column: Live Operational Graphic */}
-            <div className="lg:col-span-5 bg-gradient-to-br from-stone-900 to-[#2A2B26] text-white rounded-xl border border-stone-700 p-6 flex flex-col justify-between shadow-2xl">
+            <div className="lg:col-span-5 relative overflow-hidden bg-gradient-to-br from-[#1C1D20] via-[#18191C] to-[#121315] text-white rounded-2xl border border-stone-700/80 p-5 sm:p-6 flex flex-col justify-between shadow-2xl">
+              {/* Decorative ambient glows */}
+              <div className="absolute -top-16 -right-16 w-44 h-44 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
               {/* Graphic Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-stone-700 text-xs font-mono">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-semibold text-stone-200 uppercase tracking-wide">MẠNG LƯỚI VẬN HÀNH KHO</span>
+              <div className="relative flex items-center justify-between pb-3.5 border-b border-stone-800 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </span>
+                  <span className="font-bold text-stone-200 uppercase tracking-wider text-xs">MẠNG LƯỚI VẬN HÀNH KHO</span>
                 </div>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-bold border border-emerald-500/30">HOẠT ĐỘNG</span>
+                <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold border border-emerald-500/30 flex items-center gap-1.5 tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  HOẠT ĐỘNG
+                </span>
               </div>
 
               {/* Graphic Unit Tiers */}
-              <div className="my-5 space-y-3 font-mono">
-                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[#E89520]">
+              <div className="relative my-4 space-y-2.5">
+                {/* Small */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-amber-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
                       <BoxIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                       <div className="text-xs font-bold text-white">Gian Nhỏ (Small · 33,6 m²)</div>
-                       <div className="text-[11px] text-stone-400">107,52 m³ · Khóa PIN điện tử</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors whitespace-nowrap">
+                          Gian Nhỏ (Small)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          33,6 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        107,52 m³ · Khóa PIN điện tử
+                      </div>
                     </div>
                   </div>
-                   <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 5.500.000 ₫</span>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 5.500.000 ₫
+                    </span>
+                  </div>
                 </div>
 
-                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                {/* Medium */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-sky-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-105 transition-transform">
                       <WarehouseIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                       <div className="text-xs font-bold text-white">Gian Vừa (Medium · 57,6 m²)</div>
-                       <div className="text-[11px] text-stone-400">195,84 m³ · 24/7 ra vào</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors whitespace-nowrap">
+                          Gian Vừa (Medium)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          57,6 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        195,84 m³ · 24/7 ra vào tự do
+                      </div>
                     </div>
                   </div>
-                   <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 9.500.000 ₫</span>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 9.500.000 ₫
+                    </span>
+                  </div>
                 </div>
 
-                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                      <KeyIcon className="w-5 h-5" />
+                {/* Large */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-indigo-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <TruckIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                       <div className="text-xs font-bold text-white">Kho Lớn (Large · 91,8 m²)</div>
-                       <div className="text-[11px] text-stone-400">330,48 m³ · Xe tải bốc dỡ</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-indigo-300 transition-colors whitespace-nowrap">
+                          Kho Lớn (Large)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          91,8 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        330,48 m³ · Cửa xe tải bốc dỡ
+                      </div>
                     </div>
                   </div>
-                   <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 15.000.000 ₫</span>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 15.000.000 ₫
+                    </span>
+                  </div>
                 </div>
 
-                <div className="bg-[#1C1D1A] p-3.5 rounded-lg border border-stone-700 flex items-center justify-between hover:border-amber-500/50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                      <KeyIcon className="w-5 h-5" />
+                {/* Extra Large */}
+                <div
+                  onClick={() => setActiveModal('unit_types')}
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-purple-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  title="Nhấn để xem thông số chi tiết"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <LayersIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-white">Gian Rất Lớn (Extra Large · 136,8 m²)</div>
-                      <div className="text-[11px] text-stone-400">547,2 m³ · Pallet và máy móc</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-purple-300 transition-colors whitespace-nowrap">
+                          Gian Rất Lớn (XL)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+                          136,8 m²
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-400 truncate mt-0.5">
+                        547,2 m³ · Pallet & tải trọng nặng
+                      </div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-[#E89520] bg-amber-500/10 px-2 py-1 rounded">Từ 22.500.000 ₫</span>
+                  <div className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+                      Từ 22.500.000 ₫
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Graphic Bottom Status */}
-              <div className="pt-3 border-t border-stone-700 flex items-center justify-between text-[11px] text-stone-400">
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheckIcon className="w-4 h-4 text-emerald-400" />
-                  <span>Bảo vệ & Giám sát CCTV</span>
+              <div className="relative pt-3.5 border-t border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
+                <span className="flex items-center gap-1.5 text-stone-300 font-medium">
+                  <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Bảo vệ & Giám sát CCTV 24/7</span>
                 </span>
-                 <span className="font-mono font-semibold text-stone-300">HCM-Q1-F01 · BD-F01</span>
+                <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60">
+                  HCM-Q1 · BD-F01
+                </span>
               </div>
             </div>
 
