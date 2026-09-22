@@ -6,10 +6,6 @@ import type { User } from '../../types'
 import type { CheckInRecord, Facility, ReturnCase, StorageReservation, StorageUnit } from '../../types/storageHub'
 import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
 import { useStorageHub } from '../../store/StorageHubContext'
-import type { User } from '../../types'
-import type { CheckInRecord, Facility, StorageReservation, StorageUnit } from '../../types/storageHub'
-import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
-import { useStorageHub } from '../../store/StorageHubContext'
 import { isFacilityVisible } from '../../domain/managerRules'
 
 type ReservationStatus = 'CREATED' | 'REVIEW_REQUIRED' | 'AWAITING_DEPOSIT' | 'DEPOSIT_PAID' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED'
@@ -102,49 +98,6 @@ const mapSharedReservation = (reservation: StorageReservation, units: StorageUni
     appointmentDate,
     appointmentTime: reservation.appointmentTime || '09:00',
     checkInDeadline: reservation.checkInDeadline || addDays(appointmentDate, 14),
-  }
-}
-
-const mapSharedCheckin = (
-  checkin: CheckInRecord,
-  reservation: StorageReservation | undefined,
-  unit: StorageUnit | undefined,
-  facility: Facility | undefined,
-): StaffCheckin | null => {
-  if (!reservation) return null
-  const appointmentDate = checkin.scheduledDate || reservation.appointmentDate || reservation.moveInDate
-  if (!appointmentDate) return null
-  const appointmentTime = checkin.scheduledTime || reservation.appointmentTime || '09:00'
-  const goods = reservation.goods
-  return {
-    id: checkin.id,
-    reservationId: checkin.holdId,
-    customer: checkin.customerName || reservation.customerName,
-    email: reservation.customerEmail,
-    phone: reservation.customerPhone,
-    identityId: reservation.identityId,
-    unit: unit?.code || checkin.unitId,
-    facility: facility?.name || reservation.facilityName,
-    date: appointmentDate,
-    time: appointmentTime,
-    status: checkin.status === 'completed'
-      ? 'completed'
-      : checkin.status === 'cancelled'
-        ? 'no-show'
-        : reservation.payment.status === 'paid' ? 'scheduled' : 'pending-payment',
-    goodsType: goods.category,
-    material: goods.material,
-    packageCount: goods.packageCount,
-    weightKg: goods.weightKg,
-    dimensionsCm: `${goods.lengthCm} × ${goods.widthCm} × ${goods.heightCm}`,
-    dimWeightKg: goods.dimWeightKg,
-    initialCondition: checkin.initialCondition || goods.condition,
-    evidence: [...reservation.evidence, ...checkin.evidencePhotos],
-    appointmentDate,
-    appointmentTime,
-    checkInDeadline: reservation.checkInDeadline || addDays(appointmentDate, 14),
-    scheduleChanged: false,
-    customerHandoverStatus: checkin.customerConfirmationTimestamp ? 'confirmed' : 'pending',
   }
 }
 
