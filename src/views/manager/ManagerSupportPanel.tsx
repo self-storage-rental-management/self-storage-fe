@@ -302,7 +302,7 @@ export default function ManagerSupportPanel({ user, showToast, sb }: ManagerSupp
             <div className="space-y-3 pt-2 border-t border-stone-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <label className="text-xs font-bold text-stone-800">
-                  {'Nội dung phản hồi từ Facility Manager:'}
+                  {'Nội dung phản hồi từ quản lý cơ sở:'}
                 </label>
                 <div className="flex items-center gap-2 justify-end">
                   <span className="text-xs text-stone-500">{'Cập nhật trạng thái:'}</span>

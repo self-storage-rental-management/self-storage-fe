@@ -47,7 +47,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
     <div className="fade-in space-y-6">
       <SectionHeader
         title={'Quy Định & Chính Sách Vận Hành Cơ Sở'}
-        subtitle={`${user.facility ?? 'Downtown Storage'} · ${
+        subtitle={`${user.facility ?? 'Kho Việt – Cơ sở Quận 1'} · ${
           'Quy chế lưu kho, quy trình leo thang nợ, an toàn PCCC và cấu hình thông số tự động hóa'
         }`}
         action={
