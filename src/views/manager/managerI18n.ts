@@ -1,4 +1,6 @@
-import type { Language } from '../../i18n/LanguageContext'
+// The old shared LanguageContext was removed; Manager labels only need the
+// two supported display languages and should remain independently type-safe.
+export type Language = 'en' | 'vi'
 
 const statusLabels: Record<string, { en: string; vi: string }> = {
   available: { en: 'Available', vi: 'Khả dụng' },

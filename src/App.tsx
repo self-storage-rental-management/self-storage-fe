@@ -24,10 +24,10 @@ function MainContent() {
         name: canonicalRecord.name,
         email: canonicalRecord.email,
         role: canonicalRecord.role as User['role'],
-        facility: canonicalRecord.facility
+        facility: canonicalRecord.facility,
+        facilityId: canonicalRecord.facilityId
       }
     : null
-
   const handleLogin = (nextUser: User) => {
     setSessionUserId(nextUser.id)
   }

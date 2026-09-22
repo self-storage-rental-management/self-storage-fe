@@ -4,6 +4,7 @@ import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
 import type { RentalRecord, StorageReservation, StorageUnit } from '../../types/storageHub'
 import { checkDateOverlap } from '../../store/StorageHubContext'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface ManagerUnitsPanelProps {
   user: User
@@ -37,8 +38,8 @@ export default function ManagerUnitsPanel({ user, storeHolds, storeUnits, storeR
   const [selectedUnitId, setSelectedUnitId] = useState('')
 
   const facilityReservations = useMemo(() => storeHolds.filter(reservation =>
-    !user.facility || user.facility === 'All facilities' || reservation.facilityName === user.facility || reservation.facilityId === user.facility
-  ), [storeHolds, user.facility])
+    isFacilityVisible(user, reservation.facilityId, reservation.facilityName)
+  ), [storeHolds, user])
 
   const filteredReservations = facilityReservations.filter(reservation => {
     const normalized = query.trim().toLowerCase()

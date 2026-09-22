@@ -1,4 +1,11 @@
 import type { RentalRecord, ReturnCase, StorageReservation, StorageUnit } from '../types/storageHub'
+import type { User } from '../types'
+
+/** Facility scope is keyed by ID; names remain a legacy fallback for old records. */
+export function isFacilityVisible(user: Pick<User, 'facility' | 'facilityId'>, facilityId?: string, facilityName?: string) {
+  if (!user.facility || user.facility === 'All facilities') return true
+  return facilityId === user.facilityId || facilityId === user.facility || facilityName === user.facility
+}
 
 export const ACTIVE_RESERVATION_STATUSES = ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'] as const
 

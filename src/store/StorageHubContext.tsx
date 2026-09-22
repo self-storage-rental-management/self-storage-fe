@@ -64,6 +64,7 @@ function normalizeUsers(value: unknown): StoredUser[] {
         // roles can only come from the provisioned account record/backend.
         role: seeded?.role ?? provisionedRole ?? 'customer',
         facility: seeded?.facility ?? candidate.facility,
+        facilityId: seeded?.facilityId ?? candidate.facilityId,
       } as StoredUser
     })
     .filter((candidate): candidate is StoredUser => candidate !== null)
@@ -578,6 +579,16 @@ const mergeRenewalTestRentals = (rentals: RentalRecord[]) => [
   ...rentals
 ]
 
+// Older browser snapshots may contain a facility display name copied from a
+// customer profile. The physical unit is the authoritative source for the
+// facility, so reconcile persisted rentals before renewal filtering/approval.
+const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(rental => {
+  const unit = INITIAL_UNITS.find(item => item.id === rental.unitId)
+  return unit
+    ? { ...rental, facilityId: unit.facilityId, facilityName: unit.facilityName }
+    : rental
+})
+
 const INITIAL_RENTALS: RentalRecord[] = [
   ...RENEWAL_TEST_RENTALS,
   {
@@ -975,12 +986,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           holds: normalizedHolds,
           contracts: parsed.contracts || INITIAL_CONTRACTS,
           payments: parsed.payments || [],
-          renewals: Array.isArray(parsed.renewals) ? parsed.renewals.map((renewal: RenewalRecord) => ({ ...renewal, renewalMonths: renewal.renewalMonths || 1 })) : [],
+          renewals: Array.isArray(parsed.renewals) ? parsed.renewals.map((renewal: RenewalRecord) => {
+            const rental = Array.isArray(parsed.rentals) ? parsed.rentals.find((item: RentalRecord) => item.id === renewal.rentalId) : undefined
+            const unit = INITIAL_UNITS.find(item => item.id === (rental?.unitId || renewal.unitId))
+            return {
+              ...renewal,
+              renewalMonths: renewal.renewalMonths || 1,
+              facilityId: unit?.facilityId || rental?.facilityId || renewal.facilityId
+            }
+          }) : [],
           maintenanceTasks: parsed.maintenanceTasks || [],
           staffTasks: parsed.staffTasks || [],
           accessCredentials: parsed.accessCredentials || [],
           checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins : INITIAL_CHECKINS),
-          rentals: Array.isArray(parsed.rentals) ? mergeRenewalTestRentals(parsed.rentals) : INITIAL_RENTALS,
+          rentals: Array.isArray(parsed.rentals) ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals)) : INITIAL_RENTALS,
           returns: Array.isArray(parsed.returns) ? mergeReturnTestCases(parsed.returns) : INITIAL_RETURNS,
           activities: parsed.activities || INITIAL_ACTIVITIES,
           tickets: parsed.tickets || TICKETS,
@@ -1820,9 +1839,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const payRemainingBalance = (holdId: string, staffUser: User, paymentMethod: string) => {
     const reservation = state.holds.find(h => h.id === holdId)
     const amount = reservation?.remainingAmount || 0
+    const normalizedMethod = paymentMethod.trim().toUpperCase()
+    const mappedMethod = normalizedMethod.includes('BANK') || normalizedMethod.includes('TRANSFER') || paymentMethod.includes('Chuyển khoản')
+      ? 'BANK_TRANSFER'
+      : normalizedMethod.includes('ONLINE') || normalizedMethod.includes('GATEWAY')
+        ? 'ONLINE_GATEWAY'
+        : 'CASH'
     recordRemainingPayment(holdId, staffUser, {
       amount,
-      paymentMethod: paymentMethod.includes('Chuyển khoản') ? 'BANK_TRANSFER' : 'CASH',
+      paymentMethod: mappedMethod,
       transactionReference: `REF-${Date.now().toString().slice(-6)}`
     })
   }
@@ -2540,7 +2565,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung phản hồi.')
     const ticket = state.tickets.find(item => item.id === ticketId)
     if (!ticket) throw new Error('Không tìm thấy yêu cầu hỗ trợ.')
-    if (staffUser.facility && staffUser.facility !== 'All facilities' && staffUser.facility !== ticket.facility && staffUser.facility !== ticket.facilityId) throw new Error('Bạn không có quyền xử lý yêu cầu của cơ sở khác.')
+    if (staffUser.facility && staffUser.facility !== 'All facilities' && staffUser.facilityId !== ticket.facilityId && staffUser.facility !== ticket.facility && staffUser.facility !== ticket.facilityId) throw new Error('Bạn không có quyền xử lý yêu cầu của cơ sở khác.')
     const now = new Date().toISOString()
     setState(prev => ({
       ...prev,
