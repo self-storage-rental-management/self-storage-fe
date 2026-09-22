@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar } from '../../components/ui'
 import { formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
@@ -6,7 +6,7 @@ import type { User } from '../../types'
 import type { Facility, StorageUnit, StorageHold, UnitType } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
-import { FACILITIES, type TicketItem } from '../../data/demoDatabase'
+import type { TicketItem } from '../../data/demoDatabase'
 
 const CUSTOMER_FACILITY_DISPLAY: Record<string, { code: string; name: string; address: string }> = Object.fromEntries(
   FACILITIES.map(facility => [facility.id, { code: facility.code, name: facility.name, address: facility.address }])
@@ -344,6 +344,61 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     deleteResolvedSupportTicket
   } = useStorageHub()
 
+  const CUSTOMER_FACILITY_DISPLAY = useMemo(() => {
+    const map: Record<string, { code: string; name: string; address: string }> = {}
+    for (const f of facilities) {
+      map[f.id] = { code: f.code || f.id.toUpperCase(), name: f.name, address: f.address }
+      if (f.code) {
+        map[f.code] = { code: f.code, name: f.name, address: f.address }
+      }
+    }
+    return new Proxy(map, {
+      get(target, prop: string) {
+        if (prop in target) return target[prop]
+        const found = facilities.find(f => f.id === prop || f.code === prop)
+        if (found) {
+          return { code: found.code || found.id.toUpperCase(), name: found.name, address: found.address }
+        }
+        return { code: String(prop).toUpperCase(), name: String(prop), address: '' }
+      }
+    })
+  }, [facilities])
+
+  const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = useMemo(() => {
+    return units.map(unit => {
+      let sizeCode: CustomerCatalogUnit['sizeCode'] = 'M'
+      if (unit.type === 'Small' || unit.code.includes('-S-') || unit.code.includes('-S')) sizeCode = 'S'
+      else if (unit.type === 'Large' || unit.code.includes('-L-') || unit.code.includes('-L')) sizeCode = 'L'
+      else if (unit.type === 'Extra Large' || unit.code.includes('-XL-') || unit.code.includes('-XL')) sizeCode = 'XL'
+      else if (unit.type === 'Medium' || unit.code.includes('-M-') || unit.code.includes('-M')) sizeCode = 'M'
+
+      const spec = CUSTOMER_UNIT_SPECS[sizeCode]
+      const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
+      const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
+      const [lengthM, widthM, heightM] = spec.dimensions
+
+      return {
+        ...unit,
+        facilityName,
+        sizeCode,
+        rackCount: spec.rackCount,
+        rackDimensions: '0,8×2,0 m',
+        aisleWidthM: spec.aisleWidthM,
+        smallBoxCapacity: spec.smallBoxCapacity,
+        largeBoxCapacity: spec.largeBoxCapacity,
+        trolley: spec.trolley,
+        dimensions: unit.dimensions || { lengthM, widthM, heightM },
+        doorDimensions: unit.doorDimensions || { widthM: 2, heightM: 2.4 },
+        volumeM3: unit.volumeM3 || spec.volumeM3,
+        maxLoadKg: unit.maxLoadKg || spec.maxLoadKg,
+        price: unit.price || spec.price,
+        deposit: unit.deposit || unit.price || spec.price,
+        allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
+        prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+      }
+    })
+  }, [units, facilities])
+
   const NAV: NavItem[] = [
     { id: 'overview', label: 'Tổng quan', icon: Icon.home, group: 'Kho của tôi', permission: 'view_dashboard' },
     { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'view_facilities' },
@@ -614,9 +669,12 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     return hold.status === 'DEPOSIT_PAID'
   })
   const effectiveAvailableCount = (facilityId: string, unitTypeName?: string) => {
-    const physical = units.filter(unit => unit.facilityId === facilityId && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName))).length
-    const capacityHeld = activeUnassignedCapacityHolds.filter(hold => hold.facilityId === facilityId && (!unitTypeName || unitTypeMatches(hold.unitTypeName, unitTypeName))).length
-    return Math.max(0, physical - capacityHeld)
+    const facCode = facilities.find(f => f.id === facilityId)?.code
+    const physical = units.filter(unit => (unit.facilityId === facilityId || (facCode && unit.facilityId === facCode)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName))).length
+    const capacityHeld = activeUnassignedCapacityHolds.filter(hold => (hold.facilityId === facilityId || (facCode && hold.facilityId === facCode)) && (!unitTypeName || unitTypeMatches(hold.unitTypeName, unitTypeName))).length
+    const heldType = temporaryHoldTarget ? unitTypes.find(type => type.id === temporaryHoldTarget.unitTypeId) : undefined
+    const temporaryHeld = hasActiveTemporarySlot && (temporaryHoldTarget?.facilityId === facilityId || (facCode && temporaryHoldTarget?.facilityId === facCode)) && (!unitTypeName || Boolean(heldType && unitTypeMatches(heldType.name, unitTypeName))) ? 1 : 0
+    return Math.max(0, physical - capacityHeld - temporaryHeld)
   }
   const contractExpiryNotifications = myRentals.flatMap(rental => {
     if (rental.status !== 'active') return []
@@ -697,7 +755,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
   const selectedFacility = facilities.find(facility => facility.id === selectedFacilityId) ?? null
   const availableUnits = units.filter(unit =>
-    (!selectedFacility || unit.facilityName === selectedFacility.name || unit.facilityId === selectedFacility.id) &&
+    (!selectedFacility || unit.facilityName === selectedFacility.name || unit.facilityId === selectedFacility.id || unit.facilityId === selectedFacility.code) &&
     (sizeFilter === 'All' || unit.type === sizeFilter)
   )
   const matchingFacilities = facilities.filter(facility => {
@@ -1247,7 +1305,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             {matchingFacilities.map(facility => {
-               const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => unit.facilityId === facility.id && physicalUnitByCode.has(unit.code))
+               const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => (unit.facilityId === facility.id || unit.facilityId === facility.code) && physicalUnitByCode.has(unit.code))
                const availCount = effectiveAvailableCount(facility.id)
               const minimumMonthlyPrice = facilityCatalogUnits.length ? Math.min(...facilityCatalogUnits.map(unit => unit.price)) : null
               const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
@@ -1258,7 +1316,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               return (
                 <Card key={facility.id} className="overflow-hidden stat-card-hover">
                   <div className="relative h-44 bg-stone-200">
-                    <img src={CUSTOMER_FACILITY_IMAGE_BY_ID[facility.id] ?? `https://images.unsplash.com/${facility.image}?w=720&h=352&fit=crop&auto=format`} alt={`Hình ảnh ${displayName}`} className="h-full w-full object-cover" />
+                    <img src={facility.image?.startsWith('http') ? facility.image : `https://images.unsplash.com/${facility.image || 'photo-1586528116311-ad8dd3c8310d'}?w=720&h=352&fit=crop&auto=format`} alt={`${displayName} storage facility`} className="h-full w-full object-cover" />
                     <div className="absolute left-3 top-3 z-10">
                       <span className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-extrabold backdrop-blur-sm ${availCount > 0 ? 'border-emerald-300 bg-emerald-700/95 text-white shadow-[0_8px_22px_rgba(4,120,87,0.55)]' : 'border-red-300 bg-red-700/95 text-white shadow-[0_8px_22px_rgba(185,28,28,0.5)]'}`}>
                         {availCount} {'gian kho còn trống'}
@@ -1328,7 +1386,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant={!selectedFacilityId ? 'primary' : 'outline'} onClick={() => setSelectedFacilityId(null)}>Tất cả cơ sở</Button>
-                {facilities.map(facility => <Button key={facility.id} size="sm" variant={selectedFacilityId === facility.id ? 'primary' : 'outline'} onClick={() => setSelectedFacilityId(facility.id)}>{facility.id === 'fac-001' ? 'Xem kho Hồ Chí Minh' : 'Xem kho Bình Dương'}</Button>)}
+                {facilities.map(facility => <Button key={facility.id} size="sm" variant={selectedFacilityId === facility.id ? 'primary' : 'outline'} onClick={() => setSelectedFacilityId(facility.id)}>{facility.id === 'fac-001' ? 'Xem kho Hồ Chí Minh' : facility.id === 'fac-002' ? 'Xem kho Bình Dương' : `Xem kho ${facility.name}`}</Button>)}
               </div>
               <label className="relative ml-auto block w-full lg:w-[420px]"><span className="sr-only">Tìm kiếm kho</span><input value={unitSearch} onChange={event => setUnitSearch(event.target.value)} placeholder="Tìm theo mã kho hoặc size S, M, L, XL..." className="w-full rounded-xl border border-stone-300 py-2.5 pl-10 pr-4 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200" /><span className="pointer-events-none absolute left-3 top-3 text-stone-400">{SearchIcon}</span></label>
             </div>
@@ -1340,7 +1398,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 const heldIds = customerHeldUnitIds
                 const rentedIds = customerRentedUnitIds
                 const matchingCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit =>
-                   unit.facilityId === facility.id &&
+                   (unit.facilityId === facility.id || unit.facilityId === facility.code) &&
                    Boolean(physicalUnitByCode.get(unit.code)) &&
                    (physicalUnitByCode.get(unit.code)?.status === 'available' || heldIds.has(unit.id)) &&
                    !rentedIds.has(unit.id) &&
@@ -1393,7 +1451,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                               <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Kích thước D×R×C</p><b className="mt-1 block text-stone-950">{unit.dimensions.lengthM}×{unit.dimensions.widthM}×{unit.dimensions.heightM} m</b></div>
                               <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Thể tích kho</p><b className="mt-1 block text-stone-950">{unit.volumeM3.toLocaleString('vi-VN')} m³</b></div>
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold"><span className="rounded-full bg-sky-50 px-3 py-1.5 text-sky-800">❄ Có máy lạnh</span><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800">● An ninh 24/7</span><span className="rounded-full bg-rose-50 px-3 py-1.5 text-rose-800">PCCC tự động</span></div>
+                            <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold">{unit.climate ? <span className="rounded-full bg-sky-50 px-3 py-1.5 text-sky-800">❄ Có máy lạnh</span> : <span className="rounded-full bg-stone-100 px-3 py-1.5 text-stone-700">Thông gió tự nhiên</span>}<span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800">● An ninh 24/7</span><span className="rounded-full bg-rose-50 px-3 py-1.5 text-rose-800">PCCC tự động</span></div>
                             <div className="mt-5 border-t border-stone-200 pt-4"><p className="text-xs text-stone-500">Giá thuê mỗi tháng</p><p className="mt-0.5 text-2xl font-extrabold text-stone-950">{formatVnd(unit.price)}<span className="text-xs font-normal text-stone-500">/tháng</span></p><p className="mt-1 text-[11px] font-medium text-amber-800">Cọc trước 20% tổng giá trị kỳ thuê</p></div>
                           <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
                             <Button size="sm" variant="outline" onClick={() => handleOpenSpecs(facility, unitType, isHeld ? 0 : 1, displayUnit)}>Xem chi tiết</Button>

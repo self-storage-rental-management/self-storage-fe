@@ -17,6 +17,16 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
   // Local editable state for business configuration parameters
   const [formConfig, setFormConfig] = useState<BusinessConfig>(storeConfig)
   const [isSaving, setIsSaving] = useState(false)
+  const [policiesList] = useState<Array<{ id: string; name: string; value: string; scope: string; editable?: boolean }>>(() => {
+    try {
+      const stored = localStorage.getItem('storagehub:policies')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return POLICIES
+  })
 
   useEffect(() => {
     setFormConfig(storeConfig)
@@ -208,7 +218,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
             </tr>
           </Thead>
           <Tbody>
-            {POLICIES.map(p => (
+            {policiesList.map(p => (
               <Tr key={p.id}>
                 <Td>
                   <span className="font-bold text-sm text-stone-900">{p.name}</span>

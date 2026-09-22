@@ -81,6 +81,7 @@ const mapSharedReservation = (reservation: StorageReservation, units: StorageUni
     facility: reservation.facilityName,
     facilityAddress: facility?.address || '—',
     size: assignedUnit?.areaM2 || matchingTypeUnit?.areaM2 || 0,
+    sizeCode: assignedUnit?.type || matchingTypeUnit?.type || reservation.unitTypeName || 'Standard',
     sizeUnit: 'm²',
     moveIn: appointmentDate,
     payment: reservation.payment.status === 'paid' ? 'paid' : 'pending',
