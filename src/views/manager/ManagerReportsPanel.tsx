@@ -5,6 +5,7 @@ import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
 import type { ActivityRecord, RentalRecord, StoragePayment, StorageReservation, StorageUnit } from '../../types/storageHub'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface Props {
   user: User
@@ -22,7 +23,7 @@ function escapeCsv(value: unknown) {
 }
 
 export default function ManagerReportsPanel({ user, units, reservations, rentals, payments, activities, showToast }: Props) {
-    const facilityUnits = useMemo(() => units.filter(unit => !user.facility || user.facility === 'All facilities' || unit.facilityName === user.facility || unit.facilityId === user.facility), [units, user.facility])
+    const facilityUnits = useMemo(() => units.filter(unit => isFacilityVisible(user, unit.facilityId, unit.facilityName)), [units, user])
   const facilityIds = new Set(facilityUnits.map(unit => unit.facilityId))
   const facilityReservations = reservations.filter(item => facilityIds.has(item.facilityId))
   const facilityRentals = rentals.filter(item => facilityIds.has(item.facilityId))

@@ -76,13 +76,14 @@ interface LayoutProps {
   roleLabel: string
   roleColor: string
   notifications?: LayoutNotification[]
+  additionalNotifications?: LayoutNotification[]
   onNotificationClick?: (notification: LayoutNotification) => void
   canAccess?: (permission: PermissionKey) => boolean
 }
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, onNotificationClick, canAccess
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
 }: LayoutProps) {
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -246,7 +247,10 @@ export default function Layout({
       message: item.timeVi,
       page: item.page
     }))
-  const notifications = suppliedNotifications ?? fallbackNotifications
+  const notifications = [
+    ...(suppliedNotifications ?? fallbackNotifications),
+    ...(additionalNotifications ?? [])
+  ]
   const unreadCount = notifications.filter(item => !badgeSeenNotificationIds.includes(item.id)).length
 
   const formatNotificationDate = (value?: string) => {

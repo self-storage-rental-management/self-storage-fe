@@ -4,6 +4,7 @@ import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
 import type { MaintenanceTask, StorageUnit } from '../../types/storageHub'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface Props {
   user: User
@@ -22,7 +23,7 @@ export default function ManagerInventoryPanel({ user, units, maintenanceTasks, u
   const [targetStatus, setTargetStatus] = useState<'available' | 'maintenance'>('maintenance')
   const [reason, setReason] = useState('')
 
-  const facilityUnits = useMemo(() => units.filter(unit => !user.facility || user.facility === 'All facilities' || unit.facilityName === user.facility || unit.facilityId === user.facility), [units, user.facility])
+  const facilityUnits = useMemo(() => units.filter(unit => isFacilityVisible(user, unit.facilityId, unit.facilityName)), [units, user])
   const visibleUnits = facilityUnits.filter(unit => {
     const normalized = query.trim().toLowerCase()
     return (filter === 'all' || unit.status === filter) && (!normalized || [unit.code, unit.type, unit.zone].some(value => value.toLowerCase().includes(normalized)))

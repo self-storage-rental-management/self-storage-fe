@@ -42,6 +42,8 @@ export interface User {
   role: Role
   avatar?: string
   facility?: string
+  /** Stable facility key used for authorization and cross-screen filtering. */
+  facilityId?: string
 }
 
 export type LoginEventStatus = 'success' | 'failed' | 'logout'

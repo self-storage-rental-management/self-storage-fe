@@ -4,6 +4,7 @@ import { Icon } from '../../components/Layout'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { CheckInRecord } from '../../types/storageHub'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface ManagerCheckinsPanelProps {
   user: User
@@ -20,9 +21,8 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
 
   // Filter checkins by facility (either match checkin.facilityId or unit's facility)
   const facilityCheckins = storeCheckins.filter(c => {
-    if (!user.facility || user.facility === 'All facilities') return true
     const unit = storeUnits.find(u => u.id === c.unitId)
-    return (unit && unit.facilityName === user.facility) || c.facilityId === user.facility
+    return isFacilityVisible(user, c.facilityId || unit?.facilityId, unit?.facilityName)
   })
 
   const scheduledCount = facilityCheckins.filter(c => c.status === 'scheduled').length

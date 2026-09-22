@@ -29,7 +29,8 @@ function MainContent() {
         email: canonicalRecord.email,
         phone: canonicalRecord.phone,
         role: canonicalRecord.role as User['role'],
-        facility: canonicalRecord.facility
+        facility: canonicalRecord.facility,
+        facilityId: canonicalRecord.facilityId
       }
     : null
 
