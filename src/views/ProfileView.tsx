@@ -7,7 +7,55 @@ interface ProfileViewProps {
   onUpdateUser?: (updated: Partial<User>) => void
 }
 
+<<<<<<< Updated upstream
 export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
+=======
+function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  id
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label?: string
+  id?: string
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#e9a12c] focus:ring-offset-2 ${
+        checked ? 'bg-[#e9a12c]' : 'bg-stone-300'
+      }`}
+    >
+      <span className="sr-only">{label}</span>
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+}
+
+export default function ProfileView({ user }: ProfileViewProps) {
+  const {
+    sessions,
+    revokeSession,
+    revokeAllUserSessions,
+    updateCustomerProfile,
+    requestOwnPasswordReset,
+    submitProfileChangeRequest,
+    deleteOwnCustomerAccount
+  } = useStorageHub()
+  const staffText = (text: string) => user.role === 'staff' ? text.replace(/Admin\/HR/g, 'bộ phận quản trị và nhân sự').replace(/audit log/g, 'nhật ký kiểm toán').replace(/Email|email/g, 'thư điện tử') : text
+  const isCustomer = user.role === 'customer'
+  const isInternal = !isCustomer
+>>>>>>> Stashed changes
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile')
 
   // Form states
@@ -56,9 +104,46 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
       alert('Mật khẩu mới phải có ít nhất 6 ký tự')
       return
     }
+<<<<<<< Updated upstream
     if (newPassword !== confirmPassword) {
       alert('Mật khẩu xác nhận không khớp')
       return
+=======
+    try {
+      requestOwnPasswordReset(user)
+      showToast('Đã gửi yêu cầu đặt lại mật khẩu tới email của bạn.')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể tạo yêu cầu đổi mật khẩu.')
+    }
+  }
+
+  const handleSubmitProfileRequest = () => {
+    try {
+      submitProfileChangeRequest({ requestedFields: requestFields, reason: requestReason }, user)
+      setRequestModalOpen(false)
+      setRequestReason('')
+      showToast(staffText('Đã gửi yêu cầu chỉnh sửa tới Admin/HR.'))
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể gửi yêu cầu chỉnh sửa.')
+    }
+  }
+
+  const handleDeleteAccount = () => {
+    if (!isCustomer) return
+    setDeleteAccountConfirmationOpen(true)
+  }
+
+  const confirmDeleteAccount = () => {
+    try {
+      deleteOwnCustomerAccount(user)
+      setDeleteAccountConfirmationOpen(false)
+      showToast('Đã xoá tài khoản. Phiên đăng nhập sẽ kết thúc.')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể xoá tài khoản.')
+>>>>>>> Stashed changes
     }
     showToast('Chưa thể đổi mật khẩu: frontend chưa kết nối API xác thực.')
   }
@@ -200,6 +285,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<<<<<<< Updated upstream
                   <Input
                     label={'Số Điện Thoại Chính'}
                     value={phone}
@@ -227,6 +313,48 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
                   <Button type="submit" variant="primary">
                     {'Lưu Thay Đổi'}
+=======
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Họ và Tên</span>
+                    <span className="font-bold text-stone-900 text-base">{name}</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">{staffText("Địa Chỉ Email Công Tác")}</span>
+                    <span className="font-semibold text-stone-900 text-sm">{email}</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Số Điện Thoại Chính</span>
+                    <span className="font-semibold text-stone-900 text-sm">{phone || 'Chưa cập nhật'}</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Số CCCD / Hộ Chiếu</span>
+                    <span className="font-mono font-bold text-stone-900 text-sm">{idCard}</span>
+                  </div>
+
+                  <div className="sm:col-span-2 p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Địa Chỉ Thường Trú</span>
+                    <span className="text-stone-800 text-sm leading-relaxed">{address}</span>
+                  </div>
+
+                  <div className="sm:col-span-2 p-4 rounded-xl bg-stone-50 border border-stone-200/80">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Người Liên Hệ Khẩn Cấp (Tên & SĐT)</span>
+                    <span className="text-stone-800 text-sm font-medium">{emergencyContact}</span>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-500">
+                  <span>{staffText("Thông tin nhân sự được đồng bộ tập trung. Khi cần thay đổi, hãy gửi yêu cầu tới Admin/HR.")}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRequestModalOpen(true)}
+                    className="shrink-0 border-stone-300 hover:bg-stone-100 text-stone-800 cursor-pointer"
+                  >
+                    Gửi Yêu Cầu Chỉnh Sửa
+>>>>>>> Stashed changes
                   </Button>
                 </div>
               </form>
@@ -266,6 +394,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
               </div>
             </Card>
 
+<<<<<<< Updated upstream
             <Card className="p-5 bg-[#fbfaf6] border-dashed">
               <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-stone-500 mb-2">
                 {'Thẻ Ra Vào Kho Kỹ Thuật Số'}
@@ -283,6 +412,26 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 </p>
               </div>
             </Card>
+=======
+            {isInternal && (
+              <Card className="p-5 bg-[#fbfaf6] border-stone-200">
+                <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông Tin Tổ Chức</h3>
+                <p className="text-xs text-stone-600 leading-relaxed">{staffText("Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu audit log.")}</p>
+                <Button className="mt-4 w-full cursor-pointer" size="sm" onClick={() => setRequestModalOpen(true)}>
+                  Gửi Yêu Cầu Chỉnh Sửa
+                </Button>
+              </Card>
+            )}
+
+            {isCustomer && (
+              <Card className="p-5 bg-[#fbfaf6] border-stone-200">
+                <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-stone-500 mb-2">
+                  Bảo vệ tài khoản Khách hàng
+                </h3>
+                <p className="text-xs text-stone-600 leading-relaxed">Hồ sơ khách hàng được mã hóa và bảo mật theo tiêu chuẩn StorageHub. Bạn có thể yêu cầu đổi mật khẩu ở tab Bảo mật.</p>
+              </Card>
+            )}
+>>>>>>> Stashed changes
           </div>
         </div>
       )}
@@ -291,6 +440,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
       {activeTab === 'security' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+<<<<<<< Updated upstream
             {/* Password change */}
             <Card className="p-6">
               <div className="pb-4 mb-5 border-b border-stone-100">
@@ -301,6 +451,15 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                   {'Sử dụng mật khẩu mạnh có ít nhất 8 ký tự'}
                 </p>
               </div>
+=======
+            {isInternal ? (
+              /* Internal Staff / Manager / Business / Admin: Enterprise Security Card */
+              <Card className="p-6">
+                <div className="pb-4 mb-5 border-b border-stone-100">
+                  <h2 className="text-lg font-bold text-stone-900">Chính Sách Bảo Mật Tài Khoản Nội Bộ</h2>
+                  <p className="text-xs text-stone-500">{staffText("Tài khoản công tác được quản trị tập trung bởi bộ phận Quản Trị & Nhân Sự (Admin/HR)")}</p>
+                </div>
+>>>>>>> Stashed changes
 
               <form onSubmit={handleChangePassword} className="space-y-4">
                 <Input
@@ -416,6 +575,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 {'Bổ sung thêm lớp bảo mật bằng cách yêu cầu mã OTP từ ứng dụng Google Authenticator hoặc tin nhắn SMS khi đăng nhập.'}
               </p>
               <div className="pt-2">
+<<<<<<< Updated upstream
                 <Button
                   variant={twoFactorEnabled ? 'outline' : 'primary'}
                   size="sm"
@@ -434,6 +594,9 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                     ? ('Tắt Xác Thực 2FA')
                     : ('Kích Hoạt Bảo Mật 2FA')}
                 </Button>
+=======
+                <span className="text-xs text-stone-500 block">{staffText("Liên hệ Admin/HR để kích hoạt xác thực 2 bước.")}</span>
+>>>>>>> Stashed changes
               </div>
             </Card>
           </div>
@@ -458,8 +621,13 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                 <p className="font-semibold text-stone-800 text-sm">
                   {'Cảnh Báo Hóa Đơn & Tiền Thuê Kho'}
                 </p>
+<<<<<<< Updated upstream
                 <p className="text-xs text-stone-500">
                   {'Nhận nhắc nhở hạn thanh toán và hóa đơn điện tử qua email'}
+=======
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  {staffText('Nhận nhắc nhở hạn thanh toán và hóa đơn điện tử tự động qua email đã đăng ký')}
+>>>>>>> Stashed changes
                 </p>
               </div>
               <input
@@ -535,6 +703,101 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
           </div>
         </Card>
       )}
+<<<<<<< Updated upstream
+=======
+
+      <Modal closeLabel={user.role === 'staff' ? 'Đóng hộp thoại' : undefined} open={requestModalOpen && isInternal} onClose={() => setRequestModalOpen(false)} title="Gửi Yêu Cầu Chỉnh Sửa Hồ Sơ">
+        <div className="space-y-5">
+          <p className="text-xs text-stone-500 leading-relaxed">
+            {staffText("Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (audit log).")}</p>
+
+          <div>
+            <span className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-2.5">
+              Hạng mục cần cập nhật <span className="text-amber-600">*</span>
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {[
+                { id: 'Họ và Tên', label: 'Họ và Tên' },
+                { id: 'Email liên hệ', label: staffText('Email công tác') },
+                { id: 'Số điện thoại', label: 'Số điện thoại' },
+                { id: 'Mật khẩu', label: 'Mật khẩu đăng nhập' },
+                { id: 'Vai trò', label: 'Vai trò chức danh' },
+                { id: 'Cơ sở phụ trách', label: 'Cơ sở phụ trách' },
+              ].map(({ id, label }) => {
+                const isSelected = requestFields.includes(id)
+                return (
+                  <label
+                    key={id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-medium cursor-pointer transition select-none ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-50/80 text-amber-950 font-semibold shadow-xs'
+                        : 'border-stone-200 bg-white hover:bg-stone-50 text-stone-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={event =>
+                        setRequestFields(current =>
+                          event.target.checked
+                            ? [...new Set([...current, id])]
+                            : current.filter(item => item !== id)
+                        )
+                      }
+                      className="w-4 h-4 shrink-0 rounded border-stone-300 accent-amber-600 cursor-pointer"
+                    />
+                    <span className="truncate">{label}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
+              Nội dung đề nghị chi tiết <span className="text-amber-600">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={requestReason}
+              onChange={event => setRequestReason(event.target.value)}
+              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456; Điều chuyển cơ sở sang Kho Việt – Cơ sở Quận 1...)"
+              className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none transition"
+            />
+            <div className="flex justify-between items-center mt-1 text-[11px] text-stone-400">
+              <span>Tối thiểu 10 ký tự</span>
+              <span className={requestReason.trim().length >= 10 ? 'text-emerald-600 font-semibold' : 'text-stone-400'}>
+                {requestReason.trim().length}/10 ký tự
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">
+            <Button
+              variant="outline"
+              className="cursor-pointer border-stone-300 text-stone-700 hover:bg-stone-100"
+              onClick={() => setRequestModalOpen(false)}
+            >
+              Hủy Bỏ
+            </Button>
+            <Button
+              variant="primary"
+              className="cursor-pointer bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              disabled={!requestFields.length || requestReason.trim().length < 10}
+              onClick={handleSubmitProfileRequest}
+            >
+              {staffText("Gửi Yêu Cầu Tới Admin/HR")}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal closeLabel={user.role === 'staff' ? 'Đóng hộp thoại' : undefined} open={deleteAccountConfirmationOpen && isCustomer} onClose={() => setDeleteAccountConfirmationOpen(false)} title="Xác nhận xóa tài khoản">
+        <div className="space-y-5">
+          <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">Bạn chắc chắn muốn xóa tài khoản? Chỉ có thể xóa khi không còn đơn hiện tại, đơn quá hạn hoặc khoản chưa thanh toán.</p>
+          <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => setDeleteAccountConfirmationOpen(false)}>Quay lại</Button><Button variant="danger" onClick={confirmDeleteAccount}>Xóa tài khoản</Button></div>
+        </div>
+      </Modal>
+>>>>>>> Stashed changes
     </div>
   )
 }
