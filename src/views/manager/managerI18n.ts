@@ -1,148 +1,181 @@
-// The old shared LanguageContext was removed; Manager labels only need the
-// two supported display languages and should remain independently type-safe.
 export type Language = 'en' | 'vi'
 
-const statusLabels: Record<string, { en: string; vi: string }> = {
-  available: { en: 'Available', vi: 'Còn trống' },
-  reserved: { en: 'Reserved', vi: 'Đã giữ chỗ' },
-  occupied: { en: 'Occupied', vi: 'Đang sử dụng' },
-  maintenance: { en: 'Maintenance', vi: 'Bảo trì' },
-  held: { en: 'Held', vi: 'Đang giữ' },
-  assigned: { en: 'Assigned', vi: 'Đã phân công' },
-  active: { en: 'Active', vi: 'Đang hiệu lực' },
-  paid: { en: 'Paid', vi: 'Đã thanh toán' },
-  overdue: { en: 'Overdue', vi: 'Quá hạn' },
-  pending: { en: 'Pending', vi: 'Đang chờ' },
-  completed: { en: 'Completed', vi: 'Hoàn tất' },
-  cancelled: { en: 'Cancelled', vi: 'Đã hủy' },
-  scheduled: { en: 'Scheduled', vi: 'Đã lên lịch' },
-  open: { en: 'Open', vi: 'Đang mở' },
-  in_progress: { en: 'In progress', vi: 'Đang thực hiện' },
-  'in-progress': { en: 'In progress', vi: 'Đang thực hiện' },
-  resolved: { en: 'Resolved', vi: 'Đã xử lý' },
-  'on-duty': { en: 'On duty', vi: 'Đang trực' },
-  no_show: { en: 'No-show', vi: 'Không đến' },
-  return_requested: { en: 'Return requested', vi: 'Đã yêu cầu trả kho' },
-  return_inspection: { en: 'Return inspection', vi: 'Đang nghiệm thu trả kho' },
-  closing: { en: 'Closing', vi: 'Đang tất toán' },
-  requested: { en: 'Requested', vi: 'Đã yêu cầu' },
-  inspected: { en: 'Inspected', vi: 'Đã nghiệm thu' },
-  disputed: { en: 'Disputed', vi: 'Đang khiếu nại' },
-  refund_pending: { en: 'Refund pending', vi: 'Chờ hoàn tiền' },
-  payment_due: { en: 'Payment due', vi: 'Chờ thanh toán' },
-  awaiting_customer_confirmation: { en: 'Awaiting customer confirmation', vi: 'Chờ khách xác nhận' },
-  CREATED: { en: 'Created', vi: 'Đã tạo' },
-  DEPOSIT_PAID: { en: 'Deposit paid', vi: 'Đã thanh toán cọc' },
-  UNIT_RESERVED: { en: 'Unit reserved', vi: 'Đã giữ gian kho' },
-  READY_FOR_CHECKIN: { en: 'Ready for move-in', vi: 'Sẵn sàng nhận kho' },
-  COMPLETED: { en: 'Completed', vi: 'Hoàn tất' },
-  CANCELLED: { en: 'Cancelled', vi: 'Đã hủy' },
-  EXPIRED: { en: 'Expired', vi: 'Hết hạn' },
-  PENDING: { en: 'Pending', vi: 'Đang chờ' },
-  PAID: { en: 'Paid', vi: 'Đã thanh toán' },
-  ACTIVE: { en: 'Active', vi: 'Đang hoạt động' },
-  SUSPENDED: { en: 'Suspended', vi: 'Đã khóa' },
-  REVOKED: { en: 'Revoked', vi: 'Đã thu hồi' },
-  approved: { en: 'Approved', vi: 'Đã duyệt' },
-  rejected: { en: 'Rejected', vi: 'Đã từ chối' },
-  deposit_paid: { en: 'Deposit paid', vi: 'Đã thanh toán cọc' },
-  appointment_scheduled: { en: 'Appointment scheduled', vi: 'Đã hẹn lịch' },
-  payment_processing: { en: 'Payment processing', vi: 'Đang xử lý thanh toán' },
-  payment_failed: { en: 'Payment failed', vi: 'Thanh toán thất bại' },
-  payment_expired: { en: 'Payment expired', vi: 'Thanh toán hết hạn' },
-  awaiting_email: { en: 'Awaiting email verification', vi: 'Chờ xác minh email' },
-  awaiting_review: { en: 'Awaiting review', vi: 'Chờ duyệt hồ sơ' },
-  awaiting_payment: { en: 'Awaiting deposit payment', vi: 'Chờ thanh toán cọc' },
+type BilingualLabel = { en: string; vi: string }
+
+const labels = (en: string, vi: string): BilingualLabel => ({ en, vi })
+
+const statusLabels: Record<string, BilingualLabel> = {
+  available: labels('Available', 'Còn trống'),
+  reserved: labels('Reserved', 'Đã giữ chỗ'),
+  occupied: labels('Occupied', 'Đang sử dụng'),
+  maintenance: labels('Maintenance', 'Bảo trì'),
+  held: labels('Held', 'Đang giữ'),
+  assigned: labels('Assigned', 'Đã phân công'),
+  active: labels('Active', 'Đang hiệu lực'),
+  paid: labels('Paid', 'Đã thanh toán'),
+  refunded: labels('Refunded', 'Đã hoàn tiền'),
+  overdue: labels('Overdue', 'Quá hạn'),
+  pending: labels('Pending', 'Đang chờ'),
+  completed: labels('Completed', 'Hoàn tất'),
+  cancelled: labels('Cancelled', 'Đã hủy'),
+  scheduled: labels('Scheduled', 'Đã lên lịch'),
+  open: labels('Open', 'Đang mở'),
+  in_progress: labels('In progress', 'Đang thực hiện'),
+  'in-progress': labels('In progress', 'Đang thực hiện'),
+  resolved: labels('Resolved', 'Đã xử lý'),
+  'on-duty': labels('On duty', 'Đang trực'),
+  no_show: labels('No-show', 'Không đến'),
+  awaiting_deposit: labels('Awaiting deposit', 'Chờ thanh toán tiền cọc'),
+  contract_signed: labels('Contract signed', 'Đã ký hợp đồng'),
+  fully_paid: labels('Fully paid', 'Đã thanh toán đủ'),
+  unit_assigned: labels('Unit assigned', 'Đã phân gian kho'),
+  review_required: labels('Review required', 'Cần duyệt hồ sơ'),
+  confirmed: labels('Confirmed', 'Đã xác nhận'),
+  expired: labels('Expired', 'Đã hết hạn'),
+  draft: labels('Draft', 'Bản nháp'),
+  checked_in: labels('Checked in', 'Đã nhận kho'),
+  return_requested: labels('Return requested', 'Đã yêu cầu trả kho'),
+  return_inspection: labels('Return inspection', 'Đang nghiệm thu trả kho'),
+  closing: labels('Closing', 'Đang tất toán'),
+  requested: labels('Requested', 'Đã yêu cầu'),
+  inspected: labels('Inspected', 'Đã nghiệm thu'),
+  disputed: labels('Disputed', 'Đang khiếu nại'),
+  refund_pending: labels('Refund pending', 'Chờ hoàn tiền'),
+  payment_due: labels('Payment due', 'Chờ thanh toán'),
+  awaiting_customer_confirmation: labels('Awaiting customer confirmation', 'Chờ khách xác nhận'),
+  CREATED: labels('Created', 'Đã tạo'),
+  DEPOSIT_PAID: labels('Deposit paid', 'Đã thanh toán cọc'),
+  UNIT_RESERVED: labels('Unit reserved', 'Đã giữ gian kho'),
+  READY_FOR_CHECKIN: labels('Ready for move-in', 'Sẵn sàng nhận kho'),
+  COMPLETED: labels('Completed', 'Hoàn tất'),
+  CANCELLED: labels('Cancelled', 'Đã hủy'),
+  EXPIRED: labels('Expired', 'Hết hạn'),
+  PENDING: labels('Pending', 'Đang chờ'),
+  PAID: labels('Paid', 'Đã thanh toán'),
+  ACTIVE: labels('Active', 'Đang hoạt động'),
+  SUSPENDED: labels('Suspended', 'Đã khóa'),
+  REVOKED: labels('Revoked', 'Đã thu hồi'),
+  NOT_REQUIRED: labels('Not required', 'Không cần duyệt'),
+  APPROVED: labels('Approved', 'Đã duyệt'),
+  REJECTED: labels('Rejected', 'Đã từ chối'),
+  approved: labels('Approved', 'Đã duyệt'),
+  rejected: labels('Rejected', 'Đã từ chối'),
+  deposit_paid: labels('Deposit paid', 'Đã thanh toán cọc'),
+  appointment_scheduled: labels('Appointment scheduled', 'Đã hẹn lịch'),
+  payment_processing: labels('Payment processing', 'Đang xử lý thanh toán'),
+  payment_failed: labels('Payment failed', 'Thanh toán thất bại'),
+  payment_expired: labels('Payment expired', 'Thanh toán hết hạn'),
+  awaiting_email: labels('Awaiting email verification', 'Chờ xác minh thư điện tử'),
+  awaiting_review: labels('Awaiting review', 'Chờ duyệt hồ sơ'),
+  awaiting_payment: labels('Awaiting deposit payment', 'Chờ thanh toán cọc')
 }
 
-const unitTypes: Record<string, { en: string; vi: string }> = {
-  small: { en: 'Small', vi: 'Nhỏ' },
-  medium: { en: 'Medium', vi: 'Vừa' },
-  large: { en: 'Large', vi: 'Lớn' },
-  'extra large': { en: 'Extra Large', vi: 'Rất lớn' },
-  xlarge: { en: 'Extra Large', vi: 'Rất lớn' }
+const unitTypes: Record<string, BilingualLabel> = {
+  small: labels('Small', 'Nhỏ'),
+  medium: labels('Medium', 'Vừa'),
+  large: labels('Large', 'Lớn'),
+  'extra large': labels('Extra Large', 'Rất lớn'),
+  xlarge: labels('Extra Large', 'Rất lớn')
 }
 
-const paymentTypes: Record<string, { en: string; vi: string }> = {
-  RESERVATION_DEPOSIT: { en: 'Reservation deposit', vi: 'Cọc giữ chỗ' },
-  INITIAL_RENT: { en: 'Initial rent', vi: 'Tiền thuê ban đầu' },
-  RENTAL_PAYMENT: { en: 'Rental payment', vi: 'Thanh toán tiền thuê' },
-  RENEWAL: { en: 'Renewal', vi: 'Gia hạn' },
-  REFUND: { en: 'Refund', vi: 'Hoàn tiền' },
-  RETURN_BALANCE: { en: 'Return balance', vi: 'Thanh toán khi trả kho' }
+const paymentTypes: Record<string, BilingualLabel> = {
+  RESERVATION_DEPOSIT: labels('Reservation deposit', 'Cọc giữ chỗ'),
+  INITIAL_RENT: labels('Initial rent', 'Tiền thuê ban đầu'),
+  RENT: labels('Rent', 'Tiền thuê định kỳ'),
+  RENTAL_PAYMENT: labels('Rental payment', 'Thanh toán tiền thuê'),
+  RENEWAL: labels('Renewal', 'Gia hạn'),
+  DAMAGE_FEE: labels('Damage fee', 'Phí hư hỏng'),
+  REFUND: labels('Refund', 'Hoàn tiền'),
+  RETURN_BALANCE: labels('Return balance', 'Thanh toán khi trả kho')
 }
 
-const methods: Record<string, { en: string; vi: string }> = {
-  BANK_TRANSFER: { en: 'Bank transfer', vi: 'Chuyển khoản' },
-  CASH: { en: 'Cash', vi: 'Tiền mặt' },
-  ONLINE_GATEWAY: { en: 'Online gateway', vi: 'Cổng thanh toán trực tuyến' }
+const methods: Record<string, BilingualLabel> = {
+  BANK_TRANSFER: labels('Bank transfer', 'Chuyển khoản'),
+  CASH: labels('Cash', 'Tiền mặt'),
+  ONLINE_GATEWAY: labels('Online gateway', 'Cổng thanh toán trực tuyến')
 }
 
-const taskTypes: Record<string, { en: string; vi: string }> = {
-  general: { en: 'General', vi: 'Chung' },
-  checkin: { en: 'Move-in', vi: 'Nhận kho' },
-  return: { en: 'Move-out', vi: 'Trả kho' },
-  maintenance: { en: 'Maintenance', vi: 'Bảo trì' },
-  support: { en: 'Support', vi: 'Hỗ trợ' }
+const taskTypes: Record<string, BilingualLabel> = {
+  general: labels('General', 'Chung'),
+  checkin: labels('Move-in', 'Nhận kho'),
+  return: labels('Move-out', 'Trả kho'),
+  maintenance: labels('Maintenance', 'Bảo trì'),
+  support: labels('Support', 'Hỗ trợ')
 }
 
-const priorities: Record<string, { en: string; vi: string }> = {
-  low: { en: 'Low', vi: 'Thấp' },
-  medium: { en: 'Medium', vi: 'Trung bình' },
-  high: { en: 'High', vi: 'Cao' }
+const priorities: Record<string, BilingualLabel> = {
+  low: labels('Low', 'Thấp'),
+  medium: labels('Medium', 'Trung bình'),
+  high: labels('High', 'Cao')
 }
 
-const activities: Record<string, { en: string; vi: string }> = {
-  RESERVATION_CREATED: { en: 'Reservation created', vi: 'Đã tạo đơn đặt chỗ' },
-  RESERVATION_APPROVED: { en: 'Reservation approved', vi: 'Đã duyệt đơn đặt chỗ' },
-  RESERVATION_CANCELLED: { en: 'Reservation cancelled', vi: 'Đã hủy đơn đặt chỗ' },
-  UNIT_ASSIGNED: { en: 'Unit selected', vi: 'Gian kho đã được xác định' },
-  UNIT_MAINTENANCE_STARTED: { en: 'Maintenance started', vi: 'Đã đưa gian kho vào bảo trì' },
-  UNIT_RELEASED: { en: 'Unit released', vi: 'Đã mở lại gian kho' },
-  PAPER_CONTRACT_SIGNED: { en: 'Paper contract signed', vi: 'Đã ký hợp đồng giấy' },
-  INITIAL_BALANCE_PAID: { en: 'Initial balance paid', vi: 'Đã thanh toán số dư ban đầu' },
-  CHECKIN_COMPLETED: { en: 'Move-in completed', vi: 'Đã hoàn tất nhận kho' },
-  UNIT_RECEIPT_CONFIRMED: { en: 'Unit receipt confirmed', vi: 'Đã xác nhận nhận gian kho' },
-  RENEWAL_REQUESTED: { en: 'Renewal requested', vi: 'Đã yêu cầu gia hạn' },
-  RENEWAL_REQUEST_UPDATED: { en: 'Renewal request updated', vi: 'Đã cập nhật yêu cầu gia hạn' },
-  RENEWAL_REQUEST_CANCELLED: { en: 'Renewal request cancelled', vi: 'Đã hủy yêu cầu gia hạn' },
-  RENEWAL_APPROVED: { en: 'Renewal approved', vi: 'Đã duyệt gia hạn' },
-  RENEWAL_REJECTED: { en: 'Renewal rejected', vi: 'Đã từ chối gia hạn' },
-  RENEWAL_DEPOSIT_PAID: { en: 'Renewal deposit paid', vi: 'Đã thanh toán cọc gia hạn' },
-  RENEWAL_COMPLETED_AT_FACILITY: { en: 'Renewal completed at facility', vi: 'Đã hoàn tất gia hạn tại cơ sở' },
-  RETURN_INSPECTION_COMPLETED: { en: 'Move-out inspection completed', vi: 'Đã nghiệm thu trả kho' },
-  RETURN_SETTLEMENT_CONFIRMED: { en: 'Settlement confirmed', vi: 'Đã xác nhận quyết toán' },
-  RETURN_SETTLEMENT_DISPUTED: { en: 'Settlement disputed', vi: 'Đã khiếu nại quyết toán' },
-  RETURN_DISPUTE_REVIEWED: { en: 'Dispute reviewed', vi: 'Đã xử lý khiếu nại' },
-  RETURN_BALANCE_PAID: { en: 'Return balance paid', vi: 'Đã thanh toán số dư trả kho' },
-  RETURN_REFUND_COMPLETED: { en: 'Refund completed', vi: 'Đã hoàn tiền cọc' },
-  RENT_PAYMENT_RECORDED: { en: 'Rental payment recorded', vi: 'Đã ghi nhận tiền thuê' },
-  LATE_FEE_APPLIED: { en: 'Late fee applied', vi: 'Đã áp dụng phí trễ' },
-  LATE_FEE_WAIVED: { en: 'Late fee waived', vi: 'Đã miễn phí trễ' },
-  RENTAL_ACCESS_SUSPENDED: { en: 'Rental access suspended', vi: 'Đã khóa quyền truy cập' },
-  RENTAL_ACCESS_RESTORED: { en: 'Rental access restored', vi: 'Đã mở lại quyền truy cập' },
-  DELINQUENCY_REMINDER_SENT: { en: 'Delinquency reminder sent', vi: 'Đã gửi nhắc nợ' },
-  FACILITY_TASK_CREATED: { en: 'Facility task created', vi: 'Đã tạo nhiệm vụ cơ sở' },
-  FACILITY_TASK_UPDATED: { en: 'Facility task updated', vi: 'Đã cập nhật nhiệm vụ cơ sở' },
-  MAINTENANCE_COMPLETED: { en: 'Maintenance completed', vi: 'Đã hoàn tất bảo trì' },
-  POLICY_UPDATE: { en: 'Policy updated', vi: 'Đã cập nhật chính sách' }
+const activities: Record<string, BilingualLabel> = {
+  RESERVATION_CREATED: labels('Reservation created', 'Đã tạo đơn đặt chỗ'),
+  RESERVATION_APPROVED: labels('Reservation approved', 'Đã duyệt đơn đặt chỗ'),
+  RESERVATION_CANCELLED: labels('Reservation cancelled', 'Đã hủy đơn đặt chỗ'),
+  UNIT_ASSIGNED: labels('Unit selected', 'Gian kho đã được xác định'),
+  UNIT_MAINTENANCE_STARTED: labels('Maintenance started', 'Đã đưa gian kho vào bảo trì'),
+  UNIT_RELEASED: labels('Unit released', 'Đã mở lại gian kho'),
+  PAPER_CONTRACT_SIGNED: labels('Paper contract signed', 'Đã ký hợp đồng giấy'),
+  INITIAL_BALANCE_PAID: labels('Initial balance paid', 'Đã thanh toán số dư ban đầu'),
+  CHECKIN_COMPLETED: labels('Move-in completed', 'Đã hoàn tất nhận kho'),
+  UNIT_RECEIPT_CONFIRMED: labels('Unit receipt confirmed', 'Đã xác nhận nhận gian kho'),
+  RENEWAL_REQUESTED: labels('Renewal requested', 'Đã yêu cầu gia hạn'),
+  RENEWAL_REQUEST_UPDATED: labels('Renewal request updated', 'Đã cập nhật yêu cầu gia hạn'),
+  RENEWAL_REQUEST_CANCELLED: labels('Renewal request cancelled', 'Đã hủy yêu cầu gia hạn'),
+  RENEWAL_APPROVED: labels('Renewal approved', 'Đã duyệt gia hạn'),
+  RENEWAL_REJECTED: labels('Renewal rejected', 'Đã từ chối gia hạn'),
+  RENEWAL_DEPOSIT_PAID: labels('Renewal deposit paid', 'Đã thanh toán cọc gia hạn'),
+  RENEWAL_COMPLETED_AT_FACILITY: labels('Renewal completed at facility', 'Đã hoàn tất gia hạn tại cơ sở'),
+  RETURN_INSPECTION_COMPLETED: labels('Move-out inspection completed', 'Đã nghiệm thu trả kho'),
+  RETURN_SETTLEMENT_CONFIRMED: labels('Settlement confirmed', 'Đã xác nhận quyết toán'),
+  RETURN_SETTLEMENT_DISPUTED: labels('Settlement disputed', 'Đã khiếu nại quyết toán'),
+  RETURN_DISPUTE_REVIEWED: labels('Dispute reviewed', 'Đã xử lý khiếu nại'),
+  RETURN_BALANCE_PAID: labels('Return balance paid', 'Đã thanh toán số dư trả kho'),
+  RETURN_REFUND_COMPLETED: labels('Refund completed', 'Đã hoàn tiền cọc'),
+  RENT_PAYMENT_RECORDED: labels('Rental payment recorded', 'Đã ghi nhận tiền thuê'),
+  LATE_FEE_APPLIED: labels('Late fee applied', 'Đã áp dụng phí trễ'),
+  LATE_FEE_WAIVED: labels('Late fee waived', 'Đã miễn phí trễ'),
+  RENTAL_ACCESS_SUSPENDED: labels('Rental access suspended', 'Đã khóa quyền truy cập'),
+  RENTAL_ACCESS_RESTORED: labels('Rental access restored', 'Đã mở lại quyền truy cập'),
+  DELINQUENCY_REMINDER_SENT: labels('Delinquency reminder sent', 'Đã gửi nhắc nợ'),
+  FACILITY_TASK_CREATED: labels('Facility task created', 'Đã tạo nhiệm vụ cơ sở'),
+  FACILITY_TASK_UPDATED: labels('Facility task updated', 'Đã cập nhật nhiệm vụ cơ sở'),
+  MAINTENANCE_COMPLETED: labels('Maintenance completed', 'Đã hoàn tất bảo trì'),
+  POLICY_UPDATE: labels('Policy updated', 'Đã cập nhật chính sách'),
+  GOODS_REVIEW_REJECTED: labels('Goods review rejected', 'Đã từ chối hồ sơ hàng hóa'),
+  ROLE_PERMISSIONS_UPDATED: labels('Role permissions updated', 'Đã cập nhật quyền vai trò'),
+  CUSTOMER_PROFILE_UPDATED: labels('Customer profile updated', 'Đã cập nhật hồ sơ khách hàng'),
+  PROFILE_CHANGE_REQUESTED: labels('Profile change requested', 'Đã yêu cầu thay đổi hồ sơ'),
+  CUSTOMER_PASSWORD_RESET_REQUESTED: labels('Customer password reset requested', 'Đã yêu cầu đặt lại mật khẩu khách hàng'),
+  PASSWORD_RESET_REQUESTED: labels('Password reset requested', 'Đã yêu cầu đặt lại mật khẩu'),
+  INTERNAL_ACCOUNT_UPDATED: labels('Internal account updated', 'Đã cập nhật tài khoản nội bộ'),
+  ACCOUNT_DELETED: labels('Account deleted', 'Đã xóa tài khoản'),
+  CUSTOMER_ACCOUNT_DELETED: labels('Customer account deleted', 'Đã xóa tài khoản khách hàng'),
+  SESSION_REVOKED: labels('Session revoked', 'Đã thu hồi phiên đăng nhập'),
+  ALL_SESSIONS_REVOKED: labels('All sessions revoked', 'Đã thu hồi toàn bộ phiên đăng nhập')
 }
 
-const entities: Record<string, { en: string; vi: string }> = {
-  hold: { en: 'Reservation', vi: 'Đơn đặt chỗ' },
-  unit: { en: 'Unit', vi: 'Gian kho' },
-  rental: { en: 'Rental', vi: 'Hợp đồng thuê' },
-  payment: { en: 'Payment', vi: 'Thanh toán' },
-  return: { en: 'Return', vi: 'Hồ sơ trả kho' },
-  task: { en: 'Task', vi: 'Nhiệm vụ' },
-  policy: { en: 'Policy', vi: 'Chính sách' }
+const entities: Record<string, BilingualLabel> = {
+  hold: labels('Reservation', 'Đơn đặt chỗ'),
+  unit: labels('Unit', 'Gian kho'),
+  rental: labels('Rental', 'Hợp đồng thuê'),
+  payment: labels('Payment', 'Thanh toán'),
+  return: labels('Return', 'Hồ sơ trả kho'),
+  checkin: labels('Move-in', 'Hồ sơ nhận kho'),
+  task: labels('Task', 'Nhiệm vụ'),
+  policy: labels('Policy', 'Chính sách'),
+  user: labels('User', 'Người dùng'),
+  system: labels('System', 'Hệ thống')
 }
 
-function labelFrom(map: Record<string, { en: string; vi: string }>, value: string, lang: Language) {
-  return map[value]?.[lang] || value.replace(/_/g, ' ')
+function labelFrom(map: Record<string, BilingualLabel>, value: string, lang: Language) {
+  if (!value) return lang === 'vi' ? 'Chưa ghi nhận' : 'Not recorded'
+  return map[value]?.[lang] || (lang === 'vi' ? 'Chưa phân loại' : value.replace(/_/g, ' '))
 }
 
 export const managerStatusLabel = (value: string, lang: Language) => labelFrom(statusLabels, value, lang)
+
 export const managerUnitTypeLabel = (value: string, lang: Language) => {
   const normalized = value.toLowerCase()
   if (lang === 'en') return unitTypes[normalized]?.en || value
@@ -150,14 +183,16 @@ export const managerUnitTypeLabel = (value: string, lang: Language) => {
   if (normalized.includes('large')) return 'Gian kho lớn'
   if (normalized.includes('medium')) return 'Gian kho vừa'
   if (normalized.includes('small')) return 'Gian kho nhỏ'
-  return value
+  return 'Loại gian kho khác'
 }
+
 export const managerPaymentTypeLabel = (value: string, lang: Language) => labelFrom(paymentTypes, value, lang)
 export const managerPaymentMethodLabel = (value: string, lang: Language) => labelFrom(methods, value, lang)
 export const managerTaskTypeLabel = (value: string, lang: Language) => labelFrom(taskTypes, value, lang)
 export const managerPriorityLabel = (value: string, lang: Language) => labelFrom(priorities, value, lang)
 export const managerActivityLabel = (value: string, lang: Language) => labelFrom(activities, value, lang)
 export const managerEntityLabel = (value: string, lang: Language) => labelFrom(entities, value, lang)
+
 export const managerDateLabel = (value: string | undefined, lang: Language, includeTime = false) => {
   if (!value) return '—'
   const parsed = new Date(value)
@@ -166,9 +201,14 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
     ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')
     : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US')
 }
+
 export const managerTimeLabel = (value: string | undefined, lang: Language) => {
   if (!value) return '—'
   const parsed = new Date(`1970-01-01 ${value}`)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleTimeString(lang === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: lang !== 'vi' })
+  return parsed.toLocaleTimeString(lang === 'vi' ? 'vi-VN' : 'en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: lang !== 'vi'
+  })
 }
