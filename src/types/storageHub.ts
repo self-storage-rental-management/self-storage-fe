@@ -65,6 +65,7 @@ export interface UnitType {
 
 export interface Facility {
   id: string
+  code?: string
   name: string
   address: string
   city: string
@@ -143,6 +144,24 @@ export interface GoodsDeclaration {
   fragile: boolean
   specialHandling?: string
   notes?: string
+  items?: Array<{
+    id: string
+    category: string
+    materialType?: 'NORMAL' | 'FRAGILE' | ''
+    materialName?: string
+    customGoodsName?: string
+    description?: string
+    customMaterial?: string
+    quantity?: number
+    dimensions?: { lengthCm?: number; widthCm?: number; heightCm?: number }
+    weightKg?: number
+    fragile?: boolean
+    customerNote?: string
+    images?: string[]
+    requiresStaffReview?: boolean
+    reviewStatus?: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
+    staffReviewNote?: string
+  }>
 }
 
 export interface PricingQuote {
@@ -242,6 +261,10 @@ export interface StorageReservation {
   depositPaidAt?: string
   checkInDeadline?: string
   reviewExpiresAt?: string
+  goodsReviewStatus?: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  goodsReviewSubmittedAt?: string
+  goodsReviewDueAt?: string
+  depositRequired?: boolean
   largestItemDimensionsCm?: {
     lengthCm: number
     widthCm: number
@@ -427,6 +450,8 @@ export interface RenewalRecord {
   renewalContractNumber?: string
   effectiveAt?: string
   originalMonthlyRate?: number
+  discountRate?: number
+  discountAmount?: number
   totalAmount?: number
   bookingDepositAmount?: number
   remainingAmount?: number
@@ -440,6 +465,14 @@ export interface RenewalRecord {
   completedBy?: string
   attachmentUrl?: string
   notes?: string
+}
+
+export interface ReturnSettlementAdjustments {
+  damageFee: number
+  cleaningFee: number
+  overdueFee: number
+  outstandingFee: number
+  resolutionNote: string
 }
 
 export interface MaintenanceTask {
@@ -495,6 +528,7 @@ export interface RentalRecord {
   receiptConfirmedBy?: string
   customerArchivedAt?: string
   lateFeeAmount?: number
+  lateFeeProcessedForDueDate?: string
   overlocked?: boolean
   lastReminderAt?: string
   remindersSent?: number

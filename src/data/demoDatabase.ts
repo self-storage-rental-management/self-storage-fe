@@ -1,31 +1,191 @@
 /** Seed data for the frontend demo. Replace this module with API calls when the backend is connected. */
 
 export const FACILITIES = [
-  { id: 'fac-001', name: 'Downtown Storage', address: '125 Nguyen Hue, District 1', city: 'Ho Chi Minh City', rating: 4.8, available: 18, price: '89', climate: true, security: '24/7', image: 'photo-1553413077-190dd305871c', units: 120, occupied: 96, revenue: 18450, growth: 8.4, manager: 'Demo Manager', status: 'active' },
-  { id: 'fac-002', name: 'Riverside Storage', address: '42 Bach Dang, Binh Thanh', city: 'Ho Chi Minh City', rating: 4.6, available: 9, price: '75', climate: false, security: '24/7', image: 'photo-1586864387967-d02ef85d93e8', units: 80, occupied: 61, revenue: 10890, growth: 5.1, manager: 'Mai Tran', status: 'active' },
+  {
+    id: 'fac-001',
+    code: 'HCM-Q1-F01',
+    name: 'Kho Việt – Cơ sở Quận 1',
+    address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh',
+    rating: 4.9,
+    available: 14,
+    price: '5.500.000đ',
+    climate: true,
+    security: '24/7',
+    image: 'photo-1553413077-190dd305871c',
+    units: 20,
+    occupied: 6,
+    revenue: 72500000,
+    growth: 8.4,
+    manager: 'Nguyễn Văn Quản Lý',
+    status: 'active'
+  },
+  {
+    id: 'fac-002',
+    code: 'BD-F01',
+    name: 'Kho Việt – Cơ sở Bình Dương',
+    address: '468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
+    city: 'Bình Dương',
+    rating: 4.8,
+    available: 15,
+    price: '5.500.000đ',
+    climate: true,
+    security: '24/7',
+    image: 'photo-1586864387967-d02ef85d93e8',
+    units: 20,
+    occupied: 5,
+    revenue: 57500000,
+    growth: 6.2,
+    manager: 'Mai Trần',
+    status: 'active'
+  },
 ]
 
+export interface UnitSpec {
+  size: 'S' | 'M' | 'L' | 'XL'
+  name: string
+  dimensions: string
+  lengthM: number
+  widthM: number
+  heightM: number
+  areaM2: number
+  volumeM3: number
+  aisleM: number
+  priceMonthly: number
+  priceFormatted: string
+  smallBoxes: number
+  largeBoxes: number
+  cartEquipment: string
+}
+
+export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
+  S: {
+    size: 'S',
+    name: 'Kho Nhỏ (S)',
+    dimensions: '5,6 × 6,0 × 3,2 m',
+    lengthM: 5.6,
+    widthM: 6.0,
+    heightM: 3.2,
+    areaM2: 33.6,
+    volumeM3: 107.52,
+    aisleM: 1.8,
+    priceMonthly: 5500000,
+    priceFormatted: '5.500.000đ',
+    smallBoxes: 384,
+    largeBoxes: 160,
+    cartEquipment: 'Xe đẩy tay / xe sàn nhỏ'
+  },
+  M: {
+    size: 'M',
+    name: 'Kho Trung (M)',
+    dimensions: '9,0 × 6,4 × 3,4 m',
+    lengthM: 9.0,
+    widthM: 6.4,
+    heightM: 3.4,
+    areaM2: 57.6,
+    volumeM3: 195.84,
+    aisleM: 2.2,
+    priceMonthly: 9500000,
+    priceFormatted: '9.500.000đ',
+    smallBoxes: 576,
+    largeBoxes: 240,
+    cartEquipment: 'Platform trolley'
+  },
+  L: {
+    size: 'L',
+    name: 'Kho Lớn (L)',
+    dimensions: '13,5 × 6,8 × 3,6 m',
+    lengthM: 13.5,
+    widthM: 6.8,
+    heightM: 3.6,
+    areaM2: 91.8,
+    volumeM3: 330.48,
+    aisleM: 2.6,
+    priceMonthly: 15000000,
+    priceFormatted: '15.000.000đ',
+    smallBoxes: 768,
+    largeBoxes: 320,
+    cartEquipment: 'Pallet jack tay'
+  },
+  XL: {
+    size: 'XL',
+    name: 'Kho Rất Lớn (XL)',
+    dimensions: '19,0 × 7,2 × 4,0 m',
+    lengthM: 19.0,
+    widthM: 7.2,
+    heightM: 4.0,
+    areaM2: 136.8,
+    volumeM3: 547.20,
+    aisleM: 3.0,
+    priceMonthly: 22500000,
+    priceFormatted: '22.500.000đ',
+    smallBoxes: 960,
+    largeBoxes: 400,
+    cartEquipment: 'Electric walkie pallet truck'
+  }
+}
+
 export const UNITS = [
-  { id: 'A-104', size: 5, sqft: 25, floor: 1, type: 'Small', price: 89, climate: true, status: 'available', facility: 'Downtown Storage' },
-  { id: 'B-208', size: 10, sqft: 100, floor: 2, type: 'Medium', price: 149, climate: true, status: 'occupied', facility: 'Downtown Storage' },
-  { id: 'C-301', size: 20, sqft: 400, floor: 3, type: 'Large', price: 269, climate: false, status: 'available', facility: 'Downtown Storage' },
-  { id: 'A-115', size: 5, sqft: 25, floor: 1, type: 'Small', price: 85, climate: false, status: 'reserved', facility: 'Riverside Storage' },
-  { id: 'R-106', size: 5, sqft: 25, floor: 1, type: 'Small', price: 75, climate: false, status: 'available', facility: 'Riverside Storage' },
-  { id: 'R-214', size: 10, sqft: 100, floor: 2, type: 'Medium', price: 135, climate: false, status: 'available', facility: 'Riverside Storage' },
-  { id: 'R-305', size: 20, sqft: 400, floor: 3, type: 'Large', price: 245, climate: true, status: 'available', facility: 'Riverside Storage' },
-  { id: 'B-112', size: 10, sqft: 100, floor: 1, type: 'Medium', price: 155, climate: true, status: 'available', facility: 'Downtown Storage' },
-  { id: 'D-402', size: 25, sqft: 500, floor: 4, type: 'Extra Large', price: 349, climate: true, status: 'occupied', facility: 'Downtown Storage' },
+  // ── 20 Gian Kho Cơ Sở TP. Hồ Chí Minh (HCM-Q1-F01) ──
+  { id: 'HCM-Q1-F01-S-001', code: 'HCM-Q1-F01-S-001', customerCode: 'HCM-Q1-F01-S-001', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-S-002', code: 'HCM-Q1-F01-S-002', customerCode: 'HCM-Q1-F01-S-002', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-S-003', code: 'HCM-Q1-F01-S-003', customerCode: 'HCM-Q1-F01-S-003', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-S-004', code: 'HCM-Q1-F01-S-004', customerCode: 'HCM-Q1-F01-S-004', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-S-005', code: 'HCM-Q1-F01-S-005', customerCode: 'HCM-Q1-F01-S-005', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+
+  { id: 'HCM-Q1-F01-M-001', code: 'HCM-Q1-F01-M-001', customerCode: 'HCM-Q1-F01-M-001', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-M-002', code: 'HCM-Q1-F01-M-002', customerCode: 'HCM-Q1-F01-M-002', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-M-003', code: 'HCM-Q1-F01-M-003', customerCode: 'HCM-Q1-F01-M-003', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-M-004', code: 'HCM-Q1-F01-M-004', customerCode: 'HCM-Q1-F01-M-004', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-M-005', code: 'HCM-Q1-F01-M-005', customerCode: 'HCM-Q1-F01-M-005', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'reserved', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+
+  { id: 'HCM-Q1-F01-L-001', code: 'HCM-Q1-F01-L-001', customerCode: 'HCM-Q1-F01-L-001', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-L-002', code: 'HCM-Q1-F01-L-002', customerCode: 'HCM-Q1-F01-L-002', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-L-003', code: 'HCM-Q1-F01-L-003', customerCode: 'HCM-Q1-F01-L-003', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-L-004', code: 'HCM-Q1-F01-L-004', customerCode: 'HCM-Q1-F01-L-004', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-L-005', code: 'HCM-Q1-F01-L-005', customerCode: 'HCM-Q1-F01-L-005', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+
+  { id: 'HCM-Q1-F01-XL-001', code: 'HCM-Q1-F01-XL-001', customerCode: 'HCM-Q1-F01-XL-001', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-XL-002', code: 'HCM-Q1-F01-XL-002', customerCode: 'HCM-Q1-F01-XL-002', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-XL-003', code: 'HCM-Q1-F01-XL-003', customerCode: 'HCM-Q1-F01-XL-003', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-XL-004', code: 'HCM-Q1-F01-XL-004', customerCode: 'HCM-Q1-F01-XL-004', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-XL-005', code: 'HCM-Q1-F01-XL-005', customerCode: 'HCM-Q1-F01-XL-005', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'maintenance', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+
+  // ── 20 Gian Kho Cơ Sở Bình Dương (BD-F01) ──
+  { id: 'BD-F01-S-001', code: 'BD-F01-S-001', customerCode: 'BD-F01-S-001', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-S-002', code: 'BD-F01-S-002', customerCode: 'BD-F01-S-002', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-S-003', code: 'BD-F01-S-003', customerCode: 'BD-F01-S-003', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-S-004', code: 'BD-F01-S-004', customerCode: 'BD-F01-S-004', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-S-005', code: 'BD-F01-S-005', customerCode: 'BD-F01-S-005', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+
+  { id: 'BD-F01-M-001', code: 'BD-F01-M-001', customerCode: 'BD-F01-M-001', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: false, status: 'occupied', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-M-002', code: 'BD-F01-M-002', customerCode: 'BD-F01-M-002', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-M-003', code: 'BD-F01-M-003', customerCode: 'BD-F01-M-003', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-M-004', code: 'BD-F01-M-004', customerCode: 'BD-F01-M-004', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-M-005', code: 'BD-F01-M-005', customerCode: 'BD-F01-M-005', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+
+  { id: 'BD-F01-L-001', code: 'BD-F01-L-001', customerCode: 'BD-F01-L-001', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-L-002', code: 'BD-F01-L-002', customerCode: 'BD-F01-L-002', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-L-003', code: 'BD-F01-L-003', customerCode: 'BD-F01-L-003', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-L-004', code: 'BD-F01-L-004', customerCode: 'BD-F01-L-004', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-L-005', code: 'BD-F01-L-005', customerCode: 'BD-F01-L-005', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+
+  { id: 'BD-F01-XL-001', code: 'BD-F01-XL-001', customerCode: 'BD-F01-XL-001', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-XL-002', code: 'BD-F01-XL-002', customerCode: 'BD-F01-XL-002', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-XL-003', code: 'BD-F01-XL-003', customerCode: 'BD-F01-XL-003', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-XL-004', code: 'BD-F01-XL-004', customerCode: 'BD-F01-XL-004', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-XL-005', code: 'BD-F01-XL-005', customerCode: 'BD-F01-XL-005', size: 'XL', sizeCode: 'XL', type: 'Extra Large', dimensions: '19,0×7,2×4,0 m', dimensionsM: [19.0, 7.2, 4.0], areaM2: 136.8, volumeM3: 547.20, maxLoadKg: 3600, price: 22500000, floor: 4, zone: 'Khu D', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
 ]
 
 export const MY_RENTALS = [
-  { id: 'rent-001', unit: 'B-208', facility: 'Downtown Storage', size: 10, status: 'active', paid: true, amount: 149, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
-  { id: 'rent-002', unit: 'A-104', facility: 'Downtown Storage', size: 5, status: 'active', paid: false, amount: 89, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
+  { id: 'rent-001', unit: 'HCM-Q1-F01-M-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 57.6, sizeCode: 'M', status: 'active', paid: true, amount: 9500000, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
+  { id: 'rent-002', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 33.6, sizeCode: 'S', status: 'active', paid: false, amount: 5500000, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
 ]
 
 export const PAYMENTS = [
-  { id: 'INV-2026-0081', date: 'Sep 12, 2026', description: 'Unit B-208 · September rent', method: 'Visa ending 4242', amount: 149, status: 'paid' },
-  { id: 'INV-2026-0070', date: 'Aug 12, 2026', description: 'Unit B-208 · August rent', method: 'Visa ending 4242', amount: 149, status: 'paid' },
-  { id: 'INV-2026-0062', date: 'Jul 12, 2026', description: 'Unit B-208 · July rent', method: 'Visa ending 4242', amount: 149, status: 'paid' },
+  { id: 'INV-2026-0081', date: 'Sep 12, 2026', description: 'Unit HCM-Q1-F01-M-001 · Thuê tháng 9', method: 'Chuyển khoản VietQR', amount: 9500000, status: 'paid' },
+  { id: 'INV-2026-0070', date: 'Aug 12, 2026', description: 'Unit HCM-Q1-F01-M-001 · Thuê tháng 8', method: 'Chuyển khoản VietQR', amount: 9500000, status: 'paid' },
+  { id: 'INV-2026-0062', date: 'Jul 12, 2026', description: 'Unit HCM-Q1-F01-M-001 · Thuê tháng 7', method: 'Chuyển khoản VietQR', amount: 9500000, status: 'paid' },
 ]
 
 export interface TicketMessage {
@@ -65,8 +225,8 @@ export const TICKETS: TicketItem[] = [
     priority: 'high',
     status: 'open',
     created: 'Sep 17, 2026 · 10:24 AM',
-    facility: 'Downtown Storage',
-    unit: 'B-208',
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    unit: 'HCM-Q1-F01-M-001',
     messages: [
       {
         id: 'msg-1',
@@ -93,8 +253,8 @@ export const TICKETS: TicketItem[] = [
     priority: 'medium',
     status: 'in-progress',
     created: 'Sep 16, 2026 · 02:15 PM',
-    facility: 'Downtown Storage',
-    unit: 'A-210',
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    unit: 'HCM-Q1-F01-S-002',
     messages: [
       {
         id: 'msg-3',
@@ -121,8 +281,8 @@ export const TICKETS: TicketItem[] = [
     priority: 'low',
     status: 'resolved',
     created: 'Sep 14, 2026 · 09:00 AM',
-    facility: 'Downtown Storage',
-    unit: 'C-301',
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    unit: 'HCM-Q1-F01-L-001',
     messages: [
       {
         id: 'msg-5',
@@ -149,15 +309,15 @@ export const TICKETS: TicketItem[] = [
     priority: 'low',
     status: 'resolved',
     created: 'Sep 12, 2026 · 03:40 PM',
-    facility: 'Downtown Storage',
-    unit: 'A-104',
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    unit: 'HCM-Q1-F01-S-001',
     messages: [
       {
         id: 'msg-7',
         sender: 'Nguyen Minh Anh',
         role: 'customer',
         time: 'Sep 12, 2026 · 03:40 PM',
-        text: 'I would like to activate auto-renewal for my lease on Unit A-104.'
+        text: 'I would like to activate auto-renewal for my lease on HCM-Q1-F01-S-001.'
       },
       {
         id: 'msg-8',
@@ -173,41 +333,64 @@ export const TICKETS: TicketItem[] = [
 export const SUPPORT_TICKETS = TICKETS
 
 export const TASKS = [
-  { id: 'task-1', title: 'Inspect unit A-104 before handover', time: '09:00 AM', priority: 'high', done: false },
+  { id: 'task-1', title: 'Kiểm tra HCM-Q1-F01-S-001 trước bàn giao', time: '09:00 AM', priority: 'high', done: false },
   { id: 'task-2', title: 'Verify reservation R-2048', time: '10:30 AM', priority: 'medium', done: true },
   { id: 'task-3', title: 'Check corridor cameras', time: '02:00 PM', priority: 'low', done: false }
 ]
 
 export const RESERVATIONS = [
-  { id: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'A-104', facility: 'Downtown Storage', facilityAddress: '125 Nguyen Hue, District 1', size: 5, moveIn: 'Sep 20, 2026', payment: 'paid', paid: true, status: 'pending', emailVerified: true, goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: '12 kiện nguyên niêm phong, khô ráo', evidence: ['EV-2048-01 · Ảnh hàng hóa lúc khai báo', 'MAIL-2048 · Email đã xác nhận lúc 09:42 18/09/2026'] },
-  { id: 'RSV-2049', customer: 'Hoang Van Bach', email: 'bach.hoang@gmail.com', phone: '091 999 8811', identityId: '079198004567', unit: 'B-112', facility: 'Downtown Storage', facilityAddress: '125 Nguyen Hue, District 1', size: 10, moveIn: 'Sep 22, 2026', payment: 'pending', paid: false, status: 'confirmed', emailVerified: false, goodsType: 'Thiết bị văn phòng', material: 'Kim loại, nhựa', packageCount: 8, weightKg: 240, dimensionsCm: '120 × 80 × 90', dimWeightKg: 173, initialCondition: '8 kiện, 1 thùng móp góc nhẹ', evidence: ['EV-2049-01 · Phiếu khai báo hàng hóa'] }
+  { id: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', facilityAddress: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh', size: 33.6, sizeCode: 'S', moveIn: 'Sep 20, 2026', payment: 'paid', paid: true, status: 'pending', emailVerified: true, goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: '12 kiện nguyên niêm phong, khô ráo', evidence: ['EV-2048-01 · Ảnh hàng hóa lúc khai báo', 'MAIL-2048 · Email đã xác nhận lúc 09:42 18/09/2026'] },
+  { id: 'RSV-2049', customer: 'Hoang Van Bach', email: 'bach.hoang@gmail.com', phone: '091 999 8811', identityId: '079198004567', unit: 'HCM-Q1-F01-M-002', facility: 'Kho Việt – Cơ sở Quận 1', facilityAddress: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh', size: 57.6, sizeCode: 'M', moveIn: 'Sep 22, 2026', payment: 'pending', paid: false, status: 'confirmed', emailVerified: false, goodsType: 'Thiết bị văn phòng', material: 'Kim loại, nhựa', packageCount: 8, weightKg: 240, dimensionsCm: '120 × 80 × 90', dimWeightKg: 173, initialCondition: '8 kiện, 1 thùng móp góc nhẹ', evidence: ['EV-2049-01 · Phiếu khai báo hàng hóa'] }
 ]
 
 export const CHECKINS = [
-  { id: 'CHK-301', reservationId: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'A-104', facility: 'Downtown Storage', date: 'Sep 20, 2026', time: '11:00 AM', status: 'scheduled', goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: 'Kho sạch, khóa hoạt động; 12 kiện nguyên niêm phong', evidence: ['Ảnh CCCD đã đối chiếu', 'Ảnh hiện trạng kho trước bàn giao', 'Phiếu cân & đo kích thước'] }
+  { id: 'CHK-301', reservationId: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', date: 'Sep 20, 2026', time: '11:00 AM', status: 'scheduled', goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: 'Kho sạch, khóa hoạt động; 12 kiện nguyên niêm phong', evidence: ['Ảnh CCCD đã đối chiếu', 'Ảnh hiện trạng kho trước bàn giao', 'Phiếu cân & đo kích thước'] }
 ]
 
 export const RETURNS = [
-  { id: 'RET-118', customer: 'Pham Thu Ha', email: 'ha.pham@gmail.com', phone: '093 555 0128', unit: 'A-102', facility: 'Downtown Storage', date: 'Sep 15, 2026', returnDate: 'Sep 15, 2026', condition: 'good', status: 'pending', deposit: 89, damageNotes: '', goodsType: 'Đồ gia dụng', material: 'Gỗ, vải', packageCount: 6, initialWeightKg: 132, finalWeightKg: 130, initialCondition: 'Kho sạch, tường và khóa nguyên vẹn; 6 kiện', finalCondition: 'Chờ kiểm kê', classification: 'Chờ phân loại', evidence: ['EV-IN-118 · 6 ảnh hiện trạng lúc nhận kho'] }
+  { id: 'RET-118', customer: 'Pham Thu Ha', email: 'ha.pham@gmail.com', phone: '093 555 0128', unit: 'HCM-Q1-F01-S-003', facility: 'Kho Việt – Cơ sở Quận 1', date: 'Sep 15, 2026', returnDate: 'Sep 15, 2026', condition: 'good', status: 'pending', deposit: 5_500_000 / 26_000, damageNotes: '', goodsType: 'Đồ gia dụng', material: 'Gỗ, vải', packageCount: 6, initialWeightKg: 132, finalWeightKg: 130, initialCondition: 'Kho sạch, tường và khóa nguyên vẹn; 6 kiện', finalCondition: 'Chờ kiểm kê', classification: 'Chờ phân loại', evidence: ['EV-IN-118 · 6 ảnh hiện trạng lúc nhận kho'] }
 ]
 
 export const OCCUPANCY_DATA = [
-  { month: 'Apr', occupied: 78, total: 120 },
-  { month: 'May', occupied: 84, total: 120 },
-  { month: 'Jun', occupied: 89, total: 120 },
-  { month: 'Jul', occupied: 92, total: 120 },
-  { month: 'Aug', occupied: 95, total: 120 },
-  { month: 'Sep', occupied: 96, total: 120 }
+  { month: 'Tháng 4', occupied: 82, total: 120 },
+  { month: 'Tháng 5', occupied: 91, total: 120 },
+  { month: 'Tháng 6', occupied: 96, total: 120 },
+  { month: 'Tháng 7', occupied: 103, total: 120 },
+  { month: 'Tháng 8', occupied: 111, total: 120 },
+  { month: 'Tháng 9', occupied: 116, total: 120 }
 ]
 
-export const REVENUE_DATA = [
-  { month: 'Apr', revenue: 14200 },
-  { month: 'May', revenue: 15600 },
-  { month: 'Jun', revenue: 16300 },
-  { month: 'Jul', revenue: 17100 },
-  { month: 'Aug', revenue: 17900 },
-  { month: 'Sep', revenue: 18450 }
+export interface MonthlyRevenueRecord {
+  month: string
+  revenue: number
+  growth: string
+  growthNumber: number
+  contracts: number
+  occupancyRate: string
+  occupancyNumber: number
+}
+
+export const REVENUE_DATA: MonthlyRevenueRecord[] = [
+  { month: 'Tháng 4', revenue: 14200000, growth: '—', growthNumber: 0, contracts: 82, occupancyRate: '68%', occupancyNumber: 0.68 },
+  { month: 'Tháng 5', revenue: 15600000, growth: '+9,9%', growthNumber: 0.099, contracts: 91, occupancyRate: '72%', occupancyNumber: 0.72 },
+  { month: 'Tháng 6', revenue: 16300000, growth: '+4,5%', growthNumber: 0.045, contracts: 96, occupancyRate: '75%', occupancyNumber: 0.75 },
+  { month: 'Tháng 7', revenue: 17100000, growth: '+4,9%', growthNumber: 0.049, contracts: 103, occupancyRate: '78%', occupancyNumber: 0.78 },
+  { month: 'Tháng 8', revenue: 17900000, growth: '+4,7%', growthNumber: 0.047, contracts: 111, occupancyRate: '81%', occupancyNumber: 0.81 },
+  { month: 'Tháng 9', revenue: 18450000, growth: '+3,1%', growthNumber: 0.031, contracts: 116, occupancyRate: '84%', occupancyNumber: 0.84 }
 ]
+
+export const REVENUE_BREAKDOWN = [
+  { category: 'Tiền thuê kho', percentage: 78, color: '#2563eb' },
+  { category: 'Phí dịch vụ', percentage: 13, color: '#10b981' },
+  { category: 'Phí vận chuyển', percentage: 5, color: '#f59e0b' },
+  { category: 'Phí khác', percentage: 4, color: '#8b5cf6' }
+]
+
+export const WAREHOUSE_PERFORMANCE = {
+  currentOccupancy: '84%',
+  activeContracts: 116,
+  renewalRate: '91%'
+}
 
 export const UNIT_TYPE_DATA = [
   { name: 'Small', value: 42, color: '#3b82f6' },
@@ -246,12 +429,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Demo Customer',
     email: 'customer@storagehub.demo',
     phone: '+84 908 123 456',
-    unit: 'B-208',
-    unitType: 'Medium Climate',
+    unit: 'HCM-Q1-F01-M-001',
+    unitType: 'Kho Trung (M)',
     size: 10,
-    facility: 'Downtown Storage',
-    amount: 149,
-    deposit: 149,
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    amount: 9500000,
+    deposit: 9500000,
     status: 'active',
     paid: 'paid',
     paymentStatus: 'paid',
@@ -268,12 +451,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Tran Van Binh',
     email: 'binh.tran@email.com',
     phone: '+84 912 345 678',
-    unit: 'A-210',
-    unitType: 'Small Standard',
+    unit: 'HCM-Q1-F01-S-002',
+    unitType: 'Kho Nhỏ (S)',
     size: 5,
-    facility: 'Downtown Storage',
-    amount: 89,
-    deposit: 89,
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    amount: 5500000,
+    deposit: 5500000,
     status: 'active',
     paid: 'overdue',
     paymentStatus: 'overdue',
@@ -290,12 +473,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Nguyen Minh Anh',
     email: 'anh.nguyen@outlook.com',
     phone: '+84 903 555 123',
-    unit: 'A-104',
-    unitType: 'Small Climate',
+    unit: 'HCM-Q1-F01-S-001',
+    unitType: 'Kho Nhỏ (S)',
     size: 5,
-    facility: 'Downtown Storage',
-    amount: 89,
-    deposit: 89,
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    amount: 5500000,
+    deposit: 5500000,
     status: 'active',
     paid: 'paid',
     paymentStatus: 'paid',
@@ -312,12 +495,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Le Hoang Nam',
     email: 'nam.le@gmail.com',
     phone: '+84 988 776 655',
-    unit: 'C-301',
-    unitType: 'Large Storage',
+    unit: 'HCM-Q1-F01-L-001',
+    unitType: 'Kho Lớn (L)',
     size: 20,
-    facility: 'Downtown Storage',
-    amount: 269,
-    deposit: 269,
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    amount: 15000000,
+    deposit: 15000000,
     status: 'active',
     paid: 'paid',
     paymentStatus: 'paid',
@@ -334,12 +517,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Saigon Logistics Co.',
     email: 'contact@sg-logistics.vn',
     phone: '+84 28 3822 9999',
-    unit: 'D-402',
-    unitType: 'Extra Large Commercial',
+    unit: 'HCM-Q1-F01-XL-001',
+    unitType: 'Kho Rất Lớn (XL)',
     size: 25,
-    facility: 'Downtown Storage',
-    amount: 349,
-    deposit: 349,
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    amount: 22500000,
+    deposit: 22500000,
     status: 'active',
     paid: 'paid',
     paymentStatus: 'paid',
@@ -356,12 +539,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Doan Thi Mai',
     email: 'mai.doan@gmail.com',
     phone: '+84 977 112 233',
-    unit: 'A-115',
-    unitType: 'Small Standard',
+    unit: 'BD-F01-S-002',
+    unitType: 'Kho Nhỏ (S)',
     size: 5,
-    facility: 'Riverside Storage',
-    amount: 75,
-    deposit: 75,
+    facility: 'Kho Việt – Cơ sở Bình Dương',
+    amount: 5500000,
+    deposit: 5500000,
     status: 'pending',
     paid: 'pending',
     paymentStatus: 'pending',
@@ -378,12 +561,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Vuong Quoc Tuan',
     email: 'tuan.vuong@vcorp.vn',
     phone: '+84 909 888 222',
-    unit: 'B-108',
-    unitType: 'Medium Standard',
+    unit: 'BD-F01-M-001',
+    unitType: 'Kho Trung (M)',
     size: 10,
-    facility: 'Riverside Storage',
-    amount: 135,
-    deposit: 135,
+    facility: 'Kho Việt – Cơ sở Bình Dương',
+    amount: 9500000,
+    deposit: 9500000,
     status: 'active',
     paid: 'overdue',
     paymentStatus: 'overdue',
@@ -397,9 +580,9 @@ export const RENTALS: RentalRecord[] = [
 ]
 
 export const STAFF_LIST = [
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', shift: 'Morning', tasks: 3, status: 'on-duty', phone: '090 555 0101' },
-  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', shift: 'Day', tasks: 5, status: 'on-duty', phone: '090 555 0102' },
-  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', shift: 'Night', tasks: 1, status: 'off-duty', phone: '090 555 0103' }
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1' },
+  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'fac-002', facilityName: 'Kho Việt – Cơ sở Bình Dương' }
 ]
 
 export interface OverdueAccount {
@@ -432,7 +615,7 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'binh.tran@email.com',
     phone: '+84 912 345 678',
     unit: 'A-210',
-    facility: 'Downtown Storage',
+    facility: 'Kho Việt – Cơ sở Quận 1',
     amount: 89,
     baseAmount: 89,
     lateFee: 25,
@@ -453,7 +636,7 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'tuan.vuong@vcorp.vn',
     phone: '+84 909 888 222',
     unit: 'B-108',
-    facility: 'Riverside Storage',
+    facility: 'Kho Việt – Cơ sở Bình Dương',
     amount: 135,
     baseAmount: 135,
     lateFee: 35,
@@ -474,7 +657,7 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'trinh.nguyen@freemail.com',
     phone: '+84 902 119 922',
     unit: 'C-105',
-    facility: 'Downtown Storage',
+    facility: 'Kho Việt – Cơ sở Quận 1',
     amount: 220,
     baseAmount: 220,
     lateFee: 50,
@@ -495,7 +678,7 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'giabao.ha@gmail.com',
     phone: '+84 938 445 566',
     unit: 'A-304',
-    facility: 'Downtown Storage',
+    facility: 'Kho Việt – Cơ sở Quận 1',
     amount: 89,
     baseAmount: 89,
     lateFee: 0,
@@ -512,8 +695,8 @@ export const OVERDUE: OverdueAccount[] = [
 ]
 
 export const UTILIZATION = [
-  { name: 'Downtown Storage', value: 80 },
-  { name: 'Riverside Storage', value: 76 }
+  { name: 'Kho Việt – Cơ sở Quận 1', value: 80 },
+  { name: 'Kho Việt – Cơ sở Bình Dương', value: 76 }
 ]
 
 export const SUPPORT_METRICS = [
@@ -524,12 +707,12 @@ export const SUPPORT_METRICS = [
 export const REVENUE_TREND = REVENUE_DATA
 
 export const CONVERSION_DATA = [
-  { month: 'Apr', visits: 420, bookings: 38 },
-  { month: 'May', visits: 510, bookings: 49 },
-  { month: 'Jun', visits: 580, bookings: 61 },
-  { month: 'Jul', visits: 620, bookings: 66 },
-  { month: 'Aug', visits: 710, bookings: 78 },
-  { month: 'Sep', visits: 760, bookings: 84 }
+  { month: 'Tháng 4', visits: 420, bookings: 38 },
+  { month: 'Tháng 5', visits: 510, bookings: 49 },
+  { month: 'Tháng 6', visits: 580, bookings: 61 },
+  { month: 'Tháng 7', visits: 620, bookings: 66 },
+  { month: 'Tháng 8', visits: 710, bookings: 78 },
+  { month: 'Tháng 9', visits: 760, bookings: 84 }
 ]
 
 // export const PRICING_TIERS = [
@@ -625,7 +808,7 @@ export const DISCOUNTS: PromotionItem[] = [
     uses: 22,
     maxUses: 50,
     minLeaseMonths: 12,
-    applicableFacility: 'Downtown Storage',
+    applicableFacility: 'Kho Việt – Cơ sở Quận 1',
     applicableUnitType: 'Medium & Large',
     startDate: 'Feb 15, 2026',
     expires: 'Nov 30, 2026'
@@ -644,7 +827,7 @@ export const DISCOUNTS: PromotionItem[] = [
     uses: 36,
     maxUses: 80,
     minLeaseMonths: 1,
-    applicableFacility: 'Riverside Storage',
+    applicableFacility: 'Kho Việt – Cơ sở Bình Dương',
     applicableUnitType: 'Small & Medium',
     startDate: 'Sep 01, 2026',
     expires: 'Oct 31, 2026'
@@ -711,9 +894,9 @@ export const FEES = [
 ]
 
 export const USERS = [
-  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Downtown Storage', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Downtown Storage', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
-  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Downtown Storage', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
+  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
+  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
   { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'All facilities', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
   { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'All facilities', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
 ]
@@ -749,7 +932,7 @@ export const ACTIVITY_LOGS: AuditActivityLog[] = [
     actor: 'Demo Administrator',
     role: 'admin',
     action: 'Updated facility operating security policy',
-    target: 'Downtown Storage · Gate PIN Policy',
+    target: 'Kho Việt – Cơ sở Quận 1 · Quy định PIN cổng',
     time: '8 minutes ago',
     timestamp: '2026-09-18 11:58:14',
     type: 'info',

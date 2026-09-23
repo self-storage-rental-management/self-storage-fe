@@ -76,13 +76,14 @@ interface LayoutProps {
   roleLabel: string
   roleColor: string
   notifications?: LayoutNotification[]
+  additionalNotifications?: LayoutNotification[]
   onNotificationClick?: (notification: LayoutNotification) => void
   canAccess?: (permission: PermissionKey) => boolean
 }
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, onNotificationClick, canAccess
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
 }: LayoutProps) {
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -151,14 +152,15 @@ export default function Layout({
       'return': 'Nghiệm Thu Trả Kho',
       'dashboard': 'Bảng Điều Khiển',
       'reports': 'Báo Cáo Cơ Sở',
-      'units': 'Quản Lý Gian Kho',
+      'units': 'Quản Lý Kho',
       'staff': 'Phân Công Nhân Viên',
       'rentals': 'Hợp Đồng & Cước Thuê',
       'overdue': 'Quản Lý Nợ Quá Hạn',
-      'facilities': 'Tổng Quan Cơ Sở',
+      'facilities': 'Quản Lý Cơ Sở',
       'performance': 'Hiệu Suất Vận Hành',
       'policies': 'Chính Sách Thuê',
       'pricing': 'Bảng Giá & Biểu Phí',
+      'discounts': 'Khuyến Mãi & Voucher',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',
       'roles': 'Vai Trò & Phân Quyền',
@@ -246,7 +248,10 @@ export default function Layout({
       message: item.timeVi,
       page: item.page
     }))
-  const notifications = suppliedNotifications ?? fallbackNotifications
+  const notifications = [
+    ...(suppliedNotifications ?? fallbackNotifications),
+    ...(additionalNotifications ?? [])
+  ]
   const unreadCount = notifications.filter(item => !badgeSeenNotificationIds.includes(item.id)).length
 
   const formatNotificationDate = (value?: string) => {
@@ -274,7 +279,7 @@ export default function Layout({
   }
 
   return (
-    <div className="flex h-full bg-[#f3f2eb]">
+    <div className={`flex h-full bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -400,7 +405,7 @@ export default function Layout({
               title={'Thông báo'}
               aria-expanded={notificationsOpen}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="show-icon w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               {unreadCount > 0 && (

@@ -1,12 +1,52 @@
-import { useState } from 'react'
+import React, { useState, Fragment } from 'react'
 import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Avatar, Tabs } from '../../components/ui'
 import type { User, Role } from '../../types'
 import type { PermissionKey } from '../../types'
-import { PERMISSION_DEFINITIONS } from '../../auth/rbac'
-import { LOGIN_HISTORY, ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog, type SettingGroup } from "../../data/demoDatabase"
+import { PERMISSION_DEFINITIONS, DEFAULT_ROLE_PERMISSIONS } from '../../auth/rbac'
+import { ACTIVITY_LOGS, SETTINGS_GROUPS, type AuditActivityLog } from "../../data/demoDatabase"
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
+
+function CheckIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+function MinusIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M18 12H6" />
+    </svg>
+  )
+}
+
+function LockIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  )
+}
+
+function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  )
+}
+
+function RefreshIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+  )
+}
 
 const roleColors: Record<Role, string> = {
   customer: 'bg-blue-100 text-blue-700',
@@ -37,7 +77,11 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
     requestUserPasswordReset,
     rolePermissions,
     updateRolePermissions,
-    can
+    can,
+    loginHistory,
+    sessions,
+    securityAlerts,
+    revokeAllUserSessions
   } = useStorageHub()
 
   const NAV: NavItem[] = [
@@ -54,6 +98,7 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
   const [logTab, setLogTab] = useState('Tất cả')
   const [logSearch, setLogSearch] = useState('')
   const [historyTab, setHistoryTab] = useState('Tất cả')
+  const [historyUserFilter, setHistoryUserFilter] = useState('all')
   const [selectedUser, setSelectedUser] = useState<typeof USERS[0] | null>(null)
   const [accountMode, setAccountMode] = useState<'internal' | 'customer-support'>('internal')
   const [accountForm, setAccountForm] = useState({ name: '', email: '', phone: '', role: 'staff' as Exclude<Role, 'customer'>, facility: '', status: 'active' as 'active' | 'inactive' | 'suspended', reason: '' })
@@ -62,13 +107,29 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
   const [facilityFilter, setFacilityFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
 
+  // RBAC interactive state
+  const [rbacSearch, setRbacSearch] = useState('')
+  const [rbacGroupFilter, setRbacGroupFilter] = useState<'all' | 'Điều hướng' | 'Nghiệp vụ' | 'Quản trị'>('all')
+  const [showResetModal, setShowResetModal] = useState(false)
+
+  const handleResetDefaultPermissions = () => {
+    try {
+      for (const r of (Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[])) {
+        updateRolePermissions(r, DEFAULT_ROLE_PERMISSIONS[r], user)
+      }
+      showToast('Đã khôi phục toàn bộ phân quyền về trạng thái mặc định.')
+      setShowResetModal(false)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể khôi phục phân quyền.')
+    }
+  }
+
   // Audit Logs interactive state
   const [logsList, setLogsList] = useState<AuditActivityLog[]>(ACTIVITY_LOGS)
   const [selectedLog, setSelectedLog] = useState<AuditActivityLog | null>(null)
   const [logModalOpen, setLogModalOpen] = useState(false)
 
   // Settings interactive state
-  const [settingsGroups, setSettingsGroups] = useState<SettingGroup[]>(SETTINGS_GROUPS)
   const [activeSettingsTab, setActiveSettingsTab] = useState('Tất cả danh mục')
 
   // Toast
@@ -260,80 +321,321 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
         </div>
       )}
 
-      {/* ── ROLES & PERMISSIONS ───────────────────────────────── */}
+      {/* ── ROLES & PERMISSIONS (RBAC) ────────────────────────── */}
       {page === 'roles' && can(user, 'manage_roles') && (
-        <div className="fade-in">
-          <SectionHeader
-            title="Vai Trò & Ma Trận Phân Quyền"
-            subtitle="Ma trận kiểm soát quyền truy cập dựa trên vai trò (RBAC)"
-          />
-          <Card className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50">
-                <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide min-w-48">
-                    Quyền Hạn
-                  </th>
-                  {(Object.keys(roleColors) as Role[]).map(r => (
-                    <th key={r} className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${roleColors[r]}`}>{roleLabels[r]}</span>
+        <div className="fade-in rbac-matrix space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <SectionHeader
+              title="Phân Quyền & Kiểm Soát Truy Cập Doanh Nghiệp"
+              subtitle="Thiết lập quyền hạn truy cập, phân công trách nhiệm và kiểm soát an toàn vận hành cho từng bộ phận trong tổ chức"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResetModal(true)}
+              className="shrink-0 flex items-center gap-2 border-slate-300 text-slate-700 hover:bg-slate-100 self-start sm:self-center cursor-pointer"
+            >
+              <RefreshIcon className="w-4 h-4 text-slate-500" />
+              <span>Khôi phục mặc định</span>
+            </Button>
+          </div>
+
+          {/* Executive KPI Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Tổng Quyền Hạn</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">27 <span className="text-sm font-normal text-slate-500">quyền</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">13 Giám sát · 11 Nghiệp vụ · 3 Quản trị</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-base">
+                🛡️
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Nhóm Vai Trò</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">5 <span className="text-sm font-normal text-slate-500">vai trò</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Admin, Quản lý, Nhân viên, KH, KD</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-base">
+                👥
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Khối Chức Năng</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">3 <span className="text-sm font-normal text-slate-500">khối</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Điều hướng · Vận hành · Hệ thống</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-base">
+                ⚙️
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Bảo Vệ Cốt Lõi</p>
+                <p className="text-2xl font-bold text-emerald-700 mt-1">2 <span className="text-sm font-normal text-slate-500">quyền khóa</span></p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Ngăn ngừa tự khóa quyền Admin</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-base">
+                🔒
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Tìm kiếm quyền hạn (theo tên, mã key)..."
+                value={rbacSearch}
+                onChange={e => setRbacSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#e9a12c] focus:border-transparent"
+              />
+              <div className="absolute left-3 top-2.5 text-slate-400 pointer-events-none">
+                <SearchIcon className="w-4 h-4" />
+              </div>
+              {rbacSearch && (
+                <button
+                  type="button"
+                  onClick={() => setRbacSearch('')}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+              {[
+                { id: 'all', label: 'Tất cả', count: 27 },
+                { id: 'Điều hướng', label: 'Điều hướng & Giám sát', count: 13 },
+                { id: 'Nghiệp vụ', label: 'Nghiệp vụ vận hành', count: 11 },
+                { id: 'Quản trị', label: 'Quản trị hệ thống', count: 3 },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setRbacGroupFilter(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    rbacGroupFilter === tab.id
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    rbacGroupFilter === tab.id ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Matrix Table */}
+          <Card className="overflow-hidden border border-slate-200/90 shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-900 text-white">
+                    <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider min-w-[280px]">
+                      Quyền Hạn Doanh Nghiệp
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {PERMISSION_DEFINITIONS.map(p => (
-                  <tr key={p.key} className="hover:bg-slate-50">
-                    <td className="px-5 py-3 font-medium text-slate-700"><div>{p.label}</div><div className="mt-0.5 text-[10px] font-normal uppercase tracking-wide text-slate-400">{p.group}</div></td>
-                    {(Object.keys(roleColors) as Role[]).map(r => {
-                      const has = rolePermissions[r][p.key]
-                      const locked = r === 'admin' && (p.key === 'manage_roles' || p.key === 'manage_users')
-                      return (
-                        <td key={r} className="px-4 py-3 text-center">
-                          <button type="button" disabled={locked} aria-label={`${has ? 'Tắt' : 'Bật'} ${p.label} cho ${roleLabels[r]}`} onClick={() => {
-                            try {
-                              updateRolePermissions(r, { [p.key]: !has }, user)
-                              showToast(`Đã ${has ? 'tắt' : 'bật'} quyền ${p.label} cho ${roleLabels[r]}.`)
-                            } catch (error) {
-                              showToast(error instanceof Error ? error.message : 'Không thể cập nhật quyền.')
-                            }
-                          }} className={`inline-flex items-center justify-center w-7 h-7 rounded-full transition ${has ? 'bg-green-100 hover:bg-green-200' : 'bg-slate-100 hover:bg-slate-200'} ${locked ? 'cursor-not-allowed opacity-60' : ''}`}>
-                            {has
-                              ? <svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                              : <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>}
-                          </button>
-                        </td>
-                      )
-                    })}
+                    {(Object.keys(roleColors) as Role[]).map(r => (
+                      <th key={r} className="px-4 py-3.5 text-center text-xs font-bold uppercase tracking-wider min-w-[130px]">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold shadow-2xs ${roleColors[r]}`}>
+                          {roleLabels[r]}
+                        </span>
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {['Điều hướng', 'Nghiệp vụ', 'Quản trị'].map(groupKey => {
+                    const groupPermissions = PERMISSION_DEFINITIONS.filter(p => {
+                      const matchesGroup = rbacGroupFilter === 'all' || rbacGroupFilter === groupKey
+                      const matchesSearch = !rbacSearch.trim() ||
+                        p.label.toLowerCase().includes(rbacSearch.trim().toLowerCase()) ||
+                        p.key.toLowerCase().includes(rbacSearch.trim().toLowerCase())
+                      return p.group === groupKey && matchesGroup && matchesSearch
+                    })
+
+                    if (groupPermissions.length === 0) return null
+
+                    const groupMeta = {
+                      'Điều hướng': { title: 'Khối Điều Hướng & Giám Sát Dữ Liệu', badge: 'Xem & Tra cứu', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+                      'Nghiệp vụ': { title: 'Khối Nghiệp Vụ Vận Hành & Giao Dịch Kho', badge: 'Thao tác & Phê duyệt', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+                      'Quản trị': { title: 'Khối Quản Trị Hệ Thống & Bảo Mật', badge: 'Quản trị cấp cao', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+                    }[groupKey] || { title: groupKey, badge: 'Phân hệ', color: 'bg-slate-50 text-slate-700 border-slate-200' }
+
+                    return (
+                      <Fragment key={groupKey}>
+                        {/* Section Header Row */}
+                        <tr className="bg-slate-100/90 border-t border-b border-slate-200/80">
+                          <td colSpan={6} className="px-6 py-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-xs uppercase tracking-wider text-slate-800">
+                                {groupMeta.title}
+                              </span>
+                              <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded border ${groupMeta.color}`}>
+                                {groupMeta.badge} ({groupPermissions.length})
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Permission Rows */}
+                        {groupPermissions.map(p => (
+                          <tr key={p.key} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-6 py-3.5">
+                              <div className="font-semibold text-slate-800 text-sm">{p.label}</div>
+                              <div className="mt-0.5 text-[11px] font-mono text-slate-400">{p.key}</div>
+                            </td>
+                            {(Object.keys(roleColors) as Role[]).map(r => {
+                              const has = rolePermissions[r][p.key]
+                              const locked = r === 'admin' && (p.key === 'manage_roles' || p.key === 'manage_users')
+
+                              return (
+                                <td key={r} className="px-4 py-3 text-center align-middle">
+                                  {locked ? (
+                                    <div
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold cursor-not-allowed select-none shadow-2xs"
+                                      title="Quyền lõi quản trị được bảo vệ hệ thống, không thể tắt"
+                                    >
+                                      <LockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      <span className="text-[11px]">Bảo vệ</span>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      aria-label={`${has ? 'Thu hồi' : 'Cấp'} quyền ${p.label} cho ${roleLabels[r]}`}
+                                      onClick={() => {
+                                        try {
+                                          updateRolePermissions(r, { [p.key]: !has }, user)
+                                          showToast(`Đã ${has ? 'thu hồi' : 'cấp'} quyền "${p.label}" cho ${roleLabels[r]}.`)
+                                        } catch (error) {
+                                          showToast(error instanceof Error ? error.message : 'Không thể cập nhật quyền.')
+                                        }
+                                      }}
+                                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs ${
+                                        has
+                                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                          : 'bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 border border-slate-200'
+                                      }`}
+                                      title={has ? 'Đã cấp quyền (Nhấn để thu hồi)' : 'Chưa cấp quyền (Nhấn để cấp)'}
+                                    >
+                                      {has ? (
+                                        <>
+                                          <CheckIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                          <span className="text-[11.5px]">Đã cấp</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <MinusIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                          <span className="text-[11.5px]">Chưa cấp</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </Card>
-          <p className="mt-3 text-xs text-slate-500">Thay đổi được lưu ngay vào StorageHubContext và áp dụng tức thời cho menu, route và thao tác nghiệp vụ. Hai quyền lõi của Admin được khóa để tránh tự khóa hệ thống.</p>
+
+          {/* Footer Guide Note */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+              i
+            </div>
+            <div className="space-y-1 leading-relaxed">
+              <p className="font-semibold text-slate-800">Cơ chế áp dụng quyền hạn tức thời:</p>
+              <p>Mọi thay đổi trên ma trận quyền hạn sẽ được cập nhật trực tiếp vào hệ thống và có hiệu lực ngay đối với các thanh điều hướng, quyền truy cập trang và thao tác nghiệp vụ của người dùng tương ứng mà không cần khởi động lại dịch vụ.</p>
+              <p className="text-amber-700 font-medium">Lưu ý: Hai quyền cốt lõi của Quản trị viên (Quản lý tài khoản & Quản lý bảng quyền) được khóa an toàn vĩnh viễn để bảo vệ tính toàn vẹn của hệ thống.</p>
+            </div>
+          </div>
+
+          {/* Modal Khôi phục mặc định */}
+          {showResetModal && (
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+                <div className="flex items-center gap-3 text-amber-600">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                    <RefreshIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">Khôi Phục Phân Quyền Mặc Định</h3>
+                    <p className="text-xs text-slate-500">Cài đặt lại cấu hình RBAC tiêu chuẩn</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Bạn có chắc chắn muốn khôi phục toàn bộ bảng phân quyền của 5 nhóm vai trò (Khách hàng, Nhân viên, Quản lý, Kinh doanh, Quản trị viên) về cấu hình chuẩn ban đầu không? Mọi tùy biến trước đó sẽ được thiết lập lại.
+                </p>
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowResetModal(false)}
+                    className="cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleResetDefaultPermissions}
+                    className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                  >
+                    Xác nhận khôi phục
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ── LOGIN HISTORY ─────────────────────────────────────── */}
       {page === 'login-history' && (
-        <div className="fade-in">
+        <div className="fade-in space-y-5">
           <SectionHeader
             title="Lịch Sử Đăng Nhập Hệ Thống"
-            subtitle="Nhật ký kiểm toán an ninh các sự kiện xác thực tài khoản"
+            subtitle="Lịch sử xác thực, phiên đang mở và cảnh báo bất thường được lưu từ StorageHubContext"
           />
-          <div className="mb-4 flex gap-3 items-center">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <Tabs
               tabs={['Tất cả', 'Thành công', 'Thất bại']}
               active={historyTab}
               onChange={val => setHistoryTab(val)}
             />
-            {LOGIN_HISTORY.some(l => l.status === 'failed') && (
-              <div className="flex items-center gap-2 ml-auto bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-sm text-red-700">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" /></svg>
-                Phát hiện 1 lần đăng nhập thất bại khả nghi
-              </div>
-            )}
+            <label className="flex items-center gap-2 text-sm text-slate-600 lg:ml-auto">
+              <span className="font-medium">Tài khoản</span>
+              <select value={historyUserFilter} onChange={event => setHistoryUserFilter(event.target.value)} className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-none">
+                <option value="all">Tất cả tài khoản</option>
+                {USERS.map(account => <option key={account.id} value={account.id}>{account.name} · {account.email}</option>)}
+              </select>
+            </label>
           </div>
+          {securityAlerts.filter(alert => !alert.resolvedAt).length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <span aria-hidden="true">⚠</span>
+              <span>Phát hiện {securityAlerts.filter(alert => !alert.resolvedAt).length} cảnh báo an ninh chưa xử lý. Hãy kiểm tra các lần đăng nhập thất bại hoặc thiết bị mới.</span>
+            </div>
+          )}
           <Card>
             <Table>
               <Thead>
@@ -348,15 +650,16 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                 </tr>
               </Thead>
               <Tbody>
-                {LOGIN_HISTORY
+                {loginHistory
                   .filter(l => {
                     if (historyTab === 'Tất cả') return true
                     if (historyTab === 'Thành công') return l.status === 'success'
                     if (historyTab === 'Thất bại') return l.status === 'failed'
-                    return l.status === historyTab.toLowerCase()
+                    return false
                   })
+                  .filter(l => historyUserFilter === 'all' || l.userId === historyUserFilter || (!l.userId && USERS.find(account => account.email === l.email)?.id === historyUserFilter))
                   .map(l => (
-                    <Tr key={l.id} className={l.status === 'failed' ? 'bg-red-50' : ''}>
+                    <Tr key={l.id} className={l.status === 'failed' || l.suspicious ? 'bg-red-50' : ''}>
                       <Td>
                         <div>
                           <p className="font-medium text-sm text-slate-800">{l.user}</p>
@@ -364,17 +667,50 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                         </div>
                       </Td>
                       <Td>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[l.role as Role]}`}>{roleLabels[l.role as Role] ?? l.role}</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[l.role as Role] ?? 'bg-slate-100 text-slate-600'}`}>{l.role ? roleLabels[l.role] : 'Chưa xác định'}</span>
                       </Td>
                       <Td><code className="text-xs bg-slate-100 px-2 py-0.5 rounded">{l.ip}</code></Td>
                       <Td className="text-sm text-slate-500">{l.location}</Td>
                       <Td className="text-xs text-slate-400">{l.device}</Td>
-                      <Td className="text-xs text-slate-500">{l.time}</Td>
+                      <Td className="text-xs text-slate-500">{l.timestamp}</Td>
                       <Td>
                         {l.status === 'failed'
-                          ? <Badge variant="error">Thất bại</Badge>
-                          : <Badge variant="success">Thành công</Badge>}
+                          ? <Badge variant="error">{l.suspicious ? 'Khả nghi' : 'Thất bại'}</Badge>
+                          : l.status === 'logout' ? <Badge variant="muted">Đã đăng xuất</Badge> : <Badge variant="success">Thành công</Badge>}
                       </Td>
+                    </Tr>
+                  ))}
+              </Tbody>
+            </Table>
+          </Card>
+          <Card>
+            <div className="flex flex-col gap-2 border-b border-stone-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-stone-900">Phiên đăng nhập</h3>
+                <p className="text-xs text-stone-500">Chỉ phiên đang hoạt động mới có thể bị thu hồi.</p>
+              </div>
+              <span className="text-sm text-stone-500">{sessions.filter(session => session.status === 'active').length} phiên đang mở</span>
+            </div>
+            <Table>
+              <Thead><tr><Th>Tài khoản</Th><Th>Thiết bị</Th><Th>Vị trí</Th><Th>Bắt đầu</Th><Th>Trạng thái</Th><Th /></tr></Thead>
+              <Tbody>
+                {sessions
+                  .filter(session => historyUserFilter === 'all' || session.userId === historyUserFilter)
+                  .map(session => (
+                    <Tr key={session.id}>
+                      <Td><p className="font-medium text-sm text-slate-800">{session.userName}</p><p className="text-xs text-slate-400">{session.email}</p></Td>
+                      <Td className="text-xs text-slate-500">{session.device}</Td>
+                      <Td className="text-xs text-slate-500">{session.location}</Td>
+                      <Td className="text-xs text-slate-500">{session.createdAt}</Td>
+                      <Td>{session.status === 'active' ? <Badge variant="success">Đang hoạt động</Badge> : session.status === 'revoked' ? <Badge variant="error">Đã thu hồi</Badge> : <Badge variant="muted">Đã đăng xuất</Badge>}</Td>
+                      <Td className="text-right">{session.status === 'active' && can(user, 'manage_users') && <Button variant="outline" size="sm" onClick={() => {
+                        try {
+                          const count = revokeAllUserSessions(session.userId, user)
+                          showToast(count > 0 ? `Đã đăng xuất ${count} phiên của ${session.email}.` : 'Tài khoản này không còn phiên đang hoạt động.')
+                        } catch (error) {
+                          showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên.')
+                        }
+                      }}>Đăng xuất mọi thiết bị</Button>}</Td>
                     </Tr>
                   ))}
               </Tbody>
@@ -430,7 +766,10 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
             l.action.toLowerCase().includes(query) ||
             l.target.toLowerCase().includes(query) ||
             l.ip.includes(query)
-          return matchTab && matchSearch
+          const matchUser = historyUserFilter === 'all'
+            || activities.some(activity => activity.id === l.id && activity.actorId === historyUserFilter)
+            || USERS.some(account => account.id === historyUserFilter && (account.name === l.actor || account.email === l.actor))
+          return matchTab && matchSearch && matchUser
         })
 
         return (
@@ -496,6 +835,10 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                   className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
+              <select value={historyUserFilter} onChange={event => setHistoryUserFilter(event.target.value)} className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-none">
+                <option value="all">Tất cả tài khoản</option>
+                {USERS.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
+              </select>
             </div>
 
             {/* Audit Log Stream */}
@@ -571,18 +914,9 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
 
       {/* ── SYSTEM SETTINGS ───────────────────────────────────── */}
       {page === 'settings' && (() => {
-        const handleSaveSettings = () => {
-          showToast('Bản demo chỉ thay đổi biểu mẫu trong phiên hiện tại; chưa ghi cấu hình hệ thống.')
-        }
-
-        const handleResetDefaults = () => {
-          setSettingsGroups(SETTINGS_GROUPS)
-          showToast('Đã khôi phục biểu mẫu demo về giá trị ban đầu.')
-        }
-
         const filteredGroups = activeSettingsTab === 'Tất cả danh mục'
-          ? settingsGroups
-          : settingsGroups.filter(g => {
+          ? SETTINGS_GROUPS
+          : SETTINGS_GROUPS.filter(g => {
               return (
                 (activeSettingsTab === 'Cơ sở kho' && g.group === 'Facility Defaults') ||
                 (activeSettingsTab === 'Thanh toán' && g.group === 'Billing & Delinquency') ||
@@ -599,14 +933,9 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               title="Cấu Hình Hệ Thống & Cơ Sở Kho"
               subtitle="Tinh chỉnh các ngưỡng vận hành, thời gian ân hạn công nợ, quy tắc an ninh và thông báo tự động"
               action={
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleResetDefaults}>
-                    Khôi Phục Mặc Định
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={handleSaveSettings}>
-                    Lưu Toàn Bộ Cài Đặt
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" disabled>
+                  Chỉ xem · Chưa kết nối backend
+                </Button>
               }
             />
 
@@ -644,7 +973,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                             <input
                               type="checkbox"
                               defaultChecked={Boolean(item.value)}
-                              className="w-4 h-4 text-amber-600 rounded cursor-pointer"
+                              disabled
+                              className="w-4 h-4 text-amber-600 rounded cursor-not-allowed"
                             />
                             <span className="text-xs text-stone-600 font-medium">
                               Bật / Tự động áp dụng thiết lập này
@@ -653,7 +983,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                         ) : item.type === 'select' ? (
                           <select
                             defaultValue={item.value as string}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs bg-stone-100 text-stone-500 focus:outline-none"
                           >
                             {item.options ? item.options.map(opt => (
                               <option key={opt} value={opt}>{opt}</option>
@@ -665,13 +996,15 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
                           <input
                             type="number"
                             defaultValue={item.value as number}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-500 bg-stone-100 focus:outline-none"
                           />
                         ) : (
                           <input
                             type="text"
                             defaultValue={item.value as string}
-                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            disabled
+                            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-500 bg-stone-100 focus:outline-none"
                           />
                         )}
                       </div>
@@ -681,9 +1014,8 @@ export default function AdminApp({ user, onLogout }: { user: User; onLogout: () 
               ))}
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={handleResetDefaults}>Hủy Thay Đổi</Button>
-              <Button variant="primary" onClick={handleSaveSettings}>Lưu Toàn Bộ Cài Đặt</Button>
+            <div className="flex justify-end pt-2 text-xs text-stone-500">
+              Cấu hình đang ở chế độ chỉ xem; cần kết nối backend trước khi cho phép lưu thay đổi.
             </div>
           </div>
         )

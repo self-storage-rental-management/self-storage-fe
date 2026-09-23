@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Badge, Button, Card, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Input } from '../../components/ui'
 import { formatVnd } from '../../i18n/currency'
-import { useStorageHub } from '../../store/StorageHubContext'
+import { DEFAULT_BUSINESS_CONFIG, useStorageHub } from '../../store/StorageHubContext'
 import { POLICIES } from '../../data/demoDatabase'
 import type { User } from '../../types'
 import type { BusinessConfig } from '../../types/storageHub'
@@ -17,6 +17,16 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
   // Local editable state for business configuration parameters
   const [formConfig, setFormConfig] = useState<BusinessConfig>(storeConfig)
   const [isSaving, setIsSaving] = useState(false)
+  const [policiesList] = useState<Array<{ id: string; name: string; value: string; scope: string; editable?: boolean }>>(() => {
+    try {
+      const stored = localStorage.getItem('storagehub:policies')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return POLICIES
+  })
 
   useEffect(() => {
     setFormConfig(storeConfig)
@@ -37,13 +47,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
   }
 
   const handleResetDefault = () => {
-    const defaults: BusinessConfig = {
-      dimDivisor: 5000,
-      gracePeriodDays: 7,
-      lateFeeAmount: 25,
-      defaultDepositRatio: 0.2,
-      holdExpiryHours: 24
-    }
+    const defaults: BusinessConfig = DEFAULT_BUSINESS_CONFIG
     setFormConfig(defaults)
     updateBusinessConfig(defaults, user)
     showToast('Đã khôi phục thông số vận hành mặc định.')
@@ -53,7 +57,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
     <div className="fade-in space-y-6">
       <SectionHeader
         title={'Quy Định & Chính Sách Vận Hành Cơ Sở'}
-        subtitle={`${user.facility ?? 'Downtown Storage'} · ${
+        subtitle={`${user.facility ?? 'Kho Việt – Cơ sở Quận 1'} · ${
           'Quy chế lưu kho, quy trình leo thang nợ, an toàn PCCC và cấu hình thông số tự động hóa'
         }`}
         action={
@@ -214,7 +218,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
             </tr>
           </Thead>
           <Tbody>
-            {POLICIES.map(p => (
+            {policiesList.map(p => (
               <Tr key={p.id}>
                 <Td>
                   <span className="font-bold text-sm text-stone-900">{p.name}</span>

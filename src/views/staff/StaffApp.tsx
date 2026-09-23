@@ -50,7 +50,67 @@ const addDays = (dateLabel: string, days: number) => {
   const date = new Date(dateLabel)
   if (Number.isNaN(date.getTime())) return dateLabel
   date.setDate(date.getDate() + days)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return date.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+const toDateInputValue = (dateLabel: string) => {
+  const date = new Date(dateLabel)
+  if (Number.isNaN(date.getTime())) return ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const sharedReservationStatus = (reservation: StorageReservation): ReservationStatus => {
+  if (reservation.status === 'awaiting_review') return 'REVIEW_REQUIRED'
+  if (reservation.status === 'awaiting_email') return 'CREATED'
+  if (reservation.status === 'awaiting_payment') return 'AWAITING_DEPOSIT'
+  if (reservation.status === 'DEPOSIT_PAID') return 'DEPOSIT_PAID'
+  if (reservation.status === 'UNIT_RESERVED') return 'UNIT_RESERVED'
+  if (reservation.status === 'READY_FOR_CHECKIN') return 'READY_FOR_CHECKIN'
+  if (reservation.status === 'COMPLETED') return 'COMPLETED'
+  if (reservation.status === 'CANCELLED') return 'CANCELLED'
+  if (reservation.status === 'EXPIRED') return 'EXPIRED'
+  return 'CREATED'
+}
+
+const mapSharedReservation = (reservation: StorageReservation, units: StorageUnit[], facilities: Facility[]): StaffReservation => {
+  const assignedUnit = reservation.assignedUnitId
+    ? units.find(item => item.id === reservation.assignedUnitId)
+    : undefined
+  const matchingTypeUnit = units.find(item => item.facilityId === reservation.facilityId && item.type.toLowerCase().startsWith(reservation.unitTypeId.toLowerCase().replace('xlarge', 'extra large')))
+  const facility = facilities.find(item => item.id === reservation.facilityId || item.name === reservation.facilityName)
+  const appointmentDate = reservation.appointmentDate || reservation.moveInDate
+  return {
+    id: reservation.id,
+    customer: reservation.customerName,
+    email: reservation.customerEmail,
+    phone: reservation.customerPhone,
+    identityId: reservation.identityId,
+    unit: assignedUnit?.code || reservation.assignedUnitId || 'Chưa xác định gian kho',
+    facility: reservation.facilityName,
+    facilityAddress: facility?.address || '—',
+    size: assignedUnit?.areaM2 || matchingTypeUnit?.areaM2 || 0,
+    sizeCode: assignedUnit?.type || matchingTypeUnit?.type || reservation.unitTypeName || 'Standard',
+    sizeUnit: 'm²',
+    moveIn: appointmentDate,
+    payment: reservation.payment.status === 'paid' ? 'paid' : 'pending',
+    paid: reservation.payment.status === 'paid',
+    status: sharedReservationStatus(reservation),
+    emailVerified: reservation.emailVerification?.verified ?? false,
+    goodsType: reservation.goods.category,
+    material: reservation.goods.material,
+    packageCount: reservation.goods.packageCount,
+    weightKg: reservation.goods.weightKg,
+    dimensionsCm: `${reservation.goods.lengthCm} × ${reservation.goods.widthCm} × ${reservation.goods.heightCm}`,
+    dimWeightKg: reservation.goods.dimWeightKg,
+    initialCondition: reservation.goods.condition,
+    evidence: reservation.evidence,
+    appointmentDate,
+    appointmentTime: reservation.appointmentTime || '09:00',
+    checkInDeadline: reservation.checkInDeadline || addDays(appointmentDate, 14),
+  }
 }
 
 const toDateInputValue = (dateLabel: string) => {
@@ -209,8 +269,15 @@ const returnSeed: StaffReturn[] = RETURNS.map(item => ({
 }))
 
 const unitOperationSpecs: Record<string, { doorWidth: number; doorHeight: number; inner: [number, number, number]; maxWeight: number }> = {
-  'A-104': { doorWidth: 90, doorHeight: 200, inner: [220, 220, 230], maxWeight: 500 },
-  'B-112': { doorWidth: 110, doorHeight: 210, inner: [300, 300, 240], maxWeight: 900 },
+  'HCM-Q1-F01-S-001': { doorWidth: 200, doorHeight: 240, inner: [560, 600, 320], maxWeight: 600 },
+  'HCM-Q1-F01-M-002': { doorWidth: 200, doorHeight: 240, inner: [900, 640, 340], maxWeight: 1200 },
+  'HCM-Q1-F01-M-001': { doorWidth: 200, doorHeight: 240, inner: [900, 640, 340], maxWeight: 1200 },
+  'HCM-Q1-F01-L-001': { doorWidth: 200, doorHeight: 240, inner: [1350, 680, 360], maxWeight: 2400 },
+  'HCM-Q1-F01-XL-001': { doorWidth: 200, doorHeight: 240, inner: [1900, 720, 400], maxWeight: 3600 },
+  'BD-F01-S-001': { doorWidth: 200, doorHeight: 240, inner: [560, 600, 320], maxWeight: 600 },
+  'BD-F01-S-002': { doorWidth: 200, doorHeight: 240, inner: [560, 600, 320], maxWeight: 600 },
+  'BD-F01-M-001': { doorWidth: 200, doorHeight: 240, inner: [900, 640, 340], maxWeight: 1200 },
+  'BD-F01-L-001': { doorWidth: 200, doorHeight: 240, inner: [1350, 680, 360], maxWeight: 2400 },
 }
 
 const parseDimensions = (value: string): [number, number, number] | null => {
@@ -266,7 +333,7 @@ const statusLabelMap: Record<string, string> = {
 }
 
 export default function StaffApp({ user, onLogout }: { user: User; onLogout: () => void }) {
-    const hub = useStorageHub()
+  const hub = useStorageHub()
   const nav: NavItem[] = [
     { id: 'dashboard', label: 'Tổng quan ca làm việc', icon: Icon.home, group: 'Ca làm việc', permission: 'view_dashboard' },
     { id: 'reservations', label: 'Duyệt yêu cầu đặt kho', icon: Icon.calendar, group: 'Vận hành', permission: 'approve_reservations' },
@@ -286,7 +353,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [selectedReturn, setSelectedReturn] = useState<StaffReturn | null>(null)
   const [returnDetailsOnly, setReturnDetailsOnly] = useState(false)
   const [selectedCheckin, setSelectedCheckin] = useState<StaffCheckin | null>(null)
-  const [ticketTab, setTicketTab] = useState('Open')
+  const [ticketTab, setTicketTab] = useState('Mở Mới')
   const [reservationSearch, setReservationSearch] = useState('')
   const [reservationStatus, setReservationStatus] = useState('all')
   const [scheduledReturnIds, setScheduledReturnIds] = useState<Set<string>>(new Set())
@@ -328,7 +395,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [feeDetails, setFeeDetails] = useState<Record<string, string>>({})
 
   // Support Tickets state
-  const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(SUPPORT_TICKETS)
+  const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() => SUPPORT_TICKETS.filter(item => isFacilityVisible(user, item.facilityId, item.facility)))
   const [selectedStaffTicket, setSelectedStaffTicket] = useState<StaffTicket | null>(null)
   const [assignedStaffByTicket, setAssignedStaffByTicket] = useState<Record<string, string>>(() =>
     Object.fromEntries(SUPPORT_TICKETS.map(ticket => {
@@ -428,6 +495,44 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     return <Badge variant={variants[value] ?? 'muted'}>{label}</Badge>
   }
 
+  useEffect(() => {
+    if (!pendingCheckinCompletionId || !selectedCheckin || selectedCheckin.id !== pendingCheckinCompletionId) return
+    const sharedHold = hub.holds.find(item => item.id === selectedCheckin.reservationId)
+    if (!sharedHold || sharedHold.status !== 'READY_FOR_CHECKIN') return
+    const dimensions = parseDimensions(actualDimensions)
+    if (!dimensions) {
+      setPendingCheckinCompletionId(null)
+      showToast('Kích thước thực tế chưa hợp lệ.')
+      return
+    }
+    const evidence = [checkinEvidence.trim(), contractFile.trim(), paymentEvidence.trim(), `RECEIPT-${Date.now()} · ${paymentReference.trim()} · ${user.name} thu phần còn lại`, `CHECKIN-${Date.now()} · ${user.name} xác nhận đối chiếu, cấp credential và bàn giao${scheduleOverrideReason.trim() ? ` · Override: ${scheduleOverrideReason.trim()}` : ''}${checkinNotes.trim() ? ` · ${checkinNotes.trim()}` : ''}`]
+    try {
+      hub.completeCheckIn({
+        holdId: selectedCheckin.reservationId,
+        staffUser: user,
+        checklist: { identityVerified: Boolean(checkinChecks.identity), termsAccepted: Boolean(checkinChecks.contract), paymentConfirmed: Boolean(checkinChecks.payment), unitWalkthrough: Boolean(checkinChecks.walkthrough), accessCodeIssued: Boolean(checkinChecks.credential) },
+        actualMeasurements: { lengthCm: dimensions[0], widthCm: dimensions[1], heightCm: dimensions[2], weightKg: Number(actualWeight), actualVolumeM3: (dimensions[0] * dimensions[1] * dimensions[2] * Math.max(1, selectedCheckin.packageCount)) / 1_000_000, dimWeightKg: selectedCheckin.dimWeightKg, varianceAccepted: true, varianceNotes: checkinNotes.trim() || undefined },
+        initialCondition: actualCondition.trim(),
+        evidencePhotos: evidence,
+        goodsHandover: { packageCount: selectedCheckin.packageCount, category: selectedCheckin.goodsType, estimatedWeightKg: Number(actualWeight), notes: `${actualMaterial.trim()}${checkinNotes.trim() ? ` · ${checkinNotes.trim()}` : ''}` },
+        handedOverItems: [`PIN/thẻ/chìa khóa kho ${selectedCheckin.unit}`, contractFile.trim(), paymentEvidence.trim()],
+      })
+      setCheckins(items => items.map(item => item.id === selectedCheckin.id ? { ...item, status: 'completed', customerHandoverStatus: 'pending', dimensionsCm: actualDimensions.trim(), weightKg: Number(actualWeight), material: actualMaterial.trim(), initialCondition: actualCondition.trim(), evidence: [...item.evidence, ...evidence] } : item))
+      setReservations(items => items.map(item => item.id === selectedCheckin.reservationId ? { ...item, status: 'COMPLETED' } : item))
+      setPendingCheckinCompletionId(null)
+      setCheckinModal(false)
+      showToast('Đã kích hoạt rental; Customer có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.')
+    } catch (error) {
+      setPendingCheckinCompletionId(null)
+      showToast(error instanceof Error ? error.message : 'Không thể hoàn tất Check-in.')
+    }
+  }, [pendingCheckinCompletionId, hub.holds])
+
+  const s = (value: string, variants: Record<string, string>) => {
+    const label = statusLabelMap[value] || value.charAt(0).toUpperCase() + value.slice(1).replace(/-/g, ' ')
+    return <Badge variant={variants[value] ?? 'muted'}>{label}</Badge>
+  }
+
   const normalizedSearch = reservationSearch.trim().toLowerCase()
   const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 }
   const filteredReservations = reservations.filter(r => {
@@ -435,7 +540,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const searchText = [r.id, r.customer, r.phone, r.email, r.identityId, r.facility, r.unit].join(' ').toLowerCase()
     return matchesStatus && (!normalizedSearch || searchText.includes(normalizedSearch))
   })
-  const facilityTickets = staffTickets.filter(ticket => !user.facility || ticket.facility === user.facility)
+  const facilityTickets = staffTickets.filter(ticket => isFacilityVisible(user, ticket.facilityId, ticket.facility))
   const fitEvaluation = selectedCheckin ? evaluateFit(actualDimensions, Number(actualWeight), selectedCheckin.unit) : null
   const reservationForCheckin = selectedCheckin ? reservations.find(reservation => reservation.id === selectedCheckin.reservationId) : null
   const selectedAppointmentDate = selectedCheckin ? new Date(selectedCheckin.appointmentDate) : null
@@ -452,7 +557,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const returnTotalDeductions = [returnDamageFee, returnCleaningFee, returnLostItemFee, returnOverdueFee, returnOtherDebt]
     .reduce((total, value) => total + Math.max(0, Number(value) || 0), 0)
   const returnRefund = selectedReturn ? Math.max(0, selectedReturn.deposit - returnTotalDeductions) : 0
-  const expiringRentals = MY_RENTALS.filter(rental => {
+  const expiringRentals = MY_RENTALS.filter(rental => isFacilityVisible(user, undefined, rental.facility)).filter(rental => {
     const due = new Date(rental.nextDue)
     if (Number.isNaN(due.getTime())) return false
     const days = Math.ceil((due.getTime() - Date.now()) / 86400000)
@@ -463,6 +568,10 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const reservation = reservations.find(item => item.id === checkin.reservationId)
     return !reservation || (reservation.status !== 'CANCELLED' && reservation.status !== 'EXPIRED')
   })
+  const scheduledRenewals = hub.renewals.filter(renewal =>
+    renewal.status === 'appointment_scheduled' &&
+    isFacilityVisible(user, renewal.facilityId, hub.rentals.find(rental => rental.id === renewal.rentalId)?.facilityName)
+  )
   const openCheckinRecord = (checkin: StaffCheckin) => {
     setSelectedCheckin(checkin)
     setCheckinChecks({ identity: false, reservation: false, contract: false, payment: checkin.status !== 'pending-payment', measurement: false, walkthrough: false, condition: false, credential: false })
@@ -489,6 +598,11 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const openOperationalTask = (task: (typeof operationalTasks)[number]) => {
     if (task.id.startsWith('allocation-')) {
       const reservation = reservations.find(item => item.id === task.id.replace('allocation-', ''))
+      if (reservation) { setSelectedReservation(reservation); setReservationModal(true) }
+      return
+    }
+    if (task.id.startsWith('review-')) {
+      const reservation = reservations.find(item => item.id === task.id.replace('review-', ''))
       if (reservation) { setSelectedReservation(reservation); setReservationModal(true) }
       return
     }
@@ -605,7 +719,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                     </Td>
                     <Td>
                       <p className="font-medium">{r.unit}</p>
-                      <p className="text-xs text-slate-400">{r.size} ft²</p>
+                      <p className="text-xs text-slate-400">{r.size} {r.sizeUnit || (r.sizeCode ? 'm²' : 'ft²')}</p>
                     </Td>
                     <Td><p>{formatDate(r.appointmentDate)} · {formatTime(r.appointmentTime)}</p><p className="text-[11px] text-stone-500">{'Hạn cuối'}: {formatDate(r.checkInDeadline)}</p>{r.previousAppointment && <p className="text-[11px] text-amber-700">{'Lịch cũ'}: {r.previousAppointment}</p>}</Td>
                     <Td>{r.paid ? <Badge variant="success">{'Đã thanh toán'}</Badge> : <Badge variant="error">{'Chưa thanh toán'}</Badge>}</Td>

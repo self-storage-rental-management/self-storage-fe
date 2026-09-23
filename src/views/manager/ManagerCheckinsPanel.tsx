@@ -4,6 +4,7 @@ import { Icon } from '../../components/Layout'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { CheckInRecord } from '../../types/storageHub'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 interface ManagerCheckinsPanelProps {
   user: User
@@ -20,9 +21,8 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
 
   // Filter checkins by facility (either match checkin.facilityId or unit's facility)
   const facilityCheckins = storeCheckins.filter(c => {
-    if (!user.facility || user.facility === 'All facilities') return true
     const unit = storeUnits.find(u => u.id === c.unitId)
-    return (unit && unit.facilityName === user.facility) || c.facilityId === user.facility
+    return isFacilityVisible(user, c.facilityId || unit?.facilityId, unit?.facilityName)
   })
 
   const scheduledCount = facilityCheckins.filter(c => c.status === 'scheduled').length
@@ -61,7 +61,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={'Giám Sát Quy Trình Check-in & Bàn Giao Kho'}
+        title={'Giám sát quy trình nhận kho & bàn giao kho'}
         subtitle={
           'Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý 5 bước và biên bản kiểm đo thực tế'
         }
