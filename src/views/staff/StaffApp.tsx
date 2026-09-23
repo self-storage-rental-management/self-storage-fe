@@ -564,7 +564,6 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const days = Math.ceil((due.getTime() - Date.now()) / 86400000)
     return days >= 0 && days <= 30
   })
-  const scheduledRenewals = hub.renewals.filter(item => item.status === 'appointment_scheduled')
   const eligibleCheckins = checkins.filter(checkin => {
     const reservation = reservations.find(item => item.id === checkin.reservationId)
     return !reservation || (reservation.status !== 'CANCELLED' && reservation.status !== 'EXPIRED')
