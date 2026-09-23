@@ -15,20 +15,21 @@ import ManagerUnitsPanel from './ManagerUnitsPanel'
 import ManagerPoliciesPanel from './ManagerPoliciesPanel'
 import ManagerSupportPanel from './ManagerSupportPanel'
 import { isFacilityVisible } from '../../domain/managerRules'
+import { managerStatusLabel } from './managerI18n'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
   const nav: NavItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: Icon.home, group: 'Tổng quan', permission: 'view_dashboard' },
-    { id: 'reservations', label: 'Reservations & Unit Assignment', icon: Icon.calendar, group: 'Vận hành', permission: 'assign_units' },
-    { id: 'inventory', label: 'Storage Inventory', icon: Icon.box, group: 'Vận hành', permission: 'manage_inventory' },
-    { id: 'rentals', label: 'Rentals', icon: Icon.policy, group: 'Vận hành', permission: 'manage_rentals' },
-    { id: 'moves', label: 'Move-ins & Move-outs', icon: Icon.truck, group: 'Vận hành', permission: 'view_checkins' },
-    { id: 'payments', label: 'Payments & Delinquency', icon: Icon.dollar, group: 'Tài chính', permission: 'manage_payments' },
-    { id: 'staff-tasks', label: 'Staff & Tasks', icon: Icon.users, group: 'Điều phối', permission: 'manage_staff_tasks' },
-    { id: 'support', label: 'Support', icon: Icon.support, group: 'Chăm sóc', permission: 'view_support' },
-    { id: 'policies', label: 'Policies', icon: Icon.policy, group: 'Điều hành', permission: 'manage_policies' },
-    { id: 'reports', label: 'Facility Reports', icon: Icon.chart, group: 'Báo cáo', permission: 'view_reports' }
+    { id: 'dashboard', label: 'Bảng điều khiển', icon: Icon.home, group: 'Tổng quan', permission: 'view_dashboard' },
+    { id: 'reservations', label: 'Duyệt hồ sơ hàng hóa', icon: Icon.calendar, group: 'Vận hành', permission: 'approve_reservations' },
+    { id: 'inventory', label: 'Tồn kho gian kho', icon: Icon.box, group: 'Vận hành', permission: 'manage_inventory' },
+    { id: 'rentals', label: 'Hợp đồng & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: 'manage_rentals' },
+    { id: 'moves', label: 'Nhận kho & Trả kho', icon: Icon.truck, group: 'Vận hành', permission: 'view_checkins' },
+    { id: 'payments', label: 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: 'manage_payments' },
+    { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'manage_staff_tasks' },
+    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Chăm sóc', permission: 'view_support' },
+    { id: 'policies', label: 'Chính sách thuê', icon: Icon.policy, group: 'Điều hành', permission: 'manage_policies' },
+    { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'view_reports' }
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)
@@ -41,10 +42,10 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     const variants: Record<string, string> = {
       available: 'success', occupied: 'info', maintenance: 'warning', reserved: 'purple', held: 'purple', assigned: 'purple',
       active: 'success', paid: 'success', overdue: 'error', pending: 'warning', completed: 'success', cancelled: 'error', scheduled: 'info',
-      requested: 'warning', inspected: 'warning', disputed: 'error', refund_pending: 'purple', payment_due: 'error', awaiting_customer_confirmation: 'warning',
+      requested: 'warning', inspected: 'warning', disputed: 'error', refund_pending: 'purple', payment_due: 'error', awaiting_customer_confirmation: 'warning', 'in-progress': 'info', resolved: 'success', no_show: 'muted',
       CREATED: 'info', DEPOSIT_PAID: 'success', UNIT_RESERVED: 'purple', READY_FOR_CHECKIN: 'success', COMPLETED: 'success', CANCELLED: 'error', EXPIRED: 'muted'
     }
-    return <Badge variant={variants[status] || 'muted'}>{status.replace(/_/g, ' ')}</Badge>
+    return <Badge variant={variants[status] || 'muted'}>{managerStatusLabel(status, 'vi')}</Badge>
   }
 
   const facility = hub.facilities.find(item => item.id === user.facilityId || item.name === user.facility || item.id === user.facility) || hub.facilities[0]
@@ -65,11 +66,25 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       page: 'rentals',
       targetId: renewal.rentalId
     }))
+  const reviewNotifications: LayoutNotification[] = hub.holds
+    .filter(hold => hold.goodsReviewStatus === 'PENDING' && isFacilityVisible({ ...user, facilityId: managerFacilityId }, hold.facilityId, hold.facilityName))
+    .map(hold => ({
+      id: `manager-goods-review-${hold.id}-${hold.goodsReviewSubmittedAt}`,
+      date: hold.goodsReviewSubmittedAt || hold.createdAt,
+      title: 'Có hồ sơ hàng hóa cần duyệt',
+      message: `${hold.id} · ${hold.customerName} · Hạn xử lý 24 giờ`,
+      page: 'reservations',
+      targetId: hold.id
+    }))
+  const returnDisputeNotifications: LayoutNotification[] = hub.returns
+    .filter(item => item.status === 'disputed' && isFacilityVisible({ ...user, facilityId: managerFacilityId }, item.facilityId, item.facilityName))
+    .map(item => ({ id: `manager-return-dispute-${item.id}`, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, title: 'Customer yêu cầu xem xét lại quyết toán', message: `${item.customerName} · ${item.unitId} · ${item.customerDecisionNote || 'Cần Manager xử lý'}`, page: 'moves', targetId: item.id }))
+  const managerNotifications = [...reviewNotifications, ...renewalNotifications, ...returnDisputeNotifications]
 
-  return <Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={renewalNotifications} canAccess={permission => hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
+  return <Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={managerNotifications} canAccess={permission => hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && <ManagerDashboardPanel user={user} setPage={setPage} />}
-    {page === 'reservations' && <ManagerUnitsPanel user={user} storeHolds={hub.holds} storeUnits={hub.units} storeRentals={hub.rentals} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />}
-    {page === 'inventory' && <ManagerInventoryPanel user={user} units={hub.units} maintenanceTasks={hub.maintenanceTasks} updateUnitStatus={hub.updateUnitStatus} showToast={showToast} />}
+    {page === 'reservations' && <ManagerUnitsPanel user={user} storeHolds={hub.holds} storeUnits={hub.units} approveReservation={hub.approveReservation} rejectGoodsReview={hub.rejectGoodsReview} showToast={showToast} />}
+    {page === 'inventory' && <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} updateUnitStatus={hub.updateUnitStatus} showToast={showToast} />}
     {page === 'rentals' && <ManagerRentalsPanel user={user} rentals={hub.rentals} contracts={hub.contracts} renewals={hub.renewals} approveRenewal={hub.approveRenewal} rejectRenewal={hub.rejectRenewal} showToast={showToast} />}
     {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} />}
     {page === 'payments' && <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} recordRentalPayment={hub.recordRentalPayment} applyRentalLateFee={hub.applyRentalLateFee} waiveRentalLateFee={hub.waiveRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />}

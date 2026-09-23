@@ -58,7 +58,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
   const [name, setName] = useState(user.name)
   const [email, setEmail] = useState(user.email)
   const [phone, setPhone] = useState(user.phone || '')
-  const [address, setAddress] = useState('125 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh')
+  const [address, setAddress] = useState('125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh')
   const [emergencyContact, setEmergencyContact] = useState('Nguyễn Văn An (+84 909 777 888)')
   const [idCard, setIdCard] = useState('079098001234')
 
@@ -79,6 +79,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [requestReason, setRequestReason] = useState('')
   const [requestFields, setRequestFields] = useState<string[]>(['Họ và Tên', 'Email liên hệ'])
+  const [deleteAccountConfirmationOpen, setDeleteAccountConfirmationOpen] = useState(false)
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
@@ -141,9 +142,14 @@ export default function ProfileView({ user }: ProfileViewProps) {
   }
 
   const handleDeleteAccount = () => {
-    if (!isCustomer || !window.confirm('Bạn chắc chắn muốn xoá tài khoản? Chỉ được xoá khi không còn đơn hiện tại, đơn quá hạn hoặc khoản chưa thanh toán.')) return
+    if (!isCustomer) return
+    setDeleteAccountConfirmationOpen(true)
+  }
+
+  const confirmDeleteAccount = () => {
     try {
       deleteOwnCustomerAccount(user)
+      setDeleteAccountConfirmationOpen(false)
       showToast('Đã xoá tài khoản. Phiên đăng nhập sẽ kết thúc.')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Không thể xoá tài khoản.')
@@ -752,7 +758,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
               rows={3}
               value={requestReason}
               onChange={event => setRequestReason(event.target.value)}
-              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456; Điều chuyển cơ sở sang Downtown Storage...)"
+              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456; Điều chuyển cơ sở sang Kho Việt – Cơ sở Quận 1...)"
               className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none transition"
             />
             <div className="flex justify-between items-center mt-1 text-[11px] text-stone-400">
@@ -780,6 +786,13 @@ export default function ProfileView({ user }: ProfileViewProps) {
               Gửi Yêu Cầu Tới Admin/HR
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal open={deleteAccountConfirmationOpen && isCustomer} onClose={() => setDeleteAccountConfirmationOpen(false)} title="Xác nhận xóa tài khoản">
+        <div className="space-y-5">
+          <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">Bạn chắc chắn muốn xóa tài khoản? Chỉ có thể xóa khi không còn đơn hiện tại, đơn quá hạn hoặc khoản chưa thanh toán.</p>
+          <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => setDeleteAccountConfirmationOpen(false)}>Quay lại</Button><Button variant="danger" onClick={confirmDeleteAccount}>Xóa tài khoản</Button></div>
         </div>
       </Modal>
     </div>

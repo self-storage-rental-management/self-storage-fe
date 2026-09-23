@@ -5,11 +5,31 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
 import HomePage from './views/home/HomePage'
 
-const CustomerApp = lazy(() => import('./views/customer/CustomerApp'))
-const StaffApp = lazy(() => import('./views/staff/StaffApp'))
-const ManagerApp = lazy(() => import('./views/manager/ManagerApp'))
-const BusinessApp = lazy(() => import('./views/business/BusinessApp'))
-const AdminApp = lazy(() => import('./views/admin/AdminApp'))
+const CHUNK_RELOAD_KEY = 'storagehub:chunk-reload'
+
+const lazyWithChunkRecovery = (loader: () => Promise<any>) => lazy(async () => {
+  try {
+    const module = await loader()
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+    return module
+  } catch (error) {
+    const currentLocation = `${window.location.pathname}${window.location.search}`
+    const retriedLocation = sessionStorage.getItem(CHUNK_RELOAD_KEY)
+    if (retriedLocation !== currentLocation) {
+      sessionStorage.setItem(CHUNK_RELOAD_KEY, currentLocation)
+      window.location.reload()
+      return new Promise(() => {})
+    }
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+    throw error
+  }
+})
+
+const CustomerApp = lazyWithChunkRecovery(() => import('./views/customer/CustomerApp'))
+const StaffApp = lazyWithChunkRecovery(() => import('./views/staff/StaffApp'))
+const ManagerApp = lazyWithChunkRecovery(() => import('./views/manager/ManagerApp'))
+const BusinessApp = lazyWithChunkRecovery(() => import('./views/business/BusinessApp'))
+const AdminApp = lazyWithChunkRecovery(() => import('./views/admin/AdminApp'))
 
 function MainContent() {
   const { users, sessions, startSession, endSession } = useStorageHub()
@@ -58,6 +78,14 @@ function MainContent() {
       setGuestView('home')
     }
   }, [sessionId, sessionUserId, sessions])
+
+  useEffect(() => {
+    if (user) return
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('page')) return
+    url.searchParams.delete('page')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [user])
 
   const handleLogin = (nextUser: User) => {
     setSessionUserId(nextUser.id)

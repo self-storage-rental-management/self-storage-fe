@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
@@ -16,7 +16,7 @@ interface ManagerReturnsPanelProps {
 export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerReturnsPanelProps) {
     const { returns: storeReturns, reviewReturnDispute, completeReturnRefund } = useStorageHub()
 
-  const [returnTab, setReturnTab] = useState('All')
+  const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
   const [returnSearch, setReturnSearch] = useState('')
   const [selectedReturn, setSelectedReturn] = useState<ReturnCase | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
@@ -29,6 +29,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const facilityReturns = storeReturns.filter(r => isFacilityVisible(user, r.facilityId, r.facilityName))
 
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
+  useEffect(() => { if (disputedCount > 0) setReturnTab('disputed') }, [disputedCount])
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length
   const completedCount = facilityReturns.filter(r => r.status === 'completed').length
   const inspectingCount = facilityReturns.filter(
@@ -523,7 +524,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-stone-700">
-                {'Kết luận phân xử của Facility Manager'}
+                {'Kết luận xử lý của quản lý cơ sở'}
               </label>
               <textarea
                 rows={4}

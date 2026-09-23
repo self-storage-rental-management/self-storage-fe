@@ -152,14 +152,15 @@ export default function Layout({
       'return': 'Nghiệm Thu Trả Kho',
       'dashboard': 'Bảng Điều Khiển',
       'reports': 'Báo Cáo Cơ Sở',
-      'units': 'Quản Lý Gian Kho',
+      'units': 'Quản Lý Kho',
       'staff': 'Phân Công Nhân Viên',
       'rentals': 'Hợp Đồng & Cước Thuê',
       'overdue': 'Quản Lý Nợ Quá Hạn',
-      'facilities': 'Tổng Quan Cơ Sở',
+      'facilities': 'Quản Lý Cơ Sở',
       'performance': 'Hiệu Suất Vận Hành',
       'policies': 'Chính Sách Thuê',
       'pricing': 'Bảng Giá & Biểu Phí',
+      'discounts': 'Khuyến Mãi & Voucher',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',
       'roles': 'Vai Trò & Phân Quyền',
@@ -305,7 +306,7 @@ export default function Layout({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-2 overflow-y-auto" aria-label={`${roleLabel} navigation`}>
+        <nav className="flex-1 px-3 py-2 overflow-y-auto" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
           {visibleNavItems.map((item, index) => {
             const groupText = getNavGroup(item.group)
             const prevGroupText = getNavGroup(visibleNavItems[index - 1]?.group)
@@ -337,7 +338,7 @@ export default function Layout({
                 ? 'bg-[#3a3933] border border-[#4b4940] shadow-sm'
                 : 'hover:bg-white/5'
             }`}
-            title="View Profile & Settings"
+            title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
           >
             <Avatar name={user.name} size="md" />
             <div className="min-w-0 flex-1">
@@ -381,7 +382,7 @@ export default function Layout({
           <button
             className="lg:hidden text-slate-500 hover:text-slate-700 p-1"
             onClick={() => setSidebarOpen(true)}
-            aria-label="Open navigation menu"
+            aria-label={user.role === 'staff' ? 'Mở trình đơn điều hướng' : 'Open navigation menu'}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />

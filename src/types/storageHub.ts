@@ -65,6 +65,7 @@ export interface UnitType {
 
 export interface Facility {
   id: string
+  code?: string
   name: string
   address: string
   city: string
@@ -449,6 +450,8 @@ export interface RenewalRecord {
   renewalContractNumber?: string
   effectiveAt?: string
   originalMonthlyRate?: number
+  discountRate?: number
+  discountAmount?: number
   totalAmount?: number
   bookingDepositAmount?: number
   remainingAmount?: number
