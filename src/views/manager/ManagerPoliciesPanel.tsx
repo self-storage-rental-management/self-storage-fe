@@ -107,8 +107,8 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
             {'Thời gian khóa giữ kho (TTL)'}
           </p>
           <p className="text-2xl font-bold text-amber-600 mt-1">
-            {storeConfig.holdExpiryHours}{' '}
-            <span className="text-sm font-normal text-stone-500">{'giờ'}</span>
+            {'10 '}
+            <span className="text-sm font-normal text-stone-500">{'phút'}</span>
           </p>
           <p className="text-[11px] text-stone-500 mt-1">
             {'Tự động nhả kho nếu chưa nộp cọc'}
@@ -184,11 +184,12 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
           />
 
           <Input
-            label={'Hạn giữ chỗ thanh toán (giờ)'}
+            label={'Hạn giữ chỗ thanh toán (phút; hiện cố định 10 phút)'}
             type="number"
             min="1"
             max="72"
-            value={String(formConfig.holdExpiryHours)}
+            value={'10'}
+            disabled
             onChange={e => setFormConfig({ ...formConfig, holdExpiryHours: Number(e.target.value) || 24 })}
           />
 
