@@ -113,65 +113,6 @@ const mapSharedReservation = (reservation: StorageReservation, units: StorageUni
   }
 }
 
-const toDateInputValue = (dateLabel: string) => {
-  const date = new Date(dateLabel)
-  if (Number.isNaN(date.getTime())) return ''
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-const sharedReservationStatus = (reservation: StorageReservation): ReservationStatus => {
-  if (reservation.status === 'awaiting_review') return 'REVIEW_REQUIRED'
-  if (reservation.status === 'awaiting_email') return 'CREATED'
-  if (reservation.status === 'awaiting_payment') return 'AWAITING_DEPOSIT'
-  if (reservation.status === 'DEPOSIT_PAID') return 'DEPOSIT_PAID'
-  if (reservation.status === 'UNIT_RESERVED') return 'UNIT_RESERVED'
-  if (reservation.status === 'READY_FOR_CHECKIN') return 'READY_FOR_CHECKIN'
-  if (reservation.status === 'COMPLETED') return 'COMPLETED'
-  if (reservation.status === 'CANCELLED') return 'CANCELLED'
-  if (reservation.status === 'EXPIRED') return 'EXPIRED'
-  return 'CREATED'
-}
-
-const mapSharedReservation = (reservation: StorageReservation, units: StorageUnit[], facilities: Facility[]): StaffReservation => {
-  const assignedUnit = reservation.assignedUnitId
-    ? units.find(item => item.id === reservation.assignedUnitId)
-    : undefined
-  const matchingTypeUnit = units.find(item => item.facilityId === reservation.facilityId && item.type.toLowerCase().startsWith(reservation.unitTypeId.toLowerCase().replace('xlarge', 'extra large')))
-  const facility = facilities.find(item => item.id === reservation.facilityId || item.name === reservation.facilityName)
-  const appointmentDate = reservation.appointmentDate || reservation.moveInDate
-  return {
-    id: reservation.id,
-    customer: reservation.customerName,
-    email: reservation.customerEmail,
-    phone: reservation.customerPhone,
-    identityId: reservation.identityId,
-    unit: assignedUnit?.code || reservation.assignedUnitId || 'Chưa xác định gian kho',
-    facility: reservation.facilityName,
-    facilityAddress: facility?.address || '—',
-    size: assignedUnit?.areaM2 || matchingTypeUnit?.areaM2 || 0,
-    sizeCode: assignedUnit?.type || matchingTypeUnit?.type || reservation.unitTypeName || 'Standard',
-    sizeUnit: 'm²',
-    moveIn: appointmentDate,
-    payment: reservation.payment.status === 'paid' ? 'paid' : 'pending',
-    paid: reservation.payment.status === 'paid',
-    status: sharedReservationStatus(reservation),
-    emailVerified: reservation.emailVerification?.verified ?? false,
-    goodsType: reservation.goods.category,
-    material: reservation.goods.material,
-    packageCount: reservation.goods.packageCount,
-    weightKg: reservation.goods.weightKg,
-    dimensionsCm: `${reservation.goods.lengthCm} × ${reservation.goods.widthCm} × ${reservation.goods.heightCm}`,
-    dimWeightKg: reservation.goods.dimWeightKg,
-    initialCondition: reservation.goods.condition,
-    evidence: reservation.evidence,
-    appointmentDate,
-    appointmentTime: reservation.appointmentTime || '09:00',
-    checkInDeadline: reservation.checkInDeadline || addDays(appointmentDate, 14),
-  }
-}
 
 const mapSharedCheckin = (record: CheckInRecord, reservation: StorageReservation | undefined, units: StorageUnit[], facilities: Facility[]): StaffCheckin => {
   const unit = units.find(item => item.id === record.unitId || item.code === record.unitId)
@@ -495,43 +436,6 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     return <Badge variant={variants[value] ?? 'muted'}>{label}</Badge>
   }
 
-  useEffect(() => {
-    if (!pendingCheckinCompletionId || !selectedCheckin || selectedCheckin.id !== pendingCheckinCompletionId) return
-    const sharedHold = hub.holds.find(item => item.id === selectedCheckin.reservationId)
-    if (!sharedHold || sharedHold.status !== 'READY_FOR_CHECKIN') return
-    const dimensions = parseDimensions(actualDimensions)
-    if (!dimensions) {
-      setPendingCheckinCompletionId(null)
-      showToast('Kích thước thực tế chưa hợp lệ.')
-      return
-    }
-    const evidence = [checkinEvidence.trim(), contractFile.trim(), paymentEvidence.trim(), `RECEIPT-${Date.now()} · ${paymentReference.trim()} · ${user.name} thu phần còn lại`, `CHECKIN-${Date.now()} · ${user.name} xác nhận đối chiếu, cấp credential và bàn giao${scheduleOverrideReason.trim() ? ` · Override: ${scheduleOverrideReason.trim()}` : ''}${checkinNotes.trim() ? ` · ${checkinNotes.trim()}` : ''}`]
-    try {
-      hub.completeCheckIn({
-        holdId: selectedCheckin.reservationId,
-        staffUser: user,
-        checklist: { identityVerified: Boolean(checkinChecks.identity), termsAccepted: Boolean(checkinChecks.contract), paymentConfirmed: Boolean(checkinChecks.payment), unitWalkthrough: Boolean(checkinChecks.walkthrough), accessCodeIssued: Boolean(checkinChecks.credential) },
-        actualMeasurements: { lengthCm: dimensions[0], widthCm: dimensions[1], heightCm: dimensions[2], weightKg: Number(actualWeight), actualVolumeM3: (dimensions[0] * dimensions[1] * dimensions[2] * Math.max(1, selectedCheckin.packageCount)) / 1_000_000, dimWeightKg: selectedCheckin.dimWeightKg, varianceAccepted: true, varianceNotes: checkinNotes.trim() || undefined },
-        initialCondition: actualCondition.trim(),
-        evidencePhotos: evidence,
-        goodsHandover: { packageCount: selectedCheckin.packageCount, category: selectedCheckin.goodsType, estimatedWeightKg: Number(actualWeight), notes: `${actualMaterial.trim()}${checkinNotes.trim() ? ` · ${checkinNotes.trim()}` : ''}` },
-        handedOverItems: [`PIN/thẻ/chìa khóa kho ${selectedCheckin.unit}`, contractFile.trim(), paymentEvidence.trim()],
-      })
-      setCheckins(items => items.map(item => item.id === selectedCheckin.id ? { ...item, status: 'completed', customerHandoverStatus: 'pending', dimensionsCm: actualDimensions.trim(), weightKg: Number(actualWeight), material: actualMaterial.trim(), initialCondition: actualCondition.trim(), evidence: [...item.evidence, ...evidence] } : item))
-      setReservations(items => items.map(item => item.id === selectedCheckin.reservationId ? { ...item, status: 'COMPLETED' } : item))
-      setPendingCheckinCompletionId(null)
-      setCheckinModal(false)
-      showToast('Đã kích hoạt rental; Customer có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.')
-    } catch (error) {
-      setPendingCheckinCompletionId(null)
-      showToast(error instanceof Error ? error.message : 'Không thể hoàn tất Check-in.')
-    }
-  }, [pendingCheckinCompletionId, hub.holds])
-
-  const s = (value: string, variants: Record<string, string>) => {
-    const label = statusLabelMap[value] || value.charAt(0).toUpperCase() + value.slice(1).replace(/-/g, ' ')
-    return <Badge variant={variants[value] ?? 'muted'}>{label}</Badge>
-  }
 
   const normalizedSearch = reservationSearch.trim().toLowerCase()
   const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 }
