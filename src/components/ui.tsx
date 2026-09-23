@@ -234,18 +234,8 @@ export function Modal({ open, onClose, title, children, size = 'md', closeLabel 
       <div role="dialog" aria-modal="true" aria-labelledby="modal-title" className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-stone-200 shadow-2xl w-full ${size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} mx-4 p-6 fade-in`}>
         <div className="flex items-center justify-between mb-5">
           <h2 id="modal-title" className="text-lg font-bold text-stone-900">{title}</h2>
-<<<<<<< Updated upstream
-          <button aria-label="Close dialog" className="text-stone-400 hover:text-stone-700 transition" onClick={onClose}>
-            Đóng
+          <button aria-label={closeLabel} className="flex items-center justify-center rounded-lg p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700" onClick={onClose}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-=======
-          <button
-            aria-label={closeLabel}
-            className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
-            onClick={onClose}
-          >
-            <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
->>>>>>> Stashed changes
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
