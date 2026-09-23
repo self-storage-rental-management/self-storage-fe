@@ -89,7 +89,7 @@ export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   gracePeriodDays: 0,
   lateFeeAmount: 25,
   defaultDepositRatio: 0.2,
-  holdExpiryHours: 12
+  holdExpiryHours: 1 / 6
 }
 
 // 4 Standard Unit Types based on Metric DIM (m, m², m³)
@@ -1552,7 +1552,15 @@ rentals: Array.isArray(parsed.rentals)
             evidence: [...hold.evidence, `EXPIRED · Đơn tự động hết hạn do ${reason}; gian kho được giải phóng.`]
           }
         })
-        return changed ? { ...prev, holds } : prev
+        if (!changed) return prev
+        const expiredIds = new Set(holds.filter((hold, index) => hold.status === 'EXPIRED' && prev.holds[index].status !== 'EXPIRED').map(hold => hold.id))
+        const units = prev.units.map(unit => {
+          const reservedPeriods = (unit.reservedPeriods || []).filter(period => !expiredIds.has(period.reservationId))
+          if (reservedPeriods.length === (unit.reservedPeriods || []).length) return unit
+          const occupied = Boolean(unit.currentRentalId) || prev.rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))
+          return { ...unit, reservedPeriods, status: occupied ? unit.status : reservedPeriods.length ? 'reserved' as const : 'available' as const, nextAvailableDate: reservedPeriods.length ? unit.nextAvailableDate : undefined }
+        })
+        return { ...prev, holds, units }
       })
     }
     expireOverdueReservations()
@@ -1631,7 +1639,7 @@ rentals: Array.isArray(parsed.rentals)
       const overlapsReservedPeriod = (u.reservedPeriods || []).some(period => checkDateOverlap(startDate, endDate, period.startDate, period.endDate))
       // Check if any reservation or rental overlaps on this unit
       const overlapsReservation = state.holds.some(
-        h => h.assignedUnitId === u.id && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status) &&
+         h => h.assignedUnitId === u.id && !['CANCELLED', 'EXPIRED', 'COMPLETED', 'awaiting_review'].includes(h.status) && !(h.status === 'awaiting_email' && h.goodsReviewStatus === 'PENDING') &&
              checkDateOverlap(startDate, endDate, h.startDate, h.endDate)
       )
       const overlapsRental = state.rentals.some(
@@ -1741,10 +1749,10 @@ rentals: Array.isArray(parsed.rentals)
     const holdId = `RSV-${Date.now().toString().slice(-4)}`
     const quoteId = `QUO-${Date.now().toString().slice(-4)}`
     const requiresGoodsReview = Boolean(params.goods.items?.some(item => item.category === 'OTHER' || item.requiresStaffReview))
-    const emailExpiresAt = new Date(nowTime + 12 * 60 * 60 * 1000).toISOString()
+    const emailExpiresAt = new Date(nowTime + 10 * 60 * 1000).toISOString()
     const goodsReviewSubmittedAt = undefined
     const goodsReviewDueAt = undefined
-    const paymentExpiresAt = requiresGoodsReview ? undefined : new Date(nowTime + 12 * 60 * 60 * 1000).toISOString()
+    const paymentExpiresAt = requiresGoodsReview ? undefined : emailExpiresAt
     const emailToken = crypto.getRandomValues(new Uint32Array(1))[0].toString().padStart(6, '0').slice(-6)
 
     const pricingQuote: PricingQuote = {
@@ -1819,7 +1827,7 @@ rentals: Array.isArray(parsed.rentals)
 
     setState(prev => ({
       ...prev,
-      units: prev.units.map(unit => unit.id === availableUnit.id
+      units: prev.units.map(unit => !requiresGoodsReview && unit.id === availableUnit.id
         ? {
             ...unit,
             status: 'reserved',
@@ -1845,7 +1853,7 @@ rentals: Array.isArray(parsed.rentals)
           entityId: holdId,
           notes: requiresGoodsReview
             ? `Khách hàng xác nhận gian ${availableUnit.code}. Chờ xác minh email trước khi Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
-            : `Khách hàng xác nhận gian ${availableUnit.code}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 12 giờ.`,
+            : `Khách hàng xác nhận gian ${availableUnit.code}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 10 phút.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -1878,11 +1886,20 @@ rentals: Array.isArray(parsed.rentals)
     if (isGoodsReview && reservation.goodsReviewDueAt && new Date(reservation.goodsReviewDueAt).getTime() < Date.now()) {
       throw new Error('Thời hạn duyệt hàng hóa 12 giờ đã hết. Kho đã được giải phóng.')
     }
+    if (isGoodsReview) {
+      const earlier = state.holds.some(item => item.id !== reservation.id && item.status === 'awaiting_review' && item.goodsReviewStatus === 'PENDING' && item.facilityId === reservation.facilityId && item.unitTypeId === reservation.unitTypeId && item.createdAt < reservation.createdAt && (!item.goodsReviewDueAt || new Date(item.goodsReviewDueAt).getTime() > Date.now()))
+      if (earlier) throw new Error('Vui lòng xử lý hồ sơ đến trước theo thứ tự FCFS.')
+      const unit = state.units.find(item => item.id === reservation.assignedUnitId)
+      if (!unit || unit.status !== 'available' || (unit.reservedPeriods || []).some(period => period.reservationId !== reservation.id && checkDateOverlap(period.startDate, period.endDate, reservation.startDate, reservation.endDate))) {
+        throw new Error('Gian kho đã được khách khác giữ. Vui lòng chọn gian kho còn trống trước khi duyệt hồ sơ.')
+      }
+    }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
-    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
+    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 10 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
     const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
+      units: isGoodsReview ? prev.units.map(unit => unit.id === reservation.assignedUnitId ? { ...unit, status: 'reserved' as const, reservedPeriods: [...(unit.reservedPeriods || []), { reservationId, customerName: reservation.customerName, startDate: reservation.startDate, endDate: reservation.endDate }], nextAvailableDate: reservation.endDate } : unit) : prev.units,
       holds: prev.holds.map(item => item.id === reservationId ? {
         ...item,
         status: nextStatus,
@@ -3851,6 +3868,7 @@ rentals: Array.isArray(parsed.rentals)
     assertPermission(customer, 'book_storage')
     if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
+    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 10 phút giữ kho. Vui lòng tạo đơn đặt giữ kho mới.')
     const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
@@ -3948,9 +3966,10 @@ rentals: Array.isArray(parsed.rentals)
     const now = new Date()
 
     if (decision === 'disputed') {
+      if (!note?.trim()) throw new Error('Vui lòng nhập lý do yêu cầu xem xét lại quyết toán.')
       setState(prev => ({
         ...prev,
-        returns: prev.returns.map(r => r.id === returnId ? { ...r, status: 'disputed', customerDecision: 'disputed', customerDecisionNote: note?.trim() || 'Khách hàng yêu cầu xem xét lại quyết toán.' } : r),
+        returns: prev.returns.map(r => r.id === returnId ? { ...r, status: 'disputed', customerDecision: 'disputed', customerDecisionNote: note!.trim() } : r),
         activities: [{ id: `act-${Date.now()}`, action: 'RETURN_SETTLEMENT_DISPUTED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: note?.trim() || 'Khách hàng yêu cầu xem xét lại quyết toán.', timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
       }))
       return
@@ -3987,7 +4006,7 @@ rentals: Array.isArray(parsed.rentals)
       payments: returnCase.netRefundAmount > 0 ? [refundPayment, ...prev.payments] : prev.payments,
       units: prev.units.map(u => u.id === unit.id ? { ...u, status: 'maintenance', currentRentalId: undefined, reservedPeriods: (u.reservedPeriods || []).filter(period => period.reservationId !== rental.holdId), nextAvailableDate: undefined } : u),
       holds: prev.holds.map(hold => hold.id === rental.holdId ? { ...hold, generatedAccessPin: undefined } : hold),
-      rentals: prev.rentals.map(r => r.id === rental.id ? { ...r, status: amountDueFromCustomer > 0 ? 'closing' : 'completed', gateCode: '', checkedOutAt: amountDueFromCustomer > 0 ? undefined : now.toISOString(), accessRevokedAt: now.toISOString() } : r),
+      rentals: prev.rentals.map(r => r.id === rental.id ? { ...r, status: amountDueFromCustomer > 0 || returnCase.netRefundAmount > 0 ? 'closing' : 'completed', gateCode: '', checkedOutAt: amountDueFromCustomer > 0 || returnCase.netRefundAmount > 0 ? undefined : now.toISOString(), accessRevokedAt: now.toISOString() } : r),
       returns: prev.returns.map(r => r.id === returnId ? { ...r, status: amountDueFromCustomer > 0 ? 'payment_due' : returnCase.netRefundAmount > 0 ? 'refund_pending' : 'completed', customerConfirmed: true, customerConfirmedAt: now.toISOString(), customerDecision: 'accepted', customerDecisionNote: note?.trim(), completedAt: amountDueFromCustomer > 0 || returnCase.netRefundAmount > 0 ? undefined : now.toISOString() } : r),
       accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === rental.id ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
       maintenanceTasks: prev.maintenanceTasks.some(task => task.unitId === unit.id && task.status !== 'completed') ? prev.maintenanceTasks : [maintenanceTask, ...prev.maintenanceTasks],
@@ -4030,6 +4049,7 @@ rentals: Array.isArray(parsed.rentals)
     setState(prev => ({
       ...prev,
       payments: prev.payments.map(item => item.id === refundPayment.id ? { ...item, status: 'PAID', transactionReference: transactionReference.trim(), paidAt: now.toISOString(), receivedBy: staffUser.id, recordedBy: staffUser.id } : item),
+      rentals: prev.rentals.map(item => item.id === returnCase.rentalId ? { ...item, status: 'completed', checkedOutAt: now.toISOString() } : item),
       returns: prev.returns.map(item => item.id === returnId ? { ...item, status: 'completed', completedAt: now.toISOString(), refundTransaction: { id: refundPayment.id, type: 'refund', amount: item.netRefundAmount, status: 'paid', recordedAt: now.toISOString() } } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RETURN_REFUND_COMPLETED', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `Đã chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
@@ -4040,6 +4060,7 @@ rentals: Array.isArray(parsed.rentals)
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
     assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
+    if (!resolutionNote?.trim()) throw new Error('Vui lòng nhập lý do và kết quả rà soát quyết toán.')
     const now = new Date()
     setState(prev => ({
       ...prev,
