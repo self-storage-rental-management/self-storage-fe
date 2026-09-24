@@ -6,6 +6,7 @@ import type { User } from '../../types'
 import type { Facility, StorageUnit, StorageHold, UnitType } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
+import { FACILITIES } from '../../data/demoDatabase'
 import type { TicketItem } from '../../data/demoDatabase'
 
 const CUSTOMER_FACILITY_DISPLAY: Record<string, { code: string; name: string; address: string }> = Object.fromEntries(
