@@ -17,6 +17,16 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
   // Local editable state for business configuration parameters
   const [formConfig, setFormConfig] = useState<BusinessConfig>(storeConfig)
   const [isSaving, setIsSaving] = useState(false)
+  const [policiesList] = useState<Array<{ id: string; name: string; value: string; scope: string; editable?: boolean }>>(() => {
+    try {
+      const stored = localStorage.getItem('storagehub:policies')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return POLICIES
+  })
 
   useEffect(() => {
     setFormConfig(storeConfig)
@@ -97,8 +107,8 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
             {'Thời gian khóa giữ kho (TTL)'}
           </p>
           <p className="text-2xl font-bold text-amber-600 mt-1">
-            {storeConfig.holdExpiryHours}{' '}
-            <span className="text-sm font-normal text-stone-500">{'giờ'}</span>
+            {'10 '}
+            <span className="text-sm font-normal text-stone-500">{'phút'}</span>
           </p>
           <p className="text-[11px] text-stone-500 mt-1">
             {'Tự động nhả kho nếu chưa nộp cọc'}
@@ -174,11 +184,12 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
           />
 
           <Input
-            label={'Hạn giữ chỗ thanh toán (giờ)'}
+            label={'Hạn giữ chỗ thanh toán (phút; hiện cố định 10 phút)'}
             type="number"
             min="1"
             max="72"
-            value={String(formConfig.holdExpiryHours)}
+            value={'10'}
+            disabled
             onChange={e => setFormConfig({ ...formConfig, holdExpiryHours: Number(e.target.value) || 24 })}
           />
 
@@ -208,7 +219,7 @@ export default function ManagerPoliciesPanel({ user, showToast }: ManagerPolicie
             </tr>
           </Thead>
           <Tbody>
-            {POLICIES.map(p => (
+            {policiesList.map(p => (
               <Tr key={p.id}>
                 <Td>
                   <span className="font-bold text-sm text-stone-900">{p.name}</span>

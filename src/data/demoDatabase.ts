@@ -352,22 +352,45 @@ export const RETURNS = [
 ]
 
 export const OCCUPANCY_DATA = [
-  { month: 'Apr', occupied: 78, total: 120 },
-  { month: 'May', occupied: 84, total: 120 },
-  { month: 'Jun', occupied: 89, total: 120 },
-  { month: 'Jul', occupied: 92, total: 120 },
-  { month: 'Aug', occupied: 95, total: 120 },
-  { month: 'Sep', occupied: 96, total: 120 }
+  { month: 'Tháng 4', occupied: 82, total: 120 },
+  { month: 'Tháng 5', occupied: 91, total: 120 },
+  { month: 'Tháng 6', occupied: 96, total: 120 },
+  { month: 'Tháng 7', occupied: 103, total: 120 },
+  { month: 'Tháng 8', occupied: 111, total: 120 },
+  { month: 'Tháng 9', occupied: 116, total: 120 }
 ]
 
-export const REVENUE_DATA = [
-  { month: 'Apr', revenue: 14200 },
-  { month: 'May', revenue: 15600 },
-  { month: 'Jun', revenue: 16300 },
-  { month: 'Jul', revenue: 17100 },
-  { month: 'Aug', revenue: 17900 },
-  { month: 'Sep', revenue: 18450 }
+export interface MonthlyRevenueRecord {
+  month: string
+  revenue: number
+  growth: string
+  growthNumber: number
+  contracts: number
+  occupancyRate: string
+  occupancyNumber: number
+}
+
+export const REVENUE_DATA: MonthlyRevenueRecord[] = [
+  { month: 'Tháng 4', revenue: 14200000, growth: '—', growthNumber: 0, contracts: 82, occupancyRate: '68%', occupancyNumber: 0.68 },
+  { month: 'Tháng 5', revenue: 15600000, growth: '+9,9%', growthNumber: 0.099, contracts: 91, occupancyRate: '72%', occupancyNumber: 0.72 },
+  { month: 'Tháng 6', revenue: 16300000, growth: '+4,5%', growthNumber: 0.045, contracts: 96, occupancyRate: '75%', occupancyNumber: 0.75 },
+  { month: 'Tháng 7', revenue: 17100000, growth: '+4,9%', growthNumber: 0.049, contracts: 103, occupancyRate: '78%', occupancyNumber: 0.78 },
+  { month: 'Tháng 8', revenue: 17900000, growth: '+4,7%', growthNumber: 0.047, contracts: 111, occupancyRate: '81%', occupancyNumber: 0.81 },
+  { month: 'Tháng 9', revenue: 18450000, growth: '+3,1%', growthNumber: 0.031, contracts: 116, occupancyRate: '84%', occupancyNumber: 0.84 }
 ]
+
+export const REVENUE_BREAKDOWN = [
+  { category: 'Tiền thuê kho', percentage: 78, color: '#2563eb' },
+  { category: 'Phí dịch vụ', percentage: 13, color: '#10b981' },
+  { category: 'Phí vận chuyển', percentage: 5, color: '#f59e0b' },
+  { category: 'Phí khác', percentage: 4, color: '#8b5cf6' }
+]
+
+export const WAREHOUSE_PERFORMANCE = {
+  currentOccupancy: '84%',
+  activeContracts: 116,
+  renewalRate: '91%'
+}
 
 export const UNIT_TYPE_DATA = [
   { name: 'Small', value: 42, color: '#3b82f6' },
@@ -684,12 +707,12 @@ export const SUPPORT_METRICS = [
 export const REVENUE_TREND = REVENUE_DATA
 
 export const CONVERSION_DATA = [
-  { month: 'Apr', visits: 420, bookings: 38 },
-  { month: 'May', visits: 510, bookings: 49 },
-  { month: 'Jun', visits: 580, bookings: 61 },
-  { month: 'Jul', visits: 620, bookings: 66 },
-  { month: 'Aug', visits: 710, bookings: 78 },
-  { month: 'Sep', visits: 760, bookings: 84 }
+  { month: 'Tháng 4', visits: 420, bookings: 38 },
+  { month: 'Tháng 5', visits: 510, bookings: 49 },
+  { month: 'Tháng 6', visits: 580, bookings: 61 },
+  { month: 'Tháng 7', visits: 620, bookings: 66 },
+  { month: 'Tháng 8', visits: 710, bookings: 78 },
+  { month: 'Tháng 9', visits: 760, bookings: 84 }
 ]
 
 // export const PRICING_TIERS = [
