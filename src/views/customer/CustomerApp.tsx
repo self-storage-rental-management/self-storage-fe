@@ -678,9 +678,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     const facCode = facilities.find(f => f.id === facilityId)?.code
     const physical = units.filter(unit => (unit.facilityId === facilityId || (facCode && unit.facilityId === facCode)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName))).length
     const capacityHeld = activeUnassignedCapacityHolds.filter(hold => (hold.facilityId === facilityId || (facCode && hold.facilityId === facCode)) && (!unitTypeName || unitTypeMatches(hold.unitTypeName, unitTypeName))).length
-    const heldType = temporaryHoldTarget ? unitTypes.find(type => type.id === temporaryHoldTarget.unitTypeId) : undefined
-    const temporaryHeld = hasActiveTemporarySlot && (temporaryHoldTarget?.facilityId === facilityId || (facCode && temporaryHoldTarget?.facilityId === facCode)) && (!unitTypeName || Boolean(heldType && unitTypeMatches(heldType.name, unitTypeName))) ? 1 : 0
-    return Math.max(0, physical - capacityHeld - temporaryHeld)
+    return Math.max(0, physical - capacityHeld)
   }
   const contractExpiryNotifications = myRentals.flatMap(rental => {
     if (rental.status !== 'active') return []
