@@ -113,7 +113,6 @@ const mapSharedReservation = (reservation: StorageReservation, units: StorageUni
   }
 }
 
-
 const mapSharedCheckin = (record: CheckInRecord, reservation: StorageReservation | undefined, units: StorageUnit[], facilities: Facility[]): StaffCheckin => {
   const unit = units.find(item => item.id === record.unitId || item.code === record.unitId)
   const facility = facilities.find(item => item.id === record.facilityId)
@@ -435,7 +434,6 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const label = statusLabelMap[value] || value.charAt(0).toUpperCase() + value.slice(1).replace(/-/g, ' ')
     return <Badge variant={variants[value] ?? 'muted'}>{label}</Badge>
   }
-
 
   const normalizedSearch = reservationSearch.trim().toLowerCase()
   const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 }
