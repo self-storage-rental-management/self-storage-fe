@@ -3,8 +3,13 @@ import type { User } from '../types'
 
 /** Facility scope is keyed by ID; names remain a legacy fallback for old records. */
 export function isFacilityVisible(user: Pick<User, 'facility' | 'facilityId'>, facilityId?: string, facilityName?: string) {
-  if (user.facility === 'All facilities' || (!user.facility && !user.facilityId)) return true
-  return facilityId === user.facilityId || facilityId === user.facility || facilityName === user.facility
+  if (user.facility === 'All facilities') return true
+  if (!user.facility && !user.facilityId) return false
+  // Stable facilityId wins whenever both sides have one. Names remain a
+  // compatibility fallback for legacy records that do not have an ID yet.
+  if (user.facilityId && facilityId) return facilityId === user.facilityId
+  if (user.facility && facilityId && facilityId === user.facility) return true
+  return Boolean(user.facility && facilityName && facilityName === user.facility)
 }
 
 export const ACTIVE_RESERVATION_STATUSES = ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'] as const
