@@ -247,6 +247,10 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
   const [formFacManager, setFormFacManager] = useState<string>('')
   const [formFacPhone, setFormFacPhone] = useState<string>('024 3822 9999')
   const [formFacUnits, setFormFacUnits] = useState<number>(20)
+  const [formFacUnitS, setFormFacUnitS] = useState<number>(5)
+  const [formFacUnitM, setFormFacUnitM] = useState<number>(5)
+  const [formFacUnitL, setFormFacUnitL] = useState<number>(5)
+  const [formFacUnitXL, setFormFacUnitXL] = useState<number>(5)
   const [formFacPrice, setFormFacPrice] = useState<string>('5.500.000đ')
   const [formFacClimate, setFormFacClimate] = useState<boolean>(false)
   const [formFacSecurity, setFormFacSecurity] = useState<string>('Khóa riêng tự quản, Bảo vệ cổng')
@@ -258,6 +262,92 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
   const showToast = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
+  }
+
+  // Tự do chỉ định số lượng từng cỡ kho (S, M, L, XL)
+  const handleUnitSizeChange = (size: 'S' | 'M' | 'L' | 'XL', val: number) => {
+    const safeVal = Math.max(0, Math.floor(val || 0))
+    let s = formFacUnitS
+    let m = formFacUnitM
+    let l = formFacUnitL
+    let xl = formFacUnitXL
+    if (size === 'S') s = safeVal
+    if (size === 'M') m = safeVal
+    if (size === 'L') l = safeVal
+    if (size === 'XL') xl = safeVal
+    setFormFacUnitS(s)
+    setFormFacUnitM(m)
+    setFormFacUnitL(l)
+    setFormFacUnitXL(xl)
+    setFormFacUnits(s + m + l + xl)
+  }
+
+  // Phân bổ nhanh theo các kịch bản thực tế
+  const handleApplyPreset = (preset: 'equal' | 'mini' | 'large' | 'small-only') => {
+    const total = formFacUnits > 0 ? formFacUnits : 10
+    if (preset === 'equal') {
+      const base = Math.floor(total / 4)
+      let rem = total % 4
+      const s = base + (rem-- > 0 ? 1 : 0)
+      const m = base + (rem-- > 0 ? 1 : 0)
+      const l = base + (rem-- > 0 ? 1 : 0)
+      const xl = base + (rem-- > 0 ? 1 : 0)
+      setFormFacUnitS(s)
+      setFormFacUnitM(m)
+      setFormFacUnitL(l)
+      setFormFacUnitXL(xl)
+      setFormFacUnits(s + m + l + xl)
+    } else if (preset === 'mini') {
+      const s = Math.ceil(total * 0.6)
+      const m = Math.max(0, total - s)
+      setFormFacUnitS(s)
+      setFormFacUnitM(m)
+      setFormFacUnitL(0)
+      setFormFacUnitXL(0)
+      setFormFacUnits(s + m)
+    } else if (preset === 'large') {
+      const l = Math.floor(total * 0.5)
+      const xl = Math.max(0, total - l)
+      setFormFacUnitS(0)
+      setFormFacUnitM(0)
+      setFormFacUnitL(l)
+      setFormFacUnitXL(xl)
+      setFormFacUnits(l + xl)
+    } else if (preset === 'small-only') {
+      setFormFacUnitS(total)
+      setFormFacUnitM(0)
+      setFormFacUnitL(0)
+      setFormFacUnitXL(0)
+      setFormFacUnits(total)
+    }
+  }
+
+  // Tự động phân bổ khi sửa tổng số kho
+  const handleTotalUnitsChange = (newTotal: number) => {
+    const target = Math.max(0, Math.floor(newTotal || 0))
+    setFormFacUnits(target)
+    const currentSum = formFacUnitS + formFacUnitM + formFacUnitL + formFacUnitXL
+    if (currentSum > 0) {
+      let s = Math.round((formFacUnitS / currentSum) * target)
+      let m = Math.round((formFacUnitM / currentSum) * target)
+      let l = Math.round((formFacUnitL / currentSum) * target)
+      let xl = Math.max(0, target - (s + m + l))
+      setFormFacUnitS(s)
+      setFormFacUnitM(m)
+      setFormFacUnitL(l)
+      setFormFacUnitXL(xl)
+    } else {
+      const base = Math.floor(target / 4)
+      let rem = target % 4
+      const s = base + (rem-- > 0 ? 1 : 0)
+      const m = base + (rem-- > 0 ? 1 : 0)
+      const l = base + (rem-- > 0 ? 1 : 0)
+      const xl = base + (rem-- > 0 ? 1 : 0)
+      setFormFacUnitS(s)
+      setFormFacUnitM(m)
+      setFormFacUnitL(l)
+      setFormFacUnitXL(xl)
+    }
   }
 
   // Tự động gợi ý mã cơ sở chuẩn theo tỉnh/thành phố
@@ -298,6 +388,10 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
     setFormFacCity(defaultCity)
     setFormFacManager('Trần Văn Quản Lý')
     setFormFacPhone('024 3822 9999')
+    setFormFacUnitS(5)
+    setFormFacUnitM(5)
+    setFormFacUnitL(5)
+    setFormFacUnitXL(5)
     setFormFacUnits(20)
     setFormFacPrice('5.500.000đ')
     setFormFacClimate(false)
@@ -330,6 +424,12 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
       return
     }
 
+    const totalCalculatedUnits = formFacUnitS + formFacUnitM + formFacUnitL + formFacUnitXL
+    if (totalCalculatedUnits <= 0) {
+      showToast(lang === 'vi' ? 'Vui lòng chỉ định ít nhất 1 gian kho cho cơ sở!' : 'Please specify at least 1 storage unit!')
+      return
+    }
+
     const created = createFacility({
       code,
       name: formFacName.trim(),
@@ -337,20 +437,27 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
       city: formFacCity.trim(),
       manager: formFacManager.trim() || 'Quản lý cơ sở',
       phone: formFacPhone.trim() || '1900 6868',
-      units: Number(formFacUnits) || 20,
+      units: totalCalculatedUnits,
+      unitDistribution: {
+        S: formFacUnitS,
+        M: formFacUnitM,
+        L: formFacUnitL,
+        XL: formFacUnitXL
+      },
       price: formFacPrice || '5.500.000đ',
       climate: formFacClimate,
       security: formFacSecurity,
       accessHours: formFacAccessHours,
       status: formFacStatus,
-      occupied: 6,
-      available: Math.max(0, (Number(formFacUnits) || 20) - 6),
-      revenue: 48500000,
-      growth: 6.8
+      occupied: 0,
+      available: totalCalculatedUnits,
+      revenue: 0,
+      growth: 0
     }, user)
 
     setCreateFacilityModal(false)
-    showToast(lang === 'vi' ? `Đã thêm cơ sở "${created.name}" (${created.code}) thành công với ${created.units} gian kho chuẩn!` : `Facility "${created.name}" created successfully!`)
+    const breakdownStr = `S: ${formFacUnitS} · M: ${formFacUnitM} · L: ${formFacUnitL} · XL: ${formFacUnitXL}`
+    showToast(lang === 'vi' ? `Đã thêm cơ sở "${created.name}" (${created.code}) với ${created.units} gian kho (${breakdownStr})!` : `Facility "${created.name}" created successfully!`)
   }
 
   const handleOpenEditFacility = (f: any) => {
@@ -361,7 +468,35 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
     setFormFacCity(f.city)
     setFormFacManager(f.manager)
     setFormFacPhone(f.phone || '1900 6868')
-    setFormFacUnits(f.units)
+
+    // Find current unit breakdown
+    const facUnits = unitsList.filter(u => u.facilityId === f.id || u.facilityId === f.code)
+    let sCount = 0
+    let mCount = 0
+    let lCount = 0
+    let xlCount = 0
+    if (f.unitDistribution) {
+      sCount = f.unitDistribution.S ?? 0
+      mCount = f.unitDistribution.M ?? 0
+      lCount = f.unitDistribution.L ?? 0
+      xlCount = f.unitDistribution.XL ?? 0
+    } else if (facUnits.length > 0) {
+      sCount = facUnits.filter(u => ((u as any).size || (u.type === 'Small' ? 'S' : '')) === 'S').length
+      mCount = facUnits.filter(u => ((u as any).size || (u.type === 'Medium' ? 'M' : '')) === 'M').length
+      lCount = facUnits.filter(u => ((u as any).size || (u.type === 'Large' ? 'L' : '')) === 'L').length
+      xlCount = facUnits.filter(u => ((u as any).size || (u.type === 'Extra Large' ? 'XL' : '')) === 'XL').length
+    } else {
+      const base = Math.floor((f.units || 20) / 4)
+      sCount = base
+      mCount = base
+      lCount = base
+      xlCount = Math.max(0, (f.units || 20) - base * 3)
+    }
+    setFormFacUnitS(sCount)
+    setFormFacUnitM(mCount)
+    setFormFacUnitL(lCount)
+    setFormFacUnitXL(xlCount)
+    setFormFacUnits(sCount + mCount + lCount + xlCount)
     setFormFacPrice(f.price)
     setFormFacClimate(Boolean(f.climate))
     setFormFacSecurity(f.security || 'Khóa riêng tự quản, Bảo vệ cổng')
@@ -386,6 +521,45 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
       showToast(lang === 'vi' ? 'Vui lòng nhập tên cơ sở!' : 'Please enter facility name!')
       return
     }
+    if (!formFacAddress.trim()) {
+      showToast(lang === 'vi' ? 'Vui lòng nhập địa chỉ cơ sở!' : 'Please enter facility address!')
+      return
+    }
+
+    const totalCalculatedUnits = formFacUnitS + formFacUnitM + formFacUnitL + formFacUnitXL
+    if (totalCalculatedUnits <= 0) {
+      showToast(lang === 'vi' ? 'Vui lòng chỉ định ít nhất 1 gian kho cho cơ sở!' : 'Please specify at least 1 storage unit!')
+      return
+    }
+
+    // Validation: không cho phép giảm số lượng thấp hơn số gian kho đang được thuê (occupied)
+    const facUnits = unitsList.filter(u => u.facilityId === selectedFacility.id || u.facilityId === selectedFacility.code)
+    const getOcc = (size: 'S' | 'M' | 'L' | 'XL') => facUnits.filter(u => {
+      const s = (u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : 'XL')
+      return s === size && (u.status === 'occupied' || (u.status as string) === 'rented')
+    }).length
+
+    const occS = getOcc('S')
+    const occM = getOcc('M')
+    const occL = getOcc('L')
+    const occXL = getOcc('XL')
+
+    if (formFacUnitS < occS) {
+      showToast(lang === 'vi' ? `Không thể giảm Kho S xuống ${formFacUnitS} vì hiện có ${occS} gian kho đang được thuê.` : `Cannot reduce Unit S to ${formFacUnitS} because ${occS} units are occupied.`)
+      return
+    }
+    if (formFacUnitM < occM) {
+      showToast(lang === 'vi' ? `Không thể giảm Kho M xuống ${formFacUnitM} vì hiện có ${occM} gian kho đang được thuê.` : `Cannot reduce Unit M to ${formFacUnitM} because ${occM} units are occupied.`)
+      return
+    }
+    if (formFacUnitL < occL) {
+      showToast(lang === 'vi' ? `Không thể giảm Kho L xuống ${formFacUnitL} vì hiện có ${occL} gian kho đang được thuê.` : `Cannot reduce Unit L to ${formFacUnitL} because ${occL} units are occupied.`)
+      return
+    }
+    if (formFacUnitXL < occXL) {
+      showToast(lang === 'vi' ? `Không thể giảm Kho XL xuống ${formFacUnitXL} vì hiện có ${occXL} gian kho đang được thuê.` : `Cannot reduce Unit XL to ${formFacUnitXL} because ${occXL} units are occupied.`)
+      return
+    }
 
     updateFacility(selectedFacility.id, {
       code,
@@ -394,7 +568,13 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
       city: formFacCity.trim(),
       manager: formFacManager.trim(),
       phone: formFacPhone.trim(),
-      units: Number(formFacUnits) || selectedFacility.units,
+      units: totalCalculatedUnits,
+      unitDistribution: {
+        S: formFacUnitS,
+        M: formFacUnitM,
+        L: formFacUnitL,
+        XL: formFacUnitXL
+      },
       price: formFacPrice,
       climate: formFacClimate,
       security: formFacSecurity,
@@ -403,7 +583,8 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
     }, user)
 
     setEditFacilityModal(false)
-    showToast(lang === 'vi' ? `Đã cập nhật cơ sở "${formFacName}" thành công!` : `Facility updated!`)
+    const breakdownStr = `S: ${formFacUnitS} · M: ${formFacUnitM} · L: ${formFacUnitL} · XL: ${formFacUnitXL}`
+    showToast(lang === 'vi' ? `Đã cập nhật cơ sở "${formFacName}" thành công (${totalCalculatedUnits} kho · ${breakdownStr})!` : `Facility updated!`)
   }
 
   const handleDeleteFacility = () => {
@@ -600,6 +781,26 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                             <span className="truncate" title={f.accessHours || '06:00 - 22:00'}>{f.accessHours || '06:00 - 22:00 (24/7 VIP)'}</span>
                           </div>
                         </div>
+
+                        {/* Hàng 2.5: Cơ cấu quy mô gian kho (S, M, L, XL) */}
+                        {(() => {
+                          const facUnits = unitsList.filter(u => u.facilityId === f.id || u.facilityId === f.code)
+                          const s = f.unitDistribution?.S ?? facUnits.filter(u => ((u as any).size || (u.type === 'Small' ? 'S' : '')) === 'S').length
+                          const m = f.unitDistribution?.M ?? facUnits.filter(u => ((u as any).size || (u.type === 'Medium' ? 'M' : '')) === 'M').length
+                          const l = f.unitDistribution?.L ?? facUnits.filter(u => ((u as any).size || (u.type === 'Large' ? 'L' : '')) === 'L').length
+                          const xl = f.unitDistribution?.XL ?? facUnits.filter(u => ((u as any).size || (u.type === 'Extra Large' ? 'XL' : '')) === 'XL').length
+
+                          return (
+                            <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
+                              <span className="text-slate-400 font-medium text-[11px]">{lang === 'vi' ? 'Quy mô chi tiết:' : 'Unit sizes:'}</span>
+                              {s > 0 && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-mono text-[11px] font-semibold">{s} Kho Nhỏ (S)</span>}
+                              {m > 0 && <span className="px-2 py-0.5 rounded bg-green-50 text-green-800 border border-green-200 font-mono text-[11px] font-semibold">{m} Kho Vừa (M)</span>}
+                              {l > 0 && <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-mono text-[11px] font-semibold">{l} Kho Lớn (L)</span>}
+                              {xl > 0 && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 font-mono text-[11px] font-semibold">{xl} Kho Rất Lớn (XL)</span>}
+                              {(s + m + l + xl === 0) && <span className="text-slate-400 italic text-[11px]">{f.units} kho tiêu chuẩn</span>}
+                            </div>
+                          )
+                        })()}
 
                         {/* Hàng 3: Thước đo vận hành (Lấp đầy, Doanh thu, Đơn giá từ) */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
@@ -1722,244 +1923,446 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
         </div>
       </Modal>
 
-            {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
-      {/* 1. Modal Thêm Mới Cơ Sở (Create Facility) */}
-      <Modal open={createFacilityModal} onClose={() => setCreateFacilityModal(false)} title={lang === 'vi' ? 'Thêm Cơ Sở Kho Mới' : 'Create New Storage Facility'}>
-        <div className="space-y-4">
-          <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-xs text-amber-900 flex items-start gap-2">
-            <span className="text-base shrink-0">ℹ️</span>
-            <div>
-              <b>Hệ thống tự động đồng bộ:</b> Khi tạo mới cơ sở tại địa điểm mới (ví dụ Hà Nội), hệ thống sẽ tự động khởi tạo danh mục <b>{formFacUnits} gian kho chuẩn (S, M, L, XL)</b> để sẵn sàng cho khách hàng đặt thuê.
-            </div>
-          </div>
+      {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
+      {(() => {
+        // Shared size specifications for compact form table
+        const FACILITY_SIZE_SPECS = [
+          {
+            size: 'S' as const,
+            name: 'Kho Nhỏ',
+            dimensions: '5.6 × 6.0 m',
+            areaM2: '33.6 m²',
+            volumeM3: '107 m³',
+            badgeClass: 'bg-sky-50 text-sky-700 border-sky-200'
+          },
+          {
+            size: 'M' as const,
+            name: 'Kho Trung',
+            dimensions: '9.0 × 6.4 m',
+            areaM2: '57.6 m²',
+            volumeM3: '195 m³',
+            badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+          },
+          {
+            size: 'L' as const,
+            name: 'Kho Lớn',
+            dimensions: '13.5 × 6.8 m',
+            areaM2: '91.8 m²',
+            volumeM3: '330 m³',
+            badgeClass: 'bg-purple-50 text-purple-700 border-purple-200'
+          },
+          {
+            size: 'XL' as const,
+            name: 'Rất Lớn',
+            dimensions: '19.0 × 7.2 m',
+            areaM2: '136.8 m²',
+            volumeM3: '547 m³',
+            badgeClass: 'bg-amber-50 text-amber-800 border-amber-200'
+          }
+        ]
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {lang === 'vi' ? 'Mã cơ sở / Mã kho *' : 'Facility Code *'}
-              </label>
-              <input
-                type="text"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
-                placeholder="VD: HN-F01, DN-F01..."
-                value={formFacCode}
-                onChange={e => setFormFacCode(e.target.value.toUpperCase())}
-              />
-              <p className="text-[11px] text-slate-400 mt-0.5">Quy chuẩn: Tỉnh/TP - Số thứ tự (VD: HN-F01)</p>
-            </div>
+        const getFormUnitQty = (size: 'S' | 'M' | 'L' | 'XL') => {
+          if (size === 'S') return formFacUnitS
+          if (size === 'M') return formFacUnitM
+          if (size === 'L') return formFacUnitL
+          return formFacUnitXL
+        }
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {lang === 'vi' ? 'Tỉnh / Thành phố *' : 'City / Province *'}
-              </label>
-              <Select
-                value={formFacCity}
-                onChange={e => {
-                  const newCity = e.target.value;
-                  setFormFacCity(newCity);
-                  // Tự động gợi ý mã và tên kho theo thành phố mới
-                  const autoCode = suggestFacilityCode(newCity);
-                  setFormFacCode(autoCode);
-                  if (formFacName.includes('Cơ sở')) {
-                    setFormFacName(`Kho Việt – Cơ sở ${newCity}`);
-                  }
-                }}
-              >
-                <option value="Hà Nội">Hà Nội</option>
-                <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
-                <option value="Bình Dương">Bình Dương</option>
-                <option value="Đà Nẵng">Đà Nẵng</option>
-                <option value="Cần Thơ">Cần Thơ</option>
-                <option value="Hải Phòng">Hải Phòng</option>
-                <option value="Đồng Nai">Đồng Nai</option>
-                <option value="Vũng Tàu">Vũng Tàu</option>
-                <option value="Nha Trang">Nha Trang</option>
-              </Select>
-            </div>
-          </div>
-
-          <Input
-            label={lang === 'vi' ? 'Tên cơ sở / Chi nhánh kho *' : 'Facility Name *'}
-            placeholder="VD: Kho Việt – Cơ sở Hà Nội..."
-            value={formFacName}
-            onChange={e => setFormFacName(e.target.value)}
-          />
-
-          <Input
-            label={lang === 'vi' ? 'Địa điểm / Địa chỉ chi tiết *' : 'Street Address *'}
-            placeholder="VD: Số 123 Đường Cầu Giấy, Phường Quan Hoa, Quận Cầu Giấy..."
-            value={formFacAddress}
-            onChange={e => setFormFacAddress(e.target.value)}
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label={lang === 'vi' ? 'Người quản lý chi nhánh' : 'Facility Manager'}
-              placeholder="VD: Trần Văn Quản Lý..."
-              value={formFacManager}
-              onChange={e => setFormFacManager(e.target.value)}
-            />
-            <Input
-              label={lang === 'vi' ? 'Số điện thoại hotline chi nhánh' : 'Phone / Hotline'}
-              placeholder="VD: 024 3822 9999..."
-              value={formFacPhone}
-              onChange={e => setFormFacPhone(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label={lang === 'vi' ? 'Quy mô số lượng gian kho' : 'Total Units'}
-              type="number"
-              value={String(formFacUnits)}
-              onChange={e => setFormFacUnits(Number(e.target.value))}
-            />
-            <Input
-              label={lang === 'vi' ? 'Giá cơ sở từ / tháng' : 'Starting Price'}
-              placeholder="5.500.000đ"
-              value={formFacPrice}
-              onChange={e => setFormFacPrice(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label={lang === 'vi' ? 'Khung giờ ra vào / Giờ mở cửa' : 'Access Hours'}
-              placeholder="06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)"
-              value={formFacAccessHours}
-              onChange={e => setFormFacAccessHours(e.target.value)}
-            />
-            <Select
-              label={lang === 'vi' ? 'Trạng thái ban đầu' : 'Initial Status'}
-              value={formFacStatus}
-              onChange={e => setFormFacStatus(e.target.value as any)}
-            >
-              <option value="active">{lang === 'vi' ? 'Đang hoạt động (Active)' : 'Active'}</option>
-              <option value="maintenance">{lang === 'vi' ? 'Chuẩn bị khai trương / Bảo trì' : 'Maintenance / Pre-opening'}</option>
-            </Select>
-          </div>
-
-
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="outline" onClick={() => setCreateFacilityModal(false)}>
-              {lang === 'vi' ? 'Hủy' : 'Cancel'}
-            </Button>
-            <Button
-              variant="primary"
-              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-              disabled={!formFacName.trim() || !formFacCode.trim() || !formFacAddress.trim()}
-              onClick={handleCreateFacility}
-            >
-              {lang === 'vi' ? 'Lưu Cơ Sở Mới' : 'Save Facility'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* 2. Modal Chỉnh Sửa Cơ Sở (Edit Facility) */}
-      <Modal open={editFacilityModal} onClose={() => setEditFacilityModal(false)} title={lang === 'vi' ? 'Chỉnh Sửa Thông Tin Cơ Sở' : 'Edit Facility'}>
-        {selectedFacility && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {lang === 'vi' ? 'Mã cơ sở / Mã kho *' : 'Facility Code *'}
-                </label>
-                <input
-                  type="text"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
-                  value={formFacCode}
-                  onChange={e => setFormFacCode(e.target.value.toUpperCase())}
-                />
+        const renderUnitAllocationSection = (
+          isEditing: boolean,
+          occupiedMap: Record<'S' | 'M' | 'L' | 'XL', number> = { S: 0, M: 0, L: 0, XL: 0 }
+        ) => {
+          return (
+            <div className="space-y-3 pt-1">
+              {/* Section Header */}
+              <div className="flex items-center justify-between border-b border-stone-200 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
+                  <span>📐</span> {lang === 'vi' ? 'Phân bổ gian kho' : 'Storage Unit Allocation'}
+                </h4>
+                <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full font-mono">
+                  {lang === 'vi' ? `Tổng: ${formFacUnits} kho` : `Total: ${formFacUnits} units`}
+                </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {lang === 'vi' ? 'Tỉnh / Thành phố *' : 'City / Province *'}
-                </label>
-                <input
-                  type="text"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  value={formFacCity}
-                  onChange={e => setFormFacCity(e.target.value)}
-                />
+              {/* Compact Table */}
+              <div className="border border-stone-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-stone-100/75 border-b border-stone-200 text-stone-600 font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-3">{lang === 'vi' ? 'Kích thước' : 'Size'}</th>
+                      <th className="py-2.5 px-3 text-center">{lang === 'vi' ? 'Diện tích' : 'Area'}</th>
+                      <th className="py-2.5 px-3 text-center">{lang === 'vi' ? 'Thể tích' : 'Volume'}</th>
+                      <th className="py-2.5 px-3 text-right">{lang === 'vi' ? 'Số lượng' : 'Quantity'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {FACILITY_SIZE_SPECS.map(spec => {
+                      const qty = getFormUnitQty(spec.size)
+                      const occ = occupiedMap[spec.size] || 0
+                      const isBelowOcc = isEditing && qty < occ
+
+                      return (
+                        <tr key={spec.size} className="hover:bg-stone-50/50 transition-colors">
+                          <td className="py-2 px-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-7 h-7 flex items-center justify-center rounded font-mono font-bold text-xs border shrink-0 ${spec.badgeClass}`}>
+                                {spec.size}
+                              </span>
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-stone-800">{spec.name}</span>
+                                  <span className="text-[11px] text-stone-400 font-mono">({spec.dimensions})</span>
+                                </div>
+                                {isEditing && occ > 0 && (
+                                  <div className="text-[11px] font-medium text-amber-700">
+                                    Đang thuê: {occ} kho
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono text-stone-600">
+                            {spec.areaM2}
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono text-stone-500">
+                            {spec.volumeM3}
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                disabled={isEditing ? qty <= occ : qty <= 0}
+                                onClick={() => handleUnitSizeChange(spec.size, Math.max(isEditing ? occ : 0, qty - 1))}
+                                className="w-7 h-7 rounded border border-stone-300 bg-white hover:bg-stone-100 font-bold text-stone-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min={0}
+                                className={`w-14 h-7 text-center border rounded font-mono font-bold text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                                  isBelowOcc ? 'border-red-400 text-red-700 bg-red-50' : 'border-stone-300 text-stone-800'
+                                }`}
+                                value={qty}
+                                onChange={e => {
+                                  const parsed = parseInt(e.target.value, 10)
+                                  handleUnitSizeChange(spec.size, isNaN(parsed) ? 0 : Math.max(0, parsed))
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleUnitSizeChange(spec.size, qty + 1)}
+                                className="w-7 h-7 rounded border border-stone-300 bg-white hover:bg-stone-100 font-bold text-stone-700 flex items-center justify-center transition cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+                            {isBelowOcc && (
+                              <div className="text-[10px] text-red-600 text-right mt-0.5">
+                                Tối thiểu {occ} (đang thuê)
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot className="bg-stone-50/90 border-t border-stone-200 font-semibold text-stone-800">
+                    <tr>
+                      <td colSpan={3} className="py-2.5 px-3">
+                        {lang === 'vi' ? 'Tổng cộng' : 'Total'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <span className="font-mono text-sm font-bold text-amber-700">{formFacUnits}</span>{' '}
+                        <span className="text-stone-500 font-normal text-xs">{lang === 'vi' ? 'kho' : 'units'}</span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
+
             </div>
+          )
+        }
 
-            <Input
-              label={lang === 'vi' ? 'Tên cơ sở / Chi nhánh kho *' : 'Facility Name *'}
-              value={formFacName}
-              onChange={e => setFormFacName(e.target.value)}
-            />
+        return (
+          <>
+            {/* 1. Modal Thêm Mới Cơ Sở (Create Facility) */}
+            <Modal
+              open={createFacilityModal}
+              onClose={() => setCreateFacilityModal(false)}
+              title={lang === 'vi' ? 'Thêm Cơ Sở Kho Mới' : 'Create New Storage Facility'}
+              size="lg"
+            >
+              <div className="space-y-4">
+                {/* Thông tin cơ sở */}
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
+                    {lang === 'vi' ? 'Thông tin cơ sở' : 'Facility Information'}
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-700 mb-1">
+                          {lang === 'vi' ? 'Mã cơ sở / Mã kho *' : 'Facility Code *'}
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold"
+                          placeholder="VD: HN-F02"
+                          value={formFacCode}
+                          onChange={e => setFormFacCode(e.target.value.toUpperCase())}
+                        />
+                        <p className="text-[11px] text-stone-400 mt-0.5">Quy chuẩn: Tỉnh/TP - Số thứ tự (VD: HN-F02)</p>
+                      </div>
 
-            <Input
-              label={lang === 'vi' ? 'Địa điểm / Địa chỉ chi tiết *' : 'Address *'}
-              value={formFacAddress}
-              onChange={e => setFormFacAddress(e.target.value)}
-            />
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-700 mb-1">
+                          {lang === 'vi' ? 'Tỉnh / Thành phố *' : 'City / Province *'}
+                        </label>
+                        <Select
+                          value={formFacCity}
+                          onChange={e => {
+                            const newCity = e.target.value;
+                            setFormFacCity(newCity);
+                            const autoCode = suggestFacilityCode(newCity);
+                            setFormFacCode(autoCode);
+                            if (formFacName.includes('Cơ sở')) {
+                              setFormFacName(`Kho Việt – Cơ sở ${newCity}`);
+                            }
+                          }}
+                        >
+                          <option value="Hà Nội">Hà Nội</option>
+                          <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
+                          <option value="Bình Dương">Bình Dương</option>
+                          <option value="Đà Nẵng">Đà Nẵng</option>
+                          <option value="Cần Thơ">Cần Thơ</option>
+                          <option value="Hải Phòng">Hải Phòng</option>
+                          <option value="Đồng Nai">Đồng Nai</option>
+                          <option value="Vũng Tàu">Vũng Tàu</option>
+                          <option value="Nha Trang">Nha Trang</option>
+                        </Select>
+                      </div>
+                    </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label={lang === 'vi' ? 'Người quản lý chi nhánh' : 'Manager'}
-                value={formFacManager}
-                onChange={e => setFormFacManager(e.target.value)}
-              />
-              <Input
-                label={lang === 'vi' ? 'Hotline liên hệ' : 'Phone'}
-                value={formFacPhone}
-                onChange={e => setFormFacPhone(e.target.value)}
-              />
-            </div>
+                    <Input
+                      label={lang === 'vi' ? 'Tên cơ sở / Chi nhánh kho *' : 'Facility Name *'}
+                      placeholder="VD: Kho Việt – Cơ sở Hà Nội..."
+                      value={formFacName}
+                      onChange={e => setFormFacName(e.target.value)}
+                    />
 
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label={lang === 'vi' ? 'Tổng số kho quy hoạch' : 'Total Units'}
-                type="number"
-                value={String(formFacUnits)}
-                onChange={e => setFormFacUnits(Number(e.target.value))}
-              />
-              <Input
-                label={lang === 'vi' ? 'Giá cơ sở từ' : 'Starting Price'}
-                value={formFacPrice}
-                onChange={e => setFormFacPrice(e.target.value)}
-              />
-            </div>
+                    <Input
+                      label={lang === 'vi' ? 'Địa điểm / Địa chỉ chi tiết *' : 'Street Address *'}
+                      placeholder="VD: Số 123 Đường Cầu Giấy, Phường Quan Hoa, Quận Cầu Giấy..."
+                      value={formFacAddress}
+                      onChange={e => setFormFacAddress(e.target.value)}
+                    />
 
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label={lang === 'vi' ? 'Khung giờ ra vào' : 'Access Hours'}
-                value={formFacAccessHours}
-                onChange={e => setFormFacAccessHours(e.target.value)}
-              />
-              <Select
-                label={lang === 'vi' ? 'Trạng thái hoạt động' : 'Status'}
-                value={formFacStatus}
-                onChange={e => setFormFacStatus(e.target.value as any)}
-              >
-                <option value="active">{lang === 'vi' ? 'Đang hoạt động (Active)' : 'Active'}</option>
-                <option value="maintenance">{lang === 'vi' ? 'Chuẩn bị khai trương / Bảo trì' : 'Maintenance'}</option>
-              </Select>
-            </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input
+                        label={lang === 'vi' ? 'Người quản lý chi nhánh' : 'Facility Manager'}
+                        placeholder="VD: Trần Văn Quản Lý..."
+                        value={formFacManager}
+                        onChange={e => setFormFacManager(e.target.value)}
+                      />
+                      <Input
+                        label={lang === 'vi' ? 'Hotline liên hệ' : 'Phone / Hotline'}
+                        placeholder="VD: 024 3822 9999..."
+                        value={formFacPhone}
+                        onChange={e => setFormFacPhone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
 
+                {/* Quy mô & phân bổ kho */}
+                {renderUnitAllocationSection(false)}
 
+                {/* Thông số vận hành */}
+                <div className="pt-1">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
+                    {lang === 'vi' ? 'Thông số vận hành' : 'Operation Settings'}
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input
+                        label={lang === 'vi' ? 'Giá cơ sở từ / tháng' : 'Starting Price'}
+                        placeholder="5.500.000đ"
+                        value={formFacPrice}
+                        onChange={e => setFormFacPrice(e.target.value)}
+                      />
+                      <Input
+                        label={lang === 'vi' ? 'Khung giờ ra vào / Giờ mở cửa' : 'Access Hours'}
+                        placeholder="06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)"
+                        value={formFacAccessHours}
+                        onChange={e => setFormFacAccessHours(e.target.value)}
+                      />
+                    </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <Button variant="outline" onClick={() => setEditFacilityModal(false)}>
-                {lang === 'vi' ? 'Hủy' : 'Cancel'}
-              </Button>
-              <Button
-                variant="primary"
-                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-                disabled={!formFacName.trim() || !formFacCode.trim()}
-                onClick={handleUpdateFacility}
-              >
-                {lang === 'vi' ? 'Lưu Thay Đổi' : 'Save Changes'}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+                    <div>
+                      <Select
+                        label={lang === 'vi' ? 'Trạng thái ban đầu' : 'Initial Status'}
+                        value={formFacStatus}
+                        onChange={e => setFormFacStatus(e.target.value as any)}
+                      >
+                        <option value="active">{lang === 'vi' ? 'Đang hoạt động (Active)' : 'Active'}</option>
+                        <option value="maintenance">{lang === 'vi' ? 'Chuẩn bị khai trương / Bảo trì' : 'Maintenance / Pre-opening'}</option>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sticky footer */}
+                <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex justify-end items-center gap-2 z-10">
+                  <Button variant="outline" onClick={() => setCreateFacilityModal(false)}>
+                    {lang === 'vi' ? 'Hủy' : 'Cancel'}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                    disabled={!formFacName.trim() || !formFacCode.trim() || !formFacAddress.trim() || formFacUnits <= 0}
+                    onClick={handleCreateFacility}
+                  >
+                    {lang === 'vi' ? 'Lưu Cơ Sở Mới' : 'Save Facility'}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+
+            {/* 2. Modal Chỉnh Sửa Cơ Sở (Edit Facility) */}
+            <Modal
+              open={editFacilityModal}
+              onClose={() => setEditFacilityModal(false)}
+              title={lang === 'vi' ? 'Chỉnh Sửa Thông Tin Cơ Sở' : 'Edit Facility'}
+              size="lg"
+            >
+              {selectedFacility && (() => {
+                const facUnits = unitsList.filter(u => u.facilityId === selectedFacility.id || u.facilityId === selectedFacility.code)
+                const occMap = {
+                  S: facUnits.filter(u => ((u as any).size === 'S' || u.type === 'Small') && (u.status === 'occupied' || (u.status as string) === 'rented')).length,
+                  M: facUnits.filter(u => ((u as any).size === 'M' || u.type === 'Medium') && (u.status === 'occupied' || (u.status as string) === 'rented')).length,
+                  L: facUnits.filter(u => ((u as any).size === 'L' || u.type === 'Large') && (u.status === 'occupied' || (u.status as string) === 'rented')).length,
+                  XL: facUnits.filter(u => ((u as any).size === 'XL' || u.type === 'Extra Large') && (u.status === 'occupied' || (u.status as string) === 'rented')).length,
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {/* Thông tin cơ sở */}
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
+                        {lang === 'vi' ? 'Thông tin cơ sở' : 'Facility Information'}
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-stone-700 mb-1">
+                              {lang === 'vi' ? 'Mã cơ sở / Mã kho *' : 'Facility Code *'}
+                            </label>
+                            <input
+                              type="text"
+                              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold"
+                              value={formFacCode}
+                              onChange={e => setFormFacCode(e.target.value.toUpperCase())}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-stone-700 mb-1">
+                              {lang === 'vi' ? 'Tỉnh / Thành phố *' : 'City / Province *'}
+                            </label>
+                            <input
+                              type="text"
+                              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              value={formFacCity}
+                              onChange={e => setFormFacCity(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <Input
+                          label={lang === 'vi' ? 'Tên cơ sở / Chi nhánh kho *' : 'Facility Name *'}
+                          value={formFacName}
+                          onChange={e => setFormFacName(e.target.value)}
+                        />
+
+                        <Input
+                          label={lang === 'vi' ? 'Địa điểm / Địa chỉ chi tiết *' : 'Address *'}
+                          value={formFacAddress}
+                          onChange={e => setFormFacAddress(e.target.value)}
+                        />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <Input
+                            label={lang === 'vi' ? 'Người quản lý chi nhánh' : 'Manager'}
+                            value={formFacManager}
+                            onChange={e => setFormFacManager(e.target.value)}
+                          />
+                          <Input
+                            label={lang === 'vi' ? 'Hotline liên hệ' : 'Phone'}
+                            value={formFacPhone}
+                            onChange={e => setFormFacPhone(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quy mô & phân bổ kho */}
+                    {renderUnitAllocationSection(true, occMap)}
+
+                    {/* Thông số vận hành */}
+                    <div className="pt-1">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
+                        {lang === 'vi' ? 'Thông số vận hành' : 'Operation Settings'}
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <Input
+                            label={lang === 'vi' ? 'Giá cơ sở từ' : 'Starting Price'}
+                            value={formFacPrice}
+                            onChange={e => setFormFacPrice(e.target.value)}
+                          />
+                          <Input
+                            label={lang === 'vi' ? 'Khung giờ ra vào' : 'Access Hours'}
+                            value={formFacAccessHours}
+                            onChange={e => setFormFacAccessHours(e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <Select
+                            label={lang === 'vi' ? 'Trạng thái hoạt động' : 'Status'}
+                            value={formFacStatus}
+                            onChange={e => setFormFacStatus(e.target.value as any)}
+                          >
+                            <option value="active">{lang === 'vi' ? 'Đang hoạt động (Active)' : 'Active'}</option>
+                            <option value="maintenance">{lang === 'vi' ? 'Chuẩn bị khai trương / Bảo trì' : 'Maintenance'}</option>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sticky footer */}
+                    <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex justify-end items-center gap-2 z-10">
+                      <Button variant="outline" onClick={() => setEditFacilityModal(false)}>
+                        {lang === 'vi' ? 'Hủy' : 'Cancel'}
+                      </Button>
+                      <Button
+                        variant="primary"
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                        disabled={!formFacName.trim() || !formFacCode.trim() || formFacUnits <= 0}
+                        onClick={handleUpdateFacility}
+                      >
+                        {lang === 'vi' ? 'Lưu Thay Đổi' : 'Save Changes'}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })()}
+            </Modal>
+          </>
+        )
+      })()}
 
       {/* 3. Modal Xác Nhận Xóa Cơ Sở Có Kiểm Tra An Toàn */}
       <Modal open={deleteFacilityModal} onClose={() => setDeleteFacilityModal(false)} title={lang === 'vi' ? 'Xác Nhận Xóa Cơ Sở' : 'Confirm Delete Facility'}>
@@ -2011,7 +2414,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
       </Modal>
 
       {/* 4. Modal Chi Tiết Cơ Sở & Danh Mục Gian Kho Quy Hoạch */}
-      <Modal open={viewFacilityModal} onClose={() => setViewFacilityModal(false)} title={lang === 'vi' ? 'Thông Tin Chi Tiết Cơ Sở' : 'Facility Details'}>
+      <Modal open={viewFacilityModal} onClose={() => setViewFacilityModal(false)} title={lang === 'vi' ? 'Thông Tin Chi Tiết Cơ Sở' : 'Facility Details'} size="lg">
         {selectedFacility && (() => {
           const facCode = selectedFacility.code || selectedFacility.id;
           const facilityUnits = unitsList.filter(u => u.facilityId === selectedFacility.id || u.facilityId === facCode);
@@ -2083,18 +2486,20 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                     {(['S', 'M', 'L', 'XL'] as const).map(size => {
                       const spec = UNIT_SPECS[size];
                       const unitsOfSize = facilityUnits.filter(u => ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : 'XL')) === size);
-                      const totalSize = unitsOfSize.length || Math.round(selectedFacility.units / 4);
+                      const totalSize = facilityUnits.length > 0
+                        ? unitsOfSize.length
+                        : (selectedFacility.unitDistribution?.[size] ?? 0);
                       const occupiedSize = unitsOfSize.filter(u => u.status === 'occupied').length;
-                      const availableSize = unitsOfSize.filter(u => u.status === 'available').length || (totalSize - occupiedSize);
+                      const availableSize = unitsOfSize.filter(u => u.status === 'available').length || Math.max(0, totalSize - occupiedSize);
 
                       return (
                         <tr key={size} className="hover:bg-amber-50/50">
                           <td className="p-2.5">
                             <span className={`inline-block px-2 py-0.5 rounded font-mono text-xs font-bold ${
-                              size === 'S' ? 'bg-blue-100 text-blue-800' :
-                              size === 'M' ? 'bg-green-100 text-green-800' :
-                              size === 'L' ? 'bg-purple-100 text-purple-800' :
-                              'bg-amber-100 text-amber-900'
+                              size === 'S' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
+                              size === 'M' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                              size === 'L' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                              'bg-amber-50 text-amber-800 border border-amber-200'
                             }`}>
                               {size} · {spec.name}
                             </span>
@@ -2109,6 +2514,15 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                       );
                     })}
                   </tbody>
+                  <tfoot className="bg-stone-50 border-t border-stone-200 font-semibold text-slate-800">
+                    <tr>
+                      <td colSpan={3} className="p-2.5 font-bold">Tổng cộng</td>
+                      <td className="p-2.5 font-bold text-amber-800">{selectedFacility.units} kho</td>
+                      <td className="p-2.5 text-blue-700 font-bold">{selectedFacility.occupied || 0} kho</td>
+                      <td className="p-2.5 text-emerald-700 font-bold">{Math.max(0, (selectedFacility.units || 0) - (selectedFacility.occupied || 0))} kho</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
 
