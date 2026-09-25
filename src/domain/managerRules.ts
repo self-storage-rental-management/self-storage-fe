@@ -139,24 +139,67 @@ export function managerUnitHasOperationalLock(
 }
 
 export function facilityTaskInitialStatus(assignedStaffId?: string): FacilityTask['status'] {
-  return assignedStaffId ? 'in_progress' : 'open'
+  void assignedStaffId
+  return 'open'
 }
 
 export function canManagerAssignStaff(
   manager: Pick<User, 'role' | 'facility' | 'facilityId'>,
   staff: { role: string; facility?: string; facilityId?: string }
 ) {
-  return staff.role === 'staff' && isManagerFacilityVisible(manager, staff.facilityId, staff.facility)
+  if (manager.role !== 'manager' || staff.role !== 'staff') return false
+  if (manager.facilityId) return Boolean(staff.facilityId) && staff.facilityId === manager.facilityId
+  return Boolean(manager.facility && manager.facility !== 'All facilities' && staff.facility === manager.facility)
 }
 
-export function canManagerCompleteFacilityTask(
-  task: Pick<FacilityTask, 'assignedStaffId' | 'status'>
+export interface ManagerTaskReferenceRecord {
+  id: string
+  type: FacilityTask['type']
+  facilityId?: string
+  facilityName?: string
+}
+
+export function canManagerLinkTaskReference(
+  manager: Pick<User, 'role' | 'facility' | 'facilityId'>,
+  taskType: FacilityTask['type'],
+  referenceId: string,
+  references: ManagerTaskReferenceRecord[]
 ) {
-  return Boolean(task.assignedStaffId) && task.status === 'in_progress'
+  if (manager.role !== 'manager' || !referenceId) return false
+  const reference = references.find(item => item.id === referenceId)
+  if (!reference || (taskType !== 'general' && reference.type !== taskType)) return false
+  if (manager.facilityId) return Boolean(reference.facilityId) && reference.facilityId === manager.facilityId
+  return Boolean(manager.facility && manager.facility !== 'All facilities' && reference.facilityName === manager.facility)
+}
+
+export function canStaffTransitionFacilityTask(
+  task: Pick<FacilityTask, 'assignedStaffId' | 'status'>,
+  staffId: string,
+  nextStatus: Extract<FacilityTask['status'], 'in_progress' | 'completed'>
+) {
+  if (!task.assignedStaffId || task.assignedStaffId !== staffId) return false
+  return (task.status === 'open' && nextStatus === 'in_progress') ||
+    (task.status === 'in_progress' && nextStatus === 'completed')
+}
+
+export function canManagerCancelFacilityTask(task: Pick<FacilityTask, 'status'>) {
+  return task.status === 'open' || task.status === 'in_progress'
+}
+
+export function canManagerReassignFacilityTask(task: Pick<FacilityTask, 'status'>) {
+  return task.status === 'open' || task.status === 'in_progress'
 }
 
 export function canManagerEditFacilityTask(task: Pick<FacilityTask, 'status'>) {
-  return task.status !== 'completed'
+  return task.status !== 'completed' && task.status !== 'cancelled'
+}
+
+export function isFacilityTaskOverdue(
+  task: Pick<FacilityTask, 'dueAt' | 'status'>,
+  asOf = new Date().toISOString().slice(0, 10)
+) {
+  return task.status !== 'completed' && task.status !== 'cancelled' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(task.dueAt) && task.dueAt < asOf
 }
 
 export interface ManagerReturnSettlementFees {

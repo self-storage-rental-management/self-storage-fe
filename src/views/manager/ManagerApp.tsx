@@ -11,7 +11,7 @@ import ManagerPaymentsPanel from './ManagerPaymentsPanel'
 import ManagerRentalsPanel from './ManagerRentalsPanel'
 import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
-import { isManagerFacilityVisible } from '../../domain/managerRules'
+import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
@@ -64,7 +64,17 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const returnDisputeNotifications: LayoutNotification[] = hub.returns
     .filter(item => item.status === 'disputed' && isManagerFacilityVisible({ ...user, facilityId: managerFacilityId }, item.facilityId, item.facilityName))
     .map(item => ({ id: `manager-return-dispute-${item.id}`, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, title: 'Customer yêu cầu xem xét lại quyết toán', message: `${item.customerName} · ${item.unitId} · ${item.customerDecisionNote || 'Cần Manager xử lý'}`, page: 'moves', targetId: item.id }))
-  const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications]
+  const managerTaskNotifications: LayoutNotification[] = hub.staffTasks
+    .filter(task => isManagerFacilityVisible({ ...user, facilityId: managerFacilityId }, task.facilityId, task.facilityName))
+    .flatMap(task => {
+      const notifications: LayoutNotification[] = []
+      if (task.startedAt) notifications.push({ id: `manager-task-accepted-${task.id}-${task.startedAt}`, date: task.startedAt, title: 'Staff đã nhận nhiệm vụ', message: `${task.assignedStaffName || 'Staff'} · ${task.title}`, page: 'staff-tasks', targetId: task.id })
+      if (task.completedAt) notifications.push({ id: `manager-task-completed-${task.id}-${task.completedAt}`, date: task.completedAt, title: 'Staff đã hoàn thành nhiệm vụ', message: `${task.completedByName || task.assignedStaffName || 'Staff'} · ${task.title}`, page: 'staff-tasks', targetId: task.id })
+      if (task.reportedUnableAt) notifications.push({ id: `manager-task-unable-${task.id}-${task.reportedUnableAt}`, date: task.reportedUnableAt, title: 'Staff báo không thể thực hiện', message: `${task.assignedStaffName || 'Staff'} · ${task.title} · ${task.unableReason || 'Chưa có lý do'}`, page: 'staff-tasks', targetId: task.id })
+      if (isFacilityTaskOverdue(task)) notifications.push({ id: `manager-task-overdue-${task.id}-${task.dueAt}`, date: task.dueAt, title: 'Nhiệm vụ đã quá hạn', message: `${task.title} · ${task.assignedStaffName || 'Chưa phân công'}`, page: 'staff-tasks', targetId: task.id })
+      return notifications
+    })
+  const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
 
   return <Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={managerNotifications} canAccess={permission => hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && <ManagerDashboardPanel user={user} setPage={setPage} />}

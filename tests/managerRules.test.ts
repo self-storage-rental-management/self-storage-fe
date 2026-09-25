@@ -4,10 +4,14 @@ import {
   billingPeriodsDue,
   calculateManagerReturnSettlement,
   canManagerAssignStaff,
-  canManagerCompleteFacilityTask,
+  canManagerCancelFacilityTask,
   canManagerEditFacilityTask,
+  canManagerLinkTaskReference,
+  canManagerReassignFacilityTask,
+  canStaffTransitionFacilityTask,
   canApplyManagerLateFee,
   facilityTaskInitialStatus,
+  isFacilityTaskOverdue,
   isManagerFacilityVisible,
   isManagerOperationAllowed,
   isManagerRentalOverdue,
@@ -105,20 +109,55 @@ describe('Facility Manager business rules', () => {
     expect(managerUnitHasOperationalLock('U-2', [], unitRentals)).toBe(false)
   })
 
-  it('starts an assigned facility task in progress', () => {
+  it('keeps newly assigned tasks open until the assigned Staff accepts them', () => {
     expect(facilityTaskInitialStatus()).toBe('open')
-    expect(facilityTaskInitialStatus('staff-1')).toBe('in_progress')
+    expect(facilityTaskInitialStatus('staff-1')).toBe('open')
   })
 
-  it('only assigns and completes facility tasks within the manager facility', () => {
+  it('only assigns facility tasks to Staff in the manager facility by stable ID scope', () => {
     const manager = { role: 'manager' as const, facilityId: 'F-1' }
     expect(canManagerAssignStaff(manager, { role: 'staff', facilityId: 'F-1' })).toBe(true)
     expect(canManagerAssignStaff(manager, { role: 'staff', facilityId: 'F-2' })).toBe(false)
+    expect(canManagerAssignStaff({ ...manager, facility: 'Same name' }, { role: 'staff', facilityId: 'F-2', facility: 'Same name' })).toBe(false)
     expect(canManagerAssignStaff(manager, { role: 'customer', facilityId: 'F-1' })).toBe(false)
-    expect(canManagerCompleteFacilityTask({ assignedStaffId: 'staff-1', status: 'in_progress' })).toBe(true)
-    expect(canManagerCompleteFacilityTask({ status: 'open' })).toBe(false)
+  })
+
+  it('only links an existing task reference of the selected type and manager facility', () => {
+    const manager = { role: 'manager' as const, facilityId: 'F-1' }
+    const references = [
+      { id: 'CHK-1', type: 'checkin' as const, facilityId: 'F-1' },
+      { id: 'RET-1', type: 'return' as const, facilityId: 'F-2' }
+    ]
+    expect(canManagerLinkTaskReference(manager, 'checkin', 'CHK-1', references)).toBe(true)
+    expect(canManagerLinkTaskReference(manager, 'return', 'CHK-1', references)).toBe(false)
+    expect(canManagerLinkTaskReference(manager, 'return', 'RET-1', references)).toBe(false)
+    expect(canManagerLinkTaskReference(manager, 'general', 'CHK-1', references)).toBe(true)
+    expect(canManagerLinkTaskReference(manager, 'checkin', 'UNKNOWN', references)).toBe(false)
+  })
+
+  it('reserves completion for the assigned Staff and enforces lifecycle transitions', () => {
+    expect(canStaffTransitionFacilityTask({ assignedStaffId: 'staff-1', status: 'open' }, 'staff-1', 'in_progress')).toBe(true)
+    expect(canStaffTransitionFacilityTask({ assignedStaffId: 'staff-1', status: 'in_progress' }, 'staff-1', 'completed')).toBe(true)
+    expect(canStaffTransitionFacilityTask({ assignedStaffId: 'staff-1', status: 'open' }, 'staff-2', 'in_progress')).toBe(false)
+    expect(canStaffTransitionFacilityTask({ assignedStaffId: 'staff-1', status: 'open' }, 'staff-1', 'completed')).toBe(false)
+  })
+
+  it('only lets Manager cancel or reassign non-terminal tasks', () => {
+    expect(canManagerCancelFacilityTask({ status: 'open' })).toBe(true)
+    expect(canManagerCancelFacilityTask({ status: 'in_progress' })).toBe(true)
+    expect(canManagerCancelFacilityTask({ status: 'completed' })).toBe(false)
+    expect(canManagerReassignFacilityTask({ status: 'open' })).toBe(true)
+    expect(canManagerReassignFacilityTask({ status: 'cancelled' })).toBe(false)
     expect(canManagerEditFacilityTask({ status: 'completed' })).toBe(false)
+    expect(canManagerEditFacilityTask({ status: 'cancelled' })).toBe(false)
     expect(canManagerEditFacilityTask({ status: 'in_progress' })).toBe(true)
+  })
+
+  it('marks only unfinished tasks past their due date as overdue', () => {
+    expect(isFacilityTaskOverdue({ dueAt: '2026-09-20', status: 'open' }, '2026-09-21')).toBe(true)
+    expect(isFacilityTaskOverdue({ dueAt: '2026-09-21', status: 'in_progress' }, '2026-09-21')).toBe(false)
+    expect(isFacilityTaskOverdue({ dueAt: '2026-09-20', status: 'completed' }, '2026-09-21')).toBe(false)
+    expect(isFacilityTaskOverdue({ dueAt: '2026-09-20', status: 'cancelled' }, '2026-09-21')).toBe(false)
   })
 
   it('recalculates a disputed return settlement without negative values', () => {

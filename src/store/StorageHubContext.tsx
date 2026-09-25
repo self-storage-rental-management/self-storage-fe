@@ -31,8 +31,11 @@ import {
   calculateManagerReturnSettlement,
   canApplyManagerLateFee,
   canManagerAssignStaff,
-  canManagerCompleteFacilityTask,
+  canManagerCancelFacilityTask,
   canManagerEditFacilityTask,
+  canManagerLinkTaskReference,
+  canManagerReassignFacilityTask,
+  canStaffTransitionFacilityTask,
   facilityTaskInitialStatus,
   isFacilityVisible,
   isManagerFacilityVisible,
@@ -1081,7 +1084,7 @@ interface StorageHubContextValue extends StorageHubState {
   setRentalOverlock: (rentalId: string, overlocked: boolean, manager: User) => void
   sendDelinquencyReminder: (rentalId: string, manager: User) => void
   createFacilityTask: (task: Omit<FacilityTask, 'id' | 'createdAt' | 'status'>, manager: User) => FacilityTask
-  updateFacilityTask: (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, actor: User) => void
+  updateFacilityTask: (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes' | 'resultReport' | 'evidence' | 'unableReason' | 'cancellationReason'>>, actor: User) => void
   updateBusinessConfig: (newConfig: Partial<BusinessConfig>, actor: User) => void
   respondSupportTicket: (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => void
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
@@ -3180,47 +3183,171 @@ rentals: Array.isArray(parsed.rentals)
     assertPermission(manager, 'manage_staff_tasks')
     assertFacilityManager(manager, task.facilityId, task.facilityName)
     if (!task.title.trim() || !task.dueAt) throw new Error('Nhiệm vụ cần có tiêu đề và hạn xử lý.')
-    const assignedStaff = task.assignedStaffId ? state.users.find(user => user.id === task.assignedStaffId) : undefined
+    if (manager.role === 'manager' && !task.assignedStaffId) {
+      throw new Error('Vui lòng chọn nhân viên phụ trách trước khi tạo nhiệm vụ.')
+    }
+    const assignedStaff = task.assignedStaffId
+      ? state.users.find(user => user.id === task.assignedStaffId)
+      : undefined
     if (manager.role === 'manager' && task.assignedStaffId && (!assignedStaff || !canManagerAssignStaff(manager, assignedStaff))) {
       throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Manager.')
     }
+    const referenceId = task.referenceId?.trim()
+    if (manager.role === 'manager' && referenceId) {
+      const references = [
+        ...state.checkins.map(item => ({ id: item.id, type: 'checkin' as const, facilityId: item.facilityId })),
+        ...state.returns.map(item => ({ id: item.id, type: 'return' as const, facilityId: item.facilityId, facilityName: item.facilityName })),
+        ...state.maintenanceTasks.map(item => ({ id: item.id, type: 'maintenance' as const, facilityId: item.facilityId })),
+        ...state.tickets.map(item => ({
+          id: item.id,
+          type: 'support' as const,
+          facilityId: item.facilityId || state.facilities.find(facility => facility.name === item.facility)?.id,
+          facilityName: item.facility
+        }))
+      ]
+      if (!canManagerLinkTaskReference(manager, task.type, referenceId, references)) {
+        throw new Error('Hồ sơ liên quan không tồn tại, không đúng loại hoặc không thuộc cơ sở của Manager.')
+      }
+    }
+    const createdAt = new Date().toISOString()
     const created: FacilityTask = {
       ...task,
-      assignedStaffName: assignedStaff?.name || task.assignedStaffName,
+      referenceId: referenceId || undefined,
+      assignedStaffName: assignedStaff?.name,
+      assignedAt: assignedStaff ? createdAt : undefined,
       id: `TSK-${Date.now().toString().slice(-7)}`,
       title: task.title.trim(),
       notes: task.notes?.trim(),
       status: manager.role === 'manager' ? facilityTaskInitialStatus(task.assignedStaffId) : 'open',
-      createdAt: new Date().toISOString()
+      createdAt
     }
     setState(prev => ({ ...prev, staffTasks: [created, ...prev.staffTasks], activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_CREATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: created.id, afterState: created, notes: `Tạo nhiệm vụ "${created.title}"${created.assignedStaffName ? ` cho ${created.assignedStaffName}` : ''}.`, timestamp: created.createdAt }, ...prev.activities] }))
     return created
   }
 
-  const updateFacilityTask = (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, actor: User) => {
+  const updateFacilityTask = (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes' | 'resultReport' | 'evidence' | 'unableReason' | 'cancellationReason'>>, actor: User) => {
     const task = state.staffTasks.find(item => item.id === taskId)
     if (!task) throw new Error('Không tìm thấy nhiệm vụ.')
-    assertFacilityManager(manager, task.facilityId, task.facilityName)
-    if (manager.role === 'manager' && !canManagerEditFacilityTask(task)) throw new Error('Nhiệm vụ đã hoàn tất và không thể chỉnh sửa lại.')
-    const nextAssignedStaffId = Object.prototype.hasOwnProperty.call(updates, 'assignedStaffId') ? updates.assignedStaffId : task.assignedStaffId
-    const assignedStaff = nextAssignedStaffId ? state.users.find(user => user.id === nextAssignedStaffId) : undefined
-    if (manager.role === 'manager' && nextAssignedStaffId && (!assignedStaff || !canManagerAssignStaff(manager, assignedStaff))) {
-      throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Manager.')
-    }
-    if (manager.role === 'manager' && updates.status === 'completed' && !canManagerCompleteFacilityTask(task)) {
-      throw new Error('Chỉ có thể hoàn tất nhiệm vụ đã được phân công và đang xử lý.')
-    }
-    const normalizedUpdates = manager.role === 'manager'
-      ? {
-          ...updates,
-          ...(Object.prototype.hasOwnProperty.call(updates, 'assignedStaffId') ? {
-            assignedStaffName: assignedStaff?.name,
-            status: assignedStaff ? (updates.status || 'in_progress') : 'open'
-          } : {})
+    const now = new Date().toISOString()
+    let normalizedUpdates: Partial<FacilityTask> = {}
+    let action = 'FACILITY_TASK_UPDATED'
+    let activityNote = 'Đã cập nhật nhiệm vụ.'
+
+    if (actor.role === 'manager') {
+      assertPermission(actor, 'manage_staff_tasks')
+      assertFacilityManager(actor, task.facilityId, task.facilityName)
+      if (!canManagerEditFacilityTask(task)) throw new Error('Nhiệm vụ đã kết thúc và không thể chỉnh sửa lại.')
+      if (updates.status === 'completed' || updates.status === 'in_progress') {
+        throw new Error('Manager không được nhận hoặc hoàn thành thay Staff trong luồng thông thường.')
+      }
+
+      if (updates.status === 'cancelled') {
+        if (!canManagerCancelFacilityTask(task)) throw new Error('Chỉ có thể hủy nhiệm vụ đang chờ nhận hoặc đang thực hiện.')
+        const reason = updates.cancellationReason?.trim()
+        if (!reason) throw new Error('Vui lòng nhập lý do hủy nhiệm vụ.')
+        normalizedUpdates = {
+          status: 'cancelled',
+          cancellationReason: reason,
+          cancelledAt: now,
+          cancelledById: actor.id,
+          cancelledByName: actor.name,
+          lastAssignedStaffId: task.assignedStaffId,
+          lastAssignedStaffName: task.assignedStaffName,
+          assignedStaffId: undefined,
+          assignedStaffName: undefined
         }
-      : updates
-    const now = new Date()
-    setState(prev => ({ ...prev, staffTasks: prev.staffTasks.map(item => item.id === taskId ? { ...item, ...normalizedUpdates, completedAt: normalizedUpdates.status === 'completed' ? now.toISOString() : item.completedAt } : item), activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_UPDATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: taskId, beforeState: task, afterState: { ...task, ...normalizedUpdates, completedAt: normalizedUpdates.status === 'completed' ? now.toISOString() : task.completedAt }, notes: normalizedUpdates.status === 'completed' ? 'Nhiệm vụ đã hoàn tất.' : `Cập nhật nhiệm vụ${normalizedUpdates.assignedStaffName ? ` cho ${normalizedUpdates.assignedStaffName}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+        action = 'FACILITY_TASK_CANCELLED'
+        activityNote = `Manager hủy nhiệm vụ. Lý do: ${reason}`
+      } else if (Object.prototype.hasOwnProperty.call(updates, 'assignedStaffId')) {
+        if (!canManagerReassignFacilityTask(task)) throw new Error('Nhiệm vụ đã kết thúc và không thể giao lại.')
+        if (!updates.assignedStaffId) throw new Error('Nhiệm vụ luôn phải có nhân viên phụ trách.')
+        const assignedStaff = state.users.find(user => user.id === updates.assignedStaffId)
+        if (!assignedStaff || !canManagerAssignStaff(actor, assignedStaff)) {
+          throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Manager.')
+        }
+        normalizedUpdates = {
+          assignedStaffId: assignedStaff.id,
+          assignedStaffName: assignedStaff.name,
+          assignedAt: now,
+          status: 'open',
+          startedAt: undefined,
+          completedAt: undefined,
+          completedById: undefined,
+          completedByName: undefined,
+          resultReport: undefined,
+          evidence: undefined,
+          reportedUnableAt: undefined,
+          unableReason: undefined
+        }
+        action = 'FACILITY_TASK_REASSIGNED'
+        activityNote = `Manager giao nhiệm vụ cho ${assignedStaff.name}; chờ Staff nhận việc.`
+      } else {
+        normalizedUpdates = {
+          ...(updates.dueAt !== undefined ? { dueAt: updates.dueAt } : {}),
+          ...(updates.priority !== undefined ? { priority: updates.priority } : {}),
+          ...(updates.notes !== undefined ? { notes: updates.notes.trim() } : {})
+        }
+      }
+    } else if (actor.role === 'staff') {
+      if (task.assignedStaffId !== actor.id) throw new Error('Chỉ nhân viên được giao nhiệm vụ mới có thể cập nhật.')
+      if (!isFacilityVisible(actor, task.facilityId, task.facilityName)) throw new Error('Nhiệm vụ không thuộc cơ sở của bạn.')
+      if (updates.unableReason !== undefined) {
+        const reason = updates.unableReason.trim()
+        if (!reason) throw new Error('Vui lòng nhập lý do không thể thực hiện.')
+        normalizedUpdates = { unableReason: reason, reportedUnableAt: now }
+        action = 'FACILITY_TASK_UNABLE_REPORTED'
+        activityNote = `Staff báo không thể thực hiện. Lý do: ${reason}`
+      } else {
+        if (updates.status !== 'in_progress' && updates.status !== 'completed') {
+          throw new Error('Staff chỉ có thể nhận việc hoặc đánh dấu hoàn thành.')
+        }
+        if (!canStaffTransitionFacilityTask(task, actor.id, updates.status)) {
+          throw new Error('Trạng thái nhiệm vụ không hợp lệ hoặc nhiệm vụ không được giao cho bạn.')
+        }
+        if (updates.status === 'in_progress') {
+          normalizedUpdates = { status: 'in_progress', startedAt: now }
+          action = 'FACILITY_TASK_ACCEPTED'
+          activityNote = `${actor.name} đã nhận nhiệm vụ.`
+        } else {
+          normalizedUpdates = {
+            status: 'completed',
+            completedAt: now,
+            completedById: actor.id,
+            completedByName: actor.name,
+            resultReport: updates.resultReport?.trim() || task.resultReport,
+            evidence: updates.evidence || task.evidence
+          }
+          action = 'FACILITY_TASK_COMPLETED'
+          activityNote = `${actor.name} đã hoàn thành nhiệm vụ.`
+        }
+      }
+    } else if (actor.role === 'admin') {
+      assertPermission(actor, 'manage_staff_tasks')
+      normalizedUpdates = updates
+    } else {
+      throw new Error('Bạn không có quyền cập nhật nhiệm vụ cơ sở.')
+    }
+
+    const nextTask = { ...task, ...normalizedUpdates }
+    setState(prev => ({
+      ...prev,
+      staffTasks: prev.staffTasks.map(item => item.id === taskId ? nextTask : item),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action,
+        actorId: actor.id,
+        actorName: actor.name,
+        actorRole: actor.role,
+        facilityId: task.facilityId,
+        entityType: 'task',
+        entityId: taskId,
+        beforeState: task,
+        afterState: nextTask,
+        notes: activityNote,
+        evidence: normalizedUpdates.evidence,
+        timestamp: now
+      }, ...prev.activities]
+    }))
   }
 
   // 10. Operations Config & Support Tickets
