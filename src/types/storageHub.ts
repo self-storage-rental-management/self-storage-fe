@@ -552,6 +552,8 @@ export interface FacilityTask {
   notes?: string
   createdAt: string
   completedAt?: string
+  completedById?: string
+  completedByName?: string
 }
 
 export interface ReturnCase {

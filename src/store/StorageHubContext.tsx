@@ -1065,7 +1065,7 @@ interface StorageHubContextValue extends StorageHubState {
   setRentalOverlock: (rentalId: string, overlocked: boolean, manager: User) => void
   sendDelinquencyReminder: (rentalId: string, manager: User) => void
   createFacilityTask: (task: Omit<FacilityTask, 'id' | 'createdAt' | 'status'>, manager: User) => FacilityTask
-  updateFacilityTask: (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, manager: User) => void
+  updateFacilityTask: (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, actor: User) => void
   updateBusinessConfig: (newConfig: Partial<BusinessConfig>, actor: User) => void
   respondSupportTicket: (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => void
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
@@ -3104,13 +3104,22 @@ rentals: Array.isArray(parsed.rentals)
     return created
   }
 
-  const updateFacilityTask = (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, manager: User) => {
-    assertPermission(manager, 'manage_staff_tasks')
+  const updateFacilityTask = (taskId: string, updates: Partial<Pick<FacilityTask, 'assignedStaffId' | 'assignedStaffName' | 'dueAt' | 'priority' | 'status' | 'notes'>>, actor: User) => {
     const task = state.staffTasks.find(item => item.id === taskId)
     if (!task) throw new Error('Không tìm thấy nhiệm vụ.')
-    assertFacilityManager(manager, task.facilityId, task.facilityName)
+    if (actor.role === 'staff') {
+      if (!isFacilityVisible(actor, task.facilityId, task.facilityName)) throw new Error('Bạn không có quyền xử lý nhiệm vụ của cơ sở khác.')
+      if (task.assignedStaffId !== actor.id && task.assignedStaffName !== actor.name) throw new Error('Nhiệm vụ này chưa được giao cho bạn.')
+      const changedFields = Object.keys(updates)
+      if (changedFields.length !== 1 || changedFields[0] !== 'status' || !updates.status) throw new Error('Nhân viên chỉ có thể nhận hoặc hoàn tất nhiệm vụ được giao.')
+      if (updates.status === 'in_progress' && task.status !== 'open') throw new Error('Chỉ nhiệm vụ mới được giao mới có thể nhận việc.')
+      if (updates.status === 'completed' && task.status !== 'in_progress') throw new Error('Hãy nhận việc trước khi đánh dấu hoàn thành.')
+    } else {
+      assertPermission(actor, 'manage_staff_tasks')
+      assertFacilityManager(actor, task.facilityId, task.facilityName)
+    }
     const now = new Date()
-    setState(prev => ({ ...prev, staffTasks: prev.staffTasks.map(item => item.id === taskId ? { ...item, ...updates, completedAt: updates.status === 'completed' ? now.toISOString() : item.completedAt } : item), activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_UPDATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: taskId, notes: updates.status === 'completed' ? 'Nhiệm vụ đã hoàn tất.' : `Cập nhật nhiệm vụ${updates.assignedStaffName ? ` cho ${updates.assignedStaffName}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    setState(prev => ({ ...prev, staffTasks: prev.staffTasks.map(item => item.id === taskId ? { ...item, ...updates, completedAt: updates.status === 'completed' ? now.toISOString() : item.completedAt, completedById: updates.status === 'completed' ? actor.id : item.completedById, completedByName: updates.status === 'completed' ? actor.name : item.completedByName } : item), activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_UPDATED', actorId: actor.id, actorName: actor.name, actorRole: actor.role, facilityId: task.facilityId, entityType: 'task', entityId: taskId, notes: updates.status === 'completed' ? `Nhiệm vụ đã hoàn tất bởi ${actor.name}.` : updates.status === 'in_progress' && actor.role === 'staff' ? `${actor.name} đã nhận nhiệm vụ.` : `Cập nhật nhiệm vụ${updates.assignedStaffName ? ` cho ${updates.assignedStaffName}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   // 10. Operations Config & Support Tickets
