@@ -224,8 +224,8 @@ export function EmptyState({ title, description, action }: {
 
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
-export function Modal({ open, onClose, title, children, size = 'md' }: {
-  open: boolean; onClose: () => void; title: string; children: ReactNode; size?: 'md' | 'lg' | 'xl'
+export function Modal({ open, onClose, title, children, size = 'md', closeLabel = 'Close dialog' }: {
+  open: boolean; onClose: () => void; title: string; children: ReactNode; size?: 'md' | 'lg' | 'xl'; closeLabel?: string
 }) {
   if (!open) return null
   return (

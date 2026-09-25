@@ -63,6 +63,13 @@ export interface UnitType {
   descriptionEn: string
 }
 
+export interface FacilityUnitDistribution {
+  S: number
+  M: number
+  L: number
+  XL: number
+}
+
 export interface Facility {
   id: string
   code?: string
@@ -80,9 +87,11 @@ export interface Facility {
   revenue: number
   growth: number
   manager: string
+  phone?: string
   status: 'active' | 'maintenance'
   accessHours: string
   timezone: string
+  unitDistribution?: FacilityUnitDistribution
 }
 
 export interface ReservedPeriod {
