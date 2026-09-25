@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { formatVnd } from '../../i18n/currency'
+import { formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
-import { isFacilityVisible } from '../../domain/managerRules'
+import {
+  calculateManagerReturnSettlement,
+  isManagerFacilityVisible,
+  type ManagerReturnSettlementFees
+} from '../../domain/managerRules'
+import ManagerActionNotice from './ManagerActionNotice'
 
 interface ManagerReturnsPanelProps {
   user: User
@@ -14,19 +19,20 @@ interface ManagerReturnsPanelProps {
 }
 
 export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerReturnsPanelProps) {
-    const { returns: storeReturns, reviewReturnDispute, completeReturnRefund } = useStorageHub()
+  const { returns: storeReturns, reviewReturnDispute, completeReturnRefund } = useStorageHub()
 
-  const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
+  const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
   const [returnSearch, setReturnSearch] = useState('')
   const [selectedReturn, setSelectedReturn] = useState<ReturnCase | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [disputeModalOpen, setDisputeModalOpen] = useState(false)
   const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('')
+  const [disputeSettlement, setDisputeSettlement] = useState<ManagerReturnSettlementFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
   const [refundTxnRef, setRefundTxnRef] = useState('')
 
   // Filter returns by facility
-  const facilityReturns = storeReturns.filter(r => isFacilityVisible(user, r.facilityId, r.facilityName))
+  const facilityReturns = storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
 
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
   useEffect(() => { if (disputedCount > 0) setReturnTab('disputed') }, [disputedCount])
@@ -73,10 +79,36 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     }
   }
 
+  const getReturnActionReason = (returnCase: ReturnCase) => {
+    if (returnCase.status === 'requested' || returnCase.status === 'scheduled' || returnCase.status === 'inspected') return 'Chờ Staff hoàn tất nghiệm thu và lập quyết toán.'
+    if (returnCase.status === 'awaiting_customer_confirmation') return 'Chờ Customer xác nhận kết quả quyết toán.'
+    if (returnCase.status === 'payment_due') return 'Chờ Customer thanh toán phần còn thiếu trước khi đóng hồ sơ.'
+    if (returnCase.status === 'completed') return 'Hồ sơ đã hoàn tất, không còn thao tác Manager.'
+    return null
+  }
+
+  const openDisputeReview = (returnCase: ReturnCase) => {
+    setSelectedReturn(returnCase)
+    setDisputeResolutionNote(returnCase.staffNotes || '')
+    setDisputeSettlement({
+      damageFee: Math.round((returnCase.damageFee || 0) * USD_TO_VND_RATE),
+      cleaningFee: Math.round((returnCase.cleaningFee || 0) * USD_TO_VND_RATE),
+      lostItemFee: Math.round((returnCase.lostItemFee || 0) * USD_TO_VND_RATE),
+      overdueFee: Math.round((returnCase.overdueFee || 0) * USD_TO_VND_RATE),
+      outstandingFee: Math.round((returnCase.outstandingFee || 0) * USD_TO_VND_RATE)
+    })
+    setDisputeModalOpen(true)
+  }
+
+  const setSettlementFee = (field: keyof ManagerReturnSettlementFees, value: string) => {
+    const parsed = Number(value)
+    setDisputeSettlement(current => ({ ...current, [field]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 }))
+  }
+
   const handleReviewDispute = () => {
     if (!selectedReturn) return
     try {
-      reviewReturnDispute(selectedReturn.id, user, disputeResolutionNote)
+      reviewReturnDispute(selectedReturn.id, user, disputeResolutionNote, settlementInBaseCurrency)
       showToast(
         `Đã rà soát khiếu nại cho đơn ${selectedReturn.id} thành công!`
       )
@@ -106,6 +138,18 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       showToast(err?.message || 'Error completing refund')
     }
   }
+
+  const settlementInBaseCurrency: ManagerReturnSettlementFees = {
+    damageFee: disputeSettlement.damageFee / USD_TO_VND_RATE,
+    cleaningFee: disputeSettlement.cleaningFee / USD_TO_VND_RATE,
+    lostItemFee: disputeSettlement.lostItemFee / USD_TO_VND_RATE,
+    overdueFee: disputeSettlement.overdueFee / USD_TO_VND_RATE,
+    outstandingFee: disputeSettlement.outstandingFee / USD_TO_VND_RATE
+  }
+
+  const disputePreview = selectedReturn
+    ? calculateManagerReturnSettlement(selectedReturn.depositAmount, settlementInBaseCurrency)
+    : null
 
   return (
     <div className="fade-in space-y-6">
@@ -147,6 +191,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
           iconBg="bg-purple-50 text-purple-700"
         />
       </div>
+
+      <ManagerActionNotice tone={disputedCount || refundPendingCount ? 'warning' : 'info'}>
+        Manager trực tiếp xử lý hồ sơ bị khiếu nại và hồ sơ đã đủ điều kiện hoàn cọc. Các trạng thái còn lại đang chờ Staff nghiệm thu, Customer xác nhận hoặc Customer thanh toán.
+      </ManagerActionNotice>
 
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -307,9 +355,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             size="sm"
                             className="bg-rose-600 hover:bg-rose-700 text-white font-medium"
                             onClick={() => {
-                              setSelectedReturn(ret)
-                              setDisputeResolutionNote(ret.staffNotes || '')
-                              setDisputeModalOpen(true)
+                              openDisputeReview(ret)
                             }}
                           >
                             {'Xử lý khiếu nại'}
@@ -323,13 +369,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                             onClick={() => {
                               setSelectedReturn(ret)
-                              setRefundTxnRef(`REF-TXN-${Date.now().toString().slice(-6)}`)
+                              setRefundTxnRef('')
                               setRefundModalOpen(true)
                             }}
                           >
                             {'Hoàn cọc'}
                           </Button>
                         )}
+                        {getReturnActionReason(ret) && <div className="max-w-48 text-left"><ManagerActionNotice compact tone={ret.status === 'completed' ? 'success' : 'info'}>{getReturnActionReason(ret)}</ManagerActionNotice></div>}
                       </div>
                     </Td>
                   </Tr>
@@ -464,6 +511,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </div>
             )}
 
+            {getReturnActionReason(selectedReturn) && <ManagerActionNotice tone={selectedReturn.status === 'completed' ? 'success' : 'info'}>{getReturnActionReason(selectedReturn)}</ManagerActionNotice>}
+
             <div className="flex justify-end gap-2 pt-2 border-t">
               <Button variant="outline" onClick={() => setDetailModalOpen(false)}>
                 {'Đóng'}
@@ -474,8 +523,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   className="bg-rose-600 hover:bg-rose-700 text-white"
                   onClick={() => {
                     setDetailModalOpen(false)
-                    setDisputeResolutionNote(selectedReturn.staffNotes || '')
-                    setDisputeModalOpen(true)
+                    openDisputeReview(selectedReturn)
                   }}
                 >
                   {'Xử lý khiếu nại'}
@@ -487,7 +535,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={() => {
                     setDetailModalOpen(false)
-                    setRefundTxnRef(`REF-TXN-${Date.now().toString().slice(-6)}`)
+                    setRefundTxnRef('')
                     setRefundModalOpen(true)
                   }}
                 >
@@ -520,6 +568,18 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   "{selectedReturn.customerDecisionNote || ('Không đồng ý với phí khấu trừ nghiệm thu kho.')}"
                 </p>
               </div>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm font-bold text-stone-900">Xác nhận lại các khoản quyết toán</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="Phí hư hỏng (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.damageFee)} onChange={event => setSettlementFee('damageFee', event.target.value)} />
+                <Input label="Phí vệ sinh (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.cleaningFee)} onChange={event => setSettlementFee('cleaningFee', event.target.value)} />
+                <Input label="Phí mất vật dụng (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.lostItemFee)} onChange={event => setSettlementFee('lostItemFee', event.target.value)} />
+                <Input label="Phí quá hạn (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.overdueFee)} onChange={event => setSettlementFee('overdueFee', event.target.value)} />
+                <Input label="Công nợ còn lại (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.outstandingFee)} onChange={event => setSettlementFee('outstandingFee', event.target.value)} />
+              </div>
+              {disputePreview && <div className="grid gap-2 border-t border-stone-200 pt-3 text-sm sm:grid-cols-3"><p>Khấu trừ: <b>{formatVnd(disputePreview.totalDeductions)}</b></p><p>Hoàn khách: <b className="text-emerald-700">{formatVnd(disputePreview.netRefundAmount)}</b></p><p>Khách nộp thêm: <b className="text-rose-700">{formatVnd(disputePreview.amountDueFromCustomer)}</b></p></div>}
             </div>
 
             <div className="space-y-1.5">

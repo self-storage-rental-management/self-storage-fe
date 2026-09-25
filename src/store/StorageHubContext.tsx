@@ -27,7 +27,23 @@ import type {
 import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
-import { isFacilityVisible } from '../domain/managerRules'
+import {
+  calculateManagerReturnSettlement,
+  canApplyManagerLateFee,
+  canManagerAssignStaff,
+  canManagerCompleteFacilityTask,
+  canManagerEditFacilityTask,
+  facilityTaskInitialStatus,
+  isFacilityVisible,
+  isManagerFacilityVisible,
+  isManagerOperationAllowed,
+  isManagerRentalOverdue,
+  managerUnitHasOperationalLock,
+  nextDueAfterPayment,
+  rentalAmountDue,
+  unitHasAllocationConflict,
+  type ManagerReturnSettlementFees
+} from '../domain/managerRules'
 import { formatVnd, USD_TO_VND_RATE } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
 
@@ -188,7 +204,7 @@ function assertFacilityManager(user: User, facilityId: string, facilityName: str
   if (user.role !== 'manager' && user.role !== 'admin') {
     throw new Error('Chỉ Facility Manager được thực hiện thao tác này.')
   }
-  if (user.role === 'admin' || isFacilityVisible(user, facilityId, facilityName)) return
+  if (user.role === 'admin' || isManagerFacilityVisible(user, facilityId, facilityName)) return
   throw new Error('Bạn không có quyền thao tác dữ liệu của cơ sở khác.')
 }
 
@@ -1054,7 +1070,7 @@ interface StorageHubContextValue extends StorageHubState {
   confirmReturnSettlement: (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => void
   payReturnBalance: (returnId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string) => void
   completeReturnRefund: (returnId: string, staffUser: User, transactionReference: string) => void
-  reviewReturnDispute: (returnId: string, manager: User, resolutionNote?: string) => void
+  reviewReturnDispute: (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => void
   createMaintenanceTask: (unitId: string, reason: string, staffUser?: User) => MaintenanceTask
   completeMaintenanceTask: (taskId: string, managerUser: User) => void
   releaseMaintenanceUnit: (unitId: string, staffUser: User) => void
@@ -1083,12 +1099,25 @@ interface StorageHubContextValue extends StorageHubState {
   createFacility: (data: Partial<Facility>, actor?: User) => Facility
   updateFacility: (facilityId: string, updates: Partial<Facility>, actor?: User) => void
   deleteFacility: (facilityId: string, actor?: User) => { success: boolean; reason?: string }
-  createUnit: (data: Partial<StorageUnit>, actor?: User) => StorageUnit
-  updateUnit: (unitId: string, updates: Partial<StorageUnit>, actor?: User) => void
-  deleteUnit: (unitId: string, actor?: User) => { success: boolean; reason?: string }
+  createUnit: (data: Partial<StorageUnit>, actor: User) => StorageUnit
+  updateUnit: (unitId: string, updates: Partial<StorageUnit>, actor: User) => void
+  deleteUnit: (unitId: string, actor: User) => { success: boolean; reason?: string }
 }
 
 const StorageHubContext = createContext<StorageHubContextValue | null>(null)
+
+const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
+
+function normalizeRuntimeRolePermissions(value: unknown) {
+  const normalized = normalizeRolePermissions(value)
+  try {
+    if (!localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
+      normalized.manager.assign_units = true
+      localStorage.setItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY, 'done')
+    }
+  } catch {}
+  return normalized
+}
 
 const normalizeReservationPricing = (hold: StorageReservation): StorageReservation => {
   const normalizedTypeValue = (hold.unitTypeId || hold.unitTypeName || '').toLowerCase().replace(/[-_]/g, ' ').trim()
@@ -1183,7 +1212,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           ...parsed,
           facilities: Array.isArray(parsed.facilities) && parsed.facilities.length ? normalizeStoredFacilities(parsed.facilities as Facility[]) : INITIAL_FACILITIES,
           users: normalizeUsers(parsed.users),
-          rolePermissions: normalizeRolePermissions(parsed.rolePermissions),
+          rolePermissions: normalizeRuntimeRolePermissions(parsed.rolePermissions),
           units: (Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS).map(unit => unit.currentRentalId === 'RNT-9654' || (unit.currentRentalId && RETIRED_EXPIRY_TEST_RENTAL_IDS.has(unit.currentRentalId)) ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(period.reservationId)) } : unit),
           holds: normalizedHolds,
           contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654')) : INITIAL_CONTRACTS,
@@ -1209,7 +1238,7 @@ renewals: Array.isArray(parsed.renewals)
   : [],
 maintenanceTasks: parsed.maintenanceTasks || [],
 staffTasks: parsed.staffTasks || [],
-accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
+accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && (!credential.reservationId || !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId)) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
 checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654') : []),
 rentals: Array.isArray(parsed.rentals)
   ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654')))
@@ -1579,7 +1608,7 @@ rentals: Array.isArray(parsed.rentals)
           setState({
             ...parsed,
             users: normalizeUsers(parsed.users),
-            rolePermissions: normalizeRolePermissions(parsed.rolePermissions),
+            rolePermissions: normalizeRuntimeRolePermissions(parsed.rolePermissions),
             units: Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS,
             holds,
             checkins,
@@ -1870,6 +1899,7 @@ rentals: Array.isArray(parsed.rentals)
 
   const approveReservation = (reservationId: string, reviewer: User) => {
     assertPermission(reviewer, 'approve_reservations')
+    if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ đặt kho thuộc nghiệp vụ của Facility Staff.')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation) throw new Error('Không tìm thấy yêu cầu đặt giữ kho.')
     if (reviewer.role !== 'staff' && reviewer.role !== 'manager' && reviewer.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được phê duyệt yêu cầu.')
@@ -1921,6 +1951,7 @@ rentals: Array.isArray(parsed.rentals)
 
   const rejectGoodsReview = (reservationId: string, reviewer: User, note: string) => {
     assertPermission(reviewer, 'approve_reservations')
+    if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ hàng hóa thuộc nghiệp vụ của Facility Staff.')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || reservation.goodsReviewStatus !== 'PENDING') throw new Error('Không tìm thấy yêu cầu hàng hóa đang chờ duyệt.')
     if (!reservation.emailVerification?.verified || reservation.status !== 'awaiting_review') throw new Error('Khách hàng chưa xác minh email; hồ sơ chưa sẵn sàng để duyệt.')
@@ -1959,14 +1990,14 @@ rentals: Array.isArray(parsed.rentals)
     }))
   }
 
-  // 2. Facility Manager: Assign specific Unit for date range
+  // Facility Manager manually reserves a compatible physical unit after deposit payment.
   const assignUnitToHold = (reservationId: string, unitId: string, managerUser: User) => {
     assertPermission(managerUser, 'assign_units')
     const reservation = state.holds.find(h => h.id === reservationId)
     const unit = state.units.find(u => u.id === unitId)
     if (!reservation || !unit) throw new Error('Không tìm thấy thông tin đơn đặt hoặc gian kho.')
     assertFacilityManager(managerUser, reservation.facilityId, reservation.facilityName)
-    if (!['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(reservation.status)) {
+    if (!['DEPOSIT_PAID', 'UNIT_RESERVED'].includes(reservation.status)) {
       throw new Error('Chỉ đơn đã thanh toán cọc và còn hiệu lực mới được phân kho.')
     }
     if (reservation.payment.status !== 'paid') throw new Error('Đơn chưa thanh toán cọc giữ chỗ.')
@@ -2077,7 +2108,10 @@ rentals: Array.isArray(parsed.rentals)
             entityType: 'unit',
             entityId: unit.id,
             notes: `Manager phân kho ${unit.code} cho khách ${reservation.customerName} từ ${reservation.startDate} đến ${reservation.endDate}.`,
-            timestamp: now.toLocaleString('vi-VN')
+            correlationId: reservation.id,
+            beforeState: { assignedUnitId: reservation.assignedUnitId, status: reservation.status },
+            afterState: { assignedUnitId: unit.id, status: nextStatus },
+            timestamp: now.toISOString()
           },
           ...prev.activities
         ]
@@ -2193,7 +2227,8 @@ rentals: Array.isArray(parsed.rentals)
   }) => {
     const reservation = state.holds.find(h => h.id === params.holdId)
     assertPermission(params.staffUser, 'perform_checkin')
-    if (params.staffUser.role !== 'staff' && params.staffUser.role !== 'manager') {
+    if (params.staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Ký và ghi nhận bàn giao trực tiếp thuộc nghiệp vụ của Facility Staff.')
+    if (params.staffUser.role !== 'staff') {
       throw new Error('Chỉ nhân viên cơ sở được ghi nhận hợp đồng giấy.')
     }
     if (!params.identityVerified) throw new Error('Cần đối chiếu bản gốc CCCD/Hộ chiếu trước khi ký hợp đồng.')
@@ -2622,15 +2657,32 @@ rentals: Array.isArray(parsed.rentals)
   const approveRenewal = (renewalId: string, managerUser: User) => {
     assertPermission(managerUser, 'manage_rentals')
     const renewal = state.renewals.find(r => r.id === renewalId)
-    if (!renewal || renewal.status !== 'pending') return
+    if (!renewal || renewal.status !== 'pending') {
+      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
+      return
+    }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
     assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
 
-    // Conflict check on date range
-    const isConflicted = state.holds.some(
-      h => h.assignedUnitId === renewal.unitId && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
-           checkDateOverlap(renewal.oldEndDate, renewal.newEndDate, h.startDate, h.endDate)
-    )
+    if (managerUser.role === 'manager') {
+      if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn hiệu lực để gia hạn.')
+      if (renewal.oldEndDate !== rental.endDate) throw new Error('Thời hạn hợp đồng đã thay đổi. Vui lòng yêu cầu khách cập nhật lại đề nghị gia hạn.')
+      if (renewal.newEndDate <= renewal.oldEndDate) throw new Error('Ngày kết thúc gia hạn phải sau ngày kết thúc hợp đồng hiện tại.')
+    }
+
+    const isConflicted = managerUser.role === 'manager'
+      ? unitHasAllocationConflict(
+          renewal.unitId,
+          renewal.oldEndDate,
+          renewal.newEndDate,
+          renewal.id,
+          state.holds,
+          state.rentals.filter(item => item.id !== renewal.rentalId)
+        )
+      : state.holds.some(
+          h => h.assignedUnitId === renewal.unitId && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
+               checkDateOverlap(renewal.oldEndDate, renewal.newEndDate, h.startDate, h.endDate)
+        )
 
     if (isConflicted) {
       throw new Error('Kho đã có booking khác trong khoảng thời gian gia hạn yêu cầu.')
@@ -2652,8 +2704,11 @@ rentals: Array.isArray(parsed.rentals)
           facilityId: renewal.facilityId,
           entityType: 'rental',
           entityId: renewal.rentalId,
+          correlationId: renewal.id,
+          beforeState: { status: renewal.status, endDate: renewal.oldEndDate },
+          afterState: { status: 'approved', requestedEndDate: renewal.newEndDate, invoiceNumber, paymentDueAt: paymentDueAt.toISOString() },
           notes: `Manager duyệt gia hạn kho ${renewal.unitId} đến ${renewal.newEndDate}. Chờ khách thanh toán.`,
-          timestamp: now.toLocaleString('vi-VN')
+          timestamp: now.toISOString()
         },
         ...prev.activities
       ]
@@ -2663,7 +2718,10 @@ rentals: Array.isArray(parsed.rentals)
   const rejectRenewal = (renewalId: string, managerUser: User, reason: string) => {
     assertPermission(managerUser, 'manage_rentals')
     const renewal = state.renewals.find(r => r.id === renewalId)
-    if (!renewal || renewal.status !== 'pending') return
+    if (!renewal || renewal.status !== 'pending') {
+      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
+      return
+    }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
     assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
     if (!reason.trim()) throw new Error('Vui lòng nhập lý do từ chối yêu cầu gia hạn.')
@@ -2672,7 +2730,7 @@ rentals: Array.isArray(parsed.rentals)
     setState(prev => ({
       ...prev,
       renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'rejected', approvedBy: managerUser.name, approvedAt: now.toISOString(), notes: reason.trim() } : r),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REJECTED', actorId: managerUser.id, actorName: managerUser.name, actorRole: managerUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: `Từ chối yêu cầu ${renewal.id}. Lý do: ${reason.trim()}`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REJECTED', actorId: managerUser.id, actorName: managerUser.name, actorRole: managerUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, correlationId: renewal.id, beforeState: { status: renewal.status, endDate: renewal.oldEndDate }, afterState: { status: 'rejected', reason: reason.trim() }, notes: `Từ chối yêu cầu ${renewal.id}. Lý do: ${reason.trim()}`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -2773,7 +2831,8 @@ rentals: Array.isArray(parsed.rentals)
   }) => {
     const { renewalId, staffUser, transactionReference, identityVerified, unitAndTermsVerified, contractNumber, signedAt, scannedFileUrl, scannedFileName } = params
     assertPermission(staffUser, 'perform_checkin')
-    if (staffUser.role !== 'staff' && staffUser.role !== 'manager') throw new Error('Chỉ nhân viên cơ sở được hoàn tất gia hạn.')
+    if (staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Hoàn tất ký gia hạn tại cơ sở thuộc nghiệp vụ của Facility Staff.')
+    if (staffUser.role !== 'staff') throw new Error('Chỉ nhân viên cơ sở được hoàn tất gia hạn.')
     const renewal = state.renewals.find(item => item.id === renewalId)
     if (!renewal || renewal.status !== 'appointment_scheduled') throw new Error('Yêu cầu chưa cọc hoặc chưa có lịch ký hợp lệ.')
     if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã phiếu thu hoặc mã giao dịch.')
@@ -3000,9 +3059,11 @@ rentals: Array.isArray(parsed.rentals)
     const unit = state.units.find(item => item.id === unitId)
     if (!unit) throw new Error('Không tìm thấy gian kho.')
     assertFacilityManager(manager, unit.facilityId, unit.facilityName)
-    const hasActiveRental = state.rentals.some(rental => rental.unitId === unitId && rental.status === 'active')
-    const hasActiveReservation = state.holds.some(hold => hold.assignedUnitId === unitId && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status))
-    if (hasActiveRental || hasActiveReservation) throw new Error('Không thể đổi trạng thái gian kho đang có hợp đồng hoặc đặt chỗ hiệu lực.')
+    const hasOperationalLock = manager.role === 'manager'
+      ? managerUnitHasOperationalLock(unitId, state.holds, state.rentals)
+      : state.rentals.some(rental => rental.unitId === unitId && rental.status === 'active') ||
+        state.holds.some(hold => hold.assignedUnitId === unitId && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status))
+    if (hasOperationalLock) throw new Error('Không thể đổi trạng thái gian kho khi còn đặt chỗ, hợp đồng hoặc hồ sơ trả kho chưa hoàn tất.')
     const now = new Date()
     setState(prev => {
       const openTask = prev.maintenanceTasks.find(task => task.unitId === unitId && task.status !== 'completed')
@@ -3020,7 +3081,7 @@ rentals: Array.isArray(parsed.rentals)
         maintenanceTasks: status === 'available'
           ? prev.maintenanceTasks.map(task => task.unitId === unitId && task.status !== 'completed' ? { ...task, status: 'completed', completedAt: now.toISOString(), notes: reason?.trim() || task.notes } : task)
           : maintenanceTask ? [maintenanceTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
-        activities: [{ id: `act-${Date.now()}`, action: status === 'maintenance' ? 'UNIT_MAINTENANCE_STARTED' : 'UNIT_RELEASED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: unit.facilityId, entityType: 'unit', entityId: unit.id, notes: reason?.trim() || `Trạng thái gian kho chuyển sang ${status.toUpperCase()}.`, timestamp: now.toISOString() }, ...prev.activities]
+        activities: [{ id: `act-${Date.now()}`, action: status === 'maintenance' ? 'UNIT_MAINTENANCE_STARTED' : 'UNIT_RELEASED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: unit.facilityId, entityType: 'unit', entityId: unit.id, beforeState: { status: unit.status, conditionNotes: unit.conditionNotes }, afterState: { status, conditionNotes: reason?.trim() || unit.conditionNotes }, notes: reason?.trim() || `Trạng thái gian kho chuyển sang ${status.toUpperCase()}.`, timestamp: now.toISOString() }, ...prev.activities]
       }
     })
   }
@@ -3031,13 +3092,23 @@ rentals: Array.isArray(parsed.rentals)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
     if (rental.status !== 'active') throw new Error('Chỉ ghi nhận thanh toán cho hợp đồng đang hoạt động.')
-    const expectedAmount = Math.round((rental.monthlyRate + (rental.lateFeeAmount || 0)) * 100) / 100
+    if (manager.role === 'manager' && !isManagerRentalOverdue(rental)) throw new Error('Hợp đồng chưa đến hạn thanh toán.')
+    const expectedAmount = manager.role === 'manager'
+      ? rentalAmountDue(rental)
+      : Math.round((rental.monthlyRate + (rental.lateFeeAmount || 0)) * 100) / 100
     if (amount <= 0 || Math.abs(amount - expectedAmount) > 0.01) throw new Error(`Số tiền cần thu chính xác là ${formatVnd(expectedAmount)}.`)
     if (!transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
+    if (manager.role === 'manager' && state.payments.some(item => item.transactionReference?.trim().toLocaleLowerCase() === transactionReference.trim().toLocaleLowerCase())) {
+      throw new Error('Mã giao dịch hoặc số phiếu thu đã được sử dụng.')
+    }
     const now = new Date()
-    const baseDue = toValidDate(rental.nextDue)
-    const nextDueBase = baseDue.getTime() < now.getTime() ? now.toISOString().split('T')[0] : rental.nextDue
-    const nextDue = addCalendarMonths(nextDueBase, 1)
+    const nextDue = manager.role === 'manager'
+      ? nextDueAfterPayment(rental.nextDue, now.toISOString().slice(0, 10))
+      : (() => {
+          const baseDue = toValidDate(rental.nextDue)
+          const nextDueBase = baseDue.getTime() < now.getTime() ? now.toISOString().split('T')[0] : rental.nextDue
+          return addCalendarMonths(nextDueBase, 1)
+        })()
     const paymentId = `PAY-RENT-${Date.now().toString().slice(-8)}`
     const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId, type: 'RENT', amount, paymentMethod, transactionReference: transactionReference.trim(), receivedAt: now.toISOString(), receivedBy: manager.id, status: 'PAID', paidAt: now.toISOString(), recordedBy: manager.id, description: `Thu cước kho ${rental.unitId}${rental.lateFeeAmount ? ` gồm phí trễ ${formatVnd(rental.lateFeeAmount)}` : ''}` }
     setState(prev => ({
@@ -3045,7 +3116,7 @@ rentals: Array.isArray(parsed.rentals)
       payments: [payment, ...prev.payments],
       rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, paymentStatus: 'paid', lateFeeAmount: 0, overlocked: false, nextDue } : item),
       accessCredentials: prev.accessCredentials.map(item => item.rentalId === rentalId && item.status === 'SUSPENDED' ? { ...item, status: 'ACTIVE' } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENT_PAYMENT_RECORDED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu ${formatVnd(amount)} cho hợp đồng ${rental.id}; kỳ tiếp theo ${nextDue}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENT_PAYMENT_RECORDED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'payment', entityId: paymentId, correlationId: rental.id, beforeState: { paymentStatus: rental.paymentStatus, nextDue: rental.nextDue, lateFeeAmount: rental.lateFeeAmount || 0, overlocked: rental.overlocked || false }, afterState: { paymentStatus: 'paid', nextDue, lateFeeAmount: 0, overlocked: false, amount, paymentMethod, transactionReference: transactionReference.trim() }, notes: `Đã thu ${formatVnd(amount)} cho hợp đồng ${rental.id}; kỳ tiếp theo ${nextDue}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -3054,10 +3125,15 @@ rentals: Array.isArray(parsed.rentals)
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
-    if (rental.paymentStatus !== 'overdue') throw new Error('Chỉ áp dụng phí trễ cho hợp đồng đang quá hạn.')
+    if (!isManagerRentalOverdue(rental)) throw new Error('Chỉ áp dụng phí trễ cho hợp đồng đang quá hạn.')
     if (amount <= 0) throw new Error('Phí trễ phải lớn hơn 0.')
+    if (manager.role === 'manager' && !canApplyManagerLateFee(rental)) throw new Error('Phí trễ đã được xử lý cho kỳ thanh toán này.')
     const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: Math.round(((item.lateFeeAmount || 0) + amount) * 100) / 100 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Áp dụng phí trễ ${formatVnd(amount)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? {
+      ...item,
+      lateFeeAmount: manager.role === 'manager' ? Math.round(amount * 100) / 100 : Math.round(((item.lateFeeAmount || 0) + amount) * 100) / 100,
+      lateFeeProcessedForDueDate: manager.role === 'manager' ? item.nextDue : item.lateFeeProcessedForDueDate
+    } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, correlationId: rental.nextDue, beforeState: { lateFeeAmount: rental.lateFeeAmount || 0, processedForDueDate: rental.lateFeeProcessedForDueDate }, afterState: { lateFeeAmount: manager.role === 'manager' ? amount : (rental.lateFeeAmount || 0) + amount, processedForDueDate: manager.role === 'manager' ? rental.nextDue : rental.lateFeeProcessedForDueDate }, notes: `Áp dụng phí trễ ${formatVnd(amount)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   const waiveRentalLateFee = (rentalId: string, manager: User) => {
@@ -3066,8 +3142,13 @@ rentals: Array.isArray(parsed.rentals)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
     const previousFee = rental.lateFeeAmount || 0
+    if (manager.role === 'manager' && (!isManagerRentalOverdue(rental) || previousFee <= 0)) throw new Error('Hợp đồng không có phí trễ để miễn.')
     const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lateFeeAmount: 0 } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Miễn phí trễ ${formatVnd(previousFee)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? {
+      ...item,
+      lateFeeAmount: 0,
+      lateFeeProcessedForDueDate: manager.role === 'manager' ? item.nextDue : item.lateFeeProcessedForDueDate
+    } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, correlationId: rental.nextDue, beforeState: { lateFeeAmount: previousFee }, afterState: { lateFeeAmount: 0, processedForDueDate: manager.role === 'manager' ? rental.nextDue : rental.lateFeeProcessedForDueDate }, notes: `Miễn phí trễ ${formatVnd(previousFee)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   const setRentalOverlock = (rentalId: string, overlocked: boolean, manager: User) => {
@@ -3075,7 +3156,7 @@ rentals: Array.isArray(parsed.rentals)
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
-    if (overlocked && rental.paymentStatus !== 'overdue') throw new Error('Chỉ khóa truy cập đối với hợp đồng quá hạn.')
+    if (overlocked && !isManagerRentalOverdue(rental)) throw new Error('Chỉ khóa truy cập đối với hợp đồng quá hạn.')
     const now = new Date()
     setState(prev => ({
       ...prev,
@@ -3090,7 +3171,7 @@ rentals: Array.isArray(parsed.rentals)
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
-    if (rental.paymentStatus !== 'overdue') throw new Error('Hợp đồng không ở trạng thái quá hạn.')
+    if (!isManagerRentalOverdue(rental)) throw new Error('Hợp đồng không ở trạng thái quá hạn.')
     const now = new Date()
     setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, lastReminderAt: now.toISOString(), remindersSent: (item.remindersSent || 0) + 1 } : item), activities: [{ id: `act-${Date.now()}`, action: 'DELINQUENCY_REMINDER_SENT', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, notes: `Đã ghi nhận gửi nhắc nợ cho ${rental.customerName}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
@@ -3099,8 +3180,20 @@ rentals: Array.isArray(parsed.rentals)
     assertPermission(manager, 'manage_staff_tasks')
     assertFacilityManager(manager, task.facilityId, task.facilityName)
     if (!task.title.trim() || !task.dueAt) throw new Error('Nhiệm vụ cần có tiêu đề và hạn xử lý.')
-    const created: FacilityTask = { ...task, id: `TSK-${Date.now().toString().slice(-7)}`, title: task.title.trim(), notes: task.notes?.trim(), status: 'open', createdAt: new Date().toISOString() }
-    setState(prev => ({ ...prev, staffTasks: [created, ...prev.staffTasks], activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_CREATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: created.id, notes: `Tạo nhiệm vụ "${created.title}"${created.assignedStaffName ? ` cho ${created.assignedStaffName}` : ''}.`, timestamp: created.createdAt }, ...prev.activities] }))
+    const assignedStaff = task.assignedStaffId ? state.users.find(user => user.id === task.assignedStaffId) : undefined
+    if (manager.role === 'manager' && task.assignedStaffId && (!assignedStaff || !canManagerAssignStaff(manager, assignedStaff))) {
+      throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Manager.')
+    }
+    const created: FacilityTask = {
+      ...task,
+      assignedStaffName: assignedStaff?.name || task.assignedStaffName,
+      id: `TSK-${Date.now().toString().slice(-7)}`,
+      title: task.title.trim(),
+      notes: task.notes?.trim(),
+      status: manager.role === 'manager' ? facilityTaskInitialStatus(task.assignedStaffId) : 'open',
+      createdAt: new Date().toISOString()
+    }
+    setState(prev => ({ ...prev, staffTasks: [created, ...prev.staffTasks], activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_CREATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: created.id, afterState: created, notes: `Tạo nhiệm vụ "${created.title}"${created.assignedStaffName ? ` cho ${created.assignedStaffName}` : ''}.`, timestamp: created.createdAt }, ...prev.activities] }))
     return created
   }
 
@@ -3109,14 +3202,33 @@ rentals: Array.isArray(parsed.rentals)
     const task = state.staffTasks.find(item => item.id === taskId)
     if (!task) throw new Error('Không tìm thấy nhiệm vụ.')
     assertFacilityManager(manager, task.facilityId, task.facilityName)
+    if (manager.role === 'manager' && !canManagerEditFacilityTask(task)) throw new Error('Nhiệm vụ đã hoàn tất và không thể chỉnh sửa lại.')
+    const nextAssignedStaffId = Object.prototype.hasOwnProperty.call(updates, 'assignedStaffId') ? updates.assignedStaffId : task.assignedStaffId
+    const assignedStaff = nextAssignedStaffId ? state.users.find(user => user.id === nextAssignedStaffId) : undefined
+    if (manager.role === 'manager' && nextAssignedStaffId && (!assignedStaff || !canManagerAssignStaff(manager, assignedStaff))) {
+      throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Manager.')
+    }
+    if (manager.role === 'manager' && updates.status === 'completed' && !canManagerCompleteFacilityTask(task)) {
+      throw new Error('Chỉ có thể hoàn tất nhiệm vụ đã được phân công và đang xử lý.')
+    }
+    const normalizedUpdates = manager.role === 'manager'
+      ? {
+          ...updates,
+          ...(Object.prototype.hasOwnProperty.call(updates, 'assignedStaffId') ? {
+            assignedStaffName: assignedStaff?.name,
+            status: assignedStaff ? (updates.status || 'in_progress') : 'open'
+          } : {})
+        }
+      : updates
     const now = new Date()
-    setState(prev => ({ ...prev, staffTasks: prev.staffTasks.map(item => item.id === taskId ? { ...item, ...updates, completedAt: updates.status === 'completed' ? now.toISOString() : item.completedAt } : item), activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_UPDATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: taskId, notes: updates.status === 'completed' ? 'Nhiệm vụ đã hoàn tất.' : `Cập nhật nhiệm vụ${updates.assignedStaffName ? ` cho ${updates.assignedStaffName}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities] }))
+    setState(prev => ({ ...prev, staffTasks: prev.staffTasks.map(item => item.id === taskId ? { ...item, ...normalizedUpdates, completedAt: normalizedUpdates.status === 'completed' ? now.toISOString() : item.completedAt } : item), activities: [{ id: `act-${Date.now()}`, action: 'FACILITY_TASK_UPDATED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: task.facilityId, entityType: 'task', entityId: taskId, beforeState: task, afterState: { ...task, ...normalizedUpdates, completedAt: normalizedUpdates.status === 'completed' ? now.toISOString() : task.completedAt }, notes: normalizedUpdates.status === 'completed' ? 'Nhiệm vụ đã hoàn tất.' : `Cập nhật nhiệm vụ${normalizedUpdates.assignedStaffName ? ` cho ${normalizedUpdates.assignedStaffName}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities] }))
   }
 
   // 10. Operations Config & Support Tickets
   const updateBusinessConfig = (newConfig: Partial<BusinessConfig>, actor: User) => {
     assertPermission(actor, 'manage_policies')
-    if (actor.role !== 'manager' && actor.role !== 'admin') throw new Error('Chỉ Manager hoặc Admin được cập nhật cấu hình vận hành.')
+    if (actor.role === 'manager' && !isManagerOperationAllowed('manage_policies')) throw new Error('Chính sách thuê không thuộc phạm vi Facility Manager.')
+    if (actor.role !== 'admin') throw new Error('Chỉ Admin được cập nhật cấu hình vận hành tại đây.')
     setState(prev => ({
       ...prev,
       config: { ...prev.config, ...newConfig }
@@ -3125,7 +3237,8 @@ rentals: Array.isArray(parsed.rentals)
 
   const respondSupportTicket = (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => {
     assertPermission(staffUser, 'manage_support')
-    if (staffUser.role !== 'staff' && staffUser.role !== 'manager' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được cập nhật yêu cầu hỗ trợ.')
+    if (staffUser.role === 'manager' && !isManagerOperationAllowed('handle_support')) throw new Error('Xử lý yêu cầu hỗ trợ thuộc nghiệp vụ của Facility Staff.')
+    if (staffUser.role !== 'staff' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được cập nhật yêu cầu hỗ trợ.')
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung phản hồi.')
     const ticket = state.tickets.find(item => item.id === ticketId)
     if (!ticket) throw new Error('Không tìm thấy yêu cầu hỗ trợ.')
@@ -3671,20 +3784,36 @@ rentals: Array.isArray(parsed.rentals)
     return { success: true }
   }
 
-  const createUnit = (data: Partial<StorageUnit>, actor?: User): StorageUnit => {
-    if (actor) assertPermission(actor, 'view_facilities')
-    const code = (data.code || data.id || `UNIT-${Date.now().toString(36)}`).toUpperCase().trim()
+  const createUnit = (data: Partial<StorageUnit>, actor: User): StorageUnit => {
+    const requestedCode = (data.code || data.id || '').toUpperCase().trim()
+    if (actor.role === 'manager' && !requestedCode) throw new Error('Manager phải nhập mã gian kho thực tế.')
+    const code = requestedCode || `UNIT-${Date.now().toString(36)}`.toUpperCase()
+    if (state.units.some(item => item.id.toUpperCase() === code || item.code.toUpperCase() === code)) throw new Error('Mã gian kho đã tồn tại trong hệ thống.')
     const targetFacility = state.facilities.find(f => f.id === data.facilityId || f.code === data.facilityId)
+    if (actor.role === 'manager') {
+      assertPermission(actor, 'manage_inventory')
+      if (!targetFacility) throw new Error('Cơ sở được chọn không tồn tại trong dữ liệu hệ thống.')
+      assertFacilityManager(actor, targetFacility.id, targetFacility.name)
+    } else {
+      assertPermission(actor, 'view_facilities')
+    }
     const facilityId = targetFacility ? targetFacility.id : (data.facilityId || 'fac-001')
     const facilityName = targetFacility ? targetFacility.name : (data.facilityName || 'Kho Việt')
 
     const type = data.type || 'Small'
-    const lengthM = data.dimensions?.lengthM ?? (type === 'Medium' ? 9.0 : type === 'Large' ? 13.5 : type === 'Extra Large' ? 19.0 : 5.6)
-    const widthM = data.dimensions?.widthM ?? (type === 'Medium' ? 6.4 : type === 'Large' ? 6.8 : type === 'Extra Large' ? 7.2 : 6.0)
-    const heightM = data.dimensions?.heightM ?? (type === 'Medium' ? 3.4 : type === 'Large' ? 3.6 : type === 'Extra Large' ? 4.0 : 3.2)
-    const areaM2 = data.areaM2 ?? Math.round(lengthM * widthM * 10) / 10
-    const volumeM3 = data.volumeM3 ?? Math.round(lengthM * widthM * heightM * 100) / 100
-    const maxLoadKg = data.maxLoadKg ?? (type === 'Medium' ? 1200 : type === 'Large' ? 2400 : type === 'Extra Large' ? 3600 : 600)
+    const canonicalTypeId = type === 'Small' ? 'small' : type === 'Medium' ? 'medium' : type === 'Large' ? 'large' : 'xlarge'
+    const canonicalType = UNIT_TYPES.find(item => item.id === canonicalTypeId)
+    const policyTemplate = state.units.find(item => item.facilityId === facilityId && item.type === type) || state.units.find(item => item.type === type) || state.units.find(item => item.facilityId === facilityId)
+    if (actor.role === 'manager' && (!canonicalType || !policyTemplate)) {
+      throw new Error('Chưa có cấu hình loại kho hoặc chính sách hàng hóa để tạo gian kho tại cơ sở này.')
+    }
+    if (actor.role === 'manager' && !data.zone?.trim()) throw new Error('Manager phải nhập khu vực vật lý của gian kho.')
+    const lengthM = actor.role === 'manager' ? canonicalType!.lengthM : data.dimensions?.lengthM ?? (type === 'Medium' ? 9.0 : type === 'Large' ? 13.5 : type === 'Extra Large' ? 19.0 : 5.6)
+    const widthM = actor.role === 'manager' ? canonicalType!.widthM : data.dimensions?.widthM ?? (type === 'Medium' ? 6.4 : type === 'Large' ? 6.8 : type === 'Extra Large' ? 7.2 : 6.0)
+    const heightM = actor.role === 'manager' ? canonicalType!.heightM : data.dimensions?.heightM ?? (type === 'Medium' ? 3.4 : type === 'Large' ? 3.6 : type === 'Extra Large' ? 4.0 : 3.2)
+    const areaM2 = actor.role === 'manager' ? canonicalType!.areaM2 : data.areaM2 ?? Math.round(lengthM * widthM * 10) / 10
+    const volumeM3 = actor.role === 'manager' ? canonicalType!.volumeM3 : data.volumeM3 ?? Math.round(lengthM * widthM * heightM * 100) / 100
+    const maxLoadKg = actor.role === 'manager' ? canonicalType!.maxLoadKg : data.maxLoadKg ?? (type === 'Medium' ? 1200 : type === 'Large' ? 2400 : type === 'Extra Large' ? 3600 : 600)
     
     let basePrice = data.price ?? (type === 'Medium' ? 9_500_000 / USD_TO_VND_RATE : type === 'Large' ? 15_000_000 / USD_TO_VND_RATE : type === 'Extra Large' ? 22_500_000 / USD_TO_VND_RATE : 5_500_000 / USD_TO_VND_RATE)
     if (basePrice > 10000) {
@@ -3704,12 +3833,12 @@ rentals: Array.isArray(parsed.rentals)
       doorDimensions: data.doorDimensions || { widthM: 2, heightM: 2.4 },
       volumeM3,
       maxLoadKg,
-      allowedGoods: data.allowedGoods || ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
-      prohibitedGoods: data.prohibitedGoods || ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
-      price: basePrice,
-      deposit: data.deposit ? (data.deposit > 10000 ? data.deposit / USD_TO_VND_RATE : data.deposit) : basePrice,
+      allowedGoods: actor.role === 'manager' ? [...policyTemplate!.allowedGoods] : data.allowedGoods || ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
+      prohibitedGoods: actor.role === 'manager' ? [...policyTemplate!.prohibitedGoods] : data.prohibitedGoods || ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+      price: actor.role === 'manager' ? canonicalType!.monthlyPrice : basePrice,
+      deposit: actor.role === 'manager' ? policyTemplate!.deposit : data.deposit ? (data.deposit > 10000 ? data.deposit / USD_TO_VND_RATE : data.deposit) : basePrice,
       climate: data.climate ?? (targetFacility?.climate ?? true),
-      status: data.status || 'available',
+      status: actor.role === 'manager' ? 'available' : data.status || 'available',
       reservedPeriods: [],
       version: 1
     }
@@ -3735,32 +3864,80 @@ rentals: Array.isArray(parsed.rentals)
       return {
         ...prev,
         units: nextUnits,
-        facilities: nextFacilities
+        facilities: nextFacilities,
+        activities: actor.role === 'manager' ? [{
+          id: `act-${Date.now()}`,
+          action: 'UNIT_CREATED',
+          actorId: actor.id,
+          actorName: actor.name,
+          actorRole: actor.role,
+          facilityId,
+          entityType: 'unit',
+          entityId: newUnit.id,
+          afterState: newUnit,
+          notes: `Manager tạo gian kho ${newUnit.code} từ cấu hình loại kho và chính sách hiện có.`,
+          timestamp: new Date().toISOString()
+        }, ...prev.activities] : prev.activities
       }
     })
 
     return newUnit
   }
 
-  const updateUnit = (unitId: string, updates: Partial<StorageUnit>, actor?: User) => {
-    if (actor) assertPermission(actor, 'view_facilities')
+  const updateUnit = (unitId: string, updates: Partial<StorageUnit>, actor: User) => {
+    const targetUnit = state.units.find(u => u.id === unitId || u.code === unitId)
+    if (!targetUnit) throw new Error('Không tìm thấy gian kho.')
+    let permittedUpdates = { ...updates }
+    if (actor.role === 'manager') {
+      assertPermission(actor, 'manage_inventory')
+      assertFacilityManager(actor, targetUnit.facilityId, targetUnit.facilityName)
+      if (managerUnitHasOperationalLock(targetUnit.id, state.holds, state.rentals)) {
+        throw new Error('Không thể sửa gian kho khi còn đặt chỗ, hợp đồng hoặc hồ sơ trả kho chưa hoàn tất.')
+      }
+      const nextType = updates.type || targetUnit.type
+      const typeChanged = nextType !== targetUnit.type
+      const canonicalTypeId = nextType === 'Small' ? 'small' : nextType === 'Medium' ? 'medium' : nextType === 'Large' ? 'large' : 'xlarge'
+      const canonicalType = UNIT_TYPES.find(item => item.id === canonicalTypeId)
+      const policyTemplate = state.units.find(item => item.id !== targetUnit.id && item.facilityId === targetUnit.facilityId && item.type === nextType) || state.units.find(item => item.id !== targetUnit.id && item.type === nextType)
+      if (typeChanged && !canonicalType) throw new Error('Loại gian kho không tồn tại trong cấu hình hệ thống.')
+      if (typeChanged && !policyTemplate) throw new Error('Chưa có dữ liệu chính sách và tiền đảm bảo cho loại gian kho đã chọn.')
+      permittedUpdates = {
+        ...permittedUpdates,
+        id: targetUnit.id,
+        code: targetUnit.code,
+        facilityId: targetUnit.facilityId,
+        facilityName: targetUnit.facilityName,
+        status: targetUnit.status,
+        price: typeChanged ? canonicalType!.monthlyPrice : targetUnit.price,
+        deposit: typeChanged ? policyTemplate!.deposit : targetUnit.deposit,
+        allowedGoods: typeChanged ? [...policyTemplate!.allowedGoods] : targetUnit.allowedGoods,
+        prohibitedGoods: typeChanged ? [...policyTemplate!.prohibitedGoods] : targetUnit.prohibitedGoods,
+        ...(typeChanged ? {
+          dimensions: { lengthM: canonicalType!.lengthM, widthM: canonicalType!.widthM, heightM: canonicalType!.heightM },
+          areaM2: canonicalType!.areaM2,
+          volumeM3: canonicalType!.volumeM3,
+          maxLoadKg: canonicalType!.maxLoadKg
+        } : {})
+      }
+    } else {
+      assertPermission(actor, 'view_facilities')
+    }
     setState(prev => {
       const nextUnits = prev.units.map(u => {
         if (u.id !== unitId && u.code !== unitId) return u
-        let price = updates.price !== undefined ? updates.price : u.price
+        let price = permittedUpdates.price !== undefined ? permittedUpdates.price : u.price
         if (price > 10000) price = price / USD_TO_VND_RATE
-        let deposit = updates.deposit !== undefined ? updates.deposit : u.deposit
+        let deposit = permittedUpdates.deposit !== undefined ? permittedUpdates.deposit : u.deposit
         if (deposit > 10000) deposit = deposit / USD_TO_VND_RATE
         return {
           ...u,
-          ...updates,
+          ...permittedUpdates,
           price,
           deposit,
           id: u.id,
           code: u.code
         }
       })
-      const targetUnit = prev.units.find(u => u.id === unitId || u.code === unitId)
       const nextFacilities = prev.facilities.map(f => {
         if (f.id === targetUnit?.facilityId || f.code === targetUnit?.facilityId) {
           const facUnits = nextUnits.filter(u => u.facilityId === f.id || u.facilityId === f.code)
@@ -3780,21 +3957,50 @@ rentals: Array.isArray(parsed.rentals)
       return {
         ...prev,
         units: nextUnits,
-        facilities: nextFacilities
+        facilities: nextFacilities,
+        activities: actor.role === 'manager' ? [{
+          id: `act-${Date.now()}`,
+          action: 'UNIT_UPDATED',
+          actorId: actor.id,
+          actorName: actor.name,
+          actorRole: actor.role,
+          facilityId: targetUnit.facilityId,
+          entityType: 'unit',
+          entityId: targetUnit.id,
+          beforeState: targetUnit,
+          afterState: nextUnits.find(item => item.id === targetUnit.id),
+          notes: `Manager cập nhật thông tin vật lý gian kho ${targetUnit.code}. Giá và chính sách được giữ theo cấu hình hệ thống.`,
+          timestamp: new Date().toISOString()
+        }, ...prev.activities] : prev.activities
       }
     })
   }
 
-  const deleteUnit = (unitId: string, actor?: User): { success: boolean; reason?: string } => {
-    if (actor) assertPermission(actor, 'view_facilities')
+  const deleteUnit = (unitId: string, actor: User): { success: boolean; reason?: string } => {
     const unit = state.units.find(u => u.id === unitId || u.code === unitId)
     if (!unit) return { success: false, reason: 'Không tìm thấy gian kho.' }
+    if (actor.role === 'manager') {
+      assertPermission(actor, 'manage_inventory')
+      assertFacilityManager(actor, unit.facilityId, unit.facilityName)
+    } else {
+      assertPermission(actor, 'view_facilities')
+    }
     if (unit.status === 'occupied') {
       return { success: false, reason: 'Không thể xóa gian kho đang có khách thuê hoạt động!' }
     }
     const hasActiveHold = state.holds.some(h => (h.assignedUnitId === unit.id || h.assignedUnitId === unit.code) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status))
     if (hasActiveHold) {
       return { success: false, reason: 'Không thể xóa gian kho đang có đơn đặt giữ chỗ!' }
+    }
+    if (actor.role === 'manager') {
+      const hasHistory = state.holds.some(item => item.assignedUnitId === unit.id || item.unitId === unit.id) ||
+        state.rentals.some(item => item.unitId === unit.id) ||
+        state.checkins.some(item => item.unitId === unit.id) ||
+        state.returns.some(item => item.unitId === unit.id) ||
+        state.maintenanceTasks.some(item => item.unitId === unit.id)
+      if (unit.status !== 'available' || hasHistory) {
+        return { success: false, reason: 'Chỉ được xóa gian kho còn trống và chưa phát sinh dữ liệu nghiệp vụ.' }
+      }
     }
 
     setState(prev => {
@@ -3818,7 +4024,20 @@ rentals: Array.isArray(parsed.rentals)
       return {
         ...prev,
         units: nextUnits,
-        facilities: nextFacilities
+        facilities: nextFacilities,
+        activities: actor.role === 'manager' ? [{
+          id: `act-${Date.now()}`,
+          action: 'UNIT_DELETED',
+          actorId: actor.id,
+          actorName: actor.name,
+          actorRole: actor.role,
+          facilityId: unit.facilityId,
+          entityType: 'unit',
+          entityId: unit.id,
+          beforeState: unit,
+          notes: `Manager xóa gian kho ${unit.code} chưa phát sinh nghiệp vụ.`,
+          timestamp: new Date().toISOString()
+        }, ...prev.activities] : prev.activities
       }
     })
     return { success: true }
@@ -4043,6 +4262,9 @@ rentals: Array.isArray(parsed.rentals)
     if (staffUser.role === 'manager' || staffUser.role === 'admin') assertFacilityManager(staffUser, returnCase.facilityId, returnCase.facilityName)
     if (staffUser.role === 'staff' && !isFacilityVisible(staffUser, returnCase.facilityId, returnCase.facilityName)) throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
     if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã giao dịch hoàn cọc.')
+    if (staffUser.role === 'manager' && state.payments.some(item => item.transactionReference?.trim().toLocaleLowerCase() === transactionReference.trim().toLocaleLowerCase())) {
+      throw new Error('Mã giao dịch hoàn cọc đã được sử dụng.')
+    }
     const refundPayment = state.payments.find(item => item.rentalId === returnCase.rentalId && item.type === 'REFUND' && item.status === 'PENDING')
     if (!refundPayment) throw new Error('Không tìm thấy lệnh hoàn cọc đang chờ xử lý.')
     const now = new Date()
@@ -4055,17 +4277,59 @@ rentals: Array.isArray(parsed.rentals)
     }))
   }
 
-  const reviewReturnDispute = (returnId: string, manager: User, resolutionNote?: string) => {
+  const reviewReturnDispute = (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => {
     assertPermission(manager, 'process_returns')
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
     assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
     if (!resolutionNote?.trim()) throw new Error('Vui lòng nhập lý do và kết quả rà soát quyết toán.')
+    if (manager.role === 'manager' && !settlement) throw new Error('Vui lòng xác nhận lại toàn bộ khoản khấu trừ trước khi gửi kết luận.')
+    if (settlement && Object.values(settlement).some(value => !Number.isFinite(value) || value < 0)) {
+      throw new Error('Các khoản quyết toán phải là số không âm.')
+    }
+    const recalculated = settlement
+      ? calculateManagerReturnSettlement(returnCase.depositAmount, settlement)
+      : undefined
     const now = new Date()
     setState(prev => ({
       ...prev,
-      returns: prev.returns.map(r => r.id === returnId ? { ...r, status: 'awaiting_customer_confirmation', staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager: ${resolutionNote?.trim() || 'Đã rà soát và giữ nguyên quyết toán.'}` } : r),
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_DISPUTE_REVIEWED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.', timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
+      returns: prev.returns.map(r => r.id === returnId ? {
+        ...r,
+        status: 'awaiting_customer_confirmation',
+        ...(settlement ? {
+          damageFee: settlement.damageFee,
+          cleaningFee: settlement.cleaningFee,
+          lostItemFee: settlement.lostItemFee,
+          overdueFee: settlement.overdueFee,
+          outstandingFee: settlement.outstandingFee,
+          netRefundAmount: recalculated?.netRefundAmount ?? r.netRefundAmount,
+          amountDueFromCustomer: recalculated?.amountDueFromCustomer ?? r.amountDueFromCustomer
+        } : {}),
+        staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager: ${resolutionNote?.trim() || 'Đã rà soát và giữ nguyên quyết toán.'}`
+      } : r),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'RETURN_DISPUTE_REVIEWED',
+        actorId: manager.id,
+        actorName: manager.name,
+        actorRole: manager.role,
+        facilityId: returnCase.facilityId,
+        entityType: 'return',
+        entityId: returnId,
+        beforeState: settlement ? {
+          damageFee: returnCase.damageFee,
+          cleaningFee: returnCase.cleaningFee || 0,
+          lostItemFee: returnCase.lostItemFee || 0,
+          overdueFee: returnCase.overdueFee || 0,
+          outstandingFee: returnCase.outstandingFee,
+          netRefundAmount: returnCase.netRefundAmount,
+          amountDueFromCustomer: returnCase.amountDueFromCustomer || 0
+        } : undefined,
+        afterState: settlement ? { ...settlement, ...recalculated } : undefined,
+        evidence: returnCase.evidence,
+        notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.',
+        timestamp: now.toISOString()
+      }, ...prev.activities]
     }))
   }
 

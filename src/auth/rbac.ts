@@ -52,10 +52,10 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
     'view_checkins', 'perform_checkin', 'view_returns', 'process_returns', 'manage_payments', 'view_support', 'manage_support'
   ),
   manager: makePermissions(
-    'view_dashboard', 'view_facilities', 'view_units', 'view_reservations', 'approve_reservations',
-    'view_contracts', 'view_checkins', 'perform_checkin', 'view_rentals', 'manage_rentals',
-    'view_returns', 'process_returns', 'view_payments', 'manage_payments', 'view_support', 'manage_support',
-    'manage_inventory', 'manage_policies', 'manage_staff_tasks', 'view_reports'
+    'view_dashboard', 'view_facilities', 'view_units', 'view_reservations',
+    'view_contracts', 'view_checkins', 'view_rentals', 'manage_rentals',
+    'view_returns', 'process_returns', 'view_payments', 'manage_payments', 'view_support',
+    'assign_units', 'manage_inventory', 'manage_staff_tasks', 'view_reports'
   ),
   business: makePermissions(
     'view_dashboard', 'view_facilities', 'view_units', 'view_payments', 'view_reports', 'view_support', 'view_policies'
@@ -74,7 +74,10 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
       if (typeof candidate[key] === 'boolean') normalized[role][key] = candidate[key] as boolean
     }
   }
-  // Manager chỉ duyệt hồ sơ hàng hóa; gian cụ thể do khách chọn từ đầu.
-  normalized.manager.assign_units = false
+  // Staff/Business workflows stay disabled even when persisted permissions are stale.
+  normalized.manager.approve_reservations = false
+  normalized.manager.perform_checkin = false
+  normalized.manager.manage_support = false
+  normalized.manager.manage_policies = false
   return normalized
 }
