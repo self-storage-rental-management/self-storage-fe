@@ -725,7 +725,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                       </div>
                     </Td>
                     <Td className="font-medium">{r.unit}</Td>
-                    <Td>{r.status === 'pending' && !scheduledReturnIds.has(r.id) ? <input value={returnScheduleDrafts[r.id] ?? r.returnDate} onChange={event => setReturnScheduleDrafts(previous => ({ ...previous, [r.id]: event.target.value }))} className="w-32 rounded border border-stone-300 px-2 py-1 text-xs" aria-label={'Lịch kiểm tra trả kho'} /> : (returnScheduleDrafts[r.id] ?? r.returnDate)}</Td>
+                    <Td>{r.status === 'pending' && !scheduledReturnIds.has(r.id) ? <input type="date" value={toDateInputValue(returnScheduleDrafts[r.id] ?? r.returnDate)} onChange={event => setReturnScheduleDrafts(previous => ({ ...previous, [r.id]: event.target.value }))} className="w-36 rounded border border-stone-300 px-2 py-1 text-xs" aria-label={'Chọn ngày kiểm tra trả kho'} /> : formatDate(returnScheduleDrafts[r.id] ?? r.returnDate)}</Td>
                     <Td>
                       {r.condition === 'good'
                         ? <Badge variant="success">{'Tốt'}</Badge>
