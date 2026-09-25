@@ -80,6 +80,7 @@ export interface Facility {
   revenue: number
   growth: number
   manager: string
+  phone?: string
   status: 'active' | 'maintenance'
   accessHours: string
   timezone: string

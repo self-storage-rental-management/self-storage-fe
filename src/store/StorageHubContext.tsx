@@ -25,7 +25,7 @@ import type {
   FacilityTask
 } from '../types/storageHub'
 import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
-import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, type TicketItem } from '../data/demoDatabase'
+import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
 import { isFacilityVisible } from '../domain/managerRules'
 import { formatVnd, USD_TO_VND_RATE } from '../i18n/currency'
@@ -1209,7 +1209,7 @@ renewals: Array.isArray(parsed.renewals)
   : [],
 maintenanceTasks: parsed.maintenanceTasks || [],
 staffTasks: parsed.staffTasks || [],
-accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
+accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && (!credential.reservationId || !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId)) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
 checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654') : []),
 rentals: Array.isArray(parsed.rentals)
   ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654')))
@@ -3573,37 +3573,99 @@ rentals: Array.isArray(parsed.rentals)
   const createFacility = (data: Partial<Facility>, actor?: User): Facility => {
     if (actor) assertPermission(actor, 'view_facilities')
     const id = data.id || `fac-${Date.now().toString(36)}`
-    const code = data.code || id.toUpperCase()
+    const code = (data.code?.trim() || id).toUpperCase()
+    const unitsCount = data.units ?? 20
+    const defaultOccupied = data.occupied ?? Math.min(unitsCount, 6)
+    const defaultRevenue = data.revenue ?? 48_500_000
+    const defaultGrowth = data.growth ?? 5.5
     const newFacility: Facility = {
       id,
       code,
-      name: data.name?.trim() || `Cơ sở ${code}`,
+      name: data.name?.trim() || `Kho Việt – Cơ sở ${code}`,
       address: data.address?.trim() || 'TP. Hồ Chí Minh',
       city: data.city?.trim() || 'TP. Hồ Chí Minh',
       rating: data.rating ?? 4.9,
-      available: data.available ?? 0,
+      available: data.available ?? Math.max(0, unitsCount - defaultOccupied),
       price: data.price || '5.500.000đ',
-      climate: data.climate ?? true,
-      security: data.security || '24/7',
-      image: data.image || 'photo-1553413077-190dd305871c',
-      units: data.units ?? 20,
-      occupied: data.occupied ?? 0,
-      revenue: data.revenue ?? 0,
-      growth: data.growth ?? 0,
+      climate: data.climate ?? false,
+      security: data.security || 'Khóa riêng tự quản, Bảo vệ cổng',
+      image: data.image || (data.city?.includes('Hà Nội') ? 'photo-1586864387967-d02ef85d93e8' : 'photo-1553413077-190dd305871c'),
+      units: unitsCount,
+      occupied: defaultOccupied,
+      revenue: defaultRevenue,
+      growth: defaultGrowth,
       manager: data.manager?.trim() || 'Quản lý cơ sở',
+      phone: data.phone?.trim() || '1900 6868',
       status: data.status || 'active',
       accessHours: data.accessHours || '06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)',
       timezone: data.timezone || 'Asia/Ho_Chi_Minh'
     }
 
+    // Tự động phân bổ gian kho chuẩn S, M, L, XL theo quy mô cơ sở
+    const countPerSize = Math.max(1, Math.floor(unitsCount / 4))
+    const remainder = unitsCount - countPerSize * 3
+    const distribution: Array<{ size: 'S' | 'M' | 'L' | 'XL'; type: 'Small' | 'Medium' | 'Large' | 'Extra Large'; floor: number; zone: string; count: number }> = [
+      { size: 'S', type: 'Small', floor: 1, zone: 'Khu A', count: countPerSize },
+      { size: 'M', type: 'Medium', floor: 2, zone: 'Khu B', count: countPerSize },
+      { size: 'L', type: 'Large', floor: 3, zone: 'Khu C', count: countPerSize },
+      { size: 'XL', type: 'Extra Large', floor: 4, zone: 'Khu D', count: Math.max(1, remainder) }
+    ]
+
+    const newUnits: StorageUnit[] = []
+    let assignedOccupied = 0
+    distribution.forEach(({ size, type, floor, zone, count }) => {
+      const spec = UNIT_SPECS[size]
+      for (let i = 1; i <= count; i++) {
+        const unitNumber = String(i).padStart(3, '0')
+        const unitCode = `${code}-${size}-${unitNumber}`
+        const isOccupied = assignedOccupied < defaultOccupied && i <= 2
+        if (isOccupied) assignedOccupied++
+        newUnits.push({
+          id: unitCode,
+          code: unitCode,
+          customerCode: unitCode,
+          size,
+          sizeCode: size,
+          type,
+          dimensions: {
+            lengthM: spec.lengthM,
+            widthM: spec.widthM,
+            heightM: spec.heightM
+          },
+          doorDimensions: {
+            widthM: 1.2,
+            heightM: 2.4
+          },
+          areaM2: spec.areaM2,
+          volumeM3: spec.volumeM3,
+          maxLoadKg: size === 'S' ? 600 : size === 'M' ? 1200 : size === 'L' ? 2000 : 3500,
+          allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
+          prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
+          price: spec.priceMonthly,
+          deposit: spec.priceMonthly,
+          floor,
+          zone,
+          climate: false,
+          status: isOccupied ? 'occupied' : 'available',
+          facility: newFacility.name,
+          facilityName: newFacility.name,
+          facilityId: newFacility.id,
+          version: 1
+        } as unknown as StorageUnit)
+      }
+    })
+
     setState(prev => {
       const nextFacilities = [newFacility, ...prev.facilities]
+      const nextUnits = [...prev.units, ...newUnits]
       try {
         localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
+        localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
       } catch {}
       return {
         ...prev,
-        facilities: nextFacilities
+        facilities: nextFacilities,
+        units: nextUnits
       }
     })
 
@@ -3623,8 +3685,8 @@ rentals: Array.isArray(parsed.rentals)
       })
       const updatedFacility = nextFacilities.find(f => f.id === facilityId || f.code === facilityId)
       const nextUnits = updatedFacility && updates.name ? prev.units.map(u => {
-        if (u.facilityId === facilityId || u.facilityId === updatedFacility.id) {
-          return { ...u, facilityName: updatedFacility.name }
+        if (u.facilityId === facilityId || u.facilityId === updatedFacility.id || (updatedFacility.code && u.facilityId === updatedFacility.code)) {
+          return { ...u, facilityName: updatedFacility.name, facility: updatedFacility.name }
         }
         return u
       }) : prev.units
@@ -3656,8 +3718,9 @@ rentals: Array.isArray(parsed.rentals)
     }
 
     setState(prev => {
+      const targetFac = prev.facilities.find(f => f.id === facilityId || f.code === facilityId)
       const nextFacilities = prev.facilities.filter(f => f.id !== facilityId && f.code !== facilityId)
-      const nextUnits = prev.units.filter(u => u.facilityId !== facilityId)
+      const nextUnits = prev.units.filter(u => u.facilityId !== facilityId && (!targetFac?.code || u.facilityId !== targetFac.code) && (!targetFac?.id || u.facilityId !== targetFac.id))
       try {
         localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
         localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
@@ -3668,6 +3731,7 @@ rentals: Array.isArray(parsed.rentals)
         units: nextUnits
       }
     })
+
     return { success: true }
   }
 
