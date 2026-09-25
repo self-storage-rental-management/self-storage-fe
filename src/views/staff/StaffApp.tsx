@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
-import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input } from '../../components/ui'
+import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input, Select } from '../../components/ui'
 import StaffFeeField from './StaffFeeField'
 import StaffPaymentUpload from './StaffPaymentUpload'
 import ProfileView from '../ProfileView'
@@ -39,6 +39,7 @@ type StaffReturn = Omit<(typeof RETURNS)[number], 'status'> & {
 }
 type TicketStatus = 'open' | 'in-progress' | 'waiting-customer' | 'resolved'
 type StaffTicket = Omit<TicketItem, 'status'> & { status: TicketStatus }
+type StaffListSort = 'deadline-asc' | 'deadline-desc' | 'name-asc'
 
 const formatDate = (value?: string) => { if (!value) return 'Chưa xác định'; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN') }
 const formatDateTime = (value: string) => { const [date, time] = value.split(' · '); return `${formatDate(date)}${time ? ' · ' + formatTime(time) : ''}` }
@@ -61,6 +62,17 @@ const toDateInputValue = (dateLabel: string) => {
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
+
+const sortStaffList = <T,>(items: T[], sort: StaffListSort, deadlineOf: (item: T) => string, nameOf: (item: T) => string) =>
+  [...items].sort((left, right) => {
+    if (sort === 'name-asc') return nameOf(left).localeCompare(nameOf(right), 'vi')
+    const leftTime = new Date(deadlineOf(left)).getTime()
+    const rightTime = new Date(deadlineOf(right)).getTime()
+    if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) return 0
+    if (Number.isNaN(leftTime)) return 1
+    if (Number.isNaN(rightTime)) return -1
+    return sort === 'deadline-desc' ? rightTime - leftTime : leftTime - rightTime
+  })
 
 const sharedReservationStatus = (reservation: StorageReservation): ReservationStatus => {
   if (reservation.status === 'awaiting_review') return 'REVIEW_REQUIRED'
@@ -296,6 +308,14 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [ticketTab, setTicketTab] = useState('Mở Mới')
   const [reservationSearch, setReservationSearch] = useState('')
   const [reservationStatus, setReservationStatus] = useState('all')
+  const [reservationDateFilter, setReservationDateFilter] = useState('')
+  const [reservationSort, setReservationSort] = useState<StaffListSort>('deadline-asc')
+  const [checkinStatusFilter, setCheckinStatusFilter] = useState('all')
+  const [checkinDateFilter, setCheckinDateFilter] = useState('')
+  const [checkinSort, setCheckinSort] = useState<StaffListSort>('deadline-asc')
+  const [returnStatusFilter, setReturnStatusFilter] = useState('all')
+  const [returnDateFilter, setReturnDateFilter] = useState('')
+  const [returnSort, setReturnSort] = useState<StaffListSort>('deadline-asc')
   const [scheduledReturnIds, setScheduledReturnIds] = useState<Set<string>>(new Set())
   const [returnScheduleDrafts, setReturnScheduleDrafts] = useState<Record<string, string>>({})
   const [checkinChecks, setCheckinChecks] = useState<Record<string, boolean>>({})
@@ -437,11 +457,12 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
 
   const normalizedSearch = reservationSearch.trim().toLowerCase()
   const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 }
-  const filteredReservations = reservations.filter(r => {
+  const filteredReservations = sortStaffList(reservations.filter(r => {
     const matchesStatus = reservationStatus === 'all' || r.status === reservationStatus
+    const matchesDate = !reservationDateFilter || toDateInputValue(r.checkInDeadline || r.appointmentDate) === reservationDateFilter
     const searchText = [r.id, r.customer, r.phone, r.email, r.identityId, r.facility, r.unit].join(' ').toLowerCase()
-    return matchesStatus && (!normalizedSearch || searchText.includes(normalizedSearch))
-  })
+    return matchesStatus && matchesDate && (!normalizedSearch || searchText.includes(normalizedSearch))
+  }), reservationSort, reservation => reservation.checkInDeadline || reservation.appointmentDate, reservation => reservation.customer)
   const facilityTickets = staffTickets.filter(ticket => isFacilityVisible(user, ticket.facilityId, ticket.facility))
   const fitEvaluation = selectedCheckin ? evaluateFit(actualDimensions, Number(actualWeight), selectedCheckin.unit) : null
   const reservationForCheckin = selectedCheckin ? reservations.find(reservation => reservation.id === selectedCheckin.reservationId) : null
@@ -470,6 +491,18 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const reservation = reservations.find(item => item.id === checkin.reservationId)
     return !reservation || (reservation.status !== 'CANCELLED' && reservation.status !== 'EXPIRED')
   })
+  const displayedCheckins = sortStaffList(
+    eligibleCheckins.filter(checkin => checkin.status !== 'no-show' && (checkinStatusFilter === 'all' || checkin.status === checkinStatusFilter) && (!checkinDateFilter || toDateInputValue(checkin.checkInDeadline || checkin.appointmentDate) === checkinDateFilter)),
+    checkinSort,
+    checkin => checkin.checkInDeadline || checkin.appointmentDate,
+    checkin => checkin.customer,
+  )
+  const displayedReturns = sortStaffList(
+    returns.filter(returnItem => (returnStatusFilter === 'all' || returnItem.status === returnStatusFilter) && (!returnDateFilter || toDateInputValue(returnScheduleDrafts[returnItem.id] || returnItem.returnDate) === returnDateFilter)),
+    returnSort,
+    returnItem => returnScheduleDrafts[returnItem.id] || returnItem.returnDate,
+    returnItem => returnItem.customer,
+  )
   const scheduledRenewals = hub.renewals.filter(renewal =>
     renewal.status === 'appointment_scheduled' &&
     isFacilityVisible(user, renewal.facilityId, hub.rentals.find(rental => rental.id === renewal.rentalId)?.facilityName)
@@ -592,7 +625,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
             title={'Theo Dõi Đơn Đặt Giữ Kho'}
             subtitle={'Nhân viên theo dõi trạng thái và chuẩn bị Nhận kho; hồ sơ hàng hóa “Khác” do quản lý duyệt.'}
           />
-            <Card className="p-4 mb-4"><div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-3"><Input label={'Tìm hồ sơ'} value={reservationSearch} onChange={event => setReservationSearch(event.target.value)} placeholder={'Mã đơn, tên, SĐT, thư điện tử, CCCD, cơ sở, mã kho'} /><div><label className="text-sm font-medium text-stone-700">{'Trạng thái chuẩn'}</label><select value={reservationStatus} onChange={event => setReservationStatus(event.target.value)} className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white"><option value="all">{'Tất cả'}</option>{(['CREATED', 'REVIEW_REQUIRED', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'COMPLETED', 'CANCELLED', 'EXPIRED'] as ReservationStatus[]).map(status => <option key={status} value={status}>{statusLabelMap[status]}</option>)}</select></div></div><p className="mt-2 text-xs text-stone-500">{filteredReservations.length}/{reservations.length} {'hồ sơ phù hợp'}</p></Card>
+            <Card className="p-4 mb-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_210px_190px_210px]"><Input label={'Tìm hồ sơ'} value={reservationSearch} onChange={event => setReservationSearch(event.target.value)} placeholder={'Mã đơn, tên, SĐT, thư điện tử, CCCD, cơ sở, mã kho'} /><Select label={'Trạng thái'} value={reservationStatus} onChange={event => setReservationStatus(event.target.value)}><option value="all">{'Tất cả'}</option>{(['CREATED', 'REVIEW_REQUIRED', 'AWAITING_DEPOSIT', 'DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'COMPLETED', 'CANCELLED', 'EXPIRED'] as ReservationStatus[]).map(status => <option key={status} value={status}>{statusLabelMap[status]}</option>)}</Select><Input label={'Ngày đến hạn'} type="date" value={reservationDateFilter} onChange={event => setReservationDateFilter(event.target.value)} /><Select label={'Sắp xếp'} value={reservationSort} onChange={event => setReservationSort(event.target.value as StaffListSort)}><option value="deadline-asc">{'Sắp đến hạn trước'}</option><option value="deadline-desc">{'Hạn xa nhất trước'}</option><option value="name-asc">{'Tên khách hàng A–Z'}</option></Select></div><p className="mt-2 text-xs text-stone-500">{filteredReservations.length}/{reservations.length} {'hồ sơ phù hợp · mặc định ưu tiên hạn gần nhất'}</p></Card>
           <Card>
             <Table>
               <Thead>
@@ -651,8 +684,9 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
             title={'Nhận kho / Bàn giao'}
             subtitle={'Xử lý nhận kho và bàn giao kho cho khách'}
           />
+          <Card className="mb-4 p-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Select label={'Lọc theo trạng thái'} value={checkinStatusFilter} onChange={event => setCheckinStatusFilter(event.target.value)}><option value="all">{'Tất cả trạng thái'}</option><option value="scheduled">{'Đã lên lịch'}</option><option value="pending-payment">{'Chờ thanh toán'}</option><option value="completed">{'Hoàn tất'}</option></Select><Input label={'Ngày đến hạn'} type="date" value={checkinDateFilter} onChange={event => setCheckinDateFilter(event.target.value)} /><Select label={'Sắp xếp'} value={checkinSort} onChange={event => setCheckinSort(event.target.value as StaffListSort)}><option value="deadline-asc">{'Sắp đến hạn trước'}</option><option value="deadline-desc">{'Hạn xa nhất trước'}</option><option value="name-asc">{'Tên khách hàng A–Z'}</option></Select></div><p className="mt-2 text-xs text-stone-500">{displayedCheckins.length}/{eligibleCheckins.filter(checkin => checkin.status !== 'no-show').length} {'hồ sơ phù hợp'}</p></Card>
           <div className="space-y-3">
-            {eligibleCheckins.filter(c => c.status !== 'no-show').map(c => {
+            {displayedCheckins.map(c => {
               const appointmentAt = new Date(`${c.appointmentDate} ${c.appointmentTime}`)
               const deadlineAt = new Date(c.checkInDeadline)
               const canMarkNoShow = (!Number.isNaN(appointmentAt.getTime()) && Date.now() > appointmentAt.getTime()) || (!Number.isNaN(deadlineAt.getTime()) && Date.now() > deadlineAt.getTime())
@@ -700,6 +734,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
             title={"Nghiệm thu trả kho"}
             subtitle={'Đối chiếu hiện trạng trước–sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng'}
           />
+          <Card className="mb-4 p-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Select label={'Lọc theo trạng thái'} value={returnStatusFilter} onChange={event => setReturnStatusFilter(event.target.value)}><option value="all">{'Tất cả trạng thái'}</option><option value="pending">{'Chờ xử lý'}</option><option value="waiting-customer">{'Chờ khách hàng phản hồi'}</option><option value="refunded">{'Đã hoàn cọc'}</option></Select><Input label={'Ngày trả kho'} type="date" value={returnDateFilter} onChange={event => setReturnDateFilter(event.target.value)} /><Select label={'Sắp xếp'} value={returnSort} onChange={event => setReturnSort(event.target.value as StaffListSort)}><option value="deadline-asc">{'Sắp đến hạn trước'}</option><option value="deadline-desc">{'Hạn xa nhất trước'}</option><option value="name-asc">{'Tên khách hàng A–Z'}</option></Select></div><p className="mt-2 text-xs text-stone-500">{displayedReturns.length}/{returns.length} {'hồ sơ phù hợp'}</p></Card>
           <Card>
             <Table>
               <Thead>
@@ -715,7 +750,7 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                 </tr>
               </Thead>
               <Tbody>
-                {returns.map(r => (
+                {displayedReturns.map(r => (
                   <Tr key={r.id}>
                     <Td><span className="font-mono text-xs text-slate-500">{r.id}</span></Td>
                     <Td>
