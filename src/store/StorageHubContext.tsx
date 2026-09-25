@@ -249,10 +249,19 @@ const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
   })
 }
 
-const normalizeStoredTickets = (tickets: TicketItem[]): TicketItem[] => tickets.map(ticket => ({
-  ...ticket,
-  facility: ticket.facility === 'Downtown Storage' ? 'Kho Việt – Cơ sở Quận 1' : ticket.facility === 'Riverside Storage' ? 'Kho Việt – Cơ sở Bình Dương' : ticket.facility
-}))
+const normalizeStoredTickets = (tickets: TicketItem[]): TicketItem[] => tickets.map(ticket => {
+  const facility = ticket.facility === 'Downtown Storage'
+    ? 'Kho Việt – Cơ sở Quận 1'
+    : ticket.facility === 'Riverside Storage'
+      ? 'Kho Việt – Cơ sở Bình Dương'
+      : ticket.facility
+  const canonicalFacility = findCanonicalFacility(ticket.facilityId, facility)
+  return {
+    ...ticket,
+    facility,
+    facilityId: ticket.facilityId || canonicalFacility?.id
+  }
+})
 
 // Map demo units to typed StorageUnit using purely metric dimensions
 const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
@@ -1069,7 +1078,7 @@ interface StorageHubContextValue extends StorageHubState {
   updateBusinessConfig: (newConfig: Partial<BusinessConfig>, actor: User) => void
   respondSupportTicket: (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => void
   replySupportTicket: (ticketId: string, replyText: string, customer: User) => void
-  createSupportTicket: (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string, customer: User) => void
+  createSupportTicket: (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string, customer: User) => TicketItem
   deleteResolvedSupportTicket: (ticketId: string, customer: User) => void
   registerCustomer: (params: { name: string; email: string; phone?: string }) => User
   createInternalAccount: (params: { name: string; email: string; phone?: string; role: CompanyRole; facility?: string }, actor: User) => User
@@ -1209,7 +1218,7 @@ renewals: Array.isArray(parsed.renewals)
   : [],
 maintenanceTasks: parsed.maintenanceTasks || [],
 staffTasks: parsed.staffTasks || [],
-accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
+accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && (!credential.reservationId || !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId)) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
 checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654') : []),
 rentals: Array.isArray(parsed.rentals)
   ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654')))
@@ -3129,7 +3138,13 @@ rentals: Array.isArray(parsed.rentals)
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung phản hồi.')
     const ticket = state.tickets.find(item => item.id === ticketId)
     if (!ticket) throw new Error('Không tìm thấy yêu cầu hỗ trợ.')
-    if (!isFacilityVisible(staffUser, ticket.facilityId, ticket.facility)) throw new Error('Bạn không có quyền xử lý yêu cầu của cơ sở khác.')
+    const staffHasFacilityScope = staffUser.role !== 'staff' || Boolean(
+      (staffUser.facilityId && staffUser.facilityId !== 'ALL') ||
+      (staffUser.facility && staffUser.facility !== 'All facilities')
+    )
+    if (!staffHasFacilityScope || !isFacilityVisible(staffUser, ticket.facilityId, ticket.facility)) {
+      throw new Error('Tài khoản Staff chỉ được xử lý phiếu thuộc đúng facility scope của mình.')
+    }
     const now = new Date().toISOString()
     setState(prev => ({
       ...prev,
@@ -3148,7 +3163,8 @@ rentals: Array.isArray(parsed.rentals)
         return {
           ...t,
           status: nextStatus,
-          assignedStaff: staffUser.name,
+          assignedStaff: t.assignedStaff || staffUser.name,
+          assignedStaffInitials: t.assignedStaffInitials || staffUser.name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase(),
           updatedAt: now,
           messages: newMsg ? [...t.messages, newMsg] : t.messages
         }
@@ -3156,7 +3172,7 @@ rentals: Array.isArray(parsed.rentals)
     }))
   }
 
-  const createSupportTicket = (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string, customer: User) => {
+  const createSupportTicket = (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string, customer: User): TicketItem => {
     assertPermission(customer, 'view_support')
     if (customer.role !== 'customer') throw new Error('Chỉ khách hàng được tạo yêu cầu hỗ trợ từ cổng khách hàng.')
     if (!ticket.subject.trim() || !initialMessage.trim()) throw new Error('Tiêu đề và nội dung yêu cầu là bắt buộc.')
@@ -3181,6 +3197,7 @@ rentals: Array.isArray(parsed.rentals)
       ...prev,
       tickets: [newTicket, ...prev.tickets]
     }))
+    return newTicket
   }
 
   const registerCustomer = ({ name, email, phone = '' }: { name: string; email: string; phone?: string }): User => {

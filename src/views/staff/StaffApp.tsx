@@ -3,14 +3,15 @@ import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Lay
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input } from '../../components/ui'
 import StaffFeeField from './StaffFeeField'
 import StaffPaymentUpload from './StaffPaymentUpload'
+import StaffSupportPanel from './StaffSupportPanel'
 import ProfileView from '../ProfileView'
 import type { User } from '../../types'
 import type { CheckInRecord, Facility, ReturnCase, StorageReservation, StorageUnit } from '../../types/storageHub'
 import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
 import StaffFileUpload from './StaffFileUpload'
 import { formatVnd } from '../../i18n/currency'
-const isFacilityVisible = (user: User, _facilityId?: string, name?: string) => !user.facility || user.facility === name
 import { useStorageHub } from '../../store/StorageHubContext'
+import { isFacilityVisible } from '../../domain/managerRules'
 
 type ReservationStatus = 'CREATED' | 'REVIEW_REQUIRED' | 'AWAITING_DEPOSIT' | 'DEPOSIT_PAID' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED'
 type StaffReservation = Omit<(typeof RESERVATIONS)[number], 'status'> & {
@@ -336,7 +337,13 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [feeDetails, setFeeDetails] = useState<Record<string, string>>({})
 
   // Support Tickets state
-  const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() => SUPPORT_TICKETS.filter(item => isFacilityVisible(user, item.facilityId, item.facility)))
+  const hasFacilityScope = user.role !== 'staff' || Boolean(
+    (user.facilityId && user.facilityId !== 'ALL') ||
+    (user.facility && user.facility !== 'All facilities')
+  )
+  const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() => hasFacilityScope
+    ? SUPPORT_TICKETS.filter(item => isFacilityVisible(user, item.facilityId, item.facility))
+    : [])
   const [selectedStaffTicket, setSelectedStaffTicket] = useState<StaffTicket | null>(null)
   const [assignedStaffByTicket, setAssignedStaffByTicket] = useState<Record<string, string>>(() =>
     Object.fromEntries(SUPPORT_TICKETS.map(ticket => {
@@ -444,7 +451,9 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
     const searchText = [r.id, r.customer, r.phone, r.email, r.identityId, r.facility, r.unit].join(' ').toLowerCase()
     return matchesStatus && (!normalizedSearch || searchText.includes(normalizedSearch))
   })
-  const facilityTickets = staffTickets.filter(ticket => isFacilityVisible(user, ticket.facilityId, ticket.facility))
+  const facilityTickets = hasFacilityScope
+    ? staffTickets.filter(ticket => isFacilityVisible(user, ticket.facilityId, ticket.facility))
+    : []
   const fitEvaluation = selectedCheckin ? evaluateFit(actualDimensions, Number(actualWeight), selectedCheckin.unit) : null
   const reservationForCheckin = selectedCheckin ? reservations.find(reservation => reservation.id === selectedCheckin.reservationId) : null
   const selectedAppointmentDate = selectedCheckin ? new Date(selectedCheckin.appointmentDate) : null
@@ -753,134 +762,15 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
       )}
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
-      {page === 'support' && (() => {
-        const openCount = facilityTickets.filter(tItem => tItem.status === 'open').length
-        const inProgressCount = facilityTickets.filter(tItem => tItem.status === 'in-progress').length
-        const waitingCustomerCount = facilityTickets.filter(tItem => tItem.status === 'waiting-customer').length
-        const resolvedCount = facilityTickets.filter(tItem => tItem.status === 'resolved').length
-        const tabList = ['Mở Mới', 'Đang Xử Lý', 'Chờ khách hàng', 'Đã Giải Quyết']
-        const tabStatus: Record<string, TicketStatus> = {
-          'Mở Mới': 'open',
-          'Đang Xử Lý': 'in-progress',
-          'Chờ khách hàng': 'waiting-customer',
-          'Đã Giải Quyết': 'resolved',
-        }
-        const currentActiveTab = tabStatus[ticketTab] ?? 'open'
-        const displayedTickets = facilityTickets.filter(tItem => tItem.status === currentActiveTab)
-        const tabActive = tabList.find(tab => tabStatus[tab] === currentActiveTab) ?? tabList[0]
-
-        return (
-          <div className="fade-in space-y-5">
-            <SectionHeader
-              title={"Hỗ trợ khách hàng"}
-              subtitle={"Tiếp nhận và giải quyết yêu cầu hỗ trợ của khách hàng"}
-            />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <StatCard
-                title={"Chờ phản hồi"}
-                value={openCount}
-                delta={openCount > 0 ? ('Cần xử lý gấp') : ('Đã giải quyết hết')}
-                deltaPositive={openCount === 0}
-                icon={Icon.alert}
-                iconBg="bg-amber-50 text-amber-800"
-              />
-              <StatCard
-                title={"Đang xử lý"}
-                value={inProgressCount}
-                icon={Icon.refresh}
-                iconBg="bg-blue-50 text-blue-700"
-              />
-              <StatCard title={'Chờ khách hàng'} value={waitingCustomerCount} icon={Icon.support} iconBg="bg-violet-50 text-violet-700" />
-              <StatCard
-                title={"Đã giải quyết"}
-                value={resolvedCount}
-                icon={Icon.check}
-                iconBg="bg-emerald-50 text-emerald-700"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <Tabs
-                tabs={tabList}
-                active={tabActive}
-                onChange={setTicketTab}
-              />
-            </div>
-
-            <Card>
-              <Table>
-                <Thead>
-                  <tr>
-                    <Th>{'Mã phiếu'}</Th>
-                    <Th>{'Khách hàng'}</Th>
-                    <Th>{'Nội dung và cơ sở'}</Th>
-                    <Th>{'Danh mục'}</Th>
-                    <Th>{'Mức độ'}</Th>
-                    <Th>{'Ngày mở'}</Th>
-                    <Th>{'nhân viên phụ trách'}</Th>
-                    <Th>{'Trạng thái'}</Th>
-                    <Th className="text-right">{'Thao tác'}</Th>
-                  </tr>
-                </Thead>
-                <Tbody>
-                  {displayedTickets.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="text-center py-10 text-stone-400 text-sm">
-                        {"Chưa có phiếu hỗ trợ"}
-                      </td>
-                    </tr>
-                  ) : (
-                    displayedTickets.map(tItem => (
-                      <Tr key={tItem.id}>
-                        <Td><span className="font-mono text-xs font-semibold text-stone-600">{tItem.id}</span></Td>
-                        <Td>
-                          <div className="flex items-center gap-2">
-                            <Avatar name={tItem.customer} size="sm" />
-                            <div>
-                              <span className="text-sm font-medium text-stone-900 block">{tItem.customer}</span>
-                              <span className="text-[11px] text-stone-400">{tItem.email}</span>
-                            </div>
-                          </div>
-                        </Td>
-                        <Td className="max-w-xs">
-                          <p className="font-medium text-sm text-stone-800 truncate">{tItem.subject}</p>
-                          <p className="text-xs text-stone-400">{tItem.facility} · Gian kho {tItem.unit}</p>
-                        </Td>
-                        <Td><Badge variant="muted">{tItem.category}</Badge></Td>
-                        <Td>{s(tItem.priority, { high: 'error', medium: 'warning', low: 'muted' })}</Td>
-                        <Td className="text-xs text-stone-500">{formatDateTime(tItem.created)}</Td>
-                        <Td>
-                          {assignedStaffByTicket[tItem.id]
-                            ? <div className="flex items-center gap-2"><Avatar name={assignedStaffByTicket[tItem.id]} size="sm" /><span className="text-xs font-medium text-stone-700">{assignedStaffByTicket[tItem.id]}</span></div>
-                            : <span className="text-xs italic text-stone-400">{'Chưa có nhân viên nhận'}</span>}
-                        </Td>
-                        <Td>{s(tItem.status, { open: 'info', 'in-progress': 'warning', 'waiting-customer': 'info', resolved: 'success' })}</Td>
-                        <Td className="text-right">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedStaffTicket(tItem)
-                              setTicketNewStatus(tItem.status)
-                              setTicketEvidence('')
-                              setTicketEscalated(false)
-                              setTicketEscalationReason('')
-                              setRespondModal(true)
-                            }}
-                          >
-                            {"Phản hồi"} ({tItem.messages?.length ?? 1})
-                          </Button>
-                        </Td>
-                      </Tr>
-                    ))
-                  )}
-                </Tbody>
-              </Table>
-            </Card>
-          </div>
-        )
-      })()}
+      {page === 'support' && (
+        <StaffSupportPanel
+          user={user}
+          tickets={hub.tickets}
+          respondSupportTicket={hub.respondSupportTicket}
+          canManageSupport={true}
+          showToast={showToast}
+        />
+      )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
       {page === 'profile' && (
@@ -1112,109 +1002,183 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
       </Modal>
 
       {/* Staff Ticket Resolution Modal */}
-      <Modal closeLabel="Đóng hộp thoại" open={respondModal} onClose={() => setRespondModal(false)} title={'Phản hồi và xử lý phiếu hỗ trợ'}>
+      <Modal
+        closeLabel="Đóng hộp thoại"
+        open={respondModal}
+        onClose={() => setRespondModal(false)}
+        size="xl"
+        className="!p-0 overflow-hidden bg-[#f4f1ea] border border-[#e7e2d8]"
+        contentClassName="p-5 sm:p-6 bg-[#f4f1ea] space-y-4"
+        customHeader={
+          <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#e7e2d8] sticky top-0 z-20">
+            <h2
+              id="modal-title"
+              className="text-[15px] font-semibold text-[#191b20]"
+              style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+            >
+              Phiếu hỗ trợ
+            </h2>
+            <button
+              type="button"
+              aria-label="Đóng"
+              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
+              onClick={() => setRespondModal(false)}
+            >
+              <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        }
+      >
         {activeStaffTicket && (
           <div className="space-y-4">
-            <div className="rounded-lg bg-[#292a27] p-4 text-white">
-              <div className="flex justify-between items-center text-xs font-mono text-[#e9a12c]">
-                <span>{activeStaffTicket.id}</span>
-                <span>{activeStaffTicket.facility}</span>
+            {/* Card thông tin ticket */}
+            <div className="rounded-[10px] border border-[#e7e2d8] bg-white p-5 sm:p-6 shadow-2xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="inline-flex items-center px-2.5 py-0.5 rounded font-mono font-bold tracking-wide text-[11.5px]"
+                  style={{ background: '#efece3', color: 'var(--ink)' }}
+                >
+                  {activeStaffTicket.id}
+                </span>
+                {activeStaffTicket.status === 'resolved' ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#edf7f0] text-[#2f9e5c] border border-[#bfe7ce]">
+                    Đã giải quyết
+                  </span>
+                ) : activeStaffTicket.status === 'in-progress' ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#fef3eb] text-[#e0680f] border border-[#fcd9bd]">
+                    Đang xử lý
+                  </span>
+                ) : activeStaffTicket.status === 'waiting-customer' ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#efece3] text-[#767268] border border-[#deddd2]">
+                    Chờ khách hàng
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#efece3] text-[#767268] border border-[#deddd2]">
+                    Chờ xử lý
+                  </span>
+                )}
               </div>
-              <h3 className="font-bold text-base mt-1 text-stone-100">{activeStaffTicket.subject}</h3>
-              <p className="text-xs text-stone-300 mt-1">
-                {'Khách thuê: '}{activeStaffTicket.customer} ({activeStaffTicket.email}) · Gian kho {activeStaffTicket.unit}
-              </p>
+
+              <h3
+                className="mt-3 text-[19px] font-bold leading-snug text-[#191b20]"
+                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+              >
+                {activeStaffTicket.subject}
+              </h3>
+
+              <div className="mt-3 pt-3 border-t border-[#e7e2d8]/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[13px] text-[#767268]">
+                <div>
+                  <span>{activeStaffTicket.customer}</span>
+                  <span className="mx-1.5">·</span>
+                  <span>{activeStaffTicket.email}</span>
+                </div>
+                <div className="font-medium text-[#191b20] sm:text-right">
+                  <span>{activeStaffTicket.facility}</span>
+                  <span className="mx-1.5">·</span>
+                  <span>Gian kho <b className="font-bold text-[#191b20]">{activeStaffTicket.unit}</b></span>
+                </div>
+              </div>
             </div>
 
             {/* Chatbox */}
-            <div className="max-h-72 overflow-y-auto rounded-xl border border-stone-200 bg-stone-100/80 p-3 shadow-inner">
-              <div className="space-y-3">
-                {activeStaffTicket.messages?.map(msg => {
-                  const isStaff = msg.role === 'staff'
-                  const isSystem = msg.role === 'system'
-                  return (
-                    <div key={msg.id} className={`flex ${isSystem ? 'justify-center' : isStaff ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs shadow-sm ${
-                        isSystem
-                          ? 'bg-stone-200 text-stone-600'
-                          : isStaff
-                            ? 'rounded-br-md bg-blue-600 text-white'
-                            : 'rounded-bl-md border border-amber-200 bg-amber-50 text-stone-800'
-                      }`}>
-                        <div className={`mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isStaff ? 'text-blue-100' : 'text-stone-500'}`}>
-                          <span className={`font-bold ${isStaff ? 'text-white' : 'text-stone-800'}`}>{msg.sender}</span>
-                          <span>{msg.role === 'staff' ? ('nhân viên hỗ trợ') : msg.role === 'customer' ? ('Khách hàng') : ('Hệ thống')}</span>
-                          <span>· {formatDateTime(msg.time)}</span>
-                        </div>
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                      </div>
+            <div className="max-h-72 overflow-y-auto rounded-[10px] border border-[#e7e2d8] bg-[#faf8f4] p-4 space-y-3.5">
+              {activeStaffTicket.messages?.map(msg => {
+                const isStaff = msg.role === 'staff'
+                const isCustomer = msg.role === 'customer'
+
+                return (
+                  <div key={msg.id} className={`flex flex-col ${isStaff ? 'items-end' : 'items-start'}`}>
+                    <div className="mb-1 px-1 flex items-center gap-1.5 text-[11px] text-[#767268]">
+                      <span className="font-semibold text-[#191b20]">{msg.sender}</span>
+                      <span>·</span>
+                      <span>{isStaff ? 'Nhân viên hỗ trợ' : isCustomer ? 'Khách hàng' : 'Hệ thống'}</span>
+                      <span>·</span>
+                      <span>{formatDateTime(msg.time)}</span>
                     </div>
-                  )
-                })}
-                <div ref={chatEndRef} />
-              </div>
+                    <div
+                      className={`max-w-[75%] rounded-[10px] px-3.5 py-2.5 text-xs leading-relaxed shadow-2xs ${
+                        isStaff
+                          ? 'bg-[#fdece0] text-[#191b20] rounded-br-[3px] border border-[#fcd9bd]/60'
+                          : 'bg-white text-[#191b20] border border-[#e7e2d8] rounded-bl-[3px]'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed break-words">{msg.text}</p>
+                    </div>
+                  </div>
+                )
+              })}
+              <div ref={chatEndRef} />
             </div>
 
-            {/* Status Changer */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-stone-700 block mb-1">
-                  {'Cập Nhật Trạng Thái'}
+            {/* Status and current owner (Gộp 1 hàng ngang duy nhất) */}
+            <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-t border-[#e7e2d8]">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-[#191b20] whitespace-nowrap">
+                  Trạng thái:
                 </label>
                 <select
                   value={ticketNewStatus}
                   onChange={e => setTicketNewStatus(e.target.value as TicketStatus)}
-                  className="w-full border border-stone-300 rounded-lg p-2 text-xs bg-white focus:ring-2 focus:ring-amber-500"
+                  className="rounded-[6px] border border-[#e7e2d8] bg-white px-3 py-1.5 text-xs text-[#191b20] font-medium focus:outline-none focus:ring-2 focus:ring-[#e0680f] cursor-pointer"
                 >
-                  <option value="open">{'Mở Mới / Chờ xử lý'}</option>
-                  <option value="in-progress">{'Đang Khắc Phục'}</option>
-                  <option value="waiting-customer">{'Chờ khách hàng Phản Hồi'}</option>
-                  <option value="resolved">{'Đã Giải Quyết Xong'}</option>
+                  <option value="in-progress">Đang xử lý</option>
+                  <option value="waiting-customer">Chờ khách hàng phản hồi</option>
+                  <option value="resolved">Đã giải quyết xong</option>
+                  <option value="open">Mở mới / Chờ xử lý</option>
                 </select>
               </div>
-              <div>
-                <label className="text-xs font-medium text-stone-700 block mb-1">
-                  {'Nhân Viên Tiếp Nhận'}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={assignedStaffByTicket[activeStaffTicket.id] || ('Chưa có nhân viên nhận xử lý')}
-                    className="min-w-0 flex-1 border border-stone-200 rounded-lg p-2 text-xs bg-stone-100 text-stone-600"
-                  />
-                  {assignedStaffByTicket[activeStaffTicket.id] !== user.name && (
-                    <Button size="sm" variant="outline" onClick={() => {
-                      setAssignedStaffByTicket(previous => ({ ...previous, [activeStaffTicket.id]: user.name }))
-                      setTicketNewStatus('in-progress')
-                      showToast(`${user.name} đã nhận xử lý ${activeStaffTicket.id}.`)
-                    }}>{'Nhận xử lý'}</Button>
-                  )}
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-[#191b20] whitespace-nowrap">
+                  Phụ trách:
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-[#e0680f] text-white text-[11px] font-bold flex items-center justify-center shadow-xs">
+                    {(activeStaffTicket.assignedStaff || assignedStaffByTicket[activeStaffTicket.id] || user.name || 'DS').slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-xs font-bold text-[#191b20]">
+                    {activeStaffTicket.assignedStaff || assignedStaffByTicket[activeStaffTicket.id] || user.name || 'Chưa gán'}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Staff Reply */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-stone-700">
-                {'Nội Dung Phản Hồi Chính Thức Tới Khách'}
+            <div>
+              <label className="block text-xs font-semibold text-[#191b20] mb-1.5">
+                Nội dung phản hồi chính thức *
               </label>
               <textarea
                 rows={3}
-                placeholder={'Nhập hướng dẫn khắc phục sự cố, cấp lại mã PIN hoặc thông báo cho khách...'}
+                placeholder="Nhập hướng dẫn khắc phục sự cố, cấp lại mã PIN hoặc thông báo cho khách..."
                 value={staffReplyText}
                 onChange={e => setStaffReplyText(e.target.value)}
-                className="w-full border border-stone-300 rounded-lg p-2.5 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                className="w-full rounded-[6px] border border-[#e7e2d8] bg-white px-3 py-2 text-xs text-[#191b20] placeholder:text-[#767268]/60 focus:outline-none focus:ring-2 focus:ring-[#e0680f] focus:border-[#e0680f] transition resize-none leading-relaxed"
               />
             </div>
 
             <Input label={'Bằng chứng đính kèm (mã tệp/đường dẫn)'} value={ticketEvidence} onChange={event => setTicketEvidence(event.target.value)} />
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2"><label className="text-xs font-semibold text-amber-900"><input type="checkbox" checked={ticketEscalated} onChange={event => { setTicketEscalated(event.target.checked); if (event.target.checked) setTicketNewStatus('in-progress') }} /> {'Chuyển cấp cho quản lý/đội kỹ thuật'}</label>{ticketEscalated && <Input label={'Lý do chuyển cấp'} value={ticketEscalationReason} onChange={event => setTicketEscalationReason(event.target.value)} />}</div>
+            <div className="rounded-[8px] border border-amber-200 bg-amber-50/70 p-3 space-y-2">
+              <label className="text-xs font-semibold text-amber-900 flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={ticketEscalated} onChange={event => { setTicketEscalated(event.target.checked); if (event.target.checked) setTicketNewStatus('in-progress') }} />
+                <span>Chuyển cấp cho quản lý/đội kỹ thuật</span>
+              </label>
+              {ticketEscalated && <Input label={'Lý do chuyển cấp'} value={ticketEscalationReason} onChange={event => setTicketEscalationReason(event.target.value)} />}
+            </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
-              <Button variant="outline" onClick={() => setRespondModal(false)}>{"Hủy"}</Button>
-              <Button
-                variant="primary"
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#e7e2d8]">
+              <button
+                type="button"
+                onClick={() => setRespondModal(false)}
+                className="rounded-[6px] border border-[#e7e2d8] bg-white px-4 py-2 text-xs font-semibold text-[#191b20] hover:bg-[#faf8f4] transition cursor-pointer"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
                 disabled={!staffReplyText.trim() || (ticketEscalated && !ticketEscalationReason.trim())}
                 onClick={() => {
                   const newMsg = staffReplyText.trim() ? {
@@ -1235,16 +1199,25 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
                       }
                     })
                   )
-                  setAssignedStaffByTicket(previous => ({ ...previous, [activeStaffTicket.id]: user.name }))
+                  setAssignedStaffByTicket(previous => ({
+                    ...previous,
+                    [activeStaffTicket.id]: previous[activeStaffTicket.id] || activeStaffTicket.assignedStaff || user.name
+                  }))
                   setStaffReplyText('')
                   setTicketEvidence('')
                   setTicketEscalated(false)
                   setTicketEscalationReason('')
+                  setRespondModal(false)
                   showToast(`${user.name} đã gửi phản hồi cho ${activeStaffTicket.id}.`)
                 }}
+                className={`rounded-[6px] px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 ${
+                  !staffReplyText.trim() || (ticketEscalated && !ticketEscalationReason.trim())
+                    ? 'bg-[#d8d4c9] text-[#767268] cursor-not-allowed border-none'
+                    : 'bg-[#e0680f] text-white hover:bg-[#b8540c] shadow-sm cursor-pointer border-none'
+                }`}
               >
-                {"Lưu và gửi phản hồi"}
-              </Button>
+                Gửi phản hồi &amp; Cập nhật
+              </button>
             </div>
           </div>
         )}

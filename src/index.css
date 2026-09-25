@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&family=Oswald:wght@500;600;700&display=swap');
 @import 'tailwindcss';
 
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --font-oswald: 'Oswald', system-ui, sans-serif;
   --text-xs: 12px;
   --text-xs--line-height: 16px;
   --text-sm: 14px;
@@ -73,12 +74,22 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
 }
 
 :root {
-  --ink: #24241f;
-  --ink-soft: #5f5e55;
+  /* StorageHub Core Tokens */
+  --navy: #181b22;
+  --rust: #e0680f;
+  --rust-deep: #b8540c;
+  --bg: #f4f1ea;
+  --paper: #ffffff;
+  --line: #e7e2d8;
+  --ink: #191b20;
+  --ink-soft: #767268;
+  --green: #2f9e5c;
+  --red: #d64545;
+
+  /* Legacy aliases for compatibility */
   --canvas: #f3f2eb;
   --surface: #ffffff;
   --surface-soft: #f8f7f1;
-  --line: #deddd2;
   --charcoal: #292a27;
   --charcoal-soft: #353630;
   --amber: #e9a12c;
@@ -87,6 +98,11 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
   --success: #287a4b;
   --danger: #b63e32;
   --radius: 8px;
+}
+
+.font-oswald {
+  font-family: 'Oswald', 'Inter', system-ui, sans-serif;
+  letter-spacing: 0.06em;
 }
 
 html,

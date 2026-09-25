@@ -6,7 +6,9 @@ import type { User } from '../../types'
 import type { Facility, StorageUnit, StorageHold, UnitType } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
-import type { TicketItem } from '../../data/demoDatabase'
+import { FACILITIES, type TicketItem } from '../../data/demoDatabase'
+import CustomerSupportSection from './CustomerSupportSection'
+import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 
 const CUSTOMER_FACILITY_DISPLAY: Record<string, { code: string; name: string; address: string }> = Object.fromEntries(
   FACILITIES.map(facility => [facility.id, { code: facility.code, name: facility.name, address: facility.address }])
@@ -575,6 +577,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   }
 
   // Support
+  const [supportChatbotOpen, setSupportChatbotOpen] = useState(false)
   const [ticketOpen, setTicketOpen] = useState(false)
   const [ticketSubject, setTicketSubject] = useState('')
   const [ticketCategory, setTicketCategory] = useState('Access & Entry')
@@ -677,9 +680,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     const facCode = facilities.find(f => f.id === facilityId)?.code
     const physical = units.filter(unit => (unit.facilityId === facilityId || (facCode && unit.facilityId === facCode)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName))).length
     const capacityHeld = activeUnassignedCapacityHolds.filter(hold => (hold.facilityId === facilityId || (facCode && hold.facilityId === facCode)) && (!unitTypeName || unitTypeMatches(hold.unitTypeName, unitTypeName))).length
-    const heldType = temporaryHoldTarget ? unitTypes.find(type => type.id === temporaryHoldTarget.unitTypeId) : undefined
-    const temporaryHeld = hasActiveTemporarySlot && (temporaryHoldTarget?.facilityId === facilityId || (facCode && temporaryHoldTarget?.facilityId === facCode)) && (!unitTypeName || Boolean(heldType && unitTypeMatches(heldType.name, unitTypeName))) ? 1 : 0
-    return Math.max(0, physical - capacityHeld - temporaryHeld)
+    return Math.max(0, physical - capacityHeld)
   }
   const contractExpiryNotifications = myRentals.flatMap(rental => {
     if (rental.status !== 'active') return []
@@ -2106,89 +2107,38 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       )}
 
       {/* ── SUPPORT ─────────────────────────────────────────── */}
-      {page === 'support' && (() => {
-        const categoryLabels: Record<string, string> = {
-          'Access & Entry': 'Ra vào & mã PIN',
-          'Billing & Invoices': 'Thanh toán & hóa đơn',
-          'Unit Condition': 'Hiện trạng gian kho',
-          'General Inquiry': 'Tư vấn chung'
-        }
-        const tabOptions = [
-          { value: 'All', label: 'Tất cả', count: myTickets.length },
-          { value: 'open', label: 'Chờ tiếp nhận', count: myTickets.filter(t => t.status === 'open').length },
-          { value: 'in-progress', label: 'Đang xử lý', count: myTickets.filter(t => t.status === 'in-progress').length },
-          { value: 'resolved', label: 'Đã giải quyết', count: myTickets.filter(t => t.status === 'resolved').length }
-        ]
-        const formatTicketTime = (value: string) => {
-          const parsed = new Date(value)
-          return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('vi-VN')
-        }
-        const filteredTickets = myTickets.filter(t => {
-          const matchTab =
-            supportTab === 'All' ||
-            (supportTab === 'open' && t.status === 'open') ||
-            (supportTab === 'in-progress' && t.status === 'in-progress') ||
-            (supportTab === 'resolved' && t.status === 'resolved')
-          const query = supportSearch.toLowerCase().trim()
-          return matchTab && (!query || t.subject.toLowerCase().includes(query) || t.id.toLowerCase().includes(query))
-        }).sort((a, b) => new Date(b.updatedAt || b.created).getTime() - new Date(a.updatedAt || a.created).getTime())
-
-        return (
-          <div className="fade-in space-y-6">
-            <SectionHeader
-              title={'Tổng Đài Hỗ Trợ Khách Hàng'}
-              action={
-                <Button size="sm" onClick={() => setTicketOpen(true)}>
-                  {Icon.plus} {'Tạo yêu cầu mới'}
-                </Button>
+      {page === 'support' && (
+        <CustomerSupportSection
+          user={user}
+          tickets={tickets}
+          onOpenChatbot={() => setSupportChatbotOpen(true)}
+          onOpenCreateModal={() => setTicketOpen(true)}
+          onOpenConversation={t => {
+            setSelectedTicket(t)
+            setConversationOpen(true)
+          }}
+          onDeleteResolved={t =>
+            setConfirmation({
+              title: 'Xóa yêu cầu đã giải quyết',
+              message: `Bạn có chắc muốn xóa yêu cầu ${t.id} – “${t.subject}”? Dữ liệu trao đổi của yêu cầu này sẽ bị xóa khỏi danh sách.`,
+              confirmLabel: 'Xóa yêu cầu',
+              tone: 'danger',
+              onConfirm: () => {
+                try {
+                  deleteResolvedSupportTicket(t.id, user)
+                  if (selectedTicket?.id === t.id) {
+                    setSelectedTicket(null)
+                    setConversationOpen(false)
+                  }
+                  showToast('Đã xóa yêu cầu hỗ trợ.')
+                } catch (error) {
+                  showToast(error instanceof Error ? error.message : 'Không thể xóa yêu cầu hỗ trợ.')
+                }
               }
-            />
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Card className="p-4"><p className="text-xs text-stone-500">{'Tổng yêu cầu'}</p><p className="mt-1 text-2xl font-extrabold">{myTickets.length}</p></Card>
-              <Card className="p-4"><p className="text-xs text-stone-500">{'Đang cần xử lý'}</p><p className="mt-1 text-2xl font-extrabold text-amber-700">{myTickets.filter(t => t.status !== 'resolved').length}</p></Card>
-              <Card className="p-4"><p className="text-xs text-stone-500">{'Đã giải quyết'}</p><p className="mt-1 text-2xl font-extrabold text-emerald-700">{myTickets.filter(t => t.status === 'resolved').length}</p></Card>
-            </div>
-
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {tabOptions.map(tab => <button key={tab.value} type="button" onClick={() => setSupportTab(tab.value)} className={`rounded-full border px-4 py-2 text-xs font-bold transition ${supportTab === tab.value ? 'border-amber-500 bg-amber-500 text-stone-950 shadow-sm' : 'border-stone-200 bg-white text-stone-600 hover:border-amber-300'}`}>{tab.label} <span className={`ml-1 rounded-full px-1.5 py-0.5 ${supportTab === tab.value ? 'bg-white/60' : 'bg-stone-100'}`}>{tab.count}</span></button>)}
-              </div>
-              <label className="relative ml-auto block w-full xl:w-80">
-                <span className="sr-only">Tìm phiếu hỗ trợ</span>
-                <input type="search" placeholder={'Tìm phiếu...'} value={supportSearch} onChange={e => setSupportSearch(e.target.value)} className="w-full rounded-lg border border-stone-300 bg-white py-2.5 pl-10 pr-4 text-sm" />
-                <span className="pointer-events-none absolute left-3 top-3 text-stone-400">{SearchIcon}</span>
-              </label>
-            </div>
-
-            <div className="space-y-3">
-              {filteredTickets.map(ticket => {
-                const latestMessage = ticket.messages[ticket.messages.length - 1]
-                const priorityLabel = ticket.priority === 'high' ? ('Ảnh hưởng cao') : ticket.priority === 'medium' ? ('Ảnh hưởng vừa') : ('Ảnh hưởng thấp')
-                return <Card id={`customer-record-${ticket.id}`} tabIndex={-1} key={ticket.id} className={`overflow-hidden ${focusedNotificationTarget === ticket.id ? 'notification-target-reveal' : ''}`}>
-                  <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-amber-700">{ticket.id}</span>{badgeFor(ticket.status)}<Badge variant={ticket.priority === 'high' ? 'error' : ticket.priority === 'medium' ? 'warning' : 'muted'}>{priorityLabel}</Badge></div>
-                      <h2 className="mt-2 text-base font-bold text-stone-950">{ticket.subject}</h2>
-                      <p className="mt-1 text-xs text-stone-500">{categoryLabels[ticket.category] || ticket.category} · {ticket.facility}{ticket.unit && ticket.unit !== '—' ? ` · ${ticket.unit}` : ''}</p>
-                      <div className="mt-4 grid grid-cols-3 gap-2">
-                        {[
-                          { label: 'Đã gửi yêu cầu', done: true, current: ticket.status === 'open' },
-                          { label: 'Staff đang xử lý', done: ticket.status !== 'open', current: ticket.status === 'in-progress' },
-                          { label: 'Xử lý thành công', done: ticket.status === 'resolved', current: ticket.status === 'resolved' }
-                        ].map((step, index) => <div key={step.label} className={`rounded-lg border px-3 py-2 text-center text-[11px] font-bold ${step.current ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-sm' : step.done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-stone-200 bg-stone-50 text-stone-400'}`}><span className="block text-sm">{step.done ? '✓' : index + 1}</span>{step.label}</div>)}
-                      </div>
-                      {latestMessage && <div className="mt-3 rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-600"><b>{latestMessage.role === 'staff' ? ('Staff phản hồi:') : ('Bạn:')}</b> <span className="line-clamp-1">{latestMessage.text}</span></div>}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end"><p className="text-xs text-stone-400">{formatTicketTime(ticket.updatedAt || ticket.created)}</p>{ticket.assignedStaff && <p className="text-xs text-stone-500">{'Phụ trách'}: <b>{ticket.assignedStaff}</b></p>}<div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => { setSelectedTicket(ticket); setConversationOpen(true) }}>{'Mở trao đổi'} · {ticket.messages.length}</Button>{ticket.status === 'resolved' && <Button variant="danger" size="sm" onClick={() => setConfirmation({ title: 'Xóa yêu cầu đã giải quyết', message: `Bạn có chắc muốn xóa yêu cầu ${ticket.id} – “${ticket.subject}”? Dữ liệu trao đổi của yêu cầu này sẽ bị xóa khỏi danh sách.`, confirmLabel: 'Xóa yêu cầu', tone: 'danger', onConfirm: () => { try { deleteResolvedSupportTicket(ticket.id, user); if (selectedTicket?.id === ticket.id) { setSelectedTicket(null); setConversationOpen(false) }; showToast('Đã xóa yêu cầu hỗ trợ.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa yêu cầu hỗ trợ.') } } })}>Xóa</Button>}</div></div>
-                  </div>
-                </Card>
-              })}
-              {!filteredTickets.length && <Card className="p-10 text-center"><p className="font-semibold text-stone-700">{'Không có yêu cầu phù hợp'}</p><p className="mt-1 text-sm text-stone-500">{'Thử đổi bộ lọc hoặc tạo một yêu cầu hỗ trợ mới.'}</p></Card>}
-            </div>
-          </div>
-        )
-      })()}
+            })
+          }
+        />
+      )}
 
       {/* ── POLICIES PAGE ─────────────────────────────────────── */}
       {page === 'policies' && (
@@ -3342,9 +3292,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     category: ticketCategory,
                     priority: ticketPriority,
                     status: 'open',
-                    facility: relatedRental?.facilityName || relatedHold?.facilityName || ('Không áp dụng'),
-                    unit: relatedRental?.unitId || relatedHold?.assignedUnitId || relatedHold?.unitTypeName || '—',
-                    facilityId: relatedRental?.facilityId || relatedHold?.facilityId,
+                    facility: relatedRental?.facilityName || relatedHold?.facilityName || user.facility || 'Kho Việt – Cơ sở Quận 1',
+                    unit: relatedRental?.unitId || relatedHold?.assignedUnitId || relatedHold?.unitTypeName || 'Tư vấn chung',
+                    facilityId: relatedRental?.facilityId || relatedHold?.facilityId || user.facilityId || 'fac-001',
                     relatedType: relatedType as 'rental' | 'reservation' | 'general',
                     relatedId: relatedId || undefined
                   }, ticketDescription.trim(), user)
@@ -3363,6 +3313,14 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           </div>
         </div>
       </Modal>
+
+      <CustomerSupportChatbot
+        user={user}
+        isOpen={supportChatbotOpen}
+        onToggleOpen={setSupportChatbotOpen}
+        onOpenTicketList={() => setPage('support')}
+        showToast={showToast}
+      />
       </div>
     </Layout>
   )
