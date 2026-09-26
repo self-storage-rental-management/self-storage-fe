@@ -22,10 +22,11 @@ import type {
   RenewalRecord,
   MaintenanceTask,
   ReservedPeriod,
-  FacilityTask
+  FacilityTask,
+  FacilityUnitDistribution
 } from '../types/storageHub'
 import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
-import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, type TicketItem } from '../data/demoDatabase'
+import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
 import {
   calculateManagerReturnSettlement,
@@ -237,12 +238,61 @@ const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
   manager: f.manager,
   status: 'active',
   accessHours: '06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)',
-  timezone: 'Asia/Ho_Chi_Minh'
+  timezone: 'Asia/Ho_Chi_Minh',
+  unitDistribution: f.unitDistribution
 }))
 
 const LEGACY_FACILITY_NAMES: Record<string, string> = {
   'Downtown Storage': 'Kho Việt – Cơ sở Quận 1',
   'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
+}
+
+export const isExcludedFacility = (f: { code?: string; id?: string; city?: string; name?: string }) => {
+  const code = (f.code || f.id || '').toUpperCase()
+  const city = (f.city || '').toLowerCase()
+  const name = (f.name || '').toLowerCase()
+  return (
+    code.startsWith('HN-') ||
+    code.startsWith('DN-') ||
+    city.includes('hà nội') ||
+    city.includes('ha noi') ||
+    city.includes('đà nẵng') ||
+    city.includes('da nang') ||
+    name.includes('hà nội') ||
+    name.includes('ha noi') ||
+    name.includes('đà nẵng') ||
+    name.includes('da nang')
+  )
+}
+
+export const isExcludedUnit = (u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => {
+  const code = (u.code || u.id || u.customerCode || '').toUpperCase()
+  const facId = (u.facilityId || '').toUpperCase()
+  const facName = (u.facilityName || u.facility || '').toLowerCase()
+  return (
+    code.startsWith('HN-') ||
+    code.startsWith('DN-') ||
+    facId.startsWith('HN-') ||
+    facId.startsWith('DN-') ||
+    facName.includes('hà nội') ||
+    facName.includes('ha noi') ||
+    facName.includes('đà nẵng') ||
+    facName.includes('da nang')
+  )
+}
+
+export const isExcludedRelated = (item: any) => {
+  if (!item) return false
+  const facilityId = (item.facilityId || item.facilityCode || item.facility || item.id || '').toUpperCase()
+  const facilityName = (item.facilityName || item.facility || '').toLowerCase()
+  return (
+    facilityId.startsWith('HN-') ||
+    facilityId.startsWith('DN-') ||
+    facilityName.includes('hà nội') ||
+    facilityName.includes('ha noi') ||
+    facilityName.includes('đà nẵng') ||
+    facilityName.includes('da nang')
+  )
 }
 
 const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
@@ -252,9 +302,35 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
   if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES
-  return facilities.map(stored => {
+  const cleaned = facilities.filter(f => !isExcludedFacility(f))
+  if (cleaned.length === 0) return INITIAL_FACILITIES
+  return cleaned.map(stored => {
     const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
     if (!canonical) return stored
+    if (canonical.id === 'fac-001') {
+      return {
+        ...stored,
+        ...canonical,
+        units: 23,
+        occupied: 0,
+        available: 23,
+        revenue: 72500000,
+        growth: 8.4,
+        unitDistribution: { S: 5, M: 5, L: 8, XL: 5 }
+      }
+    }
+    if (canonical.id === 'fac-002') {
+      return {
+        ...stored,
+        ...canonical,
+        units: 20,
+        occupied: 5,
+        available: 15,
+        revenue: 57500000,
+        growth: 6.2,
+        unitDistribution: { S: 5, M: 5, L: 5, XL: 5 }
+      }
+    }
     return {
       ...canonical,
       ...stored,
@@ -268,7 +344,7 @@ const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
   })
 }
 
-const normalizeStoredTickets = (tickets: TicketItem[]): TicketItem[] => tickets.map(ticket => {
+const normalizeStoredTickets = (tickets: TicketItem[]): TicketItem[] => tickets.filter(t => !isExcludedRelated(t)).map(ticket => {
   const facility = ticket.facility === 'Downtown Storage'
     ? 'Kho Việt – Cơ sở Quận 1'
     : ticket.facility === 'Riverside Storage'
@@ -364,7 +440,8 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
 // upgrading older browser snapshots to the current Customer catalog metadata.
 const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
   if (!Array.isArray(units) || units.length === 0) return INITIAL_UNITS
-  return units.map(stored => {
+  const cleaned = units.filter(u => !isExcludedUnit(u))
+  const mapped = cleaned.map(stored => {
     const canonical = INITIAL_UNITS.find(unit => unit.id === stored.id || unit.code === stored.code)
     if (!canonical) return stored
     return {
@@ -384,6 +461,13 @@ const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
       deposit: stored.deposit ?? canonical.deposit
     }
   })
+  const existingIds = new Set(mapped.map(u => u.id))
+  for (const initUnit of INITIAL_UNITS) {
+    if (!existingIds.has(initUnit.id)) {
+      mapped.push(initUnit)
+    }
+  }
+  return mapped
 }
 
 const DEMO_SMALL_MONTHLY = UNIT_TYPES.find(item => item.id === 'small')!.monthlyPrice
@@ -1108,8 +1192,8 @@ interface StorageHubContextValue extends StorageHubState {
   requestUserPasswordReset: (userId: string, actor: User) => void
   resetToDemoData: () => void
   // Facility & Unit CRUD
-  createFacility: (data: Partial<Facility>, actor?: User) => Facility
-  updateFacility: (facilityId: string, updates: Partial<Facility>, actor?: User) => void
+  createFacility: (data: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => Facility
+  updateFacility: (facilityId: string, updates: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => void
   deleteFacility: (facilityId: string, actor?: User) => { success: boolean; reason?: string }
   createUnit: (data: Partial<StorageUnit>, actor: User) => StorageUnit
   updateUnit: (unitId: string, updates: Partial<StorageUnit>, actor: User) => void
@@ -1210,7 +1294,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.filter((hold: StorageReservation) => !['RSV-6618', 'RSV-2104', 'RSV-9654'].includes(hold.id)).map((hold: StorageReservation) => {
+        const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.filter((hold: StorageReservation) => !['RSV-6618', 'RSV-2104', 'RSV-9654'].includes(hold.id) && !isExcludedRelated(hold)).map((hold: StorageReservation) => {
             const facility = findCanonicalFacility(hold.facilityId, hold.facilityName)
             return normalizeReservationPricing({
               ...hold,
@@ -1227,41 +1311,41 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           rolePermissions: normalizeRuntimeRolePermissions(parsed.rolePermissions),
           units: (Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS).map(unit => unit.currentRentalId === 'RNT-9654' || (unit.currentRentalId && RETIRED_EXPIRY_TEST_RENTAL_IDS.has(unit.currentRentalId)) ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(period.reservationId)) } : unit),
           holds: normalizedHolds,
-          contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654')) : INITIAL_CONTRACTS,
-payments: Array.isArray(parsed.payments) ? parsed.payments.filter((payment: StoragePayment) => payment.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(payment.reservationId) && payment.rentalId !== 'RNT-9654' && (!payment.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(payment.rentalId))) : [],
-renewals: Array.isArray(parsed.renewals)
-  ? parsed.renewals.filter((renewal: RenewalRecord) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(renewal.rentalId)).map((renewal: RenewalRecord) => {
-      const rental = Array.isArray(parsed.rentals)
-        ? parsed.rentals.find(
-            (item: RentalRecord) => item.id === renewal.rentalId
-          )
-        : undefined
-      const unit = INITIAL_UNITS.find(
-        item => item.id === (rental?.unitId || renewal.unitId)
-      )
+          contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654' && !isExcludedRelated(contract))) : INITIAL_CONTRACTS,
+          payments: Array.isArray(parsed.payments) ? parsed.payments.filter((payment: StoragePayment) => payment.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(payment.reservationId) && payment.rentalId !== 'RNT-9654' && (!payment.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(payment.rentalId)) && !isExcludedRelated(payment)) : [],
+          renewals: Array.isArray(parsed.renewals)
+            ? parsed.renewals.filter((renewal: RenewalRecord) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(renewal.rentalId) && !isExcludedRelated(renewal)).map((renewal: RenewalRecord) => {
+                const rental = Array.isArray(parsed.rentals)
+                  ? parsed.rentals.find(
+                      (item: RentalRecord) => item.id === renewal.rentalId
+                    )
+                  : undefined
+                const unit = INITIAL_UNITS.find(
+                  item => item.id === (rental?.unitId || renewal.unitId)
+                )
 
-      return {
-        ...renewal,
-        renewalMonths: renewal.renewalMonths || 1,
-        facilityId:
-          unit?.facilityId || rental?.facilityId || renewal.facilityId
-      }
-    })
-  : [],
-maintenanceTasks: parsed.maintenanceTasks || [],
-staffTasks: parsed.staffTasks || [],
-accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && (!credential.reservationId || !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId)) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId))) : [],
-checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654') : []),
-rentals: Array.isArray(parsed.rentals)
-  ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654')))
-  : INITIAL_RENTALS,
-          returns: Array.isArray(parsed.returns) ? parsed.returns.filter((returnCase: ReturnCase) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(returnCase.rentalId)) : [],
-          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId) && !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(activity.entityId) && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(activity.entityId)) : INITIAL_ACTIVITIES,
+                return {
+                  ...renewal,
+                  renewalMonths: renewal.renewalMonths || 1,
+                  facilityId:
+                    unit?.facilityId || rental?.facilityId || renewal.facilityId
+                }
+              })
+            : [],
+          maintenanceTasks: Array.isArray(parsed.maintenanceTasks) ? parsed.maintenanceTasks.filter((task: any) => !isExcludedRelated(task)) : [],
+          staffTasks: Array.isArray(parsed.staffTasks) ? parsed.staffTasks.filter((task: any) => !isExcludedRelated(task)) : [],
+          accessCredentials: Array.isArray(parsed.accessCredentials) ? parsed.accessCredentials.filter((credential: AccessCredential) => credential.reservationId !== 'RSV-9654' && (!credential.reservationId || !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(credential.reservationId)) && credential.rentalId !== 'RNT-9654' && (!credential.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(credential.rentalId)) && !isExcludedRelated(credential)) : [],
+          checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654' && !isExcludedRelated(checkin)) : []),
+          rentals: Array.isArray(parsed.rentals)
+            ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654' && !isExcludedRelated(rental))))
+            : INITIAL_RENTALS,
+          returns: Array.isArray(parsed.returns) ? parsed.returns.filter((returnCase: ReturnCase) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(returnCase.rentalId) && !isExcludedRelated(returnCase)) : [],
+          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId) && !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(activity.entityId) && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(activity.entityId) && !isExcludedRelated(activity)) : INITIAL_ACTIVITIES,
           loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
           sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
           securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : INITIAL_SECURITY_ALERTS,
           profileChangeRequests: Array.isArray(parsed.profileChangeRequests) ? parsed.profileChangeRequests : INITIAL_PROFILE_CHANGE_REQUESTS,
-          tickets: Array.isArray(parsed.tickets) ? normalizeStoredTickets(parsed.tickets as TicketItem[]) : TICKETS,
+          tickets: Array.isArray(parsed.tickets) ? normalizeStoredTickets((parsed.tickets as TicketItem[]).filter(t => !isExcludedRelated(t))) : TICKETS,
           config: parsed.config || DEFAULT_BUSINESS_CONFIG
         }
       }
@@ -3826,64 +3910,261 @@ rentals: Array.isArray(parsed.rentals)
   }
 
   // ── Facility & Unit CRUD ──
-  const createFacility = (data: Partial<Facility>, actor?: User): Facility => {
+  const createFacility = (data: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User): Facility => {
     if (actor) assertPermission(actor, 'view_facilities')
     const id = data.id || `fac-${Date.now().toString(36)}`
-    const code = data.code || id.toUpperCase()
+    const code = (data.code?.trim() || id).toUpperCase()
+
+    // Determine unit breakdown
+    let countS = 0
+    let countM = 0
+    let countL = 0
+    let countXL = 0
+
+    if (data.unitDistribution) {
+      countS = Math.max(0, Number(data.unitDistribution.S) || 0)
+      countM = Math.max(0, Number(data.unitDistribution.M) || 0)
+      countL = Math.max(0, Number(data.unitDistribution.L) || 0)
+      countXL = Math.max(0, Number(data.unitDistribution.XL) || 0)
+    }
+
+    const customTotal = countS + countM + countL + countXL
+    let unitsCount = customTotal > 0 ? customTotal : (data.units ?? 20)
+
+    if (customTotal === 0 && unitsCount > 0) {
+      // Smart proportional distribution fallback if unitDistribution was not provided
+      const base = Math.floor(unitsCount / 4)
+      let rem = unitsCount % 4
+      countS = base + (rem-- > 0 ? 1 : 0)
+      countM = base + (rem-- > 0 ? 1 : 0)
+      countL = base + (rem-- > 0 ? 1 : 0)
+      countXL = base + (rem-- > 0 ? 1 : 0)
+    }
+
+    unitsCount = countS + countM + countL + countXL
+    const defaultOccupied = Math.max(0, Math.min(unitsCount, data.occupied ?? 0))
+    const defaultRevenue = data.revenue ?? 0
+    const defaultGrowth = data.growth ?? 0
+
+    const unitDistribution: FacilityUnitDistribution = {
+      S: countS,
+      M: countM,
+      L: countL,
+      XL: countXL
+    }
+
     const newFacility: Facility = {
       id,
       code,
-      name: data.name?.trim() || `Cơ sở ${code}`,
+      name: data.name?.trim() || `Kho Việt – Cơ sở ${code}`,
       address: data.address?.trim() || 'TP. Hồ Chí Minh',
       city: data.city?.trim() || 'TP. Hồ Chí Minh',
-      rating: data.rating ?? 4.9,
-      available: data.available ?? 0,
+      rating: data.rating ?? 5.0,
+      available: data.available ?? Math.max(0, unitsCount - defaultOccupied),
       price: data.price || '5.500.000đ',
-      climate: data.climate ?? true,
-      security: data.security || '24/7',
-      image: data.image || 'photo-1553413077-190dd305871c',
-      units: data.units ?? 20,
-      occupied: data.occupied ?? 0,
-      revenue: data.revenue ?? 0,
-      growth: data.growth ?? 0,
+      climate: data.climate ?? false,
+      security: data.security || 'Khóa riêng tự quản, Bảo vệ cổng',
+      image: data.image || (data.city?.includes('Hà Nội') ? 'photo-1586864387967-d02ef85d93e8' : 'photo-1553413077-190dd305871c'),
+      units: unitsCount,
+      occupied: defaultOccupied,
+      revenue: defaultRevenue,
+      growth: defaultGrowth,
       manager: data.manager?.trim() || 'Quản lý cơ sở',
+      phone: data.phone?.trim() || '1900 6868',
       status: data.status || 'active',
       accessHours: data.accessHours || '06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)',
-      timezone: data.timezone || 'Asia/Ho_Chi_Minh'
+      timezone: data.timezone || 'Asia/Ho_Chi_Minh',
+      unitDistribution
     }
+
+    const allDist: Array<{ size: 'S' | 'M' | 'L' | 'XL'; type: 'Small' | 'Medium' | 'Large' | 'Extra Large'; floor: number; zone: string; count: number }> = [
+      { size: 'S', type: 'Small', floor: 1, zone: 'Khu A', count: countS },
+      { size: 'M', type: 'Medium', floor: 2, zone: 'Khu B', count: countM },
+      { size: 'L', type: 'Large', floor: 3, zone: 'Khu C', count: countL },
+      { size: 'XL', type: 'Extra Large', floor: 4, zone: 'Khu D', count: countXL }
+    ]
+    const distribution = allDist.filter(item => item.count > 0)
+
+    const newUnits: StorageUnit[] = []
+    let assignedOccupied = 0
+    distribution.forEach(({ size, type, floor, zone, count }) => {
+      const spec = UNIT_SPECS[size]
+      for (let i = 1; i <= count; i++) {
+        const unitNumber = String(i).padStart(3, '0')
+        const unitCode = `${code}-${size}-${unitNumber}`
+        const isOccupied = assignedOccupied < defaultOccupied
+        if (isOccupied) assignedOccupied++
+        newUnits.push({
+          id: unitCode,
+          code: unitCode,
+          customerCode: unitCode,
+          size,
+          sizeCode: size,
+          type,
+          dimensions: {
+            lengthM: spec.lengthM,
+            widthM: spec.widthM,
+            heightM: spec.heightM
+          },
+          doorDimensions: {
+            widthM: 1.2,
+            heightM: 2.4
+          },
+          areaM2: spec.areaM2,
+          volumeM3: spec.volumeM3,
+          maxLoadKg: size === 'S' ? 600 : size === 'M' ? 1200 : size === 'L' ? 2000 : 3500,
+          allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
+          prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
+          price: spec.priceMonthly,
+          deposit: spec.priceMonthly,
+          floor,
+          zone,
+          climate: false,
+          status: isOccupied ? 'occupied' : 'available',
+          facility: newFacility.name,
+          facilityName: newFacility.name,
+          facilityId: newFacility.id,
+          version: 1
+        } as unknown as StorageUnit)
+      }
+    })
 
     setState(prev => {
       const nextFacilities = [newFacility, ...prev.facilities]
+      const nextUnits = [...prev.units, ...newUnits]
       try {
         localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
+        localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
       } catch {}
       return {
         ...prev,
-        facilities: nextFacilities
+        facilities: nextFacilities,
+        units: nextUnits
       }
     })
 
     return newFacility
   }
 
-  const updateFacility = (facilityId: string, updates: Partial<Facility>, actor?: User) => {
+  const updateFacility = (facilityId: string, updates: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => {
     if (actor) assertPermission(actor, 'view_facilities')
     setState(prev => {
+      const targetFac = prev.facilities.find(f => f.id === facilityId || f.code === facilityId)
+      if (!targetFac) return prev
+
+      const targetFacId = targetFac.id
+      const targetFacCode = targetFac.code || targetFacId
+
+      let nextUnits = prev.units
+      let updatedUnitDist = updates.unitDistribution || targetFac.unitDistribution
+
+      // If unitDistribution was updated, adjust units accordingly!
+      if (updates.unitDistribution) {
+        const dist = updates.unitDistribution
+        const sizes: Array<{ size: 'S' | 'M' | 'L' | 'XL'; type: 'Small' | 'Medium' | 'Large' | 'Extra Large'; floor: number; zone: string }> = [
+          { size: 'S', type: 'Small', floor: 1, zone: 'Khu A' },
+          { size: 'M', type: 'Medium', floor: 2, zone: 'Khu B' },
+          { size: 'L', type: 'Large', floor: 3, zone: 'Khu C' },
+          { size: 'XL', type: 'Extra Large', floor: 4, zone: 'Khu D' }
+        ]
+
+        let workingUnits = [...prev.units]
+
+        sizes.forEach(({ size, type, floor, zone }) => {
+          const targetCount = Math.max(0, dist[size] ?? 0)
+          const currentUnitsOfSize = workingUnits.filter(u => 
+            (u.facilityId === targetFacId || u.facilityId === targetFacCode) &&
+            ((u as any).size === size || (u.type === type))
+          )
+
+          if (currentUnitsOfSize.length < targetCount) {
+            // Add more units
+            const needed = targetCount - currentUnitsOfSize.length
+            const spec = UNIT_SPECS[size]
+            let maxNum = 0
+            currentUnitsOfSize.forEach(u => {
+              const match = u.code.match(/-(\d+)$/)
+              if (match) {
+                const n = parseInt(match[1], 10)
+                if (n > maxNum) maxNum = n
+              }
+            })
+            for (let i = 1; i <= needed; i++) {
+              const unitNum = String(maxNum + i).padStart(3, '0')
+              const unitCode = `${targetFacCode}-${size}-${unitNum}`
+              workingUnits.push({
+                id: unitCode,
+                code: unitCode,
+                customerCode: unitCode,
+                size,
+                sizeCode: size,
+                type,
+                dimensions: {
+                  lengthM: spec.lengthM,
+                  widthM: spec.widthM,
+                  heightM: spec.heightM
+                },
+                doorDimensions: {
+                  widthM: 1.2,
+                  heightM: 2.4
+                },
+                areaM2: spec.areaM2,
+                volumeM3: spec.volumeM3,
+                maxLoadKg: size === 'S' ? 600 : size === 'M' ? 1200 : size === 'L' ? 2000 : 3500,
+                allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
+                prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
+                price: spec.priceMonthly,
+                deposit: spec.priceMonthly,
+                floor,
+                zone,
+                climate: false,
+                status: 'available',
+                facility: updates.name?.trim() || targetFac.name,
+                facilityName: updates.name?.trim() || targetFac.name,
+                facilityId: targetFacId,
+                version: 1
+              } as unknown as StorageUnit)
+            }
+          } else if (currentUnitsOfSize.length > targetCount) {
+            // Need to remove (current - target) units, BUT only if they are 'available'!
+            const toRemoveCount = currentUnitsOfSize.length - targetCount
+            const availableUnits = currentUnitsOfSize.filter(u => u.status === 'available')
+            const removeIds = new Set(availableUnits.slice(-toRemoveCount).map(u => u.id))
+            workingUnits = workingUnits.filter(u => !removeIds.has(u.id))
+          }
+        })
+
+        nextUnits = workingUnits
+      }
+
+      // If name was updated, update facilityName across all its units
+      if (updates.name) {
+        const facName = updates.name.trim()
+        nextUnits = nextUnits.map(u => {
+          if (u.facilityId === targetFacId || u.facilityId === targetFacCode) {
+            return { ...u, facilityName: facName, facility: facName }
+          }
+          return u
+        })
+      }
+
+      const facUnits = nextUnits.filter(u => u.facilityId === targetFacId || u.facilityId === targetFacCode)
+      const totalUnitsCount = facUnits.length || updates.units || targetFac.units
+      const availableUnitsCount = facUnits.filter(u => u.status === 'available').length
+      const occupiedUnitsCount = facUnits.filter(u => u.status === 'occupied').length
+
       const nextFacilities = prev.facilities.map(f => {
         if (f.id !== facilityId && f.code !== facilityId) return f
         return {
           ...f,
           ...updates,
-          id: f.id
+          id: f.id,
+          units: totalUnitsCount,
+          available: availableUnitsCount,
+          occupied: occupiedUnitsCount,
+          unitDistribution: updatedUnitDist || f.unitDistribution
         }
       })
-      const updatedFacility = nextFacilities.find(f => f.id === facilityId || f.code === facilityId)
-      const nextUnits = updatedFacility && updates.name ? prev.units.map(u => {
-        if (u.facilityId === facilityId || u.facilityId === updatedFacility.id) {
-          return { ...u, facilityName: updatedFacility.name }
-        }
-        return u
-      }) : prev.units
 
       try {
         localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
@@ -3912,8 +4193,9 @@ rentals: Array.isArray(parsed.rentals)
     }
 
     setState(prev => {
+      const targetFac = prev.facilities.find(f => f.id === facilityId || f.code === facilityId)
       const nextFacilities = prev.facilities.filter(f => f.id !== facilityId && f.code !== facilityId)
-      const nextUnits = prev.units.filter(u => u.facilityId !== facilityId)
+      const nextUnits = prev.units.filter(u => u.facilityId !== facilityId && (!targetFac?.code || u.facilityId !== targetFac.code) && (!targetFac?.id || u.facilityId !== targetFac.id))
       try {
         localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
         localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
@@ -3924,6 +4206,7 @@ rentals: Array.isArray(parsed.rentals)
         units: nextUnits
       }
     })
+
     return { success: true }
   }
 
