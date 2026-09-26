@@ -1665,8 +1665,9 @@ rentals: Array.isArray(parsed.rentals)
     endObj.setMonth(endObj.getMonth() + params.rentalMonths)
     const endDate = endObj.toISOString().split('T')[0]
 
-    // Customer đã chọn đúng mã gian kho trên trang browse-units. Chỉ giữ đúng gian
-    // đó; không còn để Manager chọn lại một gian khác sau khi khách đặt.
+    // Customer only chooses a facility and unit type. A physical unit is used here
+    // for capacity/door validation, but remains unassigned until the deposit is paid
+    // and a Manager allocates a compatible unit before check-in.
     const requestedPhysicalUnit = params.customerCatalogUnit
       ? state.units.find(unit => unit.id === params.customerCatalogUnit?.physicalUnitId || unit.id === params.customerCatalogUnit?.id || unit.code === params.customerCatalogUnit?.id)
       : undefined
@@ -1798,7 +1799,7 @@ rentals: Array.isArray(parsed.rentals)
 
     const pricingQuote: PricingQuote = {
       quoteId,
-      unitId: availableUnit.id,
+      unitId: unitType.id,
       facilityId: params.facilityId,
       baseMonthlyPrice: unitType.monthlyPrice,
       depositAmount: securityDepositAmount,
@@ -1821,11 +1822,10 @@ rentals: Array.isArray(parsed.rentals)
       customerAddress: params.customerAddress,
       identityId: params.identityId,
       facilityId: params.facilityId,
-      facilityName: availableUnit.facilityName,
-      unitId: availableUnit.id,
+      facilityName: params.customerCatalogUnit?.facilityName || availableUnit.facilityName,
+      unitId: unitType.id,
       unitTypeId: unitType.id,
       unitTypeName: unitType.name,
-      assignedUnitId: availableUnit.id,
       rentalMonths: params.rentalMonths,
       startDate,
       endDate,
@@ -1861,26 +1861,14 @@ rentals: Array.isArray(parsed.rentals)
       appointmentTime: params.appointmentTime,
       expiresAt: paymentExpiresAt || emailExpiresAt,
       evidence: [requiresGoodsReview
-        ? `${holdId} · Gian ${availableUnit.code} đã được giữ. Chờ khách xác minh email trước khi gửi Staff duyệt hàng hóa “Khác”.`
-        : `${holdId} · Đã xác nhận thông tin và giữ gian ${availableUnit.code}. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
+        ? `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ khách xác minh email trước khi gửi Staff duyệt hàng hóa “Khác”.`
+        : `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
       createdAt: now.toISOString()
     }
 
     setState(prev => ({
       ...prev,
-      units: prev.units.map(unit => !requiresGoodsReview && unit.id === availableUnit.id
-        ? {
-            ...unit,
-            status: 'reserved',
-            reservedPeriods: [...(unit.reservedPeriods || []).filter(period => period.reservationId !== holdId), {
-              reservationId: holdId,
-              customerName: params.customer.name,
-              startDate,
-              endDate
-            }],
-            nextAvailableDate: endDate
-          }
-        : unit),
+      units: prev.units,
       holds: [newReservation, ...prev.holds],
       activities: [
         {
@@ -1893,8 +1881,8 @@ rentals: Array.isArray(parsed.rentals)
           entityType: 'hold',
           entityId: holdId,
           notes: requiresGoodsReview
-            ? `Khách hàng xác nhận gian ${availableUnit.code}. Chờ xác minh email trước khi Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
-            : `Khách hàng xác nhận gian ${availableUnit.code}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 10 phút.`,
+            ? `Khách hàng chọn loại kho ${unitType.name}. Chờ xác minh email trước khi Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
+            : `Khách hàng chọn loại kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 10 phút.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -1904,7 +1892,7 @@ rentals: Array.isArray(parsed.rentals)
     return {
       outcome: 'PASS',
       hold: newReservation,
-      messageVi: requiresGoodsReview ? 'Kho đã được giữ. Vui lòng xác minh email để gửi hồ sơ hàng hóa cho Staff duyệt.' : 'Kho đã được giữ. Vui lòng xác minh email để chuyển sang bước thanh toán cọc.',
+      messageVi: requiresGoodsReview ? 'Suất kho theo loại đã được giữ. Vui lòng xác minh email để gửi hồ sơ hàng hóa cho Staff duyệt.' : 'Suất kho theo loại đã được giữ. Vui lòng xác minh email để chuyển sang bước thanh toán cọc.',
       messageEn: 'Request created. Verify your email before the facility review.'
     }
   }
@@ -1931,17 +1919,16 @@ rentals: Array.isArray(parsed.rentals)
     if (isGoodsReview) {
       const earlier = state.holds.some(item => item.id !== reservation.id && item.status === 'awaiting_review' && item.goodsReviewStatus === 'PENDING' && item.facilityId === reservation.facilityId && item.unitTypeId === reservation.unitTypeId && item.createdAt < reservation.createdAt && (!item.goodsReviewDueAt || new Date(item.goodsReviewDueAt).getTime() > Date.now()))
       if (earlier) throw new Error('Vui lòng xử lý hồ sơ đến trước theo thứ tự FCFS.')
-      const unit = state.units.find(item => item.id === reservation.assignedUnitId)
-      if (!unit || unit.status !== 'available' || (unit.reservedPeriods || []).some(period => period.reservationId !== reservation.id && checkDateOverlap(period.startDate, period.endDate, reservation.startDate, reservation.endDate))) {
-        throw new Error('Gian kho đã được khách khác giữ. Vui lòng chọn gian kho còn trống trước khi duyệt hồ sơ.')
-      }
+      const capacity = state.units.filter(unit => unit.facilityId === reservation.facilityId && unit.type.toLowerCase().includes(reservation.unitTypeName.split(' ')[0].toLowerCase()) && unit.status === 'available').length
+      const earlierCapacityHolds = state.holds.filter(item => item.id !== reservation.id && !item.assignedUnitId && item.facilityId === reservation.facilityId && item.unitTypeId === reservation.unitTypeId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && item.createdAt < reservation.createdAt).length
+      if (capacity <= earlierCapacityHolds) throw new Error('Loại kho này không còn suất trống để duyệt hồ sơ.')
     }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
     const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 10 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
     const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
-      units: isGoodsReview ? prev.units.map(unit => unit.id === reservation.assignedUnitId ? { ...unit, status: 'reserved' as const, reservedPeriods: [...(unit.reservedPeriods || []), { reservationId, customerName: reservation.customerName, startDate: reservation.startDate, endDate: reservation.endDate }], nextAvailableDate: reservation.endDate } : unit) : prev.units,
+      units: prev.units,
       holds: prev.holds.map(item => item.id === reservationId ? {
         ...item,
         status: nextStatus,
@@ -4263,9 +4250,8 @@ rentals: Array.isArray(parsed.rentals)
       return {
         ...prev,
         holds: nextHolds,
-        // A customer-created hold already has its selected unit and appointment.
-        // Create the shared Check-in record at deposit time so Staff sees it
-        // immediately without requiring a reload or a second tab.
+        // An unassigned paid hold becomes visible to Manager for physical-unit
+        // allocation. The shared check-in record is created after assignment.
         checkins: nextCheckins,
         payments: (() => {
         const hold = prev.holds.find(h => h.id === holdId)
