@@ -205,33 +205,72 @@ export interface TicketItem {
   id: string
   customer: string
   email: string
+  phone?: string
   subject: string
   category: string
   priority: 'high' | 'medium' | 'low'
-  status: 'open' | 'in-progress' | 'resolved'
+  status: 'open' | 'in-progress' | 'waiting-customer' | 'resolved'
   created: string
   facility: string
   facilityId?: string
   unit: string
   assignedStaff?: string
+  assignedStaffInitials?: string
   updatedAt?: string
   relatedType?: 'rental' | 'reservation' | 'general'
   relatedId?: string
   messages: TicketMessage[]
+  source?: 'ai_assistant' | 'direct' | 'escalation'
+  aiSummary?: string
+  estimatedWaitTime?: string
+  emergencyEscalation?: boolean
+  impact?: 'high' | 'medium' | 'low'
+  feedbackRating?: 'helpful' | 'unhelpful'
+  feedbackComment?: string
 }
+
+export interface StaffRosterMember {
+  id: string
+  name: string
+  initials: string
+  role: 'staff' | 'manager'
+  email: string
+  phone: string
+  facility: string
+  facilityId: string
+  online: boolean
+}
+
+export const STAFF_ROSTER: StaffRosterMember[] = [
+  { id: 'staff-1', name: 'Mai Tran', initials: 'MT', role: 'staff', email: 'mai.tran@storagehub.demo', phone: '+84 905 111 222', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true },
+  { id: 'staff-2', name: 'Huy Le', initials: 'HL', role: 'staff', email: 'huy.le@storagehub.demo', phone: '+84 905 333 444', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true },
+  { id: 'staff-3', name: 'Anh Pham', initials: 'AP', role: 'staff', email: 'anh.pham@storagehub.demo', phone: '+84 905 555 666', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: false },
+  { id: 'staff-4', name: 'Tuan Vo', initials: 'TV', role: 'staff', email: 'tuan.vo@storagehub.demo', phone: '+84 905 777 888', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002', online: true },
+  { id: 'staff-5', name: 'Demo Staff', initials: 'DS', role: 'staff', email: 'staff@storagehub.demo', phone: '+84 905 550 101', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true },
+  { id: 'staff-mgr', name: 'Demo Manager', initials: 'DM', role: 'manager', email: 'manager@storagehub.demo', phone: '+84 903 444 888', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true }
+]
 
 export const TICKETS: TicketItem[] = [
   {
     id: 'TKT-1042',
     customer: 'Demo Customer',
     email: 'customer@storagehub.demo',
+    phone: '+84 908 123 456',
     subject: 'Access gate code not responding at main entry',
     category: 'Access & Entry',
     priority: 'high',
-    status: 'open',
+    impact: 'high',
+    status: 'in-progress',
+    source: 'ai_assistant',
+    aiSummary: 'Khách báo mã PIN không mở được cổng chính lúc 10:15. Trợ lý AI phát hiện sự cố phần cứng điều khiển, đã tự động phân loại Khẩn cấp và gán cho Mai Tran.',
+    estimatedWaitTime: '~5 - 10 phút',
     created: 'Sep 17, 2026 · 10:24 AM',
+    updatedAt: 'Sep 17, 2026 · 10:45 AM',
     facility: 'Kho Việt – Cơ sở Quận 1',
+    facilityId: 'fac-001',
     unit: 'HCM-Q1-F01-M-001',
+    assignedStaff: 'Mai Tran',
+    assignedStaffInitials: 'MT',
     messages: [
       {
         id: 'msg-1',
@@ -242,10 +281,10 @@ export const TICKETS: TicketItem[] = [
       },
       {
         id: 'msg-2',
-        sender: 'Staff Member (Mai Tran)',
+        sender: 'Mai Tran',
         role: 'staff',
         time: 'Sep 17, 2026 · 10:45 AM',
-        text: 'Hi Demo Customer, we just pushed a firmware refresh to the North Gate controller. Could you test it again or use emergency code 8820# for immediate access while we investigate?'
+        text: 'Hi Demo Customer, chúng tôi vừa làm mới firmware cho bộ điều khiển cổng Bắc. Bạn thử lại hoặc dùng mã khẩn cấp 8820# trong lúc chờ kỹ thuật viên kiểm tra trực tiếp.'
       }
     ]
   },

@@ -555,12 +555,26 @@ export interface FacilityTask {
   referenceId?: string
   assignedStaffId?: string
   assignedStaffName?: string
+  assignedAt?: string
   dueAt: string
   priority: 'high' | 'medium' | 'low'
-  status: 'open' | 'in_progress' | 'completed'
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled'
   notes?: string
   createdAt: string
+  startedAt?: string
   completedAt?: string
+  completedById?: string
+  completedByName?: string
+  resultReport?: string
+  evidence?: string[]
+  reportedUnableAt?: string
+  unableReason?: string
+  cancelledAt?: string
+  cancelledById?: string
+  cancelledByName?: string
+  cancellationReason?: string
+  lastAssignedStaffId?: string
+  lastAssignedStaffName?: string
 }
 
 export interface ReturnCase {
