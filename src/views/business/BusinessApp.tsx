@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts'
+import { useState, useMemo } from 'react'
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts'
 import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
-import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, ProgressBar, Input, Select } from '../../components/ui'
+import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, ProgressBar, Input, Select } from '../../components/ui'
 import type { User } from '../../types'
-import { FACILITIES, UNITS, RENTALS, UNIT_SPECS, REVENUE_DATA, REVENUE_TREND, REVENUE_BREAKDOWN, WAREHOUSE_PERFORMANCE, CONVERSION_DATA, PRICING_TIERS, DISCOUNTS, POLICIES, FEES, type PromotionItem } from "../../data/demoDatabase"
+import { FACILITIES, UNIT_SPECS, REVENUE_DATA, REVENUE_BREAKDOWN, CONVERSION_DATA, PRICING_TIERS, DISCOUNTS, POLICIES, FEES, type PromotionItem } from "../../data/demoDatabase"
 import { formatVnd } from '../../i18n/currency'
 import { exportRevenueExcel } from '../../utils/excelExport'
 import { useStorageHub } from '../../store/StorageHubContext'
@@ -151,20 +151,28 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
   }
 
   const [revenueFacilityFilter, setRevenueFacilityFilter] = useState('Toàn bộ cơ sở')
-  const facilityRatios: Record<string, number> = {
-    'Toàn bộ cơ sở': 1,
-    'Cơ sở Q1, TPHCM': 0.58,
-    'Cơ sở Bình Dương': 0.42
-  }
+  // Dynamic ratio for any facility (existing ones or newly created: Đà Nẵng, Quy Nhơn...)
   const activeRevenueData = useMemo(() => {
-    const ratio = facilityRatios[revenueFacilityFilter] ?? 1
-    if (ratio === 1) return REVENUE_DATA
+    if (revenueFacilityFilter === 'Toàn bộ cơ sở') return REVENUE_DATA
+
+    const targetFac = facilitiesList.find(f => f.name === revenueFacilityFilter || f.id === revenueFacilityFilter)
+    let ratio = 0.5
+    if (targetFac) {
+      const totalUnitsAll = facilitiesList.reduce((s, f) => s + (f.units || 20), 0) || 1
+      const facUnits = targetFac.units || 20
+      ratio = Math.min(0.9, Math.max(0.15, facUnits / totalUnitsAll))
+    } else if (revenueFacilityFilter.includes('Quận 1') || revenueFacilityFilter.includes('Q1')) {
+      ratio = 0.58
+    } else if (revenueFacilityFilter.includes('Bình Dương')) {
+      ratio = 0.42
+    }
+
     return REVENUE_DATA.map(item => ({
       ...item,
       revenue: Math.round(item.revenue * ratio),
-      contracts: Math.round(item.contracts * ratio)
+      contracts: Math.max(1, Math.round(item.contracts * ratio))
     }))
-  }, [revenueFacilityFilter])
+  }, [revenueFacilityFilter, facilitiesList])
 
   const currentTotalRevenue = activeRevenueData.reduce((s, i) => s + i.revenue, 0)
   const currentAvgRevenue = Math.round(currentTotalRevenue / (activeRevenueData.length || 1))
@@ -201,8 +209,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
   const [formFacCity, setFormFacCity] = useState<string>('TP. Hồ Chí Minh')
   const [formFacManager, setFormFacManager] = useState<string>('')
   const [formFacUnits, setFormFacUnits] = useState<number>(20)
-  const [formFacPrice, setFormFacPrice] = useState<string>('5.500.000đ')
-  const [formFacClimate, setFormFacClimate] = useState<boolean>(false)
+  const [formFacPrice, setFormFacPrice] = useState<string>('5.500.000 ₫')
   const [formFacStatus, setFormFacStatus] = useState<'active' | 'maintenance'>('active')
 
   // Toast
@@ -223,7 +230,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
       city: formFacCity.trim(),
       manager: formFacManager.trim() || 'Quản lý cơ sở',
       units: Number(formFacUnits) || 20,
-      price: formFacPrice || '5.500.000đ',
+      price: formFacPrice || '5.500.000 ₫',
       climate: false,
       status: formFacStatus,
       security: '24/7'
@@ -291,6 +298,12 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
   const [formCode, setFormCode] = useState<string>('HCM-Q1-F01-S-006')
   const [formFacilityId, setFormFacilityId] = useState<string>('fac-001')
   const [formSize, setFormSize] = useState<'S' | 'M' | 'L' | 'XL'>('S')
+  const [formSizeInput, setFormSizeInput] = useState<string>('Kho Nhỏ (S)')
+  const [formDimensions, setFormDimensions] = useState<string>('5,6 × 6,0 × 3,2 m')
+  const [formVolumeM3, setFormVolumeM3] = useState<number>(107.52)
+  const [formAisleM, setFormAisleM] = useState<number>(1.8)
+  const [formCapacity, setFormCapacity] = useState<string>('384 thùng nhỏ · 160 thùng to')
+  const [formEquipment, setFormEquipment] = useState<string>('Xe đẩy tay / xe sàn nhỏ')
   const [formFloor, setFormFloor] = useState<number>(1)
   const [formZone, setFormZone] = useState<string>('Khu A')
   const [formPrice, setFormPrice] = useState<number>(5500000)
@@ -299,6 +312,12 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
   const handleSizeChange = (size: 'S' | 'M' | 'L' | 'XL') => {
     setFormSize(size)
     const spec = UNIT_SPECS[size]
+    setFormSizeInput(spec.name)
+    setFormDimensions(spec.dimensions)
+    setFormVolumeM3(spec.volumeM3)
+    setFormAisleM(spec.aisleM)
+    setFormCapacity(`${spec.smallBoxes} thùng nhỏ · ${spec.largeBoxes} thùng to`)
+    setFormEquipment(spec.cartEquipment)
     setFormPrice(spec.priceMonthly)
   }
 
@@ -317,18 +336,28 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
     const targetFac = facilitiesList.find(f => f.id === formFacilityId || f.code === formFacilityId)
     const facName = targetFac ? targetFac.name : 'Kho Việt'
 
+    const nums = formDimensions.replace(/,/g, '.').match(/(\d+(?:\.\d+)?)/g)
+    const lengthM = nums && nums[0] ? parseFloat(nums[0]) : (formSize === 'S' ? 5.6 : formSize === 'M' ? 9.0 : formSize === 'L' ? 13.5 : 19.0)
+    const widthM = nums && nums[1] ? parseFloat(nums[1]) : (formSize === 'S' ? 6.0 : formSize === 'M' ? 6.4 : formSize === 'L' ? 6.8 : 7.2)
+    const heightM = nums && nums[2] ? parseFloat(nums[2]) : (formSize === 'S' ? 3.2 : formSize === 'M' ? 3.4 : formSize === 'L' ? 3.6 : 4.0)
+    const volumeM3 = Number(formVolumeM3) || Math.round(lengthM * widthM * heightM * 100) / 100
+
     createUnit({
       id: code,
       code,
       facilityId: targetFac ? targetFac.id : formFacilityId,
       facilityName: facName,
-      type: formSize === 'S' ? 'Small' : formSize === 'M' ? 'Medium' : formSize === 'L' ? 'Large' : 'Extra Large',
+      type: formSize === 'S' || formSizeInput.includes('(S)') ? 'Small' :
+            formSize === 'M' || formSizeInput.includes('(M)') ? 'Medium' :
+            formSize === 'L' || formSizeInput.includes('(L)') ? 'Large' : 'Extra Large',
       floor: Number(formFloor) || 1,
       zone: formZone,
       price: Number(formPrice),
       deposit: Number(formPrice),
       climate: false,
-      status: formStatus
+      status: formStatus,
+      dimensions: { lengthM, widthM, heightM },
+      volumeM3
     }, user)
 
     setCreateUnitModal(false)
@@ -380,11 +409,10 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                 onClick={() => {
                   setFormFacName('')
                   setFormFacAddress('')
-                  setFormFacCity('Ho Chi Minh City')
+                  setFormFacCity('TP. Hồ Chí Minh')
                   setFormFacManager('')
                   setFormFacUnits(100)
-                  setFormFacPrice('$89')
-                  setFormFacClimate(false)
+                  setFormFacPrice('5.500.000 ₫')
                   setFormFacStatus('active')
                   setCreateFacilityModal(true)
                 }}
@@ -445,7 +473,6 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                         setFormFacManager(f.manager)
                         setFormFacUnits(f.units)
                         setFormFacPrice(f.price)
-                        setFormFacClimate(false)
                         setFormFacStatus(f.status)
                         setEditFacilityModal(true)
                       }}
@@ -643,7 +670,6 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                     <Th>{lang === 'vi' ? 'Sức Chứa & Xe Đẩy' : 'Capacity & Equipment'}</Th>
                     <Th>{lang === 'vi' ? 'Vị Trí' : 'Location'}</Th>
                     <Th>{lang === 'vi' ? 'Giá Thuê/Tháng' : 'Monthly Rate'}</Th>
-                    <Th>{lang === 'vi' ? 'Máy Lạnh' : 'Climate'}</Th>
                     <Th>{lang === 'vi' ? 'Trạng Thái' : 'Status'}</Th>
                     <Th className="text-right">{lang === 'vi' ? 'Thao Tác' : 'Action'}</Th>
                   </tr>
@@ -651,7 +677,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                 <Tbody>
                   {filtered.length === 0 ? (
                     <Tr>
-                      <Td colSpan={9} className="text-center py-8 text-slate-400">
+                      <Td colSpan={8} className="text-center py-8 text-slate-400">
                         {lang === 'vi' ? 'Không tìm thấy gian kho phù hợp với bộ lọc.' : 'No units matching your filter criteria.'}
                       </Td>
                     </Tr>
@@ -691,7 +717,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                               </span>
                             </div>
                             <p className="text-xs text-slate-600 mt-1 font-medium">
-                              {spec.dimensions} · {spec.volumeM3} m³
+                              {u.dimensions ? (typeof u.dimensions === 'string' ? u.dimensions : `${(u.dimensions as any).lengthM || 0} × ${(u.dimensions as any).widthM || 0} × ${(u.dimensions as any).heightM || 0} m`) : spec.dimensions} · {u.volumeM3 ? `${u.volumeM3} m³` : `${spec.volumeM3} m³`}
                             </p>
                             <p className="text-[11px] text-slate-400">
                               Lối đi: {spec.aisleM} m
@@ -708,11 +734,6 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                           </Td>
                           <Td className="font-mono font-bold text-emerald-700 whitespace-nowrap">
                             {formatCurrency(u.price)}/tháng
-                          </Td>
-                          <Td>
-                            <Badge variant={u.climate ? 'info' : 'muted'}>
-                              {u.climate ? (lang === 'vi' ? 'Máy lạnh 24/7' : 'Climate') : (lang === 'vi' ? 'Thường' : 'Standard')}
-                            </Badge>
                           </Td>
                           <Td>
                             <Badge variant={u.status === 'available' ? 'success' : u.status === 'occupied' ? 'info' : u.status === 'maintenance' ? 'error' : 'warning'}>
@@ -1219,14 +1240,17 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cơ sở:</span>
-              <div className="w-56">
+              <div className="w-64">
                 <Select
                   value={revenueFacilityFilter}
                   onChange={e => setRevenueFacilityFilter(e.target.value)}
                 >
                   <option value="Toàn bộ cơ sở">Toàn bộ cơ sở</option>
-                  <option value="Cơ sở Q1, TPHCM">Cơ sở Q1, TPHCM</option>
-                  <option value="Cơ sở Bình Dương">Cơ sở Bình Dương</option>
+                  {facilitiesList.map(f => (
+                    <option key={f.id} value={f.name}>
+                      {f.name}
+                    </option>
+                  ))}
                 </Select>
               </div>
             </div>
@@ -1242,7 +1266,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                 <div>
                   <p className="text-sm text-stone-500 font-medium">Doanh thu lũy kế</p>
                   <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {revenueFacilityFilter === 'Toàn bộ cơ sở' ? '99.550.000 ₫' : `${currentTotalRevenue.toLocaleString('vi-VN')} ₫`}
+                    {currentTotalRevenue.toLocaleString('vi-VN')} ₫
                   </p>
                   <p className="text-xs text-stone-400 mt-1 font-medium">Tháng 4 đến Tháng 9</p>
                 </div>
@@ -1257,10 +1281,10 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                 <div>
                   <p className="text-sm text-stone-500 font-medium">Doanh thu trung bình/tháng</p>
                   <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {revenueFacilityFilter === 'Toàn bộ cơ sở' ? '16.591.667 ₫' : `${currentAvgRevenue.toLocaleString('vi-VN')} ₫`}
+                    {currentAvgRevenue.toLocaleString('vi-VN')} ₫
                   </p>
                   <p className="text-xs text-stone-400 mt-1 font-medium">
-                    {revenueFacilityFilter === 'Toàn bộ cơ sở' ? '99.550.000 / 6' : `${currentTotalRevenue.toLocaleString('vi-VN')} / 6`}
+                    {currentTotalRevenue.toLocaleString('vi-VN')} / 6
                   </p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
@@ -1815,58 +1839,144 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label={lang === 'vi' ? 'Kích thước & Phân loại kho (S / M / L / XL)' : 'Unit Size & Tier'}
-              value={formSize}
-              onChange={e => {
-                const newSize = e.target.value as 'S' | 'M' | 'L' | 'XL'
-                handleSizeChange(newSize)
-                setFormCode(generateUnitCode(formFacilityId, newSize, unitsList))
-              }}
-            >
-              <option value="S">Kho Nhỏ (S) · 5,6 × 6,0 × 3,2 m · 107,52 m³</option>
-              <option value="M">Kho Trung (M) · 9,0 × 6,4 × 3,4 m · 195,84 m³</option>
-              <option value="L">Kho Lớn (L) · 13,5 × 6,8 × 3,6 m · 330,48 m³</option>
-              <option value="XL">Kho Rất Lớn (XL) · 19,0 × 7,2 × 4,0 m · 547,20 m³</option>
-            </Select>
-
-            <Input
-              label={lang === 'vi' ? 'Đơn giá thuê / tháng (VNĐ)' : 'Monthly Price (VNĐ)'}
-              type="number"
-              value={String(formPrice)}
-              onChange={e => setFormPrice(Number(e.target.value))}
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">
+                {lang === 'vi' ? 'Kích thước & Phân loại kho (S / M / L / XL)' : 'Unit Size & Tier'}
+              </label>
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] text-slate-400 mr-1">{lang === 'vi' ? 'Chọn nhanh:' : 'Quick pick:'}</span>
+                {(['S', 'M', 'L', 'XL'] as const).map(size => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => {
+                      handleSizeChange(size)
+                      setFormCode(generateUnitCode(formFacilityId, size, unitsList))
+                    }}
+                    className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all ${
+                      formSize === size
+                        ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-300'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                placeholder="VD: Kho Nhỏ (S), Kho Trung (M), Kho Tùy Chỉnh..."
+                value={formSizeInput}
+                onChange={e => {
+                  const val = e.target.value
+                  setFormSizeInput(val)
+                  const matched = val.match(/\b(S|M|L|XL)\b/i)?.[0]?.toUpperCase()
+                  if (matched && ['S', 'M', 'L', 'XL'].includes(matched)) {
+                    setFormSize(matched as any)
+                    setFormCode(generateUnitCode(formFacilityId, matched as any, unitsList))
+                  }
+                }}
+              />
+              <Input
+                label={lang === 'vi' ? 'Đơn giá thuê / tháng (VNĐ)' : 'Monthly Price (VNĐ)'}
+                type="number"
+                value={String(formPrice)}
+                onChange={e => setFormPrice(Number(e.target.value))}
+              />
+            </div>
           </div>
 
-          {/* Thông số kỹ thuật tự động điền */}
-          {(() => {
-            const spec = UNIT_SPECS[formSize] || UNIT_SPECS.S
-            return (
-              <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-3 text-xs space-y-1.5">
-                <div className="flex justify-between items-center text-slate-700">
-                  <span className="text-slate-500">Kích thước D×R×C:</span>
-                  <span className="font-bold text-slate-900">{spec.dimensions}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-700">
-                  <span className="text-slate-500">Thể tích lưu trữ:</span>
-                  <span className="font-bold text-slate-900">{spec.volumeM3} m³</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-700">
-                  <span className="text-slate-500">Độ rộng lối đi xe:</span>
-                  <span className="font-bold text-slate-900">{spec.aisleM} m</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-700">
-                  <span className="text-slate-500">Sức chứa tối đa:</span>
-                  <span className="font-bold text-slate-900">{spec.smallBoxes} thùng nhỏ · {spec.largeBoxes} thùng to</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-700">
-                  <span className="text-slate-500">Thiết bị xe đẩy hỗ trợ:</span>
-                  <span className="font-semibold text-emerald-800">{spec.cartEquipment}</span>
-                </div>
+          {/* Thông số kỹ thuật cho phép tài khoản BO tự điền */}
+          <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-3.5 text-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+              <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                <span>📐</span> {lang === 'vi' ? 'Thông số không gian kho (Cho phép tự điền/chỉnh sửa)' : 'Space Specifications (Customizable)'}
+              </span>
+              <span className="text-[11px] text-amber-700">
+                {lang === 'vi' ? 'Tự động tính hoặc tùy chỉnh' : 'Customizable'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-600 font-medium mb-1">
+                  {lang === 'vi' ? 'Kích thước D×R×C (m):' : 'Dimensions L×W×H (m):'}
+                </label>
+                <input
+                  type="text"
+                  className="w-full bg-white border border-amber-300 rounded px-2.5 py-1.5 font-bold text-slate-800 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  value={formDimensions}
+                  onChange={e => {
+                    const val = e.target.value
+                    setFormDimensions(val)
+                    const nums = val.replace(/,/g, '.').match(/(\d+(?:\.\d+)?)/g)
+                    if (nums && nums.length >= 3) {
+                      const l = parseFloat(nums[0])
+                      const w = parseFloat(nums[1])
+                      const h = parseFloat(nums[2])
+                      if (!isNaN(l) && !isNaN(w) && !isNaN(h)) {
+                        setFormVolumeM3(Math.round(l * w * h * 100) / 100)
+                      }
+                    }
+                  }}
+                  placeholder="VD: 5,6 × 6,0 × 3,2 m"
+                />
               </div>
-            )
-          })()}
+              <div>
+                <label className="block text-slate-600 font-medium mb-1">
+                  {lang === 'vi' ? 'Thể tích lưu trữ (m³):' : 'Volume (m³):'}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full bg-white border border-amber-300 rounded px-2.5 py-1.5 font-bold text-slate-800 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  value={formVolumeM3}
+                  onChange={e => setFormVolumeM3(Number(e.target.value))}
+                  placeholder="107.52"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block text-slate-600 font-medium mb-1">
+                  {lang === 'vi' ? 'Độ rộng lối đi xe (m):' : 'Aisle Clearance (m):'}
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="w-full bg-white border border-amber-300 rounded px-2.5 py-1.5 text-slate-800 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  value={formAisleM}
+                  onChange={e => setFormAisleM(Number(e.target.value))}
+                  placeholder="1.8"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-medium mb-1">
+                  {lang === 'vi' ? 'Sức chứa ước tính:' : 'Estimated Capacity:'}
+                </label>
+                <input
+                  type="text"
+                  className="w-full bg-white border border-amber-300 rounded px-2.5 py-1.5 text-slate-800 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  value={formCapacity}
+                  onChange={e => setFormCapacity(e.target.value)}
+                  placeholder="384 thùng nhỏ · 160 thùng to"
+                />
+              </div>
+            </div>
+            <div className="pt-0.5">
+              <label className="block text-slate-600 font-medium mb-1">
+                {lang === 'vi' ? 'Thiết bị xe đẩy hỗ trợ:' : 'Cart Equipment:'}
+              </label>
+              <input
+                type="text"
+                className="w-full bg-white border border-amber-300 rounded px-2.5 py-1.5 text-emerald-800 font-medium text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                value={formEquipment}
+                onChange={e => setFormEquipment(e.target.value)}
+                placeholder="Xe đẩy tay / xe sàn nhỏ"
+              />
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Input
@@ -1948,6 +2058,27 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
         )}
       </Modal>
 
+      {/* Modal Xác Nhận Xóa Gian Kho */}
+      <Modal open={deleteConfirmModal} onClose={() => setDeleteConfirmModal(false)} title={lang === 'vi' ? 'Xác Nhận Xóa Gian Kho' : 'Confirm Delete Unit'}>
+        {selectedUnit && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              {lang === 'vi'
+                ? `Bạn có chắc chắn muốn xóa gian kho "${selectedUnit.code || selectedUnit.id}" khỏi hệ thống không?`
+                : `Are you sure you want to delete unit "${selectedUnit.code || selectedUnit.id}"?`}
+            </p>
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <Button variant="outline" onClick={() => setDeleteConfirmModal(false)}>
+                {lang === 'vi' ? 'Hủy' : 'Cancel'}
+              </Button>
+              <Button variant="primary" className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteUnit}>
+                {lang === 'vi' ? 'Xóa Gian Kho' : 'Delete Unit'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
       {/* 1. Modal Thêm Mới Cơ Sở */}
       <Modal open={createFacilityModal} onClose={() => setCreateFacilityModal(false)} title={lang === 'vi' ? 'Thêm Cơ Sở Mới' : 'Create New Facility'}>
@@ -1985,8 +2116,8 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
               onChange={e => setFormFacUnits(Number(e.target.value))}
             />
             <Input
-              label={lang === 'vi' ? 'Giá cơ sở từ ($/tháng)' : 'Starting Price'}
-              placeholder="$89"
+              label={lang === 'vi' ? 'Giá cơ sở từ (VNĐ/tháng)' : 'Starting Price (VND/month)'}
+              placeholder="VD: 5.500.000 ₫"
               value={formFacPrice}
               onChange={e => setFormFacPrice(e.target.value)}
             />
@@ -2046,7 +2177,8 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                 onChange={e => setFormFacUnits(Number(e.target.value))}
               />
               <Input
-                label={lang === 'vi' ? 'Giá cơ sở' : 'Starting Price'}
+                label={lang === 'vi' ? 'Giá cơ sở (VNĐ/tháng)' : 'Starting Price (VND/month)'}
+                placeholder="VD: 5.500.000 ₫"
                 value={formFacPrice}
                 onChange={e => setFormFacPrice(e.target.value)}
               />

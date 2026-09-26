@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
-import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input, Select } from '../../components/ui'
+import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Avatar, Input, Select } from '../../components/ui'
 import StaffFeeField from './StaffFeeField'
 import StaffPaymentUpload from './StaffPaymentUpload'
 import StaffSupportPanel from './StaffSupportPanel'
@@ -317,7 +317,6 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
   const [selectedReturn, setSelectedReturn] = useState<StaffReturn | null>(null)
   const [returnDetailsOnly, setReturnDetailsOnly] = useState(false)
   const [selectedCheckin, setSelectedCheckin] = useState<StaffCheckin | null>(null)
-  const [ticketTab, setTicketTab] = useState('Mở Mới')
   const [reservationSearch, setReservationSearch] = useState('')
   const [reservationStatus, setReservationStatus] = useState('all')
   const [reservationDateFilter, setReservationDateFilter] = useState('')
@@ -476,12 +475,17 @@ export default function StaffApp({ user, onLogout }: { user: User; onLogout: () 
 
   const normalizedSearch = reservationSearch.trim().toLowerCase()
   const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 }
-  const filteredReservations = sortStaffList(reservations.filter(r => {
-    const matchesStatus = reservationStatus === 'all' || r.status === reservationStatus
-    const matchesDate = !reservationDateFilter || toDateInputValue(reservationDeadline(r)) === reservationDateFilter
-    const searchText = [r.id, r.customer, r.phone, r.email, r.identityId, r.facility, r.unit].join(' ').toLowerCase()
-    return matchesStatus && (!normalizedSearch || searchText.includes(normalizedSearch))
-  })
+  const filteredReservations = sortStaffList(
+    reservations.filter(r => {
+      const matchesStatus = reservationStatus === 'all' || r.status === reservationStatus
+      const matchesDate = !reservationDateFilter || toDateInputValue(reservationDeadline(r)) === reservationDateFilter
+      const searchText = [r.id, r.customer, r.phone, r.email, r.identityId, r.facility, r.unit].join(' ').toLowerCase()
+      return matchesStatus && matchesDate && (!normalizedSearch || searchText.includes(normalizedSearch))
+    }),
+    reservationSort,
+    reservationDeadline,
+    r => r.customer,
+  )
   const facilityTickets = hasFacilityScope
     ? staffTickets.filter(ticket => isFacilityVisible(user, ticket.facilityId, ticket.facility))
     : []
