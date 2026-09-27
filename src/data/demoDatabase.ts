@@ -765,38 +765,54 @@ export const CONVERSION_DATA = [
 //   { id: 'tier-3', name: 'Large Unit', size: '20 ft (400 sq ft)', basePrice: 269, climateAdder: 45, highDemandMultiplier: 1.25, facility: 'All facilities' }
 // ]
 
-export const PRICING_TIERS =
-  [
-    {
-      id: 'tier-1',
-      name: 'Kho Nhỏ (S)',
-      size: '7.500.000 cm³',
-      basePrice: 89,
-      climateAdder: 20,
-      highDemandMultiplier: 1.15,
-      facility: 'Toàn bộ cơ sở'
-    },
+export interface PricingTierItem {
+  id: string
+  sizeCode: 'S' | 'M' | 'L' | 'XL'
+  name: string
+  size?: string
+  basePrice: number
+  highDemandMultiplier: number
+  facility: string
+}
 
-    {
-      id: 'tier-2',
-      name: 'Kho Vừa (M)',
-      size: '18.750.000 cm³',
-      basePrice: 149,
-      climateAdder: 30,
-      highDemandMultiplier: 1.2,
-      facility: 'Toàn bộ cơ sở'
-    },
-
-    {
-      id: 'tier-3',
-      name: 'Kho Lớn (L)',
-      size: '60.000.000 cm³',
-      basePrice: 269,
-      climateAdder: 45,
-      highDemandMultiplier: 1.25,
-      facility: 'Toàn bộ cơ sở'
-    }
-  ];
+export const PRICING_TIERS: PricingTierItem[] = [
+  {
+    id: 'tier-1',
+    sizeCode: 'S',
+    name: 'Kho Nhỏ (S)',
+    size: '',
+    basePrice: UNIT_SPECS.S.priceMonthly,
+    highDemandMultiplier: 1.15,
+    facility: 'Toàn bộ cơ sở'
+  },
+  {
+    id: 'tier-2',
+    sizeCode: 'M',
+    name: 'Kho Vừa (M)',
+    size: '',
+    basePrice: UNIT_SPECS.M.priceMonthly,
+    highDemandMultiplier: 1.2,
+    facility: 'Toàn bộ cơ sở'
+  },
+  {
+    id: 'tier-3',
+    sizeCode: 'L',
+    name: 'Kho Lớn (L)',
+    size: '',
+    basePrice: UNIT_SPECS.L.priceMonthly,
+    highDemandMultiplier: 1.25,
+    facility: 'Toàn bộ cơ sở'
+  },
+  {
+    id: 'tier-4',
+    sizeCode: 'XL',
+    name: 'Kho Rất Lớn (XL)',
+    size: '',
+    basePrice: UNIT_SPECS.XL.priceMonthly,
+    highDemandMultiplier: 1.3,
+    facility: 'Toàn bộ cơ sở'
+  }
+];
 
 export interface PromotionItem {
   id: string
