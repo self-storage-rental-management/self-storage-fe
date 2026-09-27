@@ -769,32 +769,32 @@ export const PRICING_TIERS =
   [
     {
       id: 'tier-1',
-      name: 'Small Unit',
-      size: '7,500,000 cm³',
+      name: 'Kho Nhỏ (S)',
+      size: '7.500.000 cm³',
       basePrice: 89,
       climateAdder: 20,
       highDemandMultiplier: 1.15,
-      facility: 'All facilities'
+      facility: 'Toàn bộ cơ sở'
     },
 
     {
       id: 'tier-2',
-      name: 'Medium Unit',
-      size: '18,750,000 cm³',
+      name: 'Kho Vừa (M)',
+      size: '18.750.000 cm³',
       basePrice: 149,
       climateAdder: 30,
       highDemandMultiplier: 1.2,
-      facility: 'All facilities'
+      facility: 'Toàn bộ cơ sở'
     },
 
     {
       id: 'tier-3',
-      name: 'Large Unit',
-      size: '60,000,000 cm³',
+      name: 'Kho Lớn (L)',
+      size: '60.000.000 cm³',
       basePrice: 269,
       climateAdder: 45,
       highDemandMultiplier: 1.25,
-      facility: 'All facilities'
+      facility: 'Toàn bộ cơ sở'
     }
   ];
 
@@ -931,10 +931,10 @@ export const POLICIES = [
 
 
 export const FEES = [
-  { type: 'Late payment fee', amount: '650.000 ₫', trigger: 'Applied automatically 5 days after payment due date', applies: 'All tenants' },
-  { type: 'Digital lock replacement', amount: '1.170.000 ₫', trigger: 'Upon tenant physical loss or key fob damage', applies: 'Tenant responsibility' },
-  { type: 'Unit cleaning & restoration', amount: '2.080.000 ₫', trigger: 'Charged if unit returned with debris or biohazard', applies: 'Move-out inspection' },
-  { type: 'Emergency unlock assistance', amount: '780.000 ₫', trigger: 'After-hours on-site manual lock release', applies: 'Per call-out' }
+  { type: 'Phí nộp muộn', amount: '650.000 ₫', trigger: 'Tự động áp dụng sau 5 ngày kể từ ngày đến hạn thanh toán', applies: 'Tất cả khách thuê' },
+  { type: 'Phí thay thế khóa số', amount: '1.170.000 ₫', trigger: 'Khi khách làm mất hoặc hư hỏng khóa / thẻ từ', applies: 'Trách nhiệm khách thuê' },
+  { type: 'Phí dọn vệ sinh kho', amount: '2.080.000 ₫', trigger: 'Áp dụng nếu trả kho còn rác bẩn hoặc chất nguy hại', applies: 'Kiểm tra khi trả kho' },
+  { type: 'Phí hỗ trợ mở khóa khẩn cấp', amount: '780.000 ₫', trigger: 'Mở khóa thủ công ngoài giờ hành chính tại cơ sở', applies: 'Mỗi lần yêu cầu' }
 ]
 
 export const USERS = [
