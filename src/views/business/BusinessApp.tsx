@@ -39,7 +39,7 @@ import {
 
 import type { User } from "../../types"
 
-import type { PromotionItem } from "../../data/demoDatabase"
+import type { PromotionItem, PricingTierItem } from "../../data/demoDatabase"
 import {
   UNIT_SPECS,
   REVENUE_DATA,
@@ -82,14 +82,18 @@ const getFeeType = (type: string, lang: string) => {
 
   if (lower.includes("late") || lower.includes("muộn")) return "Phí nộp muộn"
 
-  if (lower.includes("lock") || lower.includes("khóa"))
+  if (lower.includes("emergency") || lower.includes("khẩn cấp"))
+    return "Phí hỗ trợ mở khóa khẩn cấp"
+
+  if (
+    lower.includes("lock") ||
+    lower.includes("thay thế khóa") ||
+    lower.includes("khóa số")
+  )
     return "Phí thay thế khóa số"
 
   if (lower.includes("cleaning") || lower.includes("vệ sinh"))
     return "Phí dọn vệ sinh kho"
-
-  if (lower.includes("emergency") || lower.includes("khẩn cấp"))
-    return "Phí hỗ trợ mở khóa khẩn cấp"
 
   if (lower.includes("admin") || lower.includes("hồ sơ"))
     return "Phí hồ sơ ban đầu"
@@ -537,8 +541,132 @@ export default function BusinessApp({
 
   const chartYMax = Math.ceil(maxRevenueValue / 5000000) * 5000000
 
+  const [pricingTiers, setPricingTiers] =
+    useState<PricingTierItem[]>(PRICING_TIERS)
+
   const [selectedTier, setSelectedTier] =
-    useState<typeof PRICING_TIERS[0] | null>(null)
+    useState<PricingTierItem | null>(null)
+
+  const [formTierBasePrice, setFormTierBasePrice] = useState<string>("0")
+
+  const [formTierMultiplier, setFormTierMultiplier] = useState<string>("1")
+
+  const [pricingFacilityFilter, setPricingFacilityFilter] =
+    useState<string>("all")
+
+  const [facilityPricingOverrides, setFacilityPricingOverrides] = useState<
+    Record<
+      string,
+      Record<string, { basePrice: number; highDemandMultiplier: number }>
+    >
+  >({})
+
+  const selectedPricingFacility = useMemo(() => {
+    if (pricingFacilityFilter === "all") return null
+    return (
+      facilitiesList.find(
+        (f) =>
+          f.id === pricingFacilityFilter || f.code === pricingFacilityFilter,
+      ) || null
+    )
+  }, [facilitiesList, pricingFacilityFilter])
+
+  const getEffectiveTier = (tier: PricingTierItem) => {
+    if (
+      selectedPricingFacility &&
+      facilityPricingOverrides[selectedPricingFacility.id]?.[tier.id]
+    ) {
+      const override =
+        facilityPricingOverrides[selectedPricingFacility.id][tier.id]
+      return {
+        ...tier,
+        basePrice: override.basePrice,
+        highDemandMultiplier: override.highDemandMultiplier,
+        facility: selectedPricingFacility.name,
+      }
+    }
+    return {
+      ...tier,
+      facility: selectedPricingFacility
+        ? selectedPricingFacility.name
+        : "Toàn bộ cơ sở",
+    }
+  }
+
+  const handleSavePricingTier = () => {
+    if (!selectedTier) return
+    const parsedPrice = Number(formTierBasePrice)
+    const parsedMultiplier = Number(formTierMultiplier)
+    const updatedPrice =
+      parsedPrice > 0 ? parsedPrice : selectedTier.basePrice
+    const updatedMultiplier =
+      parsedMultiplier > 0
+        ? parsedMultiplier
+        : selectedTier.highDemandMultiplier
+
+    if (selectedPricingFacility) {
+      // Lưu phân tầng giá riêng biệt cho cơ sở được chọn
+      setFacilityPricingOverrides((prev) => ({
+        ...prev,
+        [selectedPricingFacility.id]: {
+          ...(prev[selectedPricingFacility.id] || {}),
+          [selectedTier.id]: {
+            basePrice: updatedPrice,
+            highDemandMultiplier: updatedMultiplier,
+          },
+        },
+      }))
+
+      // Nếu cập nhật Kho S (cước khởi điểm của cơ sở), cập nhật luôn price của facility
+      if (selectedTier.id === "tier-1" || selectedTier.name.includes("(S)")) {
+        updateFacility(
+          selectedPricingFacility.id,
+          { price: `${Math.round(updatedPrice).toLocaleString("vi-VN")}đ` },
+          user,
+        )
+      }
+    } else {
+      // Cập nhật giá niêm yết chuẩn toàn hệ thống
+      setPricingTiers((prev) =>
+        prev.map((t) =>
+          t.id === selectedTier.id
+            ? {
+                ...t,
+                basePrice: updatedPrice,
+                highDemandMultiplier: updatedMultiplier,
+              }
+            : t,
+        ),
+      )
+
+      // Đồng bộ ngược lại UNIT_SPECS
+      const sizeCode =
+        selectedTier.sizeCode ||
+        (selectedTier.name.includes("(S)")
+          ? "S"
+          : selectedTier.name.includes("(M)")
+            ? "M"
+            : selectedTier.name.includes("(XL)")
+              ? "XL"
+              : "L")
+
+      if (sizeCode && UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS]) {
+        UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS].priceMonthly = updatedPrice
+        UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS].priceFormatted = `${Math.round(updatedPrice).toLocaleString("vi-VN")}đ`
+      }
+    }
+
+    setPricingModal(false)
+    showToast(
+      lang === "vi"
+        ? `Đã cập nhật bảng giá "${selectedTier.name}"${
+            selectedPricingFacility
+              ? ` cho ${selectedPricingFacility.name}`
+              : " (Toàn hệ thống)"
+          }: ${formatCurrency(updatedPrice)}/tháng!`
+        : "Pricing tier updated!",
+    )
+  }
 
   // Discounts & Promotions interactive state
 
@@ -1814,7 +1942,7 @@ export default function BusinessApp({
 
       {/* ── PRICING & FEES ────────────────────────────────────── */}
       {page === "pricing" && (
-        <div className="fade-in">
+        <div className="fade-in space-y-4">
           <SectionHeader
             title={
               lang === "vi" ? "Bảng Giá Niêm Yết & Biểu Phí" : "Pricing & Fees"
@@ -1824,19 +1952,115 @@ export default function BusinessApp({
                 ? "Quản lý các phân tầng giá theo kích thước và biểu phí dịch vụ phát sinh"
                 : "Manage unit pricing tiers and fee schedules"
             }
+            action={
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+                  {lang === "vi" ? "Cơ sở áp dụng:" : "Facility:"}
+                </span>
+                <div className="w-56 sm:w-64">
+                  <Select
+                    value={pricingFacilityFilter}
+                    onChange={(e) => setPricingFacilityFilter(e.target.value)}
+                  >
+                    <option value="all">
+                      {lang === "vi"
+                        ? "Toàn bộ cơ sở (Áp dụng chung)"
+                        : "All Facilities (Global)"}
+                    </option>
+                    {facilitiesList.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.code || f.id})
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            }
           />
+
+          {selectedPricingFacility && (
+            <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-mono text-[11px] border border-amber-300">
+                  {selectedPricingFacility.code || selectedPricingFacility.id}
+                </span>
+                <span className="font-semibold text-slate-900 text-sm">
+                  {selectedPricingFacility.name}
+                </span>
+                <span className="text-slate-500">
+                  · {selectedPricingFacility.address} ({selectedPricingFacility.city})
+                </span>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-slate-600">
+                  Quy mô: <b>{selectedPricingFacility.units} gian kho</b>
+                </span>
+                <span className="text-slate-600">
+                  Cước cơ sở từ:{" "}
+                  <b className="text-emerald-700">
+                    {selectedPricingFacility.price || "5.500.000đ"}/tháng
+                  </b>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPricingFacilityFilter("all")}
+                  className="text-amber-800 hover:text-amber-950 font-semibold underline cursor-pointer"
+                >
+                  {lang === "vi" ? "Xem toàn bộ cơ sở" : "View all facilities"}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-            {PRICING_TIERS.map((tier) => {
+            {pricingTiers.map((rawTier) => {
+              const tier = getEffectiveTier(rawTier)
               const displayName =
                 lang === "vi"
                   ? tier.name.includes("Small")
                     ? "Kho Nhỏ (S)"
                     : tier.name.includes("Medium")
                       ? "Kho Vừa (M)"
-                      : tier.name.includes("Large")
+                      : tier.name.includes("Large") &&
+                          !tier.name.includes("Extra") &&
+                          !tier.name.includes("XL")
                         ? "Kho Lớn (L)"
-                        : tier.name
+                        : tier.name.includes("XL") ||
+                            tier.name.includes("Extra") ||
+                            tier.name.includes("Rất Lớn")
+                          ? "Kho Rất Lớn (XL)"
+                          : tier.name
                   : tier.name
+
+              const sizeKey =
+                tier.sizeCode ||
+                (tier.name.includes("(S)")
+                  ? "S"
+                  : tier.name.includes("(M)")
+                    ? "M"
+                    : tier.name.includes("(XL)")
+                      ? "XL"
+                      : "L")
+
+              const unitCountInFac = selectedPricingFacility
+                ? selectedPricingFacility.unitDistribution?.[
+                    sizeKey as "S" | "M" | "L" | "XL"
+                  ] ??
+                  unitsList.filter(
+                    (u) =>
+                      (u.facilityId === selectedPricingFacility.id ||
+                        u.facilityId === selectedPricingFacility.code) &&
+                      ((u as any).size === sizeKey ||
+                        u.type ===
+                          (sizeKey === "S"
+                            ? "Small"
+                            : sizeKey === "M"
+                              ? "Medium"
+                              : sizeKey === "L"
+                                ? "Large"
+                                : "Extra Large")),
+                  ).length
+                : null
 
               return (
                 <Card key={tier.id} className="p-5">
@@ -1845,13 +2069,19 @@ export default function BusinessApp({
                       <h3 className="font-bold text-slate-900">
                         {displayName}
                       </h3>
-                      <p className="text-xs text-slate-400">{tier.size}</p>
+                      {tier.size ? (
+                        <p className="text-xs text-slate-400">{tier.size}</p>
+                      ) : null}
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => {
                         setSelectedTier({ ...tier, name: displayName })
+                        setFormTierBasePrice(tier.basePrice.toString())
+                        setFormTierMultiplier(
+                          tier.highDemandMultiplier.toString(),
+                        )
                         setPricingModal(true)
                       }}
                     >
@@ -1863,17 +2093,8 @@ export default function BusinessApp({
                       <span className="text-slate-500">
                         {lang === "vi" ? "Giá cơ sở" : "Base price"}
                       </span>
-                      <span className="font-semibold">
+                      <span className="font-semibold text-emerald-800">
                         {formatCurrency(tier.basePrice)}/
-                        {lang === "vi" ? "th" : "mo"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">
-                        {lang === "vi" ? "Phụ phí điều hòa" : "Climate adder"}
-                      </span>
-                      <span className="font-semibold">
-                        +{formatCurrency(tier.climateAdder)}/
                         {lang === "vi" ? "th" : "mo"}
                       </span>
                     </div>
@@ -1885,6 +2106,30 @@ export default function BusinessApp({
                         ×{tier.highDemandMultiplier}
                       </span>
                     </div>
+                    <div className="flex justify-between border-t border-slate-100 pt-2 text-xs text-slate-500">
+                      <span>{lang === "vi" ? "Phạm vi:" : "Scope:"}</span>
+                      <span
+                        className="font-medium text-slate-700 truncate max-w-[130px]"
+                        title={tier.facility}
+                      >
+                        {selectedPricingFacility
+                          ? selectedPricingFacility.code ||
+                            selectedPricingFacility.name
+                          : lang === "vi"
+                            ? "Toàn bộ cơ sở"
+                            : "All facilities"}
+                      </span>
+                    </div>
+                    {unitCountInFac !== null && (
+                      <div className="flex justify-between text-xs text-slate-500 pt-1">
+                        <span>
+                          {lang === "vi" ? "Số lượng tại kho:" : "Units in facility:"}
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {unitCountInFac} gian kho
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </Card>
               )
@@ -2973,48 +3218,44 @@ export default function BusinessApp({
       >
         {selectedTier && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-              {lang === "vi" ? "Đang chỉnh sửa:" : "Editing:"}{" "}
-              <strong>{selectedTier.name}</strong> ({selectedTier.size})
-            </p>
+            <div>
+              <p className="text-sm text-slate-600">
+                {lang === "vi" ? "Đang chỉnh sửa:" : "Editing:"}{" "}
+                <strong className="text-slate-900">{selectedTier.name}</strong>
+              </p>
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1 mt-1.5 inline-block">
+                {lang === "vi" ? "Cơ sở áp dụng: " : "Target facility: "}
+                <strong>
+                  {selectedPricingFacility
+                    ? `${selectedPricingFacility.name} (${selectedPricingFacility.code || selectedPricingFacility.id})`
+                    : lang === "vi"
+                      ? "Toàn bộ hệ thống cơ sở"
+                      : "All facilities"}
+                </strong>
+              </p>
+            </div>
             <Input
               label={
-                lang === "vi" ? "Giá cơ sở (VNĐ/tháng)" : "Base Price ($/mo)"
+                lang === "vi" ? "Giá cơ sở (VNĐ/tháng)" : "Base Price (VND/mo)"
               }
               type="number"
-              defaultValue={selectedTier.basePrice.toString()}
-            />
-            <Input
-              label={
-                lang === "vi"
-                  ? "Phụ phí điều hòa (VNĐ/tháng)"
-                  : "Climate Control Adder ($/mo)"
-              }
-              type="number"
-              defaultValue={selectedTier.climateAdder.toString()}
+              value={formTierBasePrice}
+              onChange={(e) => setFormTierBasePrice(e.target.value)}
             />
             <Input
               label={
                 lang === "vi" ? "Hệ số cao điểm" : "High Demand Multiplier"
               }
               type="number"
-              defaultValue={selectedTier.highDemandMultiplier.toString()}
+              step="0.05"
+              value={formTierMultiplier}
+              onChange={(e) => setFormTierMultiplier(e.target.value)}
             />
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" onClick={() => setPricingModal(false)}>
                 {lang === "vi" ? "Hủy" : "Cancel"}
               </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setPricingModal(false)
-                  showToast(
-                    lang === "vi"
-                      ? "Đã lưu phân tầng giá mới!"
-                      : "Pricing tier updated!",
-                  )
-                }}
-              >
+              <Button variant="primary" onClick={handleSavePricingTier}>
                 {lang === "vi" ? "Lưu bảng giá" : "Save Pricing"}
               </Button>
             </div>
