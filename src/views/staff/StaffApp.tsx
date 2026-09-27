@@ -38,6 +38,7 @@ import type {
   CheckInRecord,
   Facility,
   FacilityTask,
+  RentalRecord,
   ReturnCase,
   StorageReservation,
   StorageUnit,
@@ -99,7 +100,7 @@ type StaffCheckin = Omit<typeof CHECKINS[number], "status"> & {
 }
 
 type StaffReturn = Omit<typeof RETURNS[number], "status"> & {
-  status: "pending" | "waiting-customer" | "refunded"
+  status: "pending" | "waiting-customer" | "disputed" | "payment-due" | "refund-pending" | "refunded"
 
   contractStart: string
 
@@ -416,7 +417,9 @@ const mapSharedCheckin = (
   }
 }
 
-const mapSharedReturn = (item: ReturnCase): StaffReturn => ({
+const mapSharedReturn = (item: ReturnCase, rentals: RentalRecord[]): StaffReturn => {
+  const rental = rentals.find((record) => record.id === item.rentalId)
+  return {
   id: item.id,
 
   customer: item.customerName,
@@ -441,9 +444,15 @@ const mapSharedReturn = (item: ReturnCase): StaffReturn => ({
   status:
     item.status === "requested" || item.status === "scheduled"
       ? "pending"
-      : item.status === "completed"
-        ? "refunded"
-        : "waiting-customer",
+      : item.status === "disputed"
+        ? "disputed"
+        : item.status === "payment_due"
+          ? "payment-due"
+          : item.status === "refund_pending"
+            ? "refund-pending"
+            : item.status === "completed"
+              ? "refunded"
+              : "waiting-customer",
 
   deposit: item.depositAmount,
 
@@ -461,18 +470,19 @@ const mapSharedReturn = (item: ReturnCase): StaffReturn => ({
 
   initialCondition: item.initialConditionSnapshot,
 
-  finalCondition: item.staffNotes || "Chờ kiểm kê",
+  finalCondition: item.returnedCondition || item.staffNotes || "Chờ kiểm kê",
 
   classification: item.damageClassification || "Chờ phân loại",
 
   evidence: item.evidence,
 
-  contractStart: item.requestedAt,
+  contractStart: rental?.startDate || item.requestedAt,
 
-  contractEnd: item.scheduledDate,
+  contractEnd: rental?.endDate || item.scheduledDate,
 
   requestReason: "khách hàng yêu cầu trả kho",
-})
+  }
+}
 
 const reservationSeed: StaffReservation[] = RESERVATIONS.map((item, index) => ({
   ...item,
@@ -679,6 +689,9 @@ const statusLabelMap: Record<string, string> = {
   EXPIRED: "Đã hết hạn",
 
   "waiting-customer": "Chờ khách hàng phản hồi",
+  disputed: "Khách yêu cầu tính lại",
+  "payment-due": "Chờ khách thanh toán thêm",
+  "refund-pending": "Chờ Staff hoàn cọc",
 
   "no-show": "Không đến nhận kho",
 
@@ -751,11 +764,11 @@ export default function StaffApp({
   const [page, setPage] = useState(() => getInitialPage(nav, "dashboard"))
 
   const [reservations, setReservations] =
-    useState<StaffReservation[]>(reservationSeed)
+    useState<StaffReservation[]>([])
 
-  const [checkins, setCheckins] = useState<StaffCheckin[]>(checkinSeed)
+  const [checkins, setCheckins] = useState<StaffCheckin[]>([])
 
-  const [returns, setReturns] = useState<StaffReturn[]>(returnSeed)
+  const [returns, setReturns] = useState<StaffReturn[]>([])
 
   const [inspectModal, setInspectModal] = useState(false)
 
@@ -887,6 +900,7 @@ export default function StaffApp({
   const [returnOverdueFee, setReturnOverdueFee] = useState("")
 
   const [returnOtherDebt, setReturnOtherDebt] = useState("")
+  const [returnRefundReference, setReturnRefundReference] = useState("")
 
   const [feeDetails, setFeeDetails] = useState<Record<string, string>>({})
 
@@ -975,19 +989,8 @@ export default function StaffApp({
         mapSharedReservation(reservation, hub.units, hub.facilities),
       )
 
-    const sharedIds = new Set(
-      sharedReservations.map((reservation) => reservation.id),
-    )
-
-    setReservations((previous) => [
-      ...sharedReservations,
-      ...previous.filter(
-        (reservation) =>
-          !sharedIds.has(reservation.id) &&
-          isFacilityVisible(user, undefined, reservation.facility),
-      ),
-    ])
-  }, [hub.holds, hub.units, user.facility])
+    setReservations(sharedReservations)
+  }, [hub.holds, hub.units, hub.facilities, user.facility, user.facilityId])
 
   useEffect(() => {
     const sharedCheckins = hub.checkins
@@ -1008,13 +1011,8 @@ export default function StaffApp({
         mapSharedCheckin(record, reservation, hub.units, hub.facilities),
       )
 
-    const sharedIds = new Set(sharedCheckins.map((checkin) => checkin.id))
-
-    setCheckins((previous) => [
-      ...sharedCheckins,
-      ...previous.filter((checkin) => !sharedIds.has(checkin.id)),
-    ])
-  }, [hub.checkins, hub.holds, hub.units, hub.facilities, user.facility])
+    setCheckins(sharedCheckins)
+  }, [hub.checkins, hub.holds, hub.units, hub.facilities, user.facility, user.facilityId])
 
   useEffect(() => {
     const sharedReturns = hub.returns
@@ -1023,15 +1021,10 @@ export default function StaffApp({
         isFacilityVisible(user, item.facilityId, item.facilityName),
       )
 
-      .map(mapSharedReturn)
+      .map((item) => mapSharedReturn(item, hub.rentals))
 
-    const sharedIds = new Set(sharedReturns.map((item) => item.id))
-
-    setReturns((previous) => [
-      ...sharedReturns,
-      ...previous.filter((item) => !sharedIds.has(item.id)),
-    ])
-  }, [hub.returns, user.facility])
+    setReturns(sharedReturns)
+  }, [hub.returns, hub.rentals, user.facility, user.facilityId])
 
   const showToast = (message: string) => {
     setToast(
@@ -1227,7 +1220,7 @@ export default function StaffApp({
   )
 
   const facilityTickets = hasFacilityScope
-    ? staffTickets.filter((ticket) =>
+    ? hub.tickets.filter((ticket) =>
         isFacilityVisible(user, ticket.facilityId, ticket.facility),
       )
     : []
@@ -1306,6 +1299,10 @@ export default function StaffApp({
   const returnRefund = selectedReturn
     ? Math.max(0, selectedReturn.deposit - returnTotalDeductions)
     : 0
+
+  const selectedSharedReturn = selectedReturn
+    ? hub.returns.find((item) => item.id === selectedReturn.id)
+    : undefined
 
   const expiringRentals = MY_RENTALS.filter((rental) =>
     isFacilityVisible(user, undefined, rental.facility),
@@ -1514,10 +1511,22 @@ export default function StaffApp({
         title: `Kiểm tra trả kho ${r.unit}`,
         customer: r.customer,
         time: formatDate(returnScheduleDrafts[r.id] || r.returnDate),
-        sla: scheduledReturnIds.has(r.id)
-          ? "Đã xác nhận lịch"
-          : "Cần xác nhận lịch",
-        priority: scheduledReturnIds.has(r.id) ? "medium" : "high",
+        sla:
+          r.status === "disputed"
+            ? "Manager đang xem xét yêu cầu tính lại"
+            : r.status === "payment-due"
+              ? "Chờ khách hàng thanh toán thêm"
+              : r.status === "refund-pending"
+                ? "Cần chuyển hoàn cọc cho khách hàng"
+                : r.status === "waiting-customer"
+                  ? "Chờ khách hàng xác nhận quyết toán"
+                  : scheduledReturnIds.has(r.id)
+                    ? "Đã xác nhận lịch"
+                    : "Cần xác nhận lịch",
+        priority:
+          r.status === "refund-pending" || r.status === "pending"
+            ? "high"
+            : "medium",
         page: "return",
       })),
 
@@ -1528,12 +1537,7 @@ export default function StaffApp({
         title: `Xử lý hỗ trợ ${ticket.id}`,
         customer: ticket.customer,
         time: formatDateTime(ticket.created),
-        sla:
-          ticket.status === "waiting-customer"
-            ? "Chờ khách hàng phản hồi"
-            : ticket.priority === "high"
-              ? "Xử lý ngay"
-              : "Trong ca",
+        sla: ticket.priority === "high" ? "Xử lý ngay" : "Trong ca",
         priority: ticket.priority,
         page: "support",
       })),
@@ -1667,7 +1671,10 @@ export default function StaffApp({
     reservations.filter((r) => r.status === "COMPLETED").length +
     checkins.filter((c) => c.status === "completed").length +
     returns.filter(
-      (r) => r.status === "waiting-customer" || r.status === "refunded",
+      (r) =>
+        r.status === "waiting-customer" ||
+        r.status === "disputed" ||
+        r.status === "refunded",
     ).length +
     facilityTickets.filter((ticket) => ticket.status === "resolved").length
 
@@ -2478,6 +2485,11 @@ export default function StaffApp({
                         completed: "success",
                         "no-show": "error",
                       })}
+                      {c.status === "completed" && (
+                        <Badge variant={c.customerHandoverStatus === "confirmed" ? "success" : "warning"}>
+                          {c.customerHandoverStatus === "confirmed" ? "Khách đã xác nhận nhận kho" : "Chờ khách xác nhận nhận kho"}
+                        </Badge>
+                      )}
                       {c.status !== "completed" && (
                         <Button
                           variant="primary"
@@ -2596,6 +2608,9 @@ export default function StaffApp({
                 <option value="waiting-customer">
                   {"Chờ khách hàng phản hồi"}
                 </option>
+                <option value="disputed">{"Khách yêu cầu tính lại"}</option>
+                <option value="payment-due">{"Chờ khách thanh toán thêm"}</option>
+                <option value="refund-pending">{"Chờ Staff hoàn cọc"}</option>
                 <option value="refunded">{"Đã hoàn cọc"}</option>
               </Select>
               <Input
@@ -2689,6 +2704,9 @@ export default function StaffApp({
                       {s(r.status, {
                         pending: "warning",
                         "waiting-customer": "info",
+                        disputed: "error",
+                        "payment-due": "error",
+                        "refund-pending": "warning",
                         refunded: "success",
                       })}
                     </Td>
@@ -2727,6 +2745,7 @@ export default function StaffApp({
                           onClick={() => {
                             setSelectedReturn(r)
                             setReturnDetailsOnly(true)
+                            setReturnRefundReference("")
                             const saved = hub.returns.find(
                               (item) => item.id === r.id,
                             )
@@ -2777,7 +2796,7 @@ export default function StaffApp({
       {page === "support" && (
         <StaffSupportPanel
           user={user}
-          tickets={hub.tickets}
+          tickets={facilityTickets}
           respondSupportTicket={hub.respondSupportTicket}
           canManageSupport={true}
           showToast={showToast}
@@ -3064,6 +3083,25 @@ export default function StaffApp({
                 </span>
               </div>
             </div>
+            {selectedSharedReturn?.status === "disputed" && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-bold">Khách hàng yêu cầu tính lại quyết toán</p>
+                <p className="mt-1"><b>Lý do từ khách hàng:</b> {selectedSharedReturn.customerDecisionNote || "Khách hàng chưa ghi rõ lý do."}</p>
+                <p className="mt-2 text-xs">Các số tiền bên dưới là đúng bản quyết toán khách hàng đang thấy. Hồ sơ đã chuyển Facility Manager xem xét; Staff chỉ theo dõi và không tự thay đổi kết quả khiếu nại.</p>
+              </div>
+            )}
+            {selectedSharedReturn?.status === "payment_due" && (
+              <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-950">
+                <p className="font-bold">Customer đã đồng ý quyết toán · Chờ thanh toán thêm</p>
+                <p className="mt-1">Số tiền Customer đang thấy và cần thanh toán: <b>{formatMoney(selectedSharedReturn.amountDueFromCustomer ?? 0)}</b>.</p>
+              </div>
+            )}
+            {selectedSharedReturn?.status === "refund_pending" && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-bold">Customer đã đồng ý quyết toán · Chờ Staff hoàn cọc</p>
+                <p className="mt-1">Số tiền Customer đang chờ nhận: <b>{formatMoney(selectedSharedReturn.netRefundAmount)}</b>.</p>
+              </div>
+            )}
             <div className="rounded-lg border border-slate-200 p-3 text-sm">
               <p className="mb-2 font-semibold">
                 Đối chiếu giao dịch trước – sau
@@ -3078,14 +3116,19 @@ export default function StaffApp({
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Lúc trả kho</p>
-                  <p>{selectedReturn.finalCondition}</p>
+                  <p className="text-xs text-slate-500">Kết quả nghiệm thu đã gửi</p>
+                  <p>{selectedSharedReturn?.damageClassification === "no_damage" ? "Không hư hại" : selectedSharedReturn?.damageClassification === "minor_damage" ? "Hư hại nhẹ" : selectedSharedReturn?.damageClassification === "major_damage" ? "Hư hại nặng" : "Chưa phân loại"}</p>
                   <p>
-                    {selectedReturn.packageCount} kiện ·{" "}
-                    {selectedReturn.finalWeightKg} kg
+                    {selectedSharedReturn?.packageCount ?? selectedReturn.packageCount} kiện
                   </p>
                 </div>
               </div>
+              {selectedSharedReturn?.staffNotes && (
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="text-xs text-slate-500">Biên bản Staff đã gửi cho khách hàng</p>
+                  <p className="mt-1 whitespace-pre-line">{selectedSharedReturn.staffNotes}</p>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -3156,7 +3199,7 @@ export default function StaffApp({
               aria-label="Chi tiết các khoản khấu trừ"
             >
               <h3 className="font-semibold">
-                Chi tiết các khoản khấu trừ đề xuất
+                {selectedSharedReturn?.status === "disputed" ? "Các khoản khách hàng yêu cầu tính lại" : "Chi tiết các khoản khấu trừ đề xuất"}
               </h3>
               <p className="mt-1 text-xs leading-5 text-stone-600">
                 Đơn vị: Việt Nam đồng (₫). Nhập số lượng và đơn giá theo hợp
@@ -3269,10 +3312,29 @@ export default function StaffApp({
             </div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              {
-                "Sau khi nhân viên gửi, hồ sơ chuyển sang “Chờ khách hàng xác nhận”. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng."
-              }
+              {selectedSharedReturn?.status === "disputed"
+                ? "Khách hàng đã yêu cầu tính lại. Facility Manager là người xem xét và gửi lại quyết toán; Staff không sửa hoặc đóng hồ sơ tại bước này."
+                : "Sau khi nhân viên gửi, hồ sơ chuyển sang “Chờ khách hàng xác nhận”. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng."}
             </div>
+            {selectedSharedReturn?.status === "refund_pending" && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="font-semibold text-emerald-950">Xác nhận đã chuyển hoàn cọc cho khách hàng</p>
+                <p className="mt-1 text-xs text-emerald-800">Số tiền hoàn: {formatMoney(selectedSharedReturn.netRefundAmount)}. Sau khi xác nhận, Customer sẽ thấy biên nhận hoàn cọc và hồ sơ hoàn tất.</p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1"><Input label="Mã giao dịch hoàn cọc" value={returnRefundReference} onChange={(event) => setReturnRefundReference(event.target.value)} /></div>
+                  <Button disabled={!returnRefundReference.trim()} onClick={() => {
+                    try {
+                      hub.completeReturnRefund(selectedSharedReturn.id, user, returnRefundReference.trim())
+                      setReturnRefundReference("")
+                      setInspectModal(false)
+                      showToast("Đã xác nhận chuyển hoàn cọc. Customer đã nhận được biên nhận hoàn tiền.")
+                    } catch (error) {
+                      showToast(error instanceof Error ? error.message : "Không thể xác nhận hoàn cọc.")
+                    }
+                  }}>Xác nhận đã hoàn cọc</Button>
+                </div>
+              </div>
+            )}
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" onClick={() => setInspectModal(false)}>
                 {returnDetailsOnly ? "Đóng" : "Hủy"}
