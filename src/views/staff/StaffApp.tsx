@@ -1,20 +1,4 @@
-<<<<<<< Updated upstream
-import { useEffect, useRef, useState } from 'react'
-import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
-import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Tabs, Avatar, Input, Select } from '../../components/ui'
-import StaffFeeField from './StaffFeeField'
-import StaffPaymentUpload from './StaffPaymentUpload'
-import ProfileView from '../ProfileView'
-import type { User } from '../../types'
-import type { CheckInRecord, Facility, FacilityTask, ReturnCase, StorageReservation, StorageUnit } from '../../types/storageHub'
-import { RESERVATIONS, CHECKINS, RETURNS, SUPPORT_TICKETS, MY_RENTALS, type TicketItem } from "../../data/demoDatabase"
-import StaffFileUpload from './StaffFileUpload'
-import { formatVnd } from '../../i18n/currency'
-const isFacilityVisible = (user: User, _facilityId?: string, name?: string) => !user.facility || user.facility === name
-import { useStorageHub } from '../../store/StorageHubContext'
-=======
 import { useEffect, useRef, useState } from "react"
->>>>>>> Stashed changes
 
 import Layout, {
   getInitialPage,
@@ -632,22 +616,9 @@ const evaluateFit = (dimensionsText: string, weight: number, unit: string) => {
   if (!dimensions)
     return {
       spec,
-      doorFits: false,
       volumeFits: false,
       weightFits: weight > 0 && weight <= spec.maxWeight,
     }
-
-  const [a, b, c] = dimensions
-
-  const doorFits = [
-    [a, b],
-    [a, c],
-    [b, c],
-  ].some(
-    ([x, y]) =>
-      (x <= spec.doorWidth && y <= spec.doorHeight) ||
-      (y <= spec.doorWidth && x <= spec.doorHeight),
-  )
 
   const sortedGoods = [...dimensions].sort((x, y) => x - y)
 
@@ -655,8 +626,6 @@ const evaluateFit = (dimensionsText: string, weight: number, unit: string) => {
 
   return {
     spec,
-
-    doorFits,
 
     volumeFits: sortedGoods.every(
       (dimension, index) => dimension <= sortedInner[index],
@@ -800,39 +769,6 @@ export default function StaffApp({
   const [selectedReturn, setSelectedReturn] = useState<StaffReturn | null>(null)
 
   const [returnDetailsOnly, setReturnDetailsOnly] = useState(false)
-<<<<<<< Updated upstream
-  const [selectedCheckin, setSelectedCheckin] = useState<StaffCheckin | null>(null)
-  const [ticketTab, setTicketTab] = useState('Mở Mới')
-  const [reservationSearch, setReservationSearch] = useState('')
-  const [reservationStatus, setReservationStatus] = useState('all')
-  const [reservationDateFilter, setReservationDateFilter] = useState('')
-  const [reservationSort, setReservationSort] = useState<StaffListSort>('deadline-asc')
-  const [checkinStatusFilter, setCheckinStatusFilter] = useState('all')
-  const [checkinDateFilter, setCheckinDateFilter] = useState('')
-  const [checkinSort, setCheckinSort] = useState<StaffListSort>('deadline-asc')
-  const [returnStatusFilter, setReturnStatusFilter] = useState('all')
-  const [returnDateFilter, setReturnDateFilter] = useState('')
-  const [returnSort, setReturnSort] = useState<StaffListSort>('deadline-asc')
-  const [scheduledReturnIds, setScheduledReturnIds] = useState<Set<string>>(new Set())
-  const [returnScheduleDrafts, setReturnScheduleDrafts] = useState<Record<string, string>>({})
-  const [checkinChecks, setCheckinChecks] = useState<Record<string, boolean>>({})
-  const [checkinEvidence, setCheckinEvidence] = useState('')
-  const [checkinNotes, setCheckinNotes] = useState('')
-  const [actualDimensions, setActualDimensions] = useState('')
-  const [actualWeight, setActualWeight] = useState('')
-  const [actualMaterial, setActualMaterial] = useState('')
-  const [actualCondition, setActualCondition] = useState('')
-  const [contractFile, setContractFile] = useState('')
-  const [contractFileName, setContractFileName] = useState('')
-  const [paymentReference, setPaymentReference] = useState('')
-  const [paymentEvidence, setPaymentEvidence] = useState('')
-  const [paymentEvidenceName, setPaymentEvidenceName] = useState('')
-  const [selectedRenewal, setSelectedRenewal] = useState<(typeof hub.renewals)[number] | null>(null)
-  const [renewalContractFile, setRenewalContractFile] = useState('')
-  const [renewalContractFileName, setRenewalContractFileName] = useState('')
-  const [renewalContractNumber, setRenewalContractNumber] = useState('')
-  const [renewalPaymentReference, setRenewalPaymentReference] = useState('')
-=======
 
   const [selectedCheckin, setSelectedCheckin] = useState<StaffCheckin | null>(
     null,
@@ -915,7 +851,6 @@ export default function StaffApp({
 
   const [renewalPaymentReference, setRenewalPaymentReference] = useState("")
 
->>>>>>> Stashed changes
   const [renewalIdentityVerified, setRenewalIdentityVerified] = useState(false)
 
   const [renewalTermsVerified, setRenewalTermsVerified] = useState(false)
@@ -956,15 +891,6 @@ export default function StaffApp({
   const [feeDetails, setFeeDetails] = useState<Record<string, string>>({})
 
   // Support Tickets state
-<<<<<<< Updated upstream
-  const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() => SUPPORT_TICKETS.filter(item => isFacilityVisible(user, item.facilityId, item.facility)))
-  const [selectedStaffTicket, setSelectedStaffTicket] = useState<StaffTicket | null>(null)
-  const [assignedStaffByTicket, setAssignedStaffByTicket] = useState<Record<string, string>>(() =>
-    Object.fromEntries(SUPPORT_TICKETS.map(ticket => {
-      const latestStaffMessage = [...ticket.messages].reverse().find(message => message.role === 'staff')
-      return [ticket.id, latestStaffMessage?.sender ?? '']
-    }))
-=======
 
   const hasFacilityScope =
     user.role !== "staff" ||
@@ -979,7 +905,6 @@ export default function StaffApp({
           isFacilityVisible(user, item.facilityId, item.facility),
         )
       : [],
->>>>>>> Stashed changes
   )
 
   const [selectedStaffTicket, setSelectedStaffTicket] =
@@ -1265,20 +1190,6 @@ export default function StaffApp({
   const normalizedSearch = reservationSearch.trim().toLowerCase()
 
   const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 }
-<<<<<<< Updated upstream
-  const filteredReservations = sortStaffList(reservations.filter(r => {
-    const matchesStatus = reservationStatus === 'all' || r.status === reservationStatus
-    const matchesDate = !reservationDateFilter || toDateInputValue(reservationDeadline(r)) === reservationDateFilter
-    const searchText = [r.id, r.customer, r.phone, r.email, r.identityId, r.facility, r.unit].join(' ').toLowerCase()
-    return matchesStatus && matchesDate && (!normalizedSearch || searchText.includes(normalizedSearch))
-  }), reservationSort, reservationDeadline, reservation => reservation.customer)
-  const facilityTickets = staffTickets.filter(ticket => isFacilityVisible(user, ticket.facilityId, ticket.facility))
-  const fitEvaluation = selectedCheckin ? evaluateFit(actualDimensions, Number(actualWeight), selectedCheckin.unit) : null
-  const reservationForCheckin = selectedCheckin ? reservations.find(reservation => reservation.id === selectedCheckin.reservationId) : null
-  const appointmentAt = selectedCheckin ? new Date(`${toDateInputValue(selectedCheckin.appointmentDate)}T${formatTime(selectedCheckin.appointmentTime) || '00:00'}`) : null
-  const isEarlyCheckin = Boolean(appointmentAt && !Number.isNaN(appointmentAt.getTime()) && Date.now() < appointmentAt.getTime())
-  const isOutsideAppointmentDate = Boolean(selectedCheckin && (toDateInputValue(selectedCheckin.appointmentDate) !== toDateInputValue(new Date().toISOString()) || isEarlyCheckin))
-=======
 
   const filteredReservations = sortStaffList(
     reservations.filter((r) => {
@@ -1350,7 +1261,6 @@ export default function StaffApp({
         isEarlyCheckin),
   )
 
->>>>>>> Stashed changes
   const checkinCanComplete = Boolean(
     selectedCheckin &&
       Object.values(checkinChecks).every(Boolean) &&
@@ -1362,8 +1272,7 @@ export default function StaffApp({
       contractFile.trim() &&
       paymentReference.trim() &&
       paymentEvidence.trim() &&
-      fitEvaluation?.doorFits &&
-      fitEvaluation.volumeFits &&
+      fitEvaluation?.volumeFits &&
       fitEvaluation.weightFits &&
       (!isOutsideAppointmentDate || scheduleOverrideReason.trim()) &&
       (!isEarlyCheckin || earlyCheckinConfirmed),
@@ -2769,7 +2678,7 @@ export default function StaffApp({
                       ) : (
                         <Badge variant="error">{"Hư hỏng"}</Badge>
                       )}
-                      {r.damageNotes && (
+                      {r.condition !== "good" && r.damageNotes && (
                         <p className="text-xs text-red-500 mt-0.5">
                           {r.damageNotes}
                         </p>
@@ -2865,136 +2774,6 @@ export default function StaffApp({
       )}
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
-<<<<<<< Updated upstream
-      {page === 'support' && (() => {
-        const openCount = facilityTickets.filter(tItem => tItem.status === 'open').length
-        const inProgressCount = facilityTickets.filter(tItem => tItem.status === 'in-progress').length
-        const waitingCustomerCount = facilityTickets.filter(tItem => tItem.status === 'waiting-customer').length
-        const resolvedCount = facilityTickets.filter(tItem => tItem.status === 'resolved').length
-        const tabList = ['Mở Mới', 'Đang Xử Lý', 'Chờ khách hàng', 'Đã Giải Quyết']
-        const tabStatus: Record<string, TicketStatus> = {
-          'Mở Mới': 'open',
-          'Đang Xử Lý': 'in-progress',
-          'Chờ khách hàng': 'waiting-customer',
-          'Đã Giải Quyết': 'resolved',
-        }
-        const currentActiveTab = tabStatus[ticketTab] ?? 'open'
-        const displayedTickets = facilityTickets.filter(tItem => tItem.status === currentActiveTab)
-        const tabActive = tabList.find(tab => tabStatus[tab] === currentActiveTab) ?? tabList[0]
-
-        return (
-          <div className="fade-in space-y-5">
-            <SectionHeader
-              title={"Hỗ trợ khách hàng"}
-              subtitle={"Tiếp nhận và giải quyết yêu cầu hỗ trợ của khách hàng"}
-            />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <StatCard
-                title={"Chờ phản hồi"}
-                value={openCount}
-                delta={openCount > 0 ? ('Cần xử lý gấp') : ('Đã giải quyết hết')}
-                deltaPositive={openCount === 0}
-                icon={Icon.alert}
-                iconBg="bg-amber-50 text-amber-800"
-              />
-              <StatCard
-                title={"Đang xử lý"}
-                value={inProgressCount}
-                icon={Icon.refresh}
-                iconBg="bg-blue-50 text-blue-700"
-              />
-              <StatCard title={'Chờ khách hàng'} value={waitingCustomerCount} icon={Icon.support} iconBg="bg-violet-50 text-violet-700" />
-              <StatCard
-                title={"Đã giải quyết"}
-                value={resolvedCount}
-                icon={Icon.check}
-                iconBg="bg-emerald-50 text-emerald-700"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <Tabs
-                tabs={tabList}
-                active={tabActive}
-                onChange={setTicketTab}
-              />
-            </div>
-
-            <Card>
-              <Table>
-                <Thead>
-                  <tr>
-                    <Th>{'Mã phiếu'}</Th>
-                    <Th>{'Khách hàng'}</Th>
-                    <Th>{'Nội dung và cơ sở'}</Th>
-                    <Th>{'Danh mục'}</Th>
-                    <Th>{'Mức độ'}</Th>
-                    <Th>{'Ngày mở'}</Th>
-                    <Th>{'nhân viên phụ trách'}</Th>
-                    <Th>{'Trạng thái'}</Th>
-                    <Th className="text-right">{'Thao tác'}</Th>
-                  </tr>
-                </Thead>
-                <Tbody>
-                  {displayedTickets.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="text-center py-10 text-stone-400 text-sm">
-                        {"Chưa có phiếu hỗ trợ"}
-                      </td>
-                    </tr>
-                  ) : (
-                    displayedTickets.map(tItem => (
-                      <Tr key={tItem.id}>
-                        <Td><span className="font-mono text-xs font-semibold text-stone-600">{tItem.id}</span></Td>
-                        <Td>
-                          <div className="flex items-center gap-2">
-                            <Avatar name={tItem.customer} size="sm" />
-                            <div>
-                              <span className="text-sm font-medium text-stone-900 block">{tItem.customer}</span>
-                              <span className="text-[11px] text-stone-400">{tItem.email}</span>
-                            </div>
-                          </div>
-                        </Td>
-                        <Td className="max-w-xs">
-                          <p className="font-medium text-sm text-stone-800 truncate">{tItem.subject}</p>
-                          <p className="text-xs text-stone-400">{tItem.facility} · Gian kho {tItem.unit}</p>
-                        </Td>
-                        <Td><Badge variant="muted">{tItem.category}</Badge></Td>
-                        <Td>{s(tItem.priority, { high: 'error', medium: 'warning', low: 'muted' })}</Td>
-                        <Td className="text-xs text-stone-500">{formatDateTime(tItem.created)}</Td>
-                        <Td>
-                          {assignedStaffByTicket[tItem.id]
-                            ? <div className="flex items-center gap-2"><Avatar name={assignedStaffByTicket[tItem.id]} size="sm" /><span className="text-xs font-medium text-stone-700">{assignedStaffByTicket[tItem.id]}</span></div>
-                            : <span className="text-xs italic text-stone-400">{'Chưa có nhân viên nhận'}</span>}
-                        </Td>
-                        <Td>{s(tItem.status, { open: 'info', 'in-progress': 'warning', 'waiting-customer': 'info', resolved: 'success' })}</Td>
-                        <Td className="text-right">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedStaffTicket(tItem)
-                              setTicketNewStatus(tItem.status)
-                              setTicketEvidence('')
-                              setTicketEscalated(false)
-                              setTicketEscalationReason('')
-                              setRespondModal(true)
-                            }}
-                          >
-                            {"Phản hồi"} ({tItem.messages?.length ?? 1})
-                          </Button>
-                        </Td>
-                      </Tr>
-                    ))
-                  )}
-                </Tbody>
-              </Table>
-            </Card>
-          </div>
-        )
-      })()}
-=======
       {page === "support" && (
         <StaffSupportPanel
           user={user}
@@ -3004,7 +2783,6 @@ export default function StaffApp({
           showToast={showToast}
         />
       )}
->>>>>>> Stashed changes
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
       {page === "profile" && (
@@ -3741,10 +3519,6 @@ export default function StaffApp({
                 </p>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <span>
-                    {"Cửa kho"}: {fitEvaluation.spec.doorWidth} ×{" "}
-                    {fitEvaluation.spec.doorHeight} cm
-                  </span>
-                  <span>
                     {"Lọt lòng"}: {fitEvaluation.spec.inner.join(" × ")} cm
                   </span>
                   <span>
@@ -3755,11 +3529,6 @@ export default function StaffApp({
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge variant={fitEvaluation.doorFits ? "success" : "error"}>
-                    {fitEvaluation.doorFits
-                      ? "Đã kiểm tra lọt cửa khi xoay"
-                      : "Không lọt cửa"}
-                  </Badge>
                   <Badge
                     variant={fitEvaluation.weightFits ? "success" : "error"}
                   >
@@ -3775,8 +3544,7 @@ export default function StaffApp({
                       : "Vượt thể tích"}
                   </Badge>
                 </div>
-                {(!fitEvaluation.doorFits ||
-                  !fitEvaluation.weightFits ||
+                {(!fitEvaluation.weightFits ||
                   !fitEvaluation.volumeFits) && (
                   <p className="mt-2 font-medium text-red-700">
                     {
@@ -4062,7 +3830,7 @@ export default function StaffApp({
                     })
                     setSelectedRenewal(null)
                     showToast(
-                      "Đã hoàn tất gia hạn. khách hàng đã nhận thời hạn hợp đồng và biên nhận mới.",
+                      "Đã hoàn tất gia hạn. Khách hàng đã nhận thời hạn hợp đồng và biên nhận mới.",
                     )
                   } catch (error) {
                     showToast(
@@ -4151,53 +3919,12 @@ export default function StaffApp({
       </Modal>
 
       {/* Staff Ticket Resolution Modal */}
-<<<<<<< Updated upstream
-      <Modal closeLabel="Đóng hộp thoại" open={respondModal} onClose={() => setRespondModal(false)} title={'Phản hồi và xử lý phiếu hỗ trợ'}>
-        {activeStaffTicket && (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-[#292a27] p-4 text-white">
-              <div className="flex justify-between items-center text-xs font-mono text-[#e9a12c]">
-                <span>{activeStaffTicket.id}</span>
-                <span>{activeStaffTicket.facility}</span>
-=======
       <Modal
         closeLabel="Đóng hộp thoại"
         open={respondModal}
         onClose={() => setRespondModal(false)}
         size="xl"
-        className="!p-0 overflow-hidden bg-[#f4f1ea] border border-[#e7e2d8]"
-        contentClassName="p-5 sm:p-6 bg-[#f4f1ea] space-y-4"
-        customHeader={
-          <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#e7e2d8] sticky top-0 z-20">
-            <h2
-              id="modal-title"
-              className="text-[15px] font-semibold text-[#191b20]"
-              style={{ fontFamily: "Inter, system-ui, sans-serif" }}
-            >
-              Phiếu hỗ trợ
-            </h2>
-            <button
-              type="button"
-              aria-label="Đóng"
-              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
-              onClick={() => setRespondModal(false)}
-            >
-              <svg
-                className="w-5 h-5 show-icon"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-        }
+        title="Phiếu hỗ trợ"
       >
         {activeStaffTicket && (
           <div className="space-y-4">
@@ -4252,7 +3979,6 @@ export default function StaffApp({
                     </b>
                   </span>
                 </div>
->>>>>>> Stashed changes
               </div>
               <h3 className="font-bold text-base mt-1 text-stone-100">{activeStaffTicket.subject}</h3>
               <p className="text-xs text-stone-300 mt-1">
@@ -4261,34 +3987,6 @@ export default function StaffApp({
             </div>
 
             {/* Chatbox */}
-<<<<<<< Updated upstream
-            <div className="max-h-72 overflow-y-auto rounded-xl border border-stone-200 bg-stone-100/80 p-3 shadow-inner">
-              <div className="space-y-3">
-                {activeStaffTicket.messages?.map(msg => {
-                  const isStaff = msg.role === 'staff'
-                  const isSystem = msg.role === 'system'
-                  return (
-                    <div key={msg.id} className={`flex ${isSystem ? 'justify-center' : isStaff ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs shadow-sm ${
-                        isSystem
-                          ? 'bg-stone-200 text-stone-600'
-                          : isStaff
-                            ? 'rounded-br-md bg-blue-600 text-white'
-                            : 'rounded-bl-md border border-amber-200 bg-amber-50 text-stone-800'
-                      }`}>
-                        <div className={`mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isStaff ? 'text-blue-100' : 'text-stone-500'}`}>
-                          <span className={`font-bold ${isStaff ? 'text-white' : 'text-stone-800'}`}>{msg.sender}</span>
-                          <span>{msg.role === 'staff' ? ('nhân viên hỗ trợ') : msg.role === 'customer' ? ('Khách hàng') : ('Hệ thống')}</span>
-                          <span>· {formatDateTime(msg.time)}</span>
-                        </div>
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-                <div ref={chatEndRef} />
-              </div>
-=======
             <div className="max-h-72 overflow-y-auto rounded-[10px] border border-[#e7e2d8] bg-[#faf8f4] p-4 space-y-3.5">
               {activeStaffTicket.messages?.map((msg) => {
                 const isStaff = msg.role === "staff"
@@ -4332,7 +4030,6 @@ export default function StaffApp({
                 )
               })}
               <div ref={chatEndRef} />
->>>>>>> Stashed changes
             </div>
 
             {/* Status Changer */}
@@ -4343,35 +4040,6 @@ export default function StaffApp({
                 </label>
                 <select
                   value={ticketNewStatus}
-<<<<<<< Updated upstream
-                  onChange={e => setTicketNewStatus(e.target.value as TicketStatus)}
-                  className="w-full border border-stone-300 rounded-lg p-2 text-xs bg-white focus:ring-2 focus:ring-amber-500"
-                >
-                  <option value="open">{'Mở Mới / Chờ xử lý'}</option>
-                  <option value="in-progress">{'Đang Khắc Phục'}</option>
-                  <option value="waiting-customer">{'Chờ khách hàng Phản Hồi'}</option>
-                  <option value="resolved">{'Đã Giải Quyết Xong'}</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-stone-700 block mb-1">
-                  {'Nhân Viên Tiếp Nhận'}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={assignedStaffByTicket[activeStaffTicket.id] || ('Chưa có nhân viên nhận xử lý')}
-                    className="min-w-0 flex-1 border border-stone-200 rounded-lg p-2 text-xs bg-stone-100 text-stone-600"
-                  />
-                  {assignedStaffByTicket[activeStaffTicket.id] !== user.name && (
-                    <Button size="sm" variant="outline" onClick={() => {
-                      setAssignedStaffByTicket(previous => ({ ...previous, [activeStaffTicket.id]: user.name }))
-                      setTicketNewStatus('in-progress')
-                      showToast(`${user.name} đã nhận xử lý ${activeStaffTicket.id}.`)
-                    }}>{'Nhận xử lý'}</Button>
-                  )}
-=======
                   onChange={(e) =>
                     setTicketNewStatus(e.target.value as TicketStatus)
                   }
@@ -4407,7 +4075,6 @@ export default function StaffApp({
                       user.name ||
                       "Chưa gán"}
                   </span>
->>>>>>> Stashed changes
                 </div>
               </div>
             </div>
@@ -4421,21 +4088,6 @@ export default function StaffApp({
                 rows={3}
                 placeholder={'Nhập hướng dẫn khắc phục sự cố, cấp lại mã PIN hoặc thông báo cho khách...'}
                 value={staffReplyText}
-<<<<<<< Updated upstream
-                onChange={e => setStaffReplyText(e.target.value)}
-                className="w-full border border-stone-300 rounded-lg p-2.5 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-              />
-            </div>
-
-            <Input label={'Bằng chứng đính kèm (mã tệp/đường dẫn)'} value={ticketEvidence} onChange={event => setTicketEvidence(event.target.value)} />
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2"><label className="text-xs font-semibold text-amber-900"><input type="checkbox" checked={ticketEscalated} onChange={event => { setTicketEscalated(event.target.checked); if (event.target.checked) setTicketNewStatus('in-progress') }} /> {'Chuyển cấp cho quản lý/đội kỹ thuật'}</label>{ticketEscalated && <Input label={'Lý do chuyển cấp'} value={ticketEscalationReason} onChange={event => setTicketEscalationReason(event.target.value)} />}</div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
-              <Button variant="outline" onClick={() => setRespondModal(false)}>{"Hủy"}</Button>
-              <Button
-                variant="primary"
-                disabled={!staffReplyText.trim() || (ticketEscalated && !ticketEscalationReason.trim())}
-=======
                 onChange={(e) => setStaffReplyText(e.target.value)}
                 className="w-full rounded-[6px] border border-[#e7e2d8] bg-white px-3 py-2 text-xs text-[#191b20] placeholder:text-[#767268]/60 focus:outline-none focus:ring-2 focus:ring-[#e0680f] focus:border-[#e0680f] transition resize-none leading-relaxed"
               />
@@ -4484,7 +4136,6 @@ export default function StaffApp({
                   !staffReplyText.trim() ||
                   (ticketEscalated && !ticketEscalationReason.trim())
                 }
->>>>>>> Stashed changes
                 onClick={() => {
                   const newMsg = staffReplyText.trim()
                     ? {
@@ -4525,15 +4176,6 @@ export default function StaffApp({
                       }
                     }),
                   )
-<<<<<<< Updated upstream
-                  setAssignedStaffByTicket(previous => ({ ...previous, [activeStaffTicket.id]: user.name }))
-                  setStaffReplyText('')
-                  setTicketEvidence('')
-                  setTicketEscalated(false)
-                  setTicketEscalationReason('')
-                  showToast(`${user.name} đã gửi phản hồi cho ${activeStaffTicket.id}.`)
-                }}
-=======
 
                   setAssignedStaffByTicket((previous) => ({
                     ...previous,
@@ -4564,10 +4206,9 @@ export default function StaffApp({
                     ? "bg-[#d8d4c9] text-[#767268] cursor-not-allowed border-none"
                     : "bg-[#e0680f] text-white hover:bg-[#b8540c] shadow-sm cursor-pointer border-none"
                 }`}
->>>>>>> Stashed changes
               >
                 {"Lưu và gửi phản hồi"}
-              </Button>
+              </button>
             </div>
           </div>
         )}
