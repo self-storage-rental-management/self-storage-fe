@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 
 import {
   XAxis,
@@ -39,7 +39,11 @@ import {
 
 import type { User } from "../../types"
 
-import type { PromotionItem, PricingTierItem } from "../../data/demoDatabase"
+import type {
+  PromotionItem,
+  PricingTierItem,
+  MonthlyRevenueRecord,
+} from "../../data/demoDatabase"
 import {
   UNIT_SPECS,
   REVENUE_DATA,
@@ -175,13 +179,13 @@ export default function BusinessApp({
 
   const {
     facilities: facilitiesList,
-
     units: unitsList,
-
+    rentals: rentalsList = [],
+    contracts: contractsList = [],
+    payments: paymentsList = [],
+    holds: holdsList = [],
     createFacility,
-
     updateFacility,
-
     deleteFacility,
   } = hub
 
@@ -456,66 +460,331 @@ export default function BusinessApp({
     ? selectedRevenueFacility.name
     : "Toàn bộ cơ sở"
 
-  const totalFacilityPortfolioRevenue = useMemo(() => {
-    return facilitiesList.reduce((sum, f) => sum + (f.revenue || 0), 0) || 1
-  }, [facilitiesList])
+  // Helper kiểm tra xem cơ sở có khớp ID / code / tên không
+  const isFacilityMatching = useCallback(
+    (fac: any, candidateFacId?: string, candidateFacName?: string) => {
+      if (!fac) return false
+      if (candidateFacId && candidateFacId === fac.id) return true
+      if (
+        candidateFacId &&
+        fac.code &&
+        candidateFacId.toUpperCase() === fac.code.toUpperCase()
+      )
+        return true
+      if (
+        candidateFacName &&
+        fac.name &&
+        candidateFacName.trim().toLowerCase() === fac.name.trim().toLowerCase()
+      )
+        return true
+      return false
+    },
+    [],
+  )
 
-  const activeRevenueData = useMemo(() => {
+  // Map ngày thanh toán vào tháng báo cáo (Tháng 4 – Tháng 9)
+  const getPaymentReportingMonth = useCallback((dateStr?: string): string => {
+    if (!dateStr) return "Tháng 9"
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return "Tháng 9"
+    const m = d.getMonth() + 1
+    if (m >= 4 && m <= 9) return `Tháng ${m}`
+    return m < 4 ? "Tháng 4" : "Tháng 9"
+  }, [])
+
+  // Holds/Reservations của cơ sở đang chọn
+  const selectedFacilityHolds = useMemo(() => {
+    if (!selectedRevenueFacility) return []
+    return (holdsList || []).filter((h) =>
+      isFacilityMatching(selectedRevenueFacility, h.facilityId, h.facilityName),
+    )
+  }, [selectedRevenueFacility, holdsList, isFacilityMatching])
+
+  const selectedFacilityHoldIds = useMemo(() => {
+    return new Set(selectedFacilityHolds.map((h) => h.id))
+  }, [selectedFacilityHolds])
+
+  // Rentals của cơ sở đang chọn
+  const selectedFacilityRentals = useMemo(() => {
+    if (!selectedRevenueFacility) return []
+    return (rentalsList || []).filter(
+      (r) =>
+        isFacilityMatching(
+          selectedRevenueFacility,
+          r.facilityId,
+          r.facilityName,
+        ) || selectedFacilityHoldIds.has(r.holdId),
+    )
+  }, [
+    selectedRevenueFacility,
+    rentalsList,
+    selectedFacilityHoldIds,
+    isFacilityMatching,
+  ])
+
+  const selectedFacilityRentalIds = useMemo(() => {
+    return new Set(selectedFacilityRentals.map((r) => r.id))
+  }, [selectedFacilityRentals])
+
+  // Contracts của cơ sở đang chọn
+  const selectedFacilityContracts = useMemo(() => {
+    if (!selectedRevenueFacility) return []
+    return (contractsList || []).filter(
+      (c) =>
+        selectedFacilityHoldIds.has(c.reservationId) ||
+        selectedFacilityRentals.some(
+          (r) =>
+            r.contractId === c.id || r.id === c.id || r.unitId === c.unitId,
+        ),
+    )
+  }, [
+    selectedRevenueFacility,
+    contractsList,
+    selectedFacilityHoldIds,
+    selectedFacilityRentals,
+  ])
+
+  // Thanh toán thực tế đã hoàn tất (status === 'PAID') của cơ sở đang chọn
+  const selectedFacilityPaidPayments = useMemo(() => {
+    if (!selectedRevenueFacility) return []
+    return (paymentsList || []).filter((p) => {
+      if (p.status !== "PAID" || p.type === "REFUND") return false
+      if (p.rentalId && selectedFacilityRentalIds.has(p.rentalId)) return true
+      if (p.reservationId && selectedFacilityHoldIds.has(p.reservationId))
+        return true
+      return false
+    })
+  }, [
+    selectedRevenueFacility,
+    paymentsList,
+    selectedFacilityRentalIds,
+    selectedFacilityHoldIds,
+  ])
+
+  // Tính doanh thu thực tế MTD của từng cơ sở
+  const getFacilityActualRevenue = useCallback(
+    (fac: any) => {
+      if (!fac) return 0
+      const isSeed =
+        fac.id === "fac-001" ||
+        fac.id === "fac-002" ||
+        fac.code === "HCM-Q1-F01" ||
+        fac.code === "BD-F01"
+
+      const facHoldIds = new Set(
+        (holdsList || [])
+          .filter((h) => isFacilityMatching(fac, h.facilityId, h.facilityName))
+          .map((h) => h.id),
+      )
+      const facRentalIds = new Set(
+        (rentalsList || [])
+          .filter(
+            (r) =>
+              isFacilityMatching(fac, r.facilityId, r.facilityName) ||
+              facHoldIds.has(r.holdId),
+          )
+          .map((r) => r.id),
+      )
+      const facPaid = (paymentsList || [])
+        .filter((p) => {
+          if (p.status !== "PAID" || p.type === "REFUND") return false
+          if (p.rentalId && facRentalIds.has(p.rentalId)) return true
+          if (p.reservationId && facHoldIds.has(p.reservationId)) return true
+          return false
+        })
+        .reduce((s, p) => s + (p.amount || 0), 0)
+
+      if (isSeed) {
+        return (fac.revenue || 0) + facPaid
+      }
+      return facPaid
+    },
+    [holdsList, rentalsList, paymentsList, isFacilityMatching],
+  )
+
+  const activeRevenueData: MonthlyRevenueRecord[] = useMemo(() => {
     if (!selectedRevenueFacility) {
-      return REVENUE_DATA
+      // "Toàn bộ cơ sở": Giữ nguyên số liệu REVENUE_DATA chuẩn của hệ thống demo,
+      // cộng thêm các khoản thanh toán thực tế mới phát sinh từ các cơ sở mới
+      const newFacilityPaidPayments = (paymentsList || []).filter((p) => {
+        if (p.status !== "PAID" || p.type === "REFUND") return false
+        const isSeedPayment = (rentalsList || []).some(
+          (r) =>
+            (r.id === p.rentalId || r.holdId === p.reservationId) &&
+            (r.facilityId === "fac-001" ||
+              r.facilityId === "fac-002" ||
+              r.facilityName?.includes("Quận 1") ||
+              r.facilityName?.includes("Bình Dương")),
+        )
+        return !isSeedPayment
+      })
+
+      return REVENUE_DATA.map((item) => {
+        const extraRevenue = newFacilityPaidPayments.reduce((sum, p) => {
+          if (
+            getPaymentReportingMonth(p.paidAt || p.receivedAt) === item.month
+          ) {
+            return sum + (p.amount || 0)
+          }
+          return sum
+        }, 0)
+
+        return {
+          ...item,
+          revenue: item.revenue + extraRevenue,
+        }
+      })
     }
 
-    // Tỷ trọng doanh thu tự động phân bổ theo doanh thu khai báo hoặc quy mô gian kho
+    const isQ1 =
+      selectedRevenueFacility.id === "fac-001" ||
+      selectedRevenueFacility.code === "HCM-Q1-F01" ||
+      selectedRevenueFacility.name?.includes("Quận 1")
 
-    let ratio = 1
+    const isBD =
+      selectedRevenueFacility.id === "fac-002" ||
+      selectedRevenueFacility.code === "BD-F01" ||
+      selectedRevenueFacility.name?.includes("Bình Dương")
 
-    if (
-      selectedRevenueFacility.revenue &&
-      selectedRevenueFacility.revenue > 0
-    ) {
-      ratio = selectedRevenueFacility.revenue / totalFacilityPortfolioRevenue
-    } else {
-      const totalUnits =
-        facilitiesList.reduce((s, f) => s + (f.units || 0), 0) || 1
+    if (isQ1) {
+      // Cơ sở Quận 1: Khớp nối 3 hợp đồng thực tế (S: 5.5M, M: 9.5M, L: 15.0M -> MTD 30.000.000 đ)
+      // T4: 2 HĐ (S + L = 20.500.000 đ, 9% lấp đầy)
+      // T5 - T9: 3 HĐ (S + M + L = 30.000.000 đ, 13% lấp đầy)
+      const q1Base: MonthlyRevenueRecord[] = [
+        { month: "Tháng 4", revenue: 20500000, growth: "—", growthNumber: 0, contracts: 2, occupancyRate: "9%", occupancyNumber: 2 / 23 },
+        { month: "Tháng 5", revenue: 30000000, growth: "+46,3%", growthNumber: 0.463, contracts: 3, occupancyRate: "13%", occupancyNumber: 3 / 23 },
+        { month: "Tháng 6", revenue: 30000000, growth: "0%", growthNumber: 0, contracts: 3, occupancyRate: "13%", occupancyNumber: 3 / 23 },
+        { month: "Tháng 7", revenue: 30000000, growth: "0%", growthNumber: 0, contracts: 3, occupancyRate: "13%", occupancyNumber: 3 / 23 },
+        { month: "Tháng 8", revenue: 30000000, growth: "0%", growthNumber: 0, contracts: 3, occupancyRate: "13%", occupancyNumber: 3 / 23 },
+        { month: "Tháng 9", revenue: 30000000, growth: "0%", growthNumber: 0, contracts: 3, occupancyRate: "13%", occupancyNumber: 3 / 23 },
+      ]
 
-      ratio = (selectedRevenueFacility.units || 20) / totalUnits
+      return q1Base.map((item) => {
+        const extraMonthPaid = selectedFacilityPaidPayments
+          .filter(
+            (p) =>
+              getPaymentReportingMonth(p.paidAt || p.receivedAt) === item.month,
+          )
+          .reduce((sum, p) => sum + (p.amount || 0), 0)
+
+        return {
+          ...item,
+          revenue: item.revenue + extraMonthPaid,
+        }
+      })
     }
 
-    ratio = Math.max(0.05, Math.min(1, ratio))
+    if (isBD) {
+      // Cơ sở Bình Dương: 5 gian kho lấp đầy -> MTD 57.500.000 đ (25% lấp đầy)
+      const bdBase: MonthlyRevenueRecord[] = [
+        { month: "Tháng 4", revenue: 48000000, growth: "—", growthNumber: 0, contracts: 4, occupancyRate: "20%", occupancyNumber: 4 / 20 },
+        { month: "Tháng 5", revenue: 52000000, growth: "+8,3%", growthNumber: 0.083, contracts: 4, occupancyRate: "20%", occupancyNumber: 4 / 20 },
+        { month: "Tháng 6", revenue: 55000000, growth: "+5,8%", growthNumber: 0.058, contracts: 5, occupancyRate: "25%", occupancyNumber: 5 / 20 },
+        { month: "Tháng 7", revenue: 56000000, growth: "+1,8%", growthNumber: 0.018, contracts: 5, occupancyRate: "25%", occupancyNumber: 5 / 20 },
+        { month: "Tháng 8", revenue: 57000000, growth: "+1,8%", growthNumber: 0.018, contracts: 5, occupancyRate: "25%", occupancyNumber: 5 / 20 },
+        { month: "Tháng 9", revenue: 57500000, growth: "+0,9%", growthNumber: 0.009, contracts: 5, occupancyRate: "25%", occupancyNumber: 5 / 20 },
+      ]
 
-    const facOccupancyPct =
-      selectedRevenueFacility.units > 0
+      return bdBase.map((item) => {
+        const extraMonthPaid = selectedFacilityPaidPayments
+          .filter(
+            (p) =>
+              getPaymentReportingMonth(p.paidAt || p.receivedAt) === item.month,
+          )
+          .reduce((sum, p) => sum + (p.amount || 0), 0)
+
+        return {
+          ...item,
+          revenue: item.revenue + extraMonthPaid,
+        }
+      })
+    }
+
+    // ── CƠ SỞ MỚI ĐƯỢC TẠO: ──
+    // Doanh thu PHẢI dựa trên thanh toán thực tế (status === 'PAID')
+    // Nếu chưa có giao dịch thanh toán thành công, doanh thu của cơ sở BẮT BUỘC PHẢI = 0 ₫!
+    const facOccPct =
+      selectedRevenueFacility.units > 0 && selectedRevenueFacility.occupied > 0
         ? Math.round(
-            (selectedRevenueFacility.occupied / selectedRevenueFacility.units) *
+            (selectedRevenueFacility.occupied /
+              selectedRevenueFacility.units) *
               100,
           )
-        : 75
+        : 0
 
-    return REVENUE_DATA.map((item) => {
-      const revenue = Math.round(item.revenue * ratio)
+    const activeContractsCount = Math.max(
+      selectedRevenueFacility.occupied || 0,
+      selectedFacilityContracts.length,
+      selectedFacilityRentals.length,
+    )
 
-      const contracts = Math.max(1, Math.round(item.contracts * ratio))
+    let previousMonthRevenue = 0
 
-      const occNumber = Math.min(
-        0.99,
-        Math.max(0.2, (item.occupancyNumber / 0.84) * (facOccupancyPct / 100)),
+    return REVENUE_DATA.map((item, idx) => {
+      // Khoản thanh toán thực tế đã thu trong tháng
+      const monthPayments = selectedFacilityPaidPayments.filter(
+        (p) =>
+          getPaymentReportingMonth(p.paidAt || p.receivedAt) === item.month,
+      )
+      const monthRevenue = monthPayments.reduce(
+        (sum, p) => sum + (p.amount || 0),
+        0,
       )
 
-      const occRateStr = `${Math.round(occNumber * 100)}%`
+      // Số hợp đồng:
+      // Các tháng quá khứ (Tháng 4 - 8): 0 (do cơ sở mới được tạo, quá khứ chưa thành lập)
+      // Tháng 9 (tháng hiện tại): Hiển thị số hợp đồng thực tế đã ký / hồ sơ thuê (nếu có)
+      const monthContracts =
+        idx === REVENUE_DATA.length - 1 ? activeContractsCount : 0
+
+      // Tỷ lệ lấp đầy:
+      const monthOccRate =
+        idx === REVENUE_DATA.length - 1 && facOccPct > 0
+          ? `${facOccPct}%`
+          : "0%"
+      const monthOccNumber =
+        idx === REVENUE_DATA.length - 1 && facOccPct > 0 ? facOccPct / 100 : 0
+
+      // Tính tăng trưởng so với tháng trước
+      let growthStr = "—"
+      let growthNum = 0
+      if (idx > 0) {
+        if (previousMonthRevenue === 0 && monthRevenue > 0) {
+          growthStr = "+100%"
+          growthNum = 1
+        } else if (previousMonthRevenue > 0 && monthRevenue === 0) {
+          growthStr = "-100%"
+          growthNum = -1
+        } else if (previousMonthRevenue > 0 && monthRevenue > 0) {
+          const diff =
+            ((monthRevenue - previousMonthRevenue) / previousMonthRevenue) *
+            100
+          growthStr = `${diff >= 0 ? "+" : ""}${diff.toFixed(1).replace(".", ",")}%`
+          growthNum = diff / 100
+        }
+      }
+
+      previousMonthRevenue = monthRevenue
 
       return {
-        ...item,
-
-        revenue,
-
-        contracts,
-
-        occupancyRate: occRateStr,
-
-        occupancyNumber: occNumber,
+        month: item.month,
+        revenue: monthRevenue,
+        growth: growthStr,
+        growthNumber: growthNum,
+        contracts: monthContracts,
+        occupancyRate: monthOccRate,
+        occupancyNumber: monthOccNumber,
       }
     })
-  }, [selectedRevenueFacility, totalFacilityPortfolioRevenue, facilitiesList])
+  }, [
+    selectedRevenueFacility,
+    paymentsList,
+    rentalsList,
+    selectedFacilityPaidPayments,
+    selectedFacilityContracts,
+    selectedFacilityRentals,
+    getPaymentReportingMonth,
+  ])
 
   const currentTotalRevenue = activeRevenueData.reduce(
     (s, i) => s + i.revenue,
@@ -526,20 +795,36 @@ export default function BusinessApp({
     currentTotalRevenue / (activeRevenueData.length || 1),
   )
 
-  const currentHighestItem = [...activeRevenueData].sort(
-    (a, b) => b.revenue - a.revenue,
-  )[0] || { month: "Tháng 9", revenue: 18450000 }
+  const hasAnyRevenue = currentTotalRevenue > 0
 
-  const currentForecast = !selectedRevenueFacility
-    ? "~19.000.000 ₫"
-    : `~${Math.round(currentHighestItem.revenue * 1.03).toLocaleString("vi-VN")} ₫`
+  const currentHighestItem = useMemo(() => {
+    if (!hasAnyRevenue) {
+      return { month: "Chưa phát sinh", revenue: 0 }
+    }
+    const nonZeroItems = activeRevenueData.filter((d) => d.revenue > 0)
+    if (nonZeroItems.length === 0) {
+      return { month: "Chưa phát sinh", revenue: 0 }
+    }
+    return [...nonZeroItems].sort((a, b) => b.revenue - a.revenue)[0]
+  }, [activeRevenueData, hasAnyRevenue])
+
+  const currentForecast = useMemo(() => {
+    if (!hasAnyRevenue) {
+      return "0 ₫"
+    }
+    const forecastVal = Math.round(currentHighestItem.revenue * 1.03)
+    return `~${forecastVal.toLocaleString("vi-VN")} ₫`
+  }, [hasAnyRevenue, currentHighestItem])
 
   const maxRevenueValue = Math.max(
     ...activeRevenueData.map((d) => d.revenue),
-    10000000,
+    0,
   )
 
-  const chartYMax = Math.ceil(maxRevenueValue / 5000000) * 5000000
+  const chartYMax =
+    maxRevenueValue > 0
+      ? Math.ceil(maxRevenueValue / 5000000) * 5000000
+      : 10000000
 
   const [pricingTiers, setPricingTiers] =
     useState<PricingTierItem[]>(PRICING_TIERS)
@@ -609,7 +894,7 @@ export default function BusinessApp({
       setFacilityPricingOverrides((prev) => ({
         ...prev,
         [selectedPricingFacility.id]: {
-          ...(prev[selectedPricingFacility.id] || {}),
+          ...prev[selectedPricingFacility.id],
           [selectedTier.id]: {
             basePrice: updatedPrice,
             highDemandMultiplier: updatedMultiplier,
@@ -1375,7 +1660,10 @@ export default function BusinessApp({
     return Array.from(set)
   }, [facilitiesList])
 
-  const totalRevenue = facilitiesList.reduce((s, f) => s + (f.revenue || 0), 0)
+  const totalRevenue = facilitiesList.reduce(
+    (s, f) => s + getFacilityActualRevenue(f),
+    0,
+  )
 
   const totalUnits =
     unitsList.length || facilitiesList.reduce((s, f) => s + (f.units || 0), 0)
@@ -1733,12 +2021,14 @@ export default function BusinessApp({
                                 : "Revenue MTD"}
                             </p>
                             <p className="font-bold text-slate-900 text-sm">
-                              {formatCurrency(f.revenue || 0)}
+                              {formatCurrency(getFacilityActualRevenue(f))}
                             </p>
                             <p className="text-[10px] text-emerald-700 font-semibold">
-                              {f.growth
-                                ? `+${f.growth}% so với kỳ trước`
-                                : "Doanh thu ổn định"}
+                              {getFacilityActualRevenue(f) === 0
+                                ? "Chưa phát sinh doanh thu"
+                                : f.growth
+                                  ? `+${f.growth}% so với kỳ trước`
+                                  : "Doanh thu ổn định"}
                             </p>
                           </div>
 
@@ -2613,7 +2903,7 @@ export default function BusinessApp({
                       setDownloadedFileName(fileName)
 
                       showToast(`Đã xuất báo cáo Excel: ${fileName}`)
-                    } catch (err) {
+                    } catch {
                       showToast("Lỗi khi xuất file Excel!")
                     } finally {
                       setDownloadingExcel(false)
@@ -2741,7 +3031,7 @@ export default function BusinessApp({
                     {currentAvgRevenue.toLocaleString("vi-VN")} ₫
                   </p>
                   <p className="text-xs text-stone-400 mt-1 font-medium">
-                    {currentTotalRevenue.toLocaleString("vi-VN")} / 6
+                    {currentTotalRevenue.toLocaleString("vi-VN")} ₫ / 6 tháng
                   </p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
@@ -2779,7 +3069,9 @@ export default function BusinessApp({
                     {currentForecast}
                   </p>
                   <p className="text-xs text-amber-600 mt-1 font-medium">
-                    Dựa trên xu hướng doanh thu gần đây
+                    {hasAnyRevenue
+                      ? "Dựa trên xu hướng doanh thu gần đây"
+                      : "Chưa có dữ liệu giao dịch"}
                   </p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
@@ -2931,7 +3223,7 @@ export default function BusinessApp({
                     <p className="text-xl font-bold text-stone-900 mt-0.5">
                       {selectedRevenueFacility
                         ? `${Math.round((selectedRevenueFacility.occupied / Math.max(1, selectedRevenueFacility.units)) * 100)}%`
-                        : "84%"}
+                        : `${facilitiesList.reduce((s, f) => s + (f.units || 0), 0) > 0 ? Math.round((facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0) / facilitiesList.reduce((s, f) => s + (f.units || 0), 0)) * 100) : 19}%`}
                     </p>
                   </div>
                   <div className="w-32">
@@ -2943,7 +3235,9 @@ export default function BusinessApp({
                                 Math.max(1, selectedRevenueFacility.units)) *
                                 100,
                             )
-                          : 84
+                          : facilitiesList.reduce((s, f) => s + (f.units || 0), 0) > 0
+                            ? Math.round((facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0) / facilitiesList.reduce((s, f) => s + (f.units || 0), 0)) * 100)
+                            : 19
                       }
                       max={100}
                       color="bg-blue-600"
@@ -2958,14 +3252,22 @@ export default function BusinessApp({
                     </p>
                     <p className="text-xl font-bold text-stone-900 mt-0.5">
                       {selectedRevenueFacility
-                        ? selectedRevenueFacility.occupied
-                        : 116}
+                        ? Math.max(
+                            selectedRevenueFacility.occupied,
+                            selectedFacilityContracts.length,
+                            selectedFacilityRentals.length,
+                          )
+                        : facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)}
                     </p>
                   </div>
                   <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded">
                     {selectedRevenueFacility
-                      ? `${selectedRevenueFacility.occupied} / ${selectedRevenueFacility.units} gian`
-                      : "116 / 138 gian"}
+                      ? `${Math.max(
+                          selectedRevenueFacility.occupied,
+                          selectedFacilityContracts.length,
+                          selectedFacilityRentals.length,
+                        )} / ${selectedRevenueFacility.units} gian`
+                      : `${facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)} / ${facilitiesList.reduce((s, f) => s + (f.units || 0), 0)} gian`}
                   </span>
                 </div>
 
@@ -3128,14 +3430,14 @@ export default function BusinessApp({
                         {f.name}
                       </span>
                       <span className="text-slate-800 font-semibold">
-                        {Math.round((f.occupied / f.units) * 100)}%
+                        {f.units > 0 ? Math.round((f.occupied / f.units) * 100) : 0}%
                       </span>
                     </div>
                     <ProgressBar
                       value={f.occupied}
-                      max={f.units}
+                      max={f.units || 1}
                       color={
-                        f.occupied / f.units >= 0.85
+                        f.units > 0 && f.occupied / f.units >= 0.85
                           ? "bg-green-500"
                           : "bg-blue-500"
                       }
@@ -3167,11 +3469,11 @@ export default function BusinessApp({
                       <Td>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">
-                            {Math.round((f.occupied / f.units) * 100)}%
+                            {f.units > 0 ? Math.round((f.occupied / f.units) * 100) : 0}%
                           </span>
                           <ProgressBar
                             value={f.occupied}
-                            max={f.units}
+                            max={f.units || 1}
                             color="bg-blue-500"
                           />
                         </div>
@@ -3184,7 +3486,7 @@ export default function BusinessApp({
                         </div>
                       </Td>
                       <Td className="font-semibold text-slate-800 font-mono">
-                        {formatCurrency((f.revenue || 0) * 12)} /{" "}
+                        {formatCurrency(getFacilityActualRevenue(f) * 12)} /{" "}
                         {lang === "vi" ? "năm" : "yr"}
                       </Td>
                     </Tr>
@@ -4464,7 +4766,7 @@ export default function BusinessApp({
                       Doanh thu tháng (MTD):
                     </span>
                     <b className="text-slate-800 block text-sm">
-                      {formatCurrency(selectedFacility.revenue || 0)}
+                      {formatCurrency(getFacilityActualRevenue(selectedFacility))}
                     </b>
                     <span className="text-slate-500">
                       {selectedFacility.price}/tháng từ

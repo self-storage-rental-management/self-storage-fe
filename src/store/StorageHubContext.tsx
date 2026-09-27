@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import type {
   Facility,
   StorageUnit,
   StorageReservation,
-  StorageHold,
   StorageContract,
   StoragePayment,
   CheckInRecord,
@@ -13,7 +12,6 @@ import type {
   BusinessConfig,
   GoodsDeclaration,
   PricingQuote,
-  PricingSnapshot,
   ReservationValidationResult,
   UnitType,
   DamageClassification,
@@ -312,9 +310,9 @@ const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
         ...stored,
         ...canonical,
         units: 23,
-        occupied: 0,
-        available: 23,
-        revenue: 72500000,
+        occupied: 3,
+        available: 20,
+        revenue: 30000000,
         growth: 8.4,
         unitDistribution: { S: 5, M: 5, L: 8, XL: 5 }
       }
@@ -389,10 +387,17 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
   maxLoadKg = canonicalType.maxLoadKg
 
   // Customer test inventory: demo reservations lock their selected physical units; every other unit is bookable.
-  const isReservedDemo = u.id === 'A-104' || u.id === 'B-112'
   const demoRentalByUnit: Record<string, string> = {
+    'HCM-Q1-F01-S-001': 'RNT-2026-001',
+    'HCM-Q1-F01-M-001': 'RNT-2026-002',
+    'HCM-Q1-F01-L-001': 'RNT-INIT-PREV',
+    'BD-F01-S-002': 'RNT-BD-001',
+    'BD-F01-M-001': 'RNT-BD-002',
+    'BD-F01-L-001': 'RNT-BD-003',
+    'BD-F01-XL-001': 'RNT-BD-004',
+    'BD-F01-XL-002': 'RNT-BD-005',
   }
-  const isOccupiedDemo = Boolean(demoRentalByUnit[u.id])
+  const isOccupiedDemo = Boolean(demoRentalByUnit[u.id]) || u.status === 'occupied'
   const reservedPeriods: ReservedPeriod[] = []
   if (u.id === 'A-104') {
     reservedPeriods.push({
@@ -430,7 +435,7 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     climate: u.climate,
     status: isOccupiedDemo ? 'occupied' : 'available',
     reservedPeriods,
-    nextAvailableDate: u.id === 'A-104' ? '2027-03-21' : u.id === 'B-112' ? '2026-12-23' : u.id === 'B-208' ? '2027-01-13' : undefined,
+    nextAvailableDate: u.id === 'HCM-Q1-F01-S-001' ? '2027-01-12' : u.id === 'HCM-Q1-F01-M-001' ? '2027-05-01' : u.id === 'HCM-Q1-F01-L-001' ? '2026-09-18' : u.id === 'A-104' ? '2027-03-21' : u.id === 'B-112' ? '2026-12-23' : undefined,
     currentRentalId: demoRentalByUnit[u.id],
     version: 1
   }
@@ -444,6 +449,7 @@ const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
   const mapped = cleaned.map(stored => {
     const canonical = INITIAL_UNITS.find(unit => unit.id === stored.id || unit.code === stored.code)
     if (!canonical) return stored
+    const isCanonicalOccupied = canonical.status === 'occupied' || Boolean(canonical.currentRentalId)
     return {
       ...canonical,
       ...stored,
@@ -451,14 +457,16 @@ const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
       code: canonical.code,
       facilityId: canonical.facilityId,
       facilityName: canonical.facilityName,
+      status: isCanonicalOccupied ? 'occupied' : (stored.status || canonical.status),
+      currentRentalId: isCanonicalOccupied ? canonical.currentRentalId : (stored.currentRentalId || canonical.currentRentalId),
       type: canonical.type,
       areaM2: canonical.areaM2,
       dimensions: canonical.dimensions,
       doorDimensions: canonical.doorDimensions,
       volumeM3: canonical.volumeM3,
       maxLoadKg: canonical.maxLoadKg,
-      price: stored.price ?? canonical.price,
-      deposit: stored.deposit ?? canonical.deposit
+      price: canonical.price ?? stored.price,
+      deposit: canonical.deposit ?? stored.deposit
     }
   })
   const existingIds = new Set(mapped.map(u => u.id))
@@ -791,6 +799,48 @@ const mergeRenewalTestRentals = (rentals: RentalRecord[]) => rentals.filter(rent
 // customer profile. The physical unit is the authoritative source for the
 // facility, so reconcile persisted rentals before renewal filtering/approval.
 const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(rental => {
+  if (rental.id === 'RNT-2026-001' && (rental.unitId === 'B-208' || rental.monthlyRate === 149)) {
+    return {
+      ...rental,
+      unitId: 'HCM-Q1-F01-S-001',
+      unitType: 'Kho Nhỏ (S)',
+      areaM2: 33.6,
+      volumeM3: 107.52,
+      monthlyRate: 5500000,
+      deposit: 5500000,
+      securityDeposit: 5500000,
+      facilityId: 'fac-001',
+      facilityName: 'Kho Việt – Cơ sở Quận 1'
+    }
+  }
+  if (rental.id === 'RNT-2026-002' && (rental.unitId === 'D-402' || rental.monthlyRate === 349)) {
+    return {
+      ...rental,
+      unitId: 'HCM-Q1-F01-M-001',
+      unitType: 'Kho Trung (M)',
+      areaM2: 57.6,
+      volumeM3: 195.84,
+      monthlyRate: 9500000,
+      deposit: 9500000,
+      securityDeposit: 9500000,
+      facilityId: 'fac-001',
+      facilityName: 'Kho Việt – Cơ sở Quận 1'
+    }
+  }
+  if (rental.id === 'RNT-INIT-PREV' && (rental.unitId === 'C-301' || rental.monthlyRate === 269)) {
+    return {
+      ...rental,
+      unitId: 'HCM-Q1-F01-L-001',
+      unitType: 'Kho Lớn (L)',
+      areaM2: 91.8,
+      volumeM3: 330.48,
+      monthlyRate: 15000000,
+      deposit: 15000000,
+      securityDeposit: 15000000,
+      facilityId: 'fac-001',
+      facilityName: 'Kho Việt – Cơ sở Quận 1'
+    }
+  }
   const unit = INITIAL_UNITS.find(item => item.id === rental.unitId || item.code === rental.unitId)
   if (unit) return { ...rental, unitId: unit.id, facilityId: unit.facilityId, facilityName: unit.facilityName }
   const facility = findCanonicalFacility(rental.facilityId, rental.facilityName)
@@ -801,80 +851,80 @@ const INITIAL_RENTALS: RentalRecord[] = [
   {
     id: 'RNT-INIT-PREV',
     holdId: 'RSV-INIT-PREV',
-    unitId: 'C-301',
+    unitId: 'HCM-Q1-F01-L-001',
     facilityId: 'fac-001',
     facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'cust-ha-pham',
     customerName: 'Pham Thu Ha',
     customerEmail: 'ha.pham@gmail.com',
     customerPhone: '093 555 0128',
-    unitType: 'Large Storage',
-    areaM2: 12.0,
-    volumeM3: 30.0,
+    unitType: 'Kho Lớn (L)',
+    areaM2: 91.8,
+    volumeM3: 330.48,
     startDate: 'Mar 18, 2026',
     endDate: 'Sep 18, 2026',
     nextDue: 'Sep 18, 2026',
-    monthlyRate: 269,
-    deposit: 269,
-    securityDeposit: 269,
+    monthlyRate: 15000000,
+    deposit: 15000000,
+    securityDeposit: 15000000,
     status: 'return_requested',
     paymentStatus: 'paid',
     autoRenew: false,
     gateCode: '7318#',
-    initialCondition: 'Kho sạch, tường và khóa nguyên vẹn; 6 kiện đồ gia dụng gỗ và vải.',
+    initialCondition: 'Kho sạch, tường và khóa nguyên vẹn; kiện đồ gia dụng gỗ và thiết bị.',
     evidencePhotos: ['EV-IN-118 · 6 ảnh hiện trạng lúc nhận kho']
   },
   {
     id: 'RNT-2026-001',
     holdId: 'RSV-INIT-001',
-    unitId: 'B-208',
+    unitId: 'HCM-Q1-F01-S-001',
     facilityId: 'fac-001',
     facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'demo-customer',
     customerName: 'Demo Customer',
     customerEmail: 'customer@storagehub.demo',
     customerPhone: '+84 908 123 456',
-    unitType: 'Medium Storage',
-    areaM2: 6.0,
-    volumeM3: 15.0,
+    unitType: 'Kho Nhỏ (S)',
+    areaM2: 33.6,
+    volumeM3: 107.52,
     startDate: 'Jan 12, 2026',
     endDate: 'Jan 12, 2027',
     nextDue: 'Oct 12, 2026',
-    monthlyRate: 149,
-    deposit: 149,
-    securityDeposit: 149,
+    monthlyRate: 5500000,
+    deposit: 5500000,
+    securityDeposit: 5500000,
     status: 'active',
     paymentStatus: 'paid',
     autoRenew: true,
     gateCode: '4921#',
     initialCondition: 'Sàn sạch, ổ khóa thông minh đã test hoạt động, không có vết nứt tường.',
-    evidencePhotos: ['EV-INIT-B208-01 · Biên bản bàn giao kho ban đầu']
+    evidencePhotos: ['EV-INIT-S001-01 · Biên bản bàn giao kho ban đầu']
   },
   {
     id: 'RNT-2026-002',
     holdId: 'RSV-INIT-002',
-    unitId: 'D-402',
+    unitId: 'HCM-Q1-F01-M-001',
     facilityId: 'fac-001',
     facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'demo-customer-2',
     customerName: 'Saigon Logistics Co.',
     customerEmail: 'contact@sg-logistics.vn',
     customerPhone: '+84 28 3822 9999',
-    unitType: 'Extra Large Commercial',
-    areaM2: 18.0,
-    volumeM3: 45.0,
+    unitType: 'Kho Trung (M)',
+    areaM2: 57.6,
+    volumeM3: 195.84,
     startDate: 'May 01, 2026',
     endDate: 'May 01, 2027',
     nextDue: 'Oct 01, 2026',
-    monthlyRate: 349,
-    deposit: 349,
-    securityDeposit: 349,
+    monthlyRate: 9500000,
+    deposit: 9500000,
+    securityDeposit: 9500000,
     status: 'active',
     paymentStatus: 'paid',
     autoRenew: true,
     gateCode: '9004#',
     initialCondition: 'Kho pallet thương mại, cửa cuốn cơ điện hoạt động bình thường.',
-    evidencePhotos: ['EV-INIT-D402-01 · Biên bản bàn giao kho pallet']
+    evidencePhotos: ['EV-INIT-M001-01 · Biên bản bàn giao kho pallet']
   }
 ]
 
@@ -890,7 +940,7 @@ const INITIAL_RETURNS: ReturnCase[] = [
   {
     id: 'RET-118',
     rentalId: 'RNT-INIT-PREV',
-    unitId: 'C-301',
+    unitId: 'HCM-Q1-F01-L-001',
     facilityId: 'fac-001',
     facilityName: 'Kho Việt – Cơ sở Quận 1',
     customerId: 'cust-ha-pham',
@@ -906,8 +956,8 @@ const INITIAL_RETURNS: ReturnCase[] = [
     initialWeightKg: 132,
     damageFee: 0,
     outstandingFee: 0,
-    depositAmount: 269, // Security deposit
-    netRefundAmount: 269,
+    depositAmount: 15000000, // Security deposit
+    netRefundAmount: 15000000,
     evidence: ['EV-IN-118 · 6 ảnh hiện trạng lúc nhận kho'],
     customerConfirmed: false
   }

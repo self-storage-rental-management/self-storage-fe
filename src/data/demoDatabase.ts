@@ -8,14 +8,14 @@ export const FACILITIES = [
     address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
     city: 'TP. Hồ Chí Minh',
     rating: 4.9,
-    available: 23,
+    available: 20,
     price: '5.500.000đ',
     climate: true,
     security: '24/7',
     image: 'photo-1553413077-190dd305871c',
     units: 23,
-    occupied: 0,
-    revenue: 72500000,
+    occupied: 3,
+    revenue: 30000000,
     growth: 8.4,
     manager: 'Nguyễn Văn Quản Lý',
     status: 'active' as const,
@@ -129,19 +129,19 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
 
 export const UNITS = [
   // ── 23 Gian Kho Cơ Sở TP. Hồ Chí Minh (HCM-Q1-F01) ──
-  { id: 'HCM-Q1-F01-S-001', code: 'HCM-Q1-F01-S-001', customerCode: 'HCM-Q1-F01-S-001', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-S-001', code: 'HCM-Q1-F01-S-001', customerCode: 'HCM-Q1-F01-S-001', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-S-002', code: 'HCM-Q1-F01-S-002', customerCode: 'HCM-Q1-F01-S-002', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-S-003', code: 'HCM-Q1-F01-S-003', customerCode: 'HCM-Q1-F01-S-003', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-S-004', code: 'HCM-Q1-F01-S-004', customerCode: 'HCM-Q1-F01-S-004', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-S-005', code: 'HCM-Q1-F01-S-005', customerCode: 'HCM-Q1-F01-S-005', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
 
-  { id: 'HCM-Q1-F01-M-001', code: 'HCM-Q1-F01-M-001', customerCode: 'HCM-Q1-F01-M-001', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-M-001', code: 'HCM-Q1-F01-M-001', customerCode: 'HCM-Q1-F01-M-001', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-M-002', code: 'HCM-Q1-F01-M-002', customerCode: 'HCM-Q1-F01-M-002', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-M-003', code: 'HCM-Q1-F01-M-003', customerCode: 'HCM-Q1-F01-M-003', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-M-004', code: 'HCM-Q1-F01-M-004', customerCode: 'HCM-Q1-F01-M-004', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-M-005', code: 'HCM-Q1-F01-M-005', customerCode: 'HCM-Q1-F01-M-005', size: 'M', sizeCode: 'M', type: 'Medium', dimensions: '9,0×6,4×3,4 m', dimensionsM: [9.0, 6.4, 3.4], areaM2: 57.6, volumeM3: 195.84, maxLoadKg: 1200, price: 9500000, floor: 2, zone: 'Khu B', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
 
-  { id: 'HCM-Q1-F01-L-001', code: 'HCM-Q1-F01-L-001', customerCode: 'HCM-Q1-F01-L-001', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
+  { id: 'HCM-Q1-F01-L-001', code: 'HCM-Q1-F01-L-001', customerCode: 'HCM-Q1-F01-L-001', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'occupied', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-L-002', code: 'HCM-Q1-F01-L-002', customerCode: 'HCM-Q1-F01-L-002', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-L-003', code: 'HCM-Q1-F01-L-003', customerCode: 'HCM-Q1-F01-L-003', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
   { id: 'HCM-Q1-F01-L-004', code: 'HCM-Q1-F01-L-004', customerCode: 'HCM-Q1-F01-L-004', size: 'L', sizeCode: 'L', type: 'Large', dimensions: '13,5×6,8×3,6 m', dimensionsM: [13.5, 6.8, 3.6], areaM2: 91.8, volumeM3: 330.48, maxLoadKg: 2400, price: 15000000, floor: 3, zone: 'Khu C', climate: false, status: 'available', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001' },
@@ -415,12 +415,12 @@ export interface MonthlyRevenueRecord {
 }
 
 export const REVENUE_DATA: MonthlyRevenueRecord[] = [
-  { month: 'Tháng 4', revenue: 14200000, growth: '—', growthNumber: 0, contracts: 82, occupancyRate: '68%', occupancyNumber: 0.68 },
-  { month: 'Tháng 5', revenue: 15600000, growth: '+9,9%', growthNumber: 0.099, contracts: 91, occupancyRate: '72%', occupancyNumber: 0.72 },
-  { month: 'Tháng 6', revenue: 16300000, growth: '+4,5%', growthNumber: 0.045, contracts: 96, occupancyRate: '75%', occupancyNumber: 0.75 },
-  { month: 'Tháng 7', revenue: 17100000, growth: '+4,9%', growthNumber: 0.049, contracts: 103, occupancyRate: '78%', occupancyNumber: 0.78 },
-  { month: 'Tháng 8', revenue: 17900000, growth: '+4,7%', growthNumber: 0.047, contracts: 111, occupancyRate: '81%', occupancyNumber: 0.81 },
-  { month: 'Tháng 9', revenue: 18450000, growth: '+3,1%', growthNumber: 0.031, contracts: 116, occupancyRate: '84%', occupancyNumber: 0.84 }
+  { month: 'Tháng 4', revenue: 68500000, growth: '—', growthNumber: 0, contracts: 6, occupancyRate: '14%', occupancyNumber: 0.14 },
+  { month: 'Tháng 5', revenue: 82000000, growth: '+19,7%', growthNumber: 0.197, contracts: 7, occupancyRate: '16%', occupancyNumber: 0.16 },
+  { month: 'Tháng 6', revenue: 85000000, growth: '+3,7%', growthNumber: 0.037, contracts: 8, occupancyRate: '19%', occupancyNumber: 0.19 },
+  { month: 'Tháng 7', revenue: 86000000, growth: '+1,2%', growthNumber: 0.012, contracts: 8, occupancyRate: '19%', occupancyNumber: 0.19 },
+  { month: 'Tháng 8', revenue: 87000000, growth: '+1,2%', growthNumber: 0.012, contracts: 8, occupancyRate: '19%', occupancyNumber: 0.19 },
+  { month: 'Tháng 9', revenue: 87500000, growth: '+0,6%', growthNumber: 0.006, contracts: 8, occupancyRate: '19%', occupancyNumber: 0.19 }
 ]
 
 export const REVENUE_BREAKDOWN = [
@@ -431,16 +431,16 @@ export const REVENUE_BREAKDOWN = [
 ]
 
 export const WAREHOUSE_PERFORMANCE = {
-  currentOccupancy: '84%',
-  activeContracts: 116,
+  currentOccupancy: '19%',
+  activeContracts: 8,
   renewalRate: '91%'
 }
 
 export const UNIT_TYPE_DATA = [
-  { name: 'Small', value: 42, color: '#3b82f6' },
-  { name: 'Medium', value: 48, color: '#8b5cf6' },
-  { name: 'Large', value: 22, color: '#f59e0b' },
-  { name: 'Extra Large', value: 8, color: '#10b981' }
+  { name: 'Small', value: 2, color: '#3b82f6' },
+  { name: 'Medium', value: 2, color: '#8b5cf6' },
+  { name: 'Large', value: 2, color: '#f59e0b' },
+  { name: 'Extra Large', value: 2, color: '#10b981' }
 ]
 
 export interface RentalRecord {
@@ -473,12 +473,12 @@ export const RENTALS: RentalRecord[] = [
     tenant: 'Demo Customer',
     email: 'customer@storagehub.demo',
     phone: '+84 908 123 456',
-    unit: 'HCM-Q1-F01-M-001',
-    unitType: 'Kho Trung (M)',
-    size: 10,
+    unit: 'HCM-Q1-F01-S-001',
+    unitType: 'Kho Nhỏ (S)',
+    size: 5,
     facility: 'Kho Việt – Cơ sở Quận 1',
-    amount: 9500000,
-    deposit: 9500000,
+    amount: 5500000,
+    deposit: 5500000,
     status: 'active',
     paid: 'paid',
     paymentStatus: 'paid',
@@ -491,47 +491,47 @@ export const RENTALS: RentalRecord[] = [
   },
   {
     id: 'RNT-2026-002',
-    customer: 'Tran Van Binh',
-    tenant: 'Tran Van Binh',
-    email: 'binh.tran@email.com',
-    phone: '+84 912 345 678',
-    unit: 'HCM-Q1-F01-S-002',
-    unitType: 'Kho Nhỏ (S)',
-    size: 5,
+    customer: 'Saigon Logistics Co.',
+    tenant: 'Saigon Logistics Co.',
+    email: 'contact@sg-logistics.vn',
+    phone: '+84 28 3822 9999',
+    unit: 'HCM-Q1-F01-M-001',
+    unitType: 'Kho Trung (M)',
+    size: 10,
     facility: 'Kho Việt – Cơ sở Quận 1',
-    amount: 5500000,
-    deposit: 5500000,
-    status: 'active',
-    paid: 'overdue',
-    paymentStatus: 'overdue',
-    startDate: 'Mar 01, 2026',
-    nextDue: 'Sep 05, 2026',
-    dueDate: 'Sep 05, 2026',
-    endDate: 'Mar 01, 2027',
-    autoRenew: false,
-    gateCode: '1092#'
-  },
-  {
-    id: 'RNT-2026-003',
-    customer: 'Nguyen Minh Anh',
-    tenant: 'Nguyen Minh Anh',
-    email: 'anh.nguyen@outlook.com',
-    phone: '+84 903 555 123',
-    unit: 'HCM-Q1-F01-S-001',
-    unitType: 'Kho Nhỏ (S)',
-    size: 5,
-    facility: 'Kho Việt – Cơ sở Quận 1',
-    amount: 5500000,
-    deposit: 5500000,
+    amount: 9500000,
+    deposit: 9500000,
     status: 'active',
     paid: 'paid',
     paymentStatus: 'paid',
-    startDate: 'Apr 10, 2026',
-    nextDue: 'Oct 10, 2026',
-    dueDate: 'Oct 10, 2026',
-    endDate: 'Apr 10, 2027',
+    startDate: 'May 01, 2026',
+    nextDue: 'Oct 01, 2026',
+    dueDate: 'Oct 01, 2026',
+    endDate: 'May 01, 2027',
     autoRenew: true,
-    gateCode: '7731#'
+    gateCode: '9004#'
+  },
+  {
+    id: 'RNT-2026-003',
+    customer: 'Pham Thu Ha',
+    tenant: 'Pham Thu Ha',
+    email: 'ha.pham@gmail.com',
+    phone: '+84 93 555 0128',
+    unit: 'HCM-Q1-F01-L-001',
+    unitType: 'Kho Lớn (L)',
+    size: 15,
+    facility: 'Kho Việt – Cơ sở Quận 1',
+    amount: 15000000,
+    deposit: 15000000,
+    status: 'active',
+    paid: 'paid',
+    paymentStatus: 'paid',
+    startDate: 'Mar 18, 2026',
+    nextDue: 'Sep 18, 2026',
+    dueDate: 'Sep 18, 2026',
+    endDate: 'Sep 18, 2026',
+    autoRenew: false,
+    gateCode: '7318#'
   },
   {
     id: 'RNT-2026-004',
