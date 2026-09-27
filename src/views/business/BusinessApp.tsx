@@ -662,7 +662,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
               <div className="lg:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  🔍 {lang === 'vi' ? 'Tìm kiếm cơ sở' : 'Search Facility'}
+                  {lang === 'vi' ? 'Tìm kiếm cơ sở' : 'Search Facility'}
                 </label>
                 <Input
                   placeholder={lang === 'vi' ? 'Nhập mã cơ sở (VD: HN-F01, HCM-Q1), tên kho, địa chỉ, người quản lý...' : 'Search code, name, address, manager...'}
@@ -673,7 +673,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  📍 {lang === 'vi' ? 'Tỉnh / Thành phố' : 'City / Province'}
+                  {lang === 'vi' ? 'Tỉnh / Thành phố' : 'City / Province'}
                 </label>
                 <Select
                   value={facFilterCity}
@@ -688,7 +688,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  ⚡ {lang === 'vi' ? 'Trạng thái hoạt động' : 'Status'}
+                  {lang === 'vi' ? 'Trạng thái hoạt động' : 'Status'}
                 </label>
                 <Select
                   value={facFilterStatus}
@@ -726,7 +726,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
             <Card className="p-12 text-center border-dashed border-2 border-stone-300">
               <div className="max-w-md mx-auto space-y-3">
                 <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto text-xl">
-                  🏢
+                  {Icon.building}
                 </div>
                 <h4 className="font-bold text-slate-800 text-base">
                   {lang === 'vi' ? 'Không tìm thấy cơ sở phù hợp' : 'No matching facility found'}
@@ -769,15 +769,12 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                         {/* Hàng 2: Địa chỉ + Quản lý + Hotline + Giờ mở cửa */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600">
                           <div className="flex items-start gap-1.5">
-                            <span className="text-amber-600 shrink-0">📍</span>
                             <span className="truncate" title={f.address}>{f.address} · <b className="text-slate-800">{f.city}</b></span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-amber-600 shrink-0">👤</span>
                             <span>Quản lý: <b className="text-slate-800">{f.manager}</b> {f.phone ? `(${f.phone})` : ''}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-amber-600 shrink-0">🕒</span>
                             <span className="truncate" title={f.accessHours || '06:00 - 22:00'}>{f.accessHours || '06:00 - 22:00 (24/7 VIP)'}</span>
                           </div>
                         </div>
@@ -837,7 +834,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                             setViewFacilityModal(true)
                           }}
                         >
-                          👁️ {lang === 'vi' ? 'Chi tiết' : 'Details'}
+                          {lang === 'vi' ? 'Chi tiết' : 'Details'}
                         </Button>
                         <Button
                           variant="outline"
@@ -845,7 +842,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                           className="w-full justify-center text-xs font-semibold border-amber-300 text-amber-800 hover:bg-amber-50"
                           onClick={() => handleOpenEditFacility(f)}
                         >
-                          ✏️ {lang === 'vi' ? 'Chỉnh sửa' : 'Edit'}
+                          {lang === 'vi' ? 'Chỉnh sửa' : 'Edit'}
                         </Button>
                         <Button
                           variant="outline"
@@ -856,7 +853,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                             setDeleteFacilityModal(true)
                           }}
                         >
-                          🗑️ {lang === 'vi' ? 'Xóa cơ sở' : 'Delete'}
+                          {lang === 'vi' ? 'Xóa cơ sở' : 'Delete'}
                         </Button>
                       </div>
                     </div>
@@ -956,36 +953,41 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
             subtitle={lang === 'vi' ? 'Quản lý các phân tầng giá theo kích thước và biểu phí dịch vụ phát sinh' : 'Manage unit pricing tiers and fee schedules'}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-            {PRICING_TIERS.map(tier => (
-              // <Card key={tier.type} className="p-5"> 
-              <Card key={tier.id} className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    {/* <h3 className="font-bold text-slate-900">{tier.type}</h3> */}
-                    <h3 className="font-bold text-slate-900">{tier.name}</h3>
-                    {/* <p className="text-xs text-slate-400">{tier.sizes} ft</p> */}
-                    <p className="text-xs text-slate-400">{tier.size}</p>
+            {PRICING_TIERS.map(tier => {
+              const displayName = lang === 'vi'
+                ? (tier.name.includes('Small') ? 'Kho Nhỏ (S)' :
+                    tier.name.includes('Medium') ? 'Kho Vừa (M)' :
+                    tier.name.includes('Large') ? 'Kho Lớn (L)' : tier.name)
+                : tier.name
+
+              return (
+                <Card key={tier.id} className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-bold text-slate-900">{displayName}</h3>
+                      <p className="text-xs text-slate-400">{tier.size}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedTier({ ...tier, name: displayName }); setPricingModal(true) }}>
+                      {lang === 'vi' ? 'Sửa' : 'Edit'}
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => { setSelectedTier(tier); setPricingModal(true) }}>
-                    {lang === 'vi' ? 'Sửa' : 'Edit'}
-                  </Button>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{lang === 'vi' ? 'Giá cơ sở' : 'Base price'}</span>
-                    <span className="font-semibold">{formatCurrency(tier.basePrice)}/{lang === 'vi' ? 'th' : 'mo'}</span>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{lang === 'vi' ? 'Giá cơ sở' : 'Base price'}</span>
+                      <span className="font-semibold">{formatCurrency(tier.basePrice)}/{lang === 'vi' ? 'th' : 'mo'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{lang === 'vi' ? 'Phụ phí điều hòa' : 'Climate adder'}</span>
+                      <span className="font-semibold">+{formatCurrency(tier.climateAdder)}/{lang === 'vi' ? 'th' : 'mo'}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-100 pt-2">
+                      <span className="text-slate-500">{lang === 'vi' ? 'Hệ số cao điểm' : 'High demand'}</span>
+                      <span className="font-semibold text-blue-600">×{tier.highDemandMultiplier}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{lang === 'vi' ? 'Phụ phí điều hòa' : 'Climate adder'}</span>
-                    <span className="font-semibold">+{formatCurrency(tier.climateAdder)}/{lang === 'vi' ? 'th' : 'mo'}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-100 pt-2">
-                    <span className="text-slate-500">{lang === 'vi' ? 'Hệ số cao điểm' : 'High demand'}</span>
-                    <span className="font-semibold text-blue-600">×{tier.highDemandMultiplier}</span>
-                  </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
 
           <Card className="p-5">
@@ -1000,31 +1002,57 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                 </tr>
               </Thead>
               <Tbody>
-                {FEES.map(f => (
-                  <Tr key={f.type}>
-                    <Td className="font-medium">
-                      {lang === 'vi' ? (
-                        f.type.includes('Late') ? 'Phí nộp muộn' :
-                          f.type.includes('Admin') ? 'Phí hồ sơ ban đầu' :
-                            f.type.includes('Lock') ? 'Phí cắt khóa số' :
-                              f.type.includes('Cleaning') ? 'Phí dọn vệ sinh kho' : f.type
-                      ) : f.type}
-                    </Td>
-                    {/* <Td className="font-semibold text-blue-700">{f.amount}</Td> */}
-                    <Td className="font-semibold text-blue-700">
-                      {formatCurrency(parseFloat(f.amount.replace(/[^0-9.-]+/g, '')) || 0)}
-                    </Td>
-                    <Td className="text-slate-500">
-                      {lang === 'vi' ? (
-                        f.trigger.includes('past due') ? 'Quá hạn thanh toán 7 ngày' :
-                          f.trigger.includes('Move-in') ? 'Khi ký hợp đồng nhận kho' :
-                            f.trigger.includes('Lost key') ? 'Quên mã PIN hoặc kẹt khóa' :
-                              f.trigger.includes('Move-out') ? 'Trả kho còn rác bẩn' : f.trigger
-                      ) : f.trigger}
-                    </Td>
-                    <Td><Badge variant="muted">{lang === 'vi' ? (f.applies === 'All Facilities' ? 'Toàn bộ cơ sở' : f.applies) : f.applies}</Badge></Td>
-                  </Tr>
-                ))}
+                {FEES.map(f => {
+                  const getFeeType = (type: string) => {
+                    if (lang !== 'vi') return type
+                    const lower = type.toLowerCase()
+                    if (lower.includes('late') || lower.includes('muộn')) return 'Phí nộp muộn'
+                    if (lower.includes('lock') || lower.includes('khóa')) return 'Phí thay thế khóa số'
+                    if (lower.includes('cleaning') || lower.includes('vệ sinh')) return 'Phí dọn vệ sinh kho'
+                    if (lower.includes('emergency') || lower.includes('khẩn cấp')) return 'Phí hỗ trợ mở khóa khẩn cấp'
+                    if (lower.includes('admin') || lower.includes('hồ sơ')) return 'Phí hồ sơ ban đầu'
+                    return type
+                  }
+
+                  const getFeeTrigger = (trigger: string) => {
+                    if (lang !== 'vi') return trigger
+                    const lower = trigger.toLowerCase()
+                    if (lower.includes('due') || lower.includes('hạn')) return 'Tự động áp dụng sau 5 ngày kể từ ngày đến hạn thanh toán'
+                    if (lower.includes('key') || lower.includes('loss') || lower.includes('mất') || lower.includes('hỏng')) return 'Khi khách làm mất hoặc hư hỏng khóa / thẻ từ'
+                    if (lower.includes('debris') || lower.includes('rác') || lower.includes('cleaning')) return 'Áp dụng nếu trả kho còn rác bẩn hoặc chất nguy hại'
+                    if (lower.includes('after-hours') || lower.includes('manual') || lower.includes('ngoài giờ')) return 'Mở khóa thủ công ngoài giờ hành chính tại cơ sở'
+                    if (lower.includes('move-in') || lower.includes('nhận kho')) return 'Khi ký hợp đồng nhận kho'
+                    return trigger
+                  }
+
+                  const getFeeApplies = (applies: string) => {
+                    if (lang !== 'vi') return applies
+                    const lower = applies.toLowerCase()
+                    if (lower.includes('all tenants') || lower.includes('tất cả')) return 'Tất cả khách thuê'
+                    if (lower.includes('responsibility') || lower.includes('trách nhiệm')) return 'Trách nhiệm khách thuê'
+                    if (lower.includes('inspection') || lower.includes('nghiệm thu') || lower.includes('kiểm tra')) return 'Kiểm tra khi trả kho'
+                    if (lower.includes('call-out') || lower.includes('yêu cầu')) return 'Mỗi lần yêu cầu'
+                    if (lower.includes('all facilities') || lower.includes('toàn bộ')) return 'Toàn bộ cơ sở'
+                    return applies
+                  }
+
+                  return (
+                    <Tr key={f.type}>
+                      <Td className="font-medium text-slate-900">
+                        {getFeeType(f.type)}
+                      </Td>
+                      <Td className="font-semibold text-emerald-700 font-mono">
+                        {f.amount}
+                      </Td>
+                      <Td className="text-slate-600">
+                        {getFeeTrigger(f.trigger)}
+                      </Td>
+                      <Td>
+                        <Badge variant="muted">{getFeeApplies(f.applies)}</Badge>
+                      </Td>
+                    </Tr>
+                  )
+                })}
               </Tbody>
             </Table>
           </Card>
@@ -1627,7 +1655,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                   <Th>{lang === 'vi' ? 'Thời Hạn TB' : 'Avg Length'}</Th>
                   <Th>{lang === 'vi' ? 'Rời Bỏ' : 'Churn'}</Th>
                   <Th>{lang === 'vi' ? 'Độ Hài Lòng' : 'Satisfaction'}</Th>
-                  <Th>{lang === 'vi' ? 'Doanh Thu/Gian' : 'Revenue/Unit'}</Th>
+                  <Th>{lang === 'vi' ? 'Doanh Thu / Năm' : 'Revenue / Year'}</Th>
                 </tr>
               </Thead>
               <Tbody>
@@ -1645,7 +1673,9 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                     <Td>
                       <div className="flex items-center gap-1 text-amber-500">★ 4.8</div>
                     </Td>
-                    <Td className="font-semibold">${Math.round(f.revenue / f.occupied)}/{lang === 'vi' ? 'th' : 'mo'}</Td>
+                    <Td className="font-semibold text-slate-800 font-mono">
+                      {formatCurrency((f.revenue || 0) * 12)} / {lang === 'vi' ? 'năm' : 'yr'}
+                    </Td>
                   </Tr>
                 ))}
               </Tbody>
@@ -1674,8 +1704,8 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
         {selectedTier && (
           <div className="space-y-4">
             <p className="text-sm text-slate-500">{lang === 'vi' ? 'Đang chỉnh sửa:' : 'Editing:'} <strong>{selectedTier.name}</strong> ({selectedTier.size})</p>
-            <Input label={lang === 'vi' ? 'Giá cơ sở ($/tháng)' : 'Base Price ($/mo)'} type="number" defaultValue={selectedTier.basePrice.toString()} />
-            <Input label={lang === 'vi' ? 'Phụ phí điều hòa ($/tháng)' : 'Climate Control Adder ($/mo)'} type="number" defaultValue={selectedTier.climateAdder.toString()} />
+            <Input label={lang === 'vi' ? 'Giá cơ sở (VNĐ/tháng)' : 'Base Price ($/mo)'} type="number" defaultValue={selectedTier.basePrice.toString()} />
+            <Input label={lang === 'vi' ? 'Phụ phí điều hòa (VNĐ/tháng)' : 'Climate Control Adder ($/mo)'} type="number" defaultValue={selectedTier.climateAdder.toString()} />
             <Input label={lang === 'vi' ? 'Hệ số cao điểm' : 'High Demand Multiplier'} type="number" defaultValue={selectedTier.highDemandMultiplier.toString()} />
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" onClick={() => setPricingModal(false)}>
@@ -1977,7 +2007,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
               {/* Section Header */}
               <div className="flex items-center justify-between border-b border-stone-200 pb-2">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
-                  <span>📐</span> {lang === 'vi' ? 'Phân bổ gian kho' : 'Storage Unit Allocation'}
+                  {lang === 'vi' ? 'Phân bổ gian kho' : 'Storage Unit Allocation'}
                 </h4>
                 <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full font-mono">
                   {lang === 'vi' ? `Tổng: ${formFacUnits} kho` : `Total: ${formFacUnits} units`}
@@ -2371,7 +2401,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
             {selectedFacility.occupied > 0 ? (
               <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm space-y-2">
                 <div className="font-bold flex items-center gap-1.5 text-base">
-                  <span>⛔</span> CẢNH BÁO AN TOÀN HỢP ĐỒNG:
+                  CẢNH BÁO AN TOÀN HỢP ĐỒNG:
                 </div>
                 <p>
                   Cơ sở <b>{selectedFacility.name} ({selectedFacility.code || selectedFacility.id})</b> hiện đang có <b>{selectedFacility.occupied} gian kho có khách thuê hoạt động</b>.
@@ -2431,7 +2461,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
                     </span>
                     <h3 className="text-lg font-bold text-slate-900">{selectedFacility.name}</h3>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">📍 {selectedFacility.address} · {selectedFacility.city}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{selectedFacility.address} · {selectedFacility.city}</p>
                 </div>
                 <Badge variant={selectedFacility.status === 'active' ? 'success' : 'warning'}>
                   {selectedFacility.status === 'active' ? (lang === 'vi' ? 'Đang hoạt động' : 'Active') : (lang === 'vi' ? 'Bảo trì / Sắp mở' : 'Maintenance')}
@@ -2466,7 +2496,7 @@ export default function BusinessApp({ user, onLogout }: { user: User; onLogout: 
               <div className="border border-stone-200 rounded-xl overflow-hidden">
                 <div className="bg-stone-50 px-3 py-2 border-b border-stone-200 flex justify-between items-center text-xs">
                   <span className="font-bold text-slate-800">
-                    📐 Danh Mục Gian Kho Thuộc Cơ Sở ({facilityUnits.length || selectedFacility.units} kho quy hoạch)
+                    Danh Mục Gian Kho Thuộc Cơ Sở ({facilityUnits.length || selectedFacility.units} kho quy hoạch)
                   </span>
                   <span className="text-slate-500 font-mono text-[11px]">Chuẩn S, M, L, XL</span>
                 </div>
