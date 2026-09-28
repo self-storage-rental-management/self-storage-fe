@@ -92,6 +92,9 @@ export interface Facility {
   accessHours: string
   timezone: string
   unitDistribution?: FacilityUnitDistribution
+  unitPrices?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
+  unitLoadLimits?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
+  totalDesignLoadTon?: number
 }
 
 export interface ReservedPeriod {

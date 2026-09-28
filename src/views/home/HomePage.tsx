@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import BrandLogo from '../../components/BrandLogo'
 import { useStorageHub } from '../../store/StorageHubContext'
-import { FACILITIES } from '../../data/demoDatabase'
+import { FACILITIES, UNIT_SPECS } from '../../data/demoDatabase'
 
 interface HomePageProps {
   onOpenLogin: () => void
@@ -876,27 +876,118 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
 
             {/* Modal Content: Unit Types */}
             {activeModal === 'unit_types' && (
-              <div className="mt-4 space-y-4 text-xs">
+              <div className="mt-4 space-y-5 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub cung cấp các loại đơn vị lưu trữ đa dạng, đáp ứng mọi quy mô từ đồ dùng cá nhân đến hàng hóa doanh nghiệp:
+                  StorageHub cung cấp 4 quy cách kho đa dạng, đáp ứng mọi nhu cầu từ cá nhân đến doanh nghiệp. Kích cỡ hàng hóa tối đa, lối đi và xe đẩy tăng dần theo size kho.
                 </p>
-                <div className="space-y-3">
-                  {unitCategories.map(c => (
-                    <div key={c.id} className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white border border-stone-200 flex items-center justify-center text-[#E89520] shrink-0">
-                        <BoxIcon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between font-bold text-stone-900 text-sm">
-                          <span>{c.name}</span>
-                          <span className="text-xs text-[#E89520] font-mono font-bold">{c.estRate}</span>
+
+                {(Object.values(UNIT_SPECS) as (typeof UNIT_SPECS)[keyof typeof UNIT_SPECS][]).map((spec, idx) => {
+                  const accentColors = [
+                    { border: 'border-amber-200', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-800', icon: 'bg-amber-100 text-amber-700', tag: 'S' },
+                    { border: 'border-sky-200', bg: 'bg-sky-50', badge: 'bg-sky-100 text-sky-800', icon: 'bg-sky-100 text-sky-700', tag: 'M' },
+                    { border: 'border-indigo-200', bg: 'bg-indigo-50', badge: 'bg-indigo-100 text-indigo-800', icon: 'bg-indigo-100 text-indigo-700', tag: 'L' },
+                    { border: 'border-purple-200', bg: 'bg-purple-50', badge: 'bg-purple-100 text-purple-800', icon: 'bg-purple-100 text-purple-700', tag: 'XL' },
+                  ]
+                  const color = accentColors[idx]
+                  return (
+                    <div key={spec.size} className={`rounded-2xl border ${color.border} ${color.bg} p-4`}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-9 h-9 rounded-lg ${color.icon} flex items-center justify-center shrink-0`}>
+                            <BoxIcon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-stone-900 text-sm">{spec.name}</h4>
+                            <p className="text-[11px] font-mono text-stone-500 mt-0.5">{spec.dimensions}</p>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-stone-500 font-bold mt-0.5">{c.size}</p>
-                        <p className="text-xs text-stone-600 mt-1">{c.desc}</p>
+                        <div className="text-right shrink-0">
+                          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold ${color.badge}`}>Size {color.tag}</span>
+                          <p className="mt-1 text-sm font-bold text-stone-900">{spec.priceFormatted}<span className="text-[10px] font-normal text-stone-500">/tháng</span></p>
+                        </div>
+                      </div>
+
+                      {/* Specs grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Diện tích</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.areaM2} m²</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Chiều cao</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.heightM} m</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Thể tích</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.volumeM3.toLocaleString('vi-VN')} m³</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Số khung kệ</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.frameCount} khung</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Kích thước khung (R×S×C)</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.frameDimensions.widthM}×{spec.frameDimensions.depthM}×{spec.frameDimensions.heightM} m</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Khoảng cách 2 khung</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.frameDistanceM} m</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Lối đi bộ</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.aisleM} m</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Lối xe</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.vehicleLaneWidthM} m</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Khung cửa (R×C)</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.doorWidthM} × {spec.doorHeightM} m</p>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium">Tải trọng tối đa</p>
+                          <p className="mt-0.5 font-bold text-stone-900">{spec.maxLoadKg.toLocaleString('vi-VN')} kg</p>
+                        </div>
+                      </div>
+
+                      {/* Cargo max + trolley */}
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium text-[11px] mb-1">Kích cỡ hàng tối đa (D×R×C)</p>
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{spec.maxCargoDimCm.lengthCm} cm</span>
+                            <span className="text-stone-300">×</span>
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">{spec.maxCargoDimCm.widthCm} cm</span>
+                            <span className="text-stone-300">×</span>
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{spec.maxCargoDimCm.heightCm} cm</span>
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-medium text-[11px] mb-1">Xe đẩy hỗ trợ</p>
+                          <p className="font-bold text-stone-900">{spec.cartEquipment}</p>
+                          <p className="text-[10px] text-stone-500 mt-0.5 leading-4">{spec.cartEquipmentDetail}</p>
+                        </div>
+                      </div>
+
+                      {/* Box capacity */}
+                      <div className="mt-2 flex gap-2 text-[11px]">
+                        <div className="flex-1 rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-semibold mb-1">Thùng nhỏ</p>
+                          <p className="font-bold text-stone-900">{spec.smallBox.lengthCm}×{spec.smallBox.widthCm}×{spec.smallBox.heightCm} cm · {spec.smallBox.volumeM3} m³</p>
+                          <p className="mt-1 text-base font-black text-stone-900">{spec.smallBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
+                        </div>
+                        <div className="flex-1 rounded-lg bg-white/80 border border-white p-2.5">
+                          <p className="text-stone-400 font-semibold mb-1">Thùng to</p>
+                          <p className="font-bold text-stone-900">{spec.largeBox.lengthCm}×{spec.largeBox.widthCm}×{spec.largeBox.heightCm} cm · {spec.largeBox.volumeM3} m³</p>
+                          <p className="mt-1 text-base font-black text-stone-900">{spec.largeBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
+
                 <div className="pt-3 border-t border-stone-100 flex justify-end">
                   <button
                     type="button"
@@ -906,7 +997,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     }}
                     className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-1.5"
                   >
-                    <span>Gửi yêu cầu đặt loại đơn vị này</span>
+                    <span>Đặt giữ kho ngay</span>
                     <ArrowRightIcon className="w-3.5 h-3.5" />
                   </button>
                 </div>

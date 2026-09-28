@@ -79,6 +79,33 @@ export interface PolicyItem {
   lastUpdated?: string
 }
 
+export const WAREHOUSE_PHOTO_PRESETS = [
+  {
+    id: "preset-std",
+    title: "Kho tiêu chuẩn hiện đại",
+    url: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop&q=80",
+    description: "Hệ thống kệ thép công nghiệp, lối xe rộng",
+  },
+  {
+    id: "preset-logistics",
+    title: "Kho Logistics & Pallet",
+    url: "https://images.unsplash.com/photo-1553413077-190dd305871c?w=800&auto=format&fit=crop&q=80",
+    description: "Khu vực bốc xếp pallet, sàn chịu tải trọng cao",
+  },
+  {
+    id: "preset-smart",
+    title: "Kho tự quản thông minh 24/7",
+    url: "https://images.unsplash.com/photo-1586864387967-d02ef85d93e8?w=800&auto=format&fit=crop&q=80",
+    description: "Khóa số điện tử, điều hòa nhiệt ẩm tự động",
+  },
+  {
+    id: "preset-mini",
+    title: "Kho mini cá nhân & gia đình",
+    url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80",
+    description: "Ngăn kho nhỏ gọn, bảo quản đồ dùng gia đình",
+  },
+]
+
 const getFeeType = (type: string, lang: string) => {
   if (lang !== "vi") return type
 
@@ -107,37 +134,7 @@ const getFeeType = (type: string, lang: string) => {
 
 const getFeeTrigger = (trigger: string, lang: string) => {
   if (lang !== "vi") return trigger
-
-  const lower = trigger.toLowerCase()
-
-  if (lower.includes("due") || lower.includes("hạn"))
-    return "Tự động áp dụng sau 5 ngày kể từ ngày đến hạn thanh toán"
-
-  if (
-    lower.includes("key") ||
-    lower.includes("loss") ||
-    lower.includes("mất") ||
-    lower.includes("hỏng")
-  )
-    return "Khi khách làm mất hoặc hư hỏng khóa / thẻ từ"
-
-  if (
-    lower.includes("debris") ||
-    lower.includes("rác") ||
-    lower.includes("cleaning")
-  )
-    return "Áp dụng nếu trả kho còn rác bẩn hoặc chất nguy hại"
-
-  if (
-    lower.includes("after-hours") ||
-    lower.includes("manual") ||
-    lower.includes("ngoài giờ")
-  )
-    return "Mở khóa thủ công ngoài giờ hành chính tại cơ sở"
-
-  if (lower.includes("move-in") || lower.includes("nhận kho"))
-    return "Khi ký hợp đồng nhận kho"
-
+  // Trigger strings are already in Vietnamese in FEES data — return as-is
   return trigger
 }
 
@@ -187,9 +184,49 @@ export default function BusinessApp({
     createFacility,
     updateFacility,
     deleteFacility,
+    updateUnit,
+    updateBusinessConfig,
   } = hub
 
+  const getFacilityOccupiedCount = useCallback(
+    (fac: any) => {
+      if (!fac) return 0
+      const facUnits = unitsList.filter(
+        (u) => u.facilityId === fac.id || u.facilityId === fac.code,
+      )
+      if (facUnits.length > 0) {
+        return facUnits.filter(
+          (u) =>
+            u.status === "occupied" || (u.status as string) === "rented",
+        ).length
+      }
+      return fac.occupied || 0
+    },
+    [unitsList],
+  )
+
+  const getFacilityTotalUnits = useCallback(
+    (fac: any) => {
+      if (!fac) return 0
+      const facUnits = unitsList.filter(
+        (u) => u.facilityId === fac.id || u.facilityId === fac.code,
+      )
+      return facUnits.length > 0 ? facUnits.length : fac.units || 0
+    },
+    [unitsList],
+  )
+
+  const getFacilityAvailableCount = useCallback(
+    (fac: any) => {
+      const total = getFacilityTotalUnits(fac)
+      const occ = getFacilityOccupiedCount(fac)
+      return Math.max(0, total - occ)
+    },
+    [getFacilityTotalUnits, getFacilityOccupiedCount],
+  )
+
   const lang = "vi"
+  const USD_TO_VND_RATE = 26000
 
   const formatCurrency = (amount: number): string => {
     if (amount >= 10000) {
@@ -341,6 +378,20 @@ export default function BusinessApp({
 
     savePolicies(next)
 
+    // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
+    const lowerName = newPolicy.name.toLowerCase()
+    if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
+      const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
+      if (!isNaN(num) && num > 0) {
+        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch {}
+      }
+    } else if (lowerName.includes("late") || lowerName.includes("trễ")) {
+      const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
+      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch {}
+    } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
+      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch {}
+    }
+
     setCreatePolicyModal(false)
 
     showToast(
@@ -396,6 +447,20 @@ export default function BusinessApp({
     )
 
     savePolicies(next)
+
+    // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
+    const lowerName = (policyFormName || selectedPolicy.name).toLowerCase()
+    if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
+      const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
+      if (!isNaN(num) && num > 0) {
+        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch {}
+      }
+    } else if (lowerName.includes("late") || lowerName.includes("trễ")) {
+      const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
+      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch {}
+    } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
+      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch {}
+    }
 
     setPolicyModal(false)
 
@@ -844,7 +909,13 @@ export default function BusinessApp({
       string,
       Record<string, { basePrice: number; highDemandMultiplier: number }>
     >
-  >({})
+  >(() => {
+    try {
+      const stored = localStorage.getItem("storagehub:facility-pricing")
+      if (stored) return JSON.parse(stored)
+    } catch {}
+    return {}
+  })
 
   const selectedPricingFacility = useMemo(() => {
     if (pricingFacilityFilter === "all") return null
@@ -878,6 +949,71 @@ export default function BusinessApp({
     }
   }
 
+  // Helper lấy giá thực tế theo từng cỡ kho (S, M, L, XL) của một cơ sở
+  const getFacilitySizePrice = useCallback(
+    (fac: any, size: "S" | "M" | "L" | "XL"): number => {
+      if (!fac) return UNIT_SPECS[size].priceMonthly
+
+      // 1. Kiểm tra override trong bảng giá (Bảng giá & Biểu phí)
+      const tierId =
+        size === "S"
+          ? "tier-1"
+          : size === "M"
+            ? "tier-2"
+            : size === "L"
+              ? "tier-3"
+              : "tier-4"
+      const override = facilityPricingOverrides[fac.id]?.[tierId]
+      if (override?.basePrice && override.basePrice > 0) return override.basePrice
+
+      // 2. Kiểm tra giá riêng theo size được lưu trên cơ sở (unitPrices)
+      if (fac.unitPrices?.[size] && fac.unitPrices[size] > 0)
+        return fac.unitPrices[size]
+
+      // 3. Kiểm tra giá thực tế của gian kho thuộc cơ sở này trong unitsList
+      const facCode = fac.code || fac.id
+      const matchingUnits = unitsList.filter(
+        (u) =>
+          (u.facilityId === fac.id || u.facilityId === facCode) &&
+          (((u as any).size ||
+            (u.type === "Small"
+              ? "S"
+              : u.type === "Medium"
+                ? "M"
+                : u.type === "Large"
+                  ? "L"
+                  : "XL")) === size),
+      )
+      if (matchingUnits.length > 0 && matchingUnits[0].price) {
+        const rawP = matchingUnits[0].price
+        return rawP > 10000 ? rawP : Math.round(rawP * USD_TO_VND_RATE)
+      }
+
+      // 4. Nếu cơ sở chỉ có 1 phân loại kho duy nhất (ví dụ toàn bộ 25 kho là XL),
+      // thì giá cơ sở từ (fac.price) chính là giá của phân loại kho đó
+      const dist = fac.unitDistribution
+      const activeSizes = dist
+        ? (["S", "M", "L", "XL"] as const).filter((s) => (dist[s] ?? 0) > 0)
+        : []
+      if (activeSizes.length === 1 && activeSizes[0] === size && fac.price) {
+        const parsed = parseInt(fac.price.replace(/\D/g, ""), 10)
+        if (!isNaN(parsed) && parsed > 0) return parsed
+      }
+
+      // 5. Mặc định theo quy chuẩn UNIT_SPECS
+      return UNIT_SPECS[size].priceMonthly
+    },
+    [facilityPricingOverrides, unitsList],
+  )
+
+  const getFacilitySizePriceFormatted = useCallback(
+    (fac: any, size: "S" | "M" | "L" | "XL"): string => {
+      const price = getFacilitySizePrice(fac, size)
+      return `${Math.round(price).toLocaleString("vi-VN")}đ`
+    },
+    [getFacilitySizePrice],
+  )
+
   const handleSavePricingTier = () => {
     if (!selectedTier) return
     const parsedPrice = Number(formTierBasePrice)
@@ -890,17 +1026,52 @@ export default function BusinessApp({
         : selectedTier.highDemandMultiplier
 
     if (selectedPricingFacility) {
-      // Lưu phân tầng giá riêng biệt cho cơ sở được chọn
-      setFacilityPricingOverrides((prev) => ({
-        ...prev,
+      // Lưu phân tầng giá riêng biệt cho cơ sở được chọn và persist vào localStorage
+      const nextOverrides = {
+        ...facilityPricingOverrides,
         [selectedPricingFacility.id]: {
-          ...prev[selectedPricingFacility.id],
+          ...facilityPricingOverrides[selectedPricingFacility.id],
           [selectedTier.id]: {
             basePrice: updatedPrice,
             highDemandMultiplier: updatedMultiplier,
           },
         },
-      }))
+      }
+      setFacilityPricingOverrides(nextOverrides)
+      try {
+        localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+      } catch {}
+
+      // Cập nhật giá gian kho của cơ sở được chọn trong context
+      const sizeCode =
+        selectedTier.sizeCode ||
+        (selectedTier.name.includes("(S)")
+          ? "S"
+          : selectedTier.name.includes("(M)")
+            ? "M"
+            : selectedTier.name.includes("(XL)")
+              ? "XL"
+              : "L")
+
+      const facUnits = unitsList.filter(
+        (u) =>
+          (u.facilityId === selectedPricingFacility.id ||
+            u.facilityId === selectedPricingFacility.code) &&
+          ((u as any).size === sizeCode ||
+            u.type ===
+              (sizeCode === "S"
+                ? "Small"
+                : sizeCode === "M"
+                  ? "Medium"
+                  : sizeCode === "L"
+                    ? "Large"
+                    : "Extra Large")),
+      )
+      facUnits.forEach((u) => {
+        try {
+          updateUnit(u.id, { price: updatedPrice }, user)
+        } catch {}
+      })
 
       // Nếu cập nhật Kho S (cước khởi điểm của cơ sở), cập nhật luôn price của facility
       if (selectedTier.id === "tier-1" || selectedTier.name.includes("(S)")) {
@@ -939,6 +1110,27 @@ export default function BusinessApp({
         UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS].priceMonthly = updatedPrice
         UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS].priceFormatted = `${Math.round(updatedPrice).toLocaleString("vi-VN")}đ`
       }
+
+      // Cập nhật giá cho các gian kho chưa bị override riêng
+      unitsList
+        .filter(
+          (u) =>
+            ((u as any).size === sizeCode ||
+              u.type ===
+                (sizeCode === "S"
+                  ? "Small"
+                  : sizeCode === "M"
+                    ? "Medium"
+                    : sizeCode === "L"
+                      ? "Large"
+                      : "Extra Large")) &&
+            !facilityPricingOverrides[u.facilityId]?.[selectedTier.id],
+        )
+        .forEach((u) => {
+          try {
+            updateUnit(u.id, { price: updatedPrice }, user)
+          } catch {}
+        })
     }
 
     setPricingModal(false)
@@ -1032,6 +1224,18 @@ export default function BusinessApp({
   const [formFacUnitXL, setFormFacUnitXL] = useState<number>(5)
 
   const [formFacPrice, setFormFacPrice] = useState<string>("5.500.000đ")
+  const [formFacPriceS, setFormFacPriceS] = useState<string>("5.500.000đ")
+  const [formFacPriceM, setFormFacPriceM] = useState<string>("9.500.000đ")
+  const [formFacPriceL, setFormFacPriceL] = useState<string>("15.000.000đ")
+  const [formFacPriceXL, setFormFacPriceXL] = useState<string>("22.500.000đ")
+
+  const [formFacImage, setFormFacImage] = useState<string>(
+    WAREHOUSE_PHOTO_PRESETS[0].url,
+  )
+  const [formFacLoadS, setFormFacLoadS] = useState<number>(1000)
+  const [formFacLoadM, setFormFacLoadM] = useState<number>(1600)
+  const [formFacLoadL, setFormFacLoadL] = useState<number>(2800)
+  const [formFacLoadXL, setFormFacLoadXL] = useState<number>(4000)
 
   const [formFacClimate, setFormFacClimate] = useState<boolean>(false)
 
@@ -1057,36 +1261,80 @@ export default function BusinessApp({
     setTimeout(() => setToast(null), 3000)
   }
 
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      showToast(
+        lang === "vi"
+          ? "Vui lòng chọn file hình ảnh hợp lệ!"
+          : "Please select an image file!",
+      )
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast(
+        lang === "vi"
+          ? "Dung lượng ảnh tối đa 5MB!"
+          : "Max image size is 5MB!",
+      )
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const res = ev.target?.result as string
+      if (res) {
+        setFormFacImage(res)
+        showToast(
+          lang === "vi"
+            ? "Đã tải ảnh kho lên thành công!"
+            : "Image uploaded successfully!",
+        )
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
   // Tự do chỉ định số lượng từng cỡ kho (S, M, L, XL)
 
   const handleUnitSizeChange = (size: "S" | "M" | "L" | "XL", val: number) => {
     const safeVal = Math.max(0, Math.floor(val || 0))
 
     let s = formFacUnitS
-
     let m = formFacUnitM
-
     let l = formFacUnitL
-
     let xl = formFacUnitXL
 
     if (size === "S") s = safeVal
-
     if (size === "M") m = safeVal
-
     if (size === "L") l = safeVal
-
     if (size === "XL") xl = safeVal
 
     setFormFacUnitS(s)
-
     setFormFacUnitM(m)
-
     setFormFacUnitL(l)
-
     setFormFacUnitXL(xl)
-
     setFormFacUnits(s + m + l + xl)
+
+    // Tự động đồng bộ "Giá cơ sở từ" theo cỡ kho nhỏ nhất có số lượng > 0
+    const activeSizes = (["S", "M", "L", "XL"] as const).filter((sz) => {
+      if (sz === "S") return s > 0
+      if (sz === "M") return m > 0
+      if (sz === "L") return l > 0
+      return xl > 0
+    })
+    if (activeSizes.length > 0) {
+      const minSz = activeSizes[0]
+      const p =
+        minSz === "S"
+          ? formFacPriceS
+          : minSz === "M"
+            ? formFacPriceM
+            : minSz === "L"
+              ? formFacPriceL
+              : formFacPriceXL
+      if (p) setFormFacPrice(p)
+    }
   }
 
   // Tự động gợi ý mã cơ sở chuẩn theo tỉnh/thành phố
@@ -1173,7 +1421,17 @@ export default function BusinessApp({
 
     setFormFacUnits(20)
 
+    setFormFacPriceS("5.500.000đ")
+    setFormFacPriceM("9.500.000đ")
+    setFormFacPriceL("15.000.000đ")
+    setFormFacPriceXL("22.500.000đ")
     setFormFacPrice("5.500.000đ")
+
+    setFormFacLoadS(1000)
+    setFormFacLoadM(1600)
+    setFormFacLoadL(2800)
+    setFormFacLoadXL(4000)
+    setFormFacImage(WAREHOUSE_PHOTO_PRESETS[0].url)
 
     setFormFacClimate(false)
 
@@ -1252,6 +1510,55 @@ export default function BusinessApp({
       return
     }
 
+    const parseVnd = (str: string) => {
+      const n = parseInt(str.replace(/\D/g, ""), 10)
+      return isNaN(n) ? 0 : n
+    }
+    let pS = parseVnd(formFacPriceS) || UNIT_SPECS.S.priceMonthly
+    let pM = parseVnd(formFacPriceM) || UNIT_SPECS.M.priceMonthly
+    let pL = parseVnd(formFacPriceL) || UNIT_SPECS.L.priceMonthly
+    let pXL = parseVnd(formFacPriceXL) || UNIT_SPECS.XL.priceMonthly
+
+    const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
+      if (s === "S") return formFacUnitS > 0
+      if (s === "M") return formFacUnitM > 0
+      if (s === "L") return formFacUnitL > 0
+      return formFacUnitXL > 0
+    })
+
+    const enteredStartPrice = parseVnd(formFacPrice)
+    if (enteredStartPrice > 0) {
+      if (activeSizes.length === 1) {
+        const only = activeSizes[0]
+        if (only === "XL") pXL = enteredStartPrice
+        else if (only === "L") pL = enteredStartPrice
+        else if (only === "M") pM = enteredStartPrice
+        else if (only === "S") pS = enteredStartPrice
+      } else if (activeSizes.length > 1) {
+        const first = activeSizes[0]
+        if (first === "S") pS = enteredStartPrice
+        else if (first === "M") pM = enteredStartPrice
+        else if (first === "L") pL = enteredStartPrice
+        else if (first === "XL") pXL = enteredStartPrice
+      }
+    }
+
+    const newUnitPrices = { S: pS, M: pM, L: pL, XL: pXL }
+
+    const totalDesignLoadTon = Math.round(
+      ((formFacUnitS * formFacLoadS) +
+       (formFacUnitM * formFacLoadM) +
+       (formFacUnitL * formFacLoadL) +
+       (formFacUnitXL * formFacLoadXL)) / 1000 * 10
+    ) / 10
+
+    const unitLoadLimits = {
+      S: formFacLoadS,
+      M: formFacLoadM,
+      L: formFacLoadL,
+      XL: formFacLoadXL,
+    }
+
     const created = createFacility(
       {
         code,
@@ -1278,7 +1585,17 @@ export default function BusinessApp({
           XL: formFacUnitXL,
         },
 
-        price: formFacPrice || "5.500.000đ",
+        price:
+          formFacPrice.trim() ||
+          `${Math.round(enteredStartPrice || pS).toLocaleString("vi-VN")}đ`,
+
+        unitPrices: newUnitPrices,
+
+        unitLoadLimits,
+
+        totalDesignLoadTon,
+
+        image: formFacImage || WAREHOUSE_PHOTO_PRESETS[0].url,
 
         climate: formFacClimate,
 
@@ -1299,9 +1616,27 @@ export default function BusinessApp({
       user,
     )
 
+    // Đồng bộ vào facilityPricingOverrides
+    const nextOverrides = {
+      ...facilityPricingOverrides,
+      [created.id]: {
+        "tier-1": { basePrice: pS, highDemandMultiplier: 1.15 },
+        "tier-2": { basePrice: pM, highDemandMultiplier: 1.15 },
+        "tier-3": { basePrice: pL, highDemandMultiplier: 1.15 },
+        "tier-4": { basePrice: pXL, highDemandMultiplier: 1.15 },
+      },
+    }
+    setFacilityPricingOverrides(nextOverrides)
+    try {
+      localStorage.setItem(
+        "storagehub:facility-pricing",
+        JSON.stringify(nextOverrides),
+      )
+    } catch {}
+
     setCreateFacilityModal(false)
 
-    const breakdownStr = `S: ${formFacUnitS} · M: ${formFacUnitM} · L: ${formFacUnitL} · XL: ${formFacUnitXL}`
+    const breakdownStr = `S: ${formFacUnitS} · M: ${formFacUnitM} · L: ${formFacUnitL} · XL: ${formFacUnitXL} · Tải trọng sàn: ${totalDesignLoadTon} tấn`
 
     showToast(
       lang === "vi"
@@ -1386,7 +1721,76 @@ export default function BusinessApp({
 
     setFormFacUnits(sCount + mCount + lCount + xlCount)
 
-    setFormFacPrice(f.price)
+    const sPrice = getFacilitySizePrice(f, "S")
+    const mPrice = getFacilitySizePrice(f, "M")
+    const lPrice = getFacilitySizePrice(f, "L")
+    const xlPrice = getFacilitySizePrice(f, "XL")
+
+    setFormFacPriceS(`${Math.round(sPrice).toLocaleString("vi-VN")}đ`)
+    setFormFacPriceM(`${Math.round(mPrice).toLocaleString("vi-VN")}đ`)
+    setFormFacPriceL(`${Math.round(lPrice).toLocaleString("vi-VN")}đ`)
+    setFormFacPriceXL(`${Math.round(xlPrice).toLocaleString("vi-VN")}đ`)
+
+    const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
+      if (s === "S") return sCount > 0
+      if (s === "M") return mCount > 0
+      if (s === "L") return lCount > 0
+      return xlCount > 0
+    })
+
+    if (f.price) {
+      setFormFacPrice(f.price)
+      if (activeSizes.length === 1) {
+        const only = activeSizes[0]
+        if (only === "XL") setFormFacPriceXL(f.price)
+        else if (only === "L") setFormFacPriceL(f.price)
+        else if (only === "M") setFormFacPriceM(f.price)
+        else if (only === "S") setFormFacPriceS(f.price)
+      }
+    } else {
+      const startSize = activeSizes[0] || "S"
+      const startPrice =
+        startSize === "S"
+          ? sPrice
+          : startSize === "M"
+            ? mPrice
+            : startSize === "L"
+              ? lPrice
+              : xlPrice
+      setFormFacPrice(`${Math.round(startPrice).toLocaleString("vi-VN")}đ`)
+    }
+
+    const sLoad =
+      f.unitLoadLimits?.S ??
+      facUnits.find(
+        (u) => ((u as any).size || (u.type === "Small" ? "S" : "")) === "S",
+      )?.maxLoadKg ??
+      1000
+    const mLoad =
+      f.unitLoadLimits?.M ??
+      facUnits.find(
+        (u) => ((u as any).size || (u.type === "Medium" ? "M" : "")) === "M",
+      )?.maxLoadKg ??
+      1600
+    const lLoad =
+      f.unitLoadLimits?.L ??
+      facUnits.find(
+        (u) => ((u as any).size || (u.type === "Large" ? "L" : "")) === "L",
+      )?.maxLoadKg ??
+      2800
+    const xlLoad =
+      f.unitLoadLimits?.XL ??
+      facUnits.find(
+        (u) =>
+          ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL",
+      )?.maxLoadKg ??
+      4000
+
+    setFormFacLoadS(sLoad)
+    setFormFacLoadM(mLoad)
+    setFormFacLoadL(lLoad)
+    setFormFacLoadXL(xlLoad)
+    setFormFacImage(f.image || WAREHOUSE_PHOTO_PRESETS[0].url)
 
     setFormFacClimate(Boolean(f.climate))
 
@@ -1486,7 +1890,7 @@ export default function BusinessApp({
 
         return (
           s === size &&
-          (u.status === "occupied" || u.status as string === "rented")
+          (u.status === "occupied" || (u.status as string) === "rented")
         )
       }).length
 
@@ -1538,6 +1942,59 @@ export default function BusinessApp({
       return
     }
 
+    const parseVnd = (str: string) => {
+      const n = parseInt(str.replace(/\D/g, ""), 10)
+      return isNaN(n) ? 0 : n
+    }
+    let pS = parseVnd(formFacPriceS) || UNIT_SPECS.S.priceMonthly
+    let pM = parseVnd(formFacPriceM) || UNIT_SPECS.M.priceMonthly
+    let pL = parseVnd(formFacPriceL) || UNIT_SPECS.L.priceMonthly
+    let pXL = parseVnd(formFacPriceXL) || UNIT_SPECS.XL.priceMonthly
+
+    const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
+      if (s === "S") return formFacUnitS > 0
+      if (s === "M") return formFacUnitM > 0
+      if (s === "L") return formFacUnitL > 0
+      return formFacUnitXL > 0
+    })
+
+    const enteredStartPrice = parseVnd(formFacPrice)
+    if (enteredStartPrice > 0) {
+      if (activeSizes.length === 1) {
+        const only = activeSizes[0]
+        if (only === "XL") pXL = enteredStartPrice
+        else if (only === "L") pL = enteredStartPrice
+        else if (only === "M") pM = enteredStartPrice
+        else if (only === "S") pS = enteredStartPrice
+      } else if (activeSizes.length > 1) {
+        const first = activeSizes[0]
+        if (first === "S") pS = enteredStartPrice
+        else if (first === "M") pM = enteredStartPrice
+        else if (first === "L") pL = enteredStartPrice
+        else if (first === "XL") pXL = enteredStartPrice
+      }
+    }
+
+    const updatedUnitPrices = { S: pS, M: pM, L: pL, XL: pXL }
+
+    const totalDesignLoadTon = Math.round(
+      ((formFacUnitS * formFacLoadS) +
+       (formFacUnitM * formFacLoadM) +
+       (formFacUnitL * formFacLoadL) +
+       (formFacUnitXL * formFacLoadXL)) / 1000 * 10
+    ) / 10
+
+    const unitLoadLimits = {
+      S: formFacLoadS,
+      M: formFacLoadM,
+      L: formFacLoadL,
+      XL: formFacLoadXL,
+    }
+
+    const finalPriceStr =
+      formFacPrice.trim() ||
+      `${Math.round(enteredStartPrice || pS).toLocaleString("vi-VN")}đ`
+
     updateFacility(
       selectedFacility.id,
       {
@@ -1565,7 +2022,15 @@ export default function BusinessApp({
           XL: formFacUnitXL,
         },
 
-        price: formFacPrice,
+        price: finalPriceStr,
+
+        unitPrices: updatedUnitPrices,
+
+        unitLoadLimits,
+
+        totalDesignLoadTon,
+
+        image: formFacImage,
 
         climate: formFacClimate,
 
@@ -1578,9 +2043,78 @@ export default function BusinessApp({
       user,
     )
 
+    // Cập nhật facilityPricingOverrides để tab Bảng giá cũng đồng bộ
+    const nextOverrides = {
+      ...facilityPricingOverrides,
+      [selectedFacility.id]: {
+        ...facilityPricingOverrides[selectedFacility.id],
+        "tier-1": { basePrice: pS, highDemandMultiplier: 1.15 },
+        "tier-2": { basePrice: pM, highDemandMultiplier: 1.15 },
+        "tier-3": { basePrice: pL, highDemandMultiplier: 1.15 },
+        "tier-4": { basePrice: pXL, highDemandMultiplier: 1.15 },
+      },
+    }
+    setFacilityPricingOverrides(nextOverrides)
+    try {
+      localStorage.setItem(
+        "storagehub:facility-pricing",
+        JSON.stringify(nextOverrides),
+      )
+    } catch {}
+
+    // Cập nhật giá từng kho trong unitsList qua updateUnit
+    unitsList
+      .filter(
+        (u) =>
+          u.facilityId === selectedFacility.id ||
+          u.facilityId === selectedFacility.code ||
+          u.facilityId === code,
+      )
+      .forEach((u) => {
+        const s = ((u as any).size ||
+          (u.type === "Small"
+            ? "S"
+            : u.type === "Medium"
+              ? "M"
+              : u.type === "Large"
+                ? "L"
+                : "XL")) as "S" | "M" | "L" | "XL"
+        const pVnd = updatedUnitPrices[s]
+        if (pVnd && pVnd > 0) {
+          const normP = pVnd > 10000 ? pVnd / USD_TO_VND_RATE : pVnd
+          try {
+            updateUnit(u.id, { price: normP, deposit: normP }, user)
+          } catch {}
+        }
+      })
+
+    // Cập nhật ngay selectedFacility trong state để modal view đồng bộ ngay
+    setSelectedFacility((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            code,
+            name: formFacName.trim(),
+            address: formFacAddress.trim(),
+            city: formFacCity.trim(),
+            price: finalPriceStr,
+            unitPrices: updatedUnitPrices,
+            unitLoadLimits,
+            totalDesignLoadTon,
+            image: formFacImage,
+            unitDistribution: {
+              S: formFacUnitS,
+              M: formFacUnitM,
+              L: formFacUnitL,
+              XL: formFacUnitXL,
+            },
+          }
+        : prev,
+    )
+
     setEditFacilityModal(false)
 
-    const breakdownStr = `S: ${formFacUnitS} · M: ${formFacUnitM} · L: ${formFacUnitL} · XL: ${formFacUnitXL}`
+    const breakdownStr = `S: ${formFacUnitS} · M: ${formFacUnitM} · L: ${formFacUnitL} · XL: ${formFacUnitXL} · Tải trọng sàn: ${totalDesignLoadTon} tấn`
 
     showToast(
       lang === "vi"
@@ -1854,8 +2388,10 @@ export default function BusinessApp({
               {filteredFacilities.map((f) => {
                 const facCode = f.code || f.id
 
-                const occupancyRate = f.units
-                  ? Math.round(((f.occupied || 0) / f.units) * 100)
+                const totalUnitsInFac = getFacilityTotalUnits(f)
+                const occupiedInFac = getFacilityOccupiedCount(f)
+                const occupancyRate = totalUnitsInFac
+                  ? Math.round((occupiedInFac / totalUnitsInFac) * 100)
                   : 0
 
                 return (
@@ -1864,7 +2400,25 @@ export default function BusinessApp({
                     className="p-5 hover:border-amber-400/70 transition-all border border-stone-200/90 shadow-sm bg-white"
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                      <div className="flex-1 min-w-0 space-y-3">
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        {/* Facility photo */}
+                        <div className="w-24 h-24 rounded-xl overflow-hidden bg-stone-100 border border-stone-200 shrink-0 hidden sm:block">
+                          <img
+                            src={
+                              f.image?.startsWith("http") || f.image?.startsWith("data:")
+                                ? f.image
+                                : `https://images.unsplash.com/${f.image || "photo-1586528116311-ad8dd3c8310d"}?w=240&auto=format&fit=crop`
+                            }
+                            alt={f.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                WAREHOUSE_PHOTO_PRESETS[0].url
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-3">
                         {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
                         <div className="flex flex-wrap items-center gap-3">
                           <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
@@ -1953,6 +2507,17 @@ export default function BusinessApp({
                                 "XL",
                             ).length
 
+                          const totalLoad =
+                            f.totalDesignLoadTon ??
+                            Math.round(
+                              ((s * (f.unitLoadLimits?.S ?? 1000)) +
+                                (m * (f.unitLoadLimits?.M ?? 1600)) +
+                                (l * (f.unitLoadLimits?.L ?? 2800)) +
+                                (xl * (f.unitLoadLimits?.XL ?? 4000))) /
+                                1000 *
+                                10,
+                            ) / 10
+
                           return (
                             <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
                               <span className="text-slate-400 font-medium text-[11px]">
@@ -1980,6 +2545,11 @@ export default function BusinessApp({
                                   {xl} Kho Rất Lớn (XL)
                                 </span>
                               )}
+                              {totalLoad > 0 && (
+                                <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200 font-mono text-[11px] font-semibold">
+                                  Tải trọng sàn: {totalLoad} tấn
+                                </span>
+                              )}
                               {s + m + l + xl === 0 && (
                                 <span className="text-slate-400 italic text-[11px]">
                                   {f.units} kho tiêu chuẩn
@@ -1996,14 +2566,14 @@ export default function BusinessApp({
                               {lang === "vi" ? "Tỷ lệ lấp đầy" : "Occupancy"}
                             </p>
                             <p className="font-bold text-slate-900 text-sm">
-                              {f.occupied || 0}/{f.units} kho{" "}
+                              {occupiedInFac}/{totalUnitsInFac} kho{" "}
                               <span className="text-slate-500 font-normal text-xs">
                                 ({occupancyRate}%)
                               </span>
                             </p>
                             <ProgressBar
-                              value={f.occupied || 0}
-                              max={f.units}
+                              value={occupiedInFac}
+                              max={totalUnitsInFac || 1}
                               color={
                                 occupancyRate >= 80
                                   ? "bg-emerald-500"
@@ -2045,6 +2615,7 @@ export default function BusinessApp({
                           </div>
                         </div>
                       </div>
+                    </div>
 
                       {/* Các nút hành động */}
                       <div className="flex lg:flex-col items-center justify-end gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
@@ -2254,8 +2825,8 @@ export default function BusinessApp({
                   >
                     <option value="all">
                       {lang === "vi"
-                        ? "Toàn bộ cơ sở (Áp dụng chung)"
-                        : "All Facilities (Global)"}
+                        ? "Toàn bộ cơ sở"
+                        : "All Facilities"}
                     </option>
                     {facilitiesList.map((f) => (
                       <option key={f.id} value={f.id}>
@@ -2302,7 +2873,64 @@ export default function BusinessApp({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+          {/* ── Pricing Cards: per-facility when "all", single facility when selected ── */}
+          {selectedPricingFacility === null ? (
+            /* "Toàn bộ cơ sở" — render một block per facility */
+            <div className="space-y-6">
+              {facilitiesList.map((fac) => (
+                <div key={fac.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 rounded-t-2xl">
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-mono text-[11px] border border-amber-200">
+                        {fac.code || fac.id}
+                      </span>
+                      <span className="font-semibold text-slate-900">{fac.name}</span>
+                      <span className="text-xs text-slate-400">{fac.address}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPricingFacilityFilter(fac.id)}
+                      className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                    >
+                      Chỉnh giá cơ sở này
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-5">
+                    {pricingTiers.map((rawTier) => {
+                      const tierOverride = facilityPricingOverrides[fac.id]?.[rawTier.id]
+                      const effectivePrice = tierOverride ? tierOverride.basePrice : rawTier.basePrice
+                      const displayName =
+                        rawTier.sizeCode === 'S' ? 'Kho Nhỏ (S)'
+                        : rawTier.sizeCode === 'M' ? 'Kho Vừa (M)'
+                        : rawTier.sizeCode === 'L' ? 'Kho Lớn (L)'
+                        : 'Kho Rất Lớn (XL)'
+                      const unitCount =
+                        fac.unitDistribution?.[rawTier.sizeCode] ??
+                        unitsList.filter(u =>
+                          (u.facilityId === fac.id || u.facilityId === fac.code) &&
+                          ((u as any).size === rawTier.sizeCode ||
+                            u.type === (rawTier.sizeCode === 'S' ? 'Small' : rawTier.sizeCode === 'M' ? 'Medium' : rawTier.sizeCode === 'L' ? 'Large' : 'Extra Large'))
+                        ).length
+                      return (
+                        <Card key={rawTier.id} className="p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-bold text-slate-900 text-sm">{displayName}</h4>
+                            {tierOverride && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">Giá riêng</span>
+                            )}
+                          </div>
+                          <p className="text-lg font-bold text-emerald-700">{formatCurrency(effectivePrice)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-xs text-slate-400 mt-1">{unitCount} gian kho</p>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Một cơ sở cụ thể — render 4 card có nút Sửa */
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
             {pricingTiers.map((rawTier) => {
               const tier = getEffectiveTier(rawTier)
               const displayName =
@@ -2332,25 +2960,24 @@ export default function BusinessApp({
                       ? "XL"
                       : "L")
 
-              const unitCountInFac = selectedPricingFacility
-                ? selectedPricingFacility.unitDistribution?.[
-                    sizeKey as "S" | "M" | "L" | "XL"
-                  ] ??
-                  unitsList.filter(
-                    (u) =>
-                      (u.facilityId === selectedPricingFacility.id ||
-                        u.facilityId === selectedPricingFacility.code) &&
-                      ((u as any).size === sizeKey ||
-                        u.type ===
-                          (sizeKey === "S"
-                            ? "Small"
-                            : sizeKey === "M"
-                              ? "Medium"
-                              : sizeKey === "L"
-                                ? "Large"
-                                : "Extra Large")),
-                  ).length
-                : null
+              const unitCountInFac =
+                selectedPricingFacility.unitDistribution?.[
+                  sizeKey as "S" | "M" | "L" | "XL"
+                ] ??
+                unitsList.filter(
+                  (u) =>
+                    (u.facilityId === selectedPricingFacility.id ||
+                      u.facilityId === selectedPricingFacility.code) &&
+                    ((u as any).size === sizeKey ||
+                      u.type ===
+                        (sizeKey === "S"
+                          ? "Small"
+                          : sizeKey === "M"
+                            ? "Medium"
+                            : sizeKey === "L"
+                              ? "Large"
+                              : "Extra Large")),
+                ).length
 
               return (
                 <Card key={tier.id} className="p-5">
@@ -2388,30 +3015,8 @@ export default function BusinessApp({
                         {lang === "vi" ? "th" : "mo"}
                       </span>
                     </div>
-                    <div className="flex justify-between border-t border-slate-100 pt-2">
-                      <span className="text-slate-500">
-                        {lang === "vi" ? "Hệ số cao điểm" : "High demand"}
-                      </span>
-                      <span className="font-semibold text-blue-600">
-                        ×{tier.highDemandMultiplier}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-t border-slate-100 pt-2 text-xs text-slate-500">
-                      <span>{lang === "vi" ? "Phạm vi:" : "Scope:"}</span>
-                      <span
-                        className="font-medium text-slate-700 truncate max-w-[130px]"
-                        title={tier.facility}
-                      >
-                        {selectedPricingFacility
-                          ? selectedPricingFacility.code ||
-                            selectedPricingFacility.name
-                          : lang === "vi"
-                            ? "Toàn bộ cơ sở"
-                            : "All facilities"}
-                      </span>
-                    </div>
                     {unitCountInFac !== null && (
-                      <div className="flex justify-between text-xs text-slate-500 pt-1">
+                      <div className="flex justify-between border-t border-slate-100 pt-2 text-xs text-slate-500">
                         <span>
                           {lang === "vi" ? "Số lượng tại kho:" : "Units in facility:"}
                         </span>
@@ -2424,7 +3029,8 @@ export default function BusinessApp({
                 </Card>
               )
             })}
-          </div>
+            </div>
+          )}
 
           <Card className="p-5">
             <h3 className="font-semibold text-slate-800 mb-4">
@@ -3343,7 +3949,7 @@ export default function BusinessApp({
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title={lang === "vi" ? "Lấp đầy trung bình" : "Avg Occupancy"}
-              value="89.2%"
+              value={`${totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0}%`}
               icon={Icon.chart}
               iconBg="bg-blue-50"
             />
@@ -3423,27 +4029,28 @@ export default function BusinessApp({
               </h3>
               {facilitiesList
                 .filter((f) => f.status === "active")
-                .map((f) => (
-                  <div key={f.id} className="mb-4">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-slate-700 font-medium">
-                        {f.name}
-                      </span>
-                      <span className="text-slate-800 font-semibold">
-                        {f.units > 0 ? Math.round((f.occupied / f.units) * 100) : 0}%
-                      </span>
+                .map((f) => {
+                  const occ = getFacilityOccupiedCount(f)
+                  const tot = getFacilityTotalUnits(f)
+                  const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
+                  return (
+                    <div key={f.id} className="mb-4">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-slate-700 font-medium">
+                          {f.name}
+                        </span>
+                        <span className="text-slate-800 font-semibold">
+                          {pct}%
+                        </span>
+                      </div>
+                      <ProgressBar
+                        value={occ}
+                        max={tot || 1}
+                        color={pct >= 85 ? "bg-green-500" : "bg-blue-500"}
+                      />
                     </div>
-                    <ProgressBar
-                      value={f.occupied}
-                      max={f.units || 1}
-                      color={
-                        f.units > 0 && f.occupied / f.units >= 0.85
-                          ? "bg-green-500"
-                          : "bg-blue-500"
-                      }
-                    />
-                  </div>
-                ))}
+                  )
+                })}
             </Card>
           </div>
           <Card>
@@ -3463,21 +4070,25 @@ export default function BusinessApp({
               <Tbody>
                 {facilitiesList
                   .filter((f) => f.status === "active")
-                  .map((f) => (
-                    <Tr key={f.id}>
-                      <Td className="font-medium">{f.name}</Td>
-                      <Td>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">
-                            {f.units > 0 ? Math.round((f.occupied / f.units) * 100) : 0}%
-                          </span>
-                          <ProgressBar
-                            value={f.occupied}
-                            max={f.units || 1}
-                            color="bg-blue-500"
-                          />
-                        </div>
-                      </Td>
+                  .map((f) => {
+                    const occ = getFacilityOccupiedCount(f)
+                    const tot = getFacilityTotalUnits(f)
+                    const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
+                    return (
+                      <Tr key={f.id}>
+                        <Td className="font-medium">{f.name}</Td>
+                        <Td>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">
+                              {pct}%
+                            </span>
+                            <ProgressBar
+                              value={occ}
+                              max={tot || 1}
+                              color="bg-blue-500"
+                            />
+                          </div>
+                        </Td>
                       <Td>{lang === "vi" ? "14.2 tháng" : "14.2 mo"}</Td>
                       <Td>3.4%</Td>
                       <Td>
@@ -3490,7 +4101,8 @@ export default function BusinessApp({
                         {lang === "vi" ? "năm" : "yr"}
                       </Td>
                     </Tr>
-                  ))}
+                  )
+                })}
               </Tbody>
             </Table>
           </Card>
@@ -3543,15 +4155,6 @@ export default function BusinessApp({
               type="number"
               value={formTierBasePrice}
               onChange={(e) => setFormTierBasePrice(e.target.value)}
-            />
-            <Input
-              label={
-                lang === "vi" ? "Hệ số cao điểm" : "High Demand Multiplier"
-              }
-              type="number"
-              step="0.05"
-              value={formTierMultiplier}
-              onChange={(e) => setFormTierMultiplier(e.target.value)}
             />
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" onClick={() => setPricingModal(false)}>
@@ -3942,65 +4545,32 @@ export default function BusinessApp({
 
       {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
       {(() => {
-        // Shared size specifications for compact form table
-
-        const FACILITY_SIZE_SPECS = [
-          {
-            size: "S" as const,
-
-            name: "Kho Nhỏ",
-
-            dimensions: "5.6 × 6.0 m",
-
-            areaM2: "33.6 m²",
-
-            volumeM3: "107 m³",
-
-            badgeClass: "bg-sky-50 text-sky-700 border-sky-200",
-          },
-
-          {
-            size: "M" as const,
-
-            name: "Kho Trung",
-
-            dimensions: "9.0 × 6.4 m",
-
-            areaM2: "57.6 m²",
-
-            volumeM3: "195 m³",
-
-            badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
-          },
-
-          {
-            size: "L" as const,
-
-            name: "Kho Lớn",
-
-            dimensions: "13.5 × 6.8 m",
-
-            areaM2: "91.8 m²",
-
-            volumeM3: "330 m³",
-
-            badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
-          },
-
-          {
-            size: "XL" as const,
-
-            name: "Rất Lớn",
-
-            dimensions: "19.0 × 7.2 m",
-
-            areaM2: "136.8 m²",
-
-            volumeM3: "547 m³",
-
-            badgeClass: "bg-amber-50 text-amber-800 border-amber-200",
-          },
-        ]
+        // Shared size specifications for compact form table — derived from UNIT_SPECS
+        const FACILITY_SIZE_SPECS = (
+          [
+            { size: "S" as const, name: "Kho Nhỏ", badgeClass: "bg-sky-50 text-sky-700 border-sky-200" },
+            { size: "M" as const, name: "Kho Trung", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+            { size: "L" as const, name: "Kho Lớn", badgeClass: "bg-purple-50 text-purple-700 border-purple-200" },
+            { size: "XL" as const, name: "Rất Lớn", badgeClass: "bg-amber-50 text-amber-800 border-amber-200" },
+          ] as const
+        ).map(({ size, name, badgeClass }) => {
+          const s = UNIT_SPECS[size]
+          return {
+            size,
+            name,
+            dimensions: `${s.lengthM} × ${s.widthM} × ${s.heightM} m`,
+            areaM2: `${s.areaM2} m²`,
+            volumeM3: `${s.volumeM3} m³`,
+            heightM: `${s.heightM} m`,
+            frameCount: s.frameCount,
+            frameDistanceM: s.frameDistanceM,
+            vehicleLaneWidthM: s.vehicleLaneWidthM,
+            smallBox: s.smallBox,
+            largeBox: s.largeBox,
+            cartEquipment: s.cartEquipment,
+            badgeClass,
+          }
+        })
 
         const getFormUnitQty = (size: "S" | "M" | "L" | "XL") => {
           if (size === "S") return formFacUnitS
@@ -4012,9 +4582,18 @@ export default function BusinessApp({
           return formFacUnitXL
         }
 
+        const calculatedTotalLoadTon =
+          Math.round(
+            ((formFacUnitS * formFacLoadS +
+              formFacUnitM * formFacLoadM +
+              formFacUnitL * formFacLoadL +
+              formFacUnitXL * formFacLoadXL) /
+              1000) *
+              10,
+          ) / 10
+
         const renderUnitAllocationSection = (
           isEditing: boolean,
-
           occupiedMap: Record<"S" | "M" | "L" | "XL", number> = {
             S: 0,
             M: 0,
@@ -4023,148 +4602,341 @@ export default function BusinessApp({
           },
         ) => {
           return (
-            <div className="space-y-3 pt-1">
-              {/* Section Header */}
-              <div className="flex items-center justify-between border-b border-stone-200 pb-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
-                  {lang === "vi"
-                    ? "Phân bổ gian kho"
-                    : "Storage Unit Allocation"}
-                </h4>
-                <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full font-mono">
-                  {lang === "vi"
-                    ? `Tổng: ${formFacUnits} kho`
-                    : `Total: ${formFacUnits} units`}
-                </span>
+            <div className="space-y-3 pt-2">
+              {/* Highlight Header cho Section Phân Bổ Gian Kho */}
+              <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-3.5 rounded-xl border border-amber-200/90 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-stone-950 font-bold flex items-center justify-center shrink-0 shadow-xs">
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold uppercase tracking-wider text-stone-900">
+                      {lang === "vi"
+                        ? "Phân Bổ Gian Kho & Quy Mô Thiết Kế"
+                        : "Unit Allocation & Design Scale"}
+                    </h4>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      {lang === "vi"
+                        ? "Cấu hình số lượng, tải trọng tối đa và đơn giá thuê theo từng chuẩn kích thước gian kho"
+                        : "Configure quantity, max load capacity, and monthly rates per unit size"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-300 text-sky-900 font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-500 inline-block animate-pulse"></span>
+                    <span>
+                      {lang === "vi" ? "Tải trọng sàn:" : "Floor Load:"}{" "}
+                      <b className="text-sky-950 font-extrabold text-sm">
+                        {calculatedTotalLoadTon}
+                      </b>{" "}
+                      tấn
+                    </span>
+                  </div>
+                  <div className="px-3 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-600 inline-block"></span>
+                    <span>
+                      {lang === "vi" ? "Tổng quy mô:" : "Total Units:"}{" "}
+                      <b className="text-amber-950 font-extrabold text-sm">
+                        {formFacUnits}
+                      </b>{" "}
+                      kho
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {/* Compact Table */}
-              <div className="border border-stone-200 rounded-lg overflow-hidden bg-white shadow-2xs">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-stone-100/75 border-b border-stone-200 text-stone-600 font-semibold">
+              {/* Bảng phân bổ gian kho rộng rãi, thoáng mắt */}
+              <div className="border border-stone-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-stone-100/90 border-b border-stone-200 text-stone-700 font-bold uppercase tracking-wider text-[11px]">
                     <tr>
-                      <th className="py-2.5 px-3">
-                        {lang === "vi" ? "Kích thước" : "Size"}
+                      <th className="py-3 px-4 min-w-[200px]">
+                        {lang === "vi" ? "Cỡ & Loại Kho" : "Size & Type"}
                       </th>
-                      <th className="py-2.5 px-3 text-center">
-                        {lang === "vi" ? "Diện tích" : "Area"}
+                      <th className="py-3 px-3 min-w-[140px]">
+                        {lang === "vi"
+                          ? "Quy Cách & Thể Tích"
+                          : "Dimensions & Volume"}
                       </th>
-                      <th className="py-2.5 px-3 text-center">
-                        {lang === "vi" ? "Thể tích" : "Volume"}
+                      <th className="py-3 px-3 text-center min-w-[150px]">
+                        {lang === "vi" ? "Tải Trọng Tối Đa" : "Max Load"}
                       </th>
-                      <th className="py-2.5 px-3 text-right">
-                        {lang === "vi" ? "Số lượng" : "Quantity"}
+                      <th className="py-3 px-3 text-center min-w-[170px]">
+                        {lang === "vi"
+                          ? "Đơn Giá Thuê / Tháng"
+                          : "Monthly Rate"}
+                      </th>
+                      <th className="py-3 px-4 text-right min-w-[150px]">
+                        {lang === "vi" ? "Số Lượng Kho" : "Quantity"}
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-stone-200/80">
                     {FACILITY_SIZE_SPECS.map((spec) => {
                       const qty = getFormUnitQty(spec.size)
-
                       const occ = occupiedMap[spec.size] || 0
-
                       const isBelowOcc = isEditing && qty < occ
 
                       return (
                         <tr
                           key={spec.size}
-                          className="hover:bg-stone-50/50 transition-colors"
+                          className="hover:bg-amber-50/20 transition-colors"
                         >
-                          <td className="py-2 px-3">
-                            <div className="flex items-center gap-2">
+                          {/* 1. Cỡ & Loại kho */}
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-3">
                               <span
-                                className={`w-7 h-7 flex items-center justify-center rounded font-mono font-bold text-xs border shrink-0 ${spec.badgeClass}`}
+                                className={`w-9 h-9 flex items-center justify-center rounded-lg font-mono font-bold text-sm border shrink-0 shadow-2xs ${spec.badgeClass}`}
                               >
                                 {spec.size}
                               </span>
                               <div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-semibold text-stone-800">
-                                    {spec.name}
-                                  </span>
-                                  <span className="text-[11px] text-stone-400 font-mono">
-                                    ({spec.dimensions})
-                                  </span>
+                                <div className="font-bold text-stone-900 text-sm leading-tight">
+                                  {spec.name}
+                                </div>
+                                <div className="text-[11px] text-stone-400 font-mono mt-0.5">
+                                  Chuẩn cỡ {spec.size}
                                 </div>
                                 {isEditing && occ > 0 && (
-                                  <div className="text-[11px] font-medium text-amber-700">
-                                    Đang thuê: {occ} kho
-                                  </div>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300 mt-1">
+                                    Đang cho thuê: {occ} kho
+                                  </span>
                                 )}
                               </div>
                             </div>
                           </td>
-                          <td className="py-2 px-3 text-center font-mono text-stone-600">
-                            {spec.areaM2}
-                          </td>
-                          <td className="py-2 px-3 text-center font-mono text-stone-500">
-                            {spec.volumeM3}
-                          </td>
-                          <td className="py-2 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                disabled={isEditing ? qty <= occ : qty <= 0}
-                                onClick={() =>
-                                  handleUnitSizeChange(
-                                    spec.size,
-                                    Math.max(isEditing ? occ : 0, qty - 1),
-                                  )
-                                }
-                                className="w-7 h-7 rounded border border-stone-300 bg-white hover:bg-stone-100 font-bold text-stone-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                              >
-                                -
-                              </button>
-                              <input
-                                type="number"
-                                min={0}
-                                className={`w-14 h-7 text-center border rounded font-mono font-bold text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
-                                  isBelowOcc
-                                    ? "border-red-400 text-red-700 bg-red-50"
-                                    : "border-stone-300 text-stone-800"
-                                }`}
-                                value={qty}
-                                onChange={(e) => {
-                                  const parsed = parseInt(e.target.value, 10)
 
-                                  handleUnitSizeChange(
-                                    spec.size,
-                                    isNaN(parsed) ? 0 : Math.max(0, parsed),
-                                  )
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleUnitSizeChange(spec.size, qty + 1)
-                                }
-                                className="w-7 h-7 rounded border border-stone-300 bg-white hover:bg-stone-100 font-bold text-stone-700 flex items-center justify-center transition cursor-pointer"
-                              >
-                                +
-                              </button>
-                            </div>
-                            {isBelowOcc && (
-                              <div className="text-[10px] text-red-600 text-right mt-0.5">
-                                Tối thiểu {occ} (đang thuê)
+                          {/* 2. Quy cách & Thể tích */}
+                          <td className="py-4 px-3">
+                            <div className="space-y-1">
+                              <div className="font-mono font-semibold text-stone-800 text-xs">
+                                {spec.dimensions}
                               </div>
-                            )}
+                              <div className="text-xs text-stone-500 font-medium">
+                                Thể tích:{" "}
+                                <b className="text-stone-800 font-mono">
+                                  {spec.volumeM3} m³
+                                </b>
+                              </div>
+                              <div className="text-[11px] text-stone-400 font-mono">
+                                Cao {spec.heightM} · Lối xe{" "}
+                                {spec.vehicleLaneWidthM} m
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 3. Tải trọng tối đa (kg) */}
+                          <td className="py-4 px-3 text-center">
+                            <div className="flex items-center justify-center">
+                              <div className="relative flex items-center w-full max-w-[140px]">
+                                <input
+                                  type="number"
+                                  min={100}
+                                  step={50}
+                                  className="w-full h-10 pl-3 pr-9 text-right border border-stone-300 rounded-lg font-mono font-bold text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
+                                  value={
+                                    spec.size === "S"
+                                      ? formFacLoadS
+                                      : spec.size === "M"
+                                        ? formFacLoadM
+                                        : spec.size === "L"
+                                          ? formFacLoadL
+                                          : formFacLoadXL
+                                  }
+                                  onChange={(e) => {
+                                    const val = Math.max(
+                                      0,
+                                      parseInt(e.target.value, 10) || 0,
+                                    )
+                                    if (spec.size === "S") setFormFacLoadS(val)
+                                    else if (spec.size === "M")
+                                      setFormFacLoadM(val)
+                                    else if (spec.size === "L")
+                                      setFormFacLoadL(val)
+                                    else setFormFacLoadXL(val)
+                                  }}
+                                />
+                                <span className="absolute right-2.5 text-xs text-stone-400 font-bold pointer-events-none">
+                                  kg
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 4. Đơn giá thuê / tháng */}
+                          <td className="py-4 px-3 text-center">
+                            <div className="flex items-center justify-center">
+                              <div className="relative flex items-center w-full max-w-[170px]">
+                                <input
+                                  type="text"
+                                  className="w-full h-10 px-3.5 text-right border border-stone-300 rounded-lg font-mono font-bold text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-emerald-800 shadow-2xs transition"
+                                  value={
+                                    spec.size === "S"
+                                      ? formFacPriceS
+                                      : spec.size === "M"
+                                        ? formFacPriceM
+                                        : spec.size === "L"
+                                          ? formFacPriceL
+                                          : formFacPriceXL
+                                  }
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    if (spec.size === "S") setFormFacPriceS(val)
+                                    else if (spec.size === "M")
+                                      setFormFacPriceM(val)
+                                    else if (spec.size === "L")
+                                      setFormFacPriceL(val)
+                                    else setFormFacPriceXL(val)
+
+                                    const activeSizes = (
+                                      ["S", "M", "L", "XL"] as const
+                                    ).filter((s) => {
+                                      if (s === "S")
+                                        return (
+                                          (spec.size === "S"
+                                            ? qty
+                                            : formFacUnitS) > 0
+                                        )
+                                      if (s === "M")
+                                        return (
+                                          (spec.size === "M"
+                                            ? qty
+                                            : formFacUnitM) > 0
+                                        )
+                                      if (s === "L")
+                                        return (
+                                          (spec.size === "L"
+                                            ? qty
+                                            : formFacUnitL) > 0
+                                        )
+                                      return (
+                                        (spec.size === "XL"
+                                          ? qty
+                                          : formFacUnitXL) > 0
+                                      )
+                                    })
+                                    if (
+                                      activeSizes.length > 0 &&
+                                      activeSizes[0] === spec.size
+                                    ) {
+                                      setFormFacPrice(val)
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 5. Số lượng kho */}
+                          <td className="py-4 px-4 text-right">
+                            <div className="flex flex-col items-end">
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={isEditing ? qty <= occ : qty <= 0}
+                                  onClick={() =>
+                                    handleUnitSizeChange(
+                                      spec.size,
+                                      Math.max(isEditing ? occ : 0, qty - 1),
+                                    )
+                                  }
+                                  className="w-9 h-10 rounded-lg border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-base shadow-2xs"
+                                  title="Giảm 1 kho"
+                                >
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  className={`w-16 h-10 text-center border rounded-lg font-mono font-bold text-base bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 shadow-2xs transition ${
+                                    isBelowOcc
+                                      ? "border-red-400 text-red-700 bg-red-50"
+                                      : "border-stone-300 text-stone-900"
+                                  }`}
+                                  value={qty}
+                                  onChange={(e) => {
+                                    const parsed = parseInt(e.target.value, 10)
+                                    handleUnitSizeChange(
+                                      spec.size,
+                                      isNaN(parsed) ? 0 : Math.max(0, parsed),
+                                    )
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUnitSizeChange(spec.size, qty + 1)
+                                  }
+                                  className="w-9 h-10 rounded-lg border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition cursor-pointer text-base shadow-2xs"
+                                  title="Tăng 1 kho"
+                                >
+                                  +
+                                </button>
+                              </div>
+                              {isBelowOcc && (
+                                <div className="text-[11px] font-semibold text-red-600 text-right mt-1">
+                                  Tối thiểu {occ} (đang thuê)
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )
                     })}
                   </tbody>
-                  <tfoot className="bg-stone-50/90 border-t border-stone-200 font-semibold text-stone-800">
+                  <tfoot className="bg-stone-50 border-t-2 border-stone-200 font-semibold text-stone-800">
                     <tr>
-                      <td colSpan={3} className="py-2.5 px-3">
-                        {lang === "vi" ? "Tổng cộng" : "Total"}
+                      <td colSpan={2} className="py-3.5 px-4">
+                        <div className="font-bold text-stone-900 text-sm">
+                          {lang === "vi"
+                            ? "Tổng cộng thiết kế quy hoạch"
+                            : "Total Facility Plan"}
+                        </div>
+                        <div className="text-[11px] text-stone-500 font-normal">
+                          {lang === "vi"
+                            ? "Toàn bộ gian kho thuộc cơ sở lưu trữ"
+                            : "All storage units in facility"}
+                        </div>
                       </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <span className="font-mono text-sm font-bold text-amber-700">
-                          {formFacUnits}
-                        </span>{" "}
-                        <span className="text-stone-500 font-normal text-xs">
-                          {lang === "vi" ? "kho" : "units"}
+                      <td className="py-3.5 px-3 text-center font-mono">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100/80 border border-sky-300 text-sky-950 font-extrabold text-sm shadow-2xs">
+                          <span className="text-xs font-semibold text-sky-800">
+                            {lang === "vi" ? "Tổng tải:" : "Total load:"}
+                          </span>
+                          <span>{calculatedTotalLoadTon}</span>
+                          <span className="text-xs font-semibold text-sky-800">
+                            tấn
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 text-center text-xs text-stone-400">
+                        <span className="font-mono text-stone-600 font-medium">
+                          {lang === "vi" ? "Từ" : "From"} {formFacPrice}
                         </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-extrabold text-sm shadow-2xs">
+                          <span className="text-base font-black">
+                            {formFacUnits}
+                          </span>
+                          <span className="text-xs font-bold text-amber-900">
+                            {lang === "vi" ? "kho" : "units"}
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   </tfoot>
@@ -4173,6 +4945,105 @@ export default function BusinessApp({
             </div>
           )
         }
+
+        const renderFacilityImageSection = () => (
+          <div className="pt-1">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                {lang === "vi" ? "Hình ảnh cơ sở & kho bãi" : "Facility & Warehouse Photos"}
+              </h4>
+              <span className="text-[11px] text-stone-400">
+                {lang === "vi" ? "Đồng bộ hiển thị lên thẻ kho khách hàng" : "Synced with customer warehouse card"}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 items-start bg-stone-50 p-3 rounded-xl border border-stone-200">
+                <div className="relative w-full sm:w-44 h-32 rounded-lg overflow-hidden bg-stone-200 border border-stone-300 shrink-0 group">
+                  <img
+                    src={formFacImage || WAREHOUSE_PHOTO_PRESETS[0].url}
+                    alt="Facility preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = WAREHOUSE_PHOTO_PRESETS[0].url
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-stone-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <label className="cursor-pointer bg-white/95 text-stone-800 text-[11px] font-bold px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-white flex items-center gap-1.5 transition">
+                      <svg className="w-3.5 h-3.5 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      <span>{lang === "vi" ? "Đổi ảnh" : "Change"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageFileUpload}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex-1 w-full space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                      {lang === "vi" ? "Tải ảnh từ máy tính hoặc dán link ảnh (URL)" : "Upload from device or paste image URL"}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="https://... hoặc chọn file từ máy tính"
+                        value={formFacImage}
+                        onChange={(e) => setFormFacImage(e.target.value)}
+                      />
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 hover:bg-stone-100 text-stone-700 font-semibold rounded-lg text-xs shrink-0 transition shadow-2xs">
+                        <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        <span>{lang === "vi" ? "Chọn file" : "Upload"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageFileUpload}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-medium text-stone-500 mb-1">
+                      {lang === "vi" ? "Hoặc chọn nhanh từ thư viện ảnh kho mẫu chuẩn:" : "Or select from preset warehouse photos:"}
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {WAREHOUSE_PHOTO_PRESETS.map((p) => {
+                        const isSelected = formFacImage === p.url
+                        return (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => setFormFacImage(p.url)}
+                            className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-left transition ${
+                              isSelected
+                                ? "border-amber-500 bg-amber-50/80 ring-1 ring-amber-400"
+                                : "border-stone-200 bg-white hover:border-stone-300"
+                            }`}
+                          >
+                            <img src={p.url} alt={p.title} className="w-8 h-8 rounded object-cover shrink-0" />
+                            <span className="text-[10px] font-medium text-stone-700 truncate leading-tight">
+                              {p.title}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
 
         return (
           <>
@@ -4185,7 +5056,7 @@ export default function BusinessApp({
                   ? "Thêm Cơ Sở Kho Mới"
                   : "Create New Storage Facility"
               }
-              size="lg"
+              size="2xl"
             >
               <div className="space-y-4">
                 {/* Thông tin cơ sở */}
@@ -4297,6 +5168,9 @@ export default function BusinessApp({
                   </div>
                 </div>
 
+                {/* Hình ảnh cơ sở & kho bãi */}
+                {renderFacilityImageSection()}
+
                 {/* Quy mô & phân bổ kho */}
                 {renderUnitAllocationSection(false)}
 
@@ -4306,7 +5180,7 @@ export default function BusinessApp({
                     {lang === "vi" ? "Thông số vận hành" : "Operation Settings"}
                   </h4>
                   <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <Input
                         label={
                           lang === "vi"
@@ -4315,7 +5189,29 @@ export default function BusinessApp({
                         }
                         placeholder="5.500.000đ"
                         value={formFacPrice}
-                        onChange={(e) => setFormFacPrice(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setFormFacPrice(val)
+                          const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
+                            if (s === "S") return formFacUnitS > 0
+                            if (s === "M") return formFacUnitM > 0
+                            if (s === "L") return formFacUnitL > 0
+                            return formFacUnitXL > 0
+                          })
+                          if (activeSizes.length === 1) {
+                            const only = activeSizes[0]
+                            if (only === "XL") setFormFacPriceXL(val)
+                            else if (only === "L") setFormFacPriceL(val)
+                            else if (only === "M") setFormFacPriceM(val)
+                            else if (only === "S") setFormFacPriceS(val)
+                          } else if (activeSizes.length > 1) {
+                            const first = activeSizes[0]
+                            if (first === "S") setFormFacPriceS(val)
+                            else if (first === "M") setFormFacPriceM(val)
+                            else if (first === "L") setFormFacPriceL(val)
+                            else if (first === "XL") setFormFacPriceXL(val)
+                          }
+                        }}
                       />
                       <Input
                         label={
@@ -4327,9 +5223,6 @@ export default function BusinessApp({
                         value={formFacAccessHours}
                         onChange={(e) => setFormFacAccessHours(e.target.value)}
                       />
-                    </div>
-
-                    <div>
                       <Select
                         label={
                           lang === "vi"
@@ -4384,7 +5277,7 @@ export default function BusinessApp({
               title={
                 lang === "vi" ? "Chỉnh Sửa Thông Tin Cơ Sở" : "Edit Facility"
               }
-              size="lg"
+              size="2xl"
             >
               {selectedFacility &&
                 (() => {
@@ -4510,6 +5403,9 @@ export default function BusinessApp({
                         </div>
                       </div>
 
+                      {/* Hình ảnh cơ sở & kho bãi */}
+                      {renderFacilityImageSection()}
+
                       {/* Quy mô & phân bổ kho */}
                       {renderUnitAllocationSection(true, occMap)}
 
@@ -4521,7 +5417,7 @@ export default function BusinessApp({
                             : "Operation Settings"}
                         </h4>
                         <div className="space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <Input
                               label={
                                 lang === "vi"
@@ -4529,7 +5425,29 @@ export default function BusinessApp({
                                   : "Starting Price"
                               }
                               value={formFacPrice}
-                              onChange={(e) => setFormFacPrice(e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                setFormFacPrice(val)
+                                const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
+                                  if (s === "S") return formFacUnitS > 0
+                                  if (s === "M") return formFacUnitM > 0
+                                  if (s === "L") return formFacUnitL > 0
+                                  return formFacUnitXL > 0
+                                })
+                                if (activeSizes.length === 1) {
+                                  const only = activeSizes[0]
+                                  if (only === "XL") setFormFacPriceXL(val)
+                                  else if (only === "L") setFormFacPriceL(val)
+                                  else if (only === "M") setFormFacPriceM(val)
+                                  else if (only === "S") setFormFacPriceS(val)
+                                } else if (activeSizes.length > 1) {
+                                  const first = activeSizes[0]
+                                  if (first === "S") setFormFacPriceS(val)
+                                  else if (first === "M") setFormFacPriceM(val)
+                                  else if (first === "L") setFormFacPriceL(val)
+                                  else if (first === "XL") setFormFacPriceXL(val)
+                                }
+                              }}
                             />
                             <Input
                               label={
@@ -4542,9 +5460,6 @@ export default function BusinessApp({
                                 setFormFacAccessHours(e.target.value)
                               }
                             />
-                          </div>
-
-                          <div>
                             <Select
                               label={
                                 lang === "vi"
@@ -4683,7 +5598,7 @@ export default function BusinessApp({
         open={viewFacilityModal}
         onClose={() => setViewFacilityModal(false)}
         title={lang === "vi" ? "Thông Tin Chi Tiết Cơ Sở" : "Facility Details"}
-        size="lg"
+        size="2xl"
       >
         {selectedFacility &&
           (() => {
@@ -4697,47 +5612,116 @@ export default function BusinessApp({
 
             const occupancyRate = selectedFacility.units
               ? Math.round(
-                  ((selectedFacility.occupied || 0) / selectedFacility.units) *
+                  (getFacilityOccupiedCount(selectedFacility) /
+                    Math.max(1, getFacilityTotalUnits(selectedFacility))) *
                     100,
                 )
               : 0
 
+            const defaultLoadS = selectedFacility.unitLoadLimits?.S ?? 1000
+            const defaultLoadM = selectedFacility.unitLoadLimits?.M ?? 1600
+            const defaultLoadL = selectedFacility.unitLoadLimits?.L ?? 2800
+            const defaultLoadXL = selectedFacility.unitLoadLimits?.XL ?? 4000
+
+            const totalFacilityLoadTon =
+              selectedFacility.totalDesignLoadTon ??
+              Math.round(
+                (((selectedFacility.unitDistribution?.S ?? 0) * defaultLoadS +
+                  (selectedFacility.unitDistribution?.M ?? 0) * defaultLoadM +
+                  (selectedFacility.unitDistribution?.L ?? 0) * defaultLoadL +
+                  (selectedFacility.unitDistribution?.XL ?? 0) * defaultLoadXL) /
+                  1000) *
+                  10,
+              ) / 10
+
             return (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+                {/* Ảnh kho bãi của cơ sở */}
+                {selectedFacility.image && (
+                  <div className="relative h-44 sm:h-52 w-full rounded-xl overflow-hidden border border-stone-200 shadow-xs group">
+                    <img
+                      src={
+                        selectedFacility.image.startsWith("http") ||
+                        selectedFacility.image.startsWith("data:")
+                          ? selectedFacility.image
+                          : `https://images.unsplash.com/${selectedFacility.image}?w=800&auto=format&fit=crop`
+                      }
+                      alt={selectedFacility.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          WAREHOUSE_PHOTO_PRESETS[0].url
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-stone-950/85 via-stone-900/30 to-transparent flex items-end p-4">
+                      <div className="text-white">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-stone-950 shadow-xs">
+                            {facCode}
+                          </span>
+                          <span className="text-xs text-amber-200 font-medium">
+                            {selectedFacility.city}
+                          </span>
+                          {totalFacilityLoadTon > 0 && (
+                            <span className="text-xs text-sky-200 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-400/30 font-mono">
+                              Tải trọng sàn: {totalFacilityLoadTon} tấn
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-xl font-bold text-white drop-shadow-sm">
+                          {selectedFacility.name}
+                        </h3>
+                        <p className="text-xs text-stone-300 mt-0.5">
+                          {selectedFacility.address}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Header chi tiết cơ sở */}
                 <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                        {facCode}
-                      </span>
-                      <h3 className="text-lg font-bold text-slate-900">
-                        {selectedFacility.name}
-                      </h3>
-                    </div>
+                    {!selectedFacility.image && (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                          {facCode}
+                        </span>
+                        <h3 className="text-lg font-bold text-slate-900">
+                          {selectedFacility.name}
+                        </h3>
+                      </div>
+                    )}
                     <p className="text-xs text-slate-500 mt-0.5">
                       {selectedFacility.address} · {selectedFacility.city}
                     </p>
                   </div>
-                  <Badge
-                    variant={
-                      selectedFacility.status === "active"
-                        ? "success"
-                        : "warning"
-                    }
-                  >
-                    {selectedFacility.status === "active"
-                      ? lang === "vi"
-                        ? "Đang hoạt động"
-                        : "Active"
-                      : lang === "vi"
-                        ? "Bảo trì"
-                        : "Maintenance"}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {totalFacilityLoadTon > 0 && !selectedFacility.image && (
+                      <span className="px-2.5 py-1 rounded bg-sky-50 text-sky-800 border border-sky-200 font-mono text-xs font-bold">
+                        Tải trọng sàn: {totalFacilityLoadTon} tấn
+                      </span>
+                    )}
+                    <Badge
+                      variant={
+                        selectedFacility.status === "active"
+                          ? "success"
+                          : "warning"
+                      }
+                    >
+                      {selectedFacility.status === "active"
+                        ? lang === "vi"
+                          ? "Đang hoạt động"
+                          : "Active"
+                        : lang === "vi"
+                          ? "Bảo trì"
+                          : "Maintenance"}
+                    </Badge>
+                  </div>
                 </div>
 
                 {/* Thông số kỹ thuật & Vận hành */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
                       Người quản lý:
@@ -4754,8 +5738,8 @@ export default function BusinessApp({
                       Tỷ lệ lấp đầy:
                     </span>
                     <b className="text-slate-800 block text-sm">
-                      {selectedFacility.occupied || 0} /{" "}
-                      {selectedFacility.units} kho
+                      {getFacilityOccupiedCount(selectedFacility)} /{" "}
+                      {getFacilityTotalUnits(selectedFacility)} kho
                     </b>
                     <span className="text-emerald-700 font-semibold">
                       {occupancyRate}% công suất
@@ -4770,6 +5754,17 @@ export default function BusinessApp({
                     </b>
                     <span className="text-slate-500">
                       {selectedFacility.price}/tháng từ
+                    </span>
+                  </div>
+                  <div className="bg-amber-50/70 p-3 rounded-lg border border-amber-200/80">
+                    <span className="text-amber-800/80 block mb-0.5 font-medium">
+                      {lang === "vi" ? "Tải trọng sàn:" : "Floor Load Limit:"}
+                    </span>
+                    <b className="text-amber-950 block text-sm font-bold font-mono">
+                      {totalFacilityLoadTon} tấn
+                    </b>
+                    <span className="text-amber-700 font-medium text-[11px]">
+                      {lang === "vi" ? "Thiết kế chịu tải" : "Max floor load"}
                     </span>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
@@ -4803,6 +5798,9 @@ export default function BusinessApp({
                         <th className="p-2.5">Phân loại</th>
                         <th className="p-2.5">Kích thước D×R×C</th>
                         <th className="p-2.5">Thể tích</th>
+                        <th className="p-2.5 text-center font-bold text-amber-900 bg-amber-50/50">Tải trọng (kg)</th>
+                        <th className="p-2.5 hidden md:table-cell">Khung kệ / Lối xe</th>
+                        <th className="p-2.5 hidden lg:table-cell">Xe đẩy</th>
                         <th className="p-2.5">Số lượng</th>
                         <th className="p-2.5">Đang thuê</th>
                         <th className="p-2.5">Còn trống</th>
@@ -4838,6 +5836,17 @@ export default function BusinessApp({
                           unitsOfSize.filter((u) => u.status === "available")
                             .length || Math.max(0, totalSize - occupiedSize)
 
+                        const loadKg =
+                          selectedFacility.unitLoadLimits?.[size] ??
+                          (unitsOfSize[0]?.maxLoadKg ??
+                            (size === "S"
+                              ? 1000
+                              : size === "M"
+                                ? 1600
+                                : size === "L"
+                                  ? 2800
+                                  : 4000))
+
                         return (
                           <tr key={size} className="hover:bg-amber-50/50">
                             <td className="p-2.5">
@@ -4861,6 +5870,17 @@ export default function BusinessApp({
                             <td className="p-2.5 text-slate-600">
                               {spec.volumeM3} m³
                             </td>
+                            <td className="p-2.5 text-center font-bold text-stone-800 bg-amber-50/20 font-mono">
+                              {loadKg.toLocaleString("vi-VN")} kg
+                            </td>
+                            <td className="p-2.5 hidden md:table-cell">
+                              <div className="text-slate-700 font-mono">{spec.frameCount} khung · {spec.frameDimensions.widthM}×{spec.frameDimensions.depthM}×{spec.frameDimensions.heightM} m</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">lối xe {spec.vehicleLaneWidthM} m · cao {spec.heightM} m</div>
+                            </td>
+                            <td className="p-2.5 hidden lg:table-cell text-slate-600">
+                              <div>{spec.cartEquipment}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">thùng nhỏ {spec.smallBox.count} · thùng to {spec.largeBox.count}</div>
+                            </td>
                             <td className="p-2.5 font-bold text-slate-800">
                               {totalSize} kho
                             </td>
@@ -4871,7 +5891,7 @@ export default function BusinessApp({
                               {availableSize} kho
                             </td>
                             <td className="p-2.5 font-mono font-bold text-emerald-800">
-                              {spec.priceFormatted}
+                              {getFacilitySizePriceFormatted(selectedFacility, size)}
                             </td>
                           </tr>
                         )
@@ -4880,8 +5900,12 @@ export default function BusinessApp({
                     <tfoot className="bg-stone-50 border-t border-stone-200 font-semibold text-slate-800">
                       <tr>
                         <td colSpan={3} className="p-2.5 font-bold">
-                          Tổng cộng
+                          {lang === "vi" ? "Tổng cộng" : "Total"}
                         </td>
+                        <td className="p-2.5 text-center font-bold text-amber-900 bg-amber-50/40 font-mono">
+                          {totalFacilityLoadTon} tấn
+                        </td>
+                        <td colSpan={2} className="hidden md:table-cell"></td>
                         <td className="p-2.5 font-bold text-amber-800">
                           {selectedFacility.units} kho
                         </td>
@@ -4896,7 +5920,9 @@ export default function BusinessApp({
                           )}{" "}
                           kho
                         </td>
-                        <td></td>
+                        <td className="p-2.5 font-mono font-bold text-emerald-800">
+                          {selectedFacility.price}/tháng từ
+                        </td>
                       </tr>
                     </tfoot>
                   </table>

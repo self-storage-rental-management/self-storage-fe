@@ -3497,7 +3497,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const updateBusinessConfig = (newConfig: Partial<BusinessConfig>, actor: User) => {
     assertPermission(actor, 'manage_policies')
     if (actor.role === 'manager' && !isManagerOperationAllowed('manage_policies')) throw new Error('Chính sách thuê không thuộc phạm vi Facility Manager.')
-    if (actor.role !== 'admin') throw new Error('Chỉ Admin được cập nhật cấu hình vận hành tại đây.')
+    if (actor.role !== 'admin' && actor.role !== 'business') throw new Error('Chỉ Admin và Business Owner được cập nhật cấu hình vận hành tại đây.')
     setState(prev => ({
       ...prev,
       config: { ...prev.config, ...newConfig }
@@ -4024,7 +4024,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       status: data.status || 'active',
       accessHours: data.accessHours || '06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)',
       timezone: data.timezone || 'Asia/Ho_Chi_Minh',
-      unitDistribution
+      unitDistribution,
+      unitPrices: data.unitPrices,
+      unitLoadLimits: data.unitLoadLimits,
+      totalDesignLoadTon: data.totalDesignLoadTon
     }
 
     const allDist: Array<{ size: 'S' | 'M' | 'L' | 'XL'; type: 'Small' | 'Medium' | 'Large' | 'Extra Large'; floor: number; zone: string; count: number }> = [
@@ -4034,11 +4037,27 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       { size: 'XL', type: 'Extra Large', floor: 4, zone: 'Khu D', count: countXL }
     ]
     const distribution = allDist.filter(item => item.count > 0)
+    const activeSizes = distribution.map(item => item.size)
+    let parsedStartingPrice: number | undefined
+    if (data.price) {
+      const num = parseInt(data.price.replace(/\D/g, ''), 10)
+      if (!isNaN(num) && num > 0) parsedStartingPrice = num
+    }
 
     const newUnits: StorageUnit[] = []
     let assignedOccupied = 0
     distribution.forEach(({ size, type, floor, zone, count }) => {
       const spec = UNIT_SPECS[size]
+      let monthlyPriceVnd = data.unitPrices?.[size]
+      if (!monthlyPriceVnd && activeSizes.length === 1 && activeSizes[0] === size && parsedStartingPrice) {
+        monthlyPriceVnd = parsedStartingPrice
+      }
+      if (!monthlyPriceVnd) monthlyPriceVnd = spec.priceMonthly
+      const normPrice = monthlyPriceVnd > 10000 ? monthlyPriceVnd / USD_TO_VND_RATE : monthlyPriceVnd
+
+      const defaultLoad = size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000
+      const configuredLoad = data.unitLoadLimits?.[size] ?? defaultLoad
+
       for (let i = 1; i <= count; i++) {
         const unitNumber = String(i).padStart(3, '0')
         const unitCode = `${code}-${size}-${unitNumber}`
@@ -4062,11 +4081,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           },
           areaM2: spec.areaM2,
           volumeM3: spec.volumeM3,
-          maxLoadKg: size === 'S' ? 600 : size === 'M' ? 1200 : size === 'L' ? 2000 : 3500,
+          maxLoadKg: configuredLoad,
           allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
           prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
-          price: spec.priceMonthly,
-          deposit: spec.priceMonthly,
+          price: normPrice,
+          deposit: normPrice,
           floor,
           zone,
           climate: false,
@@ -4108,6 +4127,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       let nextUnits = prev.units
       let updatedUnitDist = updates.unitDistribution || targetFac.unitDistribution
 
+      const targetDist = updates.unitDistribution || targetFac.unitDistribution
+      const activeSizes = targetDist ? (['S', 'M', 'L', 'XL'] as const).filter(s => (targetDist[s] ?? 0) > 0) : []
+      let parsedStartingPrice: number | undefined
+      if (updates.price) {
+        const num = parseInt(updates.price.replace(/\D/g, ''), 10)
+        if (!isNaN(num) && num > 0) parsedStartingPrice = num
+      }
+
       // If unitDistribution was updated, adjust units accordingly!
       if (updates.unitDistribution) {
         const dist = updates.unitDistribution
@@ -4139,6 +4166,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 if (n > maxNum) maxNum = n
               }
             })
+            let monthlyPriceVnd = updates.unitPrices?.[size]
+            if (!monthlyPriceVnd && activeSizes.length === 1 && activeSizes[0] === size && parsedStartingPrice) {
+              monthlyPriceVnd = parsedStartingPrice
+            }
+            if (!monthlyPriceVnd) monthlyPriceVnd = spec.priceMonthly
+            const normUnitP = monthlyPriceVnd > 10000 ? monthlyPriceVnd / USD_TO_VND_RATE : monthlyPriceVnd
+
             for (let i = 1; i <= needed; i++) {
               const unitNum = String(maxNum + i).padStart(3, '0')
               const unitCode = `${targetFacCode}-${size}-${unitNum}`
@@ -4160,11 +4194,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 },
                 areaM2: spec.areaM2,
                 volumeM3: spec.volumeM3,
-                maxLoadKg: size === 'S' ? 600 : size === 'M' ? 1200 : size === 'L' ? 2000 : 3500,
+                maxLoadKg: updates.unitLoadLimits?.[size] ?? targetFac.unitLoadLimits?.[size] ?? (size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000),
                 allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
                 prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
-                price: spec.priceMonthly,
-                deposit: spec.priceMonthly,
+                price: normUnitP,
+                deposit: normUnitP,
                 floor,
                 zone,
                 climate: false,
@@ -4185,6 +4219,38 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         })
 
         nextUnits = workingUnits
+      }
+
+      // Propagate unit price updates to existing units if updates.unitPrices or updates.price is passed
+      if (updates.unitPrices || parsedStartingPrice) {
+        nextUnits = nextUnits.map(u => {
+          if (u.facilityId === targetFacId || u.facilityId === targetFacCode) {
+            const s = ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : 'XL')) as 'S' | 'M' | 'L' | 'XL'
+            let newPriceVnd = updates.unitPrices?.[s]
+            if (!newPriceVnd && activeSizes.length === 1 && activeSizes[0] === s && parsedStartingPrice) {
+              newPriceVnd = parsedStartingPrice
+            }
+            if (newPriceVnd && newPriceVnd > 0) {
+              const normPrice = newPriceVnd > 10000 ? newPriceVnd / USD_TO_VND_RATE : newPriceVnd
+              return { ...u, price: normPrice, deposit: normPrice }
+            }
+          }
+          return u
+        })
+      }
+
+      // Propagate unit load limit updates to existing units if updates.unitLoadLimits is passed
+      if (updates.unitLoadLimits) {
+        nextUnits = nextUnits.map(u => {
+          if (u.facilityId === targetFacId || u.facilityId === targetFacCode) {
+            const s = ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : 'XL')) as 'S' | 'M' | 'L' | 'XL'
+            const newLoad = updates.unitLoadLimits?.[s]
+            if (newLoad && newLoad > 0) {
+              return { ...u, maxLoadKg: newLoad }
+            }
+          }
+          return u
+        })
       }
 
       // If name was updated, update facilityName across all its units
@@ -4212,7 +4278,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           units: totalUnitsCount,
           available: availableUnitsCount,
           occupied: occupiedUnitsCount,
-          unitDistribution: updatedUnitDist || f.unitDistribution
+          unitDistribution: updatedUnitDist || f.unitDistribution,
+          unitPrices: updates.unitPrices ? { ...f.unitPrices, ...updates.unitPrices } : f.unitPrices,
+          unitLoadLimits: updates.unitLoadLimits ? { ...f.unitLoadLimits, ...updates.unitLoadLimits } : f.unitLoadLimits,
+          totalDesignLoadTon: updates.totalDesignLoadTon ?? f.totalDesignLoadTon
         }
       })
 
@@ -4231,9 +4300,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const deleteFacility = (facilityId: string, actor?: User): { success: boolean; reason?: string } => {
     if (actor) assertPermission(actor, 'view_facilities')
-    const hasActiveHolds = state.holds.some(h => (h.facilityId === facilityId || h.facilityName?.includes(facilityId)) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status))
-    const hasActiveRentals = state.rentals.some(r => (r.facilityId === facilityId || r.facilityName?.includes(facilityId)) && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status))
-    const hasOccupiedUnits = state.units.some(u => (u.facilityId === facilityId) && u.status === 'occupied')
+    const targetFac = state.facilities.find(f => f.id === facilityId || f.code === facilityId)
+    const hasActiveHolds = state.holds.some(h => (h.facilityId === facilityId || (targetFac && (h.facilityId === targetFac.id || h.facilityId === targetFac.code)) || h.facilityName?.includes(facilityId)) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status))
+    const hasActiveRentals = state.rentals.some(r => (r.facilityId === facilityId || (targetFac && (r.facilityId === targetFac.id || r.facilityId === targetFac.code)) || r.facilityName?.includes(facilityId)) && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status))
+    const hasOccupiedUnits = state.units.some(u => (u.facilityId === facilityId || (targetFac && (u.facilityId === targetFac.id || u.facilityId === targetFac.code))) && (u.status === 'occupied' || (u.status as string) === 'rented'))
 
     if (hasActiveHolds || hasActiveRentals || hasOccupiedUnits) {
       return {
