@@ -25,8 +25,17 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
   // Tính toán các chỉ số tổng hợp
   const totalRevenue = data.reduce((sum, item) => sum + item.revenue, 0)
   const avgRevenue = Math.round(totalRevenue / (data.length || 1))
-  const highestItem = [...data].sort((a, b) => b.revenue - a.revenue)[0] || { month: 'Tháng 9', revenue: 18450000 }
-  const forecastNext = '~19.000.000 ₫'
+  const highestItem =
+    totalRevenue > 0
+      ? [...data].sort((a, b) => b.revenue - a.revenue)[0] || {
+          month: '—',
+          revenue: 0
+        }
+      : { month: '—', revenue: 0 }
+  const forecastNext =
+    totalRevenue > 0
+      ? `~${Math.round(highestItem.revenue * 1.03).toLocaleString('vi-VN')} ₫`
+      : '0 ₫'
 
   // ─────────────────────────────────────────────────────────────
   // SHEET 1: Báo cáo doanh thu

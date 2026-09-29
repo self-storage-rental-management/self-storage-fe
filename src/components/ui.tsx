@@ -240,7 +240,7 @@ export function Modal({
   onClose: () => void
   title?: string
   children: ReactNode
-  size?: 'md' | 'lg' | 'xl'
+  size?: 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'full'
   closeLabel?: string
   customHeader?: ReactNode
   className?: string
@@ -248,6 +248,19 @@ export function Modal({
   hideHeader?: boolean
 }) {
   if (!open) return null
+  const sizeClass =
+    size === 'full'
+      ? 'max-w-[95vw]'
+      : size === '3xl'
+        ? 'max-w-6xl'
+        : size === '2xl'
+          ? 'max-w-5xl'
+          : size === 'xl'
+            ? 'max-w-4xl'
+            : size === 'lg'
+              ? 'max-w-2xl'
+              : 'max-w-lg'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -255,9 +268,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-stone-200 shadow-2xl w-full ${
-          size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'
-        } ${customHeader || hideHeader ? 'overflow-hidden' : 'p-6'} fade-in ${className}`}
+        className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-stone-200 shadow-2xl w-full ${sizeClass} ${customHeader || hideHeader ? 'overflow-hidden' : 'p-6'} fade-in ${className}`}
       >
         {customHeader ? (
           <>

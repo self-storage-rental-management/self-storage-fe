@@ -18,12 +18,11 @@ Technology
 
 Commands
 --------
-- pnpm dev       Start the Vite development server
-- pnpm build     Build the production bundle
-- pnpm test      Run the Vitest suite once
-- pnpm typecheck Run TypeScript checking without emitting files
-- pnpm preview   Preview the production build
-- pnpm format    Format source files with oxfmt
+- npm run dev       Start the Vite development server
+- npm run build     Build the production bundle
+- npm test          Run the Vitest suite once
+- npm run typecheck Run TypeScript checking without emitting files
+- npm run preview   Preview the production build
 
 Application entry and routing
 -----------------------------
