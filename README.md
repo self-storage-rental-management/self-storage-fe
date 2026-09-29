@@ -50,8 +50,3 @@ src/
 └── views/         # Màn hình theo từng vai trò
 ```
 
-## Lưu ý
-
-- Không commit các file chứa thông tin bí mật như `.env.local`.
-- Frontend và backend nằm ở hai repository riêng biệt trong thư mục `Self-Storage Management System`.
-
