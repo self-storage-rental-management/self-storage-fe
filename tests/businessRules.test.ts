@@ -353,6 +353,21 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       }
       expect(isExcludedRelated(daNangRelated)).toBe(false)
     })
+
+    it('supports custom unitLaneWidths configuration and zero unit defaults', () => {
+      const facilityWithCustomLanes = {
+        id: 'fac-custom-lanes',
+        name: 'Kho Custom Lanes',
+        unitDistribution: { S: 0, M: 0, L: 0, XL: 0 },
+        unitLaneWidths: { S: 2.0, M: 2.5, L: 3.0, XL: 3.5 }
+      }
+
+      expect(facilityWithCustomLanes.unitLaneWidths.S).toBe(2.0)
+      expect(facilityWithCustomLanes.unitLaneWidths.M).toBe(2.5)
+      expect(facilityWithCustomLanes.unitLaneWidths.L).toBe(3.0)
+      expect(facilityWithCustomLanes.unitLaneWidths.XL).toBe(3.5)
+      expect(facilityWithCustomLanes.unitDistribution.S).toBe(0)
+    })
   })
 })
 
