@@ -63,6 +63,10 @@ import { useStorageHub } from "../../store/StorageHubContext"
 import type { FacilityCustomUnitSpec } from "../../types/storageHub"
 
 import ProfileView from "../ProfileView"
+import {
+  getUnitTypeVehicleStandard,
+  validateVehicleLaneWidth,
+} from "../../domain/facilityRules"
 
 const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
   {
@@ -1354,7 +1358,8 @@ export default function BusinessApp({
     const len = Math.max(1, Number(newSpecLength) || 1)
     const wid = Math.max(1, Number(newSpecWidth) || 1)
     const hei = Math.max(1, Number(newSpecHeight) || 1)
-    const lane = Math.max(1, Number(newSpecLane) || 4)
+    const std = getUnitTypeVehicleStandard(rawCode, wid, len)
+    const lane = Math.max(std.minLaneM, Number(newSpecLane) || std.minLaneM)
     const maxLoad = Math.max(100, Number(newSpecMaxLoad) || 2000)
     const priceNum = parseInt(newSpecPrice.replace(/\D/g, ""), 10) || 10000000
     const qty = Math.max(0, Number(newSpecCount) || 0)
@@ -1684,11 +1689,13 @@ export default function BusinessApp({
     const unitLaneWidths: Record<string, number> = {}
 
     formFacUnitSpecs.forEach((s) => {
+      const std = getUnitTypeVehicleStandard(s.sizeCode, s.widthM, s.lengthM)
+      const validLane = Math.max(std.minLaneM, s.laneWidthM ?? std.minLaneM)
       unitDistribution[s.sizeCode] = s.count
       newUnitPrices[s.sizeCode] = s.monthlyPrice
       unitLoadLimits[s.sizeCode] = s.maxLoadKg
       unitDimensions[s.sizeCode] = { lengthM: s.lengthM, widthM: s.widthM, heightM: s.heightM }
-      unitLaneWidths[s.sizeCode] = s.laneWidthM ?? 4.0
+      unitLaneWidths[s.sizeCode] = validLane
     })
 
     const totalDesignLoadTon =
@@ -2160,11 +2167,13 @@ export default function BusinessApp({
     const unitLaneWidths: Record<string, number> = {}
 
     formFacUnitSpecs.forEach((s) => {
+      const std = getUnitTypeVehicleStandard(s.sizeCode, s.widthM, s.lengthM)
+      const validLane = Math.max(std.minLaneM, s.laneWidthM ?? std.minLaneM)
       unitDistribution[s.sizeCode] = s.count
       updatedUnitPrices[s.sizeCode] = s.monthlyPrice
       unitLoadLimits[s.sizeCode] = s.maxLoadKg
       unitDimensions[s.sizeCode] = { lengthM: s.lengthM, widthM: s.widthM, heightM: s.heightM }
-      unitLaneWidths[s.sizeCode] = s.laneWidthM ?? 4.0
+      unitLaneWidths[s.sizeCode] = validLane
     })
 
     const totalDesignLoadTon =
@@ -5030,18 +5039,24 @@ export default function BusinessApp({
                                     </span>
                                     <input
                                       type="number"
-                                      min={0.5}
+                                      min={1}
                                       max={100}
                                       step={0.1}
                                       className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none focus:bg-amber-50/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                       value={spec.lengthM}
-                                      onChange={(e) =>
-                                        handleSpecDimensionChange(
-                                          spec.sizeCode,
-                                          "lengthM",
-                                          Math.max(0.5, parseFloat(e.target.value) || 0.5),
-                                        )
-                                      }
+                                      onChange={(e) => {
+                                        const raw = e.target.value
+                                        const val =
+                                          raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0
+                                            ? 1
+                                            : parseFloat(raw) || 1
+                                        handleSpecDimensionChange(spec.sizeCode, "lengthM", val)
+                                      }}
+                                      onBlur={() => {
+                                        if (!spec.lengthM || spec.lengthM < 1) {
+                                          handleSpecDimensionChange(spec.sizeCode, "lengthM", 1)
+                                        }
+                                      }}
                                       title={lang === "vi" ? "Chiều dài (m)" : "Length (m)"}
                                     />
                                     <span className="pr-1.5 text-[10px] text-stone-400 font-mono select-none bg-white">
@@ -5058,18 +5073,24 @@ export default function BusinessApp({
                                     </span>
                                     <input
                                       type="number"
-                                      min={0.5}
+                                      min={1}
                                       max={100}
                                       step={0.1}
                                       className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none focus:bg-amber-50/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                       value={spec.widthM}
-                                      onChange={(e) =>
-                                        handleSpecDimensionChange(
-                                          spec.sizeCode,
-                                          "widthM",
-                                          Math.max(0.5, parseFloat(e.target.value) || 0.5),
-                                        )
-                                      }
+                                      onChange={(e) => {
+                                        const raw = e.target.value
+                                        const val =
+                                          raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0
+                                            ? 1
+                                            : parseFloat(raw) || 1
+                                        handleSpecDimensionChange(spec.sizeCode, "widthM", val)
+                                      }}
+                                      onBlur={() => {
+                                        if (!spec.widthM || spec.widthM < 1) {
+                                          handleSpecDimensionChange(spec.sizeCode, "widthM", 1)
+                                        }
+                                      }}
                                       title={lang === "vi" ? "Chiều rộng (m)" : "Width (m)"}
                                     />
                                     <span className="pr-1.5 text-[10px] text-stone-400 font-mono select-none bg-white">
@@ -5091,13 +5112,19 @@ export default function BusinessApp({
                                       step={0.1}
                                       className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-amber-950 focus:outline-none focus:bg-amber-50/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                       value={spec.heightM}
-                                      onChange={(e) =>
-                                        handleSpecDimensionChange(
-                                          spec.sizeCode,
-                                          "heightM",
-                                          Math.max(1, parseFloat(e.target.value) || 1),
-                                        )
-                                      }
+                                      onChange={(e) => {
+                                        const raw = e.target.value
+                                        const val =
+                                          raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0
+                                            ? 1
+                                            : parseFloat(raw) || 1
+                                        handleSpecDimensionChange(spec.sizeCode, "heightM", val)
+                                      }}
+                                      onBlur={() => {
+                                        if (!spec.heightM || spec.heightM < 1) {
+                                          handleSpecDimensionChange(spec.sizeCode, "heightM", 1)
+                                        }
+                                      }}
                                       title={lang === "vi" ? "Chiều cao gian kho (m) - Tùy chỉnh tự do" : "Height (m)"}
                                     />
                                     <span className="pr-1.5 text-[10px] text-amber-700 font-bold font-mono select-none bg-white">
@@ -5116,30 +5143,86 @@ export default function BusinessApp({
                                     <span className="text-stone-400">({calcArea} m²)</span>
                                   </span>
                                   <span className="text-stone-300">·</span>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[10px] text-stone-500">
-                                      {lang === "vi" ? "Lối xe:" : "Lane:"}
-                                    </span>
-                                    <div className="flex items-center bg-stone-50 border border-stone-200 rounded overflow-hidden">
-                                      <input
-                                        type="number"
-                                        step={0.1}
-                                        className="w-10 h-5 px-0.5 text-center font-mono text-[11px] bg-white text-stone-800 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        value={spec.laneWidthM || 4}
-                                        onChange={(e) =>
-                                          handleSpecDimensionChange(
-                                            spec.sizeCode,
-                                            "laneWidthM",
-                                            parseFloat(e.target.value) || 3,
-                                          )
-                                        }
-                                        title={lang === "vi" ? "Lối xe tiếp cận (m)" : "Vehicle lane width (m)"}
-                                      />
-                                      <span className="pr-1 text-[9px] text-stone-400 font-mono bg-white">
-                                        m
-                                      </span>
-                                    </div>
-                                  </div>
+                                  {(() => {
+                                    const std = getUnitTypeVehicleStandard(
+                                      spec.sizeCode,
+                                      spec.widthM,
+                                      spec.lengthM,
+                                    )
+                                    const isLaneInvalid =
+                                      (spec.laneWidthM || 0) < std.minLaneM
+                                    return (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[10px] text-stone-500">
+                                          {lang === "vi" ? "Lối xe:" : "Lane:"}
+                                        </span>
+                                        <div
+                                          className={`flex items-center rounded overflow-hidden border ${
+                                            isLaneInvalid
+                                              ? "bg-amber-50 border-amber-400 ring-1 ring-amber-300"
+                                              : "bg-stone-50 border-stone-200"
+                                          }`}
+                                          title={
+                                            lang === "vi"
+                                              ? `Chuẩn lối xe cỡ ${spec.sizeCode}: ≥${std.minLaneM}m (Cửa kho ${std.doorWidthM}m - ${std.vehicleType})`
+                                              : `Min lane: ≥${std.minLaneM}m (Door ${std.doorWidthM}m - ${std.vehicleType})`
+                                          }
+                                        >
+                                          <input
+                                            type="number"
+                                            step={0.1}
+                                            min={std.minLaneM}
+                                            className={`w-11 h-5 px-0.5 text-center font-mono text-[11px] font-bold focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                              isLaneInvalid
+                                                ? "bg-amber-50 text-amber-900"
+                                                : "bg-white text-stone-800"
+                                            }`}
+                                            value={spec.laneWidthM ?? std.minLaneM}
+                                            onChange={(e) => {
+                                              const raw = e.target.value
+                                              const val =
+                                                raw === "0" ||
+                                                raw === "-0" ||
+                                                raw === "" ||
+                                                parseFloat(raw) <= 0
+                                                  ? std.minLaneM
+                                                  : parseFloat(raw) || std.minLaneM
+                                              handleSpecDimensionChange(
+                                                spec.sizeCode,
+                                                "laneWidthM",
+                                                val,
+                                              )
+                                            }}
+                                            onBlur={() => {
+                                              if (
+                                                !spec.laneWidthM ||
+                                                spec.laneWidthM < std.minLaneM
+                                              ) {
+                                                handleSpecDimensionChange(
+                                                  spec.sizeCode,
+                                                  "laneWidthM",
+                                                  std.minLaneM,
+                                                )
+                                                showToast(
+                                                  lang === "vi"
+                                                    ? `Lối xe cỡ ${spec.sizeCode} tự điều chỉnh về tối thiểu ${std.minLaneM}m (Cửa kho ${std.doorWidthM}m - ${std.vehicleType})`
+                                                    : `Lane for ${spec.sizeCode} auto-adjusted to min ${std.minLaneM}m`,
+                                                )
+                                              }
+                                            }}
+                                            title={
+                                              lang === "vi"
+                                                ? `Lối xe tiếp cận (Chuẩn tối thiểu: ≥${std.minLaneM}m, Cửa kho: ${std.doorWidthM}m)`
+                                                : `Lane width (Min: ≥${std.minLaneM}m, Door: ${std.doorWidthM}m)`
+                                            }
+                                          />
+                                          <span className="pr-1 text-[9px] text-stone-400 font-mono bg-white">
+                                            m
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
                                 </div>
                               </div>
                             </td>
@@ -5562,46 +5645,7 @@ export default function BusinessApp({
                     {lang === "vi" ? "Thông số vận hành" : "Operation Settings"}
                   </h4>
                   <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <Input
-                          label={
-                            lang === "vi"
-                              ? "Giá cơ sở từ / tháng"
-                              : "Starting Price"
-                          }
-                          placeholder="5.500.000đ"
-                          value={formFacPrice}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            setFormFacPrice(val)
-                            const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
-                              if (s === "S") return formFacUnitS > 0
-                              if (s === "M") return formFacUnitM > 0
-                              if (s === "L") return formFacUnitL > 0
-                              return formFacUnitXL > 0
-                            })
-                            if (activeSizes.length === 1) {
-                              const only = activeSizes[0]
-                              if (only === "XL") setFormFacPriceXL(val)
-                              else if (only === "L") setFormFacPriceL(val)
-                              else if (only === "M") setFormFacPriceM(val)
-                              else if (only === "S") setFormFacPriceS(val)
-                            } else if (activeSizes.length > 1) {
-                              const first = activeSizes[0]
-                              if (first === "S") setFormFacPriceS(val)
-                              else if (first === "M") setFormFacPriceM(val)
-                              else if (first === "L") setFormFacPriceL(val)
-                              else if (first === "XL") setFormFacPriceXL(val)
-                            }
-                          }}
-                        />
-                        <p className="mt-1 text-[11px] text-stone-500">
-                          {lang === "vi"
-                            ? "💡 Giá chào sàn \"Giá chỉ từ...\" hiển thị cho khách hàng (tự động theo cỡ kho rẻ nhất có sẵn)."
-                            : "💡 Starting price displayed on catalog cards (auto-synced from lowest active size)."}
-                        </p>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <Input
                         label={
                           lang === "vi"
@@ -5800,45 +5844,7 @@ export default function BusinessApp({
                             : "Operation Settings"}
                         </h4>
                         <div className="space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <Input
-                                label={
-                                  lang === "vi"
-                                    ? "Giá cơ sở từ"
-                                    : "Starting Price"
-                                }
-                                value={formFacPrice}
-                                onChange={(e) => {
-                                  const val = e.target.value
-                                  setFormFacPrice(val)
-                                  const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
-                                    if (s === "S") return formFacUnitS > 0
-                                    if (s === "M") return formFacUnitM > 0
-                                    if (s === "L") return formFacUnitL > 0
-                                    return formFacUnitXL > 0
-                                  })
-                                  if (activeSizes.length === 1) {
-                                    const only = activeSizes[0]
-                                    if (only === "XL") setFormFacPriceXL(val)
-                                    else if (only === "L") setFormFacPriceL(val)
-                                    else if (only === "M") setFormFacPriceM(val)
-                                    else if (only === "S") setFormFacPriceS(val)
-                                  } else if (activeSizes.length > 1) {
-                                    const first = activeSizes[0]
-                                    if (first === "S") setFormFacPriceS(val)
-                                    else if (first === "M") setFormFacPriceM(val)
-                                    else if (first === "L") setFormFacPriceL(val)
-                                    else if (first === "XL") setFormFacPriceXL(val)
-                                  }
-                                }}
-                              />
-                              <p className="mt-1 text-[11px] text-stone-500">
-                                {lang === "vi"
-                                  ? "💡 Giá chào sàn \"Giá chỉ từ...\" hiển thị cho khách hàng (tự động theo cỡ kho rẻ nhất có sẵn)."
-                                  : "💡 Starting price displayed on catalog cards (auto-synced from lowest active size)."}
-                              </p>
-                            </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <Input
                               label={
                                 lang === "vi"
@@ -6049,19 +6055,52 @@ export default function BusinessApp({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-700 mb-1">
-                      {lang === "vi" ? "Lối xe tiếp cận (m)" : "Vehicle Lane (m)"}
-                    </label>
-                    <input
-                      type="number"
-                      step={0.1}
-                      min={1}
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      value={newSpecLane}
-                      onChange={(e) => setNewSpecLane(parseFloat(e.target.value) || 4)}
-                    />
-                  </div>
+                  {(() => {
+                    const std = getUnitTypeVehicleStandard(
+                      newSpecSizeCode,
+                      Number(newSpecWidth) || 12,
+                      Number(newSpecLength) || 25,
+                    )
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-semibold text-stone-700">
+                            {lang === "vi" ? "Lối xe tiếp cận (m) *" : "Vehicle Lane (m) *"}
+                          </label>
+                          <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            {lang === "vi"
+                              ? `Tối thiểu: ≥ ${std.minLaneM}m`
+                              : `Min: ≥ ${std.minLaneM}m`}
+                          </span>
+                        </div>
+                        <input
+                          type="number"
+                          step={0.1}
+                          min={std.minLaneM}
+                          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          value={newSpecLane}
+                          onChange={(e) => {
+                            const raw = e.target.value
+                            if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
+                              setNewSpecLane(std.minLaneM)
+                            } else {
+                              setNewSpecLane(parseFloat(raw) || std.minLaneM)
+                            }
+                          }}
+                          onBlur={() => {
+                            if (!newSpecLane || Number(newSpecLane) < std.minLaneM) {
+                              setNewSpecLane(std.minLaneM)
+                            }
+                          }}
+                        />
+                        <p className="mt-1 text-[10px] text-stone-500">
+                          {lang === "vi"
+                            ? `💡 Cửa kho: ${std.doorWidthM}m · Phương tiện: ${std.vehicleType}.`
+                            : `💡 Door: ${std.doorWidthM}m · Vehicle: ${std.vehicleType}.`}
+                        </p>
+                      </div>
+                    )
+                  })()}
 
                   <div>
                     <label className="block text-xs font-semibold text-stone-700 mb-1">

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions } from '../src/auth/rbac'
 import type { User } from '../src/types'
 import { isExcludedFacility, isExcludedUnit, isExcludedRelated } from '../src/store/StorageHubContext'
+import { getUnitTypeVehicleStandard, validateVehicleLaneWidth } from '../src/domain/facilityRules'
 
 describe('Business Owner (BO) Business Rules & Logic', () => {
   const dummyBusinessUser: User = {
@@ -510,6 +511,53 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       expect(unit4XL.dimensions.lengthM * unit4XL.dimensions.widthM).toBe(120)
       expect(unit4XL.volumeM3).toBe(600)
       expect(unit4XL.maxLoadKg).toBe(20000)
+    })
+
+    it('enforces transport vehicle standards and door dimensions for standard sizes', () => {
+      const sStd = getUnitTypeVehicleStandard('S')
+      expect(sStd.minLaneM).toBe(1.8)
+      expect(sStd.doorWidthM).toBe(1.0)
+      expect(sStd.minLaneM).toBeGreaterThanOrEqual(sStd.doorWidthM)
+
+      const mStd = getUnitTypeVehicleStandard('M')
+      expect(mStd.minLaneM).toBe(2.2)
+      expect(mStd.doorWidthM).toBe(1.2)
+      expect(mStd.minLaneM).toBeGreaterThanOrEqual(mStd.doorWidthM)
+
+      const lStd = getUnitTypeVehicleStandard('L')
+      expect(lStd.minLaneM).toBe(2.6)
+      expect(lStd.doorWidthM).toBe(1.5)
+      expect(lStd.minLaneM).toBeGreaterThanOrEqual(lStd.doorWidthM)
+
+      const xlStd = getUnitTypeVehicleStandard('XL')
+      expect(xlStd.minLaneM).toBe(3.0)
+      expect(xlStd.doorWidthM).toBe(2.0)
+      expect(xlStd.minLaneM).toBeGreaterThanOrEqual(xlStd.doorWidthM)
+    })
+
+    it('enforces heavier standards for large custom units like XXL or 4XL', () => {
+      const xxlStd = getUnitTypeVehicleStandard('XXL', 12, 25)
+      expect(xxlStd.minLaneM).toBeGreaterThanOrEqual(3.5)
+      expect(xxlStd.doorWidthM).toBe(2.4)
+      expect(xxlStd.minLaneM).toBeGreaterThan(xxlStd.doorWidthM)
+    })
+
+    it('validates lane width input correctly and flags sub-standard widths', () => {
+      // S size requires 1.8m
+      const sValid = validateVehicleLaneWidth('S', 2.0)
+      expect(sValid.isValid).toBe(true)
+
+      const sInvalid = validateVehicleLaneWidth('S', 1.2)
+      expect(sInvalid.isValid).toBe(false)
+      expect(sInvalid.minRequiredLaneM).toBe(1.8)
+
+      // XL size requires 3.0m
+      const xlInvalid = validateVehicleLaneWidth('XL', 2.5)
+      expect(xlInvalid.isValid).toBe(false)
+      expect(xlInvalid.minRequiredLaneM).toBe(3.0)
+
+      const xlValid = validateVehicleLaneWidth('XL', 3.5)
+      expect(xlValid.isValid).toBe(true)
     })
   })
 })
