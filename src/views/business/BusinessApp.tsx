@@ -1237,6 +1237,16 @@ export default function BusinessApp({
   const [formFacLoadL, setFormFacLoadL] = useState<number>(2800)
   const [formFacLoadXL, setFormFacLoadXL] = useState<number>(4000)
 
+  const [formFacLengthS, setFormFacLengthS] = useState<number>(UNIT_SPECS.S.lengthM)
+  const [formFacLengthM, setFormFacLengthM] = useState<number>(UNIT_SPECS.M.lengthM)
+  const [formFacLengthL, setFormFacLengthL] = useState<number>(UNIT_SPECS.L.lengthM)
+  const [formFacLengthXL, setFormFacLengthXL] = useState<number>(UNIT_SPECS.XL.lengthM)
+
+  const [formFacWidthS, setFormFacWidthS] = useState<number>(UNIT_SPECS.S.widthM)
+  const [formFacWidthM, setFormFacWidthM] = useState<number>(UNIT_SPECS.M.widthM)
+  const [formFacWidthL, setFormFacWidthL] = useState<number>(UNIT_SPECS.L.widthM)
+  const [formFacWidthXL, setFormFacWidthXL] = useState<number>(UNIT_SPECS.XL.widthM)
+
   const [formFacClimate, setFormFacClimate] = useState<boolean>(false)
 
   const [formFacSecurity, setFormFacSecurity] = useState<string>(
@@ -1431,6 +1441,17 @@ export default function BusinessApp({
     setFormFacLoadM(1600)
     setFormFacLoadL(2800)
     setFormFacLoadXL(4000)
+
+    setFormFacLengthS(UNIT_SPECS.S.lengthM)
+    setFormFacLengthM(UNIT_SPECS.M.lengthM)
+    setFormFacLengthL(UNIT_SPECS.L.lengthM)
+    setFormFacLengthXL(UNIT_SPECS.XL.lengthM)
+
+    setFormFacWidthS(UNIT_SPECS.S.widthM)
+    setFormFacWidthM(UNIT_SPECS.M.widthM)
+    setFormFacWidthL(UNIT_SPECS.L.widthM)
+    setFormFacWidthXL(UNIT_SPECS.XL.widthM)
+
     setFormFacImage(WAREHOUSE_PHOTO_PRESETS[0].url)
 
     setFormFacClimate(false)
@@ -1559,6 +1580,13 @@ export default function BusinessApp({
       XL: formFacLoadXL,
     }
 
+    const unitDimensions = {
+      S: { lengthM: formFacLengthS, widthM: formFacWidthS },
+      M: { lengthM: formFacLengthM, widthM: formFacWidthM },
+      L: { lengthM: formFacLengthL, widthM: formFacWidthL },
+      XL: { lengthM: formFacLengthXL, widthM: formFacWidthXL },
+    }
+
     const created = createFacility(
       {
         code,
@@ -1592,6 +1620,8 @@ export default function BusinessApp({
         unitPrices: newUnitPrices,
 
         unitLoadLimits,
+
+        unitDimensions,
 
         totalDesignLoadTon,
 
@@ -1790,6 +1820,32 @@ export default function BusinessApp({
     setFormFacLoadM(mLoad)
     setFormFacLoadL(lLoad)
     setFormFacLoadXL(xlLoad)
+
+    const sUnit = facUnits.find((u) => ((u as any).size || (u.type === "Small" ? "S" : "")) === "S")
+    const mUnit = facUnits.find((u) => ((u as any).size || (u.type === "Medium" ? "M" : "")) === "M")
+    const lUnit = facUnits.find((u) => ((u as any).size || (u.type === "Large" ? "L" : "")) === "L")
+    const xlUnit = facUnits.find((u) => ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL")
+
+    const sLength = f.unitDimensions?.S?.lengthM ?? sUnit?.dimensions?.lengthM ?? UNIT_SPECS.S.lengthM
+    const mLength = f.unitDimensions?.M?.lengthM ?? mUnit?.dimensions?.lengthM ?? UNIT_SPECS.M.lengthM
+    const lLength = f.unitDimensions?.L?.lengthM ?? lUnit?.dimensions?.lengthM ?? UNIT_SPECS.L.lengthM
+    const xlLength = f.unitDimensions?.XL?.lengthM ?? xlUnit?.dimensions?.lengthM ?? UNIT_SPECS.XL.lengthM
+
+    const sWidth = f.unitDimensions?.S?.widthM ?? sUnit?.dimensions?.widthM ?? UNIT_SPECS.S.widthM
+    const mWidth = f.unitDimensions?.M?.widthM ?? mUnit?.dimensions?.widthM ?? UNIT_SPECS.M.widthM
+    const lWidth = f.unitDimensions?.L?.widthM ?? lUnit?.dimensions?.widthM ?? UNIT_SPECS.L.widthM
+    const xlWidth = f.unitDimensions?.XL?.widthM ?? xlUnit?.dimensions?.widthM ?? UNIT_SPECS.XL.widthM
+
+    setFormFacLengthS(sLength)
+    setFormFacLengthM(mLength)
+    setFormFacLengthL(lLength)
+    setFormFacLengthXL(xlLength)
+
+    setFormFacWidthS(sWidth)
+    setFormFacWidthM(mWidth)
+    setFormFacWidthL(lWidth)
+    setFormFacWidthXL(xlWidth)
+
     setFormFacImage(f.image || WAREHOUSE_PHOTO_PRESETS[0].url)
 
     setFormFacClimate(Boolean(f.climate))
@@ -1991,6 +2047,13 @@ export default function BusinessApp({
       XL: formFacLoadXL,
     }
 
+    const unitDimensions = {
+      S: { lengthM: formFacLengthS, widthM: formFacWidthS },
+      M: { lengthM: formFacLengthM, widthM: formFacWidthM },
+      L: { lengthM: formFacLengthL, widthM: formFacWidthL },
+      XL: { lengthM: formFacLengthXL, widthM: formFacWidthXL },
+    }
+
     const finalPriceStr =
       formFacPrice.trim() ||
       `${Math.round(enteredStartPrice || pS).toLocaleString("vi-VN")}đ`
@@ -2027,6 +2090,8 @@ export default function BusinessApp({
         unitPrices: updatedUnitPrices,
 
         unitLoadLimits,
+
+        unitDimensions,
 
         totalDesignLoadTon,
 
@@ -4558,16 +4623,9 @@ export default function BusinessApp({
           return {
             size,
             name,
-            dimensions: `${s.lengthM} × ${s.widthM} × ${s.heightM} m`,
-            areaM2: `${s.areaM2} m²`,
-            volumeM3: `${s.volumeM3} m³`,
+            rawHeightM: s.heightM,
             heightM: `${s.heightM} m`,
-            frameCount: s.frameCount,
-            frameDistanceM: s.frameDistanceM,
             vehicleLaneWidthM: s.vehicleLaneWidthM,
-            smallBox: s.smallBox,
-            largeBox: s.largeBox,
-            cartEquipment: s.cartEquipment,
             badgeClass,
           }
         })
@@ -4660,14 +4718,14 @@ export default function BusinessApp({
               </div>
 
               {/* Bảng phân bổ gian kho rộng rãi, thoáng mắt */}
-              <div className="border border-stone-200 rounded-xl overflow-hidden bg-white shadow-xs">
+              <div className="border border-stone-200 rounded-xl overflow-x-auto bg-white shadow-xs">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-stone-100/90 border-b border-stone-200 text-stone-700 font-bold uppercase tracking-wider text-[11px]">
                     <tr>
                       <th className="py-3 px-4 min-w-[200px]">
                         {lang === "vi" ? "Cỡ & Loại Kho" : "Size & Type"}
                       </th>
-                      <th className="py-3 px-3 min-w-[140px]">
+                      <th className="py-3 px-3 min-w-[210px]">
                         {lang === "vi"
                           ? "Quy Cách & Thể Tích"
                           : "Dimensions & Volume"}
@@ -4722,21 +4780,111 @@ export default function BusinessApp({
 
                           {/* 2. Quy cách & Thể tích */}
                           <td className="py-4 px-3">
-                            <div className="space-y-1">
-                              <div className="font-mono font-semibold text-stone-800 text-xs">
-                                {spec.dimensions}
-                              </div>
-                              <div className="text-xs text-stone-500 font-medium">
-                                Thể tích:{" "}
-                                <b className="text-stone-800 font-mono">
-                                  {spec.volumeM3} m³
-                                </b>
-                              </div>
-                              <div className="text-[11px] text-stone-400 font-mono">
-                                Cao {spec.heightM} · Lối xe{" "}
-                                {spec.vehicleLaneWidthM} m
-                              </div>
-                            </div>
+                            {(() => {
+                              const curLen =
+                                spec.size === "S"
+                                  ? formFacLengthS
+                                  : spec.size === "M"
+                                    ? formFacLengthM
+                                    : spec.size === "L"
+                                      ? formFacLengthL
+                                      : formFacLengthXL
+                              const curWid =
+                                spec.size === "S"
+                                  ? formFacWidthS
+                                  : spec.size === "M"
+                                    ? formFacWidthM
+                                    : spec.size === "L"
+                                      ? formFacWidthL
+                                      : formFacWidthXL
+
+                              const setLen = (val: number) => {
+                                if (spec.size === "S") setFormFacLengthS(val)
+                                else if (spec.size === "M") setFormFacLengthM(val)
+                                else if (spec.size === "L") setFormFacLengthL(val)
+                                else setFormFacLengthXL(val)
+                              }
+
+                              const setWid = (val: number) => {
+                                if (spec.size === "S") setFormFacWidthS(val)
+                                else if (spec.size === "M") setFormFacWidthM(val)
+                                else if (spec.size === "L") setFormFacWidthL(val)
+                                else setFormFacWidthXL(val)
+                              }
+
+                              const calcVol = Math.round(curLen * curWid * spec.rawHeightM * 10) / 10
+                              const calcArea = Math.round(curLen * curWid * 10) / 10
+
+                              return (
+                                <div className="space-y-1.5">
+                                  {/* Dài và Rộng input */}
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[10px] uppercase font-bold text-stone-500">
+                                        {lang === "vi" ? "Dài" : "L"}
+                                      </span>
+                                      <div className="relative flex items-center w-[68px]">
+                                        <input
+                                          type="number"
+                                          min={0.5}
+                                          max={100}
+                                          step={0.1}
+                                          className="w-full h-8 pl-1.5 pr-4 text-right border border-stone-300 rounded-md font-mono font-bold text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
+                                          value={curLen}
+                                          onChange={(e) =>
+                                            setLen(Math.max(0, parseFloat(e.target.value) || 0))
+                                          }
+                                          title={lang === "vi" ? "Chiều dài (m)" : "Length (m)"}
+                                        />
+                                        <span className="absolute right-1 text-[10px] text-stone-400 font-mono pointer-events-none">
+                                          m
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <span className="text-stone-300 font-bold text-xs">×</span>
+
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[10px] uppercase font-bold text-stone-500">
+                                        {lang === "vi" ? "Rộng" : "W"}
+                                      </span>
+                                      <div className="relative flex items-center w-[68px]">
+                                        <input
+                                          type="number"
+                                          min={0.5}
+                                          max={100}
+                                          step={0.1}
+                                          className="w-full h-8 pl-1.5 pr-4 text-right border border-stone-300 rounded-md font-mono font-bold text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
+                                          value={curWid}
+                                          onChange={(e) =>
+                                            setWid(Math.max(0, parseFloat(e.target.value) || 0))
+                                          }
+                                          title={lang === "vi" ? "Chiều rộng (m)" : "Width (m)"}
+                                        />
+                                        <span className="absolute right-1 text-[10px] text-stone-400 font-mono pointer-events-none">
+                                          m
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Thể tích tính tự động (chỉ hiển thị 1 lần m³) */}
+                                  <div className="text-xs text-stone-600 font-medium flex items-center flex-wrap gap-1">
+                                    <span>{lang === "vi" ? "Thể tích:" : "Volume:"}</span>
+                                    <b className="text-stone-900 font-mono">{calcVol} m³</b>
+                                    <span className="text-stone-400 text-[11px] font-normal">
+                                      ({calcArea} m²)
+                                    </span>
+                                  </div>
+
+                                  {/* Chiều cao & Lối xe giữ nguyên */}
+                                  <div className="text-[11px] text-stone-400 font-mono">
+                                    {lang === "vi" ? "Cao" : "Height"} {spec.heightM} ·{" "}
+                                    {lang === "vi" ? "Lối xe" : "Lane"} {spec.vehicleLaneWidthM} m
+                                  </div>
+                                </div>
+                              )
+                            })()}
                           </td>
 
                           {/* 3. Tải trọng tối đa (kg) */}
