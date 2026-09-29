@@ -443,13 +443,13 @@ export default function BusinessApp({
     if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
       const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
       if (!isNaN(num) && num > 0) {
-        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch {}
+        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
       }
     } else if (lowerName.includes("late") || lowerName.includes("trễ")) {
       const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
-      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch {}
+      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch { }
     } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
-      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch {}
+      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch { }
     }
 
     setCreatePolicyModal(false)
@@ -491,18 +491,18 @@ export default function BusinessApp({
     const next = policiesList.map((p) =>
       p.id === selectedPolicy.id
         ? {
-            ...p,
+          ...p,
 
-            name: policyFormName.trim() || p.name,
+          name: policyFormName.trim() || p.name,
 
-            value: policyFormValue.trim(),
+          value: policyFormValue.trim(),
 
-            scope: policyFormScope || p.scope,
+          scope: policyFormScope || p.scope,
 
-            description: policyFormDesc.trim(),
+          description: policyFormDesc.trim(),
 
-            lastUpdated: new Date().toLocaleDateString("vi-VN"),
-          }
+          lastUpdated: new Date().toLocaleDateString("vi-VN"),
+        }
         : p,
     )
 
@@ -513,13 +513,13 @@ export default function BusinessApp({
     if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
       const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
       if (!isNaN(num) && num > 0) {
-        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch {}
+        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
       }
     } else if (lowerName.includes("late") || lowerName.includes("trễ")) {
       const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
-      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch {}
+      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch { }
     } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
-      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch {}
+      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch { }
     }
 
     setPolicyModal(false)
@@ -831,10 +831,10 @@ export default function BusinessApp({
     const facOccPct =
       selectedRevenueFacility.units > 0 && selectedRevenueFacility.occupied > 0
         ? Math.round(
-            (selectedRevenueFacility.occupied /
-              selectedRevenueFacility.units) *
-              100,
-          )
+          (selectedRevenueFacility.occupied /
+            selectedRevenueFacility.units) *
+          100,
+        )
         : 0
 
     const activeContractsCount = Math.max(
@@ -973,7 +973,7 @@ export default function BusinessApp({
     try {
       const stored = localStorage.getItem("storagehub:facility-pricing")
       if (stored) return JSON.parse(stored)
-    } catch {}
+    } catch { }
     return {}
   })
 
@@ -1100,7 +1100,7 @@ export default function BusinessApp({
       setFacilityPricingOverrides(nextOverrides)
       try {
         localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
-      } catch {}
+      } catch { }
 
       // Cập nhật giá gian kho của cơ sở được chọn trong context
       const sizeCode =
@@ -1119,18 +1119,18 @@ export default function BusinessApp({
             u.facilityId === selectedPricingFacility.code) &&
           ((u as any).size === sizeCode ||
             u.type ===
-              (sizeCode === "S"
-                ? "Small"
-                : sizeCode === "M"
-                  ? "Medium"
-                  : sizeCode === "L"
-                    ? "Large"
-                    : "Extra Large")),
+            (sizeCode === "S"
+              ? "Small"
+              : sizeCode === "M"
+                ? "Medium"
+                : sizeCode === "L"
+                  ? "Large"
+                  : "Extra Large")),
       )
       facUnits.forEach((u) => {
         try {
           updateUnit(u.id, { price: updatedPrice }, user)
-        } catch {}
+        } catch { }
       })
 
       // Nếu cập nhật Kho S (cước khởi điểm của cơ sở), cập nhật luôn price của facility
@@ -1147,10 +1147,10 @@ export default function BusinessApp({
         prev.map((t) =>
           t.id === selectedTier.id
             ? {
-                ...t,
-                basePrice: updatedPrice,
-                highDemandMultiplier: updatedMultiplier,
-              }
+              ...t,
+              basePrice: updatedPrice,
+              highDemandMultiplier: updatedMultiplier,
+            }
             : t,
         ),
       )
@@ -1177,30 +1177,29 @@ export default function BusinessApp({
           (u) =>
             ((u as any).size === sizeCode ||
               u.type ===
-                (sizeCode === "S"
-                  ? "Small"
-                  : sizeCode === "M"
-                    ? "Medium"
-                    : sizeCode === "L"
-                      ? "Large"
-                      : "Extra Large")) &&
+              (sizeCode === "S"
+                ? "Small"
+                : sizeCode === "M"
+                  ? "Medium"
+                  : sizeCode === "L"
+                    ? "Large"
+                    : "Extra Large")) &&
             !facilityPricingOverrides[u.facilityId]?.[selectedTier.id],
         )
         .forEach((u) => {
           try {
             updateUnit(u.id, { price: updatedPrice }, user)
-          } catch {}
+          } catch { }
         })
     }
 
     setPricingModal(false)
     showToast(
       lang === "vi"
-        ? `Đã cập nhật bảng giá "${selectedTier.name}"${
-            selectedPricingFacility
-              ? ` cho ${selectedPricingFacility.name}`
-              : " (Toàn hệ thống)"
-          }: ${formatCurrency(updatedPrice)}/tháng!`
+        ? `Đã cập nhật bảng giá "${selectedTier.name}"${selectedPricingFacility
+          ? ` cho ${selectedPricingFacility.name}`
+          : " (Toàn hệ thống)"
+        }: ${formatCurrency(updatedPrice)}/tháng!`
         : "Pricing tier updated!",
     )
   }
@@ -1352,9 +1351,9 @@ export default function BusinessApp({
       return
     }
     const cleanName = newSpecName.trim() || `Kho ${rawCode}`
-    const len = Math.max(0.5, Number(newSpecLength) || 10)
-    const wid = Math.max(0.5, Number(newSpecWidth) || 10)
-    const hei = Math.max(1, Number(newSpecHeight) || 4)
+    const len = Math.max(1, Number(newSpecLength) || 1)
+    const wid = Math.max(1, Number(newSpecWidth) || 1)
+    const hei = Math.max(1, Number(newSpecHeight) || 1)
     const lane = Math.max(1, Number(newSpecLane) || 4)
     const maxLoad = Math.max(100, Number(newSpecMaxLoad) || 2000)
     const priceNum = parseInt(newSpecPrice.replace(/\D/g, ""), 10) || 10000000
@@ -1695,7 +1694,7 @@ export default function BusinessApp({
     const totalDesignLoadTon =
       Math.round(
         (formFacUnitSpecs.reduce((sum, s) => sum + s.count * s.maxLoadKg, 0) / 1000) *
-          10,
+        10,
       ) / 10
 
     const activeSpecs = formFacUnitSpecs.filter((s) => s.count > 0)
@@ -1782,7 +1781,7 @@ export default function BusinessApp({
         "storagehub:facility-pricing",
         JSON.stringify(nextOverrides),
       )
-    } catch {}
+    } catch { }
 
     setCreateFacilityModal(false)
 
@@ -1896,11 +1895,11 @@ export default function BusinessApp({
         const hei = (f.unitDimensions?.[sz] as any)?.heightM ?? unit?.dimensions?.heightM ?? spec?.heightM ?? 5
         const lane = f.unitLaneWidths?.[sz] ?? spec?.vehicleLaneWidthM ?? 4
 
-        const badgeClass = sz === 'S' ? 'bg-sky-50 text-sky-700 border-sky-200' 
+        const badgeClass = sz === 'S' ? 'bg-sky-50 text-sky-700 border-sky-200'
           : sz === 'M' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-          : sz === 'L' ? 'bg-purple-50 text-purple-700 border-purple-200'
-          : sz === 'XL' ? 'bg-amber-50 text-amber-800 border-amber-200'
-          : 'bg-rose-50 text-rose-800 border-rose-200'
+            : sz === 'L' ? 'bg-purple-50 text-purple-700 border-purple-200'
+              : sz === 'XL' ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-rose-50 text-rose-800 border-rose-200'
 
         const name = sz === 'S' ? 'Kho Nhỏ (S)' : sz === 'M' ? 'Kho Trung (M)' : sz === 'L' ? 'Kho Lớn (L)' : sz === 'XL' ? 'Kho Rất Lớn (XL)' : `Kho ${sz}`
 
@@ -2171,7 +2170,7 @@ export default function BusinessApp({
     const totalDesignLoadTon =
       Math.round(
         (formFacUnitSpecs.reduce((sum, s) => sum + s.count * s.maxLoadKg, 0) / 1000) *
-          10,
+        10,
       ) / 10
 
     const activeSpecs = formFacUnitSpecs.filter((s) => s.count > 0)
@@ -2254,7 +2253,7 @@ export default function BusinessApp({
         "storagehub:facility-pricing",
         JSON.stringify(nextOverrides),
       )
-    } catch {}
+    } catch { }
 
     // Cập nhật giá từng kho trong unitsList qua updateUnit
     unitsList
@@ -2278,7 +2277,7 @@ export default function BusinessApp({
           const normP = pVnd > 10000 ? pVnd / USD_TO_VND_RATE : pVnd
           try {
             updateUnit(u.id, { price: normP, deposit: normP }, user)
-          } catch {}
+          } catch { }
         }
       })
 
@@ -2286,23 +2285,23 @@ export default function BusinessApp({
     setSelectedFacility((prev: any) =>
       prev
         ? {
-            ...prev,
-            code,
-            name: formFacName.trim(),
-            address: formFacAddress.trim(),
-            city: formFacCity.trim(),
-            price: finalPriceStr,
-            unitPrices: updatedUnitPrices,
-            unitLoadLimits,
-            totalDesignLoadTon,
-            image: formFacImage,
-            unitDistribution: {
-              S: formFacUnitS,
-              M: formFacUnitM,
-              L: formFacUnitL,
-              XL: formFacUnitXL,
-            },
-          }
+          ...prev,
+          code,
+          name: formFacName.trim(),
+          address: formFacAddress.trim(),
+          city: formFacCity.trim(),
+          price: finalPriceStr,
+          unitPrices: updatedUnitPrices,
+          unitLoadLimits,
+          totalDesignLoadTon,
+          image: formFacImage,
+          unitDistribution: {
+            S: formFacUnitS,
+            M: formFacUnitM,
+            L: formFacUnitL,
+            XL: formFacUnitXL,
+          },
+        }
         : prev,
     )
 
@@ -2419,9 +2418,8 @@ export default function BusinessApp({
             subtitle={
               lang === "vi"
                 ? `${facilitiesList.length} cơ sở trong hệ thống – Thêm, sửa, xóa và theo dõi vận hành`
-                : `${facilitiesList.length} ${
-                    facilitiesList.length === 1 ? "facility" : "facilities"
-                  } in the portfolio`
+                : `${facilitiesList.length} ${facilitiesList.length === 1 ? "facility" : "facilities"
+                } in the portfolio`
             }
             action={
               <Button
@@ -2450,9 +2448,8 @@ export default function BusinessApp({
             />
             <StatCard
               title={lang === "vi" ? "Tỷ lệ lấp đầy TB" : "Portfolio Occupancy"}
-              value={`${
-                totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0
-              }%`}
+              value={`${totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0
+                }%`}
               icon={Icon.chart}
               iconBg="bg-green-50"
             />
@@ -2528,26 +2525,26 @@ export default function BusinessApp({
             {(facSearch ||
               facFilterCity !== "All" ||
               facFilterStatus !== "All") && (
-              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>
-                  Đang lọc thấy <b>{filteredFacilities.length}</b> /{" "}
-                  {facilitiesList.length} cơ sở kho trong hệ thống
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFacSearch("")
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>
+                    Đang lọc thấy <b>{filteredFacilities.length}</b> /{" "}
+                    {facilitiesList.length} cơ sở kho trong hệ thống
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFacSearch("")
 
-                    setFacFilterCity("All")
+                      setFacFilterCity("All")
 
-                    setFacFilterStatus("All")
-                  }}
-                  className="text-amber-700 hover:text-amber-900 font-medium underline cursor-pointer"
-                >
-                  Xóa bộ lọc
-                </button>
-              </div>
-            )}
+                      setFacFilterStatus("All")
+                    }}
+                    className="text-amber-700 hover:text-amber-900 font-medium underline cursor-pointer"
+                  >
+                    Xóa bộ lọc
+                  </button>
+                </div>
+              )}
           </Card>
 
           {/* Danh Sách Thẻ Cơ Sở */}
@@ -2613,203 +2610,203 @@ export default function BusinessApp({
                         </div>
 
                         <div className="flex-1 min-w-0 space-y-3">
-                        {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
-                            {facCode}
-                          </span>
-                          <h3 className="font-bold text-slate-900 text-lg leading-snug">
-                            {f.name}
-                          </h3>
-                          <Badge
-                            variant={
-                              f.status === "active" ? "success" : "warning"
-                            }
-                          >
-                            {f.status === "active"
-                              ? lang === "vi"
-                                ? "Đang hoạt động"
-                                : "Active"
-                              : lang === "vi"
-                                ? "Bảo trì"
-                                : "Maintenance"}
-                          </Badge>
-                        </div>
-
-                        {/* Hàng 2: Địa chỉ + Quản lý + Hotline + Giờ mở cửa */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600">
-                          <div className="flex items-start gap-1.5">
-                            <span className="truncate" title={f.address}>
-                              {f.address} ·{" "}
-                              <b className="text-slate-800">{f.city}</b>
+                          {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
+                              {facCode}
                             </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span>
-                              Quản lý:{" "}
-                              <b className="text-slate-800">{f.manager}</b>{" "}
-                              {f.phone ? `(${f.phone})` : ""}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className="truncate"
-                              title={f.accessHours || "06:00 - 22:00"}
+                            <h3 className="font-bold text-slate-900 text-lg leading-snug">
+                              {f.name}
+                            </h3>
+                            <Badge
+                              variant={
+                                f.status === "active" ? "success" : "warning"
+                              }
                             >
-                              {f.accessHours || "06:00 - 22:00 (24/7 VIP)"}
-                            </span>
+                              {f.status === "active"
+                                ? lang === "vi"
+                                  ? "Đang hoạt động"
+                                  : "Active"
+                                : lang === "vi"
+                                  ? "Bảo trì"
+                                  : "Maintenance"}
+                            </Badge>
                           </div>
-                        </div>
 
-                        {/* Hàng 2.5: Cơ cấu quy mô gian kho (S, M, L, XL) */}
-                        {(() => {
-                          const facUnits = unitsList.filter(
-                            (u) =>
-                              u.facilityId === f.id || u.facilityId === f.code,
-                          )
+                          {/* Hàng 2: Địa chỉ + Quản lý + Hotline + Giờ mở cửa */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600">
+                            <div className="flex items-start gap-1.5">
+                              <span className="truncate" title={f.address}>
+                                {f.address} ·{" "}
+                                <b className="text-slate-800">{f.city}</b>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span>
+                                Quản lý:{" "}
+                                <b className="text-slate-800">{f.manager}</b>{" "}
+                                {f.phone ? `(${f.phone})` : ""}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="truncate"
+                                title={f.accessHours || "06:00 - 22:00"}
+                              >
+                                {f.accessHours || "06:00 - 22:00 (24/7 VIP)"}
+                              </span>
+                            </div>
+                          </div>
 
-                          const s =
-                            f.unitDistribution?.S ??
-                            facUnits.filter(
+                          {/* Hàng 2.5: Cơ cấu quy mô gian kho (S, M, L, XL) */}
+                          {(() => {
+                            const facUnits = unitsList.filter(
                               (u) =>
-                                ((u as any).size ||
-                                  (u.type === "Small" ? "S" : "")) === "S",
-                            ).length
+                                u.facilityId === f.id || u.facilityId === f.code,
+                            )
 
-                          const m =
-                            f.unitDistribution?.M ??
-                            facUnits.filter(
-                              (u) =>
-                                ((u as any).size ||
-                                  (u.type === "Medium" ? "M" : "")) === "M",
-                            ).length
+                            const s =
+                              f.unitDistribution?.S ??
+                              facUnits.filter(
+                                (u) =>
+                                  ((u as any).size ||
+                                    (u.type === "Small" ? "S" : "")) === "S",
+                              ).length
 
-                          const l =
-                            f.unitDistribution?.L ??
-                            facUnits.filter(
-                              (u) =>
-                                ((u as any).size ||
-                                  (u.type === "Large" ? "L" : "")) === "L",
-                            ).length
+                            const m =
+                              f.unitDistribution?.M ??
+                              facUnits.filter(
+                                (u) =>
+                                  ((u as any).size ||
+                                    (u.type === "Medium" ? "M" : "")) === "M",
+                              ).length
 
-                          const xl =
-                            f.unitDistribution?.XL ??
-                            facUnits.filter(
-                              (u) =>
-                                ((u as any).size ||
-                                  (u.type === "Extra Large" ? "XL" : "")) ===
-                                "XL",
-                            ).length
+                            const l =
+                              f.unitDistribution?.L ??
+                              facUnits.filter(
+                                (u) =>
+                                  ((u as any).size ||
+                                    (u.type === "Large" ? "L" : "")) === "L",
+                              ).length
 
-                          const totalLoad =
-                            f.totalDesignLoadTon ??
-                            Math.round(
-                              ((s * (f.unitLoadLimits?.S ?? 1000)) +
-                                (m * (f.unitLoadLimits?.M ?? 1600)) +
-                                (l * (f.unitLoadLimits?.L ?? 2800)) +
-                                (xl * (f.unitLoadLimits?.XL ?? 4000))) /
+                            const xl =
+                              f.unitDistribution?.XL ??
+                              facUnits.filter(
+                                (u) =>
+                                  ((u as any).size ||
+                                    (u.type === "Extra Large" ? "XL" : "")) ===
+                                  "XL",
+                              ).length
+
+                            const totalLoad =
+                              f.totalDesignLoadTon ??
+                              Math.round(
+                                ((s * (f.unitLoadLimits?.S ?? 1000)) +
+                                  (m * (f.unitLoadLimits?.M ?? 1600)) +
+                                  (l * (f.unitLoadLimits?.L ?? 2800)) +
+                                  (xl * (f.unitLoadLimits?.XL ?? 4000))) /
                                 1000 *
                                 10,
-                            ) / 10
+                              ) / 10
 
-                          return (
-                            <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
-                              <span className="text-slate-400 font-medium text-[11px]">
-                                {lang === "vi"
-                                  ? "Quy mô chi tiết:"
-                                  : "Unit sizes:"}
-                              </span>
-                              {s > 0 && (
-                                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-mono text-[11px] font-semibold">
-                                  {s} Kho Nhỏ (S)
+                            return (
+                              <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
+                                <span className="text-slate-400 font-medium text-[11px]">
+                                  {lang === "vi"
+                                    ? "Quy mô chi tiết:"
+                                    : "Unit sizes:"}
                                 </span>
-                              )}
-                              {m > 0 && (
-                                <span className="px-2 py-0.5 rounded bg-green-50 text-green-800 border border-green-200 font-mono text-[11px] font-semibold">
-                                  {m} Kho Vừa (M)
+                                {s > 0 && (
+                                  <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-mono text-[11px] font-semibold">
+                                    {s} Kho Nhỏ (S)
+                                  </span>
+                                )}
+                                {m > 0 && (
+                                  <span className="px-2 py-0.5 rounded bg-green-50 text-green-800 border border-green-200 font-mono text-[11px] font-semibold">
+                                    {m} Kho Vừa (M)
+                                  </span>
+                                )}
+                                {l > 0 && (
+                                  <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-mono text-[11px] font-semibold">
+                                    {l} Kho Lớn (L)
+                                  </span>
+                                )}
+                                {xl > 0 && (
+                                  <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 font-mono text-[11px] font-semibold">
+                                    {xl} Kho Rất Lớn (XL)
+                                  </span>
+                                )}
+                                {totalLoad > 0 && (
+                                  <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200 font-mono text-[11px] font-semibold">
+                                    Tải trọng sàn: {totalLoad} tấn
+                                  </span>
+                                )}
+                                {s + m + l + xl === 0 && (
+                                  <span className="text-slate-400 italic text-[11px]">
+                                    {f.units} kho tiêu chuẩn
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })()}
+
+                          {/* Hàng 3: Thước đo vận hành (Lấp đầy, Doanh thu, Đơn giá từ) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
+                            <div>
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                {lang === "vi" ? "Tỷ lệ lấp đầy" : "Occupancy"}
+                              </p>
+                              <p className="font-bold text-slate-900 text-sm">
+                                {occupiedInFac}/{totalUnitsInFac} kho{" "}
+                                <span className="text-slate-500 font-normal text-xs">
+                                  ({occupancyRate}%)
                                 </span>
-                              )}
-                              {l > 0 && (
-                                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-mono text-[11px] font-semibold">
-                                  {l} Kho Lớn (L)
-                                </span>
-                              )}
-                              {xl > 0 && (
-                                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 font-mono text-[11px] font-semibold">
-                                  {xl} Kho Rất Lớn (XL)
-                                </span>
-                              )}
-                              {totalLoad > 0 && (
-                                <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200 font-mono text-[11px] font-semibold">
-                                  Tải trọng sàn: {totalLoad} tấn
-                                </span>
-                              )}
-                              {s + m + l + xl === 0 && (
-                                <span className="text-slate-400 italic text-[11px]">
-                                  {f.units} kho tiêu chuẩn
-                                </span>
-                              )}
+                              </p>
+                              <ProgressBar
+                                value={occupiedInFac}
+                                max={totalUnitsInFac || 1}
+                                color={
+                                  occupancyRate >= 80
+                                    ? "bg-emerald-500"
+                                    : occupancyRate >= 40
+                                      ? "bg-blue-500"
+                                      : "bg-amber-500"
+                                }
+                              />
                             </div>
-                          )
-                        })()}
 
-                        {/* Hàng 3: Thước đo vận hành (Lấp đầy, Doanh thu, Đơn giá từ) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
-                          <div>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              {lang === "vi" ? "Tỷ lệ lấp đầy" : "Occupancy"}
-                            </p>
-                            <p className="font-bold text-slate-900 text-sm">
-                              {occupiedInFac}/{totalUnitsInFac} kho{" "}
-                              <span className="text-slate-500 font-normal text-xs">
-                                ({occupancyRate}%)
-                              </span>
-                            </p>
-                            <ProgressBar
-                              value={occupiedInFac}
-                              max={totalUnitsInFac || 1}
-                              color={
-                                occupancyRate >= 80
-                                  ? "bg-emerald-500"
-                                  : occupancyRate >= 40
-                                    ? "bg-blue-500"
-                                    : "bg-amber-500"
-                              }
-                            />
-                          </div>
+                            <div>
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                {lang === "vi"
+                                  ? "Doanh thu tháng (MTD)"
+                                  : "Revenue MTD"}
+                              </p>
+                              <p className="font-bold text-slate-900 text-sm">
+                                {formatCurrency(getFacilityActualRevenue(f))}
+                              </p>
+                              <p className="text-[10px] text-emerald-700 font-semibold">
+                                {getFacilityActualRevenue(f) === 0
+                                  ? "Chưa phát sinh doanh thu"
+                                  : f.growth
+                                    ? `+${f.growth}% so với kỳ trước`
+                                    : "Doanh thu ổn định"}
+                              </p>
+                            </div>
 
-                          <div>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              {lang === "vi"
-                                ? "Doanh thu tháng (MTD)"
-                                : "Revenue MTD"}
-                            </p>
-                            <p className="font-bold text-slate-900 text-sm">
-                              {formatCurrency(getFacilityActualRevenue(f))}
-                            </p>
-                            <p className="text-[10px] text-emerald-700 font-semibold">
-                              {getFacilityActualRevenue(f) === 0
-                                ? "Chưa phát sinh doanh thu"
-                                : f.growth
-                                  ? `+${f.growth}% so với kỳ trước`
-                                  : "Doanh thu ổn định"}
-                            </p>
-                          </div>
-
-                          <div>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              {lang === "vi" ? "Cước cơ sở từ" : "Base Rate"}
-                            </p>
-                            <p className="font-bold text-emerald-800 text-sm">
-                              {f.price}/tháng
-                            </p>
-                            <p className="text-[10px] text-slate-500">
-                              Kỳ thuê từ 1 tháng
-                            </p>
+                            <div>
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                {lang === "vi" ? "Cước cơ sở từ" : "Base Rate"}
+                              </p>
+                              <p className="font-bold text-emerald-800 text-sm">
+                                {f.price}/tháng
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                Kỳ thuê từ 1 tháng
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
 
                       {/* Các nút hành động */}
                       <div className="flex lg:flex-col items-center justify-end gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
@@ -2928,8 +2925,8 @@ export default function BusinessApp({
                           ? p.value.replace("days", "ngày")
                           : p.value.includes("month")
                             ? p.value
-                                .replace("$25", "650.000 ₫")
-                                .replace("month", "tháng")
+                              .replace("$25", "650.000 ₫")
+                              .replace("month", "tháng")
                             : (p.value ?? "—")
                         : (p.value ?? "—")
 
@@ -3095,9 +3092,9 @@ export default function BusinessApp({
                       const effectivePrice = tierOverride ? tierOverride.basePrice : rawTier.basePrice
                       const displayName =
                         rawTier.sizeCode === 'S' ? 'Kho Nhỏ (S)'
-                        : rawTier.sizeCode === 'M' ? 'Kho Vừa (M)'
-                        : rawTier.sizeCode === 'L' ? 'Kho Lớn (L)'
-                        : 'Kho Rất Lớn (XL)'
+                          : rawTier.sizeCode === 'M' ? 'Kho Vừa (M)'
+                            : rawTier.sizeCode === 'L' ? 'Kho Lớn (L)'
+                              : 'Kho Rất Lớn (XL)'
                       const unitCount =
                         fac.unitDistribution?.[rawTier.sizeCode] ??
                         unitsList.filter(u =>
@@ -3125,45 +3122,45 @@ export default function BusinessApp({
           ) : (
             /* Một cơ sở cụ thể — render 4 card có nút Sửa */
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-            {pricingTiers.map((rawTier) => {
-              const tier = getEffectiveTier(rawTier)
-              const displayName =
-                lang === "vi"
-                  ? tier.name.includes("Small")
-                    ? "Kho Nhỏ (S)"
-                    : tier.name.includes("Medium")
-                      ? "Kho Vừa (M)"
-                      : tier.name.includes("Large") &&
+              {pricingTiers.map((rawTier) => {
+                const tier = getEffectiveTier(rawTier)
+                const displayName =
+                  lang === "vi"
+                    ? tier.name.includes("Small")
+                      ? "Kho Nhỏ (S)"
+                      : tier.name.includes("Medium")
+                        ? "Kho Vừa (M)"
+                        : tier.name.includes("Large") &&
                           !tier.name.includes("Extra") &&
                           !tier.name.includes("XL")
-                        ? "Kho Lớn (L)"
-                        : tier.name.includes("XL") ||
+                          ? "Kho Lớn (L)"
+                          : tier.name.includes("XL") ||
                             tier.name.includes("Extra") ||
                             tier.name.includes("Rất Lớn")
-                          ? "Kho Rất Lớn (XL)"
-                          : tier.name
-                  : tier.name
+                            ? "Kho Rất Lớn (XL)"
+                            : tier.name
+                    : tier.name
 
-              const sizeKey =
-                tier.sizeCode ||
-                (tier.name.includes("(S)")
-                  ? "S"
-                  : tier.name.includes("(M)")
-                    ? "M"
-                    : tier.name.includes("(XL)")
-                      ? "XL"
-                      : "L")
+                const sizeKey =
+                  tier.sizeCode ||
+                  (tier.name.includes("(S)")
+                    ? "S"
+                    : tier.name.includes("(M)")
+                      ? "M"
+                      : tier.name.includes("(XL)")
+                        ? "XL"
+                        : "L")
 
-              const unitCountInFac =
-                selectedPricingFacility.unitDistribution?.[
+                const unitCountInFac =
+                  selectedPricingFacility.unitDistribution?.[
                   sizeKey as "S" | "M" | "L" | "XL"
-                ] ??
-                unitsList.filter(
-                  (u) =>
-                    (u.facilityId === selectedPricingFacility.id ||
-                      u.facilityId === selectedPricingFacility.code) &&
-                    ((u as any).size === sizeKey ||
-                      u.type ===
+                  ] ??
+                  unitsList.filter(
+                    (u) =>
+                      (u.facilityId === selectedPricingFacility.id ||
+                        u.facilityId === selectedPricingFacility.code) &&
+                      ((u as any).size === sizeKey ||
+                        u.type ===
                         (sizeKey === "S"
                           ? "Small"
                           : sizeKey === "M"
@@ -3171,58 +3168,58 @@ export default function BusinessApp({
                             : sizeKey === "L"
                               ? "Large"
                               : "Extra Large")),
-                ).length
+                  ).length
 
-              return (
-                <Card key={tier.id} className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-bold text-slate-900">
-                        {displayName}
-                      </h3>
-                      {tier.size ? (
-                        <p className="text-xs text-slate-400">{tier.size}</p>
-                      ) : null}
+                return (
+                  <Card key={tier.id} className="p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-bold text-slate-900">
+                          {displayName}
+                        </h3>
+                        {tier.size ? (
+                          <p className="text-xs text-slate-400">{tier.size}</p>
+                        ) : null}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedTier({ ...tier, name: displayName })
+                          setFormTierBasePrice(tier.basePrice.toString())
+                          setFormTierMultiplier(
+                            tier.highDemandMultiplier.toString(),
+                          )
+                          setPricingModal(true)
+                        }}
+                      >
+                        {lang === "vi" ? "Sửa" : "Edit"}
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedTier({ ...tier, name: displayName })
-                        setFormTierBasePrice(tier.basePrice.toString())
-                        setFormTierMultiplier(
-                          tier.highDemandMultiplier.toString(),
-                        )
-                        setPricingModal(true)
-                      }}
-                    >
-                      {lang === "vi" ? "Sửa" : "Edit"}
-                    </Button>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">
-                        {lang === "vi" ? "Giá cơ sở" : "Base price"}
-                      </span>
-                      <span className="font-semibold text-emerald-800">
-                        {formatCurrency(tier.basePrice)}/
-                        {lang === "vi" ? "th" : "mo"}
-                      </span>
-                    </div>
-                    {unitCountInFac !== null && (
-                      <div className="flex justify-between border-t border-slate-100 pt-2 text-xs text-slate-500">
-                        <span>
-                          {lang === "vi" ? "Số lượng tại kho:" : "Units in facility:"}
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">
+                          {lang === "vi" ? "Giá cơ sở" : "Base price"}
                         </span>
-                        <span className="font-semibold text-slate-800">
-                          {unitCountInFac} gian kho
+                        <span className="font-semibold text-emerald-800">
+                          {formatCurrency(tier.basePrice)}/
+                          {lang === "vi" ? "th" : "mo"}
                         </span>
                       </div>
-                    )}
-                  </div>
-                </Card>
-              )
-            })}
+                      {unitCountInFac !== null && (
+                        <div className="flex justify-between border-t border-slate-100 pt-2 text-xs text-slate-500">
+                          <span>
+                            {lang === "vi" ? "Số lượng tại kho:" : "Units in facility:"}
+                          </span>
+                          <span className="font-semibold text-slate-800">
+                            {unitCountInFac} gian kho
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                )
+              })}
             </div>
           )}
 
@@ -3408,9 +3405,8 @@ export default function BusinessApp({
                       : "Total Redemptions"
                   }
                   value={totalRedemptions}
-                  delta={`${Math.round((totalRedemptions / (totalCapacity || 1)) * 100)}% ${
-                    lang === "vi" ? "hạn ngạch đã nhận" : "quota claimed"
-                  }`}
+                  delta={`${Math.round((totalRedemptions / (totalCapacity || 1)) * 100)}% ${lang === "vi" ? "hạn ngạch đã nhận" : "quota claimed"
+                    }`}
                   deltaPositive
                   icon={Icon.chart}
                   iconBg="bg-blue-50 text-blue-700"
@@ -3606,7 +3602,7 @@ export default function BusinessApp({
                             <span>
                               {lang === "vi" ? "Phạm vi:" : "Scope:"}{" "}
                               {lang === "vi" &&
-                              p.applicableFacility === "All facilities"
+                                p.applicableFacility === "All facilities"
                                 ? "Toàn bộ cơ sở"
                                 : p.applicableFacility}{" "}
                               ({p.applicableUnitType})
@@ -4031,10 +4027,10 @@ export default function BusinessApp({
                       value={
                         selectedRevenueFacility
                           ? Math.round(
-                              (selectedRevenueFacility.occupied /
-                                Math.max(1, selectedRevenueFacility.units)) *
-                                100,
-                            )
+                            (selectedRevenueFacility.occupied /
+                              Math.max(1, selectedRevenueFacility.units)) *
+                            100,
+                          )
                           : facilitiesList.reduce((s, f) => s + (f.units || 0), 0) > 0
                             ? Math.round((facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0) / facilitiesList.reduce((s, f) => s + (f.units || 0), 0)) * 100)
                             : 19
@@ -4053,20 +4049,20 @@ export default function BusinessApp({
                     <p className="text-xl font-bold text-stone-900 mt-0.5">
                       {selectedRevenueFacility
                         ? Math.max(
-                            selectedRevenueFacility.occupied,
-                            selectedFacilityContracts.length,
-                            selectedFacilityRentals.length,
-                          )
+                          selectedRevenueFacility.occupied,
+                          selectedFacilityContracts.length,
+                          selectedFacilityRentals.length,
+                        )
                         : facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)}
                     </p>
                   </div>
                   <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded">
                     {selectedRevenueFacility
                       ? `${Math.max(
-                          selectedRevenueFacility.occupied,
-                          selectedFacilityContracts.length,
-                          selectedFacilityRentals.length,
-                        )} / ${selectedRevenueFacility.units} gian`
+                        selectedRevenueFacility.occupied,
+                        selectedFacilityContracts.length,
+                        selectedFacilityRentals.length,
+                      )} / ${selectedRevenueFacility.units} gian`
                       : `${facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)} / ${facilitiesList.reduce((s, f) => s + (f.units || 0), 0)} gian`}
                   </span>
                 </div>
@@ -4283,20 +4279,20 @@ export default function BusinessApp({
                             />
                           </div>
                         </Td>
-                      <Td>{lang === "vi" ? "14.2 tháng" : "14.2 mo"}</Td>
-                      <Td>3.4%</Td>
-                      <Td>
-                        <div className="flex items-center gap-1 text-amber-500">
-                          ★ 4.8
-                        </div>
-                      </Td>
-                      <Td className="font-semibold text-slate-800 font-mono">
-                        {formatCurrency(getFacilityActualRevenue(f) * 12)} /{" "}
-                        {lang === "vi" ? "năm" : "yr"}
-                      </Td>
-                    </Tr>
-                  )
-                })}
+                        <Td>{lang === "vi" ? "14.2 tháng" : "14.2 mo"}</Td>
+                        <Td>3.4%</Td>
+                        <Td>
+                          <div className="flex items-center gap-1 text-amber-500">
+                            ★ 4.8
+                          </div>
+                        </Td>
+                        <Td className="font-semibold text-slate-800 font-mono">
+                          {formatCurrency(getFacilityActualRevenue(f) * 12)} /{" "}
+                          {lang === "vi" ? "năm" : "yr"}
+                        </Td>
+                      </Tr>
+                    )
+                  })}
               </Tbody>
             </Table>
           </Card>
@@ -4748,7 +4744,7 @@ export default function BusinessApp({
               0,
             ) /
               1000) *
-              10,
+            10,
           ) / 10
 
         const activeSpecs = formFacUnitSpecs.filter((s) => s.count > 0)
@@ -5214,11 +5210,10 @@ export default function BusinessApp({
                                   <input
                                     type="number"
                                     min={0}
-                                    className={`w-12 h-8 text-center border rounded font-mono font-bold text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-2xs transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                      isBelowOcc
+                                    className={`w-12 h-8 text-center border rounded font-mono font-bold text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-2xs transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isBelowOcc
                                         ? "border-red-400 text-red-700 bg-red-50"
                                         : "border-stone-300 text-stone-900"
-                                    }`}
+                                      }`}
                                     value={spec.count}
                                     onChange={(e) => {
                                       const parsed = parseInt(e.target.value, 10)
@@ -5254,11 +5249,10 @@ export default function BusinessApp({
                                   type="button"
                                   disabled={!canDelete}
                                   onClick={() => handleDeleteUnitSpec(spec.sizeCode, occ, isEditing)}
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
-                                    canDelete
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${canDelete
                                       ? "text-stone-400 hover:text-red-600 hover:bg-red-50 border border-stone-200 hover:border-red-300 cursor-pointer shadow-2xs"
                                       : "text-stone-300 bg-stone-50 border border-stone-200 cursor-not-allowed opacity-40"
-                                  }`}
+                                    }`}
                                   title={
                                     !canDelete
                                       ? `Không thể xóa vì đang có ${occ} gian kho đang được khách thuê`
@@ -5413,11 +5407,10 @@ export default function BusinessApp({
                             type="button"
                             key={p.id}
                             onClick={() => setFormFacImage(p.url)}
-                            className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-left transition ${
-                              isSelected
+                            className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-left transition ${isSelected
                                 ? "border-amber-500 bg-amber-50/80 ring-1 ring-amber-400"
                                 : "border-stone-200 bg-white hover:border-stone-300"
-                            }`}
+                              }`}
                           >
                             <img src={p.url} alt={p.title} className="w-8 h-8 rounded object-cover shrink-0" />
                             <span className="text-[10px] font-medium text-stone-700 truncate leading-tight">
@@ -5974,10 +5967,20 @@ export default function BusinessApp({
                       <input
                         type="number"
                         step={0.1}
-                        min={0.5}
+                        min={1}
                         className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                         value={newSpecLength}
-                        onChange={(e) => setNewSpecLength(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
+                            setNewSpecLength(1)
+                          } else {
+                            setNewSpecLength(parseFloat(raw) || 1)
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!newSpecLength || Number(newSpecLength) < 1) setNewSpecLength(1)
+                        }}
                       />
                     </div>
                     <div>
@@ -5987,10 +5990,20 @@ export default function BusinessApp({
                       <input
                         type="number"
                         step={0.1}
-                        min={0.5}
+                        min={1}
                         className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                         value={newSpecWidth}
-                        onChange={(e) => setNewSpecWidth(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
+                            setNewSpecWidth(1)
+                          } else {
+                            setNewSpecWidth(parseFloat(raw) || 1)
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!newSpecWidth || Number(newSpecWidth) < 1) setNewSpecWidth(1)
+                        }}
                       />
                     </div>
                     <div>
@@ -6003,7 +6016,17 @@ export default function BusinessApp({
                         min={1}
                         className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                         value={newSpecHeight}
-                        onChange={(e) => setNewSpecHeight(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
+                            setNewSpecHeight(1)
+                          } else {
+                            setNewSpecHeight(parseFloat(raw) || 1)
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!newSpecHeight || Number(newSpecHeight) < 1) setNewSpecHeight(1)
+                        }}
                       />
                     </div>
                   </div>
@@ -6015,11 +6038,11 @@ export default function BusinessApp({
                     </span>
                     <div className="flex items-center gap-3 font-mono font-bold">
                       <span className="text-amber-800">
-                        {Math.round(newSpecLength * newSpecWidth * 10) / 10} m²
+                        {Math.round(Math.max(1, Number(newSpecLength) || 1) * Math.max(1, Number(newSpecWidth) || 1) * 10) / 10} m²
                       </span>
                       <span className="text-stone-300">|</span>
                       <span className="text-emerald-700">
-                        {Math.round(newSpecLength * newSpecWidth * newSpecHeight * 10) / 10} m³
+                        {Math.round(Math.max(1, Number(newSpecLength) || 1) * Math.max(1, Number(newSpecWidth) || 1) * Math.max(1, Number(newSpecHeight) || 1) * 10) / 10} m³
                       </span>
                     </div>
                   </div>
@@ -6204,10 +6227,10 @@ export default function BusinessApp({
 
             const occupancyRate = selectedFacility.units
               ? Math.round(
-                  (getFacilityOccupiedCount(selectedFacility) /
-                    Math.max(1, getFacilityTotalUnits(selectedFacility))) *
-                    100,
-                )
+                (getFacilityOccupiedCount(selectedFacility) /
+                  Math.max(1, getFacilityTotalUnits(selectedFacility))) *
+                100,
+              )
               : 0
 
             const defaultLoadS = selectedFacility.unitLoadLimits?.S ?? 1000
@@ -6223,7 +6246,7 @@ export default function BusinessApp({
                   (selectedFacility.unitDistribution?.L ?? 0) * defaultLoadL +
                   (selectedFacility.unitDistribution?.XL ?? 0) * defaultLoadXL) /
                   1000) *
-                  10,
+                10,
               ) / 10
 
             return (
@@ -6234,7 +6257,7 @@ export default function BusinessApp({
                     <img
                       src={
                         selectedFacility.image.startsWith("http") ||
-                        selectedFacility.image.startsWith("data:")
+                          selectedFacility.image.startsWith("data:")
                           ? selectedFacility.image
                           : `https://images.unsplash.com/${selectedFacility.image}?w=800&auto=format&fit=crop`
                       }
@@ -6443,15 +6466,14 @@ export default function BusinessApp({
                           <tr key={size} className="hover:bg-amber-50/50">
                             <td className="p-2.5">
                               <span
-                                className={`inline-block px-2 py-0.5 rounded font-mono text-xs font-bold ${
-                                  size === "S"
+                                className={`inline-block px-2 py-0.5 rounded font-mono text-xs font-bold ${size === "S"
                                     ? "bg-sky-50 text-sky-700 border border-sky-200"
                                     : size === "M"
                                       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                       : size === "L"
                                         ? "bg-purple-50 text-purple-700 border border-purple-200"
                                         : "bg-amber-50 text-amber-800 border border-amber-200"
-                                }`}
+                                  }`}
                               >
                                 {size} · {spec.name}
                               </span>
@@ -6508,7 +6530,7 @@ export default function BusinessApp({
                           {Math.max(
                             0,
                             (selectedFacility.units || 0) -
-                              (selectedFacility.occupied || 0),
+                            (selectedFacility.occupied || 0),
                           )}{" "}
                           kho
                         </td>
