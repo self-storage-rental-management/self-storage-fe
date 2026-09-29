@@ -60,8 +60,68 @@ import { formatVnd } from "../../i18n/currency"
 import { exportRevenueExcel } from "../../utils/excelExport"
 
 import { useStorageHub } from "../../store/StorageHubContext"
+import type { FacilityCustomUnitSpec } from "../../types/storageHub"
 
 import ProfileView from "../ProfileView"
+
+const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
+  {
+    sizeCode: "S",
+    name: "Kho Nhỏ (S)",
+    lengthM: UNIT_SPECS.S.lengthM,
+    widthM: UNIT_SPECS.S.widthM,
+    heightM: UNIT_SPECS.S.heightM,
+    laneWidthM: UNIT_SPECS.S.vehicleLaneWidthM,
+    maxLoadKg: UNIT_SPECS.S.maxLoadKg,
+    monthlyPrice: UNIT_SPECS.S.priceMonthly,
+    count: 0,
+    badgeClass: "bg-sky-50 text-sky-700 border-sky-200",
+    floor: 1,
+    zone: "Khu A",
+  },
+  {
+    sizeCode: "M",
+    name: "Kho Trung (M)",
+    lengthM: UNIT_SPECS.M.lengthM,
+    widthM: UNIT_SPECS.M.widthM,
+    heightM: UNIT_SPECS.M.heightM,
+    laneWidthM: UNIT_SPECS.M.vehicleLaneWidthM,
+    maxLoadKg: UNIT_SPECS.M.maxLoadKg,
+    monthlyPrice: UNIT_SPECS.M.priceMonthly,
+    count: 0,
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    floor: 2,
+    zone: "Khu B",
+  },
+  {
+    sizeCode: "L",
+    name: "Kho Lớn (L)",
+    lengthM: UNIT_SPECS.L.lengthM,
+    widthM: UNIT_SPECS.L.widthM,
+    heightM: UNIT_SPECS.L.heightM,
+    laneWidthM: UNIT_SPECS.L.vehicleLaneWidthM,
+    maxLoadKg: UNIT_SPECS.L.maxLoadKg,
+    monthlyPrice: UNIT_SPECS.L.priceMonthly,
+    count: 0,
+    badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
+    floor: 3,
+    zone: "Khu C",
+  },
+  {
+    sizeCode: "XL",
+    name: "Kho Rất Lớn (XL)",
+    lengthM: UNIT_SPECS.XL.lengthM,
+    widthM: UNIT_SPECS.XL.widthM,
+    heightM: UNIT_SPECS.XL.heightM,
+    laneWidthM: UNIT_SPECS.XL.vehicleLaneWidthM,
+    maxLoadKg: UNIT_SPECS.XL.maxLoadKg,
+    monthlyPrice: UNIT_SPECS.XL.priceMonthly,
+    count: 0,
+    badgeClass: "bg-amber-50 text-amber-800 border-amber-200",
+    floor: 4,
+    zone: "Khu D",
+  },
+]
 
 export interface PolicyItem {
   id: string
@@ -79,7 +139,7 @@ export interface PolicyItem {
   lastUpdated?: string
 }
 
-export const WAREHOUSE_PHOTO_PRESETS = [
+const WAREHOUSE_PHOTO_PRESETS = [
   {
     id: "preset-std",
     title: "Kho tiêu chuẩn hiện đại",
@@ -1266,6 +1326,82 @@ export default function BusinessApp({
     "active",
   )
 
+  // Quản lý quy cách / loại gian kho động cho cơ sở (hỗ trợ thêm XXL, Mini, tùy biến D-R-C, giá, xóa an toàn)
+  const [formFacUnitSpecs, setFormFacUnitSpecs] = useState<FacilityCustomUnitSpec[]>(() =>
+    DEFAULT_FACILITY_UNIT_SPECS.map((s) => ({ ...s })),
+  )
+  const [showAddUnitSpecModal, setShowAddUnitSpecModal] = useState<boolean>(false)
+  const [newSpecSizeCode, setNewSpecSizeCode] = useState<string>("XXL")
+  const [newSpecName, setNewSpecName] = useState<string>("Kho Ngoại Khổ (XXL)")
+  const [newSpecLength, setNewSpecLength] = useState<number>(25.0)
+  const [newSpecWidth, setNewSpecWidth] = useState<number>(12.0)
+  const [newSpecHeight, setNewSpecHeight] = useState<number>(5.0)
+  const [newSpecLane, setNewSpecLane] = useState<number>(5.0)
+  const [newSpecMaxLoad, setNewSpecMaxLoad] = useState<number>(4500)
+  const [newSpecPrice, setNewSpecPrice] = useState<string>("28.000.000đ")
+  const [newSpecCount, setNewSpecCount] = useState<number>(5)
+
+  const handleConfirmAddUnitSpec = () => {
+    const rawCode = newSpecSizeCode.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "")
+    if (!rawCode) {
+      showToast(lang === "vi" ? "Vui lòng nhập mã loại kho (VD: XXL, MINI, LCK)!" : "Please enter unit size code!")
+      return
+    }
+    if (formFacUnitSpecs.some((s) => s.sizeCode.toUpperCase() === rawCode)) {
+      showToast(lang === "vi" ? `Loại kho "${rawCode}" đã tồn tại trong danh mục!` : `Unit type "${rawCode}" already exists!`)
+      return
+    }
+    const cleanName = newSpecName.trim() || `Kho ${rawCode}`
+    const len = Math.max(0.5, Number(newSpecLength) || 10)
+    const wid = Math.max(0.5, Number(newSpecWidth) || 10)
+    const hei = Math.max(1, Number(newSpecHeight) || 4)
+    const lane = Math.max(1, Number(newSpecLane) || 4)
+    const maxLoad = Math.max(100, Number(newSpecMaxLoad) || 2000)
+    const priceNum = parseInt(newSpecPrice.replace(/\D/g, ""), 10) || 10000000
+    const qty = Math.max(0, Number(newSpecCount) || 0)
+
+    const newSpec: FacilityCustomUnitSpec = {
+      sizeCode: rawCode,
+      name: cleanName,
+      lengthM: len,
+      widthM: wid,
+      heightM: hei,
+      laneWidthM: lane,
+      maxLoadKg: maxLoad,
+      monthlyPrice: priceNum,
+      count: qty,
+      badgeClass: "bg-rose-50 text-rose-800 border-rose-200",
+      floor: ((formFacUnitSpecs.length % 4) + 1),
+      zone: `Khu ${String.fromCharCode(65 + (formFacUnitSpecs.length % 4))}`,
+    }
+
+    setFormFacUnitSpecs((prev) => [...prev, newSpec])
+    setShowAddUnitSpecModal(false)
+    showToast(lang === "vi" ? `Đã thêm loại kho "${rawCode}" (${cleanName}) vào cơ sở!` : `Added unit type "${rawCode}"!`)
+  }
+
+  const handleDeleteUnitSpec = (sizeCode: string, occCount: number, isEditing: boolean) => {
+    if (isEditing && occCount > 0) {
+      showToast(
+        lang === "vi"
+          ? `Không thể xóa loại kho "${sizeCode}" vì đang có ${occCount} gian kho đang được khách thuê!`
+          : `Cannot delete unit type "${sizeCode}" because ${occCount} units are occupied!`,
+      )
+      return
+    }
+    setFormFacUnitSpecs((prev) => prev.filter((s) => s.sizeCode !== sizeCode))
+    showToast(lang === "vi" ? `Đã xóa loại kho "${sizeCode}" khỏi cơ sở!` : `Removed unit type "${sizeCode}"!`)
+  }
+
+  const handleUpdateSpecField = (
+    sizeCode: string,
+    updates: Partial<FacilityCustomUnitSpec>,
+  ) => {
+    setFormFacUnitSpecs((prev) =>
+      prev.map((s) => (s.sizeCode === sizeCode ? { ...s, ...updates } : s)),
+    )
+  }
+
   // Toast
 
   const [toast, setToast] = useState<string | null>(null)
@@ -1472,6 +1608,8 @@ export default function BusinessApp({
 
     setFormFacStatus("active")
 
+    setFormFacUnitSpecs(DEFAULT_FACILITY_UNIT_SPECS.map((s) => ({ ...s, count: 0 })))
+
     setCreateFacilityModal(true)
   }
 
@@ -1528,8 +1666,7 @@ export default function BusinessApp({
       return
     }
 
-    const totalCalculatedUnits =
-      formFacUnitS + formFacUnitM + formFacUnitL + formFacUnitXL
+    const totalCalculatedUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
     if (totalCalculatedUnits <= 0) {
       showToast(
@@ -1541,68 +1678,35 @@ export default function BusinessApp({
       return
     }
 
-    const parseVnd = (str: string) => {
-      const n = parseInt(str.replace(/\D/g, ""), 10)
-      return isNaN(n) ? 0 : n
-    }
-    let pS = parseVnd(formFacPriceS) || UNIT_SPECS.S.priceMonthly
-    let pM = parseVnd(formFacPriceM) || UNIT_SPECS.M.priceMonthly
-    let pL = parseVnd(formFacPriceL) || UNIT_SPECS.L.priceMonthly
-    let pXL = parseVnd(formFacPriceXL) || UNIT_SPECS.XL.priceMonthly
+    const unitDistribution: Record<string, number> = {}
+    const newUnitPrices: Record<string, number> = {}
+    const unitLoadLimits: Record<string, number> = {}
+    const unitDimensions: Record<string, { lengthM: number; widthM: number; heightM: number }> = {}
+    const unitLaneWidths: Record<string, number> = {}
 
-    const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
-      if (s === "S") return formFacUnitS > 0
-      if (s === "M") return formFacUnitM > 0
-      if (s === "L") return formFacUnitL > 0
-      return formFacUnitXL > 0
+    formFacUnitSpecs.forEach((s) => {
+      unitDistribution[s.sizeCode] = s.count
+      newUnitPrices[s.sizeCode] = s.monthlyPrice
+      unitLoadLimits[s.sizeCode] = s.maxLoadKg
+      unitDimensions[s.sizeCode] = { lengthM: s.lengthM, widthM: s.widthM, heightM: s.heightM }
+      unitLaneWidths[s.sizeCode] = s.laneWidthM ?? 4.0
     })
 
-    const enteredStartPrice = parseVnd(formFacPrice)
-    if (enteredStartPrice > 0) {
-      if (activeSizes.length === 1) {
-        const only = activeSizes[0]
-        if (only === "XL") pXL = enteredStartPrice
-        else if (only === "L") pL = enteredStartPrice
-        else if (only === "M") pM = enteredStartPrice
-        else if (only === "S") pS = enteredStartPrice
-      } else if (activeSizes.length > 1) {
-        const first = activeSizes[0]
-        if (first === "S") pS = enteredStartPrice
-        else if (first === "M") pM = enteredStartPrice
-        else if (first === "L") pL = enteredStartPrice
-        else if (first === "XL") pXL = enteredStartPrice
-      }
-    }
+    const totalDesignLoadTon =
+      Math.round(
+        (formFacUnitSpecs.reduce((sum, s) => sum + s.count * s.maxLoadKg, 0) / 1000) *
+          10,
+      ) / 10
 
-    const newUnitPrices = { S: pS, M: pM, L: pL, XL: pXL }
+    const activeSpecs = formFacUnitSpecs.filter((s) => s.count > 0)
+    const minPrice = activeSpecs.length > 0
+      ? Math.min(...activeSpecs.map((s) => s.monthlyPrice))
+      : formFacUnitSpecs[0]?.monthlyPrice || 5500000
 
-    const totalDesignLoadTon = Math.round(
-      ((formFacUnitS * formFacLoadS) +
-       (formFacUnitM * formFacLoadM) +
-       (formFacUnitL * formFacLoadL) +
-       (formFacUnitXL * formFacLoadXL)) / 1000 * 10
-    ) / 10
-
-    const unitLoadLimits = {
-      S: formFacLoadS,
-      M: formFacLoadM,
-      L: formFacLoadL,
-      XL: formFacLoadXL,
-    }
-
-    const unitDimensions = {
-      S: { lengthM: formFacLengthS, widthM: formFacWidthS },
-      M: { lengthM: formFacLengthM, widthM: formFacWidthM },
-      L: { lengthM: formFacLengthL, widthM: formFacWidthL },
-      XL: { lengthM: formFacLengthXL, widthM: formFacWidthXL },
-    }
-
-    const unitLaneWidths = {
-      S: formFacLaneS,
-      M: formFacLaneM,
-      L: formFacLaneL,
-      XL: formFacLaneXL,
-    }
+    const pS = newUnitPrices.S || 5500000
+    const pM = newUnitPrices.M || 9500000
+    const pL = newUnitPrices.L || 15000000
+    const pXL = newUnitPrices.XL || 22500000
 
     const created = createFacility(
       {
@@ -1620,19 +1724,14 @@ export default function BusinessApp({
 
         units: totalCalculatedUnits,
 
-        unitDistribution: {
-          S: formFacUnitS,
+        unitDistribution,
 
-          M: formFacUnitM,
-
-          L: formFacUnitL,
-
-          XL: formFacUnitXL,
-        },
-
-        price:
-          formFacPrice.trim() ||
-          `${Math.round(enteredStartPrice || pS).toLocaleString("vi-VN")}đ`,
+        price: (() => {
+          const parsed = parseInt(formFacPrice.replace(/\D/g, ""), 10)
+          return !isNaN(parsed) && parsed > 0
+            ? `${Math.round(parsed).toLocaleString("vi-VN")}đ`
+            : `${Math.round(minPrice).toLocaleString("vi-VN")}đ`
+        })(),
 
         unitPrices: newUnitPrices,
 
@@ -1641,6 +1740,8 @@ export default function BusinessApp({
         unitDimensions,
 
         unitLaneWidths,
+
+        unitCustomSpecs: formFacUnitSpecs,
 
         totalDesignLoadTon,
 
@@ -1685,7 +1786,11 @@ export default function BusinessApp({
 
     setCreateFacilityModal(false)
 
-    const breakdownStr = `S: ${formFacUnitS} · M: ${formFacUnitM} · L: ${formFacUnitL} · XL: ${formFacUnitXL} · Tải trọng sàn: ${totalDesignLoadTon} tấn`
+    const breakdownStr =
+      formFacUnitSpecs
+        .filter((s) => s.count > 0)
+        .map((s) => `${s.sizeCode}: ${s.count}`)
+        .join(" · ") || `Tổng: ${created.units} kho`
 
     showToast(
       lang === "vi"
@@ -1758,6 +1863,63 @@ export default function BusinessApp({
       lCount = base
 
       xlCount = Math.max(0, (f.units || 20) - base * 3)
+    }
+
+    // Nạp danh mục quy cách loại kho động (hỗ trợ cả các loại kho tùy biến như XXL)
+    if (f.unitCustomSpecs && Array.isArray(f.unitCustomSpecs) && f.unitCustomSpecs.length > 0) {
+      setFormFacUnitSpecs((f.unitCustomSpecs as FacilityCustomUnitSpec[]).map((s: FacilityCustomUnitSpec) => ({
+        ...s,
+        count: f.unitDistribution?.[s.sizeCode] ?? s.count ?? 0,
+        monthlyPrice: f.unitPrices?.[s.sizeCode] ?? s.monthlyPrice ?? 5500000,
+        lengthM: f.unitDimensions?.[s.sizeCode]?.lengthM ?? s.lengthM,
+        widthM: f.unitDimensions?.[s.sizeCode]?.widthM ?? s.widthM,
+        heightM: (f.unitDimensions?.[s.sizeCode] as any)?.heightM ?? s.heightM ?? 5,
+        laneWidthM: f.unitLaneWidths?.[s.sizeCode] ?? s.laneWidthM ?? 4,
+        maxLoadKg: f.unitLoadLimits?.[s.sizeCode] ?? s.maxLoadKg ?? 1000
+      })))
+    } else {
+      const dist = f.unitDistribution || {}
+      const sizeKeys = Array.from(new Set<string>([
+        ...Object.keys(dist),
+        ...facUnits.map(u => (u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : u.type === 'Extra Large' ? 'XL' : (u as any).sizeCode || 'S')),
+        'S', 'M', 'L', 'XL'
+      ]))
+
+      const loadedSpecs: FacilityCustomUnitSpec[] = sizeKeys.map((sz, idx) => {
+        const spec = UNIT_SPECS[sz as keyof typeof UNIT_SPECS]
+        const unit = facUnits.find(u => ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : u.type === 'Extra Large' ? 'XL' : '')) === sz)
+        const count = dist[sz] ?? facUnits.filter(u => ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : u.type === 'Extra Large' ? 'XL' : '')) === sz).length
+        const p = getFacilitySizePrice(f, sz as any)
+        const load = f.unitLoadLimits?.[sz] ?? unit?.maxLoadKg ?? spec?.maxLoadKg ?? 1000
+        const len = f.unitDimensions?.[sz]?.lengthM ?? unit?.dimensions?.lengthM ?? spec?.lengthM ?? 8
+        const wid = f.unitDimensions?.[sz]?.widthM ?? unit?.dimensions?.widthM ?? spec?.widthM ?? 10
+        const hei = (f.unitDimensions?.[sz] as any)?.heightM ?? unit?.dimensions?.heightM ?? spec?.heightM ?? 5
+        const lane = f.unitLaneWidths?.[sz] ?? spec?.vehicleLaneWidthM ?? 4
+
+        const badgeClass = sz === 'S' ? 'bg-sky-50 text-sky-700 border-sky-200' 
+          : sz === 'M' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+          : sz === 'L' ? 'bg-purple-50 text-purple-700 border-purple-200'
+          : sz === 'XL' ? 'bg-amber-50 text-amber-800 border-amber-200'
+          : 'bg-rose-50 text-rose-800 border-rose-200'
+
+        const name = sz === 'S' ? 'Kho Nhỏ (S)' : sz === 'M' ? 'Kho Trung (M)' : sz === 'L' ? 'Kho Lớn (L)' : sz === 'XL' ? 'Kho Rất Lớn (XL)' : `Kho ${sz}`
+
+        return {
+          sizeCode: sz,
+          name,
+          lengthM: len,
+          widthM: wid,
+          heightM: hei,
+          laneWidthM: lane,
+          maxLoadKg: load,
+          monthlyPrice: p,
+          count,
+          badgeClass,
+          floor: ((idx % 4) + 1),
+          zone: `Khu ${String.fromCharCode(65 + (idx % 4))}`
+        }
+      })
+      setFormFacUnitSpecs(loadedSpecs)
     }
 
     setFormFacUnitS(sCount)
@@ -1940,8 +2102,7 @@ export default function BusinessApp({
       return
     }
 
-    const totalCalculatedUnits =
-      formFacUnitS + formFacUnitM + formFacUnitL + formFacUnitXL
+    const totalCalculatedUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
     if (totalCalculatedUnits <= 0) {
       showToast(
@@ -1953,17 +2114,17 @@ export default function BusinessApp({
       return
     }
 
-    // Validation: không cho phép giảm số lượng thấp hơn số gian kho đang được thuê (occupied)
-
+    // Validation an toàn: Không cho phép giảm số lượng thấp hơn số gian kho đang được khách thuê (occupied)
     const facUnits = unitsList.filter(
       (u) =>
         u.facilityId === selectedFacility.id ||
         u.facilityId === selectedFacility.code,
     )
 
-    const getOcc = (size: "S" | "M" | "L" | "XL") =>
-      facUnits.filter((u) => {
+    for (const spec of formFacUnitSpecs) {
+      const occForSpec = facUnits.filter((u) => {
         const s =
+          (u as any).sizeCode ||
           (u as any).size ||
           (u.type === "Small"
             ? "S"
@@ -1971,128 +2132,64 @@ export default function BusinessApp({
               ? "M"
               : u.type === "Large"
                 ? "L"
-                : "XL")
-
+                : u.type === "Extra Large"
+                  ? "XL"
+                  : String(u.type))
         return (
-          s === size &&
+          (s === spec.sizeCode ||
+            (spec.sizeCode === "S" && u.type === "Small") ||
+            (spec.sizeCode === "M" && u.type === "Medium") ||
+            (spec.sizeCode === "L" && u.type === "Large") ||
+            (spec.sizeCode === "XL" && u.type === "Extra Large")) &&
           (u.status === "occupied" || (u.status as string) === "rented")
         )
       }).length
 
-    const occS = getOcc("S")
-
-    const occM = getOcc("M")
-
-    const occL = getOcc("L")
-
-    const occXL = getOcc("XL")
-
-    if (formFacUnitS < occS) {
-      showToast(
-        lang === "vi"
-          ? `Không thể giảm Kho S xuống ${formFacUnitS} vì hiện có ${occS} gian kho đang được thuê.`
-          : `Cannot reduce Unit S to ${formFacUnitS} because ${occS} units are occupied.`,
-      )
-
-      return
-    }
-
-    if (formFacUnitM < occM) {
-      showToast(
-        lang === "vi"
-          ? `Không thể giảm Kho M xuống ${formFacUnitM} vì hiện có ${occM} gian kho đang được thuê.`
-          : `Cannot reduce Unit M to ${formFacUnitM} because ${occM} units are occupied.`,
-      )
-
-      return
-    }
-
-    if (formFacUnitL < occL) {
-      showToast(
-        lang === "vi"
-          ? `Không thể giảm Kho L xuống ${formFacUnitL} vì hiện có ${occL} gian kho đang được thuê.`
-          : `Cannot reduce Unit L to ${formFacUnitL} because ${occL} units are occupied.`,
-      )
-
-      return
-    }
-
-    if (formFacUnitXL < occXL) {
-      showToast(
-        lang === "vi"
-          ? `Không thể giảm Kho XL xuống ${formFacUnitXL} vì hiện có ${occXL} gian kho đang được thuê.`
-          : `Cannot reduce Unit XL to ${formFacUnitXL} because ${occXL} units are occupied.`,
-      )
-
-      return
-    }
-
-    const parseVnd = (str: string) => {
-      const n = parseInt(str.replace(/\D/g, ""), 10)
-      return isNaN(n) ? 0 : n
-    }
-    let pS = parseVnd(formFacPriceS) || UNIT_SPECS.S.priceMonthly
-    let pM = parseVnd(formFacPriceM) || UNIT_SPECS.M.priceMonthly
-    let pL = parseVnd(formFacPriceL) || UNIT_SPECS.L.priceMonthly
-    let pXL = parseVnd(formFacPriceXL) || UNIT_SPECS.XL.priceMonthly
-
-    const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
-      if (s === "S") return formFacUnitS > 0
-      if (s === "M") return formFacUnitM > 0
-      if (s === "L") return formFacUnitL > 0
-      return formFacUnitXL > 0
-    })
-
-    const enteredStartPrice = parseVnd(formFacPrice)
-    if (enteredStartPrice > 0) {
-      if (activeSizes.length === 1) {
-        const only = activeSizes[0]
-        if (only === "XL") pXL = enteredStartPrice
-        else if (only === "L") pL = enteredStartPrice
-        else if (only === "M") pM = enteredStartPrice
-        else if (only === "S") pS = enteredStartPrice
-      } else if (activeSizes.length > 1) {
-        const first = activeSizes[0]
-        if (first === "S") pS = enteredStartPrice
-        else if (first === "M") pM = enteredStartPrice
-        else if (first === "L") pL = enteredStartPrice
-        else if (first === "XL") pXL = enteredStartPrice
+      if (spec.count < occForSpec) {
+        showToast(
+          lang === "vi"
+            ? `Không thể giảm Loại kho "${spec.name}" (${spec.sizeCode}) xuống ${spec.count} vì hiện có ${occForSpec} gian kho đang được khách thuê.`
+            : `Cannot reduce Unit "${spec.sizeCode}" to ${spec.count} because ${occForSpec} units are occupied.`,
+        )
+        return
       }
     }
+    const unitDistribution: Record<string, number> = {}
+    const updatedUnitPrices: Record<string, number> = {}
+    const unitLoadLimits: Record<string, number> = {}
+    const unitDimensions: Record<string, { lengthM: number; widthM: number; heightM: number }> = {}
+    const unitLaneWidths: Record<string, number> = {}
 
-    const updatedUnitPrices = { S: pS, M: pM, L: pL, XL: pXL }
+    formFacUnitSpecs.forEach((s) => {
+      unitDistribution[s.sizeCode] = s.count
+      updatedUnitPrices[s.sizeCode] = s.monthlyPrice
+      unitLoadLimits[s.sizeCode] = s.maxLoadKg
+      unitDimensions[s.sizeCode] = { lengthM: s.lengthM, widthM: s.widthM, heightM: s.heightM }
+      unitLaneWidths[s.sizeCode] = s.laneWidthM ?? 4.0
+    })
 
-    const totalDesignLoadTon = Math.round(
-      ((formFacUnitS * formFacLoadS) +
-       (formFacUnitM * formFacLoadM) +
-       (formFacUnitL * formFacLoadL) +
-       (formFacUnitXL * formFacLoadXL)) / 1000 * 10
-    ) / 10
+    const totalDesignLoadTon =
+      Math.round(
+        (formFacUnitSpecs.reduce((sum, s) => sum + s.count * s.maxLoadKg, 0) / 1000) *
+          10,
+      ) / 10
 
-    const unitLoadLimits = {
-      S: formFacLoadS,
-      M: formFacLoadM,
-      L: formFacLoadL,
-      XL: formFacLoadXL,
-    }
+    const activeSpecs = formFacUnitSpecs.filter((s) => s.count > 0)
+    const minPrice = activeSpecs.length > 0
+      ? Math.min(...activeSpecs.map((s) => s.monthlyPrice))
+      : formFacUnitSpecs[0]?.monthlyPrice || 5500000
 
-    const unitDimensions = {
-      S: { lengthM: formFacLengthS, widthM: formFacWidthS },
-      M: { lengthM: formFacLengthM, widthM: formFacWidthM },
-      L: { lengthM: formFacLengthL, widthM: formFacWidthL },
-      XL: { lengthM: formFacLengthXL, widthM: formFacWidthXL },
-    }
+    const finalPriceStr = (() => {
+      const parsed = parseInt(formFacPrice.replace(/\D/g, ""), 10)
+      return !isNaN(parsed) && parsed > 0
+        ? `${Math.round(parsed).toLocaleString("vi-VN")}đ`
+        : `${Math.round(minPrice).toLocaleString("vi-VN")}đ`
+    })()
 
-    const unitLaneWidths = {
-      S: formFacLaneS,
-      M: formFacLaneM,
-      L: formFacLaneL,
-      XL: formFacLaneXL,
-    }
-
-    const finalPriceStr =
-      formFacPrice.trim() ||
-      `${Math.round(enteredStartPrice || pS).toLocaleString("vi-VN")}đ`
+    const pS = updatedUnitPrices.S || 5500000
+    const pM = updatedUnitPrices.M || 9500000
+    const pL = updatedUnitPrices.L || 15000000
+    const pXL = updatedUnitPrices.XL || 22500000
 
     updateFacility(
       selectedFacility.id,
@@ -2111,15 +2208,7 @@ export default function BusinessApp({
 
         units: totalCalculatedUnits,
 
-        unitDistribution: {
-          S: formFacUnitS,
-
-          M: formFacUnitM,
-
-          L: formFacUnitL,
-
-          XL: formFacUnitXL,
-        },
+        unitDistribution,
 
         price: finalPriceStr,
 
@@ -2130,6 +2219,8 @@ export default function BusinessApp({
         unitDimensions,
 
         unitLaneWidths,
+
+        unitCustomSpecs: formFacUnitSpecs,
 
         totalDesignLoadTon,
 
@@ -4648,54 +4739,103 @@ export default function BusinessApp({
 
       {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
       {(() => {
-        // Shared size specifications for compact form table — derived from UNIT_SPECS
-        const FACILITY_SIZE_SPECS = (
-          [
-            { size: "S" as const, name: "Kho Nhỏ", badgeClass: "bg-sky-50 text-sky-700 border-sky-200" },
-            { size: "M" as const, name: "Kho Trung", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-            { size: "L" as const, name: "Kho Lớn", badgeClass: "bg-purple-50 text-purple-700 border-purple-200" },
-            { size: "XL" as const, name: "Rất Lớn", badgeClass: "bg-amber-50 text-amber-800 border-amber-200" },
-          ] as const
-        ).map(({ size, name, badgeClass }) => {
-          const s = UNIT_SPECS[size]
-          return {
-            size,
-            name,
-            rawHeightM: s.heightM,
-            heightM: `${s.heightM} m`,
-            vehicleLaneWidthM: s.vehicleLaneWidthM,
-            badgeClass,
-          }
-        })
-
-        const getFormUnitQty = (size: "S" | "M" | "L" | "XL") => {
-          if (size === "S") return formFacUnitS
-
-          if (size === "M") return formFacUnitM
-
-          if (size === "L") return formFacUnitL
-
-          return formFacUnitXL
-        }
+        const calculatedTotalUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
         const calculatedTotalLoadTon =
           Math.round(
-            ((formFacUnitS * formFacLoadS +
-              formFacUnitM * formFacLoadM +
-              formFacUnitL * formFacLoadL +
-              formFacUnitXL * formFacLoadXL) /
+            (formFacUnitSpecs.reduce(
+              (sum, s) => sum + s.count * (s.maxLoadKg || 1000),
+              0,
+            ) /
               1000) *
               10,
           ) / 10
 
+        const activeSpecs = formFacUnitSpecs.filter((s) => s.count > 0)
+        const minSpecPrice =
+          activeSpecs.length > 0
+            ? Math.min(...activeSpecs.map((s) => s.monthlyPrice))
+            : formFacUnitSpecs[0]?.monthlyPrice || 5500000
+
+        const minSpecPriceFormatted = `${Math.round(minSpecPrice).toLocaleString("vi-VN")}đ`
+
+        const handleSpecCountChange = (sizeCode: string, newCount: number) => {
+          const safeCount = Math.max(0, Math.floor(newCount || 0))
+          setFormFacUnitSpecs((prev) =>
+            prev.map((s) => (s.sizeCode === sizeCode ? { ...s, count: safeCount } : s)),
+          )
+          if (sizeCode === "S") setFormFacUnitS(safeCount)
+          if (sizeCode === "M") setFormFacUnitM(safeCount)
+          if (sizeCode === "L") setFormFacUnitL(safeCount)
+          if (sizeCode === "XL") setFormFacUnitXL(safeCount)
+
+          const nextSpecs = formFacUnitSpecs.map((s) =>
+            s.sizeCode === sizeCode ? { ...s, count: safeCount } : s,
+          )
+          const total = nextSpecs.reduce((sum, s) => sum + s.count, 0)
+          setFormFacUnits(total)
+
+          const active = nextSpecs.filter((s) => s.count > 0)
+          if (active.length > 0) {
+            const minP = Math.min(...active.map((s) => s.monthlyPrice))
+            setFormFacPrice(`${Math.round(minP).toLocaleString("vi-VN")}đ`)
+          }
+        }
+
+        const handleSpecPriceChange = (sizeCode: string, priceStr: string) => {
+          const numeric = parseInt(priceStr.replace(/\D/g, ""), 10) || 0
+          setFormFacUnitSpecs((prev) =>
+            prev.map((s) => (s.sizeCode === sizeCode ? { ...s, monthlyPrice: numeric } : s)),
+          )
+          if (sizeCode === "S") setFormFacPriceS(priceStr)
+          if (sizeCode === "M") setFormFacPriceM(priceStr)
+          if (sizeCode === "L") setFormFacPriceL(priceStr)
+          if (sizeCode === "XL") setFormFacPriceXL(priceStr)
+
+          const nextSpecs = formFacUnitSpecs.map((s) =>
+            s.sizeCode === sizeCode ? { ...s, monthlyPrice: numeric } : s,
+          )
+          const active = nextSpecs.filter((s) => s.count > 0)
+          if (active.length > 0) {
+            const minP = Math.min(...active.map((s) => s.monthlyPrice))
+            setFormFacPrice(`${Math.round(minP).toLocaleString("vi-VN")}đ`)
+          }
+        }
+
+        const handleSpecDimensionChange = (
+          sizeCode: string,
+          field: "lengthM" | "widthM" | "heightM" | "laneWidthM" | "maxLoadKg" | "name",
+          value: any,
+        ) => {
+          setFormFacUnitSpecs((prev) =>
+            prev.map((s) => (s.sizeCode === sizeCode ? { ...s, [field]: value } : s)),
+          )
+          if (sizeCode === "S") {
+            if (field === "lengthM") setFormFacLengthS(Number(value))
+            if (field === "widthM") setFormFacWidthS(Number(value))
+            if (field === "laneWidthM") setFormFacLaneS(Number(value))
+            if (field === "maxLoadKg") setFormFacLoadS(Number(value))
+          } else if (sizeCode === "M") {
+            if (field === "lengthM") setFormFacLengthM(Number(value))
+            if (field === "widthM") setFormFacWidthM(Number(value))
+            if (field === "laneWidthM") setFormFacLaneM(Number(value))
+            if (field === "maxLoadKg") setFormFacLoadM(Number(value))
+          } else if (sizeCode === "L") {
+            if (field === "lengthM") setFormFacLengthL(Number(value))
+            if (field === "widthM") setFormFacWidthL(Number(value))
+            if (field === "laneWidthM") setFormFacLaneL(Number(value))
+            if (field === "maxLoadKg") setFormFacLoadL(Number(value))
+          } else if (sizeCode === "XL") {
+            if (field === "lengthM") setFormFacLengthXL(Number(value))
+            if (field === "widthM") setFormFacWidthXL(Number(value))
+            if (field === "laneWidthM") setFormFacLaneXL(Number(value))
+            if (field === "maxLoadKg") setFormFacLoadXL(Number(value))
+          }
+        }
+
         const renderUnitAllocationSection = (
           isEditing: boolean,
-          occupiedMap: Record<"S" | "M" | "L" | "XL", number> = {
-            S: 0,
-            M: 0,
-            L: 0,
-            XL: 0,
-          },
+          occupiedMap: Record<string, number> = {},
         ) => {
           return (
             <div className="space-y-3 pt-2">
@@ -4725,13 +4865,13 @@ export default function BusinessApp({
                     </h4>
                     <p className="text-xs text-stone-500 mt-0.5">
                       {lang === "vi"
-                        ? "Cấu hình số lượng, tải trọng tối đa và đơn giá thuê theo từng chuẩn kích thước gian kho"
-                        : "Configure quantity, max load capacity, and monthly rates per unit size"}
+                        ? "Tùy biến linh hoạt loại kho (thêm mới, xóa bớt), điều chỉnh trực tiếp Dài × Rộng × Cao và tải trọng"
+                        : "Customize unit types (add, delete), directly adjust Length × Width × Height and load limits"}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-300 text-sky-900 font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-sky-500 inline-block animate-pulse"></span>
                     <span>
@@ -4747,379 +4887,404 @@ export default function BusinessApp({
                     <span>
                       {lang === "vi" ? "Tổng quy mô:" : "Total Units:"}{" "}
                       <b className="text-amber-950 font-extrabold text-sm">
-                        {formFacUnits}
+                        {calculatedTotalUnits}
                       </b>{" "}
                       kho
                     </span>
                   </div>
+                  {/* Nút Thêm Loại Kho Mới */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextSuffix = formFacUnitSpecs.length + 1
+                      const hasXXL = formFacUnitSpecs.some((s) => s.sizeCode === "XXL")
+                      setNewSpecSizeCode(hasXXL ? `CUST${nextSuffix}` : "XXL")
+                      setNewSpecName(hasXXL ? `Kho Mở Rộng ${nextSuffix}` : "Kho Ngoại Khổ (XXL)")
+                      setNewSpecLength(25)
+                      setNewSpecWidth(12)
+                      setNewSpecHeight(5.0)
+                      setNewSpecLane(5.0)
+                      setNewSpecMaxLoad(4500)
+                      setNewSpecPrice("28.000.000đ")
+                      setNewSpecCount(5)
+                      setShowAddUnitSpecModal(true)
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2.5}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                    <span>{lang === "vi" ? "+ Thêm loại kho" : "+ Add Unit Type"}</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Bảng phân bổ gian kho rộng rãi, thoáng mắt */}
+              {/* Bảng phân bổ gian kho linh hoạt */}
               <div className="border border-stone-200 rounded-xl overflow-x-auto bg-white shadow-xs">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse min-w-[960px]">
                   <thead className="bg-stone-100/90 border-b border-stone-200 text-stone-700 font-bold uppercase tracking-wider text-[11px]">
                     <tr>
-                      <th className="py-3 px-4 min-w-[200px]">
+                      <th className="py-3 px-3 min-w-[200px]">
                         {lang === "vi" ? "Cỡ & Loại Kho" : "Size & Type"}
                       </th>
-                      <th className="py-3 px-3 min-w-[210px]">
+                      <th className="py-3 px-3 min-w-[340px]">
                         {lang === "vi"
-                          ? "Quy Cách & Thể Tích"
-                          : "Dimensions & Volume"}
+                          ? "Quy Cách (D × R × C) & Thể Tích"
+                          : "Dimensions (L × W × H) & Vol"}
                       </th>
-                      <th className="py-3 px-3 text-center min-w-[150px]">
+                      <th className="py-3 px-3 text-center min-w-[140px]">
                         {lang === "vi" ? "Tải Trọng Tối Đa" : "Max Load"}
                       </th>
-                      <th className="py-3 px-3 text-center min-w-[170px]">
+                      <th className="py-3 px-3 text-center min-w-[150px]">
                         {lang === "vi"
                           ? "Đơn Giá Thuê / Tháng"
                           : "Monthly Rate"}
                       </th>
-                      <th className="py-3 px-4 text-right min-w-[150px]">
+                      <th className="py-3 px-3 text-right min-w-[130px]">
                         {lang === "vi" ? "Số Lượng Kho" : "Quantity"}
+                      </th>
+                      <th className="py-3 px-3 text-center w-14">
+                        {lang === "vi" ? "Xóa" : "Action"}
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-200/80">
-                    {FACILITY_SIZE_SPECS.map((spec) => {
-                      const qty = getFormUnitQty(spec.size)
-                      const occ = occupiedMap[spec.size] || 0
-                      const isBelowOcc = isEditing && qty < occ
+                    {formFacUnitSpecs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-stone-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <svg className="w-10 h-10 text-stone-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                            <p className="text-sm font-semibold text-stone-700">
+                              {lang === "vi" ? "Chưa có loại kho nào trong cấu hình cơ sở" : "No unit types configured yet"}
+                            </p>
+                            <p className="text-xs text-stone-400 max-w-md">
+                              {lang === "vi"
+                                ? "Cơ sở này hiện chưa có loại gian kho nào. Vui lòng bấm '+ Thêm loại kho' bên trên để tạo cỡ kho phù hợp (S, M, L, XL, XXL...)."
+                                : "Click '+ Add Unit Type' above to define storage unit sizes for this facility."}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      formFacUnitSpecs.map((spec) => {
+                        const occ = occupiedMap[spec.sizeCode] || 0
+                        const isBelowOcc = isEditing && spec.count < occ
+                        const canDelete = !isEditing || occ === 0
+                        const calcVol = Math.round(spec.lengthM * spec.widthM * (spec.heightM || 4.5) * 10) / 10
+                        const calcArea = Math.round(spec.lengthM * spec.widthM * 10) / 10
 
-                      return (
-                        <tr
-                          key={spec.size}
-                          className="hover:bg-amber-50/20 transition-colors"
-                        >
-                          {/* 1. Cỡ & Loại kho */}
-                          <td className="py-4 px-4">
-                            <div className="flex items-center gap-3">
-                              <span
-                                className={`w-9 h-9 flex items-center justify-center rounded-lg font-mono font-bold text-sm border shrink-0 shadow-2xs ${spec.badgeClass}`}
-                              >
-                                {spec.size}
-                              </span>
-                              <div>
-                                <div className="font-bold text-stone-900 text-sm leading-tight">
-                                  {spec.name}
+                        return (
+                          <tr
+                            key={spec.sizeCode}
+                            className="hover:bg-amber-50/20 transition-colors"
+                          >
+                            {/* 1. Cỡ & Loại kho */}
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <div className="flex items-center gap-2.5">
+                                <span
+                                  className={`w-8 h-8 flex items-center justify-center rounded-lg font-mono font-bold text-xs border shrink-0 shadow-2xs ${spec.badgeClass || "bg-stone-50 text-stone-700 border-stone-200"}`}
+                                >
+                                  {spec.sizeCode}
+                                </span>
+                                <div className="flex flex-col">
+                                  <input
+                                    type="text"
+                                    value={spec.name}
+                                    onChange={(e) =>
+                                      handleSpecDimensionChange(spec.sizeCode, "name", e.target.value)
+                                    }
+                                    className="font-bold text-stone-900 text-xs bg-white border border-stone-200 hover:border-stone-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-md px-2 py-1 w-36 shadow-2xs transition"
+                                    title={lang === "vi" ? "Nhấp để đổi tên hiển thị" : "Click to edit name"}
+                                  />
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[10px] text-stone-400 font-mono">
+                                      Mã: {spec.sizeCode}
+                                    </span>
+                                    {isEditing && occ > 0 && (
+                                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                                        Thuê: {occ}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="text-[11px] text-stone-400 font-mono mt-0.5">
-                                  Chuẩn cỡ {spec.size}
+                              </div>
+                            </td>
+
+                            {/* 2. Quy cách & Thể tích D x R x C */}
+                            <td className="py-3 px-3">
+                              <div className="space-y-1.5 whitespace-nowrap">
+                                {/* Hàng 1: Dài × Rộng × Cao */}
+                                <div className="flex items-center gap-1.5">
+                                  {/* Dài */}
+                                  <div className="flex items-center bg-stone-50 border border-stone-300 rounded-md overflow-hidden shadow-2xs">
+                                    <span className="px-1.5 py-1 text-[10px] font-bold text-stone-500 bg-stone-100 border-r border-stone-200 select-none">
+                                      D
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min={0.5}
+                                      max={100}
+                                      step={0.1}
+                                      className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none focus:bg-amber-50/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      value={spec.lengthM}
+                                      onChange={(e) =>
+                                        handleSpecDimensionChange(
+                                          spec.sizeCode,
+                                          "lengthM",
+                                          Math.max(0.5, parseFloat(e.target.value) || 0.5),
+                                        )
+                                      }
+                                      title={lang === "vi" ? "Chiều dài (m)" : "Length (m)"}
+                                    />
+                                    <span className="pr-1.5 text-[10px] text-stone-400 font-mono select-none bg-white">
+                                      m
+                                    </span>
+                                  </div>
+
+                                  <span className="text-stone-400 font-bold text-xs select-none">×</span>
+
+                                  {/* Rộng */}
+                                  <div className="flex items-center bg-stone-50 border border-stone-300 rounded-md overflow-hidden shadow-2xs">
+                                    <span className="px-1.5 py-1 text-[10px] font-bold text-stone-500 bg-stone-100 border-r border-stone-200 select-none">
+                                      R
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min={0.5}
+                                      max={100}
+                                      step={0.1}
+                                      className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none focus:bg-amber-50/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      value={spec.widthM}
+                                      onChange={(e) =>
+                                        handleSpecDimensionChange(
+                                          spec.sizeCode,
+                                          "widthM",
+                                          Math.max(0.5, parseFloat(e.target.value) || 0.5),
+                                        )
+                                      }
+                                      title={lang === "vi" ? "Chiều rộng (m)" : "Width (m)"}
+                                    />
+                                    <span className="pr-1.5 text-[10px] text-stone-400 font-mono select-none bg-white">
+                                      m
+                                    </span>
+                                  </div>
+
+                                  <span className="text-stone-400 font-bold text-xs select-none">×</span>
+
+                                  {/* Cao - Tùy chỉnh tự do */}
+                                  <div className="flex items-center bg-amber-50/80 border border-amber-300 rounded-md overflow-hidden shadow-2xs ring-1 ring-amber-200">
+                                    <span className="px-1.5 py-1 text-[10px] font-bold text-amber-800 bg-amber-100/90 border-r border-amber-300 select-none">
+                                      C
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={30}
+                                      step={0.1}
+                                      className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-amber-950 focus:outline-none focus:bg-amber-50/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      value={spec.heightM}
+                                      onChange={(e) =>
+                                        handleSpecDimensionChange(
+                                          spec.sizeCode,
+                                          "heightM",
+                                          Math.max(1, parseFloat(e.target.value) || 1),
+                                        )
+                                      }
+                                      title={lang === "vi" ? "Chiều cao gian kho (m) - Tùy chỉnh tự do" : "Height (m)"}
+                                    />
+                                    <span className="pr-1.5 text-[10px] text-amber-700 font-bold font-mono select-none bg-white">
+                                      m
+                                    </span>
+                                  </div>
                                 </div>
-                                {isEditing && occ > 0 && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300 mt-1">
-                                    Đang cho thuê: {occ} kho
+
+                                {/* Hàng 2: Thể tích, Diện tích, Lối xe */}
+                                <div className="flex items-center gap-2 text-[11px] text-stone-600">
+                                  <span>
+                                    {lang === "vi" ? "Thể tích:" : "Vol:"}{" "}
+                                    <b className="text-stone-900 font-mono bg-stone-100 px-1 py-0.5 rounded border border-stone-200">
+                                      {calcVol} m³
+                                    </b>{" "}
+                                    <span className="text-stone-400">({calcArea} m²)</span>
                                   </span>
+                                  <span className="text-stone-300">·</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-stone-500">
+                                      {lang === "vi" ? "Lối xe:" : "Lane:"}
+                                    </span>
+                                    <div className="flex items-center bg-stone-50 border border-stone-200 rounded overflow-hidden">
+                                      <input
+                                        type="number"
+                                        step={0.1}
+                                        className="w-10 h-5 px-0.5 text-center font-mono text-[11px] bg-white text-stone-800 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        value={spec.laneWidthM || 4}
+                                        onChange={(e) =>
+                                          handleSpecDimensionChange(
+                                            spec.sizeCode,
+                                            "laneWidthM",
+                                            parseFloat(e.target.value) || 3,
+                                          )
+                                        }
+                                        title={lang === "vi" ? "Lối xe tiếp cận (m)" : "Vehicle lane width (m)"}
+                                      />
+                                      <span className="pr-1 text-[9px] text-stone-400 font-mono bg-white">
+                                        m
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 3. Tải trọng tối đa */}
+                            <td className="py-3 px-3 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center">
+                                <div className="flex items-center bg-stone-50 border border-stone-300 rounded-lg overflow-hidden w-28 h-9 shadow-2xs focus-within:ring-1 focus-within:ring-amber-500 focus-within:border-amber-500">
+                                  <input
+                                    type="number"
+                                    min={100}
+                                    step={50}
+                                    className="w-full h-full px-2 text-right font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    value={spec.maxLoadKg}
+                                    onChange={(e) =>
+                                      handleSpecDimensionChange(
+                                        spec.sizeCode,
+                                        "maxLoadKg",
+                                        Math.max(100, parseInt(e.target.value, 10) || 100),
+                                      )
+                                    }
+                                  />
+                                  <span className="px-2 text-[11px] font-bold text-stone-500 bg-stone-100 border-l border-stone-200 select-none">
+                                    kg
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 4. Đơn giá thuê / tháng */}
+                            <td className="py-3 px-3 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center">
+                                <div className="w-32">
+                                  <input
+                                    type="text"
+                                    className="w-full h-9 px-2.5 text-right border border-stone-300 rounded-lg font-mono font-bold text-xs bg-white text-emerald-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
+                                    value={
+                                      typeof spec.monthlyPrice === "number"
+                                        ? `${spec.monthlyPrice.toLocaleString("vi-VN")}đ`
+                                        : spec.monthlyPrice
+                                    }
+                                    onChange={(e) =>
+                                      handleSpecPriceChange(spec.sizeCode, e.target.value)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 5. Số lượng kho */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap">
+                              <div className="flex flex-col items-end">
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={isEditing ? spec.count <= occ : spec.count <= 0}
+                                    onClick={() =>
+                                      handleSpecCountChange(
+                                        spec.sizeCode,
+                                        Math.max(isEditing ? occ : 0, spec.count - 1),
+                                      )
+                                    }
+                                    className="w-8 h-8 rounded border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-sm shadow-2xs"
+                                    title="Giảm 1 kho"
+                                  >
+                                    −
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    className={`w-12 h-8 text-center border rounded font-mono font-bold text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-2xs transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                      isBelowOcc
+                                        ? "border-red-400 text-red-700 bg-red-50"
+                                        : "border-stone-300 text-stone-900"
+                                    }`}
+                                    value={spec.count}
+                                    onChange={(e) => {
+                                      const parsed = parseInt(e.target.value, 10)
+                                      handleSpecCountChange(
+                                        spec.sizeCode,
+                                        isNaN(parsed) ? 0 : Math.max(0, parsed),
+                                      )
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleSpecCountChange(spec.sizeCode, spec.count + 1)
+                                    }
+                                    className="w-8 h-8 rounded border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition cursor-pointer text-sm shadow-2xs"
+                                    title="Tăng 1 kho"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                {isBelowOcc && (
+                                  <div className="text-[10px] font-semibold text-red-600 text-right mt-0.5">
+                                    Tối thiểu {occ} (đang thuê)
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* 2. Quy cách & Thể tích */}
-                          <td className="py-4 px-3">
-                            {(() => {
-                              const curLen =
-                                spec.size === "S"
-                                  ? formFacLengthS
-                                  : spec.size === "M"
-                                    ? formFacLengthM
-                                    : spec.size === "L"
-                                      ? formFacLengthL
-                                      : formFacLengthXL
-                              const curWid =
-                                spec.size === "S"
-                                  ? formFacWidthS
-                                  : spec.size === "M"
-                                    ? formFacWidthM
-                                    : spec.size === "L"
-                                      ? formFacWidthL
-                                      : formFacWidthXL
-                              const curLane =
-                                spec.size === "S"
-                                  ? formFacLaneS
-                                  : spec.size === "M"
-                                    ? formFacLaneM
-                                    : spec.size === "L"
-                                      ? formFacLaneL
-                                      : formFacLaneXL
-
-                              const setLen = (val: number) => {
-                                if (spec.size === "S") setFormFacLengthS(val)
-                                else if (spec.size === "M") setFormFacLengthM(val)
-                                else if (spec.size === "L") setFormFacLengthL(val)
-                                else setFormFacLengthXL(val)
-                              }
-
-                              const setWid = (val: number) => {
-                                if (spec.size === "S") setFormFacWidthS(val)
-                                else if (spec.size === "M") setFormFacWidthM(val)
-                                else if (spec.size === "L") setFormFacWidthL(val)
-                                else setFormFacWidthXL(val)
-                              }
-
-                              const setLane = (val: number) => {
-                                if (spec.size === "S") setFormFacLaneS(val)
-                                else if (spec.size === "M") setFormFacLaneM(val)
-                                else if (spec.size === "L") setFormFacLaneL(val)
-                                else setFormFacLaneXL(val)
-                              }
-
-                              const calcVol = Math.round(curLen * curWid * spec.rawHeightM * 10) / 10
-                              const calcArea = Math.round(curLen * curWid * 10) / 10
-
-                              return (
-                                <div className="space-y-1.5">
-                                  {/* Dài và Rộng input */}
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-[10px] uppercase font-bold text-stone-500">
-                                        {lang === "vi" ? "Dài" : "L"}
-                                      </span>
-                                      <div className="relative flex items-center w-[68px]">
-                                        <input
-                                          type="number"
-                                          min={0.5}
-                                          max={100}
-                                          step={0.1}
-                                          className="w-full h-8 pl-1.5 pr-4 text-right border border-stone-300 rounded-md font-mono font-bold text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
-                                          value={curLen}
-                                          onChange={(e) =>
-                                            setLen(Math.max(0, parseFloat(e.target.value) || 0))
-                                          }
-                                          title={lang === "vi" ? "Chiều dài (m)" : "Length (m)"}
-                                        />
-                                        <span className="absolute right-1 text-[10px] text-stone-400 font-mono pointer-events-none">
-                                          m
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    <span className="text-stone-300 font-bold text-xs">×</span>
-
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-[10px] uppercase font-bold text-stone-500">
-                                        {lang === "vi" ? "Rộng" : "W"}
-                                      </span>
-                                      <div className="relative flex items-center w-[68px]">
-                                        <input
-                                          type="number"
-                                          min={0.5}
-                                          max={100}
-                                          step={0.1}
-                                          className="w-full h-8 pl-1.5 pr-4 text-right border border-stone-300 rounded-md font-mono font-bold text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
-                                          value={curWid}
-                                          onChange={(e) =>
-                                            setWid(Math.max(0, parseFloat(e.target.value) || 0))
-                                          }
-                                          title={lang === "vi" ? "Chiều rộng (m)" : "Width (m)"}
-                                        />
-                                        <span className="absolute right-1 text-[10px] text-stone-400 font-mono pointer-events-none">
-                                          m
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Thể tích tính tự động (chỉ hiển thị 1 lần m³) */}
-                                  <div className="text-xs text-stone-600 font-medium flex items-center flex-wrap gap-1">
-                                    <span>{lang === "vi" ? "Thể tích:" : "Volume:"}</span>
-                                    <b className="text-stone-900 font-mono">{calcVol} m³</b>
-                                    <span className="text-stone-400 text-[11px] font-normal">
-                                      ({calcArea} m²)
-                                    </span>
-                                  </div>
-
-                                  {/* Chiều cao & Lối xe tự nhập */}
-                                  <div className="flex items-center gap-1.5 text-xs text-stone-600 pt-0.5">
-                                    <span className="text-[11px] text-stone-400 font-mono">
-                                      {lang === "vi" ? "Cao" : "Height"} {spec.heightM}
-                                    </span>
-                                    <span className="text-stone-300">·</span>
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-[10px] uppercase font-bold text-stone-500">
-                                        {lang === "vi" ? "Lối xe" : "Lane"}
-                                      </span>
-                                      <div className="relative flex items-center w-[64px]">
-                                        <input
-                                          type="number"
-                                          step={0.1}
-                                          className="w-full h-7 pl-1.5 pr-4 text-right border border-stone-300 rounded-md font-mono font-bold text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
-                                          value={curLane}
-                                          onChange={(e) =>
-                                            setLane(parseFloat(e.target.value) || 0)
-                                          }
-                                          title={lang === "vi" ? "Chiều rộng lối xe (m)" : "Vehicle lane width (m)"}
-                                        />
-                                        <span className="absolute right-1 text-[10px] text-stone-400 font-mono pointer-events-none">
-                                          m
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )
-                            })()}
-                          </td>
-
-                          {/* 3. Tải trọng tối đa (kg) */}
-                          <td className="py-4 px-3 text-center">
-                            <div className="flex items-center justify-center">
-                              <div className="relative flex items-center w-full max-w-[140px]">
-                                <input
-                                  type="number"
-                                  min={100}
-                                  step={50}
-                                  className="w-full h-10 pl-3 pr-9 text-right border border-stone-300 rounded-lg font-mono font-bold text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
-                                  value={
-                                    spec.size === "S"
-                                      ? formFacLoadS
-                                      : spec.size === "M"
-                                        ? formFacLoadM
-                                        : spec.size === "L"
-                                          ? formFacLoadL
-                                          : formFacLoadXL
-                                  }
-                                  onChange={(e) => {
-                                    const val = Math.max(
-                                      0,
-                                      parseInt(e.target.value, 10) || 0,
-                                    )
-                                    if (spec.size === "S") setFormFacLoadS(val)
-                                    else if (spec.size === "M")
-                                      setFormFacLoadM(val)
-                                    else if (spec.size === "L")
-                                      setFormFacLoadL(val)
-                                    else setFormFacLoadXL(val)
-                                  }}
-                                />
-                                <span className="absolute right-2.5 text-xs text-stone-400 font-bold pointer-events-none">
-                                  kg
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* 4. Đơn giá thuê / tháng */}
-                          <td className="py-4 px-3 text-center">
-                            <div className="flex items-center justify-center">
-                              <div className="relative flex items-center w-full max-w-[170px]">
-                                <input
-                                  type="text"
-                                  className="w-full h-10 px-3.5 text-right border border-stone-300 rounded-lg font-mono font-bold text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-emerald-800 shadow-2xs transition"
-                                  value={
-                                    spec.size === "S"
-                                      ? formFacPriceS
-                                      : spec.size === "M"
-                                        ? formFacPriceM
-                                        : spec.size === "L"
-                                          ? formFacPriceL
-                                          : formFacPriceXL
-                                  }
-                                  onChange={(e) => {
-                                    const val = e.target.value
-                                    if (spec.size === "S") setFormFacPriceS(val)
-                                    else if (spec.size === "M")
-                                      setFormFacPriceM(val)
-                                    else if (spec.size === "L")
-                                      setFormFacPriceL(val)
-                                    else setFormFacPriceXL(val)
-
-                                    const activeSizes = (
-                                      ["S", "M", "L", "XL"] as const
-                                    ).filter((s) => {
-                                      if (s === "S")
-                                        return (
-                                          (spec.size === "S"
-                                            ? qty
-                                            : formFacUnitS) > 0
-                                        )
-                                      if (s === "M")
-                                        return (
-                                          (spec.size === "M"
-                                            ? qty
-                                            : formFacUnitM) > 0
-                                        )
-                                      if (s === "L")
-                                        return (
-                                          (spec.size === "L"
-                                            ? qty
-                                            : formFacUnitL) > 0
-                                        )
-                                      return (
-                                        (spec.size === "XL"
-                                          ? qty
-                                          : formFacUnitXL) > 0
-                                      )
-                                    })
-                                    if (
-                                      activeSizes.length > 0 &&
-                                      activeSizes[0] === spec.size
-                                    ) {
-                                      setFormFacPrice(val)
-                                    }
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* 5. Số lượng kho */}
-                          <td className="py-4 px-4 text-right">
-                            <div className="flex flex-col items-end">
-                              <div className="inline-flex items-center gap-1.5">
+                            {/* 6. Thao tác: Xóa loại kho có kiểm tra an toàn */}
+                            <td className="py-3 px-3 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center">
                                 <button
                                   type="button"
-                                  disabled={isEditing ? qty <= occ : qty <= 0}
-                                  onClick={() =>
-                                    handleUnitSizeChange(
-                                      spec.size,
-                                      Math.max(isEditing ? occ : 0, qty - 1),
-                                    )
-                                  }
-                                  className="w-9 h-10 rounded-lg border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-base shadow-2xs"
-                                  title="Giảm 1 kho"
-                                >
-                                  −
-                                </button>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  className={`w-16 h-10 text-center border rounded-lg font-mono font-bold text-base bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 shadow-2xs transition ${
-                                    isBelowOcc
-                                      ? "border-red-400 text-red-700 bg-red-50"
-                                      : "border-stone-300 text-stone-900"
+                                  disabled={!canDelete}
+                                  onClick={() => handleDeleteUnitSpec(spec.sizeCode, occ, isEditing)}
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
+                                    canDelete
+                                      ? "text-stone-400 hover:text-red-600 hover:bg-red-50 border border-stone-200 hover:border-red-300 cursor-pointer shadow-2xs"
+                                      : "text-stone-300 bg-stone-50 border border-stone-200 cursor-not-allowed opacity-40"
                                   }`}
-                                  value={qty}
-                                  onChange={(e) => {
-                                    const parsed = parseInt(e.target.value, 10)
-                                    handleUnitSizeChange(
-                                      spec.size,
-                                      isNaN(parsed) ? 0 : Math.max(0, parsed),
-                                    )
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleUnitSizeChange(spec.size, qty + 1)
+                                  title={
+                                    !canDelete
+                                      ? `Không thể xóa vì đang có ${occ} gian kho đang được khách thuê`
+                                      : `Xóa loại kho "${spec.sizeCode}" khỏi cơ sở`
                                   }
-                                  className="w-9 h-10 rounded-lg border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition cursor-pointer text-base shadow-2xs"
-                                  title="Tăng 1 kho"
                                 >
-                                  +
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
                                 </button>
                               </div>
-                              {isBelowOcc && (
-                                <div className="text-[11px] font-semibold text-red-600 text-right mt-1">
-                                  Tối thiểu {occ} (đang thuê)
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
                   </tbody>
                   <tfoot className="bg-stone-50 border-t-2 border-stone-200 font-semibold text-stone-800">
                     <tr>
@@ -5131,36 +5296,37 @@ export default function BusinessApp({
                         </div>
                         <div className="text-[11px] text-stone-500 font-normal">
                           {lang === "vi"
-                            ? "Toàn bộ gian kho thuộc cơ sở lưu trữ"
-                            : "All storage units in facility"}
+                            ? `${formFacUnitSpecs.length} loại kho được định cấu hình cho cơ sở`
+                            : `${formFacUnitSpecs.length} unit types configured`}
                         </div>
                       </td>
                       <td className="py-3.5 px-3 text-center font-mono">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100/80 border border-sky-300 text-sky-950 font-extrabold text-sm shadow-2xs">
-                          <span className="text-xs font-semibold text-sky-800">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100/80 border border-sky-300 text-sky-950 font-extrabold text-xs shadow-2xs">
+                          <span className="text-[11px] font-semibold text-sky-800">
                             {lang === "vi" ? "Tổng tải:" : "Total load:"}
                           </span>
                           <span>{calculatedTotalLoadTon}</span>
-                          <span className="text-xs font-semibold text-sky-800">
+                          <span className="text-[11px] font-semibold text-sky-800">
                             tấn
                           </span>
                         </div>
                       </td>
                       <td className="py-3.5 px-3 text-center text-xs text-stone-400">
-                        <span className="font-mono text-stone-600 font-medium">
-                          {lang === "vi" ? "Từ" : "From"} {formFacPrice}
+                        <span className="font-mono text-stone-700 font-bold">
+                          {lang === "vi" ? "Từ" : "From"} {minSpecPriceFormatted}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-extrabold text-sm shadow-2xs">
-                          <span className="text-base font-black">
-                            {formFacUnits}
+                      <td className="py-3.5 px-3 text-right">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-extrabold text-xs shadow-2xs">
+                          <span className="text-sm font-black">
+                            {calculatedTotalUnits}
                           </span>
-                          <span className="text-xs font-bold text-amber-900">
+                          <span className="text-[11px] font-bold text-amber-900">
                             {lang === "vi" ? "kho" : "units"}
                           </span>
                         </div>
                       </td>
+                      <td className="py-3.5 px-3"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -5279,7 +5445,7 @@ export default function BusinessApp({
                   ? "Thêm Cơ Sở Kho Mới"
                   : "Create New Storage Facility"
               }
-              size="2xl"
+              size="3xl"
             >
               <div className="space-y-4">
                 {/* Thông tin cơ sở */}
@@ -5404,38 +5570,45 @@ export default function BusinessApp({
                   </h4>
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <Input
-                        label={
-                          lang === "vi"
-                            ? "Giá cơ sở từ / tháng"
-                            : "Starting Price"
-                        }
-                        placeholder="5.500.000đ"
-                        value={formFacPrice}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          setFormFacPrice(val)
-                          const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
-                            if (s === "S") return formFacUnitS > 0
-                            if (s === "M") return formFacUnitM > 0
-                            if (s === "L") return formFacUnitL > 0
-                            return formFacUnitXL > 0
-                          })
-                          if (activeSizes.length === 1) {
-                            const only = activeSizes[0]
-                            if (only === "XL") setFormFacPriceXL(val)
-                            else if (only === "L") setFormFacPriceL(val)
-                            else if (only === "M") setFormFacPriceM(val)
-                            else if (only === "S") setFormFacPriceS(val)
-                          } else if (activeSizes.length > 1) {
-                            const first = activeSizes[0]
-                            if (first === "S") setFormFacPriceS(val)
-                            else if (first === "M") setFormFacPriceM(val)
-                            else if (first === "L") setFormFacPriceL(val)
-                            else if (first === "XL") setFormFacPriceXL(val)
+                      <div>
+                        <Input
+                          label={
+                            lang === "vi"
+                              ? "Giá cơ sở từ / tháng"
+                              : "Starting Price"
                           }
-                        }}
-                      />
+                          placeholder="5.500.000đ"
+                          value={formFacPrice}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setFormFacPrice(val)
+                            const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
+                              if (s === "S") return formFacUnitS > 0
+                              if (s === "M") return formFacUnitM > 0
+                              if (s === "L") return formFacUnitL > 0
+                              return formFacUnitXL > 0
+                            })
+                            if (activeSizes.length === 1) {
+                              const only = activeSizes[0]
+                              if (only === "XL") setFormFacPriceXL(val)
+                              else if (only === "L") setFormFacPriceL(val)
+                              else if (only === "M") setFormFacPriceM(val)
+                              else if (only === "S") setFormFacPriceS(val)
+                            } else if (activeSizes.length > 1) {
+                              const first = activeSizes[0]
+                              if (first === "S") setFormFacPriceS(val)
+                              else if (first === "M") setFormFacPriceM(val)
+                              else if (first === "L") setFormFacPriceL(val)
+                              else if (first === "XL") setFormFacPriceXL(val)
+                            }
+                          }}
+                        />
+                        <p className="mt-1 text-[11px] text-stone-500">
+                          {lang === "vi"
+                            ? "💡 Giá chào sàn \"Giá chỉ từ...\" hiển thị cho khách hàng (tự động theo cỡ kho rẻ nhất có sẵn)."
+                            : "💡 Starting price displayed on catalog cards (auto-synced from lowest active size)."}
+                        </p>
+                      </div>
                       <Input
                         label={
                           lang === "vi"
@@ -5500,7 +5673,7 @@ export default function BusinessApp({
               title={
                 lang === "vi" ? "Chỉnh Sửa Thông Tin Cơ Sở" : "Edit Facility"
               }
-              size="2xl"
+              size="3xl"
             >
               {selectedFacility &&
                 (() => {
@@ -5510,36 +5683,30 @@ export default function BusinessApp({
                       u.facilityId === selectedFacility.code,
                   )
 
-                  const occMap = {
-                    S: facUnits.filter(
-                      (u) =>
-                        ((u as any).size === "S" || u.type === "Small") &&
-                        (u.status === "occupied" ||
-                          u.status as string === "rented"),
-                    ).length,
-
-                    M: facUnits.filter(
-                      (u) =>
-                        ((u as any).size === "M" || u.type === "Medium") &&
-                        (u.status === "occupied" ||
-                          u.status as string === "rented"),
-                    ).length,
-
-                    L: facUnits.filter(
-                      (u) =>
-                        ((u as any).size === "L" || u.type === "Large") &&
-                        (u.status === "occupied" ||
-                          u.status as string === "rented"),
-                    ).length,
-
-                    XL: facUnits.filter(
-                      (u) =>
-                        ((u as any).size === "XL" ||
-                          u.type === "Extra Large") &&
-                        (u.status === "occupied" ||
-                          u.status as string === "rented"),
-                    ).length,
-                  }
+                  const occMap: Record<string, number> = {}
+                  facUnits.forEach((u) => {
+                    const isOccupied =
+                      u.status === "occupied" ||
+                      (u.status as string) === "rented"
+                    if (!isOccupied) return
+                    const rawCode =
+                      (u as any).sizeCode ||
+                      (u as any).size ||
+                      (u.type === "Small"
+                        ? "S"
+                        : u.type === "Medium"
+                          ? "M"
+                          : u.type === "Large"
+                            ? "L"
+                            : u.type === "Extra Large"
+                              ? "XL"
+                              : String(u.type))
+                    occMap[rawCode] = (occMap[rawCode] || 0) + 1
+                    if (rawCode === "Small") occMap["S"] = (occMap["S"] || 0) + 1
+                    if (rawCode === "Medium") occMap["M"] = (occMap["M"] || 0) + 1
+                    if (rawCode === "Large") occMap["L"] = (occMap["L"] || 0) + 1
+                    if (rawCode === "Extra Large") occMap["XL"] = (occMap["XL"] || 0) + 1
+                  })
 
                   return (
                     <div className="space-y-4">
@@ -5641,37 +5808,44 @@ export default function BusinessApp({
                         </h4>
                         <div className="space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <Input
-                              label={
-                                lang === "vi"
-                                  ? "Giá cơ sở từ"
-                                  : "Starting Price"
-                              }
-                              value={formFacPrice}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                setFormFacPrice(val)
-                                const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
-                                  if (s === "S") return formFacUnitS > 0
-                                  if (s === "M") return formFacUnitM > 0
-                                  if (s === "L") return formFacUnitL > 0
-                                  return formFacUnitXL > 0
-                                })
-                                if (activeSizes.length === 1) {
-                                  const only = activeSizes[0]
-                                  if (only === "XL") setFormFacPriceXL(val)
-                                  else if (only === "L") setFormFacPriceL(val)
-                                  else if (only === "M") setFormFacPriceM(val)
-                                  else if (only === "S") setFormFacPriceS(val)
-                                } else if (activeSizes.length > 1) {
-                                  const first = activeSizes[0]
-                                  if (first === "S") setFormFacPriceS(val)
-                                  else if (first === "M") setFormFacPriceM(val)
-                                  else if (first === "L") setFormFacPriceL(val)
-                                  else if (first === "XL") setFormFacPriceXL(val)
+                            <div>
+                              <Input
+                                label={
+                                  lang === "vi"
+                                    ? "Giá cơ sở từ"
+                                    : "Starting Price"
                                 }
-                              }}
-                            />
+                                value={formFacPrice}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  setFormFacPrice(val)
+                                  const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
+                                    if (s === "S") return formFacUnitS > 0
+                                    if (s === "M") return formFacUnitM > 0
+                                    if (s === "L") return formFacUnitL > 0
+                                    return formFacUnitXL > 0
+                                  })
+                                  if (activeSizes.length === 1) {
+                                    const only = activeSizes[0]
+                                    if (only === "XL") setFormFacPriceXL(val)
+                                    else if (only === "L") setFormFacPriceL(val)
+                                    else if (only === "M") setFormFacPriceM(val)
+                                    else if (only === "S") setFormFacPriceS(val)
+                                  } else if (activeSizes.length > 1) {
+                                    const first = activeSizes[0]
+                                    if (first === "S") setFormFacPriceS(val)
+                                    else if (first === "M") setFormFacPriceM(val)
+                                    else if (first === "L") setFormFacPriceL(val)
+                                    else if (first === "XL") setFormFacPriceXL(val)
+                                  }
+                                }}
+                              />
+                              <p className="mt-1 text-[11px] text-stone-500">
+                                {lang === "vi"
+                                  ? "💡 Giá chào sàn \"Giá chỉ từ...\" hiển thị cho khách hàng (tự động theo cỡ kho rẻ nhất có sẵn)."
+                                  : "💡 Starting price displayed on catalog cards (auto-synced from lowest active size)."}
+                              </p>
+                            </div>
                             <Input
                               label={
                                 lang === "vi"
@@ -5731,6 +5905,201 @@ export default function BusinessApp({
                     </div>
                   )
                 })()}
+            </Modal>
+
+            {/* Modal Thêm Loại Kho Mới Vào Cơ Sở */}
+            <Modal
+              open={showAddUnitSpecModal}
+              onClose={() => setShowAddUnitSpecModal(false)}
+              title={
+                lang === "vi"
+                  ? "Thêm Loại Kho Mới Vào Cơ Sở"
+                  : "Add New Unit Type To Facility"
+              }
+              size="lg"
+            >
+              <div className="space-y-4">
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+                  <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center shrink-0 font-bold">
+                    i
+                  </div>
+                  <div>
+                    {lang === "vi"
+                      ? "Bạn có thể định nghĩa loại kho mới (ví dụ: XXL, MINI, PALLET...) với kích thước 3 chiều Dài - Rộng - Cao tùy biến. Thể tích và diện tích sẽ được hệ thống tính tự động."
+                      : "Define a new unit type with custom Length, Width, Height, and load specs."}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {lang === "vi" ? "Mã cỡ kho *" : "Size Code *"}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold"
+                      placeholder="VD: XXL, MINI, PALLET"
+                      value={newSpecSizeCode}
+                      onChange={(e) => setNewSpecSizeCode(e.target.value.toUpperCase())}
+                    />
+                    <p className="text-[11px] text-stone-400 mt-0.5">
+                      {lang === "vi" ? "Viết hoa, không dấu (VD: XXL)" : "Uppercase alphanumeric"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {lang === "vi" ? "Tên hiển thị loại kho *" : "Display Name *"}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      placeholder="VD: Kho Ngoại Khổ (XXL)"
+                      value={newSpecName}
+                      onChange={(e) => setNewSpecName(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Kích thước D - R - C */}
+                <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-wider text-stone-600">
+                    {lang === "vi" ? "Kích Thước 3 Chiều & Thể Tích" : "Dimensions & Volume"}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                        {lang === "vi" ? "Chiều Dài (m) *" : "Length (m) *"}
+                      </label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        min={0.5}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        value={newSpecLength}
+                        onChange={(e) => setNewSpecLength(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                        {lang === "vi" ? "Chiều Rộng (m) *" : "Width (m) *"}
+                      </label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        min={0.5}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        value={newSpecWidth}
+                        onChange={(e) => setNewSpecWidth(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                        {lang === "vi" ? "Chiều Cao (m) *" : "Height (m) *"}
+                      </label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        min={1}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        value={newSpecHeight}
+                        onChange={(e) => setNewSpecHeight(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live preview volume and area */}
+                  <div className="pt-1 flex items-center justify-between bg-white p-2.5 rounded-lg border border-stone-200 text-xs">
+                    <span className="text-stone-500">
+                      {lang === "vi" ? "Quy cách ước tính:" : "Estimated Specs:"}
+                    </span>
+                    <div className="flex items-center gap-3 font-mono font-bold">
+                      <span className="text-amber-800">
+                        {Math.round(newSpecLength * newSpecWidth * 10) / 10} m²
+                      </span>
+                      <span className="text-stone-300">|</span>
+                      <span className="text-emerald-700">
+                        {Math.round(newSpecLength * newSpecWidth * newSpecHeight * 10) / 10} m³
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {lang === "vi" ? "Lối xe tiếp cận (m)" : "Vehicle Lane (m)"}
+                    </label>
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={1}
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      value={newSpecLane}
+                      onChange={(e) => setNewSpecLane(parseFloat(e.target.value) || 4)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {lang === "vi" ? "Tải trọng tối đa (kg)" : "Max Load (kg)"}
+                    </label>
+                    <input
+                      type="number"
+                      step={50}
+                      min={100}
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      value={newSpecMaxLoad}
+                      onChange={(e) => setNewSpecMaxLoad(parseInt(e.target.value, 10) || 1000)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {lang === "vi" ? "Đơn giá thuê / tháng *" : "Monthly Rate *"}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-emerald-800 bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      placeholder="VD: 28.000.000đ"
+                      value={newSpecPrice}
+                      onChange={(e) => setNewSpecPrice(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {lang === "vi" ? "Số lượng kho khởi tạo" : "Initial Quantity"}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      value={newSpecCount}
+                      onChange={(e) => setNewSpecCount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddUnitSpecModal(false)}
+                  >
+                    {lang === "vi" ? "Hủy" : "Cancel"}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                    disabled={!newSpecSizeCode.trim()}
+                    onClick={handleConfirmAddUnitSpec}
+                  >
+                    {lang === "vi" ? "Xác Nhận Thêm" : "Add Unit Type"}
+                  </Button>
+                </div>
+              </div>
             </Modal>
           </>
         )

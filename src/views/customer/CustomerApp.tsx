@@ -24,7 +24,7 @@ const CUSTOMER_FACILITY_IMAGE_BY_ID: Partial<Record<string, string>> = {
   'fac-002': '/images/facilities/binh-duong.jpg',
 }
 type CustomerCatalogUnit = StorageUnit & {
-  sizeCode: 'S' | 'M' | 'L' | 'XL'
+  sizeCode: string
   rackCount: number
   rackDimensions: string
   aisleWidthM: number
@@ -51,23 +51,27 @@ const CUSTOMER_UNIT_SPECS = {
 } as const
 const storageTypeLabelVi = (value?: string) => {
   const normalized = (value || '').toLowerCase()
-  if (normalized.includes('extra large') || normalized === 'xl') return 'Kho rất lớn (XL)'
-  if (normalized.includes('medium') || normalized === 'm') return 'Kho vừa (M)'
-  if (normalized.includes('small') || normalized === 's') return 'Kho nhỏ (S)'
-  if (normalized.includes('large') || normalized === 'l') return 'Kho lớn (L)'
+  if (normalized.includes('4xl')) return 'Kho đặc biệt lớn (4XL)'
+  if (normalized.includes('xxl')) return 'Kho cực lớn (XXL)'
+  if (normalized.includes('extra large') || /(^|\W)xl(\W|$)/.test(normalized)) return 'Kho rất lớn (XL)'
+  if (normalized.includes('medium') || /(^|\W)m(\W|$)/.test(normalized)) return 'Kho vừa (M)'
+  if (normalized.includes('small') || /(^|\W)s(\W|$)/.test(normalized)) return 'Kho nhỏ (S)'
+  if (normalized.includes('large') || /(^|\W)l(\W|$)/.test(normalized)) return 'Kho lớn (L)'
   return value || 'Kho chưa xác định cỡ'
 }
 const storageSizeCode = (value?: string) => {
   const normalized = (value || '').toLowerCase()
+  if (normalized.includes('4xl')) return '4XL'
+  if (normalized.includes('xxl')) return 'XXL'
   if (normalized.includes('extra large') || /(^|\W)xl(\W|$)/.test(normalized)) return 'XL'
   if (normalized.includes('medium') || /(^|\W)m(\W|$)/.test(normalized)) return 'M'
   if (normalized.includes('small') || /(^|\W)s(\W|$)/.test(normalized)) return 'S'
   if (normalized.includes('large') || /(^|\W)l(\W|$)/.test(normalized)) return 'L'
-  return ''
+  return value || ''
 }
 
 const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = Object.entries({ 'fac-001': 'HCM-Q1-F01', 'fac-002': 'BD-F01' }).flatMap(([facilityId, prefix]) =>
-  (Object.entries(CUSTOMER_UNIT_SPECS) as [CustomerCatalogUnit['sizeCode'], (typeof CUSTOMER_UNIT_SPECS)[keyof typeof CUSTOMER_UNIT_SPECS]][]).flatMap(([sizeCode, spec]) =>
+  (Object.entries(CUSTOMER_UNIT_SPECS) as [keyof typeof CUSTOMER_UNIT_SPECS, (typeof CUSTOMER_UNIT_SPECS)[keyof typeof CUSTOMER_UNIT_SPECS]][]).flatMap(([sizeCode, spec]) =>
     Array.from({ length: 5 }, (_, index) => {
       const code = `${prefix}-${sizeCode}-${String(index + 1).padStart(3, '0')}`
       const rawSpec = UNIT_SPECS[sizeCode]
@@ -182,17 +186,29 @@ const packageCapacityPerFrame = (sample: PackageSample) => {
   const orientations = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]]
   return Math.max(...orientations.map(([x, y, z]) => Math.floor(2 / x) * Math.floor(4 / y) * Math.floor(4.5 / z)))
 }
-const CUSTOMER_UNIT_IMAGE_BY_SIZE: Record<CustomerCatalogUnit['sizeCode'], string> = {
+const CUSTOMER_UNIT_IMAGE_BY_SIZE: Record<string, string> = {
   S: '/images/customer-units/kho-s.jpg',
   M: '/images/customer-units/kho-m.jpg',
   L: '/images/customer-units/kho-l.jpg',
   XL: '/images/customer-units/kho-xl.jpg',
 }
-const CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE: Record<CustomerCatalogUnit['sizeCode'], string> = {
+const CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE: Record<string, string> = {
   S: '/images/customer-units/details/kho-s-chi-tiet.png',
   M: '/images/customer-units/details/kho-m-chi-tiet.png',
   L: '/images/customer-units/details/kho-l-chi-tiet.png',
   XL: '/images/customer-units/details/kho-xl-chi-tiet.png',
+}
+const getCustomerUnitImage = (sizeCode?: string) => {
+  if (sizeCode && CUSTOMER_UNIT_IMAGE_BY_SIZE[sizeCode]) {
+    return CUSTOMER_UNIT_IMAGE_BY_SIZE[sizeCode]
+  }
+  return CUSTOMER_UNIT_IMAGE_BY_SIZE.XL
+}
+const getCustomerUnitDetailImage = (sizeCode?: string) => {
+  if (sizeCode && CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE[sizeCode]) {
+    return CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE[sizeCode]
+  }
+  return CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE.XL
 }
 const SearchIcon = <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" /></svg>
 
@@ -406,37 +422,66 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
   const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = useMemo(() => {
     return units.map(unit => {
-      let sizeCode: CustomerCatalogUnit['sizeCode'] = 'M'
-      if (unit.type === 'Small' || unit.code.includes('-S-') || unit.code.includes('-S')) sizeCode = 'S'
-      else if (unit.type === 'Large' || unit.code.includes('-L-') || unit.code.includes('-L')) sizeCode = 'L'
-      else if (unit.type === 'Extra Large' || unit.code.includes('-XL-') || unit.code.includes('-XL')) sizeCode = 'XL'
-      else if (unit.type === 'Medium' || unit.code.includes('-M-') || unit.code.includes('-M')) sizeCode = 'M'
+      let sizeCode = (unit as any).sizeCode || ''
+      if (!sizeCode) {
+        if (unit.type === 'Small' || unit.code.includes('-S-') || unit.code.includes('-S')) sizeCode = 'S'
+        else if (unit.type === 'Large' || unit.code.includes('-L-') || unit.code.includes('-L')) sizeCode = 'L'
+        else if (unit.type === 'Extra Large' || unit.code.includes('-XL-') || unit.code.includes('-XL')) sizeCode = 'XL'
+        else if (unit.type === 'Medium' || unit.code.includes('-M-') || unit.code.includes('-M')) sizeCode = 'M'
+        else {
+          const match = unit.code.match(/-([A-Za-z0-9]+)-\d+$/)
+          sizeCode = match ? match[1] : (unit.type ? unit.type.replace(/^Kho\s+/i, '') : 'M')
+        }
+      }
 
-      const spec = CUSTOMER_UNIT_SPECS[sizeCode]
+      const standardSpecKey = (['S', 'M', 'L', 'XL'].includes(sizeCode) ? sizeCode : 'XL') as keyof typeof CUSTOMER_UNIT_SPECS
+      const spec = CUSTOMER_UNIT_SPECS[standardSpecKey]
+      const rawSpec = UNIT_SPECS[standardSpecKey]
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
       const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
-      const [lengthM, widthM, heightM] = spec.dimensions
+      const [stdL, stdW, stdH] = spec.dimensions
+      const lengthM = unit.dimensions?.lengthM ?? stdL
+      const widthM = unit.dimensions?.widthM ?? stdW
+      const heightM = unit.dimensions?.heightM ?? stdH
+      const areaM2 = unit.areaM2 || (lengthM * widthM)
+      const volumeM3 = unit.volumeM3 || (lengthM * widthM * heightM)
+      const aisleWidthM = (unit as any).laneWidthM ?? spec.aisleWidthM
+      const doorWidthM = unit.doorDimensions?.widthM ?? spec.doorWidthM
+      const doorHeightM = unit.doorDimensions?.heightM ?? spec.doorHeightM
+      const maxLoadKg = unit.maxLoadKg || spec.maxLoadKg
+      const price = unit.price || spec.price
+
+      const maxCargoDimCm = unit.dimensions ? {
+        lengthCm: Math.min(Math.round(lengthM * 100 - 40), 400),
+        widthCm: Math.min(Math.round(doorWidthM * 100 - 20), 200),
+        heightCm: Math.min(Math.round(doorHeightM * 100 - 20), 220),
+      } : spec.maxCargoDimCm
+
+      const rackCount = Math.max(1, Math.round(lengthM / 2.5))
+      const smallBoxCapacity = Math.floor(volumeM3 * 8)
+      const largeBoxCapacity = Math.floor(volumeM3 * 2.5)
 
       return {
         ...unit,
         facilityName,
         sizeCode,
-        rackCount: spec.rackCount,
-        rackDimensions: `${UNIT_SPECS[sizeCode].frameDimensions.widthM}×${UNIT_SPECS[sizeCode].frameDimensions.depthM}×${UNIT_SPECS[sizeCode].frameDimensions.heightM} m`,
-        aisleWidthM: spec.aisleWidthM,
-        doorWidthM: spec.doorWidthM,
-        doorHeightM: spec.doorHeightM,
-        maxCargoDimCm: spec.maxCargoDimCm,
-        smallBoxCapacity: spec.smallBoxCapacity,
-        largeBoxCapacity: spec.largeBoxCapacity,
-        trolley: spec.trolley,
-        trolleyDetail: spec.trolleyDetail,
-        dimensions: unit.dimensions || { lengthM, widthM, heightM },
-        doorDimensions: unit.doorDimensions || { widthM: spec.doorWidthM, heightM: spec.doorHeightM },
-        volumeM3: unit.volumeM3 || spec.volumeM3,
-        maxLoadKg: unit.maxLoadKg || spec.maxLoadKg,
-        price: unit.price || spec.price,
-        deposit: unit.deposit || unit.price || spec.price,
+        areaM2,
+        rackCount,
+        rackDimensions: `${rawSpec.frameDimensions.widthM}×${rawSpec.frameDimensions.depthM}×${rawSpec.frameDimensions.heightM} m`,
+        aisleWidthM,
+        doorWidthM,
+        doorHeightM,
+        maxCargoDimCm,
+        smallBoxCapacity,
+        largeBoxCapacity,
+        trolley: lengthM >= 15 ? 'Xe nâng tay & Xe đẩy sàn thép 500kg' : spec.trolley,
+        trolleyDetail: lengthM >= 15 ? 'Trang bị xe nâng tay pallet (tải 2 tấn) và xe đẩy tải nặng 500kg hỗ trợ xuất nhập kho lớn.' : spec.trolleyDetail,
+        dimensions: { lengthM, widthM, heightM },
+        doorDimensions: { widthM: doorWidthM, heightM: doorHeightM },
+        volumeM3,
+        maxLoadKg,
+        price,
+        deposit: unit.deposit || price,
         allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
         prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
       }
@@ -711,7 +756,17 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
   })
-  const unitTypeMatches = (unitTypeName: string, requestedTypeName: string) => unitTypeName.toLowerCase().startsWith(requestedTypeName.split(' ')[0].toLowerCase())
+  const unitTypeMatches = (unitTypeName: string, requestedTypeName: string) => {
+    if (!unitTypeName || !requestedTypeName) return false
+    const u = unitTypeName.toLowerCase().trim()
+    const r = requestedTypeName.toLowerCase().trim()
+    if (u === r) return true
+    if (u.includes(r) || r.includes(u)) return true
+    const firstWordU = u.split(' ')[0]
+    const firstWordR = r.split(' ')[0]
+    if (firstWordU && firstWordR && firstWordU === firstWordR && !['kho', 'storage'].includes(firstWordU)) return true
+    return false
+  }
   const activeUnassignedCapacityHolds = holds.filter(hold => {
     if (hold.assignedUnitId || ['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)) return false
     if (hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING') return true
@@ -1441,10 +1496,13 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={sizeFilter} onChange={event => setSizeFilter(event.target.value)} className="w-full sm:w-56">
                     <option value="All">{'Tất cả kích thước'}</option>
-                    <option value="Small">{'Size S'}</option>
-                    <option value="Medium">{'Size M'}</option>
-                    <option value="Large">{'Size L'}</option>
-                    <option value="Extra Large">{'Size XL'}</option>
+                    <option value="S">{'Size S'}</option>
+                    <option value="M">{'Size M'}</option>
+                    <option value="L">{'Size L'}</option>
+                    <option value="XL">{'Size XL'}</option>
+                    {Array.from(new Set(CUSTOMER_CATALOG_UNITS.map(u => u.sizeCode?.toUpperCase()).filter(Boolean))).filter(code => !['S', 'M', 'L', 'XL'].includes(code)).map(code => (
+                      <option key={code} value={code}>{`Size ${code}`}</option>
+                    ))}
                   </Select>
                 </div>
               }
@@ -1469,7 +1527,13 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                    Boolean(physicalUnitByCode.get(unit.code)) &&
                    (physicalUnitByCode.get(unit.code)?.status === 'available' || heldIds.has(unit.id)) &&
                    !rentedIds.has(unit.id) &&
-                  (sizeFilter === 'All' || unit.type === sizeFilter) &&
+                  (sizeFilter === 'All' ||
+                   unit.sizeCode.toUpperCase() === sizeFilter.toUpperCase() ||
+                   unit.type === sizeFilter ||
+                   (sizeFilter === 'S' && (unit.type === 'Small' || unit.sizeCode === 'S')) ||
+                   (sizeFilter === 'M' && (unit.type === 'Medium' || unit.sizeCode === 'M')) ||
+                   (sizeFilter === 'L' && (unit.type === 'Large' || unit.sizeCode === 'L')) ||
+                   (sizeFilter === 'XL' && (unit.type === 'Extra Large' || unit.sizeCode === 'XL'))) &&
                   `${unit.code} ${unit.sizeCode} ${unit.type}`.toLowerCase().includes(unitSearch.trim().toLowerCase())
                 )
                 const pageCount = Math.max(1, Math.ceil(matchingCatalogUnits.length / CUSTOMER_UNITS_PER_PAGE))
@@ -1520,11 +1584,24 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                         const catalogUnit = unit as CustomerCatalogUnit
                         const isHeld = heldIds.has(unit.id)
                         const displayUnit: CustomerCatalogUnit = { ...catalogUnit, status: isHeld ? 'held' : 'available' }
-                        const unitType = unitTypes.find(item => item.id === (catalogUnit.sizeCode === 'XL' ? 'xlarge' : catalogUnit.sizeCode.toLowerCase())) ?? unitTypes[0]
-                        const typeAvailableCount = effectiveAvailableCount(facility.id, unitType.name)
+                        const unitType: UnitType = unitTypes.find(item => item.id === (catalogUnit.sizeCode === 'XL' ? 'xlarge' : catalogUnit.sizeCode.toLowerCase()) || item.name.toLowerCase().includes(catalogUnit.sizeCode.toLowerCase())) ?? {
+                          id: catalogUnit.sizeCode.toLowerCase(),
+                          name: unit.type || `Kho ${catalogUnit.sizeCode}`,
+                          lengthM: catalogUnit.dimensions.lengthM,
+                          widthM: catalogUnit.dimensions.widthM,
+                          heightM: catalogUnit.dimensions.heightM,
+                          areaM2: catalogUnit.areaM2,
+                          volumeM3: catalogUnit.volumeM3,
+                          pricePerM3: catalogUnit.price / (catalogUnit.volumeM3 || 1),
+                          monthlyPrice: catalogUnit.price,
+                          maxLoadKg: catalogUnit.maxLoadKg,
+                          descriptionVi: `Kho lưu trữ cỡ ${catalogUnit.sizeCode} (${catalogUnit.areaM2} m²)`,
+                          descriptionEn: `Storage unit size ${catalogUnit.sizeCode} (${catalogUnit.areaM2} m²)`
+                        }
+                        const typeAvailableCount = effectiveAvailableCount(facility.id, unit.type || unitType.name)
                         return <article key={unit.id} className="group flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-1 hover:border-amber-300 hover:shadow-xl">
                           <div className="relative h-44 overflow-hidden bg-stone-800">
-                            <img src={CUSTOMER_UNIT_IMAGE_BY_SIZE[catalogUnit.sizeCode]} alt={`Kho size ${catalogUnit.sizeCode} - ${unit.code}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                            <img src={getCustomerUnitImage(catalogUnit.sizeCode)} alt={`Kho size ${catalogUnit.sizeCode} - ${unit.code}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
                             <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/15 to-transparent" />
                             <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-white"><div><p className="text-xs font-bold tracking-wide text-amber-300">{unit.code}</p><h4 className="mt-1 text-xl font-bold">Kho size {catalogUnit.sizeCode}</h4></div><span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm ${isHeld ? 'border-amber-300/70 bg-amber-700/80 text-amber-50' : 'border-emerald-300/70 bg-emerald-700/80 text-emerald-50'}`}>● {isHeld ? 'Được giữ' : 'Còn trống'}</span></div>
                           </div>
@@ -2397,32 +2474,37 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               </div>
 
               {catalogUnit && <figure className="order-2 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-                <img src={CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE[catalogUnit.sizeCode]} alt={`Sơ đồ chi tiết kho size ${catalogUnit.sizeCode}`} className="max-h-[520px] w-full object-contain bg-white" />
+                <img src={getCustomerUnitDetailImage(catalogUnit.sizeCode)} alt={`Sơ đồ chi tiết kho size ${catalogUnit.sizeCode}`} className="max-h-[520px] w-full object-contain bg-white" />
                 <figcaption className="border-t border-stone-200 px-4 py-3 text-center text-xs font-medium text-stone-600">Sơ đồ bố trí kho size {catalogUnit.sizeCode} · Kích thước và lối đi theo hồ sơ kho</figcaption>
               </figure>}
 
               <div className="order-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-5">
                 <p className="mb-4 text-xs font-bold uppercase tracking-wider text-amber-800">1. Thông tin kho chi tiết</p>
-                {catalogUnit && <ul className="divide-y divide-amber-200/70 overflow-hidden rounded-xl border border-amber-200 bg-white text-sm">
-                  {[
-                    ['Mã kho', selectedUnit.code],
-                    ['Size', catalogUnit.sizeCode],
-                    ['Kích thước kho (D × R × C)', `${selectedUnit.dimensions.lengthM} × ${selectedUnit.dimensions.widthM} × ${selectedUnit.dimensions.heightM} m`],
-                    ['Chiều cao kho', `${selectedUnit.dimensions.heightM} m`],
-                    ['Thể tích kho', `${selectedUnit.volumeM3.toLocaleString('vi-VN')} m³`],
-                    ['Số khung kệ', `${catalogUnit.rackCount} khung`],
-                    ['Kích thước mỗi khung (R × S × C)', catalogUnit.rackDimensions],
-                    ['Khoảng cách giữa 2 khung', `${UNIT_SPECS[catalogUnit.sizeCode].frameDistanceM} m`],
-                    ['Chiều rộng lối đi bộ', `${catalogUnit.aisleWidthM} m`],
-                    ['Chiều rộng lối xe', `${UNIT_SPECS[catalogUnit.sizeCode].vehicleLaneWidthM} m`],
-                    ['Kích thước khung cửa (R × C)', `${catalogUnit.doorWidthM.toLocaleString('vi-VN')} × ${catalogUnit.doorHeightM.toLocaleString('vi-VN')} m`],
-                    ['Hàng hóa tối đa (D × R × C)', `${catalogUnit.maxCargoDimCm.lengthCm} × ${catalogUnit.maxCargoDimCm.widthCm} × ${catalogUnit.maxCargoDimCm.heightCm} cm`],
-                    ['Tải trọng tối đa', `${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg`],
-                    ['Xe đẩy hỗ trợ', catalogUnit.trolley],
-                    ['Chi tiết xe đẩy', catalogUnit.trolleyDetail],
-                    ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
-                  ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="font-medium text-stone-500">{label}</span><b className="text-stone-950">{value}</b></li>)}
-                </ul>}
+                {catalogUnit && (() => {
+                  const rawSpec = (catalogUnit?.sizeCode && UNIT_SPECS[catalogUnit.sizeCode as keyof typeof UNIT_SPECS]) || UNIT_SPECS.XL
+                  return (
+                    <ul className="divide-y divide-amber-200/70 overflow-hidden rounded-xl border border-amber-200 bg-white text-sm">
+                      {[
+                        ['Mã kho', selectedUnit.code],
+                        ['Size', catalogUnit.sizeCode],
+                        ['Kích thước kho (D × R × C)', `${selectedUnit.dimensions.lengthM} × ${selectedUnit.dimensions.widthM} × ${selectedUnit.dimensions.heightM} m`],
+                        ['Chiều cao kho', `${selectedUnit.dimensions.heightM} m`],
+                        ['Thể tích kho', `${selectedUnit.volumeM3.toLocaleString('vi-VN')} m³`],
+                        ['Số khung kệ', `${catalogUnit.rackCount} khung`],
+                        ['Kích thước mỗi khung (R × S × C)', catalogUnit.rackDimensions],
+                        ['Khoảng cách giữa 2 khung', `${rawSpec.frameDistanceM} m`],
+                        ['Chiều rộng lối đi bộ', `${catalogUnit.aisleWidthM} m`],
+                        ['Chiều rộng lối xe', `${(catalogUnit as any).laneWidthM ?? rawSpec.vehicleLaneWidthM} m`],
+                        ['Kích thước khung cửa (R × C)', `${catalogUnit.doorWidthM.toLocaleString('vi-VN')} × ${catalogUnit.doorHeightM.toLocaleString('vi-VN')} m`],
+                        ['Hàng hóa tối đa (D × R × C)', `${catalogUnit.maxCargoDimCm.lengthCm} × ${catalogUnit.maxCargoDimCm.widthCm} × ${catalogUnit.maxCargoDimCm.heightCm} cm`],
+                        ['Tải trọng tối đa', `${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg`],
+                        ['Xe đẩy hỗ trợ', catalogUnit.trolley],
+                        ['Chi tiết xe đẩy', catalogUnit.trolleyDetail],
+                        ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
+                      ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="font-medium text-stone-500">{label}</span><b className="text-stone-950">{value}</b></li>)}
+                    </ul>
+                  )
+                })()}
               </div>
 
               <div className="order-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">

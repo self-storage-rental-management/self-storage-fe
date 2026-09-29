@@ -63,11 +63,28 @@ export interface UnitType {
   descriptionEn: string
 }
 
+export interface FacilityCustomUnitSpec {
+  id?: string
+  sizeCode: string
+  name: string
+  lengthM: number
+  widthM: number
+  heightM: number
+  laneWidthM?: number
+  maxLoadKg: number
+  monthlyPrice: number
+  count: number
+  badgeClass?: string
+  floor?: number
+  zone?: string
+}
+
 export interface FacilityUnitDistribution {
-  S: number
-  M: number
-  L: number
-  XL: number
+  S?: number
+  M?: number
+  L?: number
+  XL?: number
+  [key: string]: number | undefined
 }
 
 export interface Facility {
@@ -92,10 +109,11 @@ export interface Facility {
   accessHours: string
   timezone: string
   unitDistribution?: FacilityUnitDistribution
-  unitPrices?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
-  unitLoadLimits?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
-  unitDimensions?: Partial<Record<'S' | 'M' | 'L' | 'XL', { lengthM: number; widthM: number }>>
-  unitLaneWidths?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
+  unitPrices?: Partial<Record<string, number>>
+  unitLoadLimits?: Partial<Record<string, number>>
+  unitDimensions?: Partial<Record<string, { lengthM: number; widthM: number; heightM?: number }>>
+  unitLaneWidths?: Partial<Record<string, number>>
+  unitCustomSpecs?: FacilityCustomUnitSpec[]
   totalDesignLoadTon?: number
 }
 
@@ -109,11 +127,14 @@ export interface ReservedPeriod {
 export interface StorageUnit {
   id: string
   code: string
+  customerCode?: string
+  size?: 'S' | 'M' | 'L' | 'XL' | string
+  sizeCode?: 'S' | 'M' | 'L' | 'XL' | string
   facilityId: string
   facilityName: string
   floor: number
   zone: string
-  type: 'Small' | 'Medium' | 'Large' | 'Extra Large'
+  type: 'Small' | 'Medium' | 'Large' | 'Extra Large' | string
   areaM2: number
   dimensions: {
     lengthM: number
@@ -141,7 +162,6 @@ export interface StorageUnit {
   conditionNotes?: string
   version: number
   // Optional legacy fields for backward-compatibility during refactoring
-  size?: number
   sqft?: number
 }
 
