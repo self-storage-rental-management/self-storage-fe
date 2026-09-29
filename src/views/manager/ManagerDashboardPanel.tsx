@@ -17,7 +17,7 @@ import { Icon } from "../../components/Layout"
 import { formatVnd } from "../../i18n/currency"
 import { useStorageHub } from "../../store/StorageHubContext"
 import type { User } from "../../types"
-import { isFacilityVisible } from "../../domain/managerRules"
+import { isManagerFacilityVisible, isManagerRentalOverdue, parseManagerActivityTimestamp } from "../../domain/managerRules"
 import {
   managerActivityLabel,
   managerEntityLabel,
@@ -89,7 +89,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     renewals,
     maintenanceTasks,
     staffTasks,
-    tickets,
     activities,
   } = useStorageHub()
 
@@ -98,34 +97,34 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
   const currentMonth = today.slice(0, 7)
 
   const facilityUnits = units.filter((unit) =>
-    isFacilityVisible(user, unit.facilityId, unit.facilityName),
+    isManagerFacilityVisible(user, unit.facilityId, unit.facilityName),
   )
-  const facilityIds = new Set(facilityUnits.map((unit) => unit.facilityId))
-  const facilityHolds = holds.filter((item) => facilityIds.has(item.facilityId))
+  const facilityHolds = holds.filter((item) =>
+    isManagerFacilityVisible(user, item.facilityId, item.facilityName),
+  )
   const facilityRentals = rentals.filter((item) =>
-    facilityIds.has(item.facilityId),
+    isManagerFacilityVisible(user, item.facilityId, item.facilityName),
   )
-  const facilityCheckins = checkins.filter((item) =>
-    facilityIds.has(item.facilityId),
-  )
+  const facilityCheckins = checkins.filter((item) => {
+    const unit = units.find((candidate) => candidate.id === item.unitId)
+    return isManagerFacilityVisible(user, item.facilityId || unit?.facilityId, unit?.facilityName)
+  })
   const facilityReturns = returns.filter((item) =>
-    facilityIds.has(item.facilityId),
+    isManagerFacilityVisible(user, item.facilityId, item.facilityName),
   )
   const facilityRenewals = renewals.filter((item) => {
     const rental = rentals.find((candidate) => candidate.id === item.rentalId)
-    return facilityIds.has(item.facilityId || rental?.facilityId || "")
+    return isManagerFacilityVisible(user, item.facilityId || rental?.facilityId, rental?.facilityName)
   })
-  const facilityMaintenance = maintenanceTasks.filter((task) =>
-    facilityIds.has(task.facilityId),
-  )
+  const facilityMaintenance = maintenanceTasks.filter((task) => {
+    const unit = units.find((candidate) => candidate.id === task.unitId)
+    return isManagerFacilityVisible(user, task.facilityId, unit?.facilityName)
+  })
   const facilityTasks = staffTasks.filter((task) =>
-    facilityIds.has(task.facilityId),
-  )
-  const facilityTickets = tickets.filter((ticket) =>
-    isFacilityVisible(user, ticket.facilityId, ticket.facility),
+    isManagerFacilityVisible(user, task.facilityId, task.facilityName),
   )
   const facilityActivities = activities.filter((activity) =>
-    facilityIds.has(activity.facilityId),
+    isManagerFacilityVisible(user, activity.facilityId),
   )
 
   const rentalIds = new Set(facilityRentals.map((item) => item.id))
@@ -141,7 +140,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     (item) => item.status === "active",
   )
   const overdueRentals = activeRentals.filter(
-    (item) => item.paymentStatus === "overdue",
+    (item) => isManagerRentalOverdue(item),
   )
   const occupied = facilityUnits.filter(
     (item) => item.status === "occupied",
@@ -181,13 +180,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     0,
   )
 
-  const pendingReviews = facilityHolds.filter(
-    (item) =>
-      item.status === "awaiting_review" && item.goodsReviewStatus === "PENDING",
-  )
-  const unassignedReservations = facilityHolds.filter(
-    (item) => item.status === "DEPOSIT_PAID" && !item.assignedUnitId,
-  )
   const disputedReturns = facilityReturns.filter(
     (item) => item.status === "disputed",
   )
@@ -202,10 +194,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     (item) => datePart(item.dueAt) && datePart(item.dueAt) < today,
   )
   const unassignedTasks = openTasks.filter((item) => !item.assignedStaffId)
-  const highPriorityTickets = facilityTickets.filter(
-    (item) => item.priority === "high" && item.status !== "resolved",
-  )
-
   const priorityItems = [
     {
       label: "Khiếu nại quyết toán trả kho",
@@ -226,24 +214,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
       variant: "error",
     },
     {
-      label: "Hồ sơ hàng hóa chờ duyệt",
-      count: pendingReviews.length,
-      detail: pendingReviews.length
-        ? "Cần kiểm tra khai báo hàng hóa"
-        : "Không có hồ sơ chờ duyệt",
-      page: "reservations",
-      variant: "warning",
-    },
-    {
-      label: "Đơn đã cọc chưa phân gian",
-      count: unassignedReservations.length,
-      detail: unassignedReservations.length
-        ? "Cần chọn gian kho phù hợp"
-        : "Không có đơn chờ phân gian",
-      page: "reservations",
-      variant: "warning",
-    },
-    {
       label: "Nhiệm vụ đã quá hạn",
       count: overdueTasks.length,
       detail: overdueTasks.length
@@ -251,15 +221,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         : "Không có nhiệm vụ quá hạn",
       page: "staff-tasks",
       variant: "error",
-    },
-    {
-      label: "Yêu cầu hỗ trợ khẩn cấp",
-      count: highPriorityTickets.length,
-      detail: highPriorityTickets.length
-        ? "Cần phản hồi khách hàng"
-        : "Không có yêu cầu khẩn cấp",
-      page: "support",
-      variant: "warning",
     },
     {
       label: "Yêu cầu gia hạn chờ duyệt",
@@ -396,8 +357,8 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
   const recentActivities = [...facilityActivities]
     .sort(
       (left, right) =>
-        new Date(right.timestamp).getTime() -
-        new Date(left.timestamp).getTime(),
+        parseManagerActivityTimestamp(right.timestamp) -
+        parseManagerActivityTimestamp(left.timestamp),
     )
     .slice(0, 6)
 

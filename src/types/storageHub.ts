@@ -63,6 +63,13 @@ export interface UnitType {
   descriptionEn: string
 }
 
+export interface FacilityUnitDistribution {
+  S: number
+  M: number
+  L: number
+  XL: number
+}
+
 export interface Facility {
   id: string
   code?: string
@@ -80,9 +87,11 @@ export interface Facility {
   revenue: number
   growth: number
   manager: string
+  phone?: string
   status: 'active' | 'maintenance'
   accessHours: string
   timezone: string
+  unitDistribution?: FacilityUnitDistribution
 }
 
 export interface ReservedPeriod {
@@ -546,14 +555,26 @@ export interface FacilityTask {
   referenceId?: string
   assignedStaffId?: string
   assignedStaffName?: string
+  assignedAt?: string
   dueAt: string
   priority: 'high' | 'medium' | 'low'
-  status: 'open' | 'in_progress' | 'completed'
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled'
   notes?: string
   createdAt: string
+  startedAt?: string
   completedAt?: string
   completedById?: string
   completedByName?: string
+  resultReport?: string
+  evidence?: string[]
+  reportedUnableAt?: string
+  unableReason?: string
+  cancelledAt?: string
+  cancelledById?: string
+  cancelledByName?: string
+  cancellationReason?: string
+  lastAssignedStaffId?: string
+  lastAssignedStaffName?: string
 }
 
 export interface ReturnCase {

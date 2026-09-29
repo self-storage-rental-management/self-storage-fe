@@ -224,27 +224,67 @@ export function EmptyState({ title, description, action }: {
 
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
-export function Modal({ open, onClose, title, children, size = 'md', closeLabel = 'Close dialog' }: {
-  open: boolean; onClose: () => void; title: string; children: ReactNode; size?: 'md' | 'lg' | 'xl'; closeLabel?: string
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  closeLabel = 'Close dialog',
+  customHeader,
+  className = '',
+  contentClassName = '',
+  hideHeader = false
+}: {
+  open: boolean
+  onClose: () => void
+  title?: string
+  children: ReactNode
+  size?: 'md' | 'lg' | 'xl'
+  closeLabel?: string
+  customHeader?: ReactNode
+  className?: string
+  contentClassName?: string
+  hideHeader?: boolean
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="modal-title" className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-stone-200 shadow-2xl w-full ${size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} mx-4 p-6 fade-in`}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 id="modal-title" className="text-lg font-bold text-stone-900">{title}</h2>
-          <button
-            aria-label="Close dialog"
-            className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
-            onClick={onClose}
-          >
-            <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        {children}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-stone-200 shadow-2xl w-full ${
+          size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'
+        } ${customHeader || hideHeader ? 'overflow-hidden' : 'p-6'} fade-in ${className}`}
+      >
+        {customHeader ? (
+          <>
+            {customHeader}
+            <div className={contentClassName || 'p-6'}>{children}</div>
+          </>
+        ) : hideHeader ? (
+          <div className={contentClassName || 'p-6'}>{children}</div>
+        ) : (
+          <>
+            {title && (
+              <div className="flex items-center justify-between mb-5">
+                <h2 id="modal-title" className="text-lg font-bold text-stone-900">{title}</h2>
+                <button
+                  aria-label={closeLabel}
+                  className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
+                  onClick={onClose}
+                >
+                  <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            <div className={contentClassName}>{children}</div>
+          </>
+        )}
       </div>
     </div>
   )

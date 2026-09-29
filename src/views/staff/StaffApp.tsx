@@ -3054,12 +3054,12 @@ export default function StaffApp({
       )}
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
-      {page === "support" && (
+      {page === 'support' && (
         <StaffSupportPanel
           user={user}
-          tickets={facilityTickets}
+          tickets={hub.tickets}
           respondSupportTicket={hub.respondSupportTicket}
-          canManageSupport={hub.can(user, "manage_support")}
+          canManageSupport={true}
           showToast={showToast}
         />
       )}
@@ -4387,7 +4387,29 @@ export default function StaffApp({
         open={respondModal}
         onClose={() => setRespondModal(false)}
         size="xl"
-        title="Phiếu hỗ trợ"
+        className="!p-0 overflow-hidden bg-[#f4f1ea] border border-[#e7e2d8]"
+        contentClassName="p-5 sm:p-6 bg-[#f4f1ea] space-y-4"
+        customHeader={
+          <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#e7e2d8] sticky top-0 z-20">
+            <h2
+              id="modal-title"
+              className="text-[15px] font-semibold text-[#191b20]"
+              style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+            >
+              Phiếu hỗ trợ
+            </h2>
+            <button
+              type="button"
+              aria-label="Đóng"
+              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
+              onClick={() => setRespondModal(false)}
+            >
+              <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        }
       >
         {activeStaffTicket && (
           <div className="space-y-4">
@@ -4396,19 +4418,19 @@ export default function StaffApp({
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className="inline-flex items-center px-2.5 py-0.5 rounded font-mono font-bold tracking-wide text-[11.5px]"
-                  style={{ background: "#efece3", color: "var(--ink)" }}
+                  style={{ background: '#efece3', color: 'var(--ink)' }}
                 >
                   {activeStaffTicket.id}
                 </span>
-                {activeStaffTicket.status === "resolved" ? (
+                {activeStaffTicket.status === 'resolved' ? (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#edf7f0] text-[#2f9e5c] border border-[#bfe7ce]">
                     Đã giải quyết
                   </span>
-                ) : activeStaffTicket.status === "in-progress" ? (
+                ) : activeStaffTicket.status === 'in-progress' ? (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#fef3eb] text-[#e0680f] border border-[#fcd9bd]">
                     Đang xử lý
                   </span>
-                ) : activeStaffTicket.status === "waiting-customer" ? (
+                ) : activeStaffTicket.status === 'waiting-customer' ? (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#efece3] text-[#767268] border border-[#deddd2]">
                     Chờ khách hàng
                   </span>
@@ -4421,7 +4443,7 @@ export default function StaffApp({
 
               <h3
                 className="mt-3 text-[19px] font-bold leading-snug text-[#191b20]"
-                style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
               >
                 {activeStaffTicket.subject}
               </h3>

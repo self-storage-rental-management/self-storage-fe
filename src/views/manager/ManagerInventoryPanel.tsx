@@ -3,9 +3,11 @@ import { Badge, Button, Card, Input, Modal, ProgressBar, SectionHeader, Select, 
 import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
-import type { ActivityRecord, CheckInRecord, MaintenanceTask, RentalRecord, ReturnCase, StorageReservation, StorageUnit } from '../../types/storageHub'
-import { isFacilityVisible } from '../../domain/managerRules'
+import type { ActivityRecord, CheckInRecord, MaintenanceTask, RentalRecord, ReturnCase, StorageReservation, StorageUnit, UnitType } from '../../types/storageHub'
+import { isManagerFacilityVisible, isManagerRentalOverdue, managerUnitHasOperationalLock, parseManagerActivityTimestamp } from '../../domain/managerRules'
 import { managerActivityLabel, managerStatusLabel, managerUnitTypeLabel } from './managerI18n'
+import ManagerUnitEditor from './ManagerUnitEditor'
+import ManagerActionNotice from './ManagerActionNotice'
 
 interface Props {
   user: User
@@ -16,7 +18,14 @@ interface Props {
   returns: ReturnCase[]
   activities: ActivityRecord[]
   maintenanceTasks: MaintenanceTask[]
+  unitTypes: UnitType[]
+  facilityId: string
+  facilityName: string
+  createUnit: (data: Partial<StorageUnit>, actor: User) => StorageUnit
+  updateUnit: (unitId: string, updates: Partial<StorageUnit>, actor: User) => void
+  deleteUnit: (unitId: string, actor: User) => { success: boolean; reason?: string }
   updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
+  onCreateMaintenanceWork: (draft: { referenceId: string; title: string; notes: string }) => void
   showToast: (message: string) => void
 }
 
@@ -81,7 +90,14 @@ export default function ManagerInventoryPanel({
   returns,
   activities,
   maintenanceTasks,
+  unitTypes,
+  facilityId,
+  facilityName,
+  createUnit,
+  updateUnit,
+  deleteUnit,
   updateUnitStatus,
+  onCreateMaintenanceWork,
   showToast
 }: Props) {
   const [query, setQuery] = useState('')
@@ -96,9 +112,10 @@ export default function ManagerInventoryPanel({
   const [statusUnitId, setStatusUnitId] = useState<string | null>(null)
   const [targetStatus, setTargetStatus] = useState<'available' | 'maintenance'>('maintenance')
   const [reason, setReason] = useState('')
+  const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; unitId?: string } | null>(null)
 
   const facilityUnits = useMemo(
-    () => units.filter(unit => isFacilityVisible(user, unit.facilityId, unit.facilityName)),
+    () => units.filter(unit => isManagerFacilityVisible(user, unit.facilityId, unit.facilityName)),
     [units, user]
   )
   const facilityIds = useMemo(() => new Set(facilityUnits.map(unit => unit.facilityId)), [facilityUnits])
@@ -199,6 +216,20 @@ export default function ManagerInventoryPanel({
 
   const selectedUnit = facilityUnits.find(unit => unit.id === selectedUnitId) || null
   const statusUnit = facilityUnits.find(unit => unit.id === statusUnitId) || null
+  const editorUnit = editor?.mode === 'edit' ? facilityUnits.find(unit => unit.id === editor.unitId) || null : null
+  const editorUnitHasHistory = editorUnit ? (
+    facilityReservations.some(item => matchesUnit(item.assignedUnitId, editorUnit) || matchesUnit(item.unitId, editorUnit)) ||
+    facilityRentals.some(item => matchesUnit(item.unitId, editorUnit)) ||
+    checkins.some(item => matchesUnit(item.unitId, editorUnit)) ||
+    returns.some(item => matchesUnit(item.unitId, editorUnit)) ||
+    facilityMaintenance.some(item => matchesUnit(item.unitId, editorUnit))
+  ) : false
+  const canDeleteEditorUnit = Boolean(editorUnit && editorUnit.status === 'available' && !editorUnitHasHistory && !managerUnitHasOperationalLock(editorUnit.id, facilityReservations, facilityRentals))
+  const deleteBlockedReason = !editorUnit ? '' : editorUnit.status !== 'available'
+    ? 'Gian kho phải ở trạng thái còn trống trước khi xóa.'
+    : editorUnitHasHistory
+      ? 'Gian kho đã phát sinh dữ liệu nghiệp vụ nên cần được giữ lại để bảo toàn lịch sử.'
+      : 'Gian kho đang có ràng buộc đặt chỗ hoặc hợp đồng.'
 
   const openStatusModal = (unit: StorageUnit, status: 'available' | 'maintenance') => {
     setSelectedUnitId(null)
@@ -233,19 +264,32 @@ export default function ManagerInventoryPanel({
     .filter(task => task.status !== 'completed')
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 
+  const availabilityTimeline = visibleUnits.map(unit => {
+    const periods = [
+      ...facilityRentals
+        .filter(rental => matchesUnit(rental.unitId, unit) && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))
+        .map(rental => ({ id: rental.id, label: 'Hợp đồng thuê', customer: rental.customerName, startDate: rental.startDate, endDate: rental.endDate, variant: 'info' })),
+      ...facilityReservations
+        .filter(reservation => matchesUnit(reservation.assignedUnitId, unit) && activeReservationStatuses.includes(reservation.status))
+        .map(reservation => ({ id: reservation.id, label: 'Đặt chỗ', customer: reservation.customerName, startDate: reservation.startDate, endDate: reservation.endDate, variant: 'warning' }))
+    ].sort((left, right) => left.startDate.localeCompare(right.startDate))
+    return { unit, periods }
+  })
+
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
         eyebrow="Tồn kho vật lý"
         title="Tồn kho gian kho"
         subtitle="Theo dõi công suất, thông số, tình trạng khai thác và bảo trì bằng dữ liệu hiện có."
+        action={<Button onClick={() => setEditor({ mode: 'create' })}>Thêm gian kho</Button>}
       />
 
       <div className="grid grid-cols-2 gap-3">
         <StatCard title="Tổng gian kho" value={facilityUnits.length} icon={Icon.box} />
         <StatCard title="Còn trống" value={availableCount} icon={Icon.check} />
         <StatCard title="Đang sử dụng" value={occupiedCount} icon={Icon.key} />
-        <StatCard title="Đã giữ hoặc phân gian" value={reservedCount} icon={Icon.calendar} />
+        <StatCard title="Đã giữ hoặc có lịch" value={reservedCount} icon={Icon.calendar} />
         <StatCard title="Đang bảo trì" value={maintenanceCount} icon={Icon.tasks} />
         <StatCard title="Tỷ lệ lấp đầy" value={`${occupancy}%`} icon={Icon.chart} />
       </div>
@@ -277,7 +321,7 @@ export default function ManagerInventoryPanel({
             <option value="available">Còn trống</option>
             <option value="reserved">Đã giữ chỗ</option>
             <option value="held">Đang giữ tạm thời</option>
-            <option value="assigned">Đã phân gian</option>
+            <option value="assigned">Được hệ thống cấp</option>
             <option value="occupied">Đang sử dụng</option>
             <option value="maintenance">Bảo trì</option>
           </Select>
@@ -366,6 +410,14 @@ export default function ManagerInventoryPanel({
         </Table>
       </Card>
 
+      <Card>
+        <div className="border-b border-stone-200 p-4"><h2 className="font-bold text-stone-900">Lịch khả dụng tương lai</h2><p className="mt-1 text-xs text-stone-500">Đối chiếu các kỳ thuê và đặt chỗ đã có; đây là màn hình theo dõi, không thực hiện phân gian kho.</p></div>
+        <Table>
+          <Thead><tr><Th>Gian kho</Th><Th>Hiện tại</Th><Th>Các khoảng đã giữ</Th><Th>Khả dụng tiếp theo</Th></tr></Thead>
+          <Tbody>{availabilityTimeline.map(({ unit, periods }) => <Tr key={`availability-${unit.id}`}><Td><p className="font-mono font-bold">{unit.code}</p><p className="text-xs text-stone-500">{managerUnitTypeLabel(unit.type, 'vi')} · Tầng {unit.floor}</p></Td><Td><Badge variant={statusVariants[unit.status] || 'muted'}>{managerStatusLabel(unit.status, 'vi')}</Badge></Td><Td>{periods.length ? <div className="space-y-2">{periods.map(period => <div key={`${unit.id}-${period.id}`} className="rounded-lg border border-stone-200 p-2 text-xs"><div className="flex items-center justify-between gap-2"><b>{period.label} · {period.id}</b><Badge variant={period.variant}>{formatDate(period.startDate)} – {formatDate(period.endDate)}</Badge></div><p className="mt-1 text-stone-500">{period.customer}</p></div>)}</div> : <span className="text-sm text-stone-500">Không có kỳ giữ chỗ</span>}</Td><Td><b>{unit.status === 'available' && !periods.length ? 'Khả dụng ngay' : formatDate(unit.nextAvailableDate || periods.at(-1)?.endDate)}</b>{unit.status === 'maintenance' && <p className="mt-1 text-xs text-amber-700">Chờ nghiệm thu bảo trì</p>}</Td></Tr>)}</Tbody>
+        </Table>
+      </Card>
+
       <section>
         <div className="mb-3">
           <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Theo dõi xử lý</p>
@@ -379,7 +431,7 @@ export default function ManagerInventoryPanel({
                 <div className="flex items-start justify-between gap-3"><div><p className="font-mono font-bold text-stone-900">{unit?.code || task.unitId}</p><p className="mt-1 text-xs text-stone-500">Tạo lúc {formatDateTime(task.createdAt)}</p></div><Badge variant={task.status === 'in_progress' ? 'info' : 'warning'}>{managerStatusLabel(task.status, 'vi')}</Badge></div>
                 <p className="mt-3 text-sm text-stone-700">{normalizeOperationalText(task.reason)}</p>
                 <div className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-500"><p>Người phụ trách: <b className="text-stone-700">{task.assignedStaffName || 'Chưa phân công'}</b></p><p className="mt-1">Mức hư hỏng: <b className="text-stone-700">{damageLabel(task.damageClassification)}</b></p></div>
-                {unit && <Button className="mt-3 w-full" size="sm" variant="outline" onClick={() => setSelectedUnitId(unit.id)}>Xem gian kho</Button>}
+                {unit && <div className="mt-3 grid grid-cols-2 gap-2"><Button size="sm" variant="outline" onClick={() => setSelectedUnitId(unit.id)}>Xem gian kho</Button><Button size="sm" onClick={() => onCreateMaintenanceWork({ referenceId: task.id, title: `Bảo trì hoặc vệ sinh gian ${unit.code}`, notes: normalizeOperationalText(task.reason) })}>Phân công staff</Button></div>}
               </Card>
             })}
           </div>
@@ -403,6 +455,28 @@ export default function ManagerInventoryPanel({
         </Card>
       </div>
 
+      <Card>
+        <div className="border-b border-stone-200 p-4">
+          <h2 className="font-bold text-stone-900">Danh mục loại kho dùng chung</h2>
+          <p className="mt-1 text-xs text-stone-500">Thông số chuẩn được đọc trực tiếp từ dữ liệu hệ thống và được áp dụng khi thêm gian kho. Manager không thay đổi bảng giá hoặc định nghĩa loại kho trung tâm tại màn hình này.</p>
+        </div>
+        <Table>
+          <Thead><tr><Th>Loại kho</Th><Th>Kích thước chuẩn</Th><Th>Diện tích / thể tích</Th><Th>Tải trọng</Th><Th>Giá chuẩn</Th><Th>Tại cơ sở</Th></tr></Thead>
+          <Tbody>{unitTypes.map(definition => {
+            const type: StorageUnit['type'] = definition.id === 'xlarge' ? 'Extra Large' : definition.id === 'large' ? 'Large' : definition.id === 'medium' ? 'Medium' : 'Small'
+            const actualUnits = facilityUnits.filter(unit => unit.type === type)
+            return <Tr key={definition.id}>
+              <Td><p className="font-semibold text-stone-900">{definition.name}</p><p className="mt-1 max-w-xs text-xs text-stone-500">{definition.descriptionVi}</p></Td>
+              <Td>{definition.lengthM} × {definition.widthM} × {definition.heightM} m</Td>
+              <Td>{definition.areaM2.toLocaleString('vi-VN')} m² · {definition.volumeM3.toLocaleString('vi-VN')} m³</Td>
+              <Td>{definition.maxLoadKg.toLocaleString('vi-VN')} kg</Td>
+              <Td><b>{formatVnd(definition.monthlyPrice)}/tháng</b><p className="mt-1 text-xs text-stone-500">{formatVnd(definition.pricePerM3)}/m³</p></Td>
+              <Td><b>{actualUnits.length} gian</b><p className="mt-1 text-xs text-stone-500">{actualUnits.filter(unit => unit.status === 'available').length} trống · {actualUnits.filter(unit => unit.status === 'occupied').length} đang dùng · {actualUnits.filter(unit => unit.status === 'maintenance').length} bảo trì</p></Td>
+            </Tr>
+          })}</Tbody>
+        </Table>
+      </Card>
+
       <Modal open={Boolean(selectedUnit)} onClose={() => setSelectedUnitId(null)} title="Chi tiết gian kho" size="xl">
         {selectedUnit && (() => {
           const rental = activeRentalFor(selectedUnit)
@@ -412,7 +486,8 @@ export default function ManagerInventoryPanel({
           const unitReturns = returns.filter(item => matchesUnit(item.unitId, selectedUnit)).sort((left, right) => right.requestedAt.localeCompare(left.requestedAt))
           const latestReturn = unitReturns[0]
           const unitMaintenance = facilityMaintenance.filter(item => matchesUnit(item.unitId, selectedUnit)).sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-          const unitActivities = facilityActivities.filter(item => item.entityType === 'unit' && matchesUnit(item.entityId, selectedUnit)).sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()).slice(0, 5)
+          const unitActivities = facilityActivities.filter(item => item.entityType === 'unit' && matchesUnit(item.entityId, selectedUnit)).sort((left, right) => parseManagerActivityTimestamp(right.timestamp) - parseManagerActivityTimestamp(left.timestamp)).slice(0, 5)
+          const hasOperationalLock = managerUnitHasOperationalLock(selectedUnit.id, facilityReservations, facilityRentals)
           return <div className="space-y-5 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 p-4"><div><p className="font-mono text-lg font-bold text-stone-900">{selectedUnit.code}</p><p className="mt-1 text-stone-500">{selectedUnit.facilityName} · Tầng {selectedUnit.floor} · {selectedUnit.zone}</p></div><Badge variant={statusVariants[selectedUnit.status] || 'muted'}>{managerStatusLabel(selectedUnit.status, 'vi')}</Badge></div>
 
@@ -432,7 +507,7 @@ export default function ManagerInventoryPanel({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Chi phí và khả dụng</h3><div className="space-y-2"><p className="flex justify-between gap-3"><span className="text-stone-500">Giá thuê mỗi tháng</span><b>{formatVnd(selectedUnit.price)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Tiền đảm bảo</span><b>{formatVnd(selectedUnit.deposit)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Ngày khả dụng tiếp theo</span><b>{selectedUnit.status === 'available' ? 'Khả dụng ngay' : formatDate(selectedUnit.nextAvailableDate)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Giữ tạm thời đến</span><b>{selectedUnit.heldUntil ? formatDateTime(selectedUnit.heldUntil) : 'Không có'}</b></p></div></Card>
-              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Tình trạng khai thác</h3>{rental ? <div className="space-y-2"><p>Khách hàng: <b>{rental.customerName}</b></p><p>Mã hợp đồng: <b className="font-mono">{rental.id}</b></p><p>Thời hạn: <b>{formatDate(rental.startDate)} – {formatDate(rental.endDate)}</b></p><p>Kỳ thanh toán tiếp theo: <b>{formatDate(rental.nextDue)}</b></p><p>Thanh toán: <Badge variant={rental.paymentStatus === 'overdue' ? 'error' : rental.paymentStatus === 'paid' ? 'success' : 'warning'}>{managerStatusLabel(rental.paymentStatus, 'vi')}</Badge></p></div> : reservation ? <div className="space-y-2"><p>Khách hàng: <b>{reservation.customerName}</b></p><p>Mã đơn đặt chỗ: <b className="font-mono">{reservation.id}</b></p><p>Thời gian dự kiến: <b>{formatDate(reservation.startDate)} – {formatDate(reservation.endDate)}</b></p><p>Trạng thái: <Badge variant="warning">{managerStatusLabel(reservation.status, 'vi')}</Badge></p></div> : <p className="text-stone-500">Gian kho chưa có hợp đồng hoặc đơn đặt chỗ hiệu lực.</p>}</Card>
+              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Tình trạng khai thác</h3>{rental ? <div className="space-y-2"><p>Khách hàng: <b>{rental.customerName}</b></p><p>Mã hợp đồng: <b className="font-mono">{rental.id}</b></p><p>Thời hạn: <b>{formatDate(rental.startDate)} – {formatDate(rental.endDate)}</b></p><p>Kỳ thanh toán tiếp theo: <b>{formatDate(rental.nextDue)}</b></p><p>Thanh toán: <Badge variant={isManagerRentalOverdue(rental) ? 'error' : rental.paymentStatus === 'paid' ? 'success' : 'warning'}>{managerStatusLabel(isManagerRentalOverdue(rental) ? 'overdue' : rental.paymentStatus, 'vi')}</Badge></p></div> : reservation ? <div className="space-y-2"><p>Khách hàng: <b>{reservation.customerName}</b></p><p>Mã đơn đặt chỗ: <b className="font-mono">{reservation.id}</b></p><p>Thời gian dự kiến: <b>{formatDate(reservation.startDate)} – {formatDate(reservation.endDate)}</b></p><p>Trạng thái: <Badge variant="warning">{managerStatusLabel(reservation.status, 'vi')}</Badge></p></div> : <p className="text-stone-500">Gian kho chưa có hợp đồng hoặc đơn đặt chỗ hiệu lực.</p>}</Card>
             </div>
 
             {selectedUnit.reservedPeriods?.length ? <div><h3 className="mb-3 font-bold text-stone-900">Các khoảng thời gian đã giữ</h3><div className="grid gap-2 sm:grid-cols-2">{selectedUnit.reservedPeriods.map(period => <div key={`${period.reservationId}-${period.startDate}`} className="rounded-lg border border-stone-200 p-3"><p className="font-semibold">{period.customerName}</p><p className="mt-1 font-mono text-xs text-stone-500">{period.reservationId}</p><p className="mt-1 text-xs">{formatDate(period.startDate)} – {formatDate(period.endDate)}</p></div>)}</div></div> : null}
@@ -453,7 +528,9 @@ export default function ManagerInventoryPanel({
 
             {selectedUnit.conditionNotes && <div className="rounded-lg bg-amber-50 p-4"><p className="font-semibold text-amber-900">Ghi chú tình trạng</p><p className="mt-1 text-amber-800">{normalizeOperationalText(selectedUnit.conditionNotes)}</p></div>}
 
-            <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => setSelectedUnitId(null)}>Đóng</Button>{selectedUnit.status === 'available' && <Button variant="outline" onClick={() => openStatusModal(selectedUnit, 'maintenance')}>Đưa vào bảo trì</Button>}{selectedUnit.status === 'maintenance' && <Button onClick={() => openStatusModal(selectedUnit, 'available')}>Nghiệm thu và mở lại</Button>}</div>
+            {hasOperationalLock && <ManagerActionNotice tone="warning">Không thể sửa thông tin hoặc đổi trạng thái vì gian kho còn đặt chỗ, hợp đồng thuê hoặc hồ sơ trả kho chưa hoàn tất.</ManagerActionNotice>}
+            {!hasOperationalLock && !['available', 'maintenance'].includes(selectedUnit.status) && <ManagerActionNotice>Trạng thái hiện tại được điều khiển bởi luồng đặt chỗ hoặc bàn giao. Manager chỉ thao tác lại khi gian kho chuyển sang còn trống hoặc bảo trì.</ManagerActionNotice>}
+            <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => setSelectedUnitId(null)}>Đóng</Button>{!hasOperationalLock && ['available', 'maintenance'].includes(selectedUnit.status) && <Button variant="outline" onClick={() => { setSelectedUnitId(null); setEditor({ mode: 'edit', unitId: selectedUnit.id }) }}>Sửa thông tin</Button>}{selectedUnit.status === 'available' && <Button variant="outline" onClick={() => openStatusModal(selectedUnit, 'maintenance')}>Đưa vào bảo trì</Button>}{selectedUnit.status === 'maintenance' && !hasOperationalLock && <Button onClick={() => openStatusModal(selectedUnit, 'available')}>Nghiệm thu và mở lại</Button>}</div>
           </div>
         })()}
       </Modal>
@@ -461,6 +538,27 @@ export default function ManagerInventoryPanel({
       <Modal open={Boolean(statusUnit)} onClose={() => setStatusUnitId(null)} title={targetStatus === 'maintenance' ? 'Chuyển sang bảo trì' : 'Nghiệm thu và mở lại gian kho'}>
         {statusUnit && <div className="space-y-4"><div className="rounded-lg bg-stone-50 p-3 text-sm"><b className="font-mono">{statusUnit.code}</b> · {managerUnitTypeLabel(statusUnit.type, 'vi')} · {statusUnit.facilityName}</div><Input label="Lý do hoặc ghi chú nghiệm thu" value={reason} onChange={event => setReason(event.target.value)} /><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setStatusUnitId(null)}>Hủy</Button><Button disabled={!reason.trim()} onClick={saveStatus}>Xác nhận</Button></div></div>}
       </Modal>
+
+      <ManagerUnitEditor
+        open={Boolean(editor)}
+        mode={editor?.mode || 'create'}
+        unit={editorUnit}
+        unitTypes={unitTypes}
+        facilityUnits={facilityUnits}
+        policyUnits={units}
+        allUnitCodes={units.map(unit => unit.code)}
+        facilityId={facilityId}
+        facilityName={facilityName}
+        user={user}
+        canDelete={canDeleteEditorUnit}
+        deleteBlockedReason={deleteBlockedReason}
+        createUnit={createUnit}
+        updateUnit={updateUnit}
+        deleteUnit={deleteUnit}
+        onClose={() => setEditor(null)}
+        onSaved={unitId => { setEditor(null); setSelectedUnitId(unitId) }}
+        showToast={showToast}
+      />
     </div>
   )
 }
