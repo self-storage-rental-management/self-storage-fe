@@ -95,6 +95,7 @@ export interface Facility {
   unitPrices?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
   unitLoadLimits?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
   unitDimensions?: Partial<Record<'S' | 'M' | 'L' | 'XL', { lengthM: number; widthM: number }>>
+  unitLaneWidths?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
   totalDesignLoadTon?: number
 }
 

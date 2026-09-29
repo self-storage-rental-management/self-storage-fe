@@ -4054,6 +4054,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       unitPrices: data.unitPrices,
       unitLoadLimits: data.unitLoadLimits,
       unitDimensions: data.unitDimensions,
+      unitLaneWidths: data.unitLaneWidths,
       totalDesignLoadTon: data.totalDesignLoadTon
     }
 
@@ -4342,6 +4343,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           unitPrices: updates.unitPrices ? { ...f.unitPrices, ...updates.unitPrices } : f.unitPrices,
           unitLoadLimits: updates.unitLoadLimits ? { ...f.unitLoadLimits, ...updates.unitLoadLimits } : f.unitLoadLimits,
           unitDimensions: updates.unitDimensions ? { ...f.unitDimensions, ...updates.unitDimensions } : f.unitDimensions,
+          unitLaneWidths: updates.unitLaneWidths ? { ...f.unitLaneWidths, ...updates.unitLaneWidths } : f.unitLaneWidths,
           totalDesignLoadTon: updates.totalDesignLoadTon ?? f.totalDesignLoadTon
         }
       })

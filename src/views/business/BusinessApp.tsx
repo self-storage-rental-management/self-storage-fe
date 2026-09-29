@@ -1213,15 +1213,15 @@ export default function BusinessApp({
 
   const [formFacPhone, setFormFacPhone] = useState<string>("024 3822 9999")
 
-  const [formFacUnits, setFormFacUnits] = useState<number>(20)
+  const [formFacUnits, setFormFacUnits] = useState<number>(0)
 
-  const [formFacUnitS, setFormFacUnitS] = useState<number>(5)
+  const [formFacUnitS, setFormFacUnitS] = useState<number>(0)
 
-  const [formFacUnitM, setFormFacUnitM] = useState<number>(5)
+  const [formFacUnitM, setFormFacUnitM] = useState<number>(0)
 
-  const [formFacUnitL, setFormFacUnitL] = useState<number>(5)
+  const [formFacUnitL, setFormFacUnitL] = useState<number>(0)
 
-  const [formFacUnitXL, setFormFacUnitXL] = useState<number>(5)
+  const [formFacUnitXL, setFormFacUnitXL] = useState<number>(0)
 
   const [formFacPrice, setFormFacPrice] = useState<string>("5.500.000đ")
   const [formFacPriceS, setFormFacPriceS] = useState<string>("5.500.000đ")
@@ -1246,6 +1246,11 @@ export default function BusinessApp({
   const [formFacWidthM, setFormFacWidthM] = useState<number>(UNIT_SPECS.M.widthM)
   const [formFacWidthL, setFormFacWidthL] = useState<number>(UNIT_SPECS.L.widthM)
   const [formFacWidthXL, setFormFacWidthXL] = useState<number>(UNIT_SPECS.XL.widthM)
+
+  const [formFacLaneS, setFormFacLaneS] = useState<number>(UNIT_SPECS.S.vehicleLaneWidthM)
+  const [formFacLaneM, setFormFacLaneM] = useState<number>(UNIT_SPECS.M.vehicleLaneWidthM)
+  const [formFacLaneL, setFormFacLaneL] = useState<number>(UNIT_SPECS.L.vehicleLaneWidthM)
+  const [formFacLaneXL, setFormFacLaneXL] = useState<number>(UNIT_SPECS.XL.vehicleLaneWidthM)
 
   const [formFacClimate, setFormFacClimate] = useState<boolean>(false)
 
@@ -1421,15 +1426,15 @@ export default function BusinessApp({
 
     setFormFacPhone("024 3822 9999")
 
-    setFormFacUnitS(5)
+    setFormFacUnitS(0)
 
-    setFormFacUnitM(5)
+    setFormFacUnitM(0)
 
-    setFormFacUnitL(5)
+    setFormFacUnitL(0)
 
-    setFormFacUnitXL(5)
+    setFormFacUnitXL(0)
 
-    setFormFacUnits(20)
+    setFormFacUnits(0)
 
     setFormFacPriceS("5.500.000đ")
     setFormFacPriceM("9.500.000đ")
@@ -1451,6 +1456,11 @@ export default function BusinessApp({
     setFormFacWidthM(UNIT_SPECS.M.widthM)
     setFormFacWidthL(UNIT_SPECS.L.widthM)
     setFormFacWidthXL(UNIT_SPECS.XL.widthM)
+
+    setFormFacLaneS(UNIT_SPECS.S.vehicleLaneWidthM)
+    setFormFacLaneM(UNIT_SPECS.M.vehicleLaneWidthM)
+    setFormFacLaneL(UNIT_SPECS.L.vehicleLaneWidthM)
+    setFormFacLaneXL(UNIT_SPECS.XL.vehicleLaneWidthM)
 
     setFormFacImage(WAREHOUSE_PHOTO_PRESETS[0].url)
 
@@ -1587,6 +1597,13 @@ export default function BusinessApp({
       XL: { lengthM: formFacLengthXL, widthM: formFacWidthXL },
     }
 
+    const unitLaneWidths = {
+      S: formFacLaneS,
+      M: formFacLaneM,
+      L: formFacLaneL,
+      XL: formFacLaneXL,
+    }
+
     const created = createFacility(
       {
         code,
@@ -1622,6 +1639,8 @@ export default function BusinessApp({
         unitLoadLimits,
 
         unitDimensions,
+
+        unitLaneWidths,
 
         totalDesignLoadTon,
 
@@ -1846,6 +1865,16 @@ export default function BusinessApp({
     setFormFacWidthL(lWidth)
     setFormFacWidthXL(xlWidth)
 
+    const sLane = f.unitLaneWidths?.S ?? UNIT_SPECS.S.vehicleLaneWidthM
+    const mLane = f.unitLaneWidths?.M ?? UNIT_SPECS.M.vehicleLaneWidthM
+    const lLane = f.unitLaneWidths?.L ?? UNIT_SPECS.L.vehicleLaneWidthM
+    const xlLane = f.unitLaneWidths?.XL ?? UNIT_SPECS.XL.vehicleLaneWidthM
+
+    setFormFacLaneS(sLane)
+    setFormFacLaneM(mLane)
+    setFormFacLaneL(lLane)
+    setFormFacLaneXL(xlLane)
+
     setFormFacImage(f.image || WAREHOUSE_PHOTO_PRESETS[0].url)
 
     setFormFacClimate(Boolean(f.climate))
@@ -2054,6 +2083,13 @@ export default function BusinessApp({
       XL: { lengthM: formFacLengthXL, widthM: formFacWidthXL },
     }
 
+    const unitLaneWidths = {
+      S: formFacLaneS,
+      M: formFacLaneM,
+      L: formFacLaneL,
+      XL: formFacLaneXL,
+    }
+
     const finalPriceStr =
       formFacPrice.trim() ||
       `${Math.round(enteredStartPrice || pS).toLocaleString("vi-VN")}đ`
@@ -2092,6 +2128,8 @@ export default function BusinessApp({
         unitLoadLimits,
 
         unitDimensions,
+
+        unitLaneWidths,
 
         totalDesignLoadTon,
 
@@ -4797,6 +4835,14 @@ export default function BusinessApp({
                                     : spec.size === "L"
                                       ? formFacWidthL
                                       : formFacWidthXL
+                              const curLane =
+                                spec.size === "S"
+                                  ? formFacLaneS
+                                  : spec.size === "M"
+                                    ? formFacLaneM
+                                    : spec.size === "L"
+                                      ? formFacLaneL
+                                      : formFacLaneXL
 
                               const setLen = (val: number) => {
                                 if (spec.size === "S") setFormFacLengthS(val)
@@ -4810,6 +4856,13 @@ export default function BusinessApp({
                                 else if (spec.size === "M") setFormFacWidthM(val)
                                 else if (spec.size === "L") setFormFacWidthL(val)
                                 else setFormFacWidthXL(val)
+                              }
+
+                              const setLane = (val: number) => {
+                                if (spec.size === "S") setFormFacLaneS(val)
+                                else if (spec.size === "M") setFormFacLaneM(val)
+                                else if (spec.size === "L") setFormFacLaneL(val)
+                                else setFormFacLaneXL(val)
                               }
 
                               const calcVol = Math.round(curLen * curWid * spec.rawHeightM * 10) / 10
@@ -4877,10 +4930,32 @@ export default function BusinessApp({
                                     </span>
                                   </div>
 
-                                  {/* Chiều cao & Lối xe giữ nguyên */}
-                                  <div className="text-[11px] text-stone-400 font-mono">
-                                    {lang === "vi" ? "Cao" : "Height"} {spec.heightM} ·{" "}
-                                    {lang === "vi" ? "Lối xe" : "Lane"} {spec.vehicleLaneWidthM} m
+                                  {/* Chiều cao & Lối xe tự nhập */}
+                                  <div className="flex items-center gap-1.5 text-xs text-stone-600 pt-0.5">
+                                    <span className="text-[11px] text-stone-400 font-mono">
+                                      {lang === "vi" ? "Cao" : "Height"} {spec.heightM}
+                                    </span>
+                                    <span className="text-stone-300">·</span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[10px] uppercase font-bold text-stone-500">
+                                        {lang === "vi" ? "Lối xe" : "Lane"}
+                                      </span>
+                                      <div className="relative flex items-center w-[64px]">
+                                        <input
+                                          type="number"
+                                          step={0.1}
+                                          className="w-full h-7 pl-1.5 pr-4 text-right border border-stone-300 rounded-md font-mono font-bold text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 text-stone-900 shadow-2xs transition"
+                                          value={curLane}
+                                          onChange={(e) =>
+                                            setLane(parseFloat(e.target.value) || 0)
+                                          }
+                                          title={lang === "vi" ? "Chiều rộng lối xe (m)" : "Vehicle lane width (m)"}
+                                        />
+                                        <span className="absolute right-1 text-[10px] text-stone-400 font-mono pointer-events-none">
+                                          m
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               )
@@ -6023,7 +6098,7 @@ export default function BusinessApp({
                             </td>
                             <td className="p-2.5 hidden md:table-cell">
                               <div className="text-slate-700 font-mono">{spec.frameCount} khung · {spec.frameDimensions.widthM}×{spec.frameDimensions.depthM}×{spec.frameDimensions.heightM} m</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">lối xe {spec.vehicleLaneWidthM} m · cao {spec.heightM} m</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">lối xe {selectedRevenueFacility?.unitLaneWidths?.[size] ?? spec.vehicleLaneWidthM} m · cao {spec.heightM} m</div>
                             </td>
                             <td className="p-2.5 hidden lg:table-cell text-slate-600">
                               <div>{spec.cartEquipment}</div>
