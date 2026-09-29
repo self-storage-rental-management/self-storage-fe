@@ -1828,9 +1828,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       : undefined
 
     // Availability check: check units of this type in facility that don't have overlapping reservedPeriods or rentals
-    const candidateUnits = state.units.filter(
-      u => u.facilityId === params.facilityId && u.type.toLowerCase().includes(unitType.name.split(' ')[0].toLowerCase()) && u.status === 'available'
-    )
+    const fac = state.facilities.find(f => f.id === params.facilityId || f.code === params.facilityId)
+    const candidateUnits = requestedPhysicalUnit
+      ? [requestedPhysicalUnit].filter(u => u.status === 'available')
+      : state.units.filter(
+          u => (u.facilityId === params.facilityId || (fac && (u.facilityId === fac.id || u.facilityId === fac.code))) &&
+               (u.type.toLowerCase().includes(unitType.name.split(' ')[0].toLowerCase()) ||
+                ((u as any).sizeCode && (u as any).sizeCode.toLowerCase() === params.unitTypeId.toLowerCase())) &&
+               u.status === 'available'
+        )
 
     const dateAvailableUnits = candidateUnits.filter(u => {
       const overlapsReservedPeriod = (u.reservedPeriods || []).some(period => checkDateOverlap(startDate, endDate, period.startDate, period.endDate))
@@ -1879,6 +1885,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Use actual unit dimensions and parameters if available
+    const effectiveDimensions = availableUnit.dimensions || { lengthM: unitType.lengthM, widthM: unitType.widthM, heightM: unitType.heightM }
+    const effectiveMaxLoad = availableUnit.maxLoadKg || unitType.maxLoadKg
+    const effectiveVolume = availableUnit.volumeM3 || unitType.volumeM3
+    const effectiveMonthlyPrice = availableUnit.price || unitType.monthlyPrice
+
     // DIM Volume calculation
     const itemL = params.largestItemDimensionsCm?.lengthCm ?? params.goods.lengthCm
     const itemW = params.largestItemDimensionsCm?.widthCm ?? params.goods.widthCm
@@ -1886,11 +1898,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const totalGoodsVolM3 = Math.round(((itemL * itemW * itemH * params.goods.packageCount) / 1000000) * 1000) / 1000
 
     const sortedItem = [itemL / 100, itemW / 100, itemH / 100].sort((a, b) => b - a)
-    const sortedUnit = [unitType.lengthM, unitType.widthM, unitType.heightM].sort((a, b) => b - a)
+    const sortedUnit = [effectiveDimensions.lengthM, effectiveDimensions.widthM, effectiveDimensions.heightM].sort((a, b) => b - a)
 
     const packageDimensionsM = [itemL / 100, itemW / 100, itemH / 100]
-    const doorWidth = availableUnit.doorDimensions.widthM
-    const doorHeight = availableUnit.doorDimensions.heightM
+    const doorWidth = availableUnit.doorDimensions?.widthM || 1.1
+    const doorHeight = availableUnit.doorDimensions?.heightM || 2.2
     const doorPairs = [[0, 1], [0, 2], [1, 2]]
     const fitsThroughDoor = doorPairs.some(([a, b]) => {
       const first = packageDimensionsM[a]
@@ -1899,8 +1911,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     })
 
     const boxDoesNotFit = sortedItem[0] > sortedUnit[0] || sortedItem[1] > sortedUnit[1] || sortedItem[2] > sortedUnit[2]
-    const weightExceeds = params.goods.weightKg > unitType.maxLoadKg
-    const volumeExceeds = totalGoodsVolM3 > unitType.volumeM3
+    const weightExceeds = params.goods.weightKg > effectiveMaxLoad
+    const volumeExceeds = totalGoodsVolM3 > effectiveVolume
 
     if (!params.capacityValidatedByFrames && (!fitsThroughDoor || boxDoesNotFit || weightExceeds || volumeExceeds)) {
       const suggested = UNIT_TYPES.find(ut => {
@@ -1916,9 +1928,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
       let reason = ''
       if (!fitsThroughDoor) reason = `Kiện hàng lớn nhất (${itemL}×${itemW}×${itemH} cm) không lọt qua cửa kho ${Math.round(doorWidth * 100)}×${Math.round(doorHeight * 100)} cm, kể cả khi xoay kiện.`
-      else if (volumeExceeds) reason = `Tổng thể tích hàng (${totalGoodsVolM3} m³) vượt quá dung tích gian kho (${unitType.volumeM3} m³).`
+      else if (volumeExceeds) reason = `Tổng thể tích hàng (${totalGoodsVolM3} m³) vượt quá dung tích gian kho (${effectiveVolume} m³).`
       else if (boxDoesNotFit) reason = `Kiện hàng lớn nhất (${itemL}×${itemW}×${itemH} cm) vượt quá kích thước kho sau khi xoay các chiều.`
-      else if (weightExceeds) reason = `Tổng cân nặng (${params.goods.weightKg} kg) vượt quá tải trọng sàn (${unitType.maxLoadKg} kg).`
+      else if (weightExceeds) reason = `Tổng cân nặng (${params.goods.weightKg} kg) vượt quá tải trọng sàn (${effectiveMaxLoad} kg).`
 
       return {
         outcome: 'HARD_VIOLATION',
@@ -1934,11 +1946,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     // Pricing policy: the 20% booking deposit is credited toward rent, while a
     // separate one-month security deposit is collected at check-in and may be
     // refunded only after the move-out inspection and settlement.
-    const firstMonthRent = unitType.monthlyPrice
-    const grossRentalTermAmount = unitType.monthlyPrice * params.rentalMonths
+    const firstMonthRent = effectiveMonthlyPrice
+    const grossRentalTermAmount = effectiveMonthlyPrice * params.rentalMonths
     const discountAmount = Math.min(grossRentalTermAmount, Math.max(0, params.discountAmount || 0))
     const rentalTermAmount = grossRentalTermAmount - discountAmount
-    const securityDepositAmount = unitType.monthlyPrice
+    const securityDepositAmount = effectiveMonthlyPrice
     const reservationDepositAmount = Math.round(rentalTermAmount * 0.2 * 100) / 100
     const remainingAmount = rentalTermAmount - reservationDepositAmount + securityDepositAmount
     const totalInitialAmount = rentalTermAmount + securityDepositAmount
@@ -1956,7 +1968,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       quoteId,
       unitId: availableUnit.id,
       facilityId: params.facilityId,
-      baseMonthlyPrice: unitType.monthlyPrice,
+      baseMonthlyPrice: effectiveMonthlyPrice,
       depositAmount: securityDepositAmount,
       dimSurcharge: 0,
       totalFirstPayment: totalInitialAmount,
@@ -1979,8 +1991,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       facilityId: params.facilityId,
       facilityName: availableUnit.facilityName,
       unitId: availableUnit.id,
-      unitTypeId: unitType.id,
-      unitTypeName: unitType.name,
+      unitTypeId: (availableUnit as any).sizeCode?.toLowerCase() || unitType.id,
+      unitTypeName: availableUnit.type || unitType.name,
       assignedUnitId: availableUnit.id,
       rentalMonths: params.rentalMonths,
       startDate,
@@ -4055,16 +4067,61 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       unitLoadLimits: data.unitLoadLimits,
       unitDimensions: data.unitDimensions,
       unitLaneWidths: data.unitLaneWidths,
+      unitCustomSpecs: data.unitCustomSpecs,
       totalDesignLoadTon: data.totalDesignLoadTon
     }
 
-    const allDist: Array<{ size: 'S' | 'M' | 'L' | 'XL'; type: 'Small' | 'Medium' | 'Large' | 'Extra Large'; floor: number; zone: string; count: number }> = [
-      { size: 'S', type: 'Small', floor: 1, zone: 'Khu A', count: countS },
-      { size: 'M', type: 'Medium', floor: 2, zone: 'Khu B', count: countM },
-      { size: 'L', type: 'Large', floor: 3, zone: 'Khu C', count: countL },
-      { size: 'XL', type: 'Extra Large', floor: 4, zone: 'Khu D', count: countXL }
-    ]
-    const distribution = allDist.filter(item => item.count > 0)
+    let distribution: Array<{
+      size: string
+      type: string
+      floor: number
+      zone: string
+      count: number
+      lengthM?: number
+      widthM?: number
+      heightM?: number
+      maxLoadKg?: number
+      monthlyPrice?: number
+    }> = []
+
+    if (data.unitCustomSpecs && Array.isArray(data.unitCustomSpecs) && data.unitCustomSpecs.length > 0) {
+      distribution = data.unitCustomSpecs
+        .filter(s => s.count > 0)
+        .map((s, idx) => ({
+          size: s.sizeCode,
+          type: s.name,
+          floor: s.floor ?? ((idx % 4) + 1),
+          zone: s.zone ?? `Khu ${String.fromCharCode(65 + (idx % 4))}`,
+          count: s.count,
+          lengthM: s.lengthM,
+          widthM: s.widthM,
+          heightM: s.heightM,
+          maxLoadKg: s.maxLoadKg,
+          monthlyPrice: s.monthlyPrice
+        }))
+    } else {
+      const allDist: Array<{ size: string; type: string; floor: number; zone: string; count: number }> = [
+        { size: 'S', type: 'Small', floor: 1, zone: 'Khu A', count: countS },
+        { size: 'M', type: 'Medium', floor: 2, zone: 'Khu B', count: countM },
+        { size: 'L', type: 'Large', floor: 3, zone: 'Khu C', count: countL },
+        { size: 'XL', type: 'Extra Large', floor: 4, zone: 'Khu D', count: countXL }
+      ]
+      if (data.unitDistribution) {
+        Object.entries(data.unitDistribution).forEach(([k, v]) => {
+          if (!['S', 'M', 'L', 'XL'].includes(k) && typeof v === 'number' && v > 0) {
+            allDist.push({
+              size: k,
+              type: `Kho ${k}`,
+              floor: 1,
+              zone: 'Khu D',
+              count: v
+            })
+          }
+        })
+      }
+      distribution = allDist.filter(item => item.count > 0)
+    }
+
     const activeSizes = distribution.map(item => item.size)
     let parsedStartingPrice: number | undefined
     if (data.price) {
@@ -4074,21 +4131,21 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
     const newUnits: StorageUnit[] = []
     let assignedOccupied = 0
-    distribution.forEach(({ size, type, floor, zone, count }) => {
-      const spec = UNIT_SPECS[size]
-      let monthlyPriceVnd = data.unitPrices?.[size]
+    distribution.forEach(({ size, type, floor, zone, count, lengthM: customLen, widthM: customWid, heightM: customH, maxLoadKg: customLoad, monthlyPrice: customP }) => {
+      const spec = UNIT_SPECS[size as keyof typeof UNIT_SPECS]
+      let monthlyPriceVnd = customP ?? data.unitPrices?.[size]
       if (!monthlyPriceVnd && activeSizes.length === 1 && activeSizes[0] === size && parsedStartingPrice) {
         monthlyPriceVnd = parsedStartingPrice
       }
-      if (!monthlyPriceVnd) monthlyPriceVnd = spec.priceMonthly
+      if (!monthlyPriceVnd) monthlyPriceVnd = spec?.priceMonthly ?? 5500000
       const normPrice = monthlyPriceVnd > 10000 ? monthlyPriceVnd / USD_TO_VND_RATE : monthlyPriceVnd
 
       const defaultLoad = size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000
-      const configuredLoad = data.unitLoadLimits?.[size] ?? defaultLoad
+      const configuredLoad = customLoad ?? data.unitLoadLimits?.[size] ?? spec?.maxLoadKg ?? defaultLoad
 
-      const lengthM = data.unitDimensions?.[size]?.lengthM ?? spec.lengthM
-      const widthM = data.unitDimensions?.[size]?.widthM ?? spec.widthM
-      const heightM = spec.heightM
+      const lengthM = customLen ?? data.unitDimensions?.[size]?.lengthM ?? spec?.lengthM ?? 8
+      const widthM = customWid ?? data.unitDimensions?.[size]?.widthM ?? spec?.widthM ?? 10
+      const heightM = customH ?? (data.unitDimensions?.[size] as any)?.heightM ?? spec?.heightM ?? 5
       const areaM2 = Math.round(lengthM * widthM * 10) / 10
       const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
 
@@ -4160,9 +4217,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
       let nextUnits = prev.units
       let updatedUnitDist = updates.unitDistribution || targetFac.unitDistribution
-
-      const targetDist = updates.unitDistribution || targetFac.unitDistribution
-      const activeSizes = targetDist ? (['S', 'M', 'L', 'XL'] as const).filter(s => (targetDist[s] ?? 0) > 0) : []
+      const targetDist = updatedUnitDist
+      const activeSizes = targetDist ? Object.keys(targetDist).filter(s => (targetDist[s] ?? 0) > 0) : []
       let parsedStartingPrice: number | undefined
       if (updates.price) {
         const num = parseInt(updates.price.replace(/\D/g, ''), 10)
@@ -4172,16 +4228,33 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       // If unitDistribution was updated, adjust units accordingly!
       if (updates.unitDistribution) {
         const dist = updates.unitDistribution
-        const sizes: Array<{ size: 'S' | 'M' | 'L' | 'XL'; type: 'Small' | 'Medium' | 'Large' | 'Extra Large'; floor: number; zone: string }> = [
-          { size: 'S', type: 'Small', floor: 1, zone: 'Khu A' },
-          { size: 'M', type: 'Medium', floor: 2, zone: 'Khu B' },
-          { size: 'L', type: 'Large', floor: 3, zone: 'Khu C' },
-          { size: 'XL', type: 'Extra Large', floor: 4, zone: 'Khu D' }
-        ]
+        const customSpecsMap = new Map((updates.unitCustomSpecs || targetFac.unitCustomSpecs || []).map(cs => [cs.sizeCode, cs]))
+
+        const allKnownSizes = Array.from(new Set<string>([
+          ...(updates.unitCustomSpecs ? updates.unitCustomSpecs.map(s => s.sizeCode) : []),
+          ...Object.keys(dist),
+          'S', 'M', 'L', 'XL'
+        ]))
+
+        const sizes = allKnownSizes.map((size, idx) => {
+          const cs = customSpecsMap.get(size)
+          const stdType = size === 'S' ? 'Small' : size === 'M' ? 'Medium' : size === 'L' ? 'Large' : size === 'XL' ? 'Extra Large' : `Kho ${size}`
+          return {
+            size,
+            type: cs?.name || stdType,
+            floor: cs?.floor ?? ((idx % 4) + 1),
+            zone: cs?.zone ?? `Khu ${String.fromCharCode(65 + (idx % 4))}`,
+            lengthM: cs?.lengthM,
+            widthM: cs?.widthM,
+            heightM: cs?.heightM,
+            maxLoadKg: cs?.maxLoadKg,
+            monthlyPrice: cs?.monthlyPrice
+          }
+        })
 
         let workingUnits = [...prev.units]
 
-        sizes.forEach(({ size, type, floor, zone }) => {
+        sizes.forEach(({ size, type, floor, zone, lengthM: customLen, widthM: customWid, heightM: customH, maxLoadKg: customLoad, monthlyPrice: customP }) => {
           const targetCount = Math.max(0, dist[size] ?? 0)
           const currentUnitsOfSize = workingUnits.filter(u => 
             (u.facilityId === targetFacId || u.facilityId === targetFacCode) &&
@@ -4191,7 +4264,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           if (currentUnitsOfSize.length < targetCount) {
             // Add more units
             const needed = targetCount - currentUnitsOfSize.length
-            const spec = UNIT_SPECS[size]
+            const spec = UNIT_SPECS[size as keyof typeof UNIT_SPECS]
             let maxNum = 0
             currentUnitsOfSize.forEach(u => {
               const match = u.code.match(/-(\d+)$/)
@@ -4200,18 +4273,21 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 if (n > maxNum) maxNum = n
               }
             })
-            let monthlyPriceVnd = updates.unitPrices?.[size]
+            let monthlyPriceVnd = customP ?? updates.unitPrices?.[size] ?? targetFac.unitPrices?.[size]
             if (!monthlyPriceVnd && activeSizes.length === 1 && activeSizes[0] === size && parsedStartingPrice) {
               monthlyPriceVnd = parsedStartingPrice
             }
-            if (!monthlyPriceVnd) monthlyPriceVnd = spec.priceMonthly
+            if (!monthlyPriceVnd) monthlyPriceVnd = spec?.priceMonthly ?? 5500000
             const normUnitP = monthlyPriceVnd > 10000 ? monthlyPriceVnd / USD_TO_VND_RATE : monthlyPriceVnd
 
-            const lengthM = updates.unitDimensions?.[size]?.lengthM ?? targetFac.unitDimensions?.[size]?.lengthM ?? spec.lengthM
-            const widthM = updates.unitDimensions?.[size]?.widthM ?? targetFac.unitDimensions?.[size]?.widthM ?? spec.widthM
-            const heightM = spec.heightM
+            const lengthM = customLen ?? updates.unitDimensions?.[size]?.lengthM ?? targetFac.unitDimensions?.[size]?.lengthM ?? spec?.lengthM ?? 8
+            const widthM = customWid ?? updates.unitDimensions?.[size]?.widthM ?? targetFac.unitDimensions?.[size]?.widthM ?? spec?.widthM ?? 10
+            const heightM = customH ?? (updates.unitDimensions?.[size] as any)?.heightM ?? (targetFac.unitDimensions?.[size] as any)?.heightM ?? spec?.heightM ?? 5
             const areaM2 = Math.round(lengthM * widthM * 10) / 10
             const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
+
+            const defaultLoad = size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000
+            const maxLoad = customLoad ?? updates.unitLoadLimits?.[size] ?? targetFac.unitLoadLimits?.[size] ?? spec?.maxLoadKg ?? defaultLoad
 
             for (let i = 1; i <= needed; i++) {
               const unitNum = String(maxNum + i).padStart(3, '0')
@@ -4234,7 +4310,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 },
                 areaM2,
                 volumeM3,
-                maxLoadKg: updates.unitLoadLimits?.[size] ?? targetFac.unitLoadLimits?.[size] ?? (size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000),
+                maxLoadKg: maxLoad,
                 allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
                 prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
                 price: normUnitP,
@@ -4344,6 +4420,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           unitLoadLimits: updates.unitLoadLimits ? { ...f.unitLoadLimits, ...updates.unitLoadLimits } : f.unitLoadLimits,
           unitDimensions: updates.unitDimensions ? { ...f.unitDimensions, ...updates.unitDimensions } : f.unitDimensions,
           unitLaneWidths: updates.unitLaneWidths ? { ...f.unitLaneWidths, ...updates.unitLaneWidths } : f.unitLaneWidths,
+          unitCustomSpecs: updates.unitCustomSpecs ?? f.unitCustomSpecs,
           totalDesignLoadTon: updates.totalDesignLoadTon ?? f.totalDesignLoadTon
         }
       })

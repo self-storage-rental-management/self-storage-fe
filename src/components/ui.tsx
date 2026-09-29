@@ -240,7 +240,7 @@ export function Modal({
   onClose: () => void
   title?: string
   children: ReactNode
-  size?: 'md' | 'lg' | 'xl' | '2xl'
+  size?: 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'full'
   closeLabel?: string
   customHeader?: ReactNode
   className?: string
@@ -249,13 +249,17 @@ export function Modal({
 }) {
   if (!open) return null
   const sizeClass =
-    size === '2xl'
-      ? 'max-w-5xl'
-      : size === 'xl'
-        ? 'max-w-4xl'
-        : size === 'lg'
-          ? 'max-w-2xl'
-          : 'max-w-lg'
+    size === 'full'
+      ? 'max-w-[95vw]'
+      : size === '3xl'
+        ? 'max-w-6xl'
+        : size === '2xl'
+          ? 'max-w-5xl'
+          : size === 'xl'
+            ? 'max-w-4xl'
+            : size === 'lg'
+              ? 'max-w-2xl'
+              : 'max-w-lg'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

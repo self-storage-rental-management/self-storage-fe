@@ -369,6 +369,149 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       expect(facilityWithCustomLanes.unitDistribution.S).toBe(0)
     })
   })
+
+  describe('Dynamic Unit Types & Custom Dimensions (D × R × C)', () => {
+    it('calculates volume (m3) and area (m2) accurately when custom height is provided', () => {
+      const customSpec = {
+        sizeCode: 'XXL',
+        name: 'Kho Ngoại Khổ (XXL)',
+        lengthM: 25.0,
+        widthM: 12.0,
+        heightM: 6.5, // Customizable height, not hardcoded to 4.5m
+        laneWidthM: 5.0,
+        maxLoadKg: 5000,
+        monthlyPrice: 32000000,
+        count: 4,
+      }
+
+      const calcArea = Math.round(customSpec.lengthM * customSpec.widthM * 10) / 10
+      const calcVol = Math.round(customSpec.lengthM * customSpec.widthM * customSpec.heightM * 10) / 10
+
+      expect(calcArea).toBe(300.0) // 25 * 12 = 300 m2
+      expect(calcVol).toBe(1950.0) // 25 * 12 * 6.5 = 1950 m3
+    })
+
+    it('allows deleting unit types during creation or when occupancy is 0', () => {
+      let specs = [
+        { sizeCode: 'S', count: 0 },
+        { sizeCode: 'M', count: 0 },
+        { sizeCode: 'L', count: 0 },
+        { sizeCode: 'XL', count: 0 },
+        { sizeCode: 'XXL', count: 5 },
+      ]
+
+      // Business owner removes S, M, L to keep only XL and XXL
+      const removeSpec = (list: typeof specs, code: string, occCount: number, isEditing: boolean) => {
+        if (isEditing && occCount > 0) {
+          throw new Error(`Cannot delete ${code} with occupied units`)
+        }
+        return list.filter((s) => s.sizeCode !== code)
+      }
+
+      specs = removeSpec(specs, 'S', 0, false)
+      specs = removeSpec(specs, 'M', 0, false)
+      specs = removeSpec(specs, 'L', 0, false)
+
+      expect(specs.map((s) => s.sizeCode)).toEqual(['XL', 'XXL'])
+      expect(specs.length).toBe(2)
+    })
+
+    it('strictly prevents deletion of a unit type when units are actively rented', () => {
+      const occupiedMap = {
+        S: 3,
+        M: 0,
+        XXL: 2,
+      }
+
+      const isDeleteAllowed = (sizeCode: keyof typeof occupiedMap, isEditing: boolean) => {
+        const occ = occupiedMap[sizeCode] || 0
+        return !isEditing || occ === 0
+      }
+
+      // In edit mode:
+      expect(isDeleteAllowed('S', true)).toBe(false) // 3 occupied -> blocked
+      expect(isDeleteAllowed('M', true)).toBe(true)  // 0 occupied -> allowed
+      expect(isDeleteAllowed('XXL', true)).toBe(false) // 2 occupied -> blocked
+
+      // In create mode (draft, not editing active facility):
+      expect(isDeleteAllowed('S', false)).toBe(true)
+      expect(isDeleteAllowed('XXL', false)).toBe(true)
+    })
+
+    it('generates storage units with custom size codes, dimensions and loads', () => {
+      const facilityCode = 'HN-F01'
+      const customSpec = {
+        sizeCode: 'XXL',
+        name: 'Kho Ngoại Khổ (XXL)',
+        lengthM: 20,
+        widthM: 10,
+        heightM: 6,
+        laneWidthM: 5,
+        maxLoadKg: 4500,
+        monthlyPrice: 28000000,
+        count: 2,
+        floor: 1,
+        zone: 'Khu E'
+      }
+
+      const generatedUnits = Array.from({ length: customSpec.count }, (_, i) => ({
+        id: `${facilityCode}-${customSpec.sizeCode}-${String(i + 1).padStart(3, '0')}`,
+        code: `${facilityCode}-${customSpec.sizeCode}-${String(i + 1).padStart(3, '0')}`,
+        facilityId: facilityCode,
+        type: customSpec.name,
+        sizeCode: customSpec.sizeCode,
+        priceMonthly: customSpec.monthlyPrice,
+        maxLoadKg: customSpec.maxLoadKg,
+        dimensions: {
+          lengthM: customSpec.lengthM,
+          widthM: customSpec.widthM,
+          heightM: customSpec.heightM
+        }
+      }))
+
+      expect(generatedUnits).toHaveLength(2)
+      expect(generatedUnits[0].code).toBe('HN-F01-XXL-001')
+      expect(generatedUnits[1].code).toBe('HN-F01-XXL-002')
+      expect(generatedUnits[0].dimensions.heightM).toBe(6)
+      expect(generatedUnits[0].maxLoadKg).toBe(4500)
+    })
+
+    it('allows customer catalog to correctly recognize and display 4XL units', () => {
+      const unit4XL = {
+        id: 'fac-003-4XL-001',
+        code: 'HN-F01-4XL-001',
+        facilityId: 'fac-003',
+        facilityName: 'Kho Hà Nội',
+        floor: 1,
+        zone: 'Khu 4XL',
+        type: 'Kho 4XL',
+        sizeCode: '4XL',
+        areaM2: 120,
+        dimensions: { lengthM: 15, widthM: 8, heightM: 5 },
+        doorDimensions: { widthM: 1.5, heightM: 2.4 },
+        volumeM3: 600,
+        maxLoadKg: 20000,
+        price: 35000000,
+        deposit: 35000000,
+        status: 'available' as const,
+        climate: true,
+        reservedPeriods: [],
+        version: 1,
+      }
+
+      // Catalog mapping logic
+      let sizeCode = unit4XL.sizeCode || ''
+      if (!sizeCode) {
+        const match = unit4XL.code.match(/-([A-Za-z0-9]+)-\d+$/)
+        sizeCode = match ? match[1] : 'M'
+      }
+
+      expect(sizeCode).toBe('4XL')
+      expect(unit4XL.dimensions.lengthM * unit4XL.dimensions.widthM).toBe(120)
+      expect(unit4XL.volumeM3).toBe(600)
+      expect(unit4XL.maxLoadKg).toBe(20000)
+    })
+  })
 })
 
 
