@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
 import { useStorageHub } from '../store/StorageHubContext'
+import { ApiClientError } from '../services/apiClient'
+import { actorToUser, loginWithApi, logoutFromApi, registerWithApi, requestPasswordResetWithApi, resetPasswordWithApi, verifyEmailWithApi } from '../services/authApi'
 
 interface LoginProps {
   onLogin: (user: User) => void
@@ -10,6 +12,7 @@ interface LoginProps {
 }
 type AuthTab = 'login' | 'register'
 type ResetStep = 'identify' | 'verify' | 'new-password' | 'success'
+type RecoveryPurpose = 'password-reset' | 'email-verification'
 
 const DEMO_PASSWORD = 'demo123'
 const DEMO_CODE = '123456'
@@ -47,22 +50,53 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const [verificationCode, setVerificationCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+  const [recoveryPurpose, setRecoveryPurpose] = useState<RecoveryPurpose>('password-reset')
+  const [pendingRegistrationPassword, setPendingRegistrationPassword] = useState('')
+  const [debugCodeHint, setDebugCodeHint] = useState('')
   const [googleModal, setGoogleModal] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const verificationToken = url.searchParams.get('verifyEmail')
+    const resetToken = url.searchParams.get('resetPassword')
+    if (verificationToken || resetToken) {
+      setRecoveryAccount('')
+      setVerificationCode(verificationToken || resetToken || '')
+      setRecoveryPurpose(verificationToken ? 'email-verification' : 'password-reset')
+      setResetStep(verificationToken || resetToken ? 'verify' : null)
+    }
+  }, [])
 
 
-  function handleLogin(event: React.FormEvent) {
+  async function handleLogin(event: React.FormEvent) {
     event.preventDefault()
     const normalizedEmail = email.trim().toLowerCase()
-    const demoUser = users.find(user => user.status === 'active' && user.email === normalizedEmail)
-    if (!demoUser || password !== DEMO_PASSWORD) {
-      recordLoginAttempt({ email: normalizedEmail, success: false, reason: 'Email hoặc mật khẩu không đúng.' })
-      setError(
-        'Email hoặc mật khẩu không đúng.'
-      )
+    setError('')
+    setIsSubmitting(true)
+    try {
+      const actor = await loginWithApi(normalizedEmail, password)
+      onLogin(actorToUser(actor))
       return
+    } catch (apiError) {
+      const demoUser = users.find(user => user.status === 'active' && user.email === normalizedEmail)
+      const canUseDemoFallback = (apiError instanceof ApiClientError && apiError.code === 'NETWORK_ERROR')
+        || (apiError instanceof ApiClientError && apiError.status === 401 && demoUser && password === DEMO_PASSWORD)
+      if (!canUseDemoFallback) {
+        recordLoginAttempt({ email: normalizedEmail, success: false, reason: apiError instanceof Error ? apiError.message : 'Đăng nhập thất bại.' })
+        setError(apiError instanceof Error ? apiError.message : 'Email hoặc mật khẩu không đúng.')
+        return
+      }
+      if (!demoUser || password !== DEMO_PASSWORD) {
+        recordLoginAttempt({ email: normalizedEmail, success: false, reason: 'Email hoặc mật khẩu không đúng.' })
+        setError('Email hoặc mật khẩu không đúng.')
+        return
+      }
+      recordLoginAttempt({ email: normalizedEmail, userId: demoUser.id, success: true })
+      onLogin(demoUser as unknown as User)
+    } finally {
+      setIsSubmitting(false)
     }
-    recordLoginAttempt({ email: normalizedEmail, userId: demoUser.id, success: true })
-    onLogin(demoUser as unknown as User)
   }
 
   function handleGoogleCustomerLogin(googleUser: { name: string; email: string }) {
@@ -76,30 +110,51 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     }
   }
 
-  function handleRegister(event: React.FormEvent) {
+  async function handleRegister(event: React.FormEvent) {
     event.preventDefault()
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim() || !password || !confirmPassword) {
       setError('Vui lòng điền đầy đủ các thông tin bắt buộc.')
       return
     }
-    if (password.length < 8) {
-      setError('Mật khẩu phải có ít nhất 8 ký tự.')
+    if (password.length < 12) {
+      setError('Mật khẩu phải có ít nhất 12 ký tự.')
       return
     }
     if (password !== confirmPassword) {
       setError('Mật khẩu nhập lại không khớp.')
       return
     }
+    const fullName = `${firstName.trim()} ${lastName.trim()}`
+    const normalizedEmail = email.trim().toLowerCase()
+    setError('')
+    setIsSubmitting(true)
     try {
-      const customer = registerCustomer({
-        name: `${firstName.trim()} ${lastName.trim()}`,
-        email,
-        phone
-      })
-      recordLoginAttempt({ email: customer.email, userId: customer.id, success: true })
-      onLogin(customer)
+      const registration = await registerWithApi({ email: normalizedEmail, password, fullName, phone })
+      setRecoveryAccount(normalizedEmail)
+      setPendingRegistrationPassword(password)
+      setRecoveryPurpose('email-verification')
+      setDebugCodeHint(registration.debugCode || '')
+      setVerificationCode(registration.debugCode || '')
+      setResetStep('verify')
+      setTab('login')
+      setError(registration.debugCode
+        ? `Tài khoản đã tạo. Mã xác minh dev: ${registration.debugCode}`
+        : 'Tài khoản đã tạo. Hãy nhập mã xác minh được gửi đến email.')
     } catch (registrationError) {
-      setError(registrationError instanceof Error ? registrationError.message : ('Không thể tạo tài khoản Customer.'))
+      const canUseDemoFallback = registrationError instanceof ApiClientError && registrationError.code === 'NETWORK_ERROR'
+      if (!canUseDemoFallback) {
+        setError(registrationError instanceof Error ? registrationError.message : 'Không thể tạo tài khoản Customer.')
+        return
+      }
+      try {
+        const customer = registerCustomer({ name: fullName, email: normalizedEmail, phone })
+        recordLoginAttempt({ email: customer.email, userId: customer.id, success: true })
+        onLogin(customer)
+      } catch (fallbackError) {
+        setError(fallbackError instanceof Error ? fallbackError.message : 'Không thể tạo tài khoản Customer.')
+      }
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -110,6 +165,8 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   function startRecovery() {
     setRecoveryAccount(email)
+    setRecoveryPurpose('password-reset')
+    setDebugCodeHint('')
     setResetStep('identify')
     setError('')
   }
@@ -119,33 +176,79 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     setVerificationCode('')
     setNewPassword('')
     setNewPasswordConfirm('')
+    setPendingRegistrationPassword('')
+    setDebugCodeHint('')
+    setRecoveryPurpose('password-reset')
     setError('')
   }
 
-  function findAccount(event: React.FormEvent) {
+  async function findAccount(event: React.FormEvent) {
     event.preventDefault()
     if (!recoveryAccount.trim()) {
-      setError('Nhập số điện thoại hoặc địa chỉ email của bạn.')
+      setError('Nhập địa chỉ email của bạn.')
       return
     }
     setError('')
-    setResetStep('verify')
+    setIsSubmitting(true)
+    try {
+      const challenge = await requestPasswordResetWithApi(recoveryAccount.trim())
+      setRecoveryPurpose('password-reset')
+      setDebugCodeHint(challenge.debugCode || '')
+      setVerificationCode(challenge.debugCode || '')
+      setResetStep('verify')
+      setError(challenge.debugCode ? `Mã xác minh dev: ${challenge.debugCode}` : 'Hãy nhập mã được gửi đến email của bạn.')
+    } catch (recoveryError) {
+      if (!(recoveryError instanceof ApiClientError && recoveryError.code === 'NETWORK_ERROR')) {
+        setError(recoveryError instanceof Error ? recoveryError.message : 'Không thể tạo yêu cầu khôi phục.')
+        return
+      }
+      setRecoveryPurpose('password-reset')
+      setResetStep('verify')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  function verifyCode(event: React.FormEvent) {
+  async function verifyCode(event: React.FormEvent) {
     event.preventDefault()
-    if (verificationCode !== DEMO_CODE) {
-      setError(`Nhập mã xác thực demo: ${DEMO_CODE}.`)
+    if (!verificationCode.trim()) {
+      setError('Nhập mã xác thực hoặc token trong email.')
+      return
+    }
+    if (recoveryPurpose === 'email-verification') {
+      setIsSubmitting(true)
+      try {
+        const actor = await verifyEmailWithApi(recoveryAccount || undefined, verificationCode.trim())
+        if (pendingRegistrationPassword && recoveryAccount) {
+          const authenticated = await loginWithApi(recoveryAccount, pendingRegistrationPassword)
+          onLogin(actorToUser(authenticated))
+          return
+        }
+        setError('Email đã được xác minh. Bạn có thể đăng nhập bằng mật khẩu của mình.')
+        setResetStep(null)
+      } catch (verificationError) {
+        if (!(verificationError instanceof ApiClientError && verificationError.code === 'NETWORK_ERROR')) {
+          setError(verificationError instanceof Error ? verificationError.message : 'Mã xác minh không hợp lệ.')
+          return
+        }
+        if (verificationCode !== DEMO_CODE) {
+          setError(`Nhập mã xác thực demo: ${DEMO_CODE}.`)
+          return
+        }
+        setResetStep('success')
+      } finally {
+        setIsSubmitting(false)
+      }
       return
     }
     setError('')
     setResetStep('new-password')
   }
 
-  function saveNewPassword(event: React.FormEvent) {
+  async function saveNewPassword(event: React.FormEvent) {
     event.preventDefault()
-    if (newPassword.length < 8) {
-      setError('Mật khẩu mới phải có ít nhất 8 ký tự.')
+    if (newPassword.length < 12) {
+      setError('Mật khẩu mới phải có ít nhất 12 ký tự.')
       return
     }
     if (newPassword !== newPasswordConfirm) {
@@ -153,8 +256,25 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       return
     }
     setError('')
-    setPassword(newPassword)
-    setResetStep('success')
+    setIsSubmitting(true)
+    try {
+      await resetPasswordWithApi(recoveryAccount.includes('@') ? recoveryAccount.trim() : undefined, verificationCode.trim(), newPassword)
+      setPassword(newPassword)
+      setResetStep('success')
+    } catch (resetError) {
+      if (!(resetError instanceof ApiClientError && resetError.code === 'NETWORK_ERROR')) {
+        setError(resetError instanceof Error ? resetError.message : 'Không thể đặt lại mật khẩu.')
+        return
+      }
+      if (verificationCode !== DEMO_CODE) {
+        setError(`Nhập mã xác thực demo: ${DEMO_CODE}.`)
+        return
+      }
+      setPassword(newPassword)
+      setResetStep('success')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (resetStep) {
@@ -186,6 +306,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
           onFindAccount={findAccount}
           onVerify={verifyCode}
           onSavePassword={saveNewPassword}
+          purpose={recoveryPurpose}
+          debugCodeHint={debugCodeHint}
+          submitting={isSubmitting}
           onBack={() => {
             setError('')
             setResetStep(resetStep === 'verify' ? 'identify' : resetStep === 'new-password' ? 'verify' : 'identify')
@@ -335,7 +458,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                 </button>
               </div>
               <ErrorMessage message={error} />
-              <PrimaryButton>{'Đăng Nhập'}</PrimaryButton>
+              <PrimaryButton disabled={isSubmitting}>{isSubmitting ? 'Đang đăng nhập…' : 'Đăng Nhập'}</PrimaryButton>
             </form>
 
           </>
@@ -390,7 +513,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" />
             </Field>
             <ErrorMessage message={error} />
-            <PrimaryButton>{'Hoàn Tất Đăng Ký'}</PrimaryButton>
+            <PrimaryButton disabled={isSubmitting}>{isSubmitting ? 'Đang tạo tài khoản…' : 'Hoàn Tất Đăng Ký'}</PrimaryButton>
             <p className="mt-[18px] text-center text-[11.5px] leading-relaxed text-[#8b897f]">
               {'Khi đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của StorageHub.'}
             </p>
@@ -472,7 +595,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 }
 
 
-function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, setNewPassword, confirmPassword, setConfirmPassword, error, onFindAccount, onVerify, onSavePassword, onBack, onReturnToLogin }: {
+function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, setNewPassword, confirmPassword, setConfirmPassword, error, onFindAccount, onVerify, onSavePassword, onBack, onReturnToLogin, purpose, debugCodeHint, submitting }: {
   step: ResetStep
   account: string
   setAccount: (value: string) => void
@@ -488,6 +611,9 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
   onSavePassword: (event: React.FormEvent) => void
   onBack: () => void
   onReturnToLogin: () => void
+  purpose: RecoveryPurpose
+  debugCodeHint: string
+  submitting: boolean
 }) {
 
   if (step === 'success') {
@@ -495,10 +621,10 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
       <div className="text-center">
         <StatusIcon />
         <h1 className="mt-5 text-2xl font-bold text-stone-900">
-          {'Cập nhật mật khẩu thành công'}
+          {purpose === 'email-verification' ? 'Xác minh email thành công' : 'Cập nhật mật khẩu thành công'}
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-stone-500">
-          {'Mật khẩu của bạn đã được thay đổi. Bạn có thể đăng nhập ngay bằng mật khẩu mới.'}
+          {purpose === 'email-verification' ? 'Email đã được xác minh. Bạn có thể đăng nhập vào StorageHub.' : 'Mật khẩu của bạn đã được thay đổi. Bạn có thể đăng nhập ngay bằng mật khẩu mới.'}
         </p>
         <PrimaryButton className="mt-6" onClick={onReturnToLogin}>
           {'Quay lại Đăng nhập'}
@@ -514,7 +640,9 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
     },
     verify: {
       title: 'Nhập mã xác thực bảo mật',
-      text: `Chúng tôi đã gửi mã 6 chữ số đến ${account}. Nhập mã bên dưới để tiếp tục.`
+      text: purpose === 'email-verification'
+        ? `Chúng tôi đã gửi mã xác minh đến ${account || 'email của bạn'}. Nhập mã hoặc token liên kết bên dưới.`
+        : `Chúng tôi đã gửi mã 6 chữ số đến ${account}. Nhập mã bên dưới để tiếp tục.`
     },
     'new-password': {
       title: 'Tạo mật khẩu mới',
@@ -552,31 +680,27 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
             />
           </Field>
           <ErrorMessage message={error} />
-          <PrimaryButton>{'Tiếp Tục'}</PrimaryButton>
+          <PrimaryButton disabled={submitting}>{submitting ? 'Đang gửi…' : 'Tiếp Tục'}</PrimaryButton>
           <SecondaryButton onClick={onReturnToLogin}>{'Hủy Bỏ'}</SecondaryButton>
         </form>
       )}
 
       {step === 'verify' && (
         <form onSubmit={onVerify}>
-          <Field id="verification-code" label={'Mã xác thực 6 số'}>
+          <Field id="verification-code" label={purpose === 'email-verification' ? 'Mã hoặc liên kết xác thực' : 'Mã hoặc liên kết đặt lại mật khẩu'}>
             <input
               id="verification-code"
               value={code}
-              onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              inputMode="numeric"
+              onChange={event => setCode(event.target.value.trim().slice(0, 128))}
               autoComplete="one-time-code"
               autoFocus
-              placeholder="123456"
+              placeholder={purpose === 'email-verification' ? '123456 hoặc token từ email' : '123456 hoặc token từ email'}
               className="text-center font-mono text-lg tracking-[.35em]"
             />
           </Field>
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            {'Mã xác thực demo: '}
-            <strong className="font-mono">{DEMO_CODE}</strong>
-          </div>
+          {debugCodeHint && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{'Mã xác minh development: '}<strong className="font-mono">{debugCodeHint}</strong></div>}
           <ErrorMessage message={error} />
-          <PrimaryButton>{'Xác Nhận Mã'}</PrimaryButton>
+          <PrimaryButton disabled={submitting}>{submitting ? 'Đang xác minh…' : 'Xác Nhận Mã'}</PrimaryButton>
           <SecondaryButton onClick={onBack}>
             {'Dùng tài khoản khác'}
           </SecondaryButton>
@@ -608,10 +732,10 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
             />
           </Field>
           <p className="-mt-2 mb-4 text-xs text-stone-500">
-            {'Sử dụng ít nhất 8 ký tự.'}
+            {'Sử dụng ít nhất 12 ký tự.'}
           </p>
           <ErrorMessage message={error} />
-          <PrimaryButton>{'Lưu Mật Khẩu Mới'}</PrimaryButton>
+          <PrimaryButton disabled={submitting}>{submitting ? 'Đang lưu…' : 'Lưu Mật Khẩu Mới'}</PrimaryButton>
           <SecondaryButton onClick={onBack}>{'Quay Lại'}</SecondaryButton>
         </form>
       )}
@@ -632,8 +756,8 @@ function PasswordInput({ id, value, onChange, show, toggle, autoComplete, hideTo
   return <div className="relative"><input id={id} value={value} onChange={event => onChange(event.target.value)} type={show ? 'text' : 'password'} autoComplete={autoComplete} placeholder="••••••••" className={hideToggle ? '' : 'pr-10'} />{!hideToggle && <button type="button" onClick={toggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2.5 top-1/2 -translate-y-1/2 border-0 bg-transparent text-[#77766d]"><Eye open={show} /></button>}</div>
 }
 
-function PrimaryButton({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
-  return <button type={onClick ? 'button' : 'submit'} onClick={onClick} className={`w-full rounded-lg border-0 bg-[#e9a12c] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#d8901f] ${className}`}>{children}</button>
+function PrimaryButton({ children, className = '', onClick, disabled = false }: { children: React.ReactNode; className?: string; onClick?: () => void; disabled?: boolean }) {
+  return <button type={onClick ? 'button' : 'submit'} onClick={onClick} disabled={disabled} className={`w-full rounded-lg border-0 bg-[#e9a12c] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#d8901f] disabled:cursor-not-allowed disabled:opacity-60 ${className}`}>{children}</button>
 }
 
 function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
