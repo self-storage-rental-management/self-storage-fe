@@ -281,11 +281,12 @@ function SizeCategoryCard({ facility, unitType, availableCount, onReserve, onVie
     return 'S'
   })() as 'S' | 'M' | 'L' | 'XL'
   const spec = UNIT_SPECS[specKey]
+  const sizeCode = (unitType as any).sizeCode || specKey
 
   return (
     <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
       <div className="relative h-44 overflow-hidden bg-stone-200">
-        <img src={CUSTOMER_UNIT_IMAGE_BY_SIZE[sizeCode]} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <img src={getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
         <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Kho size {sizeCode}</span>
       </div>
@@ -1517,23 +1518,19 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
             <div className="space-y-8">
               {displayedFacilities.map(facility => {
                 const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
-                const heldIds = customerHeldUnitIds
-                const rentedIds = customerRentedUnitIds
-                const matchingCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit =>
-                   (unit.facilityId === facility.id || unit.facilityId === facility.code) &&
-                   Boolean(physicalUnitByCode.get(unit.code)) &&
-                   (physicalUnitByCode.get(unit.code)?.status === 'available' || heldIds.has(unit.id)) &&
-                   !rentedIds.has(unit.id) &&
-                  (sizeFilter === 'All' ||
-                   unit.sizeCode.toUpperCase() === sizeFilter.toUpperCase() ||
-                   unit.type === sizeFilter ||
-                   (sizeFilter === 'S' && (unit.type === 'Small' || unit.sizeCode === 'S')) ||
-                   (sizeFilter === 'M' && (unit.type === 'Medium' || unit.sizeCode === 'M')) ||
-                   (sizeFilter === 'L' && (unit.type === 'Large' || unit.sizeCode === 'L')) ||
-                   (sizeFilter === 'XL' && (unit.type === 'Extra Large' || unit.sizeCode === 'XL'))) &&
-                  `${unit.code} ${unit.sizeCode} ${unit.type}`.toLowerCase().includes(unitSearch.trim().toLowerCase())
-                )
-                const pageCount = Math.max(1, Math.ceil(matchingCatalogUnits.length / CUSTOMER_UNITS_PER_PAGE))
+                const matchingUnitTypes = unitTypes.filter(unitType => {
+                  const sizeCode = storageSizeCode(unitType.name)
+                  return (
+                    sizeFilter === 'All' ||
+                    unitType.name === sizeFilter ||
+                    sizeCode.toUpperCase() === sizeFilter.toUpperCase() ||
+                    (sizeFilter === 'S' && (unitType.name === 'Small' || sizeCode === 'S')) ||
+                    (sizeFilter === 'M' && (unitType.name === 'Medium' || sizeCode === 'M')) ||
+                    (sizeFilter === 'L' && (unitType.name === 'Large' || sizeCode === 'L')) ||
+                    (sizeFilter === 'XL' && (unitType.name === 'Extra Large' || sizeCode === 'XL'))
+                  ) && `${unitType.name} ${sizeCode} ${storageTypeLabelVi(unitType.name)}`.toLowerCase().includes(unitSearch.trim().toLowerCase())
+                })
+                const pageCount = Math.max(1, Math.ceil(matchingUnitTypes.length / CUSTOMER_UNIT_TYPES_PER_PAGE))
                 const currentPage = Math.min(unitPages[facility.id] ?? 1, pageCount)
                 const visibleUnitTypes = matchingUnitTypes.slice((currentPage - 1) * CUSTOMER_UNIT_TYPES_PER_PAGE, currentPage * CUSTOMER_UNIT_TYPES_PER_PAGE)
                 const availableCount = matchingUnitTypes.reduce((total, unitType) => total + effectiveAvailableCount(facility.id, unitType.name), 0)
@@ -1577,53 +1574,16 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                      {visibleCatalogUnits.map(unit => {
-                        const catalogUnit = unit as CustomerCatalogUnit
-                        const isHeld = heldIds.has(unit.id)
-                        const displayUnit: CustomerCatalogUnit = { ...catalogUnit, status: isHeld ? 'held' : 'available' }
-                        const unitType: UnitType = unitTypes.find(item => item.id === (catalogUnit.sizeCode === 'XL' ? 'xlarge' : catalogUnit.sizeCode.toLowerCase()) || item.name.toLowerCase().includes(catalogUnit.sizeCode.toLowerCase())) ?? {
-                          id: catalogUnit.sizeCode.toLowerCase(),
-                          name: unit.type || `Kho ${catalogUnit.sizeCode}`,
-                          lengthM: catalogUnit.dimensions.lengthM,
-                          widthM: catalogUnit.dimensions.widthM,
-                          heightM: catalogUnit.dimensions.heightM,
-                          areaM2: catalogUnit.areaM2,
-                          volumeM3: catalogUnit.volumeM3,
-                          pricePerM3: catalogUnit.price / (catalogUnit.volumeM3 || 1),
-                          monthlyPrice: catalogUnit.price,
-                          maxLoadKg: catalogUnit.maxLoadKg,
-                          descriptionVi: `Kho lưu trữ cỡ ${catalogUnit.sizeCode} (${catalogUnit.areaM2} m²)`,
-                          descriptionEn: `Storage unit size ${catalogUnit.sizeCode} (${catalogUnit.areaM2} m²)`
-                        }
-                        const typeAvailableCount = effectiveAvailableCount(facility.id, unit.type || unitType.name)
-                        return <article key={unit.id} className="group flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-1 hover:border-amber-300 hover:shadow-xl">
-                          <div className="relative h-44 overflow-hidden bg-stone-800">
-                            <img src={getCustomerUnitImage(catalogUnit.sizeCode)} alt={`Kho size ${catalogUnit.sizeCode} - ${unit.code}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/15 to-transparent" />
-                            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-white"><div><p className="text-xs font-bold tracking-wide text-amber-300">{unit.code}</p><h4 className="mt-1 text-xl font-bold">Kho size {catalogUnit.sizeCode}</h4></div><span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm ${isHeld ? 'border-amber-300/70 bg-amber-700/80 text-amber-50' : 'border-emerald-300/70 bg-emerald-700/80 text-emerald-50'}`}>● {isHeld ? 'Được giữ' : 'Còn trống'}</span></div>
-                          </div>
-                          <div className="flex flex-1 flex-col p-5">
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                              <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Kích thước D×R×C</p><b className="mt-1 block text-stone-950">{unit.dimensions.lengthM}×{unit.dimensions.widthM}×{unit.dimensions.heightM} m</b></div>
-                              <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Thể tích kho</p><b className="mt-1 block text-stone-950">{unit.volumeM3.toLocaleString('vi-VN')} m³</b></div>
-                              <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Lối đi</p><b className="mt-1 block text-stone-950">{catalogUnit.aisleWidthM} m</b></div>
-                              <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Khung cửa (R×C)</p><b className="mt-1 block text-stone-950">{catalogUnit.doorWidthM} × {catalogUnit.doorHeightM} m</b></div>
-                            </div>
-                            <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs">
-                              <span className="text-amber-700 font-semibold">Hàng tối đa: </span>
-                              <span className="font-bold text-stone-800">{catalogUnit.maxCargoDimCm.lengthCm}×{catalogUnit.maxCargoDimCm.widthCm}×{catalogUnit.maxCargoDimCm.heightCm} cm</span>
-                              <span className="mx-2 text-stone-300">·</span>
-                              <span className="text-stone-600">{catalogUnit.trolley}</span>
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold">{unit.climate ? <span className="rounded-full bg-sky-50 px-3 py-1.5 text-sky-800">❄ Có máy lạnh</span> : <span className="rounded-full bg-stone-100 px-3 py-1.5 text-stone-700">Thông gió tự nhiên</span>}<span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800">● An ninh 24/7</span><span className="rounded-full bg-rose-50 px-3 py-1.5 text-rose-800">PCCC tự động</span></div>
-                            <div className="mt-5 border-t border-stone-200 pt-4"><p className="text-xs text-stone-500">Giá thuê mỗi tháng</p><p className="mt-0.5 text-2xl font-extrabold text-stone-950">{formatVnd(unit.price)}<span className="text-xs font-normal text-stone-500">/tháng</span></p><p className="mt-1 text-[11px] font-medium text-amber-800">Cọc trước 20% tổng giá trị kỳ thuê</p></div>
-                          <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
-                            <Button size="sm" variant="outline" onClick={() => handleOpenSpecs(facility, unitType, isHeld ? 0 : 1, displayUnit)}>Xem chi tiết</Button>
-                            <Button size="sm" disabled={isHeld || typeAvailableCount === 0} onClick={() => handleStartReservation(facility, unitType, displayUnit)}>{isHeld ? 'Đang được giữ' : typeAvailableCount === 0 ? 'Hết kho' : 'Chọn kho này'}</Button>
-                          </div>
-                          </div>
-                        </article>
-                      })}
+                      {visibleUnitTypes.map(unitType => (
+                        <SizeCategoryCard
+                          key={unitType.id}
+                          facility={facility}
+                          unitType={unitType}
+                          availableCount={effectiveAvailableCount(facility.id, unitType.name)}
+                          onReserve={handleStartReservation}
+                          onViewSpecs={handleOpenSpecs}
+                        />
+                      ))}
                     </div>
                     {matchingUnitTypes.length === 0 && <div className="rounded-xl border border-dashed border-stone-300 py-10 text-center text-sm text-stone-500">Không tìm thấy loại kho phù hợp tại cơ sở này.</div>}
                     {matchingUnitTypes.length > CUSTOMER_UNIT_TYPES_PER_PAGE && <div className="flex flex-wrap items-center justify-center gap-2 border-t border-stone-200 pt-5"><Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.max(1, currentPage - 1) }))}>← Trang trước</Button><span className="px-2 text-sm font-semibold text-stone-600">Trang {currentPage}/{pageCount}</span><Button size="sm" variant="outline" disabled={currentPage === pageCount} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.min(pageCount, currentPage + 1) }))}>Trang sau →</Button></div>}
