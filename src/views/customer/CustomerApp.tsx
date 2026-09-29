@@ -113,7 +113,7 @@ const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = Object.entries({ 'fac-001'
   )
 )
 
-const CUSTOMER_UNITS_PER_PAGE = 6
+const CUSTOMER_UNIT_TYPES_PER_PAGE = 6
 type GoodsDeclarationItem = {
   id: string
   category: string
@@ -284,6 +284,11 @@ function SizeCategoryCard({ facility, unitType, availableCount, onReserve, onVie
 
   return (
     <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
+      <div className="relative h-44 overflow-hidden bg-stone-200">
+        <img src={CUSTOMER_UNIT_IMAGE_BY_SIZE[sizeCode]} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
+        <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Kho size {sizeCode}</span>
+      </div>
       <div className="flex flex-1 flex-col p-5">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
@@ -867,12 +872,6 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       .toLowerCase()
       .includes(searchFacility.toLowerCase())
   })
-  const customerHeldUnitIds = new Set([
-    ...holds.filter(item => !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && item.assignedUnitId).map(item => item.assignedUnitId as string),
-  ])
-  const customerRentedUnitIds = new Set(rentals.filter(item => ['active', 'return_requested', 'return_inspection', 'closing'].includes(item.status)).map(item => item.unitId))
-  const physicalUnitByCode = new Map(units.map(unit => [unit.code, unit]))
-
   const resetReservationDraft = () => {
     setBookingReview(false)
     setValidationViolation(null)
@@ -899,9 +898,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   }
 
   const handleStartReservation = (facility: Facility, unitType: UnitType, exactUnit?: StorageUnit) => {
-    const hasAvailablePhysicalUnit = exactUnit
-      ? exactUnit.status === 'available' || customerHeldUnitIds.has(exactUnit.id)
-      : effectiveAvailableCount(facility.id, unitType.name) > 0
+    const hasAvailablePhysicalUnit = effectiveAvailableCount(facility.id, unitType.name) > 0
     if (!hasAvailablePhysicalUnit) {
       showToast('Cơ sở hiện không còn gian kho trống cho loại này trong thời gian đã chọn.')
       return
@@ -995,7 +992,8 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           })
     : null
 
-  const selectedCatalogUnit = selectedUnit ? CUSTOMER_CATALOG_UNITS.find(unit => unit.id === selectedUnit.id) : undefined
+  const selectedSizeCode = storageSizeCode(selectedTarget?.unitType.name || selectedUnit?.type) as CustomerCatalogUnit['sizeCode']
+  const selectedCatalogUnit = selectedUnit ? CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === selectedSizeCode) : undefined
   const selectedRackCount = selectedCatalogUnit?.rackCount ?? 0
   const allPackageSamplesValid = capacitySamples.length > 0 && capacitySamples.every(isPackageSampleValid)
   const packageCapacityResults = allPackageSamplesValid ? capacitySamples.map(sample => {
@@ -1216,11 +1214,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       },
       capacityValidatedByFrames: packagesFitSelectedUnit,
       customerCatalogUnit: {
-        id: selectedUnit.id,
+        id: '',
         facilityName: selectedUnit.facilityName,
         doorWidthM: selectedUnit.doorDimensions.widthM,
         doorHeightM: selectedUnit.doorDimensions.heightM,
-        physicalUnitId: physicalUnitByCode.get(selectedUnit.code)?.id || selectedUnit.id,
       }
     })
 
@@ -1427,7 +1424,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             {matchingFacilities.map(facility => {
-               const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => (unit.facilityId === facility.id || unit.facilityId === facility.code) && physicalUnitByCode.has(unit.code))
+               const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => unit.facilityId === facility.id || unit.facilityId === facility.code)
                const availCount = effectiveAvailableCount(facility.id)
               const minimumMonthlyPrice = facilityCatalogUnits.length ? Math.min(...facilityCatalogUnits.map(unit => unit.price)) : null
               const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
@@ -1490,7 +1487,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 ? (`Kho còn trống tại ${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.name ?? selectedFacility.name}`)
                 : ('Kho còn trống')}
               subtitle={selectedFacility
-                ? `${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address} · Chọn trực tiếp mã kho còn trống.`
+                ? `${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address} · Chọn loại kho phù hợp; Manager sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.`
                 : undefined}
               action={
                 <div className="flex flex-wrap items-center gap-2">
@@ -1513,7 +1510,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <Button size="sm" variant={!selectedFacilityId ? 'primary' : 'outline'} onClick={() => setSelectedFacilityId(null)}>Tất cả cơ sở</Button>
                 {facilities.map(facility => <Button key={facility.id} size="sm" variant={selectedFacilityId === facility.id ? 'primary' : 'outline'} onClick={() => setSelectedFacilityId(facility.id)}>{facility.id === 'fac-001' ? 'Xem kho Hồ Chí Minh' : facility.id === 'fac-002' ? 'Xem kho Bình Dương' : `Xem kho ${facility.name}`}</Button>)}
               </div>
-              <label className="relative ml-auto block w-full lg:w-[420px]"><span className="sr-only">Tìm kiếm kho</span><input value={unitSearch} onChange={event => setUnitSearch(event.target.value)} placeholder="Tìm theo mã kho hoặc size S, M, L, XL..." className="w-full rounded-xl border border-stone-300 py-2.5 pl-10 pr-4 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200" /><span className="pointer-events-none absolute left-3 top-3 text-stone-400">{SearchIcon}</span></label>
+              <label className="relative ml-auto block w-full lg:w-[420px]"><span className="sr-only">Tìm kiếm loại kho</span><input value={unitSearch} onChange={event => setUnitSearch(event.target.value)} placeholder="Tìm theo loại kho..." className="w-full rounded-xl border border-stone-300 py-2.5 pl-10 pr-4 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200" /><span className="pointer-events-none absolute left-3 top-3 text-stone-400">{SearchIcon}</span></label>
             </div>
 
             {/* List Facilities with their 3-4 Unit Sizes */}
@@ -1538,8 +1535,8 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 )
                 const pageCount = Math.max(1, Math.ceil(matchingCatalogUnits.length / CUSTOMER_UNITS_PER_PAGE))
                 const currentPage = Math.min(unitPages[facility.id] ?? 1, pageCount)
-                const visibleCatalogUnits = matchingCatalogUnits.slice((currentPage - 1) * CUSTOMER_UNITS_PER_PAGE, currentPage * CUSTOMER_UNITS_PER_PAGE)
-                const availableCount = matchingCatalogUnits.filter(unit => !heldIds.has(unit.id)).length
+                const visibleUnitTypes = matchingUnitTypes.slice((currentPage - 1) * CUSTOMER_UNIT_TYPES_PER_PAGE, currentPage * CUSTOMER_UNIT_TYPES_PER_PAGE)
+                const availableCount = matchingUnitTypes.reduce((total, unitType) => total + effectiveAvailableCount(facility.id, unitType.name), 0)
 
                 return (
                   <section key={facility.id} className="space-y-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
@@ -1628,8 +1625,8 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                         </article>
                       })}
                     </div>
-                    {matchingCatalogUnits.length === 0 && <div className="rounded-xl border border-dashed border-stone-300 py-10 text-center text-sm text-stone-500">Không tìm thấy kho phù hợp tại cơ sở này.</div>}
-                    {matchingCatalogUnits.length > CUSTOMER_UNITS_PER_PAGE && <div className="flex flex-wrap items-center justify-center gap-2 border-t border-stone-200 pt-5"><Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.max(1, currentPage - 1) }))}>← Trang trước</Button><span className="px-2 text-sm font-semibold text-stone-600">Trang {currentPage}/{pageCount}</span><Button size="sm" variant="outline" disabled={currentPage === pageCount} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.min(pageCount, currentPage + 1) }))}>Trang sau →</Button></div>}
+                    {matchingUnitTypes.length === 0 && <div className="rounded-xl border border-dashed border-stone-300 py-10 text-center text-sm text-stone-500">Không tìm thấy loại kho phù hợp tại cơ sở này.</div>}
+                    {matchingUnitTypes.length > CUSTOMER_UNIT_TYPES_PER_PAGE && <div className="flex flex-wrap items-center justify-center gap-2 border-t border-stone-200 pt-5"><Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.max(1, currentPage - 1) }))}>← Trang trước</Button><span className="px-2 text-sm font-semibold text-stone-600">Trang {currentPage}/{pageCount}</span><Button size="sm" variant="outline" disabled={currentPage === pageCount} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.min(pageCount, currentPage + 1) }))}>Trang sau →</Button></div>}
                   </section>
                 )
               })}
@@ -1674,7 +1671,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                       <h2 className="mt-1 text-lg font-bold text-stone-900">
                         {unitTypeLabel(hold.unitTypeName || hold.unitId)} · {hold.facilityName}
                       </h2>
-                      <p className="text-xs font-semibold text-blue-800">{'Gian kho đã chọn:'} {units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.unitId || '—'}</p>
+                      <p className="text-xs font-semibold text-blue-800">{hold.assignedUnitId ? 'Gian kho Manager đã phân:' : 'Trạng thái phân kho:'} {hold.assignedUnitId ? (units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId) : 'Chưa phân gian kho cụ thể'}</p>
                       <p className="text-xs text-stone-500">
                         {'Lịch nhận kho hiện tại:'} <b>{hold.appointmentDate || hold.moveInDate}{hold.appointmentTime ? ` · ${hold.appointmentTime}` : ''}</b> · {'Thời hạn:'} {hold.rentalMonths} {'tháng'}
                       </p>
@@ -1684,7 +1681,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           <p><b>Hàng hóa khai báo:</b> {hold.goods.category} ({hold.goods.packageCount} kiện, {hold.goods.weightKg}kg)</p>
                           {hold.assignedUnitId ? (
                             <div className="flex flex-wrap justify-end gap-1">
-                              <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Gian kho đã chọn: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
+                              <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Manager đã phân: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
                               {hold.status === 'awaiting_email' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ xác minh email</span>}
                               {hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ nhân viên cơ sở duyệt hàng hóa</span>}
                             </div>
@@ -1702,7 +1699,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                             </span>
                           ) : (
                             <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">
-                              Gian kho đã được xác định theo lựa chọn của bạn
+                              {hold.payment.status === 'paid' ? 'Đã cọc · Chờ Manager phân kho' : 'Chờ hoàn tất đặt loại kho'}
                             </span>
                           )}
                         </div>
@@ -1721,7 +1718,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           </div>
                         })()}
 
-                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{'Cọc đã thanh toán. Bạn cần hoàn tất nhận kho tại gian kho đã chọn trong 14 ngày từ ngày cọc.'}</p>}
+                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Manager đã phân gian kho; vui lòng hoàn tất nhận kho trong 14 ngày từ ngày cọc.' : 'Cọc đã thanh toán. Manager sẽ phân gian kho cụ thể trước lịch check-in của bạn.'}</p>}
 
                         {hold.generatedAccessPin && !holdInactive && (
                           <div className="mt-2 rounded bg-[#292a27] p-2 text-white text-xs flex items-center justify-between">
@@ -1736,24 +1733,24 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
                           { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa trong 12 giờ' : 'Hồ sơ được duyệt tự động' },
                           { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ 20%' },
+                          { label: 'Manager phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
                           { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
                         ]
-                        // Gian kho đã được khách chọn từ đầu; sau khi cọc chỉ còn Check-in và bàn giao.
-                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status) ? 3 : hold.status === 'COMPLETED' ? (receiptConfirmed ? 5 : 4) : -1
+                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : hold.status === 'DEPOSIT_PAID' ? 3 : ['UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status) ? 4 : hold.status === 'COMPLETED' ? (receiptConfirmed ? 6 : 5) : -1
                         const activeStep = progressSteps[currentIndex]
 
                         return <div className="mt-4 border-t border-stone-200 pt-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="text-xs font-bold text-black">{'Tiến trình đơn đặt kho'}</p>
-                              <p className="mt-0.5 text-[11px] text-stone-500">{`Đã hoàn thành ${Math.max(0, currentIndex)}/5 bước`}</p>
+                              <p className="mt-0.5 text-[11px] text-stone-500">{`Đã hoàn thành ${Math.max(0, currentIndex)}/${progressSteps.length} bước`}</p>
                             </div>
                             {activeStep && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">
                               {'Đang thực hiện: '} {activeStep.label}
                             </span>}
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
                             {progressSteps.map((step, index) => {
                               const completed = index < currentIndex || currentIndex === progressSteps.length
                               const current = index === currentIndex && currentIndex < progressSteps.length
@@ -2445,10 +2442,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         size="xl"
-        title={selectedUnit?.id ? (`Chi tiết kho ${selectedUnit.code}`) : selectedTarget ? (`Hồ Sơ Kỹ Thuật: ${unitTypeLabel(selectedTarget.unitType.name)} · ${selectedTarget.facility.name}`) : (selectedUnit ? (`Hồ Sơ Kỹ Thuật & Chi Tiết Cỡ Kho`) : '')}
+        title={selectedTarget ? (`Hồ Sơ Kỹ Thuật: ${unitTypeLabel(selectedTarget.unitType.name)} · ${selectedTarget.facility.name}`) : (selectedUnit ? (`Hồ Sơ Kỹ Thuật & Chi Tiết Cỡ Kho`) : '')}
       >
         {selectedUnit && (() => {
-          const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.id === selectedUnit.id)
+          const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 
           return (
             <div className="flex flex-col gap-5">
@@ -2462,7 +2459,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 </div>
                 <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <h3 className="text-2xl font-bold">{selectedUnit.code}</h3>
+                    <h3 className="text-2xl font-bold">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)}</h3>
                     <p className="mt-1 text-sm font-semibold text-amber-300">Size {catalogUnit?.sizeCode ?? selectedUnit.type}</p>
                     <p className="mt-1 text-sm text-stone-300">{'Kích thước'}: {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m ({'dài × rộng × cao'})</p>
                   </div>
@@ -2690,9 +2687,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <div className="mt-3 grid gap-2 sm:grid-cols-4">
                   {[
                     'Chọn cỡ kho phù hợp',
-                    'Xác nhận để giữ kho',
+                    'Xác nhận giữ suất theo loại kho',
                     'Thanh toán cọc 20% trong 10 phút',
-                    'Check-in tại gian kho đã chọn trong 14 ngày'
+                    'Manager phân gian và khách check-in trong 14 ngày'
                   ].map((item, index) => <div key={item} className="flex gap-2 rounded-xl bg-stone-50 p-3"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white">{index + 1}</span><span className="font-medium leading-4 text-stone-700">{item}</span></div>)}
                 </div>
               </div>
@@ -2703,14 +2700,14 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                   disabled={selectedUnit.status !== 'available' || effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0}
                   onClick={() => {
                     if (selectedTarget) {
-                      handleStartReservation(selectedTarget.facility, selectedTarget.unitType, selectedUnit)
+                      handleStartReservation(selectedTarget.facility, selectedTarget.unitType)
                     } else {
                       setDetailOpen(false)
                       setBookOpen(true)
                     }
                   }}
                 >
-                  {selectedUnit.status !== 'available' ? ('Kho đang được giữ') : effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0 ? ('Hết kho') : ('Khai báo hàng & Đặt kho này')}
+                  {selectedUnit.status !== 'available' ? ('Loại kho đang hết chỗ') : effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0 ? ('Hết kho') : ('Khai báo hàng & Đặt loại kho này')}
                 </Button>
               </div>
             </div>
@@ -2723,27 +2720,27 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         open={bookOpen}
         onClose={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã thoát biểu mẫu đặt kho.') }}
         size="xl"
-        title={selectedUnit?.id ? (`Đặt kho ${selectedUnit.code}`) : selectedTarget ? (`Đặt Kho: ${unitTypeLabel(selectedTarget.unitType.name)}`) : (selectedUnit ? ('Đặt kho') : '')}
+        title={selectedTarget ? (`Đặt Kho: ${unitTypeLabel(selectedTarget.unitType.name)}`) : (selectedUnit ? ('Đặt kho') : '')}
       >
         {selectedUnit && currentQuote && (
           <div className="space-y-4">
             <div className="sticky top-0 z-10 rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">{'Kho bạn đang chọn'}</p>
-                  <p className="mt-1 font-bold text-black">{selectedUnit.code} · {selectedUnit.facilityName}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">{'Loại kho bạn đang chọn'}</p>
+                  <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
                 </div>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-stone-700">{'Cỡ kho đã chọn:'}</span>
-                <b>{`${selectedUnit.code} · ${selectedUnit.type} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
+                <b>{`${unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
               </div>
               <div className="mt-2 flex justify-between text-sm">
                 <span className="text-stone-700">{'Kích thước & Sức chịu tải:'}</span>
                 <span>{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
               </div>
               <div className="mt-3 rounded-lg bg-stone-100 p-3 text-xs leading-5 text-stone-700">
-                {`Việc mở và điền biểu mẫu chưa giữ kho ${selectedUnit.code}. Khi bạn nhấn xác nhận, hệ thống sẽ kiểm tra lại tình trạng kho; yêu cầu hợp lệ được ghi nhận trước sẽ được ưu tiên.`}
+                {'Việc mở và điền biểu mẫu chưa giữ suất kho. Khi bạn nhấn xác nhận, hệ thống sẽ kiểm tra lại số lượng của loại kho; yêu cầu hợp lệ được ghi nhận trước sẽ được ưu tiên. Manager sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.'}
               </div>
             </div>
 
