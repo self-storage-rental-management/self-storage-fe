@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions } from '../src/auth/rbac'
 import type { User } from '../src/types'
+import { isExcludedFacility, isExcludedUnit, isExcludedRelated } from '../src/store/StorageHubContext'
 
 describe('Business Owner (BO) Business Rules & Logic', () => {
   const dummyBusinessUser: User = {
@@ -327,6 +328,30 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       expect(isImageSrcValid(base64Url)).toBe(true)
       expect(isImageSrcValid(webUrl)).toBe(true)
       expect(isImageSrcValid('invalid_string')).toBe(false)
+    })
+
+    it('does not exclude Đà Nẵng facilities, units, or related data on reload', () => {
+      const daNangFacility = {
+        id: 'fac-danang-01',
+        code: 'DN-F01',
+        city: 'Đà Nẵng',
+        name: 'Kho Việt – Cơ sở Đà Nẵng'
+      }
+      expect(isExcludedFacility(daNangFacility)).toBe(false)
+
+      const daNangUnit = {
+        id: 'DN-F01-S-001',
+        code: 'DN-F01-S-001',
+        facilityId: 'DN-F01',
+        facilityName: 'Kho Việt – Cơ sở Đà Nẵng'
+      }
+      expect(isExcludedUnit(daNangUnit)).toBe(false)
+
+      const daNangRelated = {
+        facilityId: 'DN-F01',
+        facilityName: 'Kho Việt – Cơ sở Đà Nẵng'
+      }
+      expect(isExcludedRelated(daNangRelated)).toBe(false)
     })
   })
 })

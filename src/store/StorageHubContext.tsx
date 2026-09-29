@@ -245,53 +245,11 @@ const LEGACY_FACILITY_NAMES: Record<string, string> = {
   'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
 }
 
-export const isExcludedFacility = (f: { code?: string; id?: string; city?: string; name?: string }) => {
-  const code = (f.code || f.id || '').toUpperCase()
-  const city = (f.city || '').toLowerCase()
-  const name = (f.name || '').toLowerCase()
-  return (
-    code.startsWith('HN-') ||
-    code.startsWith('DN-') ||
-    city.includes('hà nội') ||
-    city.includes('ha noi') ||
-    city.includes('đà nẵng') ||
-    city.includes('da nang') ||
-    name.includes('hà nội') ||
-    name.includes('ha noi') ||
-    name.includes('đà nẵng') ||
-    name.includes('da nang')
-  )
-}
+export const isExcludedFacility = (_f: { code?: string; id?: string; city?: string; name?: string }) => false
 
-export const isExcludedUnit = (u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => {
-  const code = (u.code || u.id || u.customerCode || '').toUpperCase()
-  const facId = (u.facilityId || '').toUpperCase()
-  const facName = (u.facilityName || u.facility || '').toLowerCase()
-  return (
-    code.startsWith('HN-') ||
-    code.startsWith('DN-') ||
-    facId.startsWith('HN-') ||
-    facId.startsWith('DN-') ||
-    facName.includes('hà nội') ||
-    facName.includes('ha noi') ||
-    facName.includes('đà nẵng') ||
-    facName.includes('da nang')
-  )
-}
+export const isExcludedUnit = (_u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => false
 
-export const isExcludedRelated = (item: any) => {
-  if (!item) return false
-  const facilityId = (item.facilityId || item.facilityCode || item.facility || item.id || '').toUpperCase()
-  const facilityName = (item.facilityName || item.facility || '').toLowerCase()
-  return (
-    facilityId.startsWith('HN-') ||
-    facilityId.startsWith('DN-') ||
-    facilityName.includes('hà nội') ||
-    facilityName.includes('ha noi') ||
-    facilityName.includes('đà nẵng') ||
-    facilityName.includes('da nang')
-  )
-}
+export const isExcludedRelated = (_item: any) => false
 
 const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
   const normalizedName = facilityName ? LEGACY_FACILITY_NAMES[facilityName] || facilityName : undefined
@@ -301,8 +259,7 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
   if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES
   const cleaned = facilities.filter(f => !isExcludedFacility(f))
-  if (cleaned.length === 0) return INITIAL_FACILITIES
-  return cleaned.map(stored => {
+  const mapped = cleaned.map(stored => {
     const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
     if (!canonical) return stored
     if (canonical.id === 'fac-001') {
@@ -340,6 +297,13 @@ const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
       price: stored.price || canonical.price
     }
   })
+  const existingIds = new Set(mapped.map(f => f.id))
+  for (const initFac of INITIAL_FACILITIES) {
+    if (!existingIds.has(initFac.id)) {
+      mapped.push(initFac)
+    }
+  }
+  return mapped
 }
 
 const normalizeStoredTickets = (tickets: TicketItem[]): TicketItem[] => tickets.filter(t => !isExcludedRelated(t)).map(ticket => {
@@ -1354,12 +1318,50 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               appointmentTime: hold.appointmentTime || '09:00'
             })
           }) : INITIAL_RESERVATIONS
+        let rawFacilities = Array.isArray(parsed.facilities) && parsed.facilities.length ? [...parsed.facilities] : []
+        try {
+          const directFacsStr = localStorage.getItem('storagehub:facilities')
+          if (directFacsStr) {
+            const directFacs = JSON.parse(directFacsStr)
+            if (Array.isArray(directFacs)) {
+              const knownIds = new Set(rawFacilities.map((f: any) => f.id))
+              const knownCodes = new Set(rawFacilities.map((f: any) => (f.code || '').toUpperCase()))
+              for (const df of directFacs) {
+                if (df && df.id && !knownIds.has(df.id) && (!df.code || !knownCodes.has(df.code.toUpperCase()))) {
+                  rawFacilities.push(df)
+                  knownIds.add(df.id)
+                }
+              }
+            }
+          }
+        } catch {}
+
+        let rawUnits = Array.isArray(parsed.units) && parsed.units.length ? [...parsed.units] : []
+        try {
+          const directUnitsStr = localStorage.getItem('storagehub:units')
+          if (directUnitsStr) {
+            const directUnits = JSON.parse(directUnitsStr)
+            if (Array.isArray(directUnits)) {
+              const knownUnitIds = new Set(rawUnits.map((u: any) => u.id))
+              for (const du of directUnits) {
+                if (du && du.id && !knownUnitIds.has(du.id)) {
+                  rawUnits.push(du)
+                  knownUnitIds.add(du.id)
+                }
+              }
+            }
+          }
+        } catch {}
+
+        const normalizedFacilities = rawFacilities.length ? normalizeStoredFacilities(rawFacilities as Facility[]) : INITIAL_FACILITIES
+        const normalizedUnits = rawUnits.length ? normalizeStoredUnits(rawUnits as StorageUnit[]) : INITIAL_UNITS
+
         return {
           ...parsed,
-          facilities: Array.isArray(parsed.facilities) && parsed.facilities.length ? normalizeStoredFacilities(parsed.facilities as Facility[]) : INITIAL_FACILITIES,
+          facilities: normalizedFacilities,
           users: normalizeUsers(parsed.users),
           rolePermissions: normalizeRuntimeRolePermissions(parsed.rolePermissions),
-          units: (Array.isArray(parsed.units) ? normalizeStoredUnits(parsed.units as StorageUnit[]) : INITIAL_UNITS).map(unit => unit.currentRentalId === 'RNT-9654' || (unit.currentRentalId && RETIRED_EXPIRY_TEST_RENTAL_IDS.has(unit.currentRentalId)) ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(period.reservationId)) } : unit),
+          units: normalizedUnits.map(unit => unit.currentRentalId === 'RNT-9654' || (unit.currentRentalId && RETIRED_EXPIRY_TEST_RENTAL_IDS.has(unit.currentRentalId)) ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(period.reservationId)) } : unit),
           holds: normalizedHolds,
           contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654' && !isExcludedRelated(contract))) : INITIAL_CONTRACTS,
           payments: Array.isArray(parsed.payments) ? parsed.payments.filter((payment: StoragePayment) => payment.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(payment.reservationId) && payment.rentalId !== 'RNT-9654' && (!payment.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(payment.rentalId)) && !isExcludedRelated(payment)) : [],
@@ -1402,11 +1404,31 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Failed to load storageHub state from localStorage', e)
     }
+
+    let fallbackFacilities = INITIAL_FACILITIES
+    let fallbackUnits = INITIAL_UNITS
+    try {
+      const directFacsStr = localStorage.getItem('storagehub:facilities')
+      if (directFacsStr) {
+        const directFacs = JSON.parse(directFacsStr)
+        if (Array.isArray(directFacs) && directFacs.length > 0) {
+          fallbackFacilities = normalizeStoredFacilities(directFacs)
+        }
+      }
+      const directUnitsStr = localStorage.getItem('storagehub:units')
+      if (directUnitsStr) {
+        const directUnits = JSON.parse(directUnitsStr)
+        if (Array.isArray(directUnits) && directUnits.length > 0) {
+          fallbackUnits = normalizeStoredUnits(directUnits)
+        }
+      }
+    } catch {}
+
     return {
       users: USERS,
       rolePermissions: normalizeRolePermissions(undefined),
-      facilities: INITIAL_FACILITIES,
-      units: INITIAL_UNITS,
+      facilities: fallbackFacilities,
+      units: fallbackUnits,
       holds: [],
       contracts: [],
       payments: [],
@@ -3934,6 +3956,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const resetToDemoData = () => {
     localStorage.removeItem(STORAGE_KEY)
+    try {
+      localStorage.removeItem('storagehub:facilities')
+      localStorage.removeItem('storagehub:units')
+    } catch {}
     setState({
       users: USERS,
       rolePermissions: normalizeRolePermissions(undefined),
@@ -4027,6 +4053,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       unitDistribution,
       unitPrices: data.unitPrices,
       unitLoadLimits: data.unitLoadLimits,
+      unitDimensions: data.unitDimensions,
       totalDesignLoadTon: data.totalDesignLoadTon
     }
 
@@ -4058,6 +4085,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const defaultLoad = size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000
       const configuredLoad = data.unitLoadLimits?.[size] ?? defaultLoad
 
+      const lengthM = data.unitDimensions?.[size]?.lengthM ?? spec.lengthM
+      const widthM = data.unitDimensions?.[size]?.widthM ?? spec.widthM
+      const heightM = spec.heightM
+      const areaM2 = Math.round(lengthM * widthM * 10) / 10
+      const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
+
       for (let i = 1; i <= count; i++) {
         const unitNumber = String(i).padStart(3, '0')
         const unitCode = `${code}-${size}-${unitNumber}`
@@ -4071,16 +4104,16 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           sizeCode: size,
           type,
           dimensions: {
-            lengthM: spec.lengthM,
-            widthM: spec.widthM,
-            heightM: spec.heightM
+            lengthM,
+            widthM,
+            heightM
           },
           doorDimensions: {
             widthM: 1.2,
             heightM: 2.4
           },
-          areaM2: spec.areaM2,
-          volumeM3: spec.volumeM3,
+          areaM2,
+          volumeM3,
           maxLoadKg: configuredLoad,
           allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
           prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
@@ -4173,6 +4206,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             if (!monthlyPriceVnd) monthlyPriceVnd = spec.priceMonthly
             const normUnitP = monthlyPriceVnd > 10000 ? monthlyPriceVnd / USD_TO_VND_RATE : monthlyPriceVnd
 
+            const lengthM = updates.unitDimensions?.[size]?.lengthM ?? targetFac.unitDimensions?.[size]?.lengthM ?? spec.lengthM
+            const widthM = updates.unitDimensions?.[size]?.widthM ?? targetFac.unitDimensions?.[size]?.widthM ?? spec.widthM
+            const heightM = spec.heightM
+            const areaM2 = Math.round(lengthM * widthM * 10) / 10
+            const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
+
             for (let i = 1; i <= needed; i++) {
               const unitNum = String(maxNum + i).padStart(3, '0')
               const unitCode = `${targetFacCode}-${size}-${unitNum}`
@@ -4184,16 +4223,16 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 sizeCode: size,
                 type,
                 dimensions: {
-                  lengthM: spec.lengthM,
-                  widthM: spec.widthM,
-                  heightM: spec.heightM
+                  lengthM,
+                  widthM,
+                  heightM
                 },
                 doorDimensions: {
                   widthM: 1.2,
                   heightM: 2.4
                 },
-                areaM2: spec.areaM2,
-                volumeM3: spec.volumeM3,
+                areaM2,
+                volumeM3,
                 maxLoadKg: updates.unitLoadLimits?.[size] ?? targetFac.unitLoadLimits?.[size] ?? (size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000),
                 allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Hồ sơ tài liệu'],
                 prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại'],
@@ -4219,6 +4258,27 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         })
 
         nextUnits = workingUnits
+      }
+
+      // Propagate unit dimensions updates to existing units if updates.unitDimensions is passed
+      if (updates.unitDimensions) {
+        nextUnits = nextUnits.map(u => {
+          if (u.facilityId === targetFacId || u.facilityId === targetFacCode) {
+            const s = ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : 'XL')) as 'S' | 'M' | 'L' | 'XL'
+            const dim = updates.unitDimensions?.[s]
+            if (dim && dim.lengthM > 0 && dim.widthM > 0) {
+              const spec = UNIT_SPECS[s]
+              const heightM = spec.heightM
+              return {
+                ...u,
+                dimensions: { lengthM: dim.lengthM, widthM: dim.widthM, heightM },
+                areaM2: Math.round(dim.lengthM * dim.widthM * 10) / 10,
+                volumeM3: Math.round(dim.lengthM * dim.widthM * heightM * 10) / 10
+              }
+            }
+          }
+          return u
+        })
       }
 
       // Propagate unit price updates to existing units if updates.unitPrices or updates.price is passed
@@ -4281,6 +4341,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           unitDistribution: updatedUnitDist || f.unitDistribution,
           unitPrices: updates.unitPrices ? { ...f.unitPrices, ...updates.unitPrices } : f.unitPrices,
           unitLoadLimits: updates.unitLoadLimits ? { ...f.unitLoadLimits, ...updates.unitLoadLimits } : f.unitLoadLimits,
+          unitDimensions: updates.unitDimensions ? { ...f.unitDimensions, ...updates.unitDimensions } : f.unitDimensions,
           totalDesignLoadTon: updates.totalDesignLoadTon ?? f.totalDesignLoadTon
         }
       })

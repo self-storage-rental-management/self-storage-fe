@@ -94,6 +94,7 @@ export interface Facility {
   unitDistribution?: FacilityUnitDistribution
   unitPrices?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
   unitLoadLimits?: Partial<Record<'S' | 'M' | 'L' | 'XL', number>>
+  unitDimensions?: Partial<Record<'S' | 'M' | 'L' | 'XL', { lengthM: number; widthM: number }>>
   totalDesignLoadTon?: number
 }
 
