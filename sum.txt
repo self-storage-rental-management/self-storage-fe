@@ -1,0 +1,254 @@
+================================================================================
+                 TÓM TẮT DỰ ÁN: STORAGEHUB — SELF-STORAGE MANAGEMENT SYSTEM
+================================================================================
+
+1. TỔNG QUAN
+─────────────
+  • Tên dự án   : StorageHub — Secure Self-Storage
+  • Loại dự án  : Hệ thống quản lý cho thuê kho tự phục vụ (Self-Storage Rental Management)
+  • Mã môn học  : SWP391
+  • Phần        : Front-End (FE)
+  • Ngôn ngữ UI : Tiếng Việt (chính), hỗ trợ song ngữ Anh-Việt ở một số trường
+
+2. CÔNG NGHỆ SỬ DỤNG
+─────────────────────
+  • Framework       : React 19 + TypeScript 5.7
+  • Build Tool      : Vite 8.3
+  • CSS Framework   : Tailwind CSS 4
+  • Biểu đồ         : Recharts 3.10
+  • Xuất Excel      : SheetJS (xlsx)
+  • Test            : Vitest 5
+  • Formatter       : oxfmt
+  • Dev Server Port : 8443
+
+3. KIẾN TRÚC ỨNG DỤNG
+──────────────────────
+  Ứng dụng theo mô hình SPA (Single Page Application), sử dụng React Context
+  (StorageHubContext) làm state store trung tâm. Không dùng React Router — 
+  điều hướng dựa trên state nội bộ + query parameter (?page=...).
+
+  Cấu trúc thư mục src/:
+  ┌─────────────┬──────────────────────────────────────────────────────┐
+  │ Thư mục     │ Vai trò                                            │
+  ├─────────────┼──────────────────────────────────────────────────────┤
+  │ auth/       │ Hệ thống phân quyền RBAC (Role-Based Access Ctrl)  │
+  │ components/ │ UI components dùng chung (Layout, ErrorBoundary,    │
+  │             │ BrandLogo, ui.tsx, SupportBot)                      │
+  │ data/       │ Dữ liệu demo / seed database (demoDatabase.ts)     │
+  │ domain/     │ Logic nghiệp vụ: managerRules, policyMatching,     │
+  │             │ reservationFlow                                     │
+  │ i18n/       │ Đa ngôn ngữ & định dạng tiền tệ VNĐ               │
+  │ services/   │ Dịch vụ: supportBotService (chatbot hỗ trợ)        │
+  │ store/      │ StorageHubContext — state management trung tâm      │
+  │             │ (file ~272KB, quản lý toàn bộ entities & actions)   │
+  │ types/      │ Định nghĩa kiểu dữ liệu domain (storageHub.ts)    │
+  │ utils/      │ Tiện ích xuất Excel (excelExport.ts)               │
+  │ views/      │ Giao diện theo từng role (xem bên dưới)            │
+  └─────────────┴──────────────────────────────────────────────────────┘
+
+4. HỆ THỐNG PHÂN QUYỀN (RBAC)
+──────────────────────────────
+  5 vai trò (Role):
+  ┌──────────┬────────────────────────────────────────────────────────┐
+  │ Role     │ Mô tả                                                │
+  ├──────────┼────────────────────────────────────────────────────────┤
+  │ Customer │ Khách thuê kho: đặt kho, xem hợp đồng, thanh toán,  │
+  │          │ yêu cầu gia hạn/trả kho, gửi hỗ trợ                 │
+  ├──────────┼────────────────────────────────────────────────────────┤
+  │ Staff    │ Nhân viên cơ sở: phê duyệt đặt kho, check-in,       │
+  │          │ xử lý trả kho, thu tiền, hỗ trợ khách hàng          │
+  ├──────────┼────────────────────────────────────────────────────────┤
+  │ Manager  │ Quản lý cơ sở: quản lý tồn kho, hợp đồng & gia hạn,│
+  │          │ thu cước & công nợ, điều phối nhân viên, báo cáo     │
+  ├──────────┼────────────────────────────────────────────────────────┤
+  │ Business │ Chủ doanh nghiệp: xem tổng quan, cơ sở, báo cáo,   │
+  │          │ quản lý chính sách & biểu phí                        │
+  ├──────────┼────────────────────────────────────────────────────────┤
+  │ Admin    │ Quản trị hệ thống: toàn quyền — quản lý tài khoản,  │
+  │          │ bảng quyền, cài đặt hệ thống, nhật ký kiểm toán     │
+  └──────────┴────────────────────────────────────────────────────────┘
+
+  28 quyền (permission) được chia 3 nhóm: Điều hướng, Nghiệp vụ, Quản trị.
+  Admin có toàn bộ quyền; các role khác có quyền theo nghiệp vụ.
+
+5. CÁC MODULE CHỨC NĂNG CHÍNH
+──────────────────────────────
+
+  5.1 Trang chủ (HomePage)
+      - Landing page giới thiệu StorageHub
+      - Cho phép khách truy cập xem thông tin & chuyển đến Đăng nhập/Đăng ký
+
+  5.2 Xác thực (Login / Register)
+      - Đăng nhập / Đăng ký tài khoản
+      - Quản lý session, login history, security alerts
+      - Lazy loading module theo role sau đăng nhập
+
+  5.3 Customer App (~305KB)
+      - Duyệt cơ sở & gian kho (facility browsing, unit search)
+      - Luồng đặt kho hoàn chỉnh:
+          Khai báo hàng hóa → Báo giá tự động → Xác minh email →
+          Duyệt/ngoại lệ → Thanh toán cọc 20% → Phân kho → Check-in
+      - Quản lý hợp đồng thuê & gia hạn
+      - Yêu cầu trả kho
+      - Xem lịch sử thanh toán
+      - Gửi hỗ trợ (Customer Support)
+
+  5.4 Staff App (~110KB)
+      - Bảng điều khiển nhân viên
+      - Duyệt yêu cầu đặt kho (approve/reject)
+      - Thực hiện check-in & bàn giao (checklist 5 bước)
+      - Xử lý trả kho (nghiệm thu, phân loại hư hại, quyết toán)
+      - Thu tiền & upload biên lai
+      - Hỗ trợ khách hàng (trả lời ticket)
+
+  5.5 Manager App (~240KB tổng cộng các panel)
+      - Dashboard tổng quan cơ sở
+      - Quản lý tồn kho (CRUD gian kho, bảo trì)
+      - Quản lý hợp đồng & gia hạn (phê duyệt gia hạn)
+      - Giám sát nhận kho & trả kho
+      - Quản lý thanh toán & công nợ (late fee, overlock, reminder)
+      - Điều phối nhân viên & nhiệm vụ
+      - Báo cáo cơ sở (biểu đồ Recharts)
+
+  5.6 Business App (~251KB)
+      - Tổng quan đa cơ sở
+      - Quản lý chính sách thuê & biểu phí
+      - Xem báo cáo doanh thu toàn hệ thống
+
+  5.7 Admin App (~65KB)
+      - Quản lý tài khoản người dùng
+      - Quản lý bảng quyền (RBAC)
+      - Cài đặt hệ thống
+      - Nhật ký kiểm toán (Audit Log)
+      - Quản lý session & bảo mật
+
+  5.8 Hồ sơ cá nhân (ProfileView)
+      - Xem & chỉnh sửa thông tin cá nhân
+      - Yêu cầu thay đổi hồ sơ (cho staff/manager)
+
+6. CÁC ENTITY / MODEL DỮ LIỆU CHÍNH
+──────────────────────────────────────
+  • Facility           — Cơ sở / nhà kho
+  • StorageUnit         — Gian kho (S/M/L/XL), kích thước, giá, trạng thái
+  • UnitType            — Loại gian kho (kích thước chuẩn, giá/m³)
+  • StorageReservation  — Đặt giữ kho (luồng 10+ trạng thái)
+  • StorageContract     — Hợp đồng thuê kho
+  • RentalRecord        — Hồ sơ thuê kho đang hoạt động
+  • RenewalRecord       — Gia hạn hợp đồng
+  • CheckInRecord       — Bản ghi check-in & bàn giao
+  • ReturnCase          — Xử lý trả kho & quyết toán
+  • StoragePayment      — Giao dịch thanh toán
+  • GoodsDeclaration    — Khai báo hàng hóa gửi kho
+  • PricingQuote        — Báo giá tự động
+  • AccessCredential    — Mã PIN / thẻ truy cập kho
+  • FacilityTask        — Nhiệm vụ nhân viên tại cơ sở
+  • MaintenanceTask     — Công việc bảo trì gian kho
+  • ActivityRecord      — Nhật ký hoạt động (audit log)
+  • DiscountRule        — Quy tắc giảm giá / khuyến mãi
+  • BusinessConfig      — Cấu hình nghiệp vụ (dimDivisor, lateFee, v.v.)
+
+7. LUỒNG NGHIỆP VỤ CHÍNH (RESERVATION FLOW)
+─────────────────────────────────────────────
+  CREATED → awaiting_email → awaiting_review → awaiting_payment →
+  DEPOSIT_PAID → UNIT_RESERVED → READY_FOR_CHECKIN → COMPLETED
+
+  Ngoại lệ (Soft Exception): hàng quá khổ, quá nặng, vật phẩm hạn chế →
+  chuyển sang review thủ công bởi Staff.
+
+  Thanh toán cọc = 20% tổng tiền tháng đầu + phí bảo đảm.
+  Định giá dựa trên: thể tích (m³), trọng lượng quy đổi (dim weight),
+  phí phụ trội kích thước, mã giảm giá.
+
+8. TÍNH NĂNG KỸ THUẬT NỔI BẬT
+───────────────────────────────
+  • Lazy loading theo role (code splitting)
+  • Chunk error recovery (tự động reload khi chunk load lỗi)
+  • RBAC động — Admin có thể thay đổi quyền từng role tại runtime
+  • Session management — theo dõi phiên đăng nhập, revoke session
+  • Notification system — thông báo real-time trong Layout
+  • Support Bot — chatbot hỗ trợ khách hàng tự động
+  • Excel export — xuất dữ liệu ra file .xlsx
+  • Tiền tệ VNĐ — tất cả giá hiển thị bằng Việt Nam Đồng
+  • Error Boundary — bắt lỗi render & hiển thị fallback
+  • Responsive Layout — giao diện tương thích đa thiết bị
+
+9. CẤU TRÚC THƯ MỤC
+─────────────────────
+  self-storage-FE/
+  ├── index.html                    # Entry HTML
+  ├── package.json                  # Dependencies & scripts
+  ├── vite.config.ts                # Vite + Tailwind config
+  ├── tsconfig.json                 # TypeScript config
+  ├── public/                       # Static assets
+  ├── src/
+  │   ├── main.tsx                  # React entry point
+  │   ├── App.tsx                   # Root component & routing
+  │   ├── types.ts                  # Shared types (User, Session, etc.)
+  │   ├── index.css                 # Global styles
+  │   ├── auth/
+  │   │   └── rbac.ts               # Role permissions & RBAC logic
+  │   ├── components/
+  │   │   ├── Layout.tsx            # Shared layout (sidebar, header, notifs)
+  │   │   ├── ui.tsx                # Reusable UI primitives (Badge, etc.)
+  │   │   ├── BrandLogo.tsx         # Brand logo component
+  │   │   ├── ErrorBoundary.tsx     # Error boundary
+  │   │   └── support/              # Support widget
+  │   ├── data/
+  │   │   └── demoDatabase.ts       # Demo/seed data (~62KB)
+  │   ├── domain/
+  │   │   ├── managerRules.ts       # Manager business rules
+  │   │   ├── policyMatching.ts     # Policy matching engine
+  │   │   ├── reservationFlow.ts    # Reservation state machine
+  │   │   └── reservationFlow.test.ts
+  │   ├── i18n/
+  │   │   └── currency.ts           # VNĐ formatting
+  │   ├── services/
+  │   │   └── supportBotService.ts  # Chatbot AI service
+  │   ├── store/
+  │   │   └── StorageHubContext.tsx  # Central state (~272KB)
+  │   ├── types/
+  │   │   └── storageHub.ts         # Domain type definitions
+  │   ├── utils/
+  │   │   └── excelExport.ts        # Excel export utility
+  │   └── views/
+  │       ├── Login.tsx             # Login & Register
+  │       ├── ProfileView.tsx       # User profile
+  │       ├── home/
+  │       │   └── HomePage.tsx      # Landing page
+  │       ├── customer/
+  │       │   ├── CustomerApp.tsx   # Customer dashboard (~305KB)
+  │       │   └── CustomerSupportSection.tsx
+  │       ├── staff/
+  │       │   ├── StaffApp.tsx      # Staff dashboard (~110KB)
+  │       │   ├── StaffCheckinsPanel.tsx
+  │       │   ├── StaffReservationsPanel.tsx
+  │       │   ├── StaffReturnsPanel.tsx
+  │       │   ├── StaffSupportPanel.tsx
+  │       │   └── ... (Fee, Upload components)
+  │       ├── manager/
+  │       │   ├── ManagerApp.tsx    # Manager shell + nav
+  │       │   ├── ManagerDashboardPanel.tsx
+  │       │   ├── ManagerInventoryPanel.tsx
+  │       │   ├── ManagerRentalsPanel.tsx
+  │       │   ├── ManagerPaymentsPanel.tsx
+  │       │   ├── ManagerReportsPanel.tsx
+  │       │   ├── ManagerStaffTasksPanel.tsx
+  │       │   └── ... (Moves, Returns, Exceptions, i18n)
+  │       ├── business/
+  │       │   └── BusinessApp.tsx   # Business owner dashboard (~251KB)
+  │       └── admin/
+  │           └── AdminApp.tsx      # Admin dashboard (~65KB)
+  └── tests/                        # Test files
+
+10. SCRIPTS
+───────────
+  npm run dev       — Khởi chạy dev server (port 8443)
+  npm run build     — Build production
+  npm run test      — Chạy test (Vitest)
+  npm run typecheck — Kiểm tra TypeScript
+  npm run preview   — Xem bản build production
+  npm run format    — Format code (oxfmt)
+
+================================================================================
+  Tạo bởi: Antigravity AI | Ngày: 29/09/2026
+================================================================================

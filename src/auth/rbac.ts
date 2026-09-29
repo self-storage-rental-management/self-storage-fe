@@ -58,7 +58,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
     'assign_units', 'manage_inventory', 'manage_staff_tasks', 'view_reports'
   ),
   business: makePermissions(
-    'view_dashboard', 'view_facilities', 'view_units', 'view_payments', 'view_reports', 'view_support', 'view_policies'
+    'view_dashboard', 'view_facilities', 'view_units', 'view_payments', 'view_reports', 'view_support', 'view_policies', 'manage_policies'
   ),
   admin: makePermissions(...PERMISSION_KEYS),
 }
@@ -79,5 +79,7 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   normalized.manager.perform_checkin = false
   normalized.manager.manage_support = false
   normalized.manager.manage_policies = false
+  // Business role always retains policy management permission
+  normalized.business.manage_policies = true
   return normalized
 }
