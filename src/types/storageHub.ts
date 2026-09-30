@@ -77,7 +77,32 @@ export interface FacilityCustomUnitSpec {
   badgeClass?: string
   floor?: number
   zone?: string
+  /** Số khung kệ của loại kho này */
+  frameCount?: number
+  /** Kích thước của 1 khung kệ (Dài × Rộng × Cao, đơn vị mét) */
+  frameDimensions?: {
+    lengthM: number
+    widthM: number
+    heightM: number
+    depthM?: number
+  }
+  /** Danh sách các gói thuê được thiết lập cho loại kho này */
+  rentalPackages?: RentalPackage[]
 }
+
+export interface RentalPackage {
+  id: string
+  facilityId?: string
+  unitTypeId?: string // Mã loại kho: 'S', 'M', 'L', 'XL' hoặc custom
+  months: number // Kỳ hạn thuê: 1, 3, 6, 12, ...
+  name: string // Tên hiển thị gói thuê: 'Gói 1 tháng', 'Gói 3 tháng', ...
+  packagePrice: number // Tổng tiền thuê trọn gói
+  monthlyEquivalentPrice: number // Giá tương đương mỗi tháng
+  discountPercent?: number // Phần trăm giảm giá (nếu có, e.g. 3, 5, 8)
+  description?: string
+  status: 'active' | 'inactive' // Trạng thái kích hoạt gói
+}
+
 
 export interface FacilityUnitDistribution {
   S?: number
@@ -113,7 +138,10 @@ export interface Facility {
   unitLoadLimits?: Partial<Record<string, number>>
   unitDimensions?: Partial<Record<string, { lengthM: number; widthM: number; heightM?: number }>>
   unitLaneWidths?: Partial<Record<string, number>>
+  unitFrameCounts?: Partial<Record<string, number>>
+  unitFrameDimensions?: Partial<Record<string, { lengthM: number; widthM: number; heightM: number }>>
   unitCustomSpecs?: FacilityCustomUnitSpec[]
+  rentalPackages?: RentalPackage[]
   totalDesignLoadTon?: number
 }
 
@@ -160,6 +188,7 @@ export interface StorageUnit {
   heldByCustomerName?: string
   currentRentalId?: string
   conditionNotes?: string
+  rentalPackages?: RentalPackage[]
   version: number
   // Optional legacy fields for backward-compatibility during refactoring
   sqft?: number
@@ -331,6 +360,9 @@ export interface StorageReservation {
   discountAmount?: number
   appointmentDate?: string
   appointmentTime?: string
+  packageId?: string
+  packageName?: string
+  packagePrice?: number
   generatedAccessPin?: string
   unitAssignedAt?: string
   checkedInAt?: string
