@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import type { FacilityCustomUnitSpec } from '../../../types/storageHub'
+import type { FacilityCustomUnitSpec, RentalPackage } from '../../../types/storageHub'
 import { getUnitTypeVehicleStandard } from '../../../domain/facilityRules'
+import {
+  generateDefaultRentalPackages,
+  calculatePackagePrice,
+  calculateDiscountPercent,
+} from '../../../domain/packageRules'
 
 export interface UnitAllocationTableProps {
   specs: FacilityCustomUnitSpec[]
@@ -138,10 +143,103 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
     onChangeSpecs(
       specs.map((s) => {
         if (s.sizeCode !== sizeCode) return s
-        return { ...s, [field]: value }
+        const updated = { ...s, [field]: value }
+        if (field === 'monthlyPrice' && updated.rentalPackages && updated.rentalPackages.length > 0) {
+          const newPrice = typeof value === 'number' ? value : 0
+          updated.rentalPackages = updated.rentalPackages.map((pkg) => {
+            const { packagePrice, monthlyEquivalentPrice } = calculatePackagePrice(
+              newPrice,
+              pkg.months,
+              pkg.discountPercent ?? 0
+            )
+            return { ...pkg, packagePrice, monthlyEquivalentPrice }
+          })
+        }
+        return updated
       })
     )
   }
+
+  // Helper cập nhật gói thuê của spec
+  const handleUpdatePackage = (
+    sizeCode: string,
+    packageId: string,
+    updates: Partial<RentalPackage>
+  ) => {
+    onChangeSpecs(
+      specs.map((s) => {
+        if (s.sizeCode !== sizeCode) return s
+        const currentPackages =
+          s.rentalPackages && s.rentalPackages.length > 0
+            ? s.rentalPackages
+            : generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice)
+
+        const nextPackages = currentPackages.map((pkg) => {
+          if (pkg.id !== packageId) return pkg
+          const next = { ...pkg, ...updates }
+          if (updates.discountPercent !== undefined) {
+            const calc = calculatePackagePrice(s.monthlyPrice, next.months, updates.discountPercent)
+            next.packagePrice = calc.packagePrice
+            next.monthlyEquivalentPrice = calc.monthlyEquivalentPrice
+          } else if (updates.packagePrice !== undefined) {
+            next.discountPercent = calculateDiscountPercent(s.monthlyPrice, next.months, updates.packagePrice)
+            next.monthlyEquivalentPrice = Math.round(updates.packagePrice / Math.max(1, next.months))
+          }
+          return next
+        })
+        return { ...s, rentalPackages: nextPackages }
+      })
+    )
+  }
+
+  const handleAddCustomPackage = (sizeCode: string) => {
+    onChangeSpecs(
+      specs.map((s) => {
+        if (s.sizeCode !== sizeCode) return s
+        const currentPackages =
+          s.rentalPackages && s.rentalPackages.length > 0
+            ? s.rentalPackages
+            : generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice)
+
+        const existingMonths = new Set(currentPackages.map((p) => p.months))
+        const candidates = [2, 9, 18, 24, 36]
+        const nextMonth =
+          candidates.find((m) => !existingMonths.has(m)) ||
+          Math.max(...Array.from(existingMonths), 0) + 6
+        const discount = nextMonth >= 24 ? 12 : nextMonth >= 12 ? 8 : 4
+        const calc = calculatePackagePrice(s.monthlyPrice, nextMonth, discount)
+        const newPkg: RentalPackage = {
+          id: `pkg-${s.sizeCode.toLowerCase()}-${nextMonth}m-${Date.now().toString().slice(-4)}`,
+          unitTypeId: s.sizeCode,
+          months: nextMonth,
+          name: `Gói ${nextMonth} tháng`,
+          packagePrice: calc.packagePrice,
+          monthlyEquivalentPrice: calc.monthlyEquivalentPrice,
+          discountPercent: discount,
+          description: `Gói thuê ưu đãi ${nextMonth} tháng`,
+          status: 'active',
+        }
+        return { ...s, rentalPackages: [...currentPackages, newPkg] }
+      })
+    )
+  }
+
+  const handleRemoveCustomPackage = (sizeCode: string, packageId: string) => {
+    onChangeSpecs(
+      specs.map((s) => {
+        if (s.sizeCode !== sizeCode) return s
+        const currentPackages =
+          s.rentalPackages && s.rentalPackages.length > 0
+            ? s.rentalPackages
+            : generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice)
+        return {
+          ...s,
+          rentalPackages: currentPackages.filter((p) => p.id !== packageId),
+        }
+      })
+    )
+  }
+
 
   // Helper cập nhật kích thước khung kệ
   const handleUpdateFrameDim = (
@@ -286,29 +384,38 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
 
       {/* ─── Bảng Phân Bổ (Compact Row + Expandable Details) ─── */}
       <div className="border border-stone-200 rounded-xl overflow-hidden bg-white shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[760px] xl:min-w-0">
+        <div className="overflow-x-auto unit-allocation-table">
+          <table className="w-full table-fixed text-left text-xs border-collapse min-w-[780px]">
+            <colgroup>
+              <col style={{ width: '24%' }} />
+              <col style={{ width: '25%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '6%' }} />
+            </colgroup>
             <thead className="bg-stone-100/90 border-b border-stone-200 text-stone-700 font-bold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-2.5 px-3 w-[22%] min-w-[170px]">
+                <th className="py-2.5 px-3">
                   {lang === 'vi' ? 'Cỡ & Loại Kho' : 'Size & Name'}
                 </th>
-                <th className="py-2.5 px-2 w-[24%] min-w-[190px]">
+                <th className="py-2.5 px-2">
                   {lang === 'vi' ? 'Quy Cách (D × R × C)' : 'Dimensions (L × W × H)'}
                 </th>
-                <th className="py-2.5 px-2 text-center w-[12%] min-w-[100px]">
+                <th className="py-2.5 px-2 text-center">
                   {lang === 'vi' ? 'Thể Tích' : 'Volume'}
                 </th>
-                <th className="py-2.5 px-2 text-center w-[12%] min-w-[105px]">
+                <th className="py-2.5 px-2 text-center">
                   {lang === 'vi' ? 'Tải Trọng Tối Đa' : 'Max Load'}
                 </th>
-                <th className="py-2.5 px-2 text-center w-[14%] min-w-[120px]">
+                <th className="py-2.5 px-2 text-center">
                   {lang === 'vi' ? 'Đơn Giá / Tháng' : 'Monthly Rate'}
                 </th>
-                <th className="py-2.5 px-2 text-center w-[11%] min-w-[100px]">
+                <th className="py-2.5 px-2 text-center">
                   {lang === 'vi' ? 'Số Lượng' : 'Quantity'}
                 </th>
-                <th className="py-2.5 px-2 text-center w-[5%] min-w-[65px]">
+                <th className="py-2.5 px-2 text-center">
                   {lang === 'vi' ? 'Thao Tác' : 'Action'}
                 </th>
               </tr>
@@ -318,7 +425,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-stone-500">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <svg className="w-10 h-10 text-stone-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-10 h-10 text-stone-300 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
                       <p className="text-sm font-semibold text-stone-700">
@@ -375,7 +482,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                   type="text"
                                   value={spec.name}
                                   onChange={(e) => handleUpdateSpec(spec.sizeCode, 'name', e.target.value)}
-                                  className="font-bold text-stone-900 text-xs bg-white border border-stone-200 hover:border-stone-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded px-1.5 py-0.5 w-full max-w-[140px] truncate shadow-2xs transition"
+                                  className="font-bold text-stone-900 text-xs bg-white border border-stone-200 hover:border-stone-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded px-1.5 py-0.5 w-full max-w-[130px] truncate shadow-2xs transition"
                                   title={spec.name}
                                 />
                                 {isDirty && (
@@ -608,7 +715,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                             >
                               <span>{isExpanded ? 'Thu' : 'Chi tiết'}</span>
                               <svg
-                                className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                className={`w-3 h-3 show-icon transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -630,9 +737,9 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                   count: spec.count,
                                 })
                               }}
-                              className={`w-7 h-7 rounded-md flex items-center justify-center transition border ${
+                              className={`w-7 h-7 rounded-md flex items-center justify-center transition border btn-action-icon ${
                                 canDelete
-                                  ? 'border-stone-300 bg-white hover:border-red-400 hover:bg-red-50 text-stone-400 hover:text-red-600 cursor-pointer shadow-2xs'
+                                  ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:border-red-300 hover:text-red-700 cursor-pointer shadow-2xs'
                                   : 'border-stone-200 bg-stone-50 text-stone-300 cursor-not-allowed opacity-40'
                               }`}
                               aria-label={`Xóa loại kho ${spec.sizeCode}`}
@@ -642,7 +749,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                   : `Xóa loại kho "${spec.sizeCode}"`
                               }
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <svg className="w-3.5 h-3.5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
                             </button>
@@ -658,7 +765,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                               {/* Cảnh báo thay đổi khi đang có khách thuê */}
                               {hasOccWarning && (
                                 <div className="p-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-center gap-2">
-                                  <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg className="w-4 h-4 show-icon text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                   </svg>
                                   <span>
@@ -862,6 +969,179 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                   )}
                                 </div>
                               </div>
+
+                              {/* Nhóm 3: Thiết lập Gói thuê & Ưu đãi kỳ hạn */}
+                              {(() => {
+                                const rowPackages =
+                                  spec.rentalPackages && spec.rentalPackages.length > 0
+                                    ? spec.rentalPackages
+                                    : generateDefaultRentalPackages('', spec.sizeCode, spec.monthlyPrice)
+
+                                return (
+                                  <div className="bg-white p-3 rounded-xl border border-stone-200 shadow-2xs space-y-2.5">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs select-none">
+                                          🏷️
+                                        </span>
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-stone-900">
+                                              {lang === 'vi'
+                                                ? `Gói thuê & Ưu đãi kỳ hạn: ${spec.name} (${spec.sizeCode})`
+                                                : `Rental Packages: ${spec.name} (${spec.sizeCode})`}
+                                            </span>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold border border-emerald-200">
+                                              {rowPackages.filter((p) => p.status === 'active').length} gói mở bán
+                                            </span>
+                                          </div>
+                                          <span className="text-[10px] text-stone-500 block">
+                                            {lang === 'vi'
+                                              ? 'Khách hàng sẽ thấy và lựa chọn đúng các gói thuê đang hoạt động này khi xem và đặt kho'
+                                              : 'Customers will see and select these active packages when booking this storage unit'}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddCustomPackage(spec.sizeCode)}
+                                        className="text-[11px] font-bold px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                                        title={lang === 'vi' ? 'Thêm kỳ hạn thuê tùy chọn' : 'Add custom rental duration'}
+                                      >
+                                        <span className="font-bold">+</span>
+                                        <span>{lang === 'vi' ? 'Thêm kỳ hạn khác' : 'Add duration'}</span>
+                                      </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                                      {rowPackages.map((pkg) => {
+                                        const isDefaultMonths = [1, 3, 6, 12].includes(pkg.months)
+                                        const isActive = pkg.status === 'active'
+
+                                        return (
+                                          <div
+                                            key={pkg.id}
+                                            className={`p-2.5 rounded-lg border transition space-y-2 flex flex-col justify-between ${
+                                              isActive
+                                                ? 'bg-emerald-50/50 border-emerald-300/80 shadow-2xs'
+                                                : 'bg-stone-50/80 border-stone-200 opacity-60'
+                                            }`}
+                                          >
+                                            {/* Header gói: Tên + Toggle Active */}
+                                            <div className="flex items-center justify-between gap-1 border-b border-stone-200/60 pb-1.5">
+                                              <div className="flex items-center gap-1.5">
+                                                <input
+                                                  type="checkbox"
+                                                  id={`pkg-active-${spec.sizeCode}-${pkg.id}`}
+                                                  checked={isActive}
+                                                  onChange={(e) =>
+                                                    handleUpdatePackage(spec.sizeCode, pkg.id, {
+                                                      status: e.target.checked ? 'active' : 'inactive',
+                                                    })
+                                                  }
+                                                  className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                                />
+                                                <label
+                                                  htmlFor={`pkg-active-${spec.sizeCode}-${pkg.id}`}
+                                                  className="font-bold text-xs text-stone-900 cursor-pointer select-none"
+                                                >
+                                                  {pkg.name}
+                                                </label>
+                                              </div>
+
+                                              <div className="flex items-center gap-1">
+                                                <span
+                                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                                    isActive
+                                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                      : 'bg-stone-200 text-stone-600'
+                                                  }`}
+                                                >
+                                                  {isActive ? 'Mở bán' : 'Tắt'}
+                                                </span>
+                                                {!isDefaultMonths && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveCustomPackage(spec.sizeCode, pkg.id)}
+                                                    className="w-4 h-4 rounded text-stone-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center font-bold text-xs"
+                                                    title="Xóa kỳ hạn này"
+                                                  >
+                                                    ×
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+
+                                            {/* Chiết khấu (%) & Giá gói tổng */}
+                                            <div className="space-y-1.5 text-stone-700">
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-stone-500 font-medium">Giảm giá:</span>
+                                                <div className="flex items-center bg-white border border-stone-300 rounded overflow-hidden shadow-2xs">
+                                                  <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    step={0.5}
+                                                    disabled={!isActive}
+                                                    value={pkg.discountPercent ?? 0}
+                                                    onChange={(e) =>
+                                                      handleUpdatePackage(spec.sizeCode, pkg.id, {
+                                                        discountPercent: Math.max(
+                                                          0,
+                                                          Math.min(100, parseFloat(e.target.value) || 0)
+                                                        ),
+                                                      })
+                                                    }
+                                                    className="w-12 h-6 px-1 text-right font-bold text-xs bg-transparent text-emerald-800 focus:outline-none disabled:opacity-40"
+                                                  />
+                                                  <span className="px-1 text-[10px] font-bold text-stone-500 bg-stone-50 border-l border-stone-200 select-none">
+                                                    %
+                                                  </span>
+                                                </div>
+                                              </div>
+
+                                              <div className="flex items-center justify-between text-[11px]">
+                                                <span className="text-stone-500 font-medium">Giá trọn gói:</span>
+                                                <div className="flex items-center bg-white border border-stone-300 rounded overflow-hidden shadow-2xs">
+                                                  <input
+                                                    type="text"
+                                                    disabled={!isActive}
+                                                    value={
+                                                      typeof pkg.packagePrice === 'number'
+                                                        ? pkg.packagePrice.toLocaleString('vi-VN')
+                                                        : pkg.packagePrice
+                                                    }
+                                                    onChange={(e) => {
+                                                      const parsed =
+                                                        parseInt(e.target.value.replace(/\D/g, ''), 10) || 0
+                                                      handleUpdatePackage(spec.sizeCode, pkg.id, {
+                                                        packagePrice: parsed,
+                                                      })
+                                                    }}
+                                                    className="w-22 h-6 px-1 text-right font-bold text-xs bg-transparent text-stone-900 focus:outline-none disabled:opacity-40"
+                                                  />
+                                                  <span className="px-1 text-[10px] font-bold text-stone-500 bg-stone-50 border-l border-stone-200 select-none">
+                                                    ₫
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Đơn giá tương đương theo tháng */}
+                                            <div className="pt-1 border-t border-stone-200/50 flex items-center justify-between text-[10px] text-stone-500">
+                                              <span>Tương đương:</span>
+                                              <span className="font-semibold text-emerald-900">
+                                                {pkg.monthlyEquivalentPrice.toLocaleString('vi-VN')} ₫/tháng
+                                              </span>
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </td>
                         </tr>

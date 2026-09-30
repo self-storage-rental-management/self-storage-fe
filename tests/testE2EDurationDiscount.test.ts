@@ -39,16 +39,18 @@ describe('E2E Integration: BO Facility Creation, Duration Discounts & Customer B
   it('Step 2: BO verifies default Duration Discounts in Policies tab', () => {
     // Default duration discount list
     const discounts: DurationDiscountItem[] = [...DEFAULT_DURATION_DISCOUNTS]
-    expect(discounts).toHaveLength(4)
+    expect(discounts).toHaveLength(5)
 
     const pkg3m = discounts.find(d => d.months === 3)
     const pkg6m = discounts.find(d => d.months === 6)
     const pkg12m = discounts.find(d => d.months === 12)
+    const pkg24m = discounts.find(d => d.months === 24)
     const pkgOther = discounts.find(d => d.months === 'other')
 
     expect(pkg3m?.discountPercent).toBe(3)
     expect(pkg6m?.discountPercent).toBe(5)
     expect(pkg12m?.discountPercent).toBe(8)
+    expect(pkg24m?.discountPercent).toBe(12)
     expect(pkgOther?.discountPercent).toBe(0)
   })
 
