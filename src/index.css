@@ -34,6 +34,8 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
 .show-icon,
 .show-svg,
 .show-svg svg:not(.show-icon),
+.unit-allocation-table svg,
+.btn-action-icon svg,
 .rbac-matrix svg:not(.show-icon),
 .home-page svg:not(.show-icon),
 .brand-logo svg:not(.show-icon),
@@ -126,12 +128,29 @@ textarea {
   font: inherit;
 }
 
-/* Customer portal typography stays consistent without recoloring content panels. */
+/* Global typography standardization across all portals, modals, tables and dialogs */
+body,
+button,
+input,
+select,
+textarea,
+dialog,
+[role="dialog"],
+.modal,
 .customer-page,
 .customer-page *,
 .customer-role-layout,
 .customer-role-layout * {
-  font-family: Inter, system-ui, sans-serif !important;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Monospace preservation for codes, IDs, dimensions, currency */
+.font-mono,
+.font-mono-label,
+code,
+pre,
+kbd {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
 }
 
 button:not(:disabled) { cursor: pointer; }

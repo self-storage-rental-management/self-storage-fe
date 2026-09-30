@@ -3,10 +3,11 @@ import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } f
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar } from '../../components/ui'
 import { formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
 import type { User } from '../../types'
-import type { Facility, StorageUnit, StorageHold, UnitType } from '../../types/storageHub'
+import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
 import { FACILITIES, UNIT_SPECS, type TicketItem } from '../../data/demoDatabase'
+import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import {
@@ -45,11 +46,25 @@ type CustomerConfirmation = {
   tone?: 'danger' | 'primary'
   onConfirm: () => void
 }
+const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
+  const code = (sizeCode || '').toUpperCase()
+  if (code === 'S') return 'Xe đẩy tay / xe sàn nhỏ'
+  if (code === 'M') return 'Xe đẩy sàn phẳng'
+  if (code === 'L') return 'Xe nâng tay pallet'
+  if (code === 'XL') return 'Xe nâng điện dắt bộ'
+  if (!originalTrolley) return 'Xe đẩy tiêu chuẩn'
+  const t = originalTrolley.toLowerCase()
+  if (t.includes('electric') || t.includes('walkie')) return 'Xe nâng điện dắt bộ'
+  if (t.includes('platform')) return 'Xe đẩy sàn phẳng'
+  if (t.includes('pallet')) return 'Xe nâng tay pallet'
+  return originalTrolley
+}
+
 const CUSTOMER_UNIT_SPECS = {
-  S: { type: 'Small', dimensions: [UNIT_SPECS.S.lengthM, UNIT_SPECS.S.widthM, UNIT_SPECS.S.heightM], volumeM3: UNIT_SPECS.S.volumeM3, rackCount: UNIT_SPECS.S.frameCount, rackDimensions: [UNIT_SPECS.S.frameDimensions.widthM, UNIT_SPECS.S.frameDimensions.depthM, UNIT_SPECS.S.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.S.aisleM, doorWidthM: UNIT_SPECS.S.doorWidthM, doorHeightM: UNIT_SPECS.S.doorHeightM, maxCargoDimCm: UNIT_SPECS.S.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.S.smallBoxes, largeBoxCapacity: UNIT_SPECS.S.largeBoxes, trolley: UNIT_SPECS.S.cartEquipment, trolleyDetail: UNIT_SPECS.S.cartEquipmentDetail, price: UNIT_SPECS.S.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.S.maxLoadKg },
-  M: { type: 'Medium', dimensions: [UNIT_SPECS.M.lengthM, UNIT_SPECS.M.widthM, UNIT_SPECS.M.heightM], volumeM3: UNIT_SPECS.M.volumeM3, rackCount: UNIT_SPECS.M.frameCount, rackDimensions: [UNIT_SPECS.M.frameDimensions.widthM, UNIT_SPECS.M.frameDimensions.depthM, UNIT_SPECS.M.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.M.aisleM, doorWidthM: UNIT_SPECS.M.doorWidthM, doorHeightM: UNIT_SPECS.M.doorHeightM, maxCargoDimCm: UNIT_SPECS.M.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.M.smallBoxes, largeBoxCapacity: UNIT_SPECS.M.largeBoxes, trolley: UNIT_SPECS.M.cartEquipment, trolleyDetail: UNIT_SPECS.M.cartEquipmentDetail, price: UNIT_SPECS.M.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.M.maxLoadKg },
-  L: { type: 'Large', dimensions: [UNIT_SPECS.L.lengthM, UNIT_SPECS.L.widthM, UNIT_SPECS.L.heightM], volumeM3: UNIT_SPECS.L.volumeM3, rackCount: UNIT_SPECS.L.frameCount, rackDimensions: [UNIT_SPECS.L.frameDimensions.widthM, UNIT_SPECS.L.frameDimensions.depthM, UNIT_SPECS.L.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.L.aisleM, doorWidthM: UNIT_SPECS.L.doorWidthM, doorHeightM: UNIT_SPECS.L.doorHeightM, maxCargoDimCm: UNIT_SPECS.L.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.L.smallBoxes, largeBoxCapacity: UNIT_SPECS.L.largeBoxes, trolley: UNIT_SPECS.L.cartEquipment, trolleyDetail: UNIT_SPECS.L.cartEquipmentDetail, price: UNIT_SPECS.L.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.L.maxLoadKg },
-  XL: { type: 'Extra Large', dimensions: [UNIT_SPECS.XL.lengthM, UNIT_SPECS.XL.widthM, UNIT_SPECS.XL.heightM], volumeM3: UNIT_SPECS.XL.volumeM3, rackCount: UNIT_SPECS.XL.frameCount, rackDimensions: [UNIT_SPECS.XL.frameDimensions.widthM, UNIT_SPECS.XL.frameDimensions.depthM, UNIT_SPECS.XL.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.XL.aisleM, doorWidthM: UNIT_SPECS.XL.doorWidthM, doorHeightM: UNIT_SPECS.XL.doorHeightM, maxCargoDimCm: UNIT_SPECS.XL.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.XL.smallBoxes, largeBoxCapacity: UNIT_SPECS.XL.largeBoxes, trolley: UNIT_SPECS.XL.cartEquipment, trolleyDetail: UNIT_SPECS.XL.cartEquipmentDetail, price: UNIT_SPECS.XL.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.XL.maxLoadKg },
+  S: { type: 'Small', dimensions: [UNIT_SPECS.S.lengthM, UNIT_SPECS.S.widthM, UNIT_SPECS.S.heightM], volumeM3: UNIT_SPECS.S.volumeM3, rackCount: UNIT_SPECS.S.frameCount, rackDimensions: [UNIT_SPECS.S.frameDimensions.widthM, UNIT_SPECS.S.frameDimensions.depthM, UNIT_SPECS.S.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.S.aisleM, doorWidthM: UNIT_SPECS.S.doorWidthM, doorHeightM: UNIT_SPECS.S.doorHeightM, maxCargoDimCm: UNIT_SPECS.S.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.S.smallBoxes, largeBoxCapacity: UNIT_SPECS.S.largeBoxes, trolley: 'Xe đẩy tay / xe sàn nhỏ', trolleyDetail: UNIT_SPECS.S.cartEquipmentDetail, price: UNIT_SPECS.S.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.S.maxLoadKg },
+  M: { type: 'Medium', dimensions: [UNIT_SPECS.M.lengthM, UNIT_SPECS.M.widthM, UNIT_SPECS.M.heightM], volumeM3: UNIT_SPECS.M.volumeM3, rackCount: UNIT_SPECS.M.frameCount, rackDimensions: [UNIT_SPECS.M.frameDimensions.widthM, UNIT_SPECS.M.frameDimensions.depthM, UNIT_SPECS.M.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.M.aisleM, doorWidthM: UNIT_SPECS.M.doorWidthM, doorHeightM: UNIT_SPECS.M.doorHeightM, maxCargoDimCm: UNIT_SPECS.M.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.M.smallBoxes, largeBoxCapacity: UNIT_SPECS.M.largeBoxes, trolley: 'Xe đẩy sàn phẳng', trolleyDetail: UNIT_SPECS.M.cartEquipmentDetail, price: UNIT_SPECS.M.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.M.maxLoadKg },
+  L: { type: 'Large', dimensions: [UNIT_SPECS.L.lengthM, UNIT_SPECS.L.widthM, UNIT_SPECS.L.heightM], volumeM3: UNIT_SPECS.L.volumeM3, rackCount: UNIT_SPECS.L.frameCount, rackDimensions: [UNIT_SPECS.L.frameDimensions.widthM, UNIT_SPECS.L.frameDimensions.depthM, UNIT_SPECS.L.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.L.aisleM, doorWidthM: UNIT_SPECS.L.doorWidthM, doorHeightM: UNIT_SPECS.L.doorHeightM, maxCargoDimCm: UNIT_SPECS.L.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.L.smallBoxes, largeBoxCapacity: UNIT_SPECS.L.largeBoxes, trolley: 'Xe nâng tay pallet', trolleyDetail: UNIT_SPECS.L.cartEquipmentDetail, price: UNIT_SPECS.L.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.L.maxLoadKg },
+  XL: { type: 'Extra Large', dimensions: [UNIT_SPECS.XL.lengthM, UNIT_SPECS.XL.widthM, UNIT_SPECS.XL.heightM], volumeM3: UNIT_SPECS.XL.volumeM3, rackCount: UNIT_SPECS.XL.frameCount, rackDimensions: [UNIT_SPECS.XL.frameDimensions.widthM, UNIT_SPECS.XL.frameDimensions.depthM, UNIT_SPECS.XL.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.XL.aisleM, doorWidthM: UNIT_SPECS.XL.doorWidthM, doorHeightM: UNIT_SPECS.XL.doorHeightM, maxCargoDimCm: UNIT_SPECS.XL.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.XL.smallBoxes, largeBoxCapacity: UNIT_SPECS.XL.largeBoxes, trolley: 'Xe nâng điện dắt bộ', trolleyDetail: UNIT_SPECS.XL.cartEquipmentDetail, price: UNIT_SPECS.XL.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.XL.maxLoadKg },
 } as const
 const storageTypeLabelVi = (value?: string) => {
   const normalized = (value || '').toLowerCase()
@@ -156,16 +171,26 @@ const MATERIALS_BY_CATEGORY: Record<Exclude<GoodsCategoryCode, 'OTHER'>, { norma
 }
 const createGoodsDeclarationItem = (id = `goods-${Date.now()}`): GoodsDeclarationItem => ({ id, category: '', materialType: '', materialName: '', customGoodsName: '', description: '', customMaterial: '', quantity: '', lengthCm: '', widthCm: '', heightCm: '', weightKg: '', fragile: '', customerNote: '', images: [] })
 
-const rentalDiscountRate = (months: number) => {
+const rentalDiscountRate = (months: number, customPackages?: RentalPackage[]) => {
+  if (customPackages && customPackages.length > 0) {
+    const pkg = customPackages.find(p => p.months === months)
+    if (pkg) {
+      return pkg.status === 'active' && typeof pkg.discountPercent === 'number'
+        ? pkg.discountPercent / 100
+        : 0
+    }
+  }
   try {
     const raw = localStorage.getItem('storagehub:durationDiscounts')
     if (raw) {
       const list = JSON.parse(raw)
       const found = list.find((item: any) => item.months === months && item.status === 'active')
       if (found && typeof found.discountPercent === 'number') return found.discountPercent / 100
+      const inactive = list.find((item: any) => item.months === months && item.status === 'inactive')
+      if (inactive) return 0
     }
   } catch {}
-  return months === 3 ? 0.03 : months === 6 ? 0.05 : months === 12 ? 0.08 : 0
+  return months === 3 ? 0.03 : months === 6 ? 0.05 : months === 12 ? 0.08 : months === 24 ? 0.12 : 0
 }
 
 const renewalDiscountRate = (months: number) => {
@@ -175,9 +200,11 @@ const renewalDiscountRate = (months: number) => {
       const list = JSON.parse(raw)
       const found = list.find((item: any) => item.months === months && item.status === 'active')
       if (found && typeof found.renewalDiscountPercent === 'number') return found.renewalDiscountPercent / 100
+      const inactive = list.find((item: any) => item.months === months && item.status === 'inactive')
+      if (inactive) return 0
     }
   } catch {}
-  return months === 6 ? 0.03 : months === 12 ? 0.05 : 0
+  return months === 3 ? 0.02 : months === 6 ? 0.03 : months === 12 ? 0.05 : months === 24 ? 0.08 : 0
 }
 const parsePositiveNumber = (rawValue: string) => {
   if (rawValue.trim() === '') return null
@@ -321,10 +348,10 @@ function SizeCategoryCard({ facility, unitType, availableCount, onReserve, onVie
         <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-stone-200 py-4 text-sm">
           <div><p className="text-xs text-stone-500">{'Diện tích'}</p><p className="mt-0.5 font-bold text-black">{unitType.areaM2} m²</p></div>
           <div><p className="text-xs text-stone-500">{'Kích thước (D×R×C)'}</p><p className="mt-0.5 font-bold text-black">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m</p></div>
-          <div><p className="text-xs text-stone-500">{'Chiều cao kho'}</p><p className="mt-0.5 font-bold text-black">{unitType.heightM} m</p></div>
+          <div><p className="text-xs text-stone-500">{'Thể tích kho'}</p><p className="mt-0.5 font-bold text-black">{unitType.volumeM3} m³</p></div>
+          <div><p className="text-xs text-stone-500">{'Số khung kệ'}</p><p className="mt-0.5 font-bold text-black">{spec.frameCount} khung</p></div>
+          <div><p className="text-xs text-stone-500">{'Chiều rộng lối đi'}</p><p className="mt-0.5 font-bold text-black">{spec.aisleM} m</p></div>
           <div><p className="text-xs text-stone-500">{'Tải trọng tối đa'}</p><p className="mt-0.5 font-bold text-black">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</p></div>
-          <div><p className="text-xs text-stone-500">{'Lối đi'}</p><p className="mt-0.5 font-bold text-black">{spec.aisleM} m</p></div>
-          <div><p className="text-xs text-stone-500">{'Khung cửa (R×C)'}</p><p className="mt-0.5 font-bold text-black">{spec.doorWidthM} × {spec.doorHeightM} m</p></div>
         </div>
         {/* Hàng hóa tối đa & xe đẩy */}
         <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-stone-50 px-3 py-2.5 text-xs">
@@ -334,7 +361,7 @@ function SizeCategoryCard({ facility, unitType, availableCount, onReserve, onVie
           </div>
           <div>
             <p className="text-stone-500">Xe đẩy hỗ trợ</p>
-            <p className="mt-0.5 font-bold text-stone-800">{spec.cartEquipment}</p>
+            <p className="mt-0.5 font-bold text-stone-800">{customerTrolleyVi(sizeCode, spec.cartEquipment)}</p>
           </div>
         </div>
         <p className="mt-4 line-clamp-3 min-h-[3.75rem] text-sm leading-5 text-stone-600">{unitType.descriptionVi}</p>
@@ -481,7 +508,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         heightCm: Math.min(Math.round(doorHeightM * 100 - 20), 220),
       } : spec.maxCargoDimCm
 
-      const rackCount = Math.max(1, Math.round(lengthM / 2.5))
+      const rackCount = (unit as any).rackCount || (unit as any).frameCount || spec.rackCount || rawSpec.frameCount
       const smallBoxCapacity = Math.floor(volumeM3 * 8)
       const largeBoxCapacity = Math.floor(volumeM3 * 2.5)
 
@@ -498,7 +525,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         maxCargoDimCm,
         smallBoxCapacity,
         largeBoxCapacity,
-        trolley: lengthM >= 15 ? 'Xe nâng tay & Xe đẩy sàn thép 500kg' : spec.trolley,
+        trolley: customerTrolleyVi(sizeCode, lengthM >= 15 ? 'Xe nâng tay & Xe đẩy sàn thép 500kg' : spec.trolley),
         trolleyDetail: lengthM >= 15 ? 'Trang bị xe nâng tay pallet (tải 2 tấn) và xe đẩy tải nặng 500kg hỗ trợ xuất nhập kho lớn.' : spec.trolleyDetail,
         dimensions: { lengthM, widthM, heightM },
         doorDimensions: { widthM: doorWidthM, heightM: doorHeightM },
@@ -506,6 +533,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         maxLoadKg,
         price,
         deposit: unit.deposit || price,
+        rentalPackages: unit.rentalPackages || fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages || generateDefaultRentalPackages(fac?.id || unit.facilityId, sizeCode, price),
         allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
         prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
       }
@@ -640,6 +668,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   const [moveInDate, setMoveInDate] = useState('2026-09-22')
   const [bookingAppointmentTime, setBookingAppointmentTime] = useState('09:00')
   const [rentalMonths, setRentalMonths] = useState(3)
+  const [selectedPackageId, setSelectedPackageId] = useState<string>('')
   const [customerIdCard, setCustomerIdCard] = useState('079203009988')
   const [customerPhone, setCustomerPhone] = useState('+84 908 123 456')
   const [customerEmail] = useState(user.email)
@@ -654,6 +683,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     setMoveInDate('2026-09-22')
     setBookingAppointmentTime('09:00')
     setRentalMonths(3)
+    setSelectedPackageId('')
     setCustomerIdCard('079203009988')
     setCustomerPhone('+84 908 123 456')
     setCustomerAddress('Quận 1, TP. Hồ Chí Minh')
@@ -919,6 +949,18 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     setBookingReview(false)
     setBookingErrors({})
     setSelectedTarget({ facility, unitType })
+    const sizeCode = storageSizeCode(unitType.name)
+    const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
+    const unitRentalPackages = exactUnit?.rentalPackages || customSpec?.rentalPackages || generateDefaultRentalPackages(facility.id, sizeCode, unitType.monthlyPrice)
+    const activePackages = unitRentalPackages.filter(p => p.status === 'active')
+    const initialPkg = activePackages.find(p => p.months === 3) || activePackages[0]
+    if (initialPkg) {
+      setSelectedPackageId(initialPkg.id)
+      setRentalMonths(initialPkg.months)
+    } else {
+      setSelectedPackageId('')
+      setRentalMonths(3)
+    }
     const repUnit: StorageUnit = exactUnit ?? {
       id: '',
       code: unitType.name,
@@ -938,6 +980,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       deposit: unitType.monthlyPrice,
       climate: true,
       status: 'available',
+      rentalPackages: unitRentalPackages,
       reservedPeriods: [],
       version: 1
     }
@@ -948,9 +991,12 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
   const handleOpenSpecs = (facility: Facility, unitType: UnitType, availableCount: number, exactUnit?: StorageUnit) => {
     setSelectedTarget({ facility, unitType })
+    const sizeCode = storageSizeCode(unitType.name)
+    const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
+    const unitRentalPackages = exactUnit?.rentalPackages || customSpec?.rentalPackages || generateDefaultRentalPackages(facility.id, sizeCode, unitType.monthlyPrice)
     const repUnit: StorageUnit = exactUnit ?? {
       id: '',
-      code: unitType.name,
+      code: `${CUSTOMER_FACILITY_DISPLAY[facility.id]?.code ?? facility.code ?? facility.id.toUpperCase()}-${storageSizeCode(unitType.name)}`,
       facilityId: facility.id,
       facilityName: facility.name,
       floor: 1,
@@ -967,6 +1013,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       deposit: unitType.monthlyPrice,
       climate: true,
       status: availableCount > 0 ? 'available' : 'reserved',
+      rentalPackages: unitRentalPackages,
       reservedPeriods: [],
       version: 1
     }
@@ -1032,9 +1079,38 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     : undefined
   const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
   const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
-  const discountRate = rentalDiscountRate(rentalMonths)
+
+  // Active rental packages for the selected unit
+  const selectedUnitActivePackages = useMemo(() => {
+    if (!selectedUnit) return []
+    const fac = facilities.find(f => f.id === selectedUnit.facilityId || f.code === selectedUnit.facilityId)
+    const customSpec = fac?.unitCustomSpecs?.find(s => s.sizeCode === selectedSizeCode)
+    const packages = resolveRentalPackagesForUnit({
+      rentalPackages: selectedUnit.rentalPackages || customSpec?.rentalPackages,
+      monthlyPrice: selectedUnit.price,
+      sizeCode: selectedSizeCode,
+      facilityId: selectedUnit.facilityId
+    })
+    return packages.filter(p => p.status === 'active')
+  }, [selectedUnit, facilities, selectedSizeCode])
+
+  // Selected package for quote calculation
+  const selectedActivePackage = useMemo(() => {
+    if (selectedPackageId) {
+      const match = selectedUnitActivePackages.find(p => p.id === selectedPackageId)
+      if (match) return match
+    }
+    return selectedUnitActivePackages.find(p => p.months === rentalMonths)
+  }, [selectedPackageId, selectedUnitActivePackages, rentalMonths])
+
+  const discountRate = selectedActivePackage
+    ? (selectedActivePackage.discountPercent ?? 0) / 100
+    : rentalDiscountRate(rentalMonths, selectedUnitActivePackages)
+
   const grossTermValue = currentQuote ? currentQuote.baseMonthlyPrice * rentalMonths : 0
-  const promotionDiscount = Math.round(grossTermValue * discountRate * 100) / 100
+  const promotionDiscount = selectedActivePackage
+    ? Math.max(0, grossTermValue - selectedActivePackage.packagePrice)
+    : Math.round(grossTermValue * discountRate * 100) / 100
 
   const facilityPoliciesForSelected = useMemo(() => {
     const facilityName = selectedUnit?.facilityName || selectedTarget?.facility.name || (selectedFacilityId ? CUSTOMER_FACILITY_DISPLAY[selectedFacilityId]?.name : '')
@@ -1216,6 +1292,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       customerAddress,
       appointmentTime: bookingAppointmentTime,
       discountAmount: totalCombinedDiscount,
+      packageId: selectedActivePackage?.id,
+      packageName: selectedActivePackage?.name,
+      packagePrice: selectedActivePackage?.packagePrice,
       largestItemDimensionsCm: {
         lengthCm: cargoLengthNumber,
         widthCm: cargoWidthNumber,
@@ -2428,8 +2507,8 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <h3 className="text-2xl font-bold">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)}</h3>
-                    <p className="mt-1 text-sm font-semibold text-amber-300">Size {catalogUnit?.sizeCode ?? selectedUnit.type}</p>
-                    <p className="mt-1 text-sm text-stone-300">{'Kích thước'}: {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m ({'dài × rộng × cao'})</p>
+                    <p className="mt-1 text-sm font-semibold text-amber-300">Kích thước (Size) {catalogUnit?.sizeCode ?? storageSizeCode(selectedUnit.type)}</p>
+                    <p className="mt-1 text-sm text-stone-300">{'Kích thước kho'}: {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m ({'dài × rộng × cao'})</p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-white">{formatVnd(selectedUnit.price)}<span className="text-sm font-normal text-stone-300">/{'tháng'}</span></p>
@@ -2447,24 +2526,22 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <p className="mb-4 text-xs font-bold uppercase tracking-wider text-amber-800">1. Thông tin kho chi tiết</p>
                 {catalogUnit && (() => {
                   const rawSpec = (catalogUnit?.sizeCode && UNIT_SPECS[catalogUnit.sizeCode as keyof typeof UNIT_SPECS]) || UNIT_SPECS.XL
+                  const displayUnitCode = selectedUnit.code && !selectedUnit.code.toLowerCase().includes('storage')
+                    ? selectedUnit.code
+                    : `${CUSTOMER_FACILITY_DISPLAY[selectedUnit.facilityId]?.code ?? selectedUnit.facilityId.toUpperCase()}-${catalogUnit.sizeCode}`
                   return (
                     <ul className="divide-y divide-amber-200/70 overflow-hidden rounded-xl border border-amber-200 bg-white text-sm">
                       {[
-                        ['Mã kho', selectedUnit.code],
-                        ['Size', catalogUnit.sizeCode],
+                        ['Mã kho', displayUnitCode],
+                        ['Kích thước / Size', catalogUnit.sizeCode],
                         ['Kích thước kho (D × R × C)', `${selectedUnit.dimensions.lengthM} × ${selectedUnit.dimensions.widthM} × ${selectedUnit.dimensions.heightM} m`],
-                        ['Chiều cao kho', `${selectedUnit.dimensions.heightM} m`],
                         ['Thể tích kho', `${selectedUnit.volumeM3.toLocaleString('vi-VN')} m³`],
                         ['Số khung kệ', `${catalogUnit.rackCount} khung`],
                         ['Kích thước mỗi khung (R × S × C)', catalogUnit.rackDimensions],
-                        ['Khoảng cách giữa 2 khung', `${rawSpec.frameDistanceM} m`],
-                        ['Chiều rộng lối đi bộ', `${catalogUnit.aisleWidthM} m`],
-                        ['Chiều rộng lối xe', `${(catalogUnit as any).laneWidthM ?? rawSpec.vehicleLaneWidthM} m`],
-                        ['Kích thước khung cửa (R × C)', `${catalogUnit.doorWidthM.toLocaleString('vi-VN')} × ${catalogUnit.doorHeightM.toLocaleString('vi-VN')} m`],
+                        ['Chiều rộng lối đi', `${catalogUnit.aisleWidthM ?? rawSpec.aisleM} m`],
                         ['Hàng hóa tối đa (D × R × C)', `${catalogUnit.maxCargoDimCm.lengthCm} × ${catalogUnit.maxCargoDimCm.widthCm} × ${catalogUnit.maxCargoDimCm.heightCm} cm`],
                         ['Tải trọng tối đa', `${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg`],
-                        ['Xe đẩy hỗ trợ', catalogUnit.trolley],
-                        ['Chi tiết xe đẩy', catalogUnit.trolleyDetail],
+                        ['Xe đẩy hỗ trợ', customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)],
                         ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
                       ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="font-medium text-stone-500">{label}</span><b className="text-stone-950">{value}</b></li>)}
                     </ul>
@@ -2504,8 +2581,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           🛒
                         </div>
                         <div>
-                          <p className="font-bold text-stone-950 text-sm">{catalogUnit.trolley}</p>
-                          <p className="mt-1 text-xs text-stone-600">{catalogUnit.trolleyDetail}</p>
+                          <p className="font-bold text-stone-950 text-sm">{customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)}</p>
                         </div>
                       </div>
                     </div>
@@ -2525,17 +2601,77 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 )}
               </div>
 
-              <div className="order-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Ưu đãi đặt kho ban đầu</p>
-                <p className="mt-2 text-xs leading-5 text-emerald-900">
-                  {`Chính sách chiết khấu theo kỳ hạn thuê: 3 tháng giảm ${Math.round(rentalDiscountRate(3) * 100)}%, 6 tháng giảm ${Math.round(rentalDiscountRate(6) * 100)}% và 12 tháng giảm ${Math.round(rentalDiscountRate(12) * 100)}%. Gói gia hạn: 6 tháng giảm ${Math.round(renewalDiscountRate(6) * 100)}%, 12 tháng giảm ${Math.round(renewalDiscountRate(12) * 100)}%.`}
-                </p>
-                <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                  <li className="rounded-xl border border-emerald-200 bg-white p-3"><b>Thuê 3 tháng</b><span className="mt-1 block text-emerald-700">Giảm {Math.round(rentalDiscountRate(3) * 100)}% tiền thuê</span></li>
-                  <li className="rounded-xl border border-emerald-200 bg-white p-3"><b>Thuê 6 tháng</b><span className="mt-1 block text-emerald-700">Giảm {Math.round(rentalDiscountRate(6) * 100)}% tiền thuê</span></li>
-                  <li className="rounded-xl border border-emerald-200 bg-white p-3"><b>Thuê 12 tháng</b><span className="mt-1 block text-emerald-700">Giảm {Math.round(rentalDiscountRate(12) * 100)}% tiền thuê</span></li>
-                </ul>
-              </div>
+              {/* Dynamic Rental Packages Configured by BO */}
+              {(() => {
+                const fac = facilities.find(f => f.id === selectedUnit.facilityId || f.code === selectedUnit.facilityId)
+                const unitSpec = fac?.unitCustomSpecs?.find(s => s.sizeCode === catalogUnit?.sizeCode)
+                const activePackages = resolveRentalPackagesForUnit({
+                  rentalPackages: selectedUnit.rentalPackages || unitSpec?.rentalPackages,
+                  monthlyPrice: selectedUnit.price,
+                  sizeCode: catalogUnit?.sizeCode,
+                  facilityId: selectedUnit.facilityId
+                }).filter(p => p.status === 'active')
+
+                if (activePackages.length === 0) return null
+
+                return (
+                  <div className="order-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                          <span>🏷️</span>
+                          <span>Gói thuê ưu đãi cho loại kho này</span>
+                        </p>
+                        <p className="mt-0.5 text-xs text-emerald-950">
+                          Được thiết lập bởi cơ sở cho cỡ kho {catalogUnit?.sizeCode}. Thuê dài hạn để nhận mức giá ưu đãi nhất.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[11px] font-bold text-emerald-900">
+                        {activePackages.length} gói khả dụng
+                      </span>
+                    </div>
+
+                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                      {activePackages.map((pkg) => (
+                        <div
+                          key={pkg.id}
+                          className="rounded-xl border border-emerald-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-extrabold text-stone-900 text-sm">{pkg.name}</span>
+                              {(pkg.discountPercent ?? 0) > 0 ? (
+                                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                                  Giảm {pkg.discountPercent}%
+                                </span>
+                              ) : (
+                                <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
+                                  Tiêu chuẩn
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-base font-extrabold text-emerald-900">
+                              {formatVnd(pkg.packagePrice)}
+                            </p>
+                            <p className="text-[11px] text-stone-500">
+                              ~ {formatVnd(pkg.monthlyEquivalentPrice)}/tháng
+                            </p>
+                          </div>
+                          {pkg.description && (
+                            <p className="mt-2 text-[10px] text-stone-600 border-t border-stone-100 pt-1.5 line-clamp-2">
+                              {pkg.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[11px] text-emerald-800">
+                      Gói gia hạn tiếp theo: 3 tháng giảm {Math.round(renewalDiscountRate(3) * 100)}%, 6 tháng giảm {Math.round(renewalDiscountRate(6) * 100)}%, 12 tháng giảm {Math.round(renewalDiscountRate(12) * 100)}%, 24 tháng giảm {Math.round(renewalDiscountRate(24) * 100)}%.
+                    </p>
+                  </div>
+                )
+              })()}
 
               {/* Facility-Specific Policies & Rules */}
               {(() => {
@@ -2729,11 +2865,37 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               <Input label={'Địa chỉ'} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
               <Input label={'Ngày Check-in mong muốn'} type="date" value={moveInDate} min={dateInputValue(new Date())} max={dateInputValue(new Date(now + 14 * 86_400_000))} onChange={e => setMoveInDate(e.target.value)} />
               <div><Input label={'Giờ Check-in (đang mở 24/7 để kiểm thử)'} type="time" min="00:00" max="23:59" step="1800" value={bookingAppointmentTime} onChange={e => setBookingAppointmentTime(e.target.value)} /><p className="mt-1 text-[11px] text-blue-700">{'Bạn có thể chọn bất kỳ giờ nào trong ngày; giới hạn 14 ngày Check-in vẫn được áp dụng.'}</p></div>
-              <Select label={'Thời hạn thuê'} value={rentalMonths.toString()} onChange={e => setRentalMonths(Number(e.target.value))}>
-                <option value="1">1 {'tháng'}</option>
-                <option value="3">3 {'tháng'}</option>
-                <option value="6">6 {'tháng'}</option>
-                <option value="12">12 {'tháng'}</option>
+              <Select
+                label={'Gói thuê & Kỳ hạn'}
+                value={selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
+                onChange={e => {
+                  const val = e.target.value
+                  const pkg = selectedUnitActivePackages.find(p => p.id === val || p.months.toString() === val)
+                  if (pkg) {
+                    setSelectedPackageId(pkg.id)
+                    setRentalMonths(pkg.months)
+                  } else {
+                    const m = Number(val)
+                    if (!isNaN(m) && m > 0) {
+                      setRentalMonths(m)
+                    }
+                  }
+                }}
+              >
+                {selectedUnitActivePackages.length > 0 ? (
+                  selectedUnitActivePackages.map(pkg => (
+                    <option key={pkg.id} value={pkg.id}>
+                      {pkg.name} — {formatVnd(pkg.packagePrice)} {pkg.discountPercent ? `(Giảm ${pkg.discountPercent}%)` : ''}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="1">1 tháng — {formatVnd(currentQuote?.baseMonthlyPrice || selectedUnit?.price || 0)}</option>
+                    <option value="3">3 tháng — Giảm 3%</option>
+                    <option value="6">6 tháng — Giảm 5%</option>
+                    <option value="12">12 tháng — Giảm 8%</option>
+                  </>
+                )}
               </Select>
             </div>
 
@@ -2896,7 +3058,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · 2 × 4 × 4,5 m/khung</p></section>
                     <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa</p><ul className="list-disc space-y-1 pl-5">{goodsItems.map((item, index) => <li key={item.id}><b>Dòng {index + 1}:</b> {GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]} · {item.category === 'OTHER' ? item.customMaterial : item.materialName}</li>)}</ul><ul className="mt-3 list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · {sample.canFitFrame ? `cần ${sample.framesRequired} khung` : 'không thể xếp vào khung 2 × 4 × 4,5 m'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện tính sức chứa:</b> {packageCountNumber}</p><p><b>Tổng cân nặng tự động:</b> {goodsWeightNumber.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch Check-in:</b> {moveInDate} · {bookingAppointmentTime}</p><p><b>Kỳ thuê:</b> {rentalMonths} tháng</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, ngày mới vẫn phải nằm trong 14 ngày sau khi thanh toán cọc.</p></section>
+                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch Check-in:</b> {moveInDate} · {bookingAppointmentTime}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, ngày mới vẫn phải nằm trong 14 ngày sau khi thanh toán cọc.</p></section>
                   </div>
                   {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi Staff duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, Staff có tối đa 12 giờ để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
                     <div><p className="text-xs text-stone-500">Giảm giá {facilityPolicyDiscount > 0 ? '(Gồm ưu đãi cơ sở)' : `(${Math.round(discountRate * 100)}%)`}</p><p className="mt-1 font-bold text-emerald-700">− {formatVnd(totalCombinedDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
@@ -3370,17 +3532,18 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
             </div>
 
             <Select label={'Chọn gói gia hạn'} value={renewalMonths.toString()} onChange={e => setRenewalMonths(Number(e.target.value))}>
-              <option value="1">1 {'tháng'}</option>
-              <option value="3">3 {'tháng'}</option>
-              <option value="6">6 {'tháng'} · {'giảm 3%'}</option>
-              <option value="12">12 {'tháng'} · {'giảm 5%'}</option>
+              <option value="1">1 {'tháng'} · {'không giảm'}</option>
+              <option value="3">3 {'tháng'} · {renewalDiscountRate(3) > 0 ? `giảm ${Math.round(renewalDiscountRate(3) * 100)}%` : 'không giảm'}</option>
+              <option value="6">6 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(6) * 100)}%`}</option>
+              <option value="12">12 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(12) * 100)}%`}</option>
+              <option value="24">24 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(24) * 100)}%`}</option>
             </Select>
             {(() => {
               const grossRenewalAmount = activeRentalForRenewal.monthlyRate * renewalMonths
               const discountRate = renewalDiscountRate(renewalMonths)
               const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
               const renewalTotal = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
-              return <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs sm:grid-cols-2"><div><p className="text-stone-500">{'Ngày hết hạn mới dự kiến'}</p><p className="mt-1 font-bold">{addMonthsForPreview(activeRentalForRenewal.endDate, renewalMonths)}</p></div><div className="space-y-1"><div className="flex justify-between gap-3"><span className="text-stone-500">{'Tiền gia hạn gốc'}</span><b>{formatVnd(grossRenewalAmount)}</b></div><div className="flex justify-between gap-3 text-emerald-700"><span>{`Giảm giá (${Math.round(discountRate * 100)}%)`}</span><b>− {formatVnd(discountAmount)}</b></div><div className="flex justify-between gap-3 border-t border-stone-200 pt-1"><span className="font-semibold">{'Phí gia hạn sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div></div><p className="sm:col-span-2 text-stone-600">{renewalMonths === 6 ? 'Gói gia hạn 6 tháng được giảm 3%.' : renewalMonths === 12 ? 'Gói gia hạn 12 tháng được giảm 5%.' : 'Gói gia hạn 1 và 3 tháng không áp dụng giảm giá.'}</p></div>
+              return <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs sm:grid-cols-2"><div><p className="text-stone-500">{'Ngày hết hạn mới dự kiến'}</p><p className="mt-1 font-bold">{addMonthsForPreview(activeRentalForRenewal.endDate, renewalMonths)}</p></div><div className="space-y-1"><div className="flex justify-between gap-3"><span className="text-stone-500">{'Tiền gia hạn gốc'}</span><b>{formatVnd(grossRenewalAmount)}</b></div><div className="flex justify-between gap-3 text-emerald-700"><span>{`Giảm giá (${Math.round(discountRate * 100)}%)`}</span><b>− {formatVnd(discountAmount)}</b></div><div className="flex justify-between gap-3 border-t border-stone-200 pt-1"><span className="font-semibold">{'Phí gia hạn sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div></div><p className="sm:col-span-2 text-stone-600">{discountRate > 0 ? `Gói gia hạn ${renewalMonths} tháng được áp dụng mức giảm ${Math.round(discountRate * 100)}%.` : 'Kỳ hạn dưới 3 tháng không áp dụng chiết khấu gia hạn.'}</p></div>
             })()}
 
             <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">

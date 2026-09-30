@@ -67,6 +67,7 @@ import {
   getUnitTypeVehicleStandard,
   validateVehicleLaneWidth,
 } from "../../domain/facilityRules"
+import { generateDefaultRentalPackages } from "../../domain/packageRules"
 import { UnitAllocationTable } from "./facility/UnitAllocationTable"
 import { AddUnitSpecModal } from "./facility/AddUnitSpecModal"
 import {
@@ -197,9 +198,9 @@ export const DEFAULT_DURATION_DISCOUNTS: DurationDiscountItem[] = [
     title: "Gói thuê 3 tháng",
     label: "3 tháng",
     discountPercent: 3,
-    renewalDiscountPercent: 0,
-    description: "Giảm 3% tổng tiền thuê khi khách hàng đặt kỳ hạn từ 3 tháng trở lên.",
-    appliesTo: "Đặt kho lần đầu",
+    renewalDiscountPercent: 2,
+    description: "Giảm 3% khi ký hợp đồng mới từ 3 tháng và giảm 2% khi gia hạn hợp đồng.",
+    appliesTo: "Đặt mới & Gia hạn",
     status: "active",
   },
   {
@@ -210,7 +211,7 @@ export const DEFAULT_DURATION_DISCOUNTS: DurationDiscountItem[] = [
     discountPercent: 5,
     renewalDiscountPercent: 3,
     description: "Giảm 5% cho hợp đồng mới và giảm 3% khi khách gia hạn kỳ hạn 6 tháng.",
-    appliesTo: "Đặt kho & Gia hạn",
+    appliesTo: "Đặt mới & Gia hạn",
     status: "active",
   },
   {
@@ -225,14 +226,25 @@ export const DEFAULT_DURATION_DISCOUNTS: DurationDiscountItem[] = [
     status: "active",
   },
   {
+    id: "pkg-24m",
+    months: 24,
+    title: "Gói thuê 24 tháng (2 năm)",
+    label: "24 tháng",
+    discountPercent: 12,
+    renewalDiscountPercent: 8,
+    description: "Giảm 12% cho hợp đồng dài hạn 2 năm và giảm 8% khi khách gia hạn kỳ hạn 24 tháng.",
+    appliesTo: "Đặt mới & Gia hạn",
+    status: "active",
+  },
+  {
     id: "pkg-other",
     months: "other",
-    title: "Kỳ hạn khác (1 - 2 tháng hoặc linh hoạt)",
-    label: "Thời hạn khác",
+    title: "Kỳ hạn khác (dưới 3 tháng hoặc linh hoạt)",
+    label: "Dưới 3 tháng / Khác",
     discountPercent: 0,
     renewalDiscountPercent: 0,
-    description: "Áp dụng đơn giá niêm yết chuẩn theo tháng, không áp dụng chiết khấu kỳ hạn.",
-    appliesTo: "Không giảm (0%)",
+    description: "Áp dụng cho các kỳ hạn dưới 3 tháng (1-2 tháng) hoặc thời hạn linh hoạt. Không áp dụng chiết khấu kỳ hạn.",
+    appliesTo: "Không áp dụng giảm",
     status: "active",
   },
 ]
@@ -453,13 +465,31 @@ export default function BusinessApp({
       if (stored) {
         const parsed = JSON.parse(stored)
 
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter((item: PolicyItem) => {
+            const name = (item.name || "").trim().toLowerCase()
+            const desc = (item.description || "").trim().toLowerCase()
+            const scope = (item.scope || "").trim().toLowerCase()
+            if (name.includes("trốn thuế") || desc === "abc" || name === "test") return false
+            if ((name === "thời gian gia hạn" || name === "thoi gian gia han") && (desc === "abc" || !desc)) return false
+            if (scope.includes("vũng tàu") && (desc === "abc" || name === "test" || !name)) return false
+            return true
+          })
+
+          return valid.map((item: PolicyItem) => {
+            const def = POLICIES.find(p => p.id === item.id)
+            if (def && (!item.description || item.value === '650.000 ₫ / month' || item.value === '5 days' || item.name === 'Grace Period' || item.name === 'Thời gian gia hạn nợ')) {
+              return { ...item, name: def.name, value: def.value, description: item.description || def.description }
+            }
+            return item
+          })
+        }
       }
     } catch {
       // fallback
     }
 
-    return POLICIES.map((p) => ({ ...p, description: "" }))
+    return POLICIES.map((p) => ({ ...p, description: p.description || "" }))
   })
 
   const [policyModal, setPolicyModal] = useState(false)
@@ -538,7 +568,7 @@ export default function BusinessApp({
 
     // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
     const lowerName = newPolicy.name.toLowerCase()
-    if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
+    if (lowerName.includes("grace") || lowerName.includes("gia hạn") || lowerName.includes("ân hạn")) {
       const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
       if (!isNaN(num) && num > 0) {
         try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
@@ -562,14 +592,25 @@ export default function BusinessApp({
   const handleOpenEditPolicy = (policy: PolicyItem) => {
     setSelectedPolicy(policy)
 
-    setPolicyFormName(policy.name)
+    const displayName =
+      lang === "vi"
+        ? policy.name === "Grace Period" || policy.name === "Thời gian gia hạn nợ" || policy.name === "Thời gian ân hạn thanh toán"
+          ? "Thời gian ân hạn thanh toán"
+          : policy.name === "Late Fee" || policy.name === "Mức phí phạt trễ hạn"
+            ? "Mức phí phạt trễ hạn"
+            : policy.name === "Security Deposit" || policy.name === "Tiền đặt cọc an ninh"
+              ? "Tiền đặt cọc an ninh"
+              : policy.name === "Notice to Vacate" || policy.name === "Thời hạn báo trước khi trả kho sớm"
+                ? "Thời hạn báo trước khi trả kho sớm"
+                : policy.name === "Minimum Lease" || policy.name === "Thời hạn thuê tối thiểu"
+                  ? "Thời hạn thuê tối thiểu"
+                  : policy.name
+        : policy.name
 
+    setPolicyFormName(displayName)
     setPolicyFormValue(policy.value)
-
-    setPolicyFormScope(policy.scope)
-
+    setPolicyFormScope(policy.scope === "All Facilities" ? "Toàn bộ cơ sở" : policy.scope)
     setPolicyFormDesc(policy.description || "")
-
     setPolicyModal(true)
   }
 
@@ -608,7 +649,7 @@ export default function BusinessApp({
 
     // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
     const lowerName = (policyFormName || selectedPolicy.name).toLowerCase()
-    if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
+    if (lowerName.includes("grace") || lowerName.includes("gia hạn") || lowerName.includes("ân hạn")) {
       const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
       if (!isNaN(num) && num > 0) {
         try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
@@ -658,7 +699,57 @@ export default function BusinessApp({
       const stored = localStorage.getItem("storagehub:durationDiscounts")
       if (stored) {
         const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Sanitize any test data where discountPercent was set to 50% on 3m, or missing renewalDiscount
+          let sanitized = parsed.map((item: DurationDiscountItem) => {
+            if (item.id === "pkg-3m" && item.discountPercent === 50) {
+              return {
+                ...item,
+                discountPercent: 3,
+                renewalDiscountPercent: 2,
+                description: "Giảm 3% khi ký hợp đồng mới từ 3 tháng và giảm 2% khi gia hạn hợp đồng.",
+                appliesTo: "Đặt mới & Gia hạn",
+              }
+            }
+            if (item.id === "pkg-3m" && (item.renewalDiscountPercent === 0 || item.renewalDiscountPercent === undefined)) {
+              return { ...item, renewalDiscountPercent: 2, appliesTo: "Đặt mới & Gia hạn" }
+            }
+            if (item.id === "pkg-other" || item.months === "other") {
+              return {
+                ...item,
+                title: "Kỳ hạn khác (dưới 3 tháng hoặc linh hoạt)",
+                label: "Dưới 3 tháng / Khác",
+                discountPercent: 0,
+                renewalDiscountPercent: 0,
+                description: "Áp dụng cho các kỳ hạn dưới 3 tháng (1-2 tháng) hoặc thời hạn linh hoạt. Không áp dụng chiết khấu kỳ hạn.",
+                appliesTo: "Không áp dụng giảm",
+              }
+            }
+            return item
+          })
+
+          if (!sanitized.some((p: DurationDiscountItem) => p.id === "pkg-24m" || p.months === 24)) {
+            const pkg24: DurationDiscountItem = {
+              id: "pkg-24m",
+              months: 24,
+              title: "Gói thuê 24 tháng (2 năm)",
+              label: "24 tháng",
+              discountPercent: 12,
+              renewalDiscountPercent: 8,
+              description: "Giảm 12% cho hợp đồng dài hạn 2 năm và giảm 8% khi khách gia hạn kỳ hạn 24 tháng.",
+              appliesTo: "Đặt mới & Gia hạn",
+              status: "active",
+            }
+            const otherIdx = sanitized.findIndex((p: DurationDiscountItem) => p.id === "pkg-other")
+            if (otherIdx !== -1) {
+              const updated = [...sanitized]
+              updated.splice(otherIdx, 0, pkg24)
+              return updated
+            }
+            return [...sanitized, pkg24]
+          }
+          return sanitized
+        }
       }
     } catch {
       // fallback
@@ -1137,6 +1228,101 @@ export default function BusinessApp({
       ) || null
     )
   }, [facilitiesList, pricingFacilityFilter])
+
+  const [facilityPriceModalOpen, setFacilityPriceModalOpen] = useState(false)
+  const [editingPriceFacility, setEditingPriceFacility] = useState<any | null>(null)
+  const [facilityPricesForm, setFacilityPricesForm] = useState<{ S: number; M: number; L: number; XL: number }>({
+    S: 5500000,
+    M: 9500000,
+    L: 15000000,
+    XL: 22500000,
+  })
+  const [facilityMultiplierForm, setFacilityMultiplierForm] = useState<{ S: number; M: number; L: number; XL: number }>({
+    S: 1.0,
+    M: 1.0,
+    L: 1.0,
+    XL: 1.0,
+  })
+
+  const handleOpenFacilityPriceModal = (fac: any) => {
+    setEditingPriceFacility(fac)
+    const currentOverrides = facilityPricingOverrides[fac.id] || {}
+    setFacilityPricesForm({
+      S: currentOverrides["tier-1"]?.basePrice ?? 5500000,
+      M: currentOverrides["tier-2"]?.basePrice ?? 9500000,
+      L: currentOverrides["tier-3"]?.basePrice ?? 15000000,
+      XL: currentOverrides["tier-4"]?.basePrice ?? 22500000,
+    })
+    setFacilityMultiplierForm({
+      S: currentOverrides["tier-1"]?.highDemandMultiplier ?? 1.0,
+      M: currentOverrides["tier-2"]?.highDemandMultiplier ?? 1.0,
+      L: currentOverrides["tier-3"]?.highDemandMultiplier ?? 1.0,
+      XL: currentOverrides["tier-4"]?.highDemandMultiplier ?? 1.0,
+    })
+    setFacilityPriceModalOpen(true)
+  }
+
+  const handleSaveFacilityPrices = () => {
+    if (!editingPriceFacility) return
+    const facId = editingPriceFacility.id
+    const nextOverrides = {
+      ...facilityPricingOverrides,
+      [facId]: {
+        "tier-1": { basePrice: Number(facilityPricesForm.S) || 5500000, highDemandMultiplier: Number(facilityMultiplierForm.S) || 1.0 },
+        "tier-2": { basePrice: Number(facilityPricesForm.M) || 9500000, highDemandMultiplier: Number(facilityMultiplierForm.M) || 1.0 },
+        "tier-3": { basePrice: Number(facilityPricesForm.L) || 15000000, highDemandMultiplier: Number(facilityMultiplierForm.L) || 1.0 },
+        "tier-4": { basePrice: Number(facilityPricesForm.XL) || 22500000, highDemandMultiplier: Number(facilityMultiplierForm.XL) || 1.0 },
+      },
+    }
+    setFacilityPricingOverrides(nextOverrides)
+    try {
+      localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+    } catch {}
+
+    const sizes: Array<"S" | "M" | "L" | "XL"> = ["S", "M", "L", "XL"]
+    sizes.forEach((sz) => {
+      const p = facilityPricesForm[sz]
+      const uList = unitsList.filter(
+        (u) =>
+          (u.facilityId === facId || u.facilityId === editingPriceFacility.code) &&
+          ((u as any).size === sz ||
+            u.type === (sz === "S" ? "Small" : sz === "M" ? "Medium" : sz === "L" ? "Large" : "Extra Large")),
+      )
+      uList.forEach((u) => {
+        try {
+          updateUnit(u.id, { price: p }, user)
+        } catch {}
+      })
+    })
+
+    try {
+      updateFacility(facId, { price: `${formatCurrency(facilityPricesForm.S)}` }, user)
+    } catch {}
+
+    setFacilityPriceModalOpen(false)
+    showToast(
+      lang === "vi"
+        ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"!`
+        : `Updated pricing for ${editingPriceFacility.name}!`,
+    )
+  }
+
+  const handleResetFacilityPrices = () => {
+    if (!editingPriceFacility) return
+    const facId = editingPriceFacility.id
+    const nextOverrides = { ...facilityPricingOverrides }
+    delete nextOverrides[facId]
+    setFacilityPricingOverrides(nextOverrides)
+    try {
+      localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+    } catch {}
+    setFacilityPriceModalOpen(false)
+    showToast(
+      lang === "vi"
+        ? `Đã khôi phục giá mặc định cho "${editingPriceFacility.name}"!`
+        : `Reset pricing for ${editingPriceFacility.name}!`,
+    )
+  }
 
   const getEffectiveTier = (tier: PricingTierItem) => {
     if (
@@ -1790,7 +1976,7 @@ export default function BusinessApp({
 
     setFormFacStatus("active")
 
-    setFormFacUnitSpecs(DEFAULT_FACILITY_UNIT_SPECS.map((s) => ({ ...s, count: 0 })))
+    setFormFacUnitSpecs([])
 
     setCreateFacilityModal(true)
   }
@@ -2149,7 +2335,8 @@ export default function BusinessApp({
             widthM: rawDims.widthM ?? 1,
             heightM: rawDims.heightM ?? 1,
             depthM: (rawDims as any).depthM ?? rawDims.lengthM ?? 1,
-          } : undefined
+          } : undefined,
+          rentalPackages: generateDefaultRentalPackages(f.id, sz, p),
         }
       })
     }
@@ -2911,7 +3098,7 @@ export default function BusinessApp({
                                 className="truncate"
                                 title={f.accessHours || "06:00 - 22:00"}
                               >
-                                {f.accessHours || "06:00 - 22:00 (24/7 VIP)"}
+                                {f.accessHours || "06:00 - 22:00 hàng ngày"}
                               </span>
                             </div>
                           </div>
@@ -3156,63 +3343,68 @@ export default function BusinessApp({
               </div>
             </div>
 
-            {/* 4 Cards Tóm Tắt Nhanh Các Gói */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 my-4">
+            {/* 5 Cards Tóm Tắt Nhanh Các Gói */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 my-4">
               {durationDiscounts.map((item) => {
                 const isActive = item.status === "active"
                 const hasDiscount = item.discountPercent > 0
+                const hasRenewal = item.renewalDiscountPercent > 0
                 return (
                   <div
                     key={item.id}
-                    className={`p-3.5 rounded-xl border transition-all ${
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
                       isActive
-                        ? hasDiscount
-                          ? "border-emerald-200 bg-emerald-50/40 hover:border-emerald-300"
+                        ? hasDiscount || hasRenewal
+                          ? "border-emerald-200 bg-emerald-50/40 hover:border-emerald-300 shadow-2xs"
                           : "border-stone-200 bg-stone-50/70"
                         : "border-stone-200 bg-stone-100/80 opacity-60"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-bold text-slate-900 text-sm">
-                        {item.label}
-                      </span>
-                      <Badge
-                        variant={
-                          !isActive
-                            ? "warning"
-                            : hasDiscount
-                              ? "success"
-                              : "muted"
-                        }
-                      >
-                        {!isActive
-                          ? "Tạm dừng"
-                          : hasDiscount
-                            ? `Giảm ${item.discountPercent}%`
-                            : "Không giảm"}
-                      </Badge>
-                    </div>
-
-                    <div className="mt-2.5">
-                      <p className="text-base font-extrabold text-slate-900">
-                        {hasDiscount ? `-${item.discountPercent}%` : "0%"}
-                        <span className="text-xs font-normal text-slate-500 ml-1">
-                          {hasDiscount ? "tiền thuê" : "giá niêm yết"}
+                    <div>
+                      <div className="flex items-start justify-between gap-1 mb-2">
+                        <span className="font-bold text-slate-900 text-sm">
+                          {item.label}
                         </span>
-                      </p>
-                      {item.renewalDiscountPercent > 0 && (
-                        <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">
-                          Gia hạn: -{item.renewalDiscountPercent}%
-                        </p>
-                      )}
-                    </div>
+                        <Badge
+                          variant={
+                            !isActive
+                              ? "warning"
+                              : hasDiscount || hasRenewal
+                                ? "success"
+                                : "muted"
+                          }
+                        >
+                          {!isActive
+                            ? "Tạm dừng"
+                            : hasDiscount
+                              ? `Giảm ${item.discountPercent}%`
+                              : "Không giảm"}
+                        </Badge>
+                      </div>
 
-                    <p className="text-[11px] text-slate-500 mt-2 line-clamp-2 leading-relaxed">
-                      {item.description}
-                    </p>
+                      {/* Phân tách rõ ràng: Đặt mới vs Gia hạn */}
+                      <div className="space-y-1.5 py-2 px-2.5 rounded-lg bg-white/80 border border-stone-200/70 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-600 font-medium">Đặt mới:</span>
+                          <span className={`font-mono font-bold ${hasDiscount ? "text-emerald-700" : "text-slate-500"}`}>
+                            {hasDiscount ? `-${item.discountPercent}%` : "0% (Niêm yết)"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
+                          <span className="text-[11px] text-slate-600 font-medium">Gia hạn:</span>
+                          <span className={`font-mono font-bold ${hasRenewal ? "text-blue-700" : "text-slate-500"}`}>
+                            {hasRenewal ? `-${item.renewalDiscountPercent}%` : "0% (Không giảm)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 mt-2 line-clamp-3 leading-relaxed">
+                        {item.description}
+                      </p>
+                    </div>
 
                     <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[140px]">
+                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[130px]">
                         {item.appliesTo}
                       </span>
                       <button
@@ -3323,7 +3515,7 @@ export default function BusinessApp({
                   Quy Định & Điều Khoản Thuê Chung
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Các điều khoản về tiền đặt cọc, thời gian gia hạn nợ, phí trễ hạn và thông báo trả kho
+                  Các điều khoản về tiền đặt cọc, thời gian ân hạn thanh toán, phí trễ hạn và thông báo trả kho
                 </p>
               </div>
             </div>
@@ -3357,15 +3549,15 @@ export default function BusinessApp({
                   policiesList.map((p) => {
                     const displayName =
                       lang === "vi"
-                        ? p.name === "Grace Period"
-                          ? "Thời gian gia hạn nợ"
-                          : p.name === "Late Fee"
+                        ? p.name === "Grace Period" || p.name === "Thời gian gia hạn nợ" || p.name === "Thời gian ân hạn thanh toán"
+                          ? "Thời gian ân hạn thanh toán"
+                          : p.name === "Late Fee" || p.name === "Mức phí phạt trễ hạn"
                             ? "Mức phí phạt trễ hạn"
-                            : p.name === "Security Deposit"
+                            : p.name === "Security Deposit" || p.name === "Tiền đặt cọc an ninh"
                               ? "Tiền đặt cọc an ninh"
-                              : p.name === "Notice to Vacate"
-                                ? "Thời hạn báo trước khi trả phòng"
-                                : p.name === "Minimum Lease"
+                              : p.name === "Notice to Vacate" || p.name === "Thời hạn báo trước khi trả kho sớm"
+                                ? "Thời hạn báo trước khi trả kho sớm"
+                                : p.name === "Minimum Lease" || p.name === "Thời hạn thuê tối thiểu"
                                   ? "Thời hạn thuê tối thiểu"
                                   : p.name
                         : p.name
@@ -3374,10 +3566,8 @@ export default function BusinessApp({
                       lang === "vi"
                         ? p.value.includes("days")
                           ? p.value.replace("days", "ngày")
-                          : p.value.includes("month")
-                            ? p.value
-                              .replace("$25", "650.000 ₫")
-                              .replace("month", "tháng")
+                          : p.value === "1 month"
+                            ? (p.name.includes("Deposit") || p.name.includes("cọc") ? "1 tháng tiền thuê" : "1 tháng")
                             : (p.value ?? "—")
                         : (p.value ?? "—")
 
@@ -3506,6 +3696,14 @@ export default function BusinessApp({
                 </span>
                 <button
                   type="button"
+                  onClick={() => handleOpenFacilityPriceModal(selectedPricingFacility)}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="show-icon">✏️</span>
+                  <span>Chỉnh biểu giá cơ sở</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPricingFacilityFilter("all")}
                   className="text-amber-800 hover:text-amber-950 font-semibold underline cursor-pointer"
                 >
@@ -3531,10 +3729,11 @@ export default function BusinessApp({
                     </div>
                     <button
                       type="button"
-                      onClick={() => setPricingFacilityFilter(fac.id)}
-                      className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                      onClick={() => handleOpenFacilityPriceModal(fac)}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition cursor-pointer shadow-2xs flex items-center gap-1.5"
                     >
-                      Chỉnh giá cơ sở này
+                      <span className="show-icon">✏️</span>
+                      <span>Chỉnh giá cơ sở này</span>
                     </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-5">
@@ -3673,6 +3872,179 @@ export default function BusinessApp({
               })}
             </div>
           )}
+
+          {/* ── GÓI THUÊ & CHÍNH SÁCH GIẢM GIÁ THEO KỲ HẠN (3, 6, 12, 24 THÁNG) ── */}
+          <Card className="p-5 border border-amber-200/80 bg-linear-to-b from-amber-50/20 to-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {lang === "vi"
+                      ? "Chính Sách Giá Theo Thời Hạn & Gói Thuê Dài Hạn"
+                      : "Rental Packages & Long-Term Duration Discounts"}
+                  </h3>
+                  <Badge variant="success">
+                    {lang === "vi" ? "Đồng bộ giá Customer" : "Live customer pricing"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                  {lang === "vi"
+                    ? "Hệ thống tự động áp dụng tỷ lệ chiết khấu giảm giá vào đơn giá khi khách hàng thuê theo gói 3 tháng, 6 tháng, 12 tháng hoặc 24 tháng. Bạn có thể nhấn 'Sửa' để cấu hình lại mức giảm."
+                    : "Automatic discounts applied to units when customers lease for 3, 6, 12, or 24 months."}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Cards Gói Thuê */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 my-4">
+              {durationDiscounts.map((item) => {
+                const isActive = item.status === "active"
+                const hasDiscount = item.discountPercent > 0
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+                      isActive
+                        ? hasDiscount
+                          ? "border-emerald-200 bg-white hover:border-emerald-400 shadow-2xs"
+                          : "border-stone-200 bg-white"
+                        : "border-stone-200 bg-stone-100 opacity-60"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className="font-bold text-xs text-slate-900 truncate">
+                          {item.label}
+                        </span>
+                        <Badge variant={!isActive ? "warning" : hasDiscount ? "success" : "muted"}>
+                          {!isActive ? "Tạm dừng" : hasDiscount ? `-${item.discountPercent}%` : "0%"}
+                        </Badge>
+                      </div>
+
+                      {/* Phân tách rõ: Đặt mới vs Gia hạn */}
+                      <div className="space-y-1 py-1.5 px-2 rounded-lg bg-stone-50 border border-stone-200/60 text-xs my-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-500 font-medium">Đặt mới:</span>
+                          <span className={`font-mono font-bold text-xs ${hasDiscount ? "text-emerald-700" : "text-slate-500"}`}>
+                            {hasDiscount ? `-${item.discountPercent}%` : "0% (Niêm yết)"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1">
+                          <span className="text-[10px] text-slate-500 font-medium">Gia hạn:</span>
+                          <span className={`font-mono font-bold text-xs ${item.renewalDiscountPercent > 0 ? "text-blue-700" : "text-slate-500"}`}>
+                            {item.renewalDiscountPercent > 0 ? `-${item.renewalDiscountPercent}%` : "0%"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 mt-1.5 line-clamp-2">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 truncate">
+                        {item.months === "other" ? "Linh hoạt" : `${item.months} tháng`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditDuration(item)}
+                        className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                      >
+                        {lang === "vi" ? "Sửa" : "Edit"}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Bảng Ma Trận Báo Giá Quy Đổi Cho Từng Cỡ Kho */}
+            <div className="mt-4 border border-stone-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+              <div className="px-4 py-2.5 bg-stone-50 border-b border-stone-200 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-800">
+                  📐 Bảng Tra Cứu Đơn Giá Từng Loại Kho Sau Giảm Giá
+                  {selectedPricingFacility ? ` · Tại ${selectedPricingFacility.name}` : " · Mức Chuẩn Hệ Thống"}
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  Đơn giá thực tế hiển thị cho Khách hàng
+                </span>
+              </div>
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>Phân Loại Kho</Th>
+                    <Th className="text-right">Giá Gốc (1 Tháng)</Th>
+                    <Th className="text-right">Gói 3 Tháng</Th>
+                    <Th className="text-right">Gói 6 Tháng</Th>
+                    <Th className="text-right">Gói 12 Tháng</Th>
+                    <Th className="text-right">Gói 24 Tháng</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {(['S', 'M', 'L', 'XL'] as const).map((sz) => {
+                    const tierId = sz === 'S' ? 'tier-1' : sz === 'M' ? 'tier-2' : sz === 'L' ? 'tier-3' : 'tier-4'
+                    const rawTier = pricingTiers.find(t => t.id === tierId) || pricingTiers[0]
+                    const effective = getEffectiveTier(rawTier)
+                    const base = effective.basePrice
+                    const spec = UNIT_SPECS[sz]
+
+                    const getDiscountForMonths = (m: number) => {
+                      const item = durationDiscounts.find(d => d.months === m && d.status === 'active')
+                      return item ? item.discountPercent : 0
+                    }
+
+                    const d3 = getDiscountForMonths(3)
+                    const p3 = Math.round(base * (1 - d3 / 100))
+                    const d6 = getDiscountForMonths(6)
+                    const p6 = Math.round(base * (1 - d6 / 100))
+                    const d12 = getDiscountForMonths(12)
+                    const p12 = Math.round(base * (1 - d12 / 100))
+                    const d24 = getDiscountForMonths(24)
+                    const p24 = Math.round(base * (1 - d24 / 100))
+
+                    return (
+                      <Tr key={sz}>
+                        <Td className="font-semibold text-slate-900">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded font-mono text-xs font-bold ${
+                              sz === 'S' ? 'bg-blue-100 text-blue-900' :
+                              sz === 'M' ? 'bg-green-100 text-green-900' :
+                              sz === 'L' ? 'bg-purple-100 text-purple-900' :
+                              'bg-amber-100 text-amber-900'
+                            }`}>
+                              {sz}
+                            </span>
+                            <span>{spec.name}</span>
+                            <span className="text-xs text-slate-400 font-normal">({spec.dimensions})</span>
+                          </div>
+                        </Td>
+                        <Td className="text-right font-mono font-bold text-slate-900">
+                          {formatCurrency(base)}<span className="text-xs font-normal text-slate-400">/th</span>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p3)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p3 * 3)}</p>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p6)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p6 * 6)}</p>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p12)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p12 * 12)}</p>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p24)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p24 * 24)}</p>
+                        </Td>
+                      </Tr>
+                    )
+                  })}
+                </Tbody>
+              </Table>
+            </div>
+          </Card>
 
           <Card className="p-5">
             <h3 className="font-semibold text-slate-800 mb-4">
@@ -4809,6 +5181,118 @@ export default function BusinessApp({
         )}
       </Modal>
 
+      {/* ── MODAL: CHỈNH SỬA TOÀN BỘ BIỂU GIÁ CƠ SỞ ── */}
+      <Modal
+        open={facilityPriceModalOpen}
+        onClose={() => setFacilityPriceModalOpen(false)}
+        size="2xl"
+        title={
+          editingPriceFacility
+            ? `Chỉnh Sửa Biểu Giá: ${editingPriceFacility.name} (${editingPriceFacility.code || editingPriceFacility.id})`
+            : "Chỉnh Sửa Biểu Giá Cơ Sở"
+        }
+      >
+        {editingPriceFacility && (
+          <div className="space-y-4">
+            <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="font-bold text-sm text-slate-900 block">
+                  {editingPriceFacility.name}
+                </span>
+                <span className="text-slate-600">
+                  📍 {editingPriceFacility.address} · {editingPriceFacility.city}
+                </span>
+              </div>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-amber-200 text-amber-900 border border-amber-300">
+                Quy mô: {editingPriceFacility.units} gian kho
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Thiết lập đơn giá cước thuê theo tháng cho từng loại kho tại cơ sở này. Đơn giá sẽ tự động được áp dụng vào các gói thuê (3, 6, 12, 24 tháng) theo tỷ lệ chiết khấu của hệ thống.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {(['S', 'M', 'L', 'XL'] as const).map((sz) => {
+                const spec = UNIT_SPECS[sz]
+                const val = facilityPricesForm[sz]
+
+                return (
+                  <div key={sz} className="p-3.5 rounded-xl border border-stone-200 bg-white space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded font-mono text-xs font-bold ${
+                          sz === 'S' ? 'bg-blue-100 text-blue-900' :
+                          sz === 'M' ? 'bg-green-100 text-green-900' :
+                          sz === 'L' ? 'bg-purple-100 text-purple-900' :
+                          'bg-amber-100 text-amber-900'
+                        }`}>
+                          {sz}
+                        </span>
+                        <div>
+                          <p className="font-bold text-xs text-slate-900">{spec.name}</p>
+                          <p className="text-[10px] text-slate-400">{spec.dimensions} · {spec.volumeM3} m³</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-500">
+                        Tải: {spec.maxLoadKg.toLocaleString()}kg
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 block">
+                        Đơn giá niêm yết (VNĐ/tháng)
+                      </label>
+                      <input
+                        type="number"
+                        min={100000}
+                        step={50000}
+                        value={val}
+                        onChange={(e) => {
+                          const n = Number(e.target.value) || 0
+                          setFacilityPricesForm((prev) => ({ ...prev, [sz]: n }))
+                        }}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="VD: 5500000"
+                      />
+                      <p className="text-[10px] text-emerald-700 font-mono text-right">
+                        = {formatCurrency(val)}/tháng
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Ước tính gói 3T (-3%):</span>
+                      <span className="font-mono font-semibold text-slate-800">
+                        {formatCurrency(Math.round(val * 0.97))}/th
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-stone-500 hover:text-red-700"
+                onClick={handleResetFacilityPrices}
+              >
+                Khôi phục giá chuẩn hệ thống
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setFacilityPriceModalOpen(false)}>
+                  Hủy
+                </Button>
+                <Button variant="primary" onClick={handleSaveFacilityPrices}>
+                  Lưu Biểu Giá Cơ Sở
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Enhanced New Promotion Modal */}
       <Modal
         open={discountModal}
@@ -5118,7 +5602,7 @@ export default function BusinessApp({
             label={lang === "vi" ? "Tên chính sách" : "Policy Name"}
             placeholder={
               lang === "vi"
-                ? "VD: Thời gian gia hạn nợ, Phí phạt trễ hạn, Tiền cọc an ninh..."
+                ? "VD: Thời gian ân hạn thanh toán, Phí phạt trễ hạn, Tiền cọc an ninh..."
                 : "E.g. Grace Period, Late Fee..."
             }
             value={policyFormName}
@@ -5129,8 +5613,8 @@ export default function BusinessApp({
             label={lang === "vi" ? "Giá trị áp dụng" : "Current Value"}
             placeholder={
               lang === "vi"
-                ? "VD: 5 ngày, 650.000 ₫ / tháng, 1 tháng tiền thuê..."
-                : "E.g. 5 days, 1 month..."
+                ? "VD: 3 ngày, 50% đơn giá ngày / ngày trễ, 1 tháng tiền thuê..."
+                : "E.g. 3 days, 1 month..."
             }
             value={policyFormValue}
             onChange={(e) => setPolicyFormValue(e.target.value)}

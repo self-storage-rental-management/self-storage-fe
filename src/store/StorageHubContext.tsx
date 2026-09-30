@@ -21,8 +21,10 @@ import type {
   MaintenanceTask,
   ReservedPeriod,
   FacilityTask,
-  FacilityUnitDistribution
+  FacilityUnitDistribution,
+  RentalPackage
 } from '../types/storageHub'
+import { generateDefaultRentalPackages } from '../domain/packageRules'
 import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
@@ -1107,6 +1109,9 @@ interface StorageHubContextValue extends StorageHubState {
     capacityValidatedByFrames?: boolean
     discountAmount?: number
     customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number; physicalUnitId?: string }
+    packageId?: string
+    packageName?: string
+    packagePrice?: number
   }) => ReservationValidationResult
   approveReservation: (reservationId: string, reviewer: User) => void
   rejectGoodsReview: (reservationId: string, reviewer: User, note: string) => void
@@ -1813,6 +1818,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     capacityValidatedByFrames?: boolean
     discountAmount?: number
     customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number; physicalUnitId?: string }
+    packageId?: string
+    packageName?: string
+    packagePrice?: number
   }): ReservationValidationResult => {
     assertPermission(params.customer, 'book_storage')
     const normalizedTargetId =
@@ -2028,6 +2036,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       totalInitialAmount,
       approvalType: requiresGoodsReview ? 'MANUAL' : 'AUTO',
       discountAmount,
+      packageId: params.packageId,
+      packageName: params.packageName,
+      packagePrice: params.packagePrice,
       paymentExpiresAt,
       goodsReviewStatus: requiresGoodsReview ? 'PENDING' : 'NOT_REQUIRED',
       goodsReviewSubmittedAt,
@@ -4079,6 +4090,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       unitFrameCounts: data.unitFrameCounts,
       unitFrameDimensions: data.unitFrameDimensions,
       unitCustomSpecs: data.unitCustomSpecs,
+      rentalPackages: data.unitCustomSpecs?.flatMap(s => s.rentalPackages || []) || [],
       totalDesignLoadTon: data.totalDesignLoadTon
     }
 
@@ -4163,6 +4175,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const areaM2 = Math.round(lengthM * widthM * 10) / 10
       const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
 
+      const customSpec = data.unitCustomSpecs?.find(s => s.sizeCode === size)
+      const unitRentalPackages = customSpec?.rentalPackages && customSpec.rentalPackages.length > 0
+        ? customSpec.rentalPackages
+        : generateDefaultRentalPackages(newFacility.id, size, monthlyPriceVnd)
+
       for (let i = 1; i <= count; i++) {
         const unitNumber = String(i).padStart(3, '0')
         const unitCode = `${code}-${size}-${unitNumber}`
@@ -4198,6 +4215,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facility: newFacility.name,
           facilityName: newFacility.name,
           facilityId: newFacility.id,
+          rentalPackages: unitRentalPackages,
           version: 1
         } as unknown as StorageUnit)
       }
@@ -4303,6 +4321,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             const defaultLoad = size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000
             const maxLoad = customLoad ?? updates.unitLoadLimits?.[size] ?? targetFac.unitLoadLimits?.[size] ?? spec?.maxLoadKg ?? defaultLoad
 
+            const cs = customSpecsMap.get(size)
+            const unitRentalPackages = cs?.rentalPackages && cs.rentalPackages.length > 0
+              ? cs.rentalPackages
+              : generateDefaultRentalPackages(targetFacId, size, monthlyPriceVnd)
+
             for (let i = 1; i <= needed; i++) {
               const unitNum = String(maxNum + i).padStart(3, '0')
               const unitCode = `${targetFacCode}-${size}-${unitNum}`
@@ -4336,6 +4359,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 facility: updates.name?.trim() || targetFac.name,
                 facilityName: updates.name?.trim() || targetFac.name,
                 facilityId: targetFacId,
+                rentalPackages: unitRentalPackages,
                 version: 1
               } as unknown as StorageUnit)
             }
@@ -4410,6 +4434,21 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         nextUnits = nextUnits.map(u => {
           if (u.facilityId === targetFacId || u.facilityId === targetFacCode) {
             return { ...u, facilityName: facName, facility: facName }
+          }
+          return u
+        })
+      }
+
+      // Propagate unitCustomSpecs and rentalPackages to existing units
+      if (updates.unitCustomSpecs) {
+        const specsMap = new Map(updates.unitCustomSpecs.map(cs => [cs.sizeCode, cs]))
+        nextUnits = nextUnits.map(u => {
+          if (u.facilityId === targetFacId || u.facilityId === targetFacCode) {
+            const s = ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : 'XL')) as string
+            const cs = specsMap.get(s)
+            if (cs?.rentalPackages) {
+              return { ...u, rentalPackages: cs.rentalPackages }
+            }
           }
           return u
         })
