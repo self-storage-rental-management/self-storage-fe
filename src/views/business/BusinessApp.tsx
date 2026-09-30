@@ -67,6 +67,14 @@ import {
   getUnitTypeVehicleStandard,
   validateVehicleLaneWidth,
 } from "../../domain/facilityRules"
+import { generateDefaultRentalPackages } from "../../domain/packageRules"
+import { UnitAllocationTable } from "./facility/UnitAllocationTable"
+import { AddUnitSpecModal } from "./facility/AddUnitSpecModal"
+import {
+  FacilityGeneralInfo,
+  FacilityOperations,
+  FacilityImageManager,
+} from "./facility/FacilityFormFields"
 
 const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
   {
@@ -82,6 +90,13 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     badgeClass: "bg-sky-50 text-sky-700 border-sky-200",
     floor: 1,
     zone: "Khu A",
+    frameCount: UNIT_SPECS.S.frameCount,
+    frameDimensions: {
+      lengthM: UNIT_SPECS.S.frameDimensions.lengthM ?? UNIT_SPECS.S.frameDimensions.depthM,
+      widthM: UNIT_SPECS.S.frameDimensions.widthM,
+      heightM: UNIT_SPECS.S.frameDimensions.heightM,
+      depthM: UNIT_SPECS.S.frameDimensions.depthM,
+    },
   },
   {
     sizeCode: "M",
@@ -96,6 +111,13 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
     floor: 2,
     zone: "Khu B",
+    frameCount: UNIT_SPECS.M.frameCount,
+    frameDimensions: {
+      lengthM: UNIT_SPECS.M.frameDimensions.lengthM ?? UNIT_SPECS.M.frameDimensions.depthM,
+      widthM: UNIT_SPECS.M.frameDimensions.widthM,
+      heightM: UNIT_SPECS.M.frameDimensions.heightM,
+      depthM: UNIT_SPECS.M.frameDimensions.depthM,
+    },
   },
   {
     sizeCode: "L",
@@ -110,6 +132,13 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
     floor: 3,
     zone: "Khu C",
+    frameCount: UNIT_SPECS.L.frameCount,
+    frameDimensions: {
+      lengthM: UNIT_SPECS.L.frameDimensions.lengthM ?? UNIT_SPECS.L.frameDimensions.depthM,
+      widthM: UNIT_SPECS.L.frameDimensions.widthM,
+      heightM: UNIT_SPECS.L.frameDimensions.heightM,
+      depthM: UNIT_SPECS.L.frameDimensions.depthM,
+    },
   },
   {
     sizeCode: "XL",
@@ -124,6 +153,13 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     badgeClass: "bg-amber-50 text-amber-800 border-amber-200",
     floor: 4,
     zone: "Khu D",
+    frameCount: UNIT_SPECS.XL.frameCount,
+    frameDimensions: {
+      lengthM: UNIT_SPECS.XL.frameDimensions.lengthM ?? UNIT_SPECS.XL.frameDimensions.depthM,
+      widthM: UNIT_SPECS.XL.frameDimensions.widthM,
+      heightM: UNIT_SPECS.XL.frameDimensions.heightM,
+      depthM: UNIT_SPECS.XL.frameDimensions.depthM,
+    },
   },
 ]
 
@@ -142,6 +178,76 @@ export interface PolicyItem {
 
   lastUpdated?: string
 }
+
+export interface DurationDiscountItem {
+  id: string
+  months: number | 'other'
+  title: string
+  label: string
+  discountPercent: number
+  renewalDiscountPercent: number
+  description: string
+  appliesTo: string
+  status: 'active' | 'inactive'
+}
+
+export const DEFAULT_DURATION_DISCOUNTS: DurationDiscountItem[] = [
+  {
+    id: "pkg-3m",
+    months: 3,
+    title: "Gói thuê 3 tháng",
+    label: "3 tháng",
+    discountPercent: 3,
+    renewalDiscountPercent: 2,
+    description: "Giảm 3% khi ký hợp đồng mới từ 3 tháng và giảm 2% khi gia hạn hợp đồng.",
+    appliesTo: "Đặt mới & Gia hạn",
+    status: "active",
+  },
+  {
+    id: "pkg-6m",
+    months: 6,
+    title: "Gói thuê 6 tháng",
+    label: "6 tháng",
+    discountPercent: 5,
+    renewalDiscountPercent: 3,
+    description: "Giảm 5% cho hợp đồng mới và giảm 3% khi khách gia hạn kỳ hạn 6 tháng.",
+    appliesTo: "Đặt mới & Gia hạn",
+    status: "active",
+  },
+  {
+    id: "pkg-12m",
+    months: 12,
+    title: "Gói thuê 12 tháng (1 năm)",
+    label: "12 tháng",
+    discountPercent: 8,
+    renewalDiscountPercent: 5,
+    description: "Giảm 8% cho hợp đồng mới và giảm 5% khi khách gia hạn kỳ hạn 12 tháng.",
+    appliesTo: "Đặt kho & Gia hạn",
+    status: "active",
+  },
+  {
+    id: "pkg-24m",
+    months: 24,
+    title: "Gói thuê 24 tháng (2 năm)",
+    label: "24 tháng",
+    discountPercent: 12,
+    renewalDiscountPercent: 8,
+    description: "Giảm 12% cho hợp đồng dài hạn 2 năm và giảm 8% khi khách gia hạn kỳ hạn 24 tháng.",
+    appliesTo: "Đặt mới & Gia hạn",
+    status: "active",
+  },
+  {
+    id: "pkg-other",
+    months: "other",
+    title: "Kỳ hạn khác (dưới 3 tháng hoặc linh hoạt)",
+    label: "Dưới 3 tháng / Khác",
+    discountPercent: 0,
+    renewalDiscountPercent: 0,
+    description: "Áp dụng cho các kỳ hạn dưới 3 tháng (1-2 tháng) hoặc thời hạn linh hoạt. Không áp dụng chiết khấu kỳ hạn.",
+    appliesTo: "Không áp dụng giảm",
+    status: "active",
+  },
+]
 
 const WAREHOUSE_PHOTO_PRESETS = [
   {
@@ -359,13 +465,31 @@ export default function BusinessApp({
       if (stored) {
         const parsed = JSON.parse(stored)
 
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter((item: PolicyItem) => {
+            const name = (item.name || "").trim().toLowerCase()
+            const desc = (item.description || "").trim().toLowerCase()
+            const scope = (item.scope || "").trim().toLowerCase()
+            if (name.includes("trốn thuế") || desc === "abc" || name === "test") return false
+            if ((name === "thời gian gia hạn" || name === "thoi gian gia han") && (desc === "abc" || !desc)) return false
+            if (scope.includes("vũng tàu") && (desc === "abc" || name === "test" || !name)) return false
+            return true
+          })
+
+          return valid.map((item: PolicyItem) => {
+            const def = POLICIES.find(p => p.id === item.id)
+            if (def && (!item.description || item.value === '650.000 ₫ / month' || item.value === '5 days' || item.name === 'Grace Period' || item.name === 'Thời gian gia hạn nợ')) {
+              return { ...item, name: def.name, value: def.value, description: item.description || def.description }
+            }
+            return item
+          })
+        }
       }
     } catch {
       // fallback
     }
 
-    return POLICIES.map((p) => ({ ...p, description: "" }))
+    return POLICIES.map((p) => ({ ...p, description: p.description || "" }))
   })
 
   const [policyModal, setPolicyModal] = useState(false)
@@ -444,7 +568,7 @@ export default function BusinessApp({
 
     // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
     const lowerName = newPolicy.name.toLowerCase()
-    if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
+    if (lowerName.includes("grace") || lowerName.includes("gia hạn") || lowerName.includes("ân hạn")) {
       const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
       if (!isNaN(num) && num > 0) {
         try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
@@ -468,14 +592,25 @@ export default function BusinessApp({
   const handleOpenEditPolicy = (policy: PolicyItem) => {
     setSelectedPolicy(policy)
 
-    setPolicyFormName(policy.name)
+    const displayName =
+      lang === "vi"
+        ? policy.name === "Grace Period" || policy.name === "Thời gian gia hạn nợ" || policy.name === "Thời gian ân hạn thanh toán"
+          ? "Thời gian ân hạn thanh toán"
+          : policy.name === "Late Fee" || policy.name === "Mức phí phạt trễ hạn"
+            ? "Mức phí phạt trễ hạn"
+            : policy.name === "Security Deposit" || policy.name === "Tiền đặt cọc an ninh"
+              ? "Tiền đặt cọc an ninh"
+              : policy.name === "Notice to Vacate" || policy.name === "Thời hạn báo trước khi trả kho sớm"
+                ? "Thời hạn báo trước khi trả kho sớm"
+                : policy.name === "Minimum Lease" || policy.name === "Thời hạn thuê tối thiểu"
+                  ? "Thời hạn thuê tối thiểu"
+                  : policy.name
+        : policy.name
 
+    setPolicyFormName(displayName)
     setPolicyFormValue(policy.value)
-
-    setPolicyFormScope(policy.scope)
-
+    setPolicyFormScope(policy.scope === "All Facilities" ? "Toàn bộ cơ sở" : policy.scope)
     setPolicyFormDesc(policy.description || "")
-
     setPolicyModal(true)
   }
 
@@ -514,7 +649,7 @@ export default function BusinessApp({
 
     // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
     const lowerName = (policyFormName || selectedPolicy.name).toLowerCase()
-    if (lowerName.includes("grace") || lowerName.includes("gia hạn")) {
+    if (lowerName.includes("grace") || lowerName.includes("gia hạn") || lowerName.includes("ân hạn")) {
       const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
       if (!isNaN(num) && num > 0) {
         try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
@@ -557,6 +692,109 @@ export default function BusinessApp({
           : `Policy deleted!`,
       )
     }
+  }
+
+  const [durationDiscounts, setDurationDiscounts] = useState<DurationDiscountItem[]>(() => {
+    try {
+      const stored = localStorage.getItem("storagehub:durationDiscounts")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Sanitize any test data where discountPercent was set to 50% on 3m, or missing renewalDiscount
+          let sanitized = parsed.map((item: DurationDiscountItem) => {
+            if (item.id === "pkg-3m" && item.discountPercent === 50) {
+              return {
+                ...item,
+                discountPercent: 3,
+                renewalDiscountPercent: 2,
+                description: "Giảm 3% khi ký hợp đồng mới từ 3 tháng và giảm 2% khi gia hạn hợp đồng.",
+                appliesTo: "Đặt mới & Gia hạn",
+              }
+            }
+            if (item.id === "pkg-3m" && (item.renewalDiscountPercent === 0 || item.renewalDiscountPercent === undefined)) {
+              return { ...item, renewalDiscountPercent: 2, appliesTo: "Đặt mới & Gia hạn" }
+            }
+            if (item.id === "pkg-other" || item.months === "other") {
+              return {
+                ...item,
+                title: "Kỳ hạn khác (dưới 3 tháng hoặc linh hoạt)",
+                label: "Dưới 3 tháng / Khác",
+                discountPercent: 0,
+                renewalDiscountPercent: 0,
+                description: "Áp dụng cho các kỳ hạn dưới 3 tháng (1-2 tháng) hoặc thời hạn linh hoạt. Không áp dụng chiết khấu kỳ hạn.",
+                appliesTo: "Không áp dụng giảm",
+              }
+            }
+            return item
+          })
+
+          if (!sanitized.some((p: DurationDiscountItem) => p.id === "pkg-24m" || p.months === 24)) {
+            const pkg24: DurationDiscountItem = {
+              id: "pkg-24m",
+              months: 24,
+              title: "Gói thuê 24 tháng (2 năm)",
+              label: "24 tháng",
+              discountPercent: 12,
+              renewalDiscountPercent: 8,
+              description: "Giảm 12% cho hợp đồng dài hạn 2 năm và giảm 8% khi khách gia hạn kỳ hạn 24 tháng.",
+              appliesTo: "Đặt mới & Gia hạn",
+              status: "active",
+            }
+            const otherIdx = sanitized.findIndex((p: DurationDiscountItem) => p.id === "pkg-other")
+            if (otherIdx !== -1) {
+              const updated = [...sanitized]
+              updated.splice(otherIdx, 0, pkg24)
+              return updated
+            }
+            return [...sanitized, pkg24]
+          }
+          return sanitized
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return DEFAULT_DURATION_DISCOUNTS
+  })
+
+  const [editDurationModal, setEditDurationModal] = useState(false)
+  const [selectedDurationItem, setSelectedDurationItem] = useState<DurationDiscountItem | null>(null)
+  const [formDurationPercent, setFormDurationPercent] = useState<number>(0)
+  const [formDurationRenewalPercent, setFormDurationRenewalPercent] = useState<number>(0)
+  const [formDurationDesc, setFormDurationDesc] = useState<string>("")
+  const [formDurationStatus, setFormDurationStatus] = useState<'active' | 'inactive'>('active')
+
+  const handleOpenEditDuration = (item: DurationDiscountItem) => {
+    setSelectedDurationItem(item)
+    setFormDurationPercent(item.discountPercent)
+    setFormDurationRenewalPercent(item.renewalDiscountPercent)
+    setFormDurationDesc(item.description)
+    setFormDurationStatus(item.status)
+    setEditDurationModal(true)
+  }
+
+  const handleSaveDurationDiscount = () => {
+    if (!selectedDurationItem) return
+    const next = durationDiscounts.map((d) => {
+      if (d.id === selectedDurationItem.id) {
+        return {
+          ...d,
+          discountPercent: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)),
+          renewalDiscountPercent: Math.max(0, Math.min(100, Number(formDurationRenewalPercent) || 0)),
+          description: formDurationDesc.trim() || d.description,
+          status: formDurationStatus,
+        }
+      }
+      return d
+    })
+    setDurationDiscounts(next)
+    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    setEditDurationModal(false)
+    showToast(
+      lang === "vi"
+        ? `Đã cập nhật mức chiết khấu cho ${selectedDurationItem.title}!`
+        : `Updated discount for ${selectedDurationItem.title}!`,
+    )
   }
 
   const [revenueFacilityFilter, setRevenueFacilityFilter] =
@@ -991,6 +1229,101 @@ export default function BusinessApp({
     )
   }, [facilitiesList, pricingFacilityFilter])
 
+  const [facilityPriceModalOpen, setFacilityPriceModalOpen] = useState(false)
+  const [editingPriceFacility, setEditingPriceFacility] = useState<any | null>(null)
+  const [facilityPricesForm, setFacilityPricesForm] = useState<{ S: number; M: number; L: number; XL: number }>({
+    S: 5500000,
+    M: 9500000,
+    L: 15000000,
+    XL: 22500000,
+  })
+  const [facilityMultiplierForm, setFacilityMultiplierForm] = useState<{ S: number; M: number; L: number; XL: number }>({
+    S: 1.0,
+    M: 1.0,
+    L: 1.0,
+    XL: 1.0,
+  })
+
+  const handleOpenFacilityPriceModal = (fac: any) => {
+    setEditingPriceFacility(fac)
+    const currentOverrides = facilityPricingOverrides[fac.id] || {}
+    setFacilityPricesForm({
+      S: currentOverrides["tier-1"]?.basePrice ?? 5500000,
+      M: currentOverrides["tier-2"]?.basePrice ?? 9500000,
+      L: currentOverrides["tier-3"]?.basePrice ?? 15000000,
+      XL: currentOverrides["tier-4"]?.basePrice ?? 22500000,
+    })
+    setFacilityMultiplierForm({
+      S: currentOverrides["tier-1"]?.highDemandMultiplier ?? 1.0,
+      M: currentOverrides["tier-2"]?.highDemandMultiplier ?? 1.0,
+      L: currentOverrides["tier-3"]?.highDemandMultiplier ?? 1.0,
+      XL: currentOverrides["tier-4"]?.highDemandMultiplier ?? 1.0,
+    })
+    setFacilityPriceModalOpen(true)
+  }
+
+  const handleSaveFacilityPrices = () => {
+    if (!editingPriceFacility) return
+    const facId = editingPriceFacility.id
+    const nextOverrides = {
+      ...facilityPricingOverrides,
+      [facId]: {
+        "tier-1": { basePrice: Number(facilityPricesForm.S) || 5500000, highDemandMultiplier: Number(facilityMultiplierForm.S) || 1.0 },
+        "tier-2": { basePrice: Number(facilityPricesForm.M) || 9500000, highDemandMultiplier: Number(facilityMultiplierForm.M) || 1.0 },
+        "tier-3": { basePrice: Number(facilityPricesForm.L) || 15000000, highDemandMultiplier: Number(facilityMultiplierForm.L) || 1.0 },
+        "tier-4": { basePrice: Number(facilityPricesForm.XL) || 22500000, highDemandMultiplier: Number(facilityMultiplierForm.XL) || 1.0 },
+      },
+    }
+    setFacilityPricingOverrides(nextOverrides)
+    try {
+      localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+    } catch {}
+
+    const sizes: Array<"S" | "M" | "L" | "XL"> = ["S", "M", "L", "XL"]
+    sizes.forEach((sz) => {
+      const p = facilityPricesForm[sz]
+      const uList = unitsList.filter(
+        (u) =>
+          (u.facilityId === facId || u.facilityId === editingPriceFacility.code) &&
+          ((u as any).size === sz ||
+            u.type === (sz === "S" ? "Small" : sz === "M" ? "Medium" : sz === "L" ? "Large" : "Extra Large")),
+      )
+      uList.forEach((u) => {
+        try {
+          updateUnit(u.id, { price: p }, user)
+        } catch {}
+      })
+    })
+
+    try {
+      updateFacility(facId, { price: `${formatCurrency(facilityPricesForm.S)}` }, user)
+    } catch {}
+
+    setFacilityPriceModalOpen(false)
+    showToast(
+      lang === "vi"
+        ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"!`
+        : `Updated pricing for ${editingPriceFacility.name}!`,
+    )
+  }
+
+  const handleResetFacilityPrices = () => {
+    if (!editingPriceFacility) return
+    const facId = editingPriceFacility.id
+    const nextOverrides = { ...facilityPricingOverrides }
+    delete nextOverrides[facId]
+    setFacilityPricingOverrides(nextOverrides)
+    try {
+      localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+    } catch {}
+    setFacilityPriceModalOpen(false)
+    showToast(
+      lang === "vi"
+        ? `Đã khôi phục giá mặc định cho "${editingPriceFacility.name}"!`
+        : `Reset pricing for ${editingPriceFacility.name}!`,
+    )
+  }
+
   const getEffectiveTier = (tier: PricingTierItem) => {
     if (
       selectedPricingFacility &&
@@ -1013,10 +1346,10 @@ export default function BusinessApp({
     }
   }
 
-  // Helper lấy giá thực tế theo từng cỡ kho (S, M, L, XL) của một cơ sở
+  // Helper lấy giá thực tế theo từng cỡ kho (S, M, L, XL, custom) của một cơ sở
   const getFacilitySizePrice = useCallback(
-    (fac: any, size: "S" | "M" | "L" | "XL"): number => {
-      if (!fac) return UNIT_SPECS[size].priceMonthly
+    (fac: any, size: "S" | "M" | "L" | "XL" | string): number => {
+      if (!fac) return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
 
       // 1. Kiểm tra override trong bảng giá (Bảng giá & Biểu phí)
       const tierId =
@@ -1064,14 +1397,17 @@ export default function BusinessApp({
         if (!isNaN(parsed) && parsed > 0) return parsed
       }
 
-      // 5. Mặc định theo quy chuẩn UNIT_SPECS
-      return UNIT_SPECS[size].priceMonthly
+      // 5. Mặc định theo quy chuẩn UNIT_SPECS hoặc custom spec
+      const customP = fac.unitCustomSpecs?.find((cs: any) => cs.sizeCode === size)?.monthlyPrice
+      if (customP && customP > 0) return customP
+
+      return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
     },
     [facilityPricingOverrides, unitsList],
   )
 
   const getFacilitySizePriceFormatted = useCallback(
-    (fac: any, size: "S" | "M" | "L" | "XL"): string => {
+    (fac: any, size: "S" | "M" | "L" | "XL" | string): string => {
       const price = getFacilitySizePrice(fac, size)
       return `${Math.round(price).toLocaleString("vi-VN")}đ`
     },
@@ -1322,7 +1658,7 @@ export default function BusinessApp({
   )
 
   const [formFacAccessHours, setFormFacAccessHours] = useState<string>(
-    "06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)",
+    "06:00 - 22:00 hàng ngày",
   )
 
   const [formFacStatus, setFormFacStatus] = useState<"active" | "maintenance">(
@@ -1343,6 +1679,23 @@ export default function BusinessApp({
   const [newSpecMaxLoad, setNewSpecMaxLoad] = useState<number>(4500)
   const [newSpecPrice, setNewSpecPrice] = useState<string>("28.000.000đ")
   const [newSpecCount, setNewSpecCount] = useState<number>(5)
+  const [newSpecFrameCount, setNewSpecFrameCount] = useState<number>(12)
+  const [newSpecFrameLength, setNewSpecFrameLength] = useState<number>(4.0)
+  const [newSpecFrameWidth, setNewSpecFrameWidth] = useState<number>(2.0)
+  const [newSpecFrameHeight, setNewSpecFrameHeight] = useState<number>(4.5)
+  const [confirmDeleteSpec, setConfirmDeleteSpec] = useState<{
+    sizeCode: string
+    name: string
+    occ: number
+    isEditing: boolean
+  } | null>(null)
+
+  const [createValidationErrors, setCreateValidationErrors] = useState<string[]>([])
+  const [editValidationErrors, setEditValidationErrors] = useState<string[]>([])
+  const [editInitialSpecs, setEditInitialSpecs] = useState<FacilityCustomUnitSpec[]>([])
+  const [editInitialFacility, setEditInitialFacility] = useState<any>(null)
+  const [highlightSpecCode, setHighlightSpecCode] = useState<string | null>(null)
+  const [showConfirmCloseEdit, setShowConfirmCloseEdit] = useState<boolean>(false)
 
   const handleConfirmAddUnitSpec = () => {
     const rawCode = newSpecSizeCode.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "")
@@ -1363,6 +1716,10 @@ export default function BusinessApp({
     const maxLoad = Math.max(100, Number(newSpecMaxLoad) || 2000)
     const priceNum = parseInt(newSpecPrice.replace(/\D/g, ""), 10) || 10000000
     const qty = Math.max(0, Number(newSpecCount) || 0)
+    const frameCount = Math.max(0, Math.floor(Number(newSpecFrameCount) || 0))
+    const frameLen = Math.max(0.1, Number(newSpecFrameLength) || 1)
+    const frameWid = Math.max(0.1, Number(newSpecFrameWidth) || 1)
+    const frameHei = Math.max(0.1, Number(newSpecFrameHeight) || 1)
 
     const newSpec: FacilityCustomUnitSpec = {
       sizeCode: rawCode,
@@ -1377,6 +1734,13 @@ export default function BusinessApp({
       badgeClass: "bg-rose-50 text-rose-800 border-rose-200",
       floor: ((formFacUnitSpecs.length % 4) + 1),
       zone: `Khu ${String.fromCharCode(65 + (formFacUnitSpecs.length % 4))}`,
+      frameCount,
+      frameDimensions: {
+        lengthM: frameLen,
+        widthM: frameWid,
+        heightM: frameHei,
+        depthM: frameLen,
+      },
     }
 
     setFormFacUnitSpecs((prev) => [...prev, newSpec])
@@ -1608,11 +1972,11 @@ export default function BusinessApp({
 
     setFormFacSecurity("Khóa riêng tự quản, Bảo vệ cổng")
 
-    setFormFacAccessHours("06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)")
+    setFormFacAccessHours("06:00 - 22:00 hàng ngày")
 
     setFormFacStatus("active")
 
-    setFormFacUnitSpecs(DEFAULT_FACILITY_UNIT_SPECS.map((s) => ({ ...s, count: 0 })))
+    setFormFacUnitSpecs([])
 
     setCreateFacilityModal(true)
   }
@@ -1687,6 +2051,8 @@ export default function BusinessApp({
     const unitLoadLimits: Record<string, number> = {}
     const unitDimensions: Record<string, { lengthM: number; widthM: number; heightM: number }> = {}
     const unitLaneWidths: Record<string, number> = {}
+    const unitFrameCounts: Record<string, number> = {}
+    const unitFrameDimensions: Record<string, { lengthM: number; widthM: number; heightM: number }> = {}
 
     formFacUnitSpecs.forEach((s) => {
       const std = getUnitTypeVehicleStandard(s.sizeCode, s.widthM, s.lengthM)
@@ -1696,6 +2062,16 @@ export default function BusinessApp({
       unitLoadLimits[s.sizeCode] = s.maxLoadKg
       unitDimensions[s.sizeCode] = { lengthM: s.lengthM, widthM: s.widthM, heightM: s.heightM }
       unitLaneWidths[s.sizeCode] = validLane
+      if (s.frameCount !== undefined) {
+        unitFrameCounts[s.sizeCode] = s.frameCount
+      }
+      if (s.frameDimensions) {
+        unitFrameDimensions[s.sizeCode] = {
+          lengthM: s.frameDimensions.lengthM ?? s.frameDimensions.depthM ?? 1,
+          widthM: s.frameDimensions.widthM ?? 1,
+          heightM: s.frameDimensions.heightM ?? 1,
+        }
+      }
     })
 
     const totalDesignLoadTon =
@@ -1746,6 +2122,10 @@ export default function BusinessApp({
         unitDimensions,
 
         unitLaneWidths,
+
+        unitFrameCounts,
+
+        unitFrameDimensions,
 
         unitCustomSpecs: formFacUnitSpecs,
 
@@ -1872,17 +2252,36 @@ export default function BusinessApp({
     }
 
     // Nạp danh mục quy cách loại kho động (hỗ trợ cả các loại kho tùy biến như XXL)
+    let loadedSpecs: FacilityCustomUnitSpec[] = []
     if (f.unitCustomSpecs && Array.isArray(f.unitCustomSpecs) && f.unitCustomSpecs.length > 0) {
-      setFormFacUnitSpecs((f.unitCustomSpecs as FacilityCustomUnitSpec[]).map((s: FacilityCustomUnitSpec) => ({
-        ...s,
-        count: f.unitDistribution?.[s.sizeCode] ?? s.count ?? 0,
-        monthlyPrice: f.unitPrices?.[s.sizeCode] ?? s.monthlyPrice ?? 5500000,
-        lengthM: f.unitDimensions?.[s.sizeCode]?.lengthM ?? s.lengthM,
-        widthM: f.unitDimensions?.[s.sizeCode]?.widthM ?? s.widthM,
-        heightM: (f.unitDimensions?.[s.sizeCode] as any)?.heightM ?? s.heightM ?? 5,
-        laneWidthM: f.unitLaneWidths?.[s.sizeCode] ?? s.laneWidthM ?? 4,
-        maxLoadKg: f.unitLoadLimits?.[s.sizeCode] ?? s.maxLoadKg ?? 1000
-      })))
+      loadedSpecs = (f.unitCustomSpecs as FacilityCustomUnitSpec[]).map((s: FacilityCustomUnitSpec) => {
+        const specFallback = UNIT_SPECS[s.sizeCode as keyof typeof UNIT_SPECS]
+        const fallbackDims = specFallback?.frameDimensions
+        const rawDims = s.frameDimensions || f.unitFrameDimensions?.[s.sizeCode] || (fallbackDims ? {
+          lengthM: fallbackDims.lengthM ?? fallbackDims.depthM,
+          widthM: fallbackDims.widthM,
+          heightM: fallbackDims.heightM,
+          depthM: fallbackDims.depthM,
+        } : undefined)
+
+        return {
+          ...s,
+          count: f.unitDistribution?.[s.sizeCode] ?? s.count ?? 0,
+          monthlyPrice: f.unitPrices?.[s.sizeCode] ?? s.monthlyPrice ?? 5500000,
+          lengthM: f.unitDimensions?.[s.sizeCode]?.lengthM ?? s.lengthM,
+          widthM: f.unitDimensions?.[s.sizeCode]?.widthM ?? s.widthM,
+          heightM: (f.unitDimensions?.[s.sizeCode] as any)?.heightM ?? s.heightM ?? 5,
+          laneWidthM: f.unitLaneWidths?.[s.sizeCode] ?? s.laneWidthM ?? 4,
+          maxLoadKg: f.unitLoadLimits?.[s.sizeCode] ?? s.maxLoadKg ?? 1000,
+          frameCount: s.frameCount ?? f.unitFrameCounts?.[s.sizeCode] ?? specFallback?.frameCount ?? 0,
+          frameDimensions: rawDims ? {
+            lengthM: rawDims.lengthM ?? (rawDims as any).depthM ?? 1,
+            widthM: rawDims.widthM ?? 1,
+            heightM: rawDims.heightM ?? 1,
+            depthM: (rawDims as any).depthM ?? rawDims.lengthM ?? 1,
+          } : undefined
+        }
+      })
     } else {
       const dist = f.unitDistribution || {}
       const sizeKeys = Array.from(new Set<string>([
@@ -1891,7 +2290,7 @@ export default function BusinessApp({
         'S', 'M', 'L', 'XL'
       ]))
 
-      const loadedSpecs: FacilityCustomUnitSpec[] = sizeKeys.map((sz, idx) => {
+      loadedSpecs = sizeKeys.map((sz, idx) => {
         const spec = UNIT_SPECS[sz as keyof typeof UNIT_SPECS]
         const unit = facUnits.find(u => ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : u.type === 'Extra Large' ? 'XL' : '')) === sz)
         const count = dist[sz] ?? facUnits.filter(u => ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : u.type === 'Extra Large' ? 'XL' : '')) === sz).length
@@ -1901,6 +2300,13 @@ export default function BusinessApp({
         const wid = f.unitDimensions?.[sz]?.widthM ?? unit?.dimensions?.widthM ?? spec?.widthM ?? 10
         const hei = (f.unitDimensions?.[sz] as any)?.heightM ?? unit?.dimensions?.heightM ?? spec?.heightM ?? 5
         const lane = f.unitLaneWidths?.[sz] ?? spec?.vehicleLaneWidthM ?? 4
+        const fallbackDims = spec?.frameDimensions
+        const rawDims = f.unitFrameDimensions?.[sz] || (fallbackDims ? {
+          lengthM: fallbackDims.lengthM ?? fallbackDims.depthM,
+          widthM: fallbackDims.widthM,
+          heightM: fallbackDims.heightM,
+          depthM: fallbackDims.depthM,
+        } : undefined)
 
         const badgeClass = sz === 'S' ? 'bg-sky-50 text-sky-700 border-sky-200'
           : sz === 'M' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -1922,11 +2328,24 @@ export default function BusinessApp({
           count,
           badgeClass,
           floor: ((idx % 4) + 1),
-          zone: `Khu ${String.fromCharCode(65 + (idx % 4))}`
+          zone: `Khu ${String.fromCharCode(65 + (idx % 4))}`,
+          frameCount: f.unitFrameCounts?.[sz] ?? spec?.frameCount ?? 0,
+          frameDimensions: rawDims ? {
+            lengthM: rawDims.lengthM ?? (rawDims as any).depthM ?? 1,
+            widthM: rawDims.widthM ?? 1,
+            heightM: rawDims.heightM ?? 1,
+            depthM: (rawDims as any).depthM ?? rawDims.lengthM ?? 1,
+          } : undefined,
+          rentalPackages: generateDefaultRentalPackages(f.id, sz, p),
         }
       })
-      setFormFacUnitSpecs(loadedSpecs)
     }
+    setFormFacUnitSpecs(loadedSpecs)
+    setEditInitialSpecs(loadedSpecs.map((s) => ({
+      ...s,
+      frameDimensions: s.frameDimensions ? { ...s.frameDimensions } : undefined,
+    })))
+    setEditInitialFacility(f)
 
     setFormFacUnitS(sCount)
 
@@ -2050,11 +2469,12 @@ export default function BusinessApp({
     setFormFacSecurity(f.security || "Khóa riêng tự quản, Bảo vệ cổng")
 
     setFormFacAccessHours(
-      f.accessHours || "06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)",
+      f.accessHours || "06:00 - 22:00 hàng ngày",
     )
 
     setFormFacStatus(f.status)
-
+    setEditValidationErrors([])
+    setHighlightSpecCode(null)
     setEditFacilityModal(true)
   }
 
@@ -2165,6 +2585,8 @@ export default function BusinessApp({
     const unitLoadLimits: Record<string, number> = {}
     const unitDimensions: Record<string, { lengthM: number; widthM: number; heightM: number }> = {}
     const unitLaneWidths: Record<string, number> = {}
+    const unitFrameCounts: Record<string, number> = {}
+    const unitFrameDimensions: Record<string, { lengthM: number; widthM: number; heightM: number }> = {}
 
     formFacUnitSpecs.forEach((s) => {
       const std = getUnitTypeVehicleStandard(s.sizeCode, s.widthM, s.lengthM)
@@ -2174,6 +2596,16 @@ export default function BusinessApp({
       unitLoadLimits[s.sizeCode] = s.maxLoadKg
       unitDimensions[s.sizeCode] = { lengthM: s.lengthM, widthM: s.widthM, heightM: s.heightM }
       unitLaneWidths[s.sizeCode] = validLane
+      if (s.frameCount !== undefined) {
+        unitFrameCounts[s.sizeCode] = s.frameCount
+      }
+      if (s.frameDimensions) {
+        unitFrameDimensions[s.sizeCode] = {
+          lengthM: s.frameDimensions.lengthM ?? s.frameDimensions.depthM ?? 1,
+          widthM: s.frameDimensions.widthM ?? 1,
+          heightM: s.frameDimensions.heightM ?? 1,
+        }
+      }
     })
 
     const totalDesignLoadTon =
@@ -2227,6 +2659,10 @@ export default function BusinessApp({
         unitDimensions,
 
         unitLaneWidths,
+
+        unitFrameCounts,
+
+        unitFrameDimensions,
 
         unitCustomSpecs: formFacUnitSpecs,
 
@@ -2662,7 +3098,7 @@ export default function BusinessApp({
                                 className="truncate"
                                 title={f.accessHours || "06:00 - 22:00"}
                               >
-                                {f.accessHours || "06:00 - 22:00 (24/7 VIP)"}
+                                {f.accessHours || "06:00 - 22:00 hàng ngày"}
                               </span>
                             </div>
                           </div>
@@ -2863,7 +3299,7 @@ export default function BusinessApp({
 
       {/* ── RENTAL POLICIES ───────────────────────────────────── */}
       {page === "policies" && (
-        <div className="fade-in">
+        <div className="fade-in space-y-6">
           <SectionHeader
             title={
               lang === "vi"
@@ -2872,8 +3308,8 @@ export default function BusinessApp({
             }
             subtitle={
               lang === "vi"
-                ? "Các điều khoản, quy chế thương mại áp dụng thống nhất toàn hệ thống"
-                : "Company-wide rental terms and conditions"
+                ? "Các điều khoản, gói kỳ hạn ưu đãi và quy chế thương mại áp dụng thống nhất toàn hệ thống"
+                : "Company-wide rental terms, duration packages, and conditions"
             }
             action={
               <Button
@@ -2885,7 +3321,205 @@ export default function BusinessApp({
               </Button>
             }
           />
-          <Card>
+
+          {/* ── KHỐI 1: GÓI THUÊ & MỨC GIẢM GIÁ THEO KỲ HẠN ── */}
+          <Card className="p-5 border border-stone-200/90 shadow-sm bg-white">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-sm font-bold">
+                    🏷️
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    Gói Thuê & Mức Giảm Giá Kỳ Hạn
+                  </h3>
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    Áp dụng tự động trên hệ thống
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
+                </p>
+              </div>
+            </div>
+
+            {/* 5 Cards Tóm Tắt Nhanh Các Gói */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 my-4">
+              {durationDiscounts.map((item) => {
+                const isActive = item.status === "active"
+                const hasDiscount = item.discountPercent > 0
+                const hasRenewal = item.renewalDiscountPercent > 0
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+                      isActive
+                        ? hasDiscount || hasRenewal
+                          ? "border-emerald-200 bg-emerald-50/40 hover:border-emerald-300 shadow-2xs"
+                          : "border-stone-200 bg-stone-50/70"
+                        : "border-stone-200 bg-stone-100/80 opacity-60"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-1 mb-2">
+                        <span className="font-bold text-slate-900 text-sm">
+                          {item.label}
+                        </span>
+                        <Badge
+                          variant={
+                            !isActive
+                              ? "warning"
+                              : hasDiscount || hasRenewal
+                                ? "success"
+                                : "muted"
+                          }
+                        >
+                          {!isActive
+                            ? "Tạm dừng"
+                            : hasDiscount
+                              ? `Giảm ${item.discountPercent}%`
+                              : "Không giảm"}
+                        </Badge>
+                      </div>
+
+                      {/* Phân tách rõ ràng: Đặt mới vs Gia hạn */}
+                      <div className="space-y-1.5 py-2 px-2.5 rounded-lg bg-white/80 border border-stone-200/70 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-600 font-medium">Đặt mới:</span>
+                          <span className={`font-mono font-bold ${hasDiscount ? "text-emerald-700" : "text-slate-500"}`}>
+                            {hasDiscount ? `-${item.discountPercent}%` : "0% (Niêm yết)"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
+                          <span className="text-[11px] text-slate-600 font-medium">Gia hạn:</span>
+                          <span className={`font-mono font-bold ${hasRenewal ? "text-blue-700" : "text-slate-500"}`}>
+                            {hasRenewal ? `-${item.renewalDiscountPercent}%` : "0% (Không giảm)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 mt-2 line-clamp-3 leading-relaxed">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[130px]">
+                        {item.appliesTo}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditDuration(item)}
+                        className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                      >
+                        Sửa
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Bảng Chi Tiết Gói Thuê & Mức Giảm */}
+            <div className="rounded-xl border border-stone-200 overflow-hidden">
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>Gói Thuê & Thời Hạn</Th>
+                    <Th>Giảm Giá Đặt Mới</Th>
+                    <Th>Giảm Giá Gia Hạn</Th>
+                    <Th>Phạm Vi Áp Dụng</Th>
+                    <Th>Quy Định & Ghi Chú</Th>
+                    <Th>Trạng Thái</Th>
+                    <Th className="text-right">Thao Tác</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {durationDiscounts.map((item) => (
+                    <Tr key={item.id}>
+                      <Td className="font-semibold text-slate-900">
+                        <div>
+                          <span>{item.title}</span>
+                          <span className="block text-[11px] font-normal text-slate-400">
+                            {item.months === "other"
+                              ? "Linh hoạt theo nhu cầu"
+                              : `Kỳ hạn hợp đồng ${item.months} tháng`}
+                          </span>
+                        </div>
+                      </Td>
+                      <Td>
+                        <span
+                          className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
+                            item.discountPercent > 0
+                              ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                              : "bg-stone-100 text-stone-600"
+                          }`}
+                        >
+                          {item.discountPercent > 0
+                            ? `-${item.discountPercent}%`
+                            : "0%"}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span
+                          className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
+                            item.renewalDiscountPercent > 0
+                              ? "bg-blue-100 text-blue-900 border border-blue-300"
+                              : "bg-stone-100 text-stone-600"
+                          }`}
+                        >
+                          {item.renewalDiscountPercent > 0
+                            ? `-${item.renewalDiscountPercent}%`
+                            : "0%"}
+                        </span>
+                      </Td>
+                      <Td className="text-xs text-slate-700 font-medium">
+                        {item.appliesTo}
+                      </Td>
+                      <Td className="text-xs text-slate-500 max-w-xs">
+                        {item.description}
+                      </Td>
+                      <Td>
+                        <Badge
+                          variant={
+                            item.status === "active" ? "success" : "warning"
+                          }
+                        >
+                          {item.status === "active"
+                            ? "Đang áp dụng"
+                            : "Tạm dừng"}
+                        </Badge>
+                      </Td>
+                      <Td className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenEditDuration(item)}
+                          className="text-amber-800 hover:text-amber-950 font-semibold"
+                        >
+                          Sửa
+                        </Button>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </div>
+          </Card>
+
+          {/* ── KHỐI 2: QUY ĐỊNH & CHÍNH SÁCH CHUNG ── */}
+          <Card className="p-5 border border-stone-200/90 shadow-sm bg-white">
+            <div className="flex items-center justify-between mb-4 border-b border-stone-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">
+                  Quy Định & Điều Khoản Thuê Chung
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Các điều khoản về tiền đặt cọc, thời gian ân hạn thanh toán, phí trễ hạn và thông báo trả kho
+                </p>
+              </div>
+            </div>
+
             <Table>
               <Thead>
                 <tr>
@@ -2915,15 +3549,15 @@ export default function BusinessApp({
                   policiesList.map((p) => {
                     const displayName =
                       lang === "vi"
-                        ? p.name === "Grace Period"
-                          ? "Thời gian gia hạn nợ"
-                          : p.name === "Late Fee"
+                        ? p.name === "Grace Period" || p.name === "Thời gian gia hạn nợ" || p.name === "Thời gian ân hạn thanh toán"
+                          ? "Thời gian ân hạn thanh toán"
+                          : p.name === "Late Fee" || p.name === "Mức phí phạt trễ hạn"
                             ? "Mức phí phạt trễ hạn"
-                            : p.name === "Security Deposit"
+                            : p.name === "Security Deposit" || p.name === "Tiền đặt cọc an ninh"
                               ? "Tiền đặt cọc an ninh"
-                              : p.name === "Notice to Vacate"
-                                ? "Thời hạn báo trước khi trả phòng"
-                                : p.name === "Minimum Lease"
+                              : p.name === "Notice to Vacate" || p.name === "Thời hạn báo trước khi trả kho sớm"
+                                ? "Thời hạn báo trước khi trả kho sớm"
+                                : p.name === "Minimum Lease" || p.name === "Thời hạn thuê tối thiểu"
                                   ? "Thời hạn thuê tối thiểu"
                                   : p.name
                         : p.name
@@ -2932,10 +3566,8 @@ export default function BusinessApp({
                       lang === "vi"
                         ? p.value.includes("days")
                           ? p.value.replace("days", "ngày")
-                          : p.value.includes("month")
-                            ? p.value
-                              .replace("$25", "650.000 ₫")
-                              .replace("month", "tháng")
+                          : p.value === "1 month"
+                            ? (p.name.includes("Deposit") || p.name.includes("cọc") ? "1 tháng tiền thuê" : "1 tháng")
                             : (p.value ?? "—")
                         : (p.value ?? "—")
 
@@ -3064,6 +3696,14 @@ export default function BusinessApp({
                 </span>
                 <button
                   type="button"
+                  onClick={() => handleOpenFacilityPriceModal(selectedPricingFacility)}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="show-icon">✏️</span>
+                  <span>Chỉnh biểu giá cơ sở</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPricingFacilityFilter("all")}
                   className="text-amber-800 hover:text-amber-950 font-semibold underline cursor-pointer"
                 >
@@ -3089,10 +3729,11 @@ export default function BusinessApp({
                     </div>
                     <button
                       type="button"
-                      onClick={() => setPricingFacilityFilter(fac.id)}
-                      className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                      onClick={() => handleOpenFacilityPriceModal(fac)}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition cursor-pointer shadow-2xs flex items-center gap-1.5"
                     >
-                      Chỉnh giá cơ sở này
+                      <span className="show-icon">✏️</span>
+                      <span>Chỉnh giá cơ sở này</span>
                     </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-5">
@@ -3231,6 +3872,179 @@ export default function BusinessApp({
               })}
             </div>
           )}
+
+          {/* ── GÓI THUÊ & CHÍNH SÁCH GIẢM GIÁ THEO KỲ HẠN (3, 6, 12, 24 THÁNG) ── */}
+          <Card className="p-5 border border-amber-200/80 bg-linear-to-b from-amber-50/20 to-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {lang === "vi"
+                      ? "Chính Sách Giá Theo Thời Hạn & Gói Thuê Dài Hạn"
+                      : "Rental Packages & Long-Term Duration Discounts"}
+                  </h3>
+                  <Badge variant="success">
+                    {lang === "vi" ? "Đồng bộ giá Customer" : "Live customer pricing"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                  {lang === "vi"
+                    ? "Hệ thống tự động áp dụng tỷ lệ chiết khấu giảm giá vào đơn giá khi khách hàng thuê theo gói 3 tháng, 6 tháng, 12 tháng hoặc 24 tháng. Bạn có thể nhấn 'Sửa' để cấu hình lại mức giảm."
+                    : "Automatic discounts applied to units when customers lease for 3, 6, 12, or 24 months."}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Cards Gói Thuê */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 my-4">
+              {durationDiscounts.map((item) => {
+                const isActive = item.status === "active"
+                const hasDiscount = item.discountPercent > 0
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+                      isActive
+                        ? hasDiscount
+                          ? "border-emerald-200 bg-white hover:border-emerald-400 shadow-2xs"
+                          : "border-stone-200 bg-white"
+                        : "border-stone-200 bg-stone-100 opacity-60"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className="font-bold text-xs text-slate-900 truncate">
+                          {item.label}
+                        </span>
+                        <Badge variant={!isActive ? "warning" : hasDiscount ? "success" : "muted"}>
+                          {!isActive ? "Tạm dừng" : hasDiscount ? `-${item.discountPercent}%` : "0%"}
+                        </Badge>
+                      </div>
+
+                      {/* Phân tách rõ: Đặt mới vs Gia hạn */}
+                      <div className="space-y-1 py-1.5 px-2 rounded-lg bg-stone-50 border border-stone-200/60 text-xs my-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-500 font-medium">Đặt mới:</span>
+                          <span className={`font-mono font-bold text-xs ${hasDiscount ? "text-emerald-700" : "text-slate-500"}`}>
+                            {hasDiscount ? `-${item.discountPercent}%` : "0% (Niêm yết)"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1">
+                          <span className="text-[10px] text-slate-500 font-medium">Gia hạn:</span>
+                          <span className={`font-mono font-bold text-xs ${item.renewalDiscountPercent > 0 ? "text-blue-700" : "text-slate-500"}`}>
+                            {item.renewalDiscountPercent > 0 ? `-${item.renewalDiscountPercent}%` : "0%"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 mt-1.5 line-clamp-2">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 truncate">
+                        {item.months === "other" ? "Linh hoạt" : `${item.months} tháng`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditDuration(item)}
+                        className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                      >
+                        {lang === "vi" ? "Sửa" : "Edit"}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Bảng Ma Trận Báo Giá Quy Đổi Cho Từng Cỡ Kho */}
+            <div className="mt-4 border border-stone-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+              <div className="px-4 py-2.5 bg-stone-50 border-b border-stone-200 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-800">
+                  📐 Bảng Tra Cứu Đơn Giá Từng Loại Kho Sau Giảm Giá
+                  {selectedPricingFacility ? ` · Tại ${selectedPricingFacility.name}` : " · Mức Chuẩn Hệ Thống"}
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  Đơn giá thực tế hiển thị cho Khách hàng
+                </span>
+              </div>
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>Phân Loại Kho</Th>
+                    <Th className="text-right">Giá Gốc (1 Tháng)</Th>
+                    <Th className="text-right">Gói 3 Tháng</Th>
+                    <Th className="text-right">Gói 6 Tháng</Th>
+                    <Th className="text-right">Gói 12 Tháng</Th>
+                    <Th className="text-right">Gói 24 Tháng</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {(['S', 'M', 'L', 'XL'] as const).map((sz) => {
+                    const tierId = sz === 'S' ? 'tier-1' : sz === 'M' ? 'tier-2' : sz === 'L' ? 'tier-3' : 'tier-4'
+                    const rawTier = pricingTiers.find(t => t.id === tierId) || pricingTiers[0]
+                    const effective = getEffectiveTier(rawTier)
+                    const base = effective.basePrice
+                    const spec = UNIT_SPECS[sz]
+
+                    const getDiscountForMonths = (m: number) => {
+                      const item = durationDiscounts.find(d => d.months === m && d.status === 'active')
+                      return item ? item.discountPercent : 0
+                    }
+
+                    const d3 = getDiscountForMonths(3)
+                    const p3 = Math.round(base * (1 - d3 / 100))
+                    const d6 = getDiscountForMonths(6)
+                    const p6 = Math.round(base * (1 - d6 / 100))
+                    const d12 = getDiscountForMonths(12)
+                    const p12 = Math.round(base * (1 - d12 / 100))
+                    const d24 = getDiscountForMonths(24)
+                    const p24 = Math.round(base * (1 - d24 / 100))
+
+                    return (
+                      <Tr key={sz}>
+                        <Td className="font-semibold text-slate-900">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded font-mono text-xs font-bold ${
+                              sz === 'S' ? 'bg-blue-100 text-blue-900' :
+                              sz === 'M' ? 'bg-green-100 text-green-900' :
+                              sz === 'L' ? 'bg-purple-100 text-purple-900' :
+                              'bg-amber-100 text-amber-900'
+                            }`}>
+                              {sz}
+                            </span>
+                            <span>{spec.name}</span>
+                            <span className="text-xs text-slate-400 font-normal">({spec.dimensions})</span>
+                          </div>
+                        </Td>
+                        <Td className="text-right font-mono font-bold text-slate-900">
+                          {formatCurrency(base)}<span className="text-xs font-normal text-slate-400">/th</span>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p3)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p3 * 3)}</p>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p6)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p6 * 6)}</p>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p12)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p12 * 12)}</p>
+                        </Td>
+                        <Td className="text-right">
+                          <p className="font-mono font-bold text-emerald-700">{formatCurrency(p24)}<span className="text-xs font-normal text-slate-500">/th</span></p>
+                          <p className="text-[10px] text-slate-400 font-mono">Tổng: {formatCurrency(p24 * 24)}</p>
+                        </Td>
+                      </Tr>
+                    )
+                  })}
+                </Tbody>
+              </Table>
+            </div>
+          </Card>
 
           <Card className="p-5">
             <h3 className="font-semibold text-slate-800 mb-4">
@@ -4367,6 +5181,118 @@ export default function BusinessApp({
         )}
       </Modal>
 
+      {/* ── MODAL: CHỈNH SỬA TOÀN BỘ BIỂU GIÁ CƠ SỞ ── */}
+      <Modal
+        open={facilityPriceModalOpen}
+        onClose={() => setFacilityPriceModalOpen(false)}
+        size="2xl"
+        title={
+          editingPriceFacility
+            ? `Chỉnh Sửa Biểu Giá: ${editingPriceFacility.name} (${editingPriceFacility.code || editingPriceFacility.id})`
+            : "Chỉnh Sửa Biểu Giá Cơ Sở"
+        }
+      >
+        {editingPriceFacility && (
+          <div className="space-y-4">
+            <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="font-bold text-sm text-slate-900 block">
+                  {editingPriceFacility.name}
+                </span>
+                <span className="text-slate-600">
+                  📍 {editingPriceFacility.address} · {editingPriceFacility.city}
+                </span>
+              </div>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-amber-200 text-amber-900 border border-amber-300">
+                Quy mô: {editingPriceFacility.units} gian kho
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Thiết lập đơn giá cước thuê theo tháng cho từng loại kho tại cơ sở này. Đơn giá sẽ tự động được áp dụng vào các gói thuê (3, 6, 12, 24 tháng) theo tỷ lệ chiết khấu của hệ thống.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {(['S', 'M', 'L', 'XL'] as const).map((sz) => {
+                const spec = UNIT_SPECS[sz]
+                const val = facilityPricesForm[sz]
+
+                return (
+                  <div key={sz} className="p-3.5 rounded-xl border border-stone-200 bg-white space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded font-mono text-xs font-bold ${
+                          sz === 'S' ? 'bg-blue-100 text-blue-900' :
+                          sz === 'M' ? 'bg-green-100 text-green-900' :
+                          sz === 'L' ? 'bg-purple-100 text-purple-900' :
+                          'bg-amber-100 text-amber-900'
+                        }`}>
+                          {sz}
+                        </span>
+                        <div>
+                          <p className="font-bold text-xs text-slate-900">{spec.name}</p>
+                          <p className="text-[10px] text-slate-400">{spec.dimensions} · {spec.volumeM3} m³</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-500">
+                        Tải: {spec.maxLoadKg.toLocaleString()}kg
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 block">
+                        Đơn giá niêm yết (VNĐ/tháng)
+                      </label>
+                      <input
+                        type="number"
+                        min={100000}
+                        step={50000}
+                        value={val}
+                        onChange={(e) => {
+                          const n = Number(e.target.value) || 0
+                          setFacilityPricesForm((prev) => ({ ...prev, [sz]: n }))
+                        }}
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="VD: 5500000"
+                      />
+                      <p className="text-[10px] text-emerald-700 font-mono text-right">
+                        = {formatCurrency(val)}/tháng
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Ước tính gói 3T (-3%):</span>
+                      <span className="font-mono font-semibold text-slate-800">
+                        {formatCurrency(Math.round(val * 0.97))}/th
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-stone-500 hover:text-red-700"
+                onClick={handleResetFacilityPrices}
+              >
+                Khôi phục giá chuẩn hệ thống
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setFacilityPriceModalOpen(false)}>
+                  Hủy
+                </Button>
+                <Button variant="primary" onClick={handleSaveFacilityPrices}>
+                  Lưu Biểu Giá Cơ Sở
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Enhanced New Promotion Modal */}
       <Modal
         open={discountModal}
@@ -4676,7 +5602,7 @@ export default function BusinessApp({
             label={lang === "vi" ? "Tên chính sách" : "Policy Name"}
             placeholder={
               lang === "vi"
-                ? "VD: Thời gian gia hạn nợ, Phí phạt trễ hạn, Tiền cọc an ninh..."
+                ? "VD: Thời gian ân hạn thanh toán, Phí phạt trễ hạn, Tiền cọc an ninh..."
                 : "E.g. Grace Period, Late Fee..."
             }
             value={policyFormName}
@@ -4687,8 +5613,8 @@ export default function BusinessApp({
             label={lang === "vi" ? "Giá trị áp dụng" : "Current Value"}
             placeholder={
               lang === "vi"
-                ? "VD: 5 ngày, 650.000 ₫ / tháng, 1 tháng tiền thuê..."
-                : "E.g. 5 days, 1 month..."
+                ? "VD: 3 ngày, 50% đơn giá ngày / ngày trễ, 1 tháng tiền thuê..."
+                : "E.g. 3 days, 1 month..."
             }
             value={policyFormValue}
             onChange={(e) => setPolicyFormValue(e.target.value)}
@@ -4742,773 +5668,168 @@ export default function BusinessApp({
         </div>
       </Modal>
 
-      {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
-      {(() => {
-        const calculatedTotalUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
-
-        const calculatedTotalLoadTon =
-          Math.round(
-            (formFacUnitSpecs.reduce(
-              (sum, s) => sum + s.count * (s.maxLoadKg || 1000),
-              0,
-            ) /
-              1000) *
-            10,
-          ) / 10
-
-        const activeSpecs = formFacUnitSpecs.filter((s) => s.count > 0)
-        const minSpecPrice =
-          activeSpecs.length > 0
-            ? Math.min(...activeSpecs.map((s) => s.monthlyPrice))
-            : formFacUnitSpecs[0]?.monthlyPrice || 5500000
-
-        const minSpecPriceFormatted = `${Math.round(minSpecPrice).toLocaleString("vi-VN")}đ`
-
-        const handleSpecCountChange = (sizeCode: string, newCount: number) => {
-          const safeCount = Math.max(0, Math.floor(newCount || 0))
-          setFormFacUnitSpecs((prev) =>
-            prev.map((s) => (s.sizeCode === sizeCode ? { ...s, count: safeCount } : s)),
-          )
-          if (sizeCode === "S") setFormFacUnitS(safeCount)
-          if (sizeCode === "M") setFormFacUnitM(safeCount)
-          if (sizeCode === "L") setFormFacUnitL(safeCount)
-          if (sizeCode === "XL") setFormFacUnitXL(safeCount)
-
-          const nextSpecs = formFacUnitSpecs.map((s) =>
-            s.sizeCode === sizeCode ? { ...s, count: safeCount } : s,
-          )
-          const total = nextSpecs.reduce((sum, s) => sum + s.count, 0)
-          setFormFacUnits(total)
-
-          const active = nextSpecs.filter((s) => s.count > 0)
-          if (active.length > 0) {
-            const minP = Math.min(...active.map((s) => s.monthlyPrice))
-            setFormFacPrice(`${Math.round(minP).toLocaleString("vi-VN")}đ`)
-          }
+      {/* ── MODAL: CHỈNH SỬA GÓI THUÊ & MỨC GIẢM GIÁ KỲ HẠN ── */}
+      <Modal
+        open={editDurationModal}
+        onClose={() => setEditDurationModal(false)}
+        title={
+          selectedDurationItem
+            ? `Chỉnh Sửa Chiết Khấu: ${selectedDurationItem.title}`
+            : "Chỉnh Sửa Gói Thuê"
         }
-
-        const handleSpecPriceChange = (sizeCode: string, priceStr: string) => {
-          const numeric = parseInt(priceStr.replace(/\D/g, ""), 10) || 0
-          setFormFacUnitSpecs((prev) =>
-            prev.map((s) => (s.sizeCode === sizeCode ? { ...s, monthlyPrice: numeric } : s)),
-          )
-          if (sizeCode === "S") setFormFacPriceS(priceStr)
-          if (sizeCode === "M") setFormFacPriceM(priceStr)
-          if (sizeCode === "L") setFormFacPriceL(priceStr)
-          if (sizeCode === "XL") setFormFacPriceXL(priceStr)
-
-          const nextSpecs = formFacUnitSpecs.map((s) =>
-            s.sizeCode === sizeCode ? { ...s, monthlyPrice: numeric } : s,
-          )
-          const active = nextSpecs.filter((s) => s.count > 0)
-          if (active.length > 0) {
-            const minP = Math.min(...active.map((s) => s.monthlyPrice))
-            setFormFacPrice(`${Math.round(minP).toLocaleString("vi-VN")}đ`)
-          }
-        }
-
-        const handleSpecDimensionChange = (
-          sizeCode: string,
-          field: "lengthM" | "widthM" | "heightM" | "laneWidthM" | "maxLoadKg" | "name",
-          value: any,
-        ) => {
-          setFormFacUnitSpecs((prev) =>
-            prev.map((s) => (s.sizeCode === sizeCode ? { ...s, [field]: value } : s)),
-          )
-          if (sizeCode === "S") {
-            if (field === "lengthM") setFormFacLengthS(Number(value))
-            if (field === "widthM") setFormFacWidthS(Number(value))
-            if (field === "laneWidthM") setFormFacLaneS(Number(value))
-            if (field === "maxLoadKg") setFormFacLoadS(Number(value))
-          } else if (sizeCode === "M") {
-            if (field === "lengthM") setFormFacLengthM(Number(value))
-            if (field === "widthM") setFormFacWidthM(Number(value))
-            if (field === "laneWidthM") setFormFacLaneM(Number(value))
-            if (field === "maxLoadKg") setFormFacLoadM(Number(value))
-          } else if (sizeCode === "L") {
-            if (field === "lengthM") setFormFacLengthL(Number(value))
-            if (field === "widthM") setFormFacWidthL(Number(value))
-            if (field === "laneWidthM") setFormFacLaneL(Number(value))
-            if (field === "maxLoadKg") setFormFacLoadL(Number(value))
-          } else if (sizeCode === "XL") {
-            if (field === "lengthM") setFormFacLengthXL(Number(value))
-            if (field === "widthM") setFormFacWidthXL(Number(value))
-            if (field === "laneWidthM") setFormFacLaneXL(Number(value))
-            if (field === "maxLoadKg") setFormFacLoadXL(Number(value))
-          }
-        }
-
-        const renderUnitAllocationSection = (
-          isEditing: boolean,
-          occupiedMap: Record<string, number> = {},
-        ) => {
-          return (
-            <div className="space-y-3 pt-2">
-              {/* Highlight Header cho Section Phân Bổ Gian Kho */}
-              <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-3.5 rounded-xl border border-amber-200/90 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-stone-950 font-bold flex items-center justify-center shrink-0 shadow-xs">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold uppercase tracking-wider text-stone-900">
-                      {lang === "vi"
-                        ? "Phân Bổ Gian Kho & Quy Mô Thiết Kế"
-                        : "Unit Allocation & Design Scale"}
-                    </h4>
-                    <p className="text-xs text-stone-500 mt-0.5">
-                      {lang === "vi"
-                        ? "Tùy biến linh hoạt loại kho (thêm mới, xóa bớt), điều chỉnh trực tiếp Dài × Rộng × Cao và tải trọng"
-                        : "Customize unit types (add, delete), directly adjust Length × Width × Height and load limits"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-300 text-sky-900 font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-sky-500 inline-block animate-pulse"></span>
-                    <span>
-                      {lang === "vi" ? "Tải trọng sàn:" : "Floor Load:"}{" "}
-                      <b className="text-sky-950 font-extrabold text-sm">
-                        {calculatedTotalLoadTon}
-                      </b>{" "}
-                      tấn
-                    </span>
-                  </div>
-                  <div className="px-3 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-600 inline-block"></span>
-                    <span>
-                      {lang === "vi" ? "Tổng quy mô:" : "Total Units:"}{" "}
-                      <b className="text-amber-950 font-extrabold text-sm">
-                        {calculatedTotalUnits}
-                      </b>{" "}
-                      kho
-                    </span>
-                  </div>
-                  {/* Nút Thêm Loại Kho Mới */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextSuffix = formFacUnitSpecs.length + 1
-                      const hasXXL = formFacUnitSpecs.some((s) => s.sizeCode === "XXL")
-                      setNewSpecSizeCode(hasXXL ? `CUST${nextSuffix}` : "XXL")
-                      setNewSpecName(hasXXL ? `Kho Mở Rộng ${nextSuffix}` : "Kho Ngoại Khổ (XXL)")
-                      setNewSpecLength(25)
-                      setNewSpecWidth(12)
-                      setNewSpecHeight(5.0)
-                      setNewSpecLane(5.0)
-                      setNewSpecMaxLoad(4500)
-                      setNewSpecPrice("28.000.000đ")
-                      setNewSpecCount(5)
-                      setShowAddUnitSpecModal(true)
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2.5}
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
-                    <span>{lang === "vi" ? "+ Thêm loại kho" : "+ Add Unit Type"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Bảng phân bổ gian kho linh hoạt */}
-              <div className="border border-stone-200 rounded-xl overflow-x-auto bg-white shadow-xs">
-                <table className="w-full text-left text-xs border-collapse min-w-[960px]">
-                  <thead className="bg-stone-100/90 border-b border-stone-200 text-stone-700 font-bold uppercase tracking-wider text-[11px]">
-                    <tr>
-                      <th className="py-3 px-3 min-w-[200px]">
-                        {lang === "vi" ? "Cỡ & Loại Kho" : "Size & Type"}
-                      </th>
-                      <th className="py-3 px-3 min-w-[340px]">
-                        {lang === "vi"
-                          ? "Quy Cách (D × R × C) & Thể Tích"
-                          : "Dimensions (L × W × H) & Vol"}
-                      </th>
-                      <th className="py-3 px-3 text-center min-w-[140px]">
-                        {lang === "vi" ? "Tải Trọng Tối Đa" : "Max Load"}
-                      </th>
-                      <th className="py-3 px-3 text-center min-w-[150px]">
-                        {lang === "vi"
-                          ? "Đơn Giá Thuê / Tháng"
-                          : "Monthly Rate"}
-                      </th>
-                      <th className="py-3 px-3 text-right min-w-[130px]">
-                        {lang === "vi" ? "Số Lượng Kho" : "Quantity"}
-                      </th>
-                      <th className="py-3 px-3 text-center w-14">
-                        {lang === "vi" ? "Xóa" : "Action"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-200/80">
-                    {formFacUnitSpecs.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-stone-500">
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <svg className="w-10 h-10 text-stone-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                            <p className="text-sm font-semibold text-stone-700">
-                              {lang === "vi" ? "Chưa có loại kho nào trong cấu hình cơ sở" : "No unit types configured yet"}
-                            </p>
-                            <p className="text-xs text-stone-400 max-w-md">
-                              {lang === "vi"
-                                ? "Cơ sở này hiện chưa có loại gian kho nào. Vui lòng bấm '+ Thêm loại kho' bên trên để tạo cỡ kho phù hợp (S, M, L, XL, XXL...)."
-                                : "Click '+ Add Unit Type' above to define storage unit sizes for this facility."}
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      formFacUnitSpecs.map((spec) => {
-                        const occ = occupiedMap[spec.sizeCode] || 0
-                        const isBelowOcc = isEditing && spec.count < occ
-                        const canDelete = !isEditing || occ === 0
-                        const calcVol = Math.round(spec.lengthM * spec.widthM * (spec.heightM || 4.5) * 10) / 10
-                        const calcArea = Math.round(spec.lengthM * spec.widthM * 10) / 10
-
-                        return (
-                          <tr
-                            key={spec.sizeCode}
-                            className="hover:bg-amber-50/20 transition-colors"
-                          >
-                            {/* 1. Cỡ & Loại kho */}
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              <div className="flex items-center gap-2.5">
-                                <span
-                                  className={`w-8 h-8 flex items-center justify-center rounded-lg font-mono font-bold text-xs border shrink-0 shadow-2xs ${spec.badgeClass || "bg-stone-50 text-stone-700 border-stone-200"}`}
-                                >
-                                  {spec.sizeCode}
-                                </span>
-                                <div className="flex flex-col">
-                                  <input
-                                    type="text"
-                                    value={spec.name}
-                                    onChange={(e) =>
-                                      handleSpecDimensionChange(spec.sizeCode, "name", e.target.value)
-                                    }
-                                    className="font-bold text-stone-900 text-xs bg-white border border-stone-200 hover:border-stone-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-md px-2 py-1 w-36 shadow-2xs transition"
-                                    title={lang === "vi" ? "Nhấp để đổi tên hiển thị" : "Click to edit name"}
-                                  />
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <span className="text-[10px] text-stone-400 font-mono">
-                                      Mã: {spec.sizeCode}
-                                    </span>
-                                    {isEditing && occ > 0 && (
-                                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
-                                        Thuê: {occ}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* 2. Quy cách & Thể tích D x R x C */}
-                            <td className="py-3 px-3">
-                              <div className="space-y-1.5 whitespace-nowrap">
-                                {/* Hàng 1: Dài × Rộng × Cao */}
-                                <div className="flex items-center gap-1.5">
-                                  {/* Dài */}
-                                  <div className="flex items-center bg-stone-50 border border-stone-300 rounded-md overflow-hidden shadow-2xs">
-                                    <span className="px-1.5 py-1 text-[10px] font-bold text-stone-500 bg-stone-100 border-r border-stone-200 select-none">
-                                      D
-                                    </span>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={100}
-                                      step={0.1}
-                                      className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none focus:bg-amber-50/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                      value={spec.lengthM}
-                                      onChange={(e) => {
-                                        const raw = e.target.value
-                                        const val =
-                                          raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0
-                                            ? 1
-                                            : parseFloat(raw) || 1
-                                        handleSpecDimensionChange(spec.sizeCode, "lengthM", val)
-                                      }}
-                                      onBlur={() => {
-                                        if (!spec.lengthM || spec.lengthM < 1) {
-                                          handleSpecDimensionChange(spec.sizeCode, "lengthM", 1)
-                                        }
-                                      }}
-                                      title={lang === "vi" ? "Chiều dài (m)" : "Length (m)"}
-                                    />
-                                    <span className="pr-1.5 text-[10px] text-stone-400 font-mono select-none bg-white">
-                                      m
-                                    </span>
-                                  </div>
-
-                                  <span className="text-stone-400 font-bold text-xs select-none">×</span>
-
-                                  {/* Rộng */}
-                                  <div className="flex items-center bg-stone-50 border border-stone-300 rounded-md overflow-hidden shadow-2xs">
-                                    <span className="px-1.5 py-1 text-[10px] font-bold text-stone-500 bg-stone-100 border-r border-stone-200 select-none">
-                                      R
-                                    </span>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={100}
-                                      step={0.1}
-                                      className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none focus:bg-amber-50/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                      value={spec.widthM}
-                                      onChange={(e) => {
-                                        const raw = e.target.value
-                                        const val =
-                                          raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0
-                                            ? 1
-                                            : parseFloat(raw) || 1
-                                        handleSpecDimensionChange(spec.sizeCode, "widthM", val)
-                                      }}
-                                      onBlur={() => {
-                                        if (!spec.widthM || spec.widthM < 1) {
-                                          handleSpecDimensionChange(spec.sizeCode, "widthM", 1)
-                                        }
-                                      }}
-                                      title={lang === "vi" ? "Chiều rộng (m)" : "Width (m)"}
-                                    />
-                                    <span className="pr-1.5 text-[10px] text-stone-400 font-mono select-none bg-white">
-                                      m
-                                    </span>
-                                  </div>
-
-                                  <span className="text-stone-400 font-bold text-xs select-none">×</span>
-
-                                  {/* Cao - Tùy chỉnh tự do */}
-                                  <div className="flex items-center bg-amber-50/80 border border-amber-300 rounded-md overflow-hidden shadow-2xs ring-1 ring-amber-200">
-                                    <span className="px-1.5 py-1 text-[10px] font-bold text-amber-800 bg-amber-100/90 border-r border-amber-300 select-none">
-                                      C
-                                    </span>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={30}
-                                      step={0.1}
-                                      className="w-12 h-7 px-1 text-center font-mono font-bold text-xs bg-white text-amber-950 focus:outline-none focus:bg-amber-50/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                      value={spec.heightM}
-                                      onChange={(e) => {
-                                        const raw = e.target.value
-                                        const val =
-                                          raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0
-                                            ? 1
-                                            : parseFloat(raw) || 1
-                                        handleSpecDimensionChange(spec.sizeCode, "heightM", val)
-                                      }}
-                                      onBlur={() => {
-                                        if (!spec.heightM || spec.heightM < 1) {
-                                          handleSpecDimensionChange(spec.sizeCode, "heightM", 1)
-                                        }
-                                      }}
-                                      title={lang === "vi" ? "Chiều cao gian kho (m) - Tùy chỉnh tự do" : "Height (m)"}
-                                    />
-                                    <span className="pr-1.5 text-[10px] text-amber-700 font-bold font-mono select-none bg-white">
-                                      m
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Hàng 2: Thể tích, Diện tích, Lối xe */}
-                                <div className="flex items-center gap-2 text-[11px] text-stone-600">
-                                  <span>
-                                    {lang === "vi" ? "Thể tích:" : "Vol:"}{" "}
-                                    <b className="text-stone-900 font-mono bg-stone-100 px-1 py-0.5 rounded border border-stone-200">
-                                      {calcVol} m³
-                                    </b>{" "}
-                                    <span className="text-stone-400">({calcArea} m²)</span>
-                                  </span>
-                                  <span className="text-stone-300">·</span>
-                                  {(() => {
-                                    const std = getUnitTypeVehicleStandard(
-                                      spec.sizeCode,
-                                      spec.widthM,
-                                      spec.lengthM,
-                                    )
-                                    const isLaneInvalid =
-                                      (spec.laneWidthM || 0) < std.minLaneM
-                                    return (
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-[10px] text-stone-500">
-                                          {lang === "vi" ? "Lối xe:" : "Lane:"}
-                                        </span>
-                                        <div
-                                          className={`flex items-center rounded overflow-hidden border ${
-                                            isLaneInvalid
-                                              ? "bg-amber-50 border-amber-400 ring-1 ring-amber-300"
-                                              : "bg-stone-50 border-stone-200"
-                                          }`}
-                                          title={
-                                            lang === "vi"
-                                              ? `Chuẩn lối xe cỡ ${spec.sizeCode}: ≥${std.minLaneM}m (Cửa kho ${std.doorWidthM}m - ${std.vehicleType})`
-                                              : `Min lane: ≥${std.minLaneM}m (Door ${std.doorWidthM}m - ${std.vehicleType})`
-                                          }
-                                        >
-                                          <input
-                                            type="number"
-                                            step={0.1}
-                                            min={std.minLaneM}
-                                            className={`w-11 h-5 px-0.5 text-center font-mono text-[11px] font-bold focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                              isLaneInvalid
-                                                ? "bg-amber-50 text-amber-900"
-                                                : "bg-white text-stone-800"
-                                            }`}
-                                            value={spec.laneWidthM ?? std.minLaneM}
-                                            onChange={(e) => {
-                                              const raw = e.target.value
-                                              const val =
-                                                raw === "0" ||
-                                                raw === "-0" ||
-                                                raw === "" ||
-                                                parseFloat(raw) <= 0
-                                                  ? std.minLaneM
-                                                  : parseFloat(raw) || std.minLaneM
-                                              handleSpecDimensionChange(
-                                                spec.sizeCode,
-                                                "laneWidthM",
-                                                val,
-                                              )
-                                            }}
-                                            onBlur={() => {
-                                              if (
-                                                !spec.laneWidthM ||
-                                                spec.laneWidthM < std.minLaneM
-                                              ) {
-                                                handleSpecDimensionChange(
-                                                  spec.sizeCode,
-                                                  "laneWidthM",
-                                                  std.minLaneM,
-                                                )
-                                                showToast(
-                                                  lang === "vi"
-                                                    ? `Lối xe cỡ ${spec.sizeCode} tự điều chỉnh về tối thiểu ${std.minLaneM}m (Cửa kho ${std.doorWidthM}m - ${std.vehicleType})`
-                                                    : `Lane for ${spec.sizeCode} auto-adjusted to min ${std.minLaneM}m`,
-                                                )
-                                              }
-                                            }}
-                                            title={
-                                              lang === "vi"
-                                                ? `Lối xe tiếp cận (Chuẩn tối thiểu: ≥${std.minLaneM}m, Cửa kho: ${std.doorWidthM}m)`
-                                                : `Lane width (Min: ≥${std.minLaneM}m, Door: ${std.doorWidthM}m)`
-                                            }
-                                          />
-                                          <span className="pr-1 text-[9px] text-stone-400 font-mono bg-white">
-                                            m
-                                          </span>
-                                        </div>
-                                      </div>
-                                    )
-                                  })()}
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* 3. Tải trọng tối đa */}
-                            <td className="py-3 px-3 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center">
-                                <div className="flex items-center bg-stone-50 border border-stone-300 rounded-lg overflow-hidden w-28 h-9 shadow-2xs focus-within:ring-1 focus-within:ring-amber-500 focus-within:border-amber-500">
-                                  <input
-                                    type="number"
-                                    min={100}
-                                    step={50}
-                                    className="w-full h-full px-2 text-right font-mono font-bold text-xs bg-white text-stone-900 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    value={spec.maxLoadKg}
-                                    onChange={(e) =>
-                                      handleSpecDimensionChange(
-                                        spec.sizeCode,
-                                        "maxLoadKg",
-                                        Math.max(100, parseInt(e.target.value, 10) || 100),
-                                      )
-                                    }
-                                  />
-                                  <span className="px-2 text-[11px] font-bold text-stone-500 bg-stone-100 border-l border-stone-200 select-none">
-                                    kg
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* 4. Đơn giá thuê / tháng */}
-                            <td className="py-3 px-3 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center">
-                                <div className="w-32">
-                                  <input
-                                    type="text"
-                                    className="w-full h-9 px-2.5 text-right border border-stone-300 rounded-lg font-mono font-bold text-xs bg-white text-emerald-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
-                                    value={
-                                      typeof spec.monthlyPrice === "number"
-                                        ? `${spec.monthlyPrice.toLocaleString("vi-VN")}đ`
-                                        : spec.monthlyPrice
-                                    }
-                                    onChange={(e) =>
-                                      handleSpecPriceChange(spec.sizeCode, e.target.value)
-                                    }
-                                  />
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* 5. Số lượng kho */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap">
-                              <div className="flex flex-col items-end">
-                                <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={isEditing ? spec.count <= occ : spec.count <= 0}
-                                    onClick={() =>
-                                      handleSpecCountChange(
-                                        spec.sizeCode,
-                                        Math.max(isEditing ? occ : 0, spec.count - 1),
-                                      )
-                                    }
-                                    className="w-8 h-8 rounded border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-sm shadow-2xs"
-                                    title="Giảm 1 kho"
-                                  >
-                                    −
-                                  </button>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    className={`w-12 h-8 text-center border rounded font-mono font-bold text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-2xs transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isBelowOcc
-                                        ? "border-red-400 text-red-700 bg-red-50"
-                                        : "border-stone-300 text-stone-900"
-                                      }`}
-                                    value={spec.count}
-                                    onChange={(e) => {
-                                      const parsed = parseInt(e.target.value, 10)
-                                      handleSpecCountChange(
-                                        spec.sizeCode,
-                                        isNaN(parsed) ? 0 : Math.max(0, parsed),
-                                      )
-                                    }}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleSpecCountChange(spec.sizeCode, spec.count + 1)
-                                    }
-                                    className="w-8 h-8 rounded border border-stone-300 bg-stone-50 hover:bg-stone-200 active:scale-95 font-bold text-stone-700 flex items-center justify-center transition cursor-pointer text-sm shadow-2xs"
-                                    title="Tăng 1 kho"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                                {isBelowOcc && (
-                                  <div className="text-[10px] font-semibold text-red-600 text-right mt-0.5">
-                                    Tối thiểu {occ} (đang thuê)
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* 6. Thao tác: Xóa loại kho có kiểm tra an toàn */}
-                            <td className="py-3 px-3 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center">
-                                <button
-                                  type="button"
-                                  disabled={!canDelete}
-                                  onClick={() => handleDeleteUnitSpec(spec.sizeCode, occ, isEditing)}
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${canDelete
-                                      ? "text-stone-400 hover:text-red-600 hover:bg-red-50 border border-stone-200 hover:border-red-300 cursor-pointer shadow-2xs"
-                                      : "text-stone-300 bg-stone-50 border border-stone-200 cursor-not-allowed opacity-40"
-                                    }`}
-                                  title={
-                                    !canDelete
-                                      ? `Không thể xóa vì đang có ${occ} gian kho đang được khách thuê`
-                                      : `Xóa loại kho "${spec.sizeCode}" khỏi cơ sở`
-                                  }
-                                >
-                                  <svg
-                                    className="w-4 h-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth={2}
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                    />
-                                  </svg>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                  <tfoot className="bg-stone-50 border-t-2 border-stone-200 font-semibold text-stone-800">
-                    <tr>
-                      <td colSpan={2} className="py-3.5 px-4">
-                        <div className="font-bold text-stone-900 text-sm">
-                          {lang === "vi"
-                            ? "Tổng cộng thiết kế quy hoạch"
-                            : "Total Facility Plan"}
-                        </div>
-                        <div className="text-[11px] text-stone-500 font-normal">
-                          {lang === "vi"
-                            ? `${formFacUnitSpecs.length} loại kho được định cấu hình cho cơ sở`
-                            : `${formFacUnitSpecs.length} unit types configured`}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-3 text-center font-mono">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100/80 border border-sky-300 text-sky-950 font-extrabold text-xs shadow-2xs">
-                          <span className="text-[11px] font-semibold text-sky-800">
-                            {lang === "vi" ? "Tổng tải:" : "Total load:"}
-                          </span>
-                          <span>{calculatedTotalLoadTon}</span>
-                          <span className="text-[11px] font-semibold text-sky-800">
-                            tấn
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-3 text-center text-xs text-stone-400">
-                        <span className="font-mono text-stone-700 font-bold">
-                          {lang === "vi" ? "Từ" : "From"} {minSpecPriceFormatted}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 text-right">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-extrabold text-xs shadow-2xs">
-                          <span className="text-sm font-black">
-                            {calculatedTotalUnits}
-                          </span>
-                          <span className="text-[11px] font-bold text-amber-900">
-                            {lang === "vi" ? "kho" : "units"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-3"></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )
-        }
-
-        const renderFacilityImageSection = () => (
-          <div className="pt-1">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                {lang === "vi" ? "Hình ảnh cơ sở & kho bãi" : "Facility & Warehouse Photos"}
-              </h4>
-              <span className="text-[11px] text-stone-400">
-                {lang === "vi" ? "Đồng bộ hiển thị lên thẻ kho khách hàng" : "Synced with customer warehouse card"}
-              </span>
+      >
+        {selectedDurationItem && (
+          <div className="space-y-4">
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-1">
+              <p className="font-bold text-sm text-slate-900">
+                {selectedDurationItem.title} ({selectedDurationItem.label})
+              </p>
+              <p className="text-slate-600 leading-relaxed">
+                Tỷ lệ chiết khấu (%) thiết lập ở đây sẽ được đồng bộ trực tiếp vào công thức tính tiền và báo giá trên ứng dụng của Khách Hàng.
+              </p>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row gap-3 items-start bg-stone-50 p-3 rounded-xl border border-stone-200">
-                <div className="relative w-full sm:w-44 h-32 rounded-lg overflow-hidden bg-stone-200 border border-stone-300 shrink-0 group">
-                  <img
-                    src={formFacImage || WAREHOUSE_PHOTO_PRESETS[0].url}
-                    alt="Facility preview"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = WAREHOUSE_PHOTO_PRESETS[0].url
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-stone-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <label className="cursor-pointer bg-white/95 text-stone-800 text-[11px] font-bold px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-white flex items-center gap-1.5 transition">
-                      <svg className="w-3.5 h-3.5 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
-                      <span>{lang === "vi" ? "Đổi ảnh" : "Change"}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleImageFileUpload}
-                      />
-                    </label>
-                  </div>
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Giảm giá khi đặt mới (%)"
+                type="number"
+                min={0}
+                max={100}
+                value={formDurationPercent.toString()}
+                onChange={(e) => setFormDurationPercent(Number(e.target.value))}
+              />
 
-                <div className="flex-1 w-full space-y-2 text-xs">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-                      {lang === "vi" ? "Tải ảnh từ máy tính hoặc dán link ảnh (URL)" : "Upload from device or paste image URL"}
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        className="flex-1 border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        placeholder="https://... hoặc chọn file từ máy tính"
-                        value={formFacImage}
-                        onChange={(e) => setFormFacImage(e.target.value)}
-                      />
-                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 hover:bg-stone-100 text-stone-700 font-semibold rounded-lg text-xs shrink-0 transition shadow-2xs">
-                        <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                        </svg>
-                        <span>{lang === "vi" ? "Chọn file" : "Upload"}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleImageFileUpload}
-                        />
-                      </label>
-                    </div>
-                  </div>
+              <Input
+                label="Giảm giá khi gia hạn (%)"
+                type="number"
+                min={0}
+                max={100}
+                value={formDurationRenewalPercent.toString()}
+                onChange={(e) => setFormDurationRenewalPercent(Number(e.target.value))}
+              />
+            </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-stone-500 mb-1">
-                      {lang === "vi" ? "Hoặc chọn nhanh từ thư viện ảnh kho mẫu chuẩn:" : "Or select from preset warehouse photos:"}
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                      {WAREHOUSE_PHOTO_PRESETS.map((p) => {
-                        const isSelected = formFacImage === p.url
-                        return (
-                          <button
-                            type="button"
-                            key={p.id}
-                            onClick={() => setFormFacImage(p.url)}
-                            className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-left transition ${isSelected
-                                ? "border-amber-500 bg-amber-50/80 ring-1 ring-amber-400"
-                                : "border-stone-200 bg-white hover:border-stone-300"
-                              }`}
-                          >
-                            <img src={p.url} alt={p.title} className="w-8 h-8 rounded object-cover shrink-0" />
-                            <span className="text-[10px] font-medium text-stone-700 truncate leading-tight">
-                              {p.title}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <Select
+              label="Trạng thái chính sách"
+              value={formDurationStatus}
+              onChange={(e) => setFormDurationStatus(e.target.value as "active" | "inactive")}
+            >
+              <option value="active">Đang áp dụng (Có hiệu lực)</option>
+              <option value="inactive">Tạm dừng (Không chiết khấu)</option>
+            </Select>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">
+                Ghi chú điều khoản & diễn giải
+              </label>
+              <textarea
+                rows={3}
+                value={formDurationDesc}
+                onChange={(e) => setFormDurationDesc(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                placeholder="Nhập ghi chú điều khoản áp dụng gói thuê..."
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-3 border-t border-slate-100">
+              <Button variant="outline" onClick={() => setEditDurationModal(false)}>
+                Hủy
+              </Button>
+              <Button variant="primary" onClick={handleSaveDurationDiscount}>
+                Lưu Thay Đổi
+              </Button>
             </div>
           </div>
-        )
+        )}
+      </Modal>
+
+      {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
+      {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
+      {(() => {
+        const handleSyncUnitSpecs = (newSpecs: FacilityCustomUnitSpec[]) => {
+          setFormFacUnitSpecs(newSpecs)
+          const total = newSpecs.reduce((sum, s) => sum + s.count, 0)
+          setFormFacUnits(total)
+
+          newSpecs.forEach((s) => {
+            if (s.sizeCode === "S") {
+              setFormFacUnitS(s.count)
+              setFormFacLengthS(s.lengthM)
+              setFormFacWidthS(s.widthM)
+              setFormFacLaneS(s.laneWidthM || 4)
+              setFormFacLoadS(s.maxLoadKg)
+              setFormFacPriceS(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
+            } else if (s.sizeCode === "M") {
+              setFormFacUnitM(s.count)
+              setFormFacLengthM(s.lengthM)
+              setFormFacWidthM(s.widthM)
+              setFormFacLaneM(s.laneWidthM || 4)
+              setFormFacLoadM(s.maxLoadKg)
+              setFormFacPriceM(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
+            } else if (s.sizeCode === "L") {
+              setFormFacUnitL(s.count)
+              setFormFacLengthL(s.lengthM)
+              setFormFacWidthL(s.widthM)
+              setFormFacLaneL(s.laneWidthM || 4)
+              setFormFacLoadL(s.maxLoadKg)
+              setFormFacPriceL(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
+            } else if (s.sizeCode === "XL") {
+              setFormFacUnitXL(s.count)
+              setFormFacLengthXL(s.lengthM)
+              setFormFacWidthXL(s.widthM)
+              setFormFacLaneXL(s.laneWidthM || 4)
+              setFormFacLoadXL(s.maxLoadKg)
+              setFormFacPriceXL(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
+            }
+          })
+
+          const active = newSpecs.filter((s) => s.count > 0)
+          if (active.length > 0) {
+            const minP = Math.min(...active.map((s) => s.monthlyPrice))
+            setFormFacPrice(`${Math.round(minP).toLocaleString("vi-VN")}đ`)
+          }
+        }
+
+        const isEditDirty = (() => {
+          if (!selectedFacility || !editInitialFacility) return false
+          const orig = editInitialFacility
+          if (formFacCode.trim().toUpperCase() !== (orig.code || orig.id || "").toUpperCase()) return true
+          if (formFacName.trim() !== (orig.name || "").trim()) return true
+          if (formFacAddress.trim() !== (orig.address || "").trim()) return true
+          if (formFacCity.trim() !== (orig.city || "").trim()) return true
+          if (formFacManager.trim() !== (orig.manager || "").trim()) return true
+          if (formFacPhone.trim() !== (orig.phone || "").trim()) return true
+          if (formFacAccessHours.trim() !== (orig.accessHours || "").trim()) return true
+          if (formFacStatus !== orig.status) return true
+          if (formFacImage !== (orig.image || "")) return true
+
+          if (formFacUnitSpecs.length !== editInitialSpecs.length) return true
+          for (const s of formFacUnitSpecs) {
+            const o = editInitialSpecs.find((x) => x.sizeCode === s.sizeCode)
+            if (!o) return true
+            if (s.name !== o.name) return true
+            if (s.count !== o.count) return true
+            if (s.lengthM !== o.lengthM) return true
+            if (s.widthM !== o.widthM) return true
+            if (s.heightM !== o.heightM) return true
+            if (s.laneWidthM !== o.laneWidthM) return true
+            if (s.maxLoadKg !== o.maxLoadKg) return true
+            if (s.monthlyPrice !== o.monthlyPrice) return true
+            if (s.frameCount !== o.frameCount) return true
+            if (s.frameDimensions?.lengthM !== o.frameDimensions?.lengthM) return true
+            if (s.frameDimensions?.widthM !== o.frameDimensions?.widthM) return true
+            if (s.frameDimensions?.heightM !== o.frameDimensions?.heightM) return true
+          }
+          return false
+        })()
+
+        const handleRequestCloseEdit = () => {
+          if (isEditDirty) {
+            setShowConfirmCloseEdit(true)
+          } else {
+            setEditFacilityModal(false)
+          }
+        }
 
         return (
           <>
@@ -5521,184 +5842,110 @@ export default function BusinessApp({
                   ? "Thêm Cơ Sở Kho Mới"
                   : "Create New Storage Facility"
               }
-              size="3xl"
+              size="full"
+              className="max-w-[95vw] xl:max-w-6xl 2xl:max-w-7xl"
             >
               <div className="space-y-4">
                 {/* Thông tin cơ sở */}
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
-                    {lang === "vi" ? "Thông tin cơ sở" : "Facility Information"}
-                  </h4>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-stone-700 mb-1">
-                          {lang === "vi"
-                            ? "Mã cơ sở / Mã kho *"
-                            : "Facility Code *"}
-                        </label>
-                        <input
-                          type="text"
-                          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold"
-                          placeholder="VD: HN-F02"
-                          value={formFacCode}
-                          onChange={(e) =>
-                            setFormFacCode(e.target.value.toUpperCase())
-                          }
-                        />
-                        <p className="text-[11px] text-stone-400 mt-0.5">
-                          Quy chuẩn: Tỉnh/TP - Số thứ tự (VD: HN-F02)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-stone-700 mb-1">
-                          {lang === "vi"
-                            ? "Tỉnh / Thành phố *"
-                            : "City / Province *"}
-                        </label>
-                        <Select
-                          value={formFacCity}
-                          onChange={(e) => {
-                            const newCity = e.target.value
-
-                            setFormFacCity(newCity)
-
-                            const autoCode = suggestFacilityCode(newCity)
-
-                            setFormFacCode(autoCode)
-
-                            if (formFacName.includes("Cơ sở")) {
-                              setFormFacName(`Kho Việt – Cơ sở ${newCity}`)
-                            }
-                          }}
-                        >
-                          <option value="Hà Nội">Hà Nội</option>
-                          <option value="TP. Hồ Chí Minh">
-                            TP. Hồ Chí Minh
-                          </option>
-                          <option value="Bình Dương">Bình Dương</option>
-                          <option value="Đà Nẵng">Đà Nẵng</option>
-                          <option value="Cần Thơ">Cần Thơ</option>
-                          <option value="Hải Phòng">Hải Phòng</option>
-                          <option value="Đồng Nai">Đồng Nai</option>
-                          <option value="Vũng Tàu">Vũng Tàu</option>
-                          <option value="Nha Trang">Nha Trang</option>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <Input
-                      label={
-                        lang === "vi"
-                          ? "Tên cơ sở / Chi nhánh kho *"
-                          : "Facility Name *"
-                      }
-                      placeholder="VD: Kho Việt – Cơ sở Hà Nội..."
-                      value={formFacName}
-                      onChange={(e) => setFormFacName(e.target.value)}
-                    />
-
-                    <Input
-                      label={
-                        lang === "vi"
-                          ? "Địa điểm / Địa chỉ chi tiết *"
-                          : "Street Address *"
-                      }
-                      placeholder="VD: Số 123 Đường Cầu Giấy, Phường Quan Hoa, Quận Cầu Giấy..."
-                      value={formFacAddress}
-                      onChange={(e) => setFormFacAddress(e.target.value)}
-                    />
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input
-                        label={
-                          lang === "vi"
-                            ? "Người quản lý chi nhánh"
-                            : "Facility Manager"
-                        }
-                        placeholder="VD: Trần Văn Quản Lý..."
-                        value={formFacManager}
-                        onChange={(e) => setFormFacManager(e.target.value)}
-                      />
-                      <Input
-                        label={
-                          lang === "vi" ? "Hotline liên hệ" : "Phone / Hotline"
-                        }
-                        placeholder="VD: 024 3822 9999..."
-                        value={formFacPhone}
-                        onChange={(e) => setFormFacPhone(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <FacilityGeneralInfo
+                  isEditing={false}
+                  code={formFacCode}
+                  onChangeCode={setFormFacCode}
+                  city={formFacCity}
+                  onChangeCity={(newCity) => {
+                    setFormFacCity(newCity)
+                    const autoCode = suggestFacilityCode(newCity)
+                    setFormFacCode(autoCode)
+                    if (formFacName.includes("Cơ sở")) {
+                      setFormFacName(`Kho Việt – Cơ sở ${newCity}`)
+                    }
+                  }}
+                  name={formFacName}
+                  onChangeName={setFormFacName}
+                  address={formFacAddress}
+                  onChangeAddress={setFormFacAddress}
+                  manager={formFacManager}
+                  onChangeManager={setFormFacManager}
+                  phone={formFacPhone}
+                  onChangePhone={setFormFacPhone}
+                  existingFacilities={facilitiesList}
+                  onResetCode={() => setFormFacCode(suggestFacilityCode(formFacCity))}
+                  isAutoCode={true}
+                  lang={lang}
+                />
 
                 {/* Hình ảnh cơ sở & kho bãi */}
-                {renderFacilityImageSection()}
+                <FacilityImageManager
+                  image={formFacImage}
+                  onChangeImage={setFormFacImage}
+                  lang={lang}
+                />
 
                 {/* Quy mô & phân bổ kho */}
-                {renderUnitAllocationSection(false)}
+                <UnitAllocationTable
+                  specs={formFacUnitSpecs}
+                  onChangeSpecs={handleSyncUnitSpecs}
+                  isEditing={false}
+                  onOpenAddSpec={() => setShowAddUnitSpecModal(true)}
+                  lang={lang}
+                  onValidationChange={(_hasErrors, errors) => setCreateValidationErrors(errors)}
+                  highlightSpecCode={highlightSpecCode}
+                />
 
                 {/* Thông số vận hành */}
-                <div className="pt-1">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
-                    {lang === "vi" ? "Thông số vận hành" : "Operation Settings"}
-                  </h4>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input
-                        label={
-                          lang === "vi"
-                            ? "Khung giờ ra vào / Giờ mở cửa"
-                            : "Access Hours"
-                        }
-                        placeholder="06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)"
-                        value={formFacAccessHours}
-                        onChange={(e) => setFormFacAccessHours(e.target.value)}
-                      />
-                      <Select
-                        label={
-                          lang === "vi"
-                            ? "Trạng thái ban đầu"
-                            : "Initial Status"
-                        }
-                        value={formFacStatus}
-                        onChange={(e) =>
-                          setFormFacStatus(e.target.value as any)
-                        }
-                      >
-                        <option value="active">
-                          {lang === "vi" ? "Đang hoạt động (Active)" : "Active"}
-                        </option>
-                        <option value="maintenance">
-                          {lang === "vi" ? "Bảo trì" : "Maintenance"}
-                        </option>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
+                <FacilityOperations
+                  accessHours={formFacAccessHours}
+                  onChangeAccessHours={setFormFacAccessHours}
+                  status={formFacStatus}
+                  onChangeStatus={setFormFacStatus}
+                  lang={lang}
+                />
 
                 {/* Sticky footer */}
-                <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex justify-end items-center gap-2 z-10">
-                  <Button
-                    variant="outline"
-                    onClick={() => setCreateFacilityModal(false)}
-                  >
-                    {lang === "vi" ? "Hủy" : "Cancel"}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-                    disabled={
-                      !formFacName.trim() ||
-                      !formFacCode.trim() ||
-                      !formFacAddress.trim() ||
-                      formFacUnits <= 0
-                    }
-                    onClick={handleCreateFacility}
-                  >
-                    {lang === "vi" ? "Lưu Cơ Sở Mới" : "Save Facility"}
-                  </Button>
+                <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
+                  <div className="text-xs text-stone-500">
+                    {formFacUnits <= 0 ? (
+                      <span className="text-red-600 font-semibold flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Cần ít nhất 1 loại kho có số lượng &gt; 0
+                      </span>
+                    ) : createValidationErrors.length > 0 ? (
+                      <span className="text-red-600 font-semibold flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        {createValidationErrors[0]}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCreateFacilityModal(false)}
+                    >
+                      {lang === "vi" ? "Hủy" : "Cancel"}
+                    </Button>
+                    <Button
+                      variant="primary"
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                      disabled={
+                        !formFacName.trim() ||
+                        !formFacCode.trim() ||
+                        !formFacAddress.trim() ||
+                        formFacUnits <= 0 ||
+                        createValidationErrors.length > 0 ||
+                        facilitiesList.some(
+                          (f) => (f.code || f.id).toUpperCase() === formFacCode.trim().toUpperCase()
+                        )
+                      }
+                      onClick={handleCreateFacility}
+                    >
+                      {lang === "vi" ? "Lưu Cơ Sở Mới" : "Save Facility"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </Modal>
@@ -5706,11 +5953,12 @@ export default function BusinessApp({
             {/* 2. Modal Chỉnh Sửa Cơ Sở (Edit Facility) */}
             <Modal
               open={editFacilityModal}
-              onClose={() => setEditFacilityModal(false)}
+              onClose={handleRequestCloseEdit}
               title={
                 lang === "vi" ? "Chỉnh Sửa Thông Tin Cơ Sở" : "Edit Facility"
               }
-              size="3xl"
+              size="full"
+              className="max-w-[95vw] xl:max-w-6xl 2xl:max-w-7xl"
             >
               {selectedFacility &&
                 (() => {
@@ -5745,161 +5993,116 @@ export default function BusinessApp({
                     if (rawCode === "Extra Large") occMap["XL"] = (occMap["XL"] || 0) + 1
                   })
 
+                  const hasDuplicateCode = facilitiesList.some(
+                    (f) =>
+                      (f.code || f.id).toUpperCase() === formFacCode.trim().toUpperCase() &&
+                      f.id !== selectedFacility.id
+                  )
+
                   return (
                     <div className="space-y-4">
                       {/* Thông tin cơ sở */}
-                      <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
-                          {lang === "vi"
-                            ? "Thông tin cơ sở"
-                            : "Facility Information"}
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs font-semibold text-stone-700 mb-1">
-                                {lang === "vi"
-                                  ? "Mã cơ sở / Mã kho *"
-                                  : "Facility Code *"}
-                              </label>
-                              <input
-                                type="text"
-                                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold"
-                                value={formFacCode}
-                                onChange={(e) =>
-                                  setFormFacCode(e.target.value.toUpperCase())
-                                }
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-xs font-semibold text-stone-700 mb-1">
-                                {lang === "vi"
-                                  ? "Tỉnh / Thành phố *"
-                                  : "City / Province *"}
-                              </label>
-                              <input
-                                type="text"
-                                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                value={formFacCity}
-                                onChange={(e) => setFormFacCity(e.target.value)}
-                              />
-                            </div>
-                          </div>
-
-                          <Input
-                            label={
-                              lang === "vi"
-                                ? "Tên cơ sở / Chi nhánh kho *"
-                                : "Facility Name *"
-                            }
-                            value={formFacName}
-                            onChange={(e) => setFormFacName(e.target.value)}
-                          />
-
-                          <Input
-                            label={
-                              lang === "vi"
-                                ? "Địa điểm / Địa chỉ chi tiết *"
-                                : "Address *"
-                            }
-                            value={formFacAddress}
-                            onChange={(e) => setFormFacAddress(e.target.value)}
-                          />
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <Input
-                              label={
-                                lang === "vi"
-                                  ? "Người quản lý chi nhánh"
-                                  : "Manager"
-                              }
-                              value={formFacManager}
-                              onChange={(e) =>
-                                setFormFacManager(e.target.value)
-                              }
-                            />
-                            <Input
-                              label={
-                                lang === "vi" ? "Hotline liên hệ" : "Phone"
-                              }
-                              value={formFacPhone}
-                              onChange={(e) => setFormFacPhone(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                      <FacilityGeneralInfo
+                        isEditing={true}
+                        code={formFacCode}
+                        onChangeCode={setFormFacCode}
+                        city={formFacCity}
+                        onChangeCity={setFormFacCity}
+                        name={formFacName}
+                        onChangeName={setFormFacName}
+                        address={formFacAddress}
+                        onChangeAddress={setFormFacAddress}
+                        manager={formFacManager}
+                        onChangeManager={setFormFacManager}
+                        phone={formFacPhone}
+                        onChangePhone={setFormFacPhone}
+                        existingFacilities={facilitiesList}
+                        currentFacilityId={selectedFacility.id}
+                        initialCode={editInitialFacility?.code || editInitialFacility?.id}
+                        lang={lang}
+                      />
 
                       {/* Hình ảnh cơ sở & kho bãi */}
-                      {renderFacilityImageSection()}
+                      <FacilityImageManager
+                        image={formFacImage}
+                        onChangeImage={setFormFacImage}
+                        lang={lang}
+                      />
 
                       {/* Quy mô & phân bổ kho */}
-                      {renderUnitAllocationSection(true, occMap)}
+                      <UnitAllocationTable
+                        specs={formFacUnitSpecs}
+                        onChangeSpecs={handleSyncUnitSpecs}
+                        isEditing={true}
+                        occupiedMap={occMap}
+                        initialSpecs={editInitialSpecs}
+                        onOpenAddSpec={() => setShowAddUnitSpecModal(true)}
+                        lang={lang}
+                        onValidationChange={(_hasErrors, errors) => setEditValidationErrors(errors)}
+                        highlightSpecCode={highlightSpecCode}
+                      />
 
                       {/* Thông số vận hành */}
-                      <div className="pt-1">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2.5">
-                          {lang === "vi"
-                            ? "Thông số vận hành"
-                            : "Operation Settings"}
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <Input
-                              label={
-                                lang === "vi"
-                                  ? "Khung giờ ra vào"
-                                  : "Access Hours"
-                              }
-                              value={formFacAccessHours}
-                              onChange={(e) =>
-                                setFormFacAccessHours(e.target.value)
-                              }
-                            />
-                            <Select
-                              label={
-                                lang === "vi"
-                                  ? "Trạng thái hoạt động"
-                                  : "Status"
-                              }
-                              value={formFacStatus}
-                              onChange={(e) =>
-                                setFormFacStatus(e.target.value as any)
-                              }
-                            >
-                              <option value="active">
-                                {lang === "vi"
-                                  ? "Đang hoạt động (Active)"
-                                  : "Active"}
-                              </option>
-                              <option value="maintenance">
-                                {lang === "vi" ? "Bảo trì" : "Maintenance"}
-                              </option>
-                            </Select>
-                          </div>
-                        </div>
-                      </div>
+                      <FacilityOperations
+                        accessHours={formFacAccessHours}
+                        onChangeAccessHours={setFormFacAccessHours}
+                        status={formFacStatus}
+                        onChangeStatus={setFormFacStatus}
+                        lang={lang}
+                      />
 
                       {/* Sticky footer */}
-                      <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex justify-end items-center gap-2 z-10">
-                        <Button
-                          variant="outline"
-                          onClick={() => setEditFacilityModal(false)}
-                        >
-                          {lang === "vi" ? "Hủy" : "Cancel"}
-                        </Button>
-                        <Button
-                          variant="primary"
-                          className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-                          disabled={
-                            !formFacName.trim() ||
-                            !formFacCode.trim() ||
-                            formFacUnits <= 0
-                          }
-                          onClick={handleUpdateFacility}
-                        >
-                          {lang === "vi" ? "Lưu Thay Đổi" : "Save Changes"}
-                        </Button>
+                      <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
+                        <div className="text-xs text-stone-500">
+                          {formFacUnits <= 0 ? (
+                            <span className="text-red-600 font-semibold flex items-center gap-1">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              Cần ít nhất 1 loại kho có số lượng &gt; 0
+                            </span>
+                          ) : editValidationErrors.length > 0 ? (
+                            <span className="text-red-600 font-semibold flex items-center gap-1">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              {editValidationErrors[0]}
+                            </span>
+                          ) : !isEditDirty ? (
+                            <span className="text-stone-400 italic">
+                              Chưa có thay đổi nào so với dữ liệu gốc
+                            </span>
+                          ) : (
+                            <span className="text-amber-800 font-semibold">
+                              Có thay đổi chưa lưu
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <Button
+                            variant="outline"
+                            onClick={handleRequestCloseEdit}
+                          >
+                            {lang === "vi" ? "Hủy" : "Cancel"}
+                          </Button>
+                          <Button
+                            variant="primary"
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                            disabled={
+                              !isEditDirty ||
+                              !formFacName.trim() ||
+                              !formFacCode.trim() ||
+                              !formFacAddress.trim() ||
+                              formFacUnits <= 0 ||
+                              hasDuplicateCode ||
+                              editValidationErrors.length > 0
+                            }
+                            onClick={handleUpdateFacility}
+                          >
+                            {lang === "vi" ? "Lưu Thay Đổi" : "Save Changes"}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )
@@ -5907,262 +6110,72 @@ export default function BusinessApp({
             </Modal>
 
             {/* Modal Thêm Loại Kho Mới Vào Cơ Sở */}
-            <Modal
+            <AddUnitSpecModal
               open={showAddUnitSpecModal}
               onClose={() => setShowAddUnitSpecModal(false)}
-              title={
-                lang === "vi"
-                  ? "Thêm Loại Kho Mới Vào Cơ Sở"
-                  : "Add New Unit Type To Facility"
-              }
-              size="lg"
-            >
-              <div className="space-y-4">
-                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-900 flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center shrink-0 font-bold">
-                    i
-                  </div>
-                  <div>
-                    {lang === "vi"
-                      ? "Bạn có thể định nghĩa loại kho mới (ví dụ: XXL, MINI, PALLET...) với kích thước 3 chiều Dài - Rộng - Cao tùy biến. Thể tích và diện tích sẽ được hệ thống tính tự động."
-                      : "Define a new unit type with custom Length, Width, Height, and load specs."}
-                  </div>
-                </div>
+              onConfirm={(newSpec) => {
+                handleSyncUnitSpecs([...formFacUnitSpecs, newSpec])
+                setHighlightSpecCode(newSpec.sizeCode)
+                showToast(
+                  lang === "vi"
+                    ? `Đã thêm loại kho "${newSpec.sizeCode}" (${newSpec.name}) vào cơ sở!`
+                    : `Added unit type "${newSpec.sizeCode}"!`,
+                )
+              }}
+              existingSpecs={formFacUnitSpecs}
+              lang={lang}
+            />
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-700 mb-1">
-                      {lang === "vi" ? "Mã cỡ kho *" : "Size Code *"}
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold"
-                      placeholder="VD: XXL, MINI, PALLET"
-                      value={newSpecSizeCode}
-                      onChange={(e) => setNewSpecSizeCode(e.target.value.toUpperCase())}
-                    />
-                    <p className="text-[11px] text-stone-400 mt-0.5">
-                      {lang === "vi" ? "Viết hoa, không dấu (VD: XXL)" : "Uppercase alphanumeric"}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-700 mb-1">
-                      {lang === "vi" ? "Tên hiển thị loại kho *" : "Display Name *"}
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      placeholder="VD: Kho Ngoại Khổ (XXL)"
-                      value={newSpecName}
-                      onChange={(e) => setNewSpecName(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Kích thước D - R - C */}
-                <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 space-y-2">
-                  <div className="text-xs font-bold uppercase tracking-wider text-stone-600">
-                    {lang === "vi" ? "Kích Thước 3 Chiều & Thể Tích" : "Dimensions & Volume"}
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                        {lang === "vi" ? "Chiều Dài (m) *" : "Length (m) *"}
-                      </label>
-                      <input
-                        type="number"
-                        step={0.1}
-                        min={1}
-                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        value={newSpecLength}
-                        onChange={(e) => {
-                          const raw = e.target.value
-                          if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
-                            setNewSpecLength(1)
-                          } else {
-                            setNewSpecLength(parseFloat(raw) || 1)
-                          }
-                        }}
-                        onBlur={() => {
-                          if (!newSpecLength || Number(newSpecLength) < 1) setNewSpecLength(1)
-                        }}
-                      />
+            {/* Modal Xác Nhận Rời Đi Khi Có Unsaved Changes */}
+            {showConfirmCloseEdit && (
+              <div
+                className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+                onClick={() => setShowConfirmCloseEdit(false)}
+              >
+                <div
+                  className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-sm w-full p-5 space-y-4 animate-in zoom-in-95 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 shadow-xs">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                        {lang === "vi" ? "Chiều Rộng (m) *" : "Width (m) *"}
-                      </label>
-                      <input
-                        type="number"
-                        step={0.1}
-                        min={1}
-                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        value={newSpecWidth}
-                        onChange={(e) => {
-                          const raw = e.target.value
-                          if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
-                            setNewSpecWidth(1)
-                          } else {
-                            setNewSpecWidth(parseFloat(raw) || 1)
-                          }
-                        }}
-                        onBlur={() => {
-                          if (!newSpecWidth || Number(newSpecWidth) < 1) setNewSpecWidth(1)
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                        {lang === "vi" ? "Chiều Cao (m) *" : "Height (m) *"}
-                      </label>
-                      <input
-                        type="number"
-                        step={0.1}
-                        min={1}
-                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        value={newSpecHeight}
-                        onChange={(e) => {
-                          const raw = e.target.value
-                          if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
-                            setNewSpecHeight(1)
-                          } else {
-                            setNewSpecHeight(parseFloat(raw) || 1)
-                          }
-                        }}
-                        onBlur={() => {
-                          if (!newSpecHeight || Number(newSpecHeight) < 1) setNewSpecHeight(1)
-                        }}
-                      />
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold text-stone-900">
+                        {lang === "vi" ? "Hủy bỏ các thay đổi?" : "Discard Unsaved Changes?"}
+                      </h3>
+                      <p className="text-xs text-stone-500 leading-relaxed">
+                        {lang === "vi"
+                          ? "Bạn có những thay đổi chưa được lưu trên cơ sở này. Nếu đóng bây giờ, các thay đổi vừa chỉnh sửa sẽ bị mất."
+                          : "You have unsaved changes. Are you sure you want to discard them and close?"}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Live preview volume and area */}
-                  <div className="pt-1 flex items-center justify-between bg-white p-2.5 rounded-lg border border-stone-200 text-xs">
-                    <span className="text-stone-500">
-                      {lang === "vi" ? "Quy cách ước tính:" : "Estimated Specs:"}
-                    </span>
-                    <div className="flex items-center gap-3 font-mono font-bold">
-                      <span className="text-amber-800">
-                        {Math.round(Math.max(1, Number(newSpecLength) || 1) * Math.max(1, Number(newSpecWidth) || 1) * 10) / 10} m²
-                      </span>
-                      <span className="text-stone-300">|</span>
-                      <span className="text-emerald-700">
-                        {Math.round(Math.max(1, Number(newSpecLength) || 1) * Math.max(1, Number(newSpecWidth) || 1) * Math.max(1, Number(newSpecHeight) || 1) * 10) / 10} m³
-                      </span>
-                    </div>
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmCloseEdit(false)}
+                      className="px-4 py-2 text-xs font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg transition cursor-pointer"
+                    >
+                      {lang === "vi" ? "Tiếp tục chỉnh sửa" : "Keep Editing"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowConfirmCloseEdit(false)
+                        setEditFacilityModal(false)
+                      }}
+                      className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-lg transition cursor-pointer shadow-xs"
+                    >
+                      {lang === "vi" ? "Hủy thay đổi & Đóng" : "Discard & Close"}
+                    </button>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(() => {
-                    const std = getUnitTypeVehicleStandard(
-                      newSpecSizeCode,
-                      Number(newSpecWidth) || 12,
-                      Number(newSpecLength) || 25,
-                    )
-                    return (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-semibold text-stone-700">
-                            {lang === "vi" ? "Lối xe tiếp cận (m) *" : "Vehicle Lane (m) *"}
-                          </label>
-                          <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            {lang === "vi"
-                              ? `Tối thiểu: ≥ ${std.minLaneM}m`
-                              : `Min: ≥ ${std.minLaneM}m`}
-                          </span>
-                        </div>
-                        <input
-                          type="number"
-                          step={0.1}
-                          min={std.minLaneM}
-                          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          value={newSpecLane}
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            if (raw === "0" || raw === "-0" || raw === "" || parseFloat(raw) <= 0) {
-                              setNewSpecLane(std.minLaneM)
-                            } else {
-                              setNewSpecLane(parseFloat(raw) || std.minLaneM)
-                            }
-                          }}
-                          onBlur={() => {
-                            if (!newSpecLane || Number(newSpecLane) < std.minLaneM) {
-                              setNewSpecLane(std.minLaneM)
-                            }
-                          }}
-                        />
-                        <p className="mt-1 text-[10px] text-stone-500">
-                          {lang === "vi"
-                            ? `💡 Cửa kho: ${std.doorWidthM}m · Phương tiện: ${std.vehicleType}.`
-                            : `💡 Door: ${std.doorWidthM}m · Vehicle: ${std.vehicleType}.`}
-                        </p>
-                      </div>
-                    )
-                  })()}
-
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-700 mb-1">
-                      {lang === "vi" ? "Tải trọng tối đa (kg)" : "Max Load (kg)"}
-                    </label>
-                    <input
-                      type="number"
-                      step={50}
-                      min={100}
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      value={newSpecMaxLoad}
-                      onChange={(e) => setNewSpecMaxLoad(parseInt(e.target.value, 10) || 1000)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-700 mb-1">
-                      {lang === "vi" ? "Đơn giá thuê / tháng *" : "Monthly Rate *"}
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-emerald-800 bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      placeholder="VD: 28.000.000đ"
-                      value={newSpecPrice}
-                      onChange={(e) => setNewSpecPrice(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-700 mb-1">
-                      {lang === "vi" ? "Số lượng kho khởi tạo" : "Initial Quantity"}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      value={newSpecCount}
-                      onChange={(e) => setNewSpecCount(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowAddUnitSpecModal(false)}
-                  >
-                    {lang === "vi" ? "Hủy" : "Cancel"}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-                    disabled={!newSpecSizeCode.trim()}
-                    onClick={handleConfirmAddUnitSpec}
-                  >
-                    {lang === "vi" ? "Xác Nhận Thêm" : "Add Unit Type"}
-                  </Button>
                 </div>
               </div>
-            </Modal>
+            )}
           </>
         )
       })()}
@@ -6450,11 +6463,12 @@ export default function BusinessApp({
                     <thead className="bg-stone-100 text-slate-700 font-semibold border-b border-stone-200">
                       <tr>
                         <th className="p-2.5">Phân loại</th>
-                        <th className="p-2.5">Kích thước D×R×C</th>
+                        <th className="p-2.5">Kích thước kho</th>
                         <th className="p-2.5">Thể tích</th>
                         <th className="p-2.5 text-center font-bold text-amber-900 bg-amber-50/50">Tải trọng (kg)</th>
-                        <th className="p-2.5 hidden md:table-cell">Khung kệ / Lối xe</th>
-                        <th className="p-2.5 hidden lg:table-cell">Xe đẩy</th>
+                        <th className="p-2.5 text-blue-900 bg-blue-50/40">Kích thước khung</th>
+                        <th className="p-2.5 text-center text-blue-900 bg-blue-50/40">Số khung</th>
+                        <th className="p-2.5 hidden md:table-cell">Lối xe / Xe đẩy</th>
                         <th className="p-2.5">Số lượng</th>
                         <th className="p-2.5">Đang thuê</th>
                         <th className="p-2.5">Còn trống</th>
@@ -6462,93 +6476,171 @@ export default function BusinessApp({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
-                      {(["S", "M", "L", "XL"] as const).map((size) => {
-                        const spec = UNIT_SPECS[size]
+                      {(() => {
+                        const customSpecs =
+                          selectedFacility.unitCustomSpecs &&
+                          Array.isArray(selectedFacility.unitCustomSpecs) &&
+                          selectedFacility.unitCustomSpecs.length > 0
+                            ? selectedFacility.unitCustomSpecs
+                            : null
 
-                        const unitsOfSize = facilityUnits.filter(
-                          (u) =>
-                            ((u as any).size ||
-                              (u.type === "Small"
-                                ? "S"
-                                : u.type === "Medium"
-                                  ? "M"
-                                  : u.type === "Large"
-                                    ? "L"
-                                    : "XL")) === size,
-                        )
+                        const allSizes: string[] = customSpecs
+                          ? customSpecs.map((cs: FacilityCustomUnitSpec) => cs.sizeCode)
+                          : Array.from(
+                              new Set<string>([
+                                ...Object.keys(selectedFacility.unitDistribution || {}),
+                                ...facilityUnits.map((u) => (u as any).size || (u.type === "Small" ? "S" : u.type === "Medium" ? "M" : u.type === "Large" ? "L" : u.type === "Extra Large" ? "XL" : (u as any).sizeCode || "S")),
+                                "S",
+                                "M",
+                                "L",
+                                "XL",
+                              ]),
+                            )
 
-                        const totalSize =
-                          facilityUnits.length > 0
-                            ? unitsOfSize.length
-                            : (selectedFacility.unitDistribution?.[size] ?? 0)
+                        return allSizes.map((size: string) => {
+                          const customSpec = customSpecs?.find((cs: FacilityCustomUnitSpec) => cs.sizeCode === size)
+                          const stdSpec = UNIT_SPECS[size as keyof typeof UNIT_SPECS]
 
-                        const occupiedSize = unitsOfSize.filter(
-                          (u) => u.status === "occupied",
-                        ).length
+                          const unitsOfSize = facilityUnits.filter(
+                            (u) =>
+                              ((u as any).size ||
+                                (u as any).sizeCode ||
+                                (u.type === "Small"
+                                  ? "S"
+                                  : u.type === "Medium"
+                                    ? "M"
+                                    : u.type === "Large"
+                                      ? "L"
+                                      : u.type === "Extra Large"
+                                        ? "XL"
+                                        : String(u.type))) === size,
+                          )
 
-                        const availableSize =
-                          unitsOfSize.filter((u) => u.status === "available")
-                            .length || Math.max(0, totalSize - occupiedSize)
+                          const totalSize =
+                            facilityUnits.length > 0
+                              ? unitsOfSize.length
+                              : (selectedFacility.unitDistribution?.[size] ?? customSpec?.count ?? 0)
 
-                        const loadKg =
-                          selectedFacility.unitLoadLimits?.[size] ??
-                          (unitsOfSize[0]?.maxLoadKg ??
+                          const occupiedSize = unitsOfSize.filter(
+                            (u) => u.status === "occupied" || (u.status as string) === "rented",
+                          ).length
+
+                          const availableSize =
+                            unitsOfSize.filter((u) => u.status === "available").length ||
+                            Math.max(0, totalSize - occupiedSize)
+
+                          const loadKg =
+                            customSpec?.maxLoadKg ??
+                            selectedFacility.unitLoadLimits?.[size] ??
+                            (unitsOfSize[0]?.maxLoadKg ??
+                              (stdSpec?.maxLoadKg ??
+                                (size === "S" ? 1000 : size === "M" ? 1600 : size === "L" ? 2800 : 4000)))
+
+                          const lengthM =
+                            customSpec?.lengthM ??
+                            selectedFacility.unitDimensions?.[size]?.lengthM ??
+                            stdSpec?.lengthM ??
+                            8
+                          const widthM =
+                            customSpec?.widthM ??
+                            selectedFacility.unitDimensions?.[size]?.widthM ??
+                            stdSpec?.widthM ??
+                            10
+                          const heightM =
+                            customSpec?.heightM ??
+                            (selectedFacility.unitDimensions?.[size] as any)?.heightM ??
+                            stdSpec?.heightM ??
+                            5
+                          const dimensionsStr = `${lengthM} × ${widthM} × ${heightM} m`
+                          const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
+
+                          // Frame info
+                          const frameCount =
+                            customSpec?.frameCount ??
+                            selectedFacility.unitFrameCounts?.[size] ??
+                            stdSpec?.frameCount ??
+                            0
+                          const rawFrameDims =
+                            customSpec?.frameDimensions ??
+                            selectedFacility.unitFrameDimensions?.[size] ??
+                            (stdSpec?.frameDimensions
+                              ? {
+                                  lengthM: stdSpec.frameDimensions.lengthM ?? stdSpec.frameDimensions.depthM,
+                                  widthM: stdSpec.frameDimensions.widthM,
+                                  heightM: stdSpec.frameDimensions.heightM,
+                                }
+                              : undefined)
+
+                          const frameDimStr = rawFrameDims
+                            ? `${rawFrameDims.lengthM ?? (rawFrameDims as any).depthM} × ${rawFrameDims.widthM} × ${rawFrameDims.heightM} m`
+                            : "-"
+
+                          const laneWidth =
+                            customSpec?.laneWidthM ??
+                            selectedFacility.unitLaneWidths?.[size] ??
+                            stdSpec?.vehicleLaneWidthM ??
+                            4
+
+                          const cartText = stdSpec?.cartEquipment ?? "Xe đẩy tiêu chuẩn"
+                          const displayName = customSpec?.name ?? (stdSpec?.name || `Kho ${size}`)
+                          const badgeClass =
+                            customSpec?.badgeClass ||
                             (size === "S"
-                              ? 1000
+                              ? "bg-sky-50 text-sky-700 border-sky-200"
                               : size === "M"
-                                ? 1600
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                 : size === "L"
-                                  ? 2800
-                                  : 4000))
+                                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                                  : size === "XL"
+                                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                                    : "bg-rose-50 text-rose-800 border-rose-200")
 
-                        return (
-                          <tr key={size} className="hover:bg-amber-50/50">
-                            <td className="p-2.5">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded font-mono text-xs font-bold ${size === "S"
-                                    ? "bg-sky-50 text-sky-700 border border-sky-200"
-                                    : size === "M"
-                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                      : size === "L"
-                                        ? "bg-purple-50 text-purple-700 border border-purple-200"
-                                        : "bg-amber-50 text-amber-800 border border-amber-200"
-                                  }`}
-                              >
-                                {size} · {spec.name}
-                              </span>
-                            </td>
-                            <td className="p-2.5 font-medium text-slate-700">
-                              {spec.dimensions}
-                            </td>
-                            <td className="p-2.5 text-slate-600">
-                              {spec.volumeM3} m³
-                            </td>
-                            <td className="p-2.5 text-center font-bold text-stone-800 bg-amber-50/20 font-mono">
-                              {loadKg.toLocaleString("vi-VN")} kg
-                            </td>
-                            <td className="p-2.5 hidden md:table-cell">
-                              <div className="text-slate-700 font-mono">{spec.frameCount} khung · {spec.frameDimensions.widthM}×{spec.frameDimensions.depthM}×{spec.frameDimensions.heightM} m</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">lối xe {selectedRevenueFacility?.unitLaneWidths?.[size] ?? spec.vehicleLaneWidthM} m · cao {spec.heightM} m</div>
-                            </td>
-                            <td className="p-2.5 hidden lg:table-cell text-slate-600">
-                              <div>{spec.cartEquipment}</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">thùng nhỏ {spec.smallBox.count} · thùng to {spec.largeBox.count}</div>
-                            </td>
-                            <td className="p-2.5 font-bold text-slate-800">
-                              {totalSize} kho
-                            </td>
-                            <td className="p-2.5 text-blue-700 font-semibold">
-                              {occupiedSize} kho
-                            </td>
-                            <td className="p-2.5 text-emerald-700 font-semibold">
-                              {availableSize} kho
-                            </td>
-                            <td className="p-2.5 font-mono font-bold text-emerald-800">
-                              {getFacilitySizePriceFormatted(selectedFacility, size)}
-                            </td>
-                          </tr>
-                        )
-                      })}
+                          return (
+                            <tr key={size} className="hover:bg-amber-50/50">
+                              <td className="p-2.5">
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded font-mono text-xs font-bold border ${badgeClass}`}
+                                >
+                                  {size} · {displayName}
+                                </span>
+                              </td>
+                              <td className="p-2.5 font-medium text-slate-700 font-mono">
+                                {dimensionsStr}
+                              </td>
+                              <td className="p-2.5 text-slate-600 font-mono">
+                                {volumeM3} m³
+                              </td>
+                              <td className="p-2.5 text-center font-bold text-stone-800 bg-amber-50/20 font-mono">
+                                {loadKg.toLocaleString("vi-VN")} kg
+                              </td>
+                              <td className="p-2.5 font-mono text-blue-900 font-semibold bg-blue-50/30">
+                                {frameDimStr}
+                              </td>
+                              <td className="p-2.5 text-center font-mono font-bold text-blue-950 bg-blue-50/30">
+                                {frameCount} khung
+                              </td>
+                              <td className="p-2.5 hidden md:table-cell text-slate-600">
+                                <div>{cartText}</div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  lối xe {laneWidth} m · cao {heightM} m
+                                </div>
+                              </td>
+                              <td className="p-2.5 font-bold text-slate-800 font-mono">
+                                {totalSize} kho
+                              </td>
+                              <td className="p-2.5 text-blue-700 font-semibold font-mono">
+                                {occupiedSize} kho
+                              </td>
+                              <td className="p-2.5 text-emerald-700 font-semibold font-mono">
+                                {availableSize} kho
+                              </td>
+                              <td className="p-2.5 font-mono font-bold text-emerald-800">
+                                {getFacilitySizePriceFormatted(selectedFacility, size)}
+                              </td>
+                            </tr>
+                          )
+                        })
+                      })()}
                     </tbody>
                     <tfoot className="bg-stone-50 border-t border-stone-200 font-semibold text-slate-800">
                       <tr>
@@ -6558,7 +6650,7 @@ export default function BusinessApp({
                         <td className="p-2.5 text-center font-bold text-amber-900 bg-amber-50/40 font-mono">
                           {totalFacilityLoadTon} tấn
                         </td>
-                        <td colSpan={2} className="hidden md:table-cell"></td>
+                        <td colSpan={3} className="hidden md:table-cell"></td>
                         <td className="p-2.5 font-bold text-amber-800">
                           {selectedFacility.units} kho
                         </td>

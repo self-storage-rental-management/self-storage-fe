@@ -54,8 +54,8 @@ export interface UnitSpec {
   volumeM3: number
   /** Số khung kệ trong kho */
   frameCount: number
-  /** Kích thước mỗi khung kệ: rộng × sâu × cao (m) */
-  frameDimensions: { widthM: number; depthM: number; heightM: number }
+  /** Kích thước mỗi khung kệ: rộng × sâu/dài × cao (m) */
+  frameDimensions: { widthM: number; depthM: number; heightM: number; lengthM?: number }
   /** Khoảng cách giữa 2 khung kệ (m) */
   frameDistanceM: number
   /** Chiều rộng lối xe (m) */
@@ -95,7 +95,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 80.0,
     volumeM3: 400.0,
     frameCount: 4,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 1.8,
     vehicleLaneWidthM: 1.8,
     aisleM: 1.8,
@@ -122,7 +122,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 131.04,
     volumeM3: 655.2,
     frameCount: 6,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 2.2,
     vehicleLaneWidthM: 2.2,
     aisleM: 2.2,
@@ -149,7 +149,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 197.64,
     volumeM3: 988.2,
     frameCount: 8,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 2.6,
     vehicleLaneWidthM: 2.6,
     aisleM: 2.6,
@@ -176,7 +176,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 280.0,
     volumeM3: 1400.0,
     frameCount: 10,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 3.0,
     vehicleLaneWidthM: 3.0,
     aisleM: 3.0,
@@ -1012,16 +1012,15 @@ export const DISCOUNTS: PromotionItem[] = [
 // ]
 
 export const POLICIES = [
-  { id: 'pol-1', name: 'Grace Period', value: '5 days', scope: 'All Facilities', editable: true },
-  { id: 'pol-2', name: 'Late Fee', value: '650.000 ₫ / month', scope: 'All Facilities', editable: true },
-  { id: 'pol-3', name: 'Security Deposit', value: '1 month', scope: 'All Facilities', editable: true },
-  { id: 'pol-4', name: 'Notice to Vacate', value: '15 days', scope: 'All Facilities', editable: true },
-  { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', editable: true }
+  { id: 'pol-1', name: 'Grace Period', value: '3 days', scope: 'All Facilities', editable: true, description: 'Thời gian ân hạn thanh toán (03 ngày); từ ngày thứ 4 quá hạn bắt đầu áp dụng phí phạt trễ theo ngày và tạm khóa mã PIN mở kho.' },
+  { id: 'pol-2', name: 'Late Fee', value: '50% đơn giá ngày / ngày trễ', scope: 'All Facilities', editable: true, description: 'Phí phạt quá hạn tính theo ngày trễ thực tế: (Cước thuê tháng ÷ 30) × 50% × số ngày trễ.' },
+  { id: 'pol-3', name: 'Security Deposit', value: '1 month', scope: 'All Facilities', editable: true, description: 'Tiền cọc an ninh tương đương 01 tháng cước cơ sở (hoàn trả 100% trong 24h sau khi hoàn tất kiểm tra trả kho nguyên trạng).' },
+  { id: 'pol-4', name: 'Notice to Vacate', value: '15 days', scope: 'All Facilities', editable: true, description: 'Thời hạn thông báo trước khi kết thúc hợp đồng trước hạn (chỉ áp dụng khi trả kho sớm; hợp đồng trọn gói hết kỳ hạn tự động thanh lý).' },
+  { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', editable: true, description: 'Kỳ hạn hợp đồng thuê kho tự quản tối thiểu là 01 tháng.' }
 ]
 
-
 export const FEES = [
-  { type: 'Phí nộp muộn', amount: '50% đơn giá ngày / ngày trễ', trigger: 'Áp dụng từ ngày đầu tiên sau ngày đến hạn thanh toán (không có thời gian ân hạn). Công thức: (giá thuê tháng ÷ 30) × 50% × số ngày trễ.', applies: 'Tất cả khách thuê' },
+  { type: 'Phí nộp muộn', amount: '50% đơn giá ngày / ngày trễ', trigger: 'Áp dụng sau 3 ngày ân hạn kể từ ngày đến hạn thanh toán. Công thức: (giá thuê tháng ÷ 30) × 50% × số ngày trễ.', applies: 'Tất cả khách thuê' },
   { type: 'Phí thay thế khóa số', amount: '1.170.000 ₫', trigger: 'Khi khách làm mất hoặc hư hỏng khóa / thẻ từ', applies: 'Trách nhiệm khách thuê' },
   { type: 'Phí dọn vệ sinh kho', amount: '2.080.000 ₫', trigger: 'Áp dụng nếu trả kho còn rác bẩn hoặc chất nguy hại', applies: 'Kiểm tra khi trả kho' },
   { type: 'Phí hỗ trợ mở khóa khẩn cấp', amount: '780.000 ₫', trigger: 'Mở khóa thủ công ngoài giờ hành chính tại cơ sở', applies: 'Mỗi lần yêu cầu' }
