@@ -21,8 +21,10 @@ import type {
   MaintenanceTask,
   ReservedPeriod,
   FacilityTask,
-  FacilityUnitDistribution
+  FacilityUnitDistribution,
+  RentalPackage
 } from '../types/storageHub'
+import { generateDefaultRentalPackages } from '../domain/packageRules'
 import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
@@ -48,6 +50,7 @@ import {
 } from '../domain/managerRules'
 import { formatVnd, USD_TO_VND_RATE } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
+import { storageSizeCode, unitTypeMatches } from '../domain/facilityRules'
 
 const STORAGE_KEY = 'storagehub:v5:released-orphan-holds'
 
@@ -211,6 +214,10 @@ function assertFacilityManager(user: User, facilityId: string, facilityName: str
 }
 
 function unitMatchesReservation(unit: StorageUnit, reservation: StorageReservation) {
+  const sizeU = storageSizeCode((unit as any).sizeCode || (unit as any).size || unit.type || unit.code)
+  const sizeR = storageSizeCode(reservation.unitTypeId || reservation.unitTypeName)
+  if (sizeU && sizeR && sizeU === sizeR) return true
+  if (unitTypeMatches(unit.type, reservation.unitTypeName) || unitTypeMatches((unit as any).sizeCode, reservation.unitTypeId)) return true
   const expected = reservation.unitTypeId.toLowerCase().replace('xlarge', 'extra large')
   const actual = unit.type.toLowerCase()
   return actual === expected || actual.startsWith(expected) || expected.startsWith(actual)
@@ -235,7 +242,7 @@ const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
   growth: f.growth,
   manager: f.manager,
   status: 'active',
-  accessHours: '06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)',
+  accessHours: '06:00 - 22:00 hàng ngày',
   timezone: 'Asia/Ho_Chi_Minh',
   unitDistribution: f.unitDistribution
 }))
@@ -1102,6 +1109,9 @@ interface StorageHubContextValue extends StorageHubState {
     capacityValidatedByFrames?: boolean
     discountAmount?: number
     customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number; physicalUnitId?: string }
+    packageId?: string
+    packageName?: string
+    packagePrice?: number
   }) => ReservationValidationResult
   approveReservation: (reservationId: string, reviewer: User) => void
   rejectGoodsReview: (reservationId: string, reviewer: User, note: string) => void
@@ -1808,9 +1818,19 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     capacityValidatedByFrames?: boolean
     discountAmount?: number
     customerCatalogUnit?: { id: string; facilityName: string; doorWidthM: number; doorHeightM: number; physicalUnitId?: string }
+    packageId?: string
+    packageName?: string
+    packagePrice?: number
   }): ReservationValidationResult => {
     assertPermission(params.customer, 'book_storage')
-    const unitType = UNIT_TYPES.find(ut => ut.id === params.unitTypeId) || UNIT_TYPES[1]
+    const normalizedTargetId =
+      params.unitTypeId === 'S' || params.unitTypeId === 's' ? 'small' :
+      params.unitTypeId === 'M' || params.unitTypeId === 'm' ? 'medium' :
+      params.unitTypeId === 'L' || params.unitTypeId === 'l' ? 'large' :
+      params.unitTypeId === 'XL' || params.unitTypeId === 'xl' ? 'xlarge' :
+      params.unitTypeId
+    const unitType = UNIT_TYPES.find(ut => ut.id === params.unitTypeId || ut.id === normalizedTargetId) || UNIT_TYPES[1]
+
     const now = new Date()
     const nowTime = now.getTime()
 
@@ -1830,12 +1850,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
     // Availability check: check units of this type in facility that don't have overlapping reservedPeriods or rentals
     const fac = state.facilities.find(f => f.id === params.facilityId || f.code === params.facilityId)
+    const targetSizeCode = storageSizeCode(params.unitTypeId || unitType.id || unitType.name)
+
+    const matchesUnitType = (u: StorageUnit) => {
+      const uSize = storageSizeCode((u as any).sizeCode || (u as any).size || u.type || u.code)
+      if (uSize && targetSizeCode && uSize === targetSizeCode) return true
+      if (unitTypeMatches(u.type, unitType.name) || unitTypeMatches((u as any).sizeCode, params.unitTypeId)) return true
+      return false
+    }
+
     const candidateUnits = requestedPhysicalUnit
       ? [requestedPhysicalUnit].filter(u => u.status === 'available')
       : state.units.filter(
-          u => (u.facilityId === params.facilityId || (fac && (u.facilityId === fac.id || u.facilityId === fac.code))) &&
-               (u.type.toLowerCase().includes(unitType.name.split(' ')[0].toLowerCase()) ||
-                ((u as any).sizeCode && (u as any).sizeCode.toLowerCase() === params.unitTypeId.toLowerCase())) &&
+          u => (u.facilityId === params.facilityId || (fac && (u.facilityId === fac.id || u.facilityId === fac.code)) || (fac && u.facilityName && fac.name && u.facilityName.trim().toLowerCase() === fac.name.trim().toLowerCase())) &&
+               matchesUnitType(u) &&
                u.status === 'available'
         )
 
@@ -1854,14 +1882,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     })
     const unassignedCapacityHolds = state.holds.filter(hold =>
       !hold.assignedUnitId &&
-      hold.facilityId === params.facilityId &&
-      hold.unitTypeId === unitType.id &&
+      (hold.facilityId === params.facilityId || (fac && (hold.facilityId === fac.id || hold.facilityId === fac.code))) &&
+      (hold.unitTypeId === unitType.id || storageSizeCode(hold.unitTypeId) === targetSizeCode || storageSizeCode(hold.unitTypeName) === targetSizeCode) &&
       (hold.status === 'DEPOSIT_PAID' || (hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING') || (['awaiting_email', 'awaiting_review', 'awaiting_payment'].includes(hold.status) && Boolean(hold.paymentExpiresAt) && new Date(hold.paymentExpiresAt!).getTime() > nowTime)) &&
       checkDateOverlap(startDate, endDate, hold.startDate, hold.endDate)
     )
     const availableUnit = requestedPhysicalUnit
       ? dateAvailableUnits.find(unit => unit.id === requestedPhysicalUnit.id)
       : dateAvailableUnits[unassignedCapacityHolds.length]
+
 
     if (!availableUnit) {
       return {
@@ -1990,9 +2019,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       customerAddress: params.customerAddress,
       identityId: params.identityId,
       facilityId: params.facilityId,
-      facilityName: availableUnit.facilityName,
+      facilityName: availableUnit.facilityName || fac?.name || params.customerCatalogUnit?.facilityName || 'Kho StorageHub',
       unitId: availableUnit.id,
-      unitTypeId: (availableUnit as any).sizeCode?.toLowerCase() || unitType.id,
+      unitTypeId: unitType.id,
       unitTypeName: availableUnit.type || unitType.name,
       assignedUnitId: availableUnit.id,
       rentalMonths: params.rentalMonths,
@@ -2007,6 +2036,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       totalInitialAmount,
       approvalType: requiresGoodsReview ? 'MANUAL' : 'AUTO',
       discountAmount,
+      packageId: params.packageId,
+      packageName: params.packageName,
+      packagePrice: params.packagePrice,
       paymentExpiresAt,
       goodsReviewStatus: requiresGoodsReview ? 'PENDING' : 'NOT_REQUIRED',
       goodsReviewSubmittedAt,
@@ -4048,14 +4080,17 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       manager: data.manager?.trim() || 'Quản lý cơ sở',
       phone: data.phone?.trim() || '1900 6868',
       status: data.status || 'active',
-      accessHours: data.accessHours || '06:00 - 22:00 hàng ngày (24/7 đối với kho VIP)',
+      accessHours: data.accessHours || '06:00 - 22:00 hàng ngày',
       timezone: data.timezone || 'Asia/Ho_Chi_Minh',
       unitDistribution,
       unitPrices: data.unitPrices,
       unitLoadLimits: data.unitLoadLimits,
       unitDimensions: data.unitDimensions,
       unitLaneWidths: data.unitLaneWidths,
+      unitFrameCounts: data.unitFrameCounts,
+      unitFrameDimensions: data.unitFrameDimensions,
       unitCustomSpecs: data.unitCustomSpecs,
+      rentalPackages: data.unitCustomSpecs?.flatMap(s => s.rentalPackages || []) || [],
       totalDesignLoadTon: data.totalDesignLoadTon
     }
 
@@ -4075,18 +4110,21 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (data.unitCustomSpecs && Array.isArray(data.unitCustomSpecs) && data.unitCustomSpecs.length > 0) {
       distribution = data.unitCustomSpecs
         .filter(s => s.count > 0)
-        .map((s, idx) => ({
-          size: s.sizeCode,
-          type: s.name,
-          floor: s.floor ?? ((idx % 4) + 1),
-          zone: s.zone ?? `Khu ${String.fromCharCode(65 + (idx % 4))}`,
-          count: s.count,
-          lengthM: s.lengthM,
-          widthM: s.widthM,
-          heightM: s.heightM,
-          maxLoadKg: s.maxLoadKg,
-          monthlyPrice: s.monthlyPrice
-        }))
+        .map((s, idx) => {
+          const stdType = s.sizeCode === 'S' ? 'Small' : s.sizeCode === 'M' ? 'Medium' : s.sizeCode === 'L' ? 'Large' : s.sizeCode === 'XL' ? 'Extra Large' : s.name
+          return {
+            size: s.sizeCode,
+            type: ['S', 'M', 'L', 'XL'].includes(s.sizeCode) ? stdType : (s.name || stdType),
+            floor: s.floor ?? ((idx % 4) + 1),
+            zone: s.zone ?? `Khu ${String.fromCharCode(65 + (idx % 4))}`,
+            count: s.count,
+            lengthM: s.lengthM,
+            widthM: s.widthM,
+            heightM: s.heightM,
+            maxLoadKg: s.maxLoadKg,
+            monthlyPrice: s.monthlyPrice
+          }
+        })
     } else {
       const allDist: Array<{ size: string; type: string; floor: number; zone: string; count: number }> = [
         { size: 'S', type: 'Small', floor: 1, zone: 'Khu A', count: countS },
@@ -4137,6 +4175,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const areaM2 = Math.round(lengthM * widthM * 10) / 10
       const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
 
+      const customSpec = data.unitCustomSpecs?.find(s => s.sizeCode === size)
+      const unitRentalPackages = customSpec?.rentalPackages && customSpec.rentalPackages.length > 0
+        ? customSpec.rentalPackages
+        : generateDefaultRentalPackages(newFacility.id, size, monthlyPriceVnd)
+
       for (let i = 1; i <= count; i++) {
         const unitNumber = String(i).padStart(3, '0')
         const unitCode = `${code}-${size}-${unitNumber}`
@@ -4172,6 +4215,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facility: newFacility.name,
           facilityName: newFacility.name,
           facilityId: newFacility.id,
+          rentalPackages: unitRentalPackages,
           version: 1
         } as unknown as StorageUnit)
       }
@@ -4229,7 +4273,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           const stdType = size === 'S' ? 'Small' : size === 'M' ? 'Medium' : size === 'L' ? 'Large' : size === 'XL' ? 'Extra Large' : `Kho ${size}`
           return {
             size,
-            type: cs?.name || stdType,
+            type: ['S', 'M', 'L', 'XL'].includes(size) ? stdType : (cs?.name || stdType),
             floor: cs?.floor ?? ((idx % 4) + 1),
             zone: cs?.zone ?? `Khu ${String.fromCharCode(65 + (idx % 4))}`,
             lengthM: cs?.lengthM,
@@ -4277,6 +4321,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             const defaultLoad = size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000
             const maxLoad = customLoad ?? updates.unitLoadLimits?.[size] ?? targetFac.unitLoadLimits?.[size] ?? spec?.maxLoadKg ?? defaultLoad
 
+            const cs = customSpecsMap.get(size)
+            const unitRentalPackages = cs?.rentalPackages && cs.rentalPackages.length > 0
+              ? cs.rentalPackages
+              : generateDefaultRentalPackages(targetFacId, size, monthlyPriceVnd)
+
             for (let i = 1; i <= needed; i++) {
               const unitNum = String(maxNum + i).padStart(3, '0')
               const unitCode = `${targetFacCode}-${size}-${unitNum}`
@@ -4310,6 +4359,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 facility: updates.name?.trim() || targetFac.name,
                 facilityName: updates.name?.trim() || targetFac.name,
                 facilityId: targetFacId,
+                rentalPackages: unitRentalPackages,
                 version: 1
               } as unknown as StorageUnit)
             }
@@ -4389,6 +4439,21 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         })
       }
 
+      // Propagate unitCustomSpecs and rentalPackages to existing units
+      if (updates.unitCustomSpecs) {
+        const specsMap = new Map(updates.unitCustomSpecs.map(cs => [cs.sizeCode, cs]))
+        nextUnits = nextUnits.map(u => {
+          if (u.facilityId === targetFacId || u.facilityId === targetFacCode) {
+            const s = ((u as any).size || (u.type === 'Small' ? 'S' : u.type === 'Medium' ? 'M' : u.type === 'Large' ? 'L' : 'XL')) as string
+            const cs = specsMap.get(s)
+            if (cs?.rentalPackages) {
+              return { ...u, rentalPackages: cs.rentalPackages }
+            }
+          }
+          return u
+        })
+      }
+
       const facUnits = nextUnits.filter(u => u.facilityId === targetFacId || u.facilityId === targetFacCode)
       const totalUnitsCount = facUnits.length || updates.units || targetFac.units
       const availableUnitsCount = facUnits.filter(u => u.status === 'available').length
@@ -4408,6 +4473,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           unitLoadLimits: updates.unitLoadLimits ? { ...f.unitLoadLimits, ...updates.unitLoadLimits } : f.unitLoadLimits,
           unitDimensions: updates.unitDimensions ? { ...f.unitDimensions, ...updates.unitDimensions } : f.unitDimensions,
           unitLaneWidths: updates.unitLaneWidths ? { ...f.unitLaneWidths, ...updates.unitLaneWidths } : f.unitLaneWidths,
+          unitFrameCounts: updates.unitFrameCounts ? { ...f.unitFrameCounts, ...updates.unitFrameCounts } : f.unitFrameCounts,
+          unitFrameDimensions: updates.unitFrameDimensions ? { ...f.unitFrameDimensions, ...updates.unitFrameDimensions } : f.unitFrameDimensions,
           unitCustomSpecs: updates.unitCustomSpecs ?? f.unitCustomSpecs,
           totalDesignLoadTon: updates.totalDesignLoadTon ?? f.totalDesignLoadTon
         }
