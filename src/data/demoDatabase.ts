@@ -54,8 +54,8 @@ export interface UnitSpec {
   volumeM3: number
   /** Số khung kệ trong kho */
   frameCount: number
-  /** Kích thước mỗi khung kệ: rộng × sâu × cao (m) */
-  frameDimensions: { widthM: number; depthM: number; heightM: number }
+  /** Kích thước mỗi khung kệ: rộng × sâu/dài × cao (m) */
+  frameDimensions: { widthM: number; depthM: number; heightM: number; lengthM?: number }
   /** Khoảng cách giữa 2 khung kệ (m) */
   frameDistanceM: number
   /** Chiều rộng lối xe (m) */
@@ -95,7 +95,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 80.0,
     volumeM3: 400.0,
     frameCount: 4,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 1.8,
     vehicleLaneWidthM: 1.8,
     aisleM: 1.8,
@@ -122,7 +122,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 131.04,
     volumeM3: 655.2,
     frameCount: 6,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 2.2,
     vehicleLaneWidthM: 2.2,
     aisleM: 2.2,
@@ -149,7 +149,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 197.64,
     volumeM3: 988.2,
     frameCount: 8,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 2.6,
     vehicleLaneWidthM: 2.6,
     aisleM: 2.6,
@@ -176,7 +176,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     areaM2: 280.0,
     volumeM3: 1400.0,
     frameCount: 10,
-    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5 },
+    frameDimensions: { widthM: 2, depthM: 4, heightM: 4.5, lengthM: 4 },
     frameDistanceM: 3.0,
     vehicleLaneWidthM: 3.0,
     aisleM: 3.0,

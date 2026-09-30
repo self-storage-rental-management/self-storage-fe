@@ -77,6 +77,15 @@ export interface FacilityCustomUnitSpec {
   badgeClass?: string
   floor?: number
   zone?: string
+  /** Số khung kệ của loại kho này */
+  frameCount?: number
+  /** Kích thước của 1 khung kệ (Dài × Rộng × Cao, đơn vị mét) */
+  frameDimensions?: {
+    lengthM: number
+    widthM: number
+    heightM: number
+    depthM?: number
+  }
 }
 
 export interface FacilityUnitDistribution {
@@ -113,6 +122,8 @@ export interface Facility {
   unitLoadLimits?: Partial<Record<string, number>>
   unitDimensions?: Partial<Record<string, { lengthM: number; widthM: number; heightM?: number }>>
   unitLaneWidths?: Partial<Record<string, number>>
+  unitFrameCounts?: Partial<Record<string, number>>
+  unitFrameDimensions?: Partial<Record<string, { lengthM: number; widthM: number; heightM: number }>>
   unitCustomSpecs?: FacilityCustomUnitSpec[]
   totalDesignLoadTon?: number
 }
