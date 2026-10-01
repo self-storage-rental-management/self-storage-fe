@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { Icon } from '../../components/Layout'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import { isManagerFacilityVisible, isManagerRentalOverdue } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
+import ManagerPagination from './ManagerPagination'
+import { formatManagerDateTime, managerDateValue, matchesManagerSearch, paginateManagerItems } from './managerList'
 
 type ExceptionKind = 'return' | 'checkin' | 'reservation' | 'maintenance' | 'payment'
 
@@ -45,15 +47,15 @@ const damageLabels: Record<string, string> = {
 
 const inventoryLabels: Record<string, string> = { missing: 'Thiếu hàng hóa', excess: 'Thừa hàng hóa' }
 
-const formatDateTime = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('vi-VN')
-}
-
 export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; onOpen: (destination: ExceptionItem['destination']) => void }) {
   const hub = useStorageHub()
   const [kind, setKind] = useState<'all' | ExceptionKind>('all')
   const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [evidenceFilter, setEvidenceFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('priority')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const exceptions = useMemo<ExceptionItem[]>(() => {
     const holds = hub.holds.filter(item => isManagerFacilityVisible(user, item.facilityId, item.facilityName))
@@ -105,9 +107,21 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
   }, [hub.holds, hub.rentals, hub.units, hub.returns, hub.checkins, hub.maintenanceTasks, hub.payments, user])
 
   const visible = exceptions.filter(item => {
-    const normalized = query.trim().toLocaleLowerCase('vi-VN')
-    return (kind === 'all' || item.kind === kind) && (!normalized || [item.id, item.title, item.subject, item.reason].some(value => value.toLocaleLowerCase('vi-VN').includes(normalized)))
+    const matchEvidence = evidenceFilter === 'all' || (evidenceFilter === 'yes' ? item.evidenceCount > 0 : item.evidenceCount === 0)
+    return (kind === 'all' || item.kind === kind) &&
+      (statusFilter === 'all' || item.status === statusFilter) &&
+      matchEvidence &&
+      matchesManagerSearch(query, [item.id, item.title, item.subject, item.reason, item.status])
+  }).sort((left, right) => {
+    if (sortBy === 'newest') return managerDateValue(right.date) - managerDateValue(left.date)
+    if (sortBy === 'oldest') return managerDateValue(left.date) - managerDateValue(right.date)
+    const severity = (item: ExceptionItem) => item.status === 'disputed' ? 0 : item.status === 'overdue' || item.status === 'payment_due' ? 1 : /nghiêm trọng|bỏ lại|từ chối/i.test(item.reason) ? 2 : item.kind === 'checkin' ? 3 : item.kind === 'maintenance' ? 4 : 5
+    return severity(left) - severity(right) || managerDateValue(left.date) - managerDateValue(right.date)
   })
+  const pagination = paginateManagerItems(visible, page, pageSize)
+  const statuses = Array.from(new Set(exceptions.map(item => item.status))).sort()
+
+  useEffect(() => setPage(1), [kind, query, statusFilter, evidenceFilter, sortBy, pageSize])
 
   return <div className="space-y-5">
     <SectionHeader eyebrow="Giám sát ngoại lệ" title="Ngoại lệ vận hành của cơ sở" subtitle="Tổng hợp trực tiếp từ đặt chỗ, nhận/trả kho, bảo trì và công nợ. Mỗi hồ sơ vẫn được xử lý tại đúng luồng nghiệp vụ nguồn." />
@@ -115,11 +129,11 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
       {(['return', 'checkin', 'reservation', 'maintenance', 'payment'] as ExceptionKind[]).map(item => <StatCard key={item} title={kindLabels[item]} value={exceptions.filter(exception => exception.kind === item).length} icon={item === 'payment' ? Icon.dollar : item === 'maintenance' ? Icon.tasks : Icon.alert} />)}
     </div>
     <Card>
-      <div className="grid gap-3 border-b border-stone-200 p-4 md:grid-cols-[1fr_220px]"><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm mã hồ sơ, khách hàng, gian kho hoặc lý do…" /><Select value={kind} onChange={event => setKind(event.target.value as 'all' | ExceptionKind)}><option value="all">Tất cả loại ngoại lệ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></div>
+      <div className="grid gap-3 border-b border-stone-200 p-4 md:grid-cols-2 xl:grid-cols-5"><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm mã hồ sơ, khách hàng, gian kho hoặc lý do…" /><Select value={kind} onChange={event => setKind(event.target.value as 'all' | ExceptionKind)}><option value="all">Tất cả loại ngoại lệ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select><Select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="all">Tất cả trạng thái</option>{statuses.map(status => <option key={status} value={status}>{managerStatusLabel(status, 'vi')}</option>)}</Select><Select value={evidenceFilter} onChange={event => setEvidenceFilter(event.target.value)}><option value="all">Mọi tình trạng bằng chứng</option><option value="yes">Có bằng chứng</option><option value="no">Chưa có bằng chứng</option></Select><Select value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="priority">Nghiêm trọng trước</option><option value="oldest">Chờ lâu nhất</option><option value="newest">Mới nhất</option></Select></div>
       <Table><Thead><tr><Th>Hồ sơ</Th><Th>Loại</Th><Th>Đối tượng</Th><Th>Lý do cần chú ý</Th><Th>Trạng thái</Th><Th>Bằng chứng</Th><Th /></tr></Thead><Tbody>
-        {visible.map(item => <Tr key={`${item.kind}-${item.id}`}><Td><p className="font-semibold text-stone-900">{item.title}</p><p className="mt-1 text-xs text-stone-500">{formatDateTime(item.date)}</p></Td><Td>{kindLabels[item.kind]}</Td><Td>{item.subject}</Td><Td className="max-w-md text-sm text-stone-600">{item.reason}</Td><Td><Badge variant={item.status === 'disputed' || item.status === 'overdue' || item.status === 'REJECTED' ? 'error' : 'warning'}>{managerStatusLabel(item.status, 'vi')}</Badge></Td><Td>{item.evidenceCount ? `${item.evidenceCount} tệp/ảnh` : 'Chưa có'}</Td><Td className="text-right"><Button size="sm" variant="outline" onClick={() => onOpen(item.destination)}>Mở luồng xử lý</Button></Td></Tr>)}
+        {pagination.items.map(item => <Tr key={`${item.kind}-${item.id}`}><Td><p className="font-semibold text-stone-900">{item.title}</p><p className="mt-1 text-xs text-stone-500">{formatManagerDateTime(item.date)}</p></Td><Td>{kindLabels[item.kind]}</Td><Td>{item.subject}</Td><Td className="max-w-md text-sm text-stone-600">{item.reason}</Td><Td><Badge variant={item.status === 'disputed' || item.status === 'overdue' || item.status === 'REJECTED' ? 'error' : 'warning'}>{managerStatusLabel(item.status, 'vi')}</Badge></Td><Td>{item.evidenceCount ? `${item.evidenceCount} tệp/ảnh` : 'Chưa có'}</Td><Td className="text-right"><Button size="sm" variant="outline" onClick={() => onOpen(item.destination)}>Mở luồng xử lý</Button></Td></Tr>)}
         {!visible.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có ngoại lệ phù hợp với bộ lọc.</td></tr>}
-      </Tbody></Table>
+      </Tbody></Table><ManagerPagination {...pagination} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </Card>
     <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><b>Phân quyền:</b> các ngoại lệ hàng hóa của đặt chỗ chỉ được Manager theo dõi; quyết định kiểm tra hàng và nhận kho vẫn thuộc Staff. Manager xử lý tranh chấp trả kho, công nợ, trạng thái gian và điều phối nhiệm vụ đúng theo từng màn hình nguồn.</Card>
   </div>
