@@ -167,7 +167,7 @@ const activities: Record<string, BilingualLabel> = {
 const entities: Record<string, BilingualLabel> = {
   hold: labels('Reservation', 'Đơn đặt chỗ'),
   unit: labels('Unit', 'Gian kho'),
-  rental: labels('Rental', 'Hợp đồng thuê'),
+  rental: labels('Rental record', 'Hồ sơ thuê'),
   payment: labels('Payment', 'Thanh toán'),
   return: labels('Return', 'Hồ sơ trả kho'),
   checkin: labels('Move-in', 'Hồ sơ nhận kho'),
