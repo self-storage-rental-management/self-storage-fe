@@ -4,6 +4,7 @@ import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
 import HomePage from './views/home/HomePage'
+import RequiredPasswordChange from './views/RequiredPasswordChange'
 import { actorToUser, getAuthenticatedActor, logoutFromApi, type ApiActor } from './services/authApi'
 
 const CHUNK_RELOAD_KEY = 'storagehub:chunk-reload'
@@ -132,6 +133,10 @@ function MainContent() {
         onBackToHome={() => setGuestView('home')}
       />
     )
+  }
+
+  if (apiActor?.mustChangePassword) {
+    return <RequiredPasswordChange actor={apiActor} onChanged={setApiActor} onLogout={handleLogout} />
   }
 
   const roleApp = (() => {
