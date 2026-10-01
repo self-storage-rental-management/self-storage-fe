@@ -1,11 +1,13 @@
-import React, { useState } from 'react'
-import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Avatar, ProgressBar, Tabs } from '../../components/ui'
+import React, { useEffect, useState } from 'react'
+import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Avatar, ProgressBar, Select, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { CheckInRecord } from '../../types/storageHub'
 import { isManagerFacilityVisible } from '../../domain/managerRules'
 import ManagerActionNotice from './ManagerActionNotice'
+import ManagerPagination from './ManagerPagination'
+import { formatManagerDate, managerDateValue, matchesManagerSearch, paginateManagerItems } from './managerList'
 
 interface ManagerCheckinsPanelProps {
   user: User
@@ -13,23 +15,45 @@ interface ManagerCheckinsPanelProps {
 }
 
 export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelProps) {
-    const { checkins: storeCheckins, units: storeUnits } = useStorageHub()
+  const { checkins: storeCheckins, units: storeUnits } = useStorageHub()
+  const hiddenHistoryStorageKey = `storagehub:manager:${user.id}:hidden-checkins`
 
   const [tab, setTab] = useState('All')
   const [search, setSearch] = useState('')
+  const [staffFilter, setStaffFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sortBy, setSortBy] = useState('priority')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [selectedCheckin, setSelectedCheckin] = useState<CheckInRecord | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [hideTarget, setHideTarget] = useState<CheckInRecord | null>(null)
+  const [feedback, setFeedback] = useState<{ tone: 'success' | 'warning'; message: string } | null>(null)
+  const [hiddenCheckinIds, setHiddenCheckinIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(hiddenHistoryStorageKey) || '[]')
+      return Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : []
+    } catch {
+      return []
+    }
+  })
 
   // Filter checkins by facility (either match checkin.facilityId or unit's facility)
-  const facilityCheckins = storeCheckins.filter(c => {
+  const scopedCheckins = storeCheckins.filter(c => {
     const unit = storeUnits.find(u => u.id === c.unitId)
     return isManagerFacilityVisible(user, c.facilityId || unit?.facilityId, unit?.facilityName)
   })
+  const facilityCheckins = scopedCheckins.filter(c => !hiddenCheckinIds.includes(c.id))
+  const hiddenFacilityCount = scopedCheckins.length - facilityCheckins.length
 
-  const scheduledCount = facilityCheckins.filter(c => c.status === 'scheduled').length
-  const completedCount = facilityCheckins.filter(c => c.status === 'completed').length
-  const cancelledCount = facilityCheckins.filter(c => c.status === 'cancelled').length
+  const scheduledCount = scopedCheckins.filter(c => c.status === 'scheduled').length
+  const completedCount = scopedCheckins.filter(c => c.status === 'completed').length
+  const cancelledCount = scopedCheckins.filter(c => c.status === 'cancelled').length
 
+  const staffOptions = Array.from(new Map(facilityCheckins.filter(item => item.staffId).map(item => [item.staffId, item.staffName || item.staffId])).entries()).sort((left, right) => left[1].localeCompare(right[1], 'vi'))
+  const today = new Date().toISOString().slice(0, 10)
   const filteredCheckins = facilityCheckins.filter(c => {
     const matchTab =
       tab === 'All' ||
@@ -38,16 +62,20 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       (tab === 'completed' && c.status === 'completed') ||
       (tab === 'cancelled' && c.status === 'cancelled')
 
-    const q = search.toLowerCase().trim()
-    const matchSearch =
-      !q ||
-      c.id.toLowerCase().includes(q) ||
-      c.customerName.toLowerCase().includes(q) ||
-      c.unitId.toLowerCase().includes(q) ||
-      (c.staffName && c.staffName.toLowerCase().includes(q))
-
-    return matchTab && matchSearch
+    const matchSearch = matchesManagerSearch(search, [c.id, c.holdId, c.customerId, c.customerName, c.unitId, c.staffId, c.staffName])
+    const matchStaff = staffFilter === 'all' || c.staffId === staffFilter
+    const matchDate = (!dateFrom || c.scheduledDate >= dateFrom) && (!dateTo || c.scheduledDate <= dateTo)
+    return matchTab && matchSearch && matchStaff && matchDate
+  }).sort((left, right) => {
+    if (sortBy === 'date-asc') return managerDateValue(`${left.scheduledDate}T${left.scheduledTime || '00:00'}`) - managerDateValue(`${right.scheduledDate}T${right.scheduledTime || '00:00'}`)
+    if (sortBy === 'date-desc') return managerDateValue(`${right.scheduledDate}T${right.scheduledTime || '00:00'}`) - managerDateValue(`${left.scheduledDate}T${left.scheduledTime || '00:00'}`)
+    if (sortBy === 'customer') return left.customerName.localeCompare(right.customerName, 'vi')
+    const priority = (item: CheckInRecord) => item.status === 'scheduled' ? (item.scheduledDate < today ? 0 : item.scheduledDate === today ? 1 : 2) : item.status === 'completed' ? 3 : 4
+    return priority(left) - priority(right) || managerDateValue(`${left.scheduledDate}T${left.scheduledTime || '00:00'}`) - managerDateValue(`${right.scheduledDate}T${right.scheduledTime || '00:00'}`)
   })
+  const pagination = paginateManagerItems(filteredCheckins, page, pageSize)
+
+  useEffect(() => setPage(1), [tab, search, staffFilter, dateFrom, dateTo, sortBy, pageSize])
 
   const getChecklistCount = (cl: CheckInRecord['checklist']) => {
     let count = 0
@@ -57,6 +85,37 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
     if (cl.unitWalkthrough) count++
     if (cl.accessCodeIssued) count++
     return count
+  }
+
+  const hideHistory = () => {
+    if (!hideTarget) return
+    const nextHiddenIds = Array.from(new Set([...hiddenCheckinIds, hideTarget.id]))
+    setHiddenCheckinIds(nextHiddenIds)
+    try {
+      window.localStorage.setItem(hiddenHistoryStorageKey, JSON.stringify(nextHiddenIds))
+    } catch {
+      setFeedback({ tone: 'warning', message: 'Đã ẩn trong phiên hiện tại nhưng trình duyệt không thể lưu tùy chọn này.' })
+      setHideTarget(null)
+      return
+    }
+
+    if (selectedCheckin?.id === hideTarget.id) {
+      setSelectedCheckin(null)
+      setDetailOpen(false)
+    }
+    setFeedback({ tone: 'success', message: `Đã ẩn hồ sơ ${hideTarget.id} khỏi danh sách của Manager. Dữ liệu dùng chung không bị xóa.` })
+    setHideTarget(null)
+  }
+
+  const restoreHiddenHistory = () => {
+    setHiddenCheckinIds([])
+    try {
+      window.localStorage.removeItem(hiddenHistoryStorageKey)
+    } catch {
+      setFeedback({ tone: 'warning', message: 'Đã hiện lại trong phiên hiện tại nhưng trình duyệt không thể lưu tùy chọn này.' })
+      return
+    }
+    setFeedback({ tone: 'success', message: 'Đã hiện lại toàn bộ hồ sơ bàn giao bị ẩn.' })
   }
 
   return (
@@ -72,11 +131,29 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
         Manager theo dõi tiến độ và hồ sơ bàn giao. Việc xác minh khách hàng, ký biên bản, cấp quyền truy cập và hoàn tất nhận kho do Staff thực hiện.
       </ManagerActionNotice>
 
+      {hiddenFacilityCount > 0 && (
+        <ManagerActionNotice tone="info">
+          <div className="flex items-center justify-between gap-3">
+            <span>{hiddenFacilityCount} hồ sơ chỉ đang bị ẩn khỏi giao diện Manager; dữ liệu dùng chung vẫn còn nguyên.</span>
+            <Button size="sm" variant="outline" onClick={restoreHiddenHistory}>Hiện lại</Button>
+          </div>
+        </ManagerActionNotice>
+      )}
+
+      {feedback && (
+        <ManagerActionNotice tone={feedback.tone}>
+          <div className="flex items-center justify-between gap-3">
+            <span>{feedback.message}</span>
+            <button type="button" className="font-semibold underline" onClick={() => setFeedback(null)}>Đóng</button>
+          </div>
+        </ManagerActionNotice>
+      )}
+
       {/* KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title={'Tổng lượt tiếp nhận'}
-          value={facilityCheckins.length}
+          value={scopedCheckins.length}
           icon={Icon.clipboard}
           iconBg="bg-blue-50 text-blue-700"
         />
@@ -91,7 +168,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
         <StatCard
           title={'Đã bàn giao thành công'}
           value={completedCount}
-          delta={`${facilityCheckins.length ? Math.round((completedCount / facilityCheckins.length) * 100) : 0}% ${'tỷ lệ hoàn tất'}`}
+          delta={`${scopedCheckins.length ? Math.round((completedCount / scopedCheckins.length) * 100) : 0}% ${'tỷ lệ hoàn tất'}`}
           deltaPositive
           icon={Icon.check}
           iconBg="bg-emerald-50 text-emerald-700"
@@ -134,6 +211,14 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
           />
         </div>
       </div>
+      <Card className="p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Select label="Nhân viên" value={staffFilter} onChange={event => setStaffFilter(event.target.value)}><option value="all">Tất cả nhân viên</option>{staffOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</Select>
+          <label className="text-sm font-medium text-stone-700">Từ ngày<input type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" /></label>
+          <label className="text-sm font-medium text-stone-700">Đến ngày<input type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" /></label>
+          <Select label="Sắp xếp" value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="priority">Cần xử lý trước</option><option value="date-asc">Lịch gần nhất</option><option value="date-desc">Lịch xa nhất</option><option value="customer">Tên khách hàng</option></Select>
+        </div>
+      </Card>
 
       {/* Checkins Table */}
       <Card className="overflow-hidden border border-stone-200/80 shadow-sm">
@@ -158,7 +243,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                 </td>
               </tr>
             ) : (
-              filteredCheckins.map(c => {
+              pagination.items.map(c => {
                 const passedCount = getChecklistCount(c.checklist)
                 return (
                   <Tr key={c.id}>
@@ -182,7 +267,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     </Td>
                     <Td>
                       <div className="text-xs">
-                        <p className="font-medium text-stone-800">{c.scheduledDate}</p>
+                        <p className="font-medium text-stone-800">{formatManagerDate(c.scheduledDate)}</p>
                         <p className="text-stone-400 font-mono">{c.scheduledTime || '09:00 AM'}</p>
                       </div>
                     </Td>
@@ -209,16 +294,26 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     </Td>
                     <Td>{sb(c.status)}</Td>
                     <Td className="text-right">
-                      <div className="inline-flex max-w-52 flex-col items-end gap-2"><Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedCheckin(c)
-                            setDetailOpen(true)
-                          }}
-                        >
-                          {'Chi tiết'}
-                        </Button><ManagerActionNotice compact tone={c.status === 'completed' ? 'success' : c.status === 'cancelled' ? 'warning' : 'info'}>{c.status === 'scheduled' ? 'Chờ Staff thực hiện nhận kho.' : c.status === 'completed' ? 'Staff đã hoàn tất bàn giao.' : 'Lịch nhận kho đã hủy; không còn thao tác.'}</ManagerActionNotice></div>
+                      <div className="inline-flex max-w-52 flex-col items-end gap-2">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedCheckin(c)
+                              setDetailOpen(true)
+                            }}
+                          >
+                            {'Chi tiết'}
+                          </Button>
+                          {c.status !== 'scheduled' && (
+                            <Button variant="danger" size="sm" onClick={() => setHideTarget(c)}>
+                              Xóa
+                            </Button>
+                          )}
+                        </div>
+                        <ManagerActionNotice compact tone={c.status === 'completed' ? 'success' : c.status === 'cancelled' ? 'warning' : 'info'}>{c.status === 'scheduled' ? 'Chờ Staff thực hiện nhận kho.' : c.status === 'completed' ? 'Staff đã hoàn tất bàn giao.' : 'Lịch nhận kho đã hủy; không còn thao tác.'}</ManagerActionNotice>
+                      </div>
                     </Td>
                   </Tr>
                 )
@@ -226,6 +321,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
             )}
           </Tbody>
         </Table>
+        <ManagerPagination {...pagination} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </Card>
 
       {/* Checkin Details Modal */}
@@ -248,7 +344,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     {`Gian Kho ${selectedCheckin.unitId}`}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {selectedCheckin.customerName} · {'Lịch hẹn:'} {selectedCheckin.scheduledDate} {selectedCheckin.scheduledTime}
+                    {selectedCheckin.customerName} · {'Lịch hẹn:'} {formatManagerDate(selectedCheckin.scheduledDate)} {selectedCheckin.scheduledTime}
                   </p>
                 </div>
                 <div className="text-right">
@@ -322,12 +418,12 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
               </div>
             )}
 
-            {/* Access Code & Handover Info */}
+            {/* Manager monitors access handover status but does not receive the raw credential. */}
             <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center justify-between text-xs">
               <div>
-                <span className="text-amber-900 font-semibold block">{'Mã PIN số bảo mật gian kho'}</span>
-                <span className="font-mono text-sm font-bold text-amber-950 mt-0.5 inline-block">
-                  {selectedCheckin.accessCodeIssued || selectedCheckin.preparedAccessPin || '••••# (Kích hoạt khi hoàn tất)'}
+                <span className="text-amber-900 font-semibold block">{'Trạng thái quyền truy cập'}</span>
+                <span className="text-sm font-bold text-amber-950 mt-0.5 inline-block">
+                  {selectedCheckin.checklist.accessCodeIssued || selectedCheckin.accessCodeIssued || selectedCheckin.preparedAccessPin ? 'Đã cấp cho khách hàng' : 'Chưa cấp'}
                 </span>
               </div>
               <div className="text-right">
@@ -340,6 +436,27 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
               <Button variant="outline" onClick={() => setDetailOpen(false)}>
                 {'Đóng'}
               </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(hideTarget)}
+        onClose={() => setHideTarget(null)}
+        title="Soft-delete hồ sơ lịch sử"
+      >
+        {hideTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <p className="font-semibold">Xóa hồ sơ {hideTarget.id} khỏi lịch sử Manager?</p>
+              <p className="mt-1 text-red-700">
+                Hồ sơ của {hideTarget.customerName}, gian kho {hideTarget.unitId}, sẽ chỉ bị ẩn ở giao diện Manager hiện tại. Dữ liệu bàn giao dùng chung vẫn được giữ nguyên cho các role và luồng nghiệp vụ khác.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setHideTarget(null)}>Hủy</Button>
+              <Button variant="danger" onClick={hideHistory}>Xóa khỏi lịch sử</Button>
             </div>
           </div>
         )}
