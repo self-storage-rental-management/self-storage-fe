@@ -3,6 +3,7 @@ import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
 import { useStorageHub } from '../store/StorageHubContext'
 import { actorToUser, loginWithApi, registerWithApi, requestPasswordResetWithApi, resetPasswordWithApi, verifyEmailWithApi } from '../services/authApi'
+import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 
 interface LoginProps {
   onLogin: (user: User) => void
@@ -98,8 +99,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError('Vui lòng điền đầy đủ các thông tin bắt buộc.')
       return
     }
-    if (password.length < 12) {
-      setError('Mật khẩu phải có ít nhất 12 ký tự.')
+    const passwordError = getPasswordValidationError(password)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     if (password !== confirmPassword) {
@@ -205,8 +207,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   async function saveNewPassword(event: React.FormEvent) {
     event.preventDefault()
-    if (newPassword.length < 12) {
-      setError('Mật khẩu mới phải có ít nhất 12 ký tự.')
+    const passwordError = getPasswordValidationError(newPassword)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     if (newPassword !== newPasswordConfirm) {
@@ -443,10 +446,10 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               <input id="phone" value={phone} onChange={event => setPhone(event.target.value)} type="tel" autoComplete="tel" placeholder="0901 234 567" />
             </Field>
             <Field id="register-password" label={'Mật khẩu'}>
-              <PasswordInput id="register-password" value={password} onChange={setPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" />
+              <PasswordInput id="register-password" value={password} onChange={setPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
             </Field>
             <Field id="confirm-password" label={'Xác nhận mật khẩu'}>
-              <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" />
+              <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
             </Field>
             <ErrorMessage message={error} />
             <PrimaryButton disabled={isSubmitting}>{isSubmitting ? 'Đang tạo tài khoản…' : 'Hoàn Tất Đăng Ký'}</PrimaryButton>
@@ -611,6 +614,8 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
               show={false}
               toggle={() => undefined}
               autoComplete="new-password"
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
               hideToggle
             />
           </Field>
@@ -622,11 +627,13 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
               show={false}
               toggle={() => undefined}
               autoComplete="new-password"
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
               hideToggle
             />
           </Field>
           <p className="-mt-2 mb-4 text-xs text-stone-500">
-            {'Sử dụng ít nhất 12 ký tự.'}
+            {PASSWORD_POLICY_HINT}
           </p>
           <ErrorMessage message={error} />
           <PrimaryButton disabled={submitting}>{submitting ? 'Đang lưu…' : 'Lưu Mật Khẩu Mới'}</PrimaryButton>
@@ -646,8 +653,8 @@ function Field({ id, label, children }: { id: string; label: string; children: R
   return <div className="mb-4"><label htmlFor={id} className="mb-1.5 block text-[12.5px] font-semibold text-[#3f403a]">{label}</label>{children}</div>
 }
 
-function PasswordInput({ id, value, onChange, show, toggle, autoComplete, hideToggle = false }: { id: string; value: string; onChange: (value: string) => void; show: boolean; toggle: () => void; autoComplete: string; hideToggle?: boolean }) {
-  return <div className="relative"><input id={id} value={value} onChange={event => onChange(event.target.value)} type={show ? 'text' : 'password'} autoComplete={autoComplete} placeholder="••••••••" className={hideToggle ? '' : 'pr-10'} />{!hideToggle && <button type="button" onClick={toggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2.5 top-1/2 -translate-y-1/2 border-0 bg-transparent text-[#77766d]"><Eye open={show} /></button>}</div>
+function PasswordInput({ id, value, onChange, show, toggle, autoComplete, hideToggle = false, minLength, maxLength }: { id: string; value: string; onChange: (value: string) => void; show: boolean; toggle: () => void; autoComplete: string; hideToggle?: boolean; minLength?: number; maxLength?: number }) {
+  return <div className="relative"><input id={id} value={value} onChange={event => onChange(event.target.value)} type={show ? 'text' : 'password'} autoComplete={autoComplete} minLength={minLength} maxLength={maxLength} placeholder="••••••••" className={hideToggle ? '' : 'pr-10'} />{!hideToggle && <button type="button" onClick={toggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2.5 top-1/2 -translate-y-1/2 border-0 bg-transparent text-[#77766d]"><Eye open={show} /></button>}</div>
 }
 
 function PrimaryButton({ children, className = '', onClick, disabled = false }: { children: React.ReactNode; className?: string; onClick?: () => void; disabled?: boolean }) {
