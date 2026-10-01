@@ -145,6 +145,7 @@ describe('supportBotService', () => {
         status: 'in-progress',
         created: 'now',
         facility: 'Kho Việt – Cơ sở Quận 1',
+        facilityId: 'fac-001',
         unit: 'U1',
         assignedStaff: 'Mai Tran',
         messages: []
@@ -159,6 +160,7 @@ describe('supportBotService', () => {
         status: 'in-progress',
         created: 'now',
         facility: 'Kho Việt – Cơ sở Quận 1',
+        facilityId: 'fac-001',
         unit: 'U2',
         assignedStaff: 'Mai Tran',
         messages: []

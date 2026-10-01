@@ -63,6 +63,55 @@ export interface UnitType {
   descriptionEn: string
 }
 
+export interface FacilityCustomUnitSpec {
+  id?: string
+  sizeCode: string
+  name: string
+  lengthM: number
+  widthM: number
+  heightM: number
+  laneWidthM?: number
+  maxLoadKg: number
+  monthlyPrice: number
+  count: number
+  badgeClass?: string
+  floor?: number
+  zone?: string
+  /** Số khung kệ của loại kho này */
+  frameCount?: number
+  /** Kích thước của 1 khung kệ (Dài × Rộng × Cao, đơn vị mét) */
+  frameDimensions?: {
+    lengthM: number
+    widthM: number
+    heightM: number
+    depthM?: number
+  }
+  /** Danh sách các gói thuê được thiết lập cho loại kho này */
+  rentalPackages?: RentalPackage[]
+}
+
+export interface RentalPackage {
+  id: string
+  facilityId?: string
+  unitTypeId?: string // Mã loại kho: 'S', 'M', 'L', 'XL' hoặc custom
+  months: number // Kỳ hạn thuê: 1, 3, 6, 12, ...
+  name: string // Tên hiển thị gói thuê: 'Gói 1 tháng', 'Gói 3 tháng', ...
+  packagePrice: number // Tổng tiền thuê trọn gói
+  monthlyEquivalentPrice: number // Giá tương đương mỗi tháng
+  discountPercent?: number // Phần trăm giảm giá (nếu có, e.g. 3, 5, 8)
+  description?: string
+  status: 'active' | 'inactive' // Trạng thái kích hoạt gói
+}
+
+
+export interface FacilityUnitDistribution {
+  S?: number
+  M?: number
+  L?: number
+  XL?: number
+  [key: string]: number | undefined
+}
+
 export interface Facility {
   id: string
   code?: string
@@ -80,9 +129,20 @@ export interface Facility {
   revenue: number
   growth: number
   manager: string
+  phone?: string
   status: 'active' | 'maintenance'
   accessHours: string
   timezone: string
+  unitDistribution?: FacilityUnitDistribution
+  unitPrices?: Partial<Record<string, number>>
+  unitLoadLimits?: Partial<Record<string, number>>
+  unitDimensions?: Partial<Record<string, { lengthM: number; widthM: number; heightM?: number }>>
+  unitLaneWidths?: Partial<Record<string, number>>
+  unitFrameCounts?: Partial<Record<string, number>>
+  unitFrameDimensions?: Partial<Record<string, { lengthM: number; widthM: number; heightM: number }>>
+  unitCustomSpecs?: FacilityCustomUnitSpec[]
+  rentalPackages?: RentalPackage[]
+  totalDesignLoadTon?: number
 }
 
 export interface ReservedPeriod {
@@ -95,11 +155,14 @@ export interface ReservedPeriod {
 export interface StorageUnit {
   id: string
   code: string
+  customerCode?: string
+  size?: 'S' | 'M' | 'L' | 'XL' | string
+  sizeCode?: 'S' | 'M' | 'L' | 'XL' | string
   facilityId: string
   facilityName: string
   floor: number
   zone: string
-  type: 'Small' | 'Medium' | 'Large' | 'Extra Large'
+  type: 'Small' | 'Medium' | 'Large' | 'Extra Large' | string
   areaM2: number
   dimensions: {
     lengthM: number
@@ -125,9 +188,9 @@ export interface StorageUnit {
   heldByCustomerName?: string
   currentRentalId?: string
   conditionNotes?: string
+  rentalPackages?: RentalPackage[]
   version: number
   // Optional legacy fields for backward-compatibility during refactoring
-  size?: number
   sqft?: number
 }
 
@@ -297,6 +360,9 @@ export interface StorageReservation {
   discountAmount?: number
   appointmentDate?: string
   appointmentTime?: string
+  packageId?: string
+  packageName?: string
+  packagePrice?: number
   generatedAccessPin?: string
   unitAssignedAt?: string
   checkedInAt?: string
@@ -546,14 +612,26 @@ export interface FacilityTask {
   referenceId?: string
   assignedStaffId?: string
   assignedStaffName?: string
+  assignedAt?: string
   dueAt: string
   priority: 'high' | 'medium' | 'low'
-  status: 'open' | 'in_progress' | 'completed'
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled'
   notes?: string
   createdAt: string
+  startedAt?: string
   completedAt?: string
   completedById?: string
   completedByName?: string
+  resultReport?: string
+  evidence?: string[]
+  reportedUnableAt?: string
+  unableReason?: string
+  cancelledAt?: string
+  cancelledById?: string
+  cancelledByName?: string
+  cancellationReason?: string
+  lastAssignedStaffId?: string
+  lastAssignedStaffName?: string
 }
 
 export interface ReturnCase {

@@ -4,6 +4,7 @@ import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
 import HomePage from './views/home/HomePage'
+import { actorToUser, getAuthenticatedActor, logoutFromApi, type ApiActor } from './services/authApi'
 
 const CHUNK_RELOAD_KEY = 'storagehub:chunk-reload'
 
@@ -38,21 +39,27 @@ function MainContent() {
   // query parameters, or a form payload.
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [guestView, setGuestView] = useState<'home' | 'login' | 'register'>('home')
+  const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
+  const [guestView, setGuestView] = useState<'home' | 'login' | 'register'>(() => {
+    const url = new URL(window.location.href)
+    return url.searchParams.has('verifyEmail') || url.searchParams.has('resetPassword') ? 'login' : 'home'
+  })
 
   const canonicalRecord = sessionUserId ? users.find(item => item.id === sessionUserId) : null
   const accountStatus = canonicalRecord && 'status' in canonicalRecord ? String(canonicalRecord.status) : 'active'
-  const user: User | null = canonicalRecord && accountStatus === 'active'
-    ? {
-        id: canonicalRecord.id,
-        name: canonicalRecord.name,
-        email: canonicalRecord.email,
-        phone: canonicalRecord.phone,
-        role: canonicalRecord.role as User['role'],
-        facility: canonicalRecord.facility,
-        facilityId: canonicalRecord.facilityId
-      }
-    : null
+  const user: User | null = apiActor && apiActor.status === 'ACTIVE'
+    ? actorToUser(apiActor)
+    : canonicalRecord && accountStatus === 'active'
+      ? {
+          id: canonicalRecord.id,
+          name: canonicalRecord.name,
+          email: canonicalRecord.email,
+          phone: canonicalRecord.phone,
+          role: canonicalRecord.role as User['role'],
+          facility: canonicalRecord.facility,
+          facilityId: canonicalRecord.facilityId
+        }
+      : null
 
   useEffect(() => {
     if (!sessionUserId || sessionId) return
@@ -88,11 +95,21 @@ function MainContent() {
   }, [user])
 
   const handleLogin = (nextUser: User) => {
+    const authenticatedActor = getAuthenticatedActor()
+    if (authenticatedActor) {
+      setApiActor(authenticatedActor)
+      setSessionUserId(null)
+      setSessionId(null)
+      return
+    }
+    setApiActor(null)
     setSessionUserId(nextUser.id)
   }
 
   const handleLogout = () => {
+    if (apiActor) void logoutFromApi()
     if (user && sessionId) endSession(sessionId, user)
+    setApiActor(null)
     setSessionUserId(null)
     setSessionId(null)
     setGuestView('home')
