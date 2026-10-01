@@ -59,6 +59,7 @@ export function actorToUser(actor: ApiActor): User {
     phone: actor.phone || undefined,
     role: primaryRole(actor.roles),
     facilityId: Object.keys(actor.facilityScopes)[0],
+    mustChangePassword: actor.mustChangePassword,
   }
 }
 
@@ -72,6 +73,20 @@ export async function loginWithApi(email: string, password: string): Promise<Api
   })
   if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
     throw new Error('Backend trả về dữ liệu đăng nhập không hợp lệ.')
+  }
+  setAccessToken(response.data.accessToken)
+  setRefreshToken(response.data.refreshToken)
+  currentActor = response.data.actor
+  return currentActor
+}
+
+export async function changePasswordWithApi(currentPassword: string, newPassword: string): Promise<ApiActor> {
+  const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+  if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
+    throw new Error('Backend trả về dữ liệu đổi mật khẩu không hợp lệ.')
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
