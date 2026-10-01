@@ -44,6 +44,7 @@ export interface User {
   facility?: string
   /** Stable facility key used for authorization and cross-screen filtering. */
   facilityId?: string
+  mustChangePassword?: boolean
 }
 
 export type LoginEventStatus = 'success' | 'failed' | 'logout'
