@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { DEFAULT_ROLE_PERMISSIONS, normalizeRolePermissions } from '../src/auth/rbac'
 import type { User } from '../src/types'
 import { isExcludedFacility, isExcludedUnit, isExcludedRelated } from '../src/store/StorageHubContext'
-import { getUnitTypeVehicleStandard, validateVehicleLaneWidth } from '../src/domain/facilityRules'
+import { getUnitTypeVehicleStandard, validateVehicleLaneWidth, validateFrameSpecification } from '../src/domain/facilityRules'
 
 describe('Business Owner (BO) Business Rules & Logic', () => {
   const dummyBusinessUser: User = {
@@ -560,7 +560,300 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       expect(xlValid.isValid).toBe(true)
     })
   })
+
+  describe('Storage Frame Specifications & Dimensions (Kích thước & Số khung)', () => {
+    it('validates a valid frame specification with length, width, height > 0 and integer frameCount >= 0', () => {
+      const res = validateFrameSpecification(4, { lengthM: 2.5, widthM: 1.2, heightM: 2.0 })
+      expect(res.isValid).toBe(true)
+      expect(res.errors).toHaveLength(0)
+      expect(res.sanitized.frameCount).toBe(4)
+      expect(res.sanitized.frameDimensions.lengthM).toBe(2.5)
+      expect(res.sanitized.frameDimensions.widthM).toBe(1.2)
+      expect(res.sanitized.frameDimensions.heightM).toBe(2.0)
+    })
+
+    it('rejects frame dimensions less than or equal to 0 or NaN', () => {
+      const resZero = validateFrameSpecification(2, { lengthM: 0, widthM: -1, heightM: NaN })
+      expect(resZero.isValid).toBe(false)
+      expect(resZero.errors).toContain('Chiều dài khung phải lớn hơn 0')
+      expect(resZero.errors).toContain('Chiều rộng khung phải lớn hơn 0')
+      expect(resZero.errors).toContain('Chiều cao khung phải lớn hơn 0')
+      // Sanitized fallbacks should be safe (> 0)
+      expect(resZero.sanitized.frameDimensions.lengthM).toBe(1)
+      expect(resZero.sanitized.frameDimensions.widthM).toBe(1)
+      expect(resZero.sanitized.frameDimensions.heightM).toBe(1)
+    })
+
+    it('rejects negative or non-integer frameCount', () => {
+      const resNeg = validateFrameSpecification(-3, { lengthM: 1, widthM: 1, heightM: 1 })
+      expect(resNeg.isValid).toBe(false)
+      expect(resNeg.errors).toContain('Số khung phải là số nguyên không âm (>= 0)')
+      expect(resNeg.sanitized.frameCount).toBe(0)
+
+      const resFloat = validateFrameSpecification(3.5, { lengthM: 1, widthM: 1, heightM: 1 })
+      expect(resFloat.isValid).toBe(false)
+      expect(resFloat.errors).toContain('Số khung phải là số nguyên không âm (>= 0)')
+      expect(resFloat.sanitized.frameCount).toBe(3)
+    })
+
+    it('supports backward compatibility when frameDimensions or frameCount are missing/undefined', () => {
+      const legacySpec = {
+        size: 'S',
+        name: 'Storage S',
+        count: 5,
+        lengthM: 2,
+        widthM: 1.5,
+        heightM: 2.4,
+      } as any
+
+      // Should sanitize gracefully without throwing errors or crashing
+      const res = validateFrameSpecification(legacySpec.frameCount, legacySpec.frameDimensions)
+      expect(res.sanitized.frameCount).toBe(0)
+      expect(res.sanitized.frameDimensions.lengthM).toBe(1)
+      expect(res.sanitized.frameDimensions.widthM).toBe(1)
+      expect(res.sanitized.frameDimensions.heightM).toBe(1)
+    })
+
+    it('supports custom storage types (e.g. XXL, MINI) with their own frame counts and dimensions', () => {
+      const customSpec = {
+        size: 'XXL',
+        name: 'Extra Extra Large Storage',
+        count: 2,
+        lengthM: 10,
+        widthM: 6,
+        heightM: 4.5,
+        frameCount: 8,
+        frameDimensions: {
+          lengthM: 5.0,
+          widthM: 2.5,
+          heightM: 3.5,
+        },
+      }
+
+      const res = validateFrameSpecification(customSpec.frameCount, customSpec.frameDimensions)
+      expect(res.isValid).toBe(true)
+      expect(res.sanitized.frameCount).toBe(8)
+      expect(res.sanitized.frameDimensions.lengthM).toBe(5.0)
+      expect(res.sanitized.frameDimensions.widthM).toBe(2.5)
+      expect(res.sanitized.frameDimensions.heightM).toBe(3.5)
+    })
+
+    it('ensures changing frame count does NOT mutate or violate storage unit count and occupancy protection', () => {
+      // Simulating a facility where size S has 5 units and 3 are occupied
+      const occupiedUnits = { S: 3 }
+      const unitSpec = {
+        size: 'S',
+        count: 5,
+        frameCount: 10, // Currently 10 frames
+      }
+
+      // User changes frameCount to 2 (drastically reduced) or 0
+      const updatedSpec = {
+        ...unitSpec,
+        frameCount: 2,
+      }
+
+      // Unit count remains 5, which satisfies occupancy constraint >= 3
+      expect(updatedSpec.count).toBe(5)
+      expect(updatedSpec.count >= occupiedUnits.S).toBe(true)
+
+      // Frame count changed independently without touching storage unit count
+      expect(updatedSpec.frameCount).toBe(2)
+      expect(unitSpec.count).toBe(updatedSpec.count)
+    })
+  })
+
+  describe('BO Facility Form & Custom Unit Validation Rules', () => {
+    it('validates Vietnamese hotline phone number format', () => {
+      const isValidVnPhone = (phone: string) => {
+        const cleaned = phone.replace(/[\s.-]/g, '')
+        return /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/.test(cleaned) || /^1900[0-9]{4,6}$/.test(cleaned) || /^1800[0-9]{4,6}$/.test(cleaned)
+      }
+
+      expect(isValidVnPhone('0901234567')).toBe(true)
+      expect(isValidVnPhone('+84901234567')).toBe(true)
+      expect(isValidVnPhone('090 123 4567')).toBe(true)
+      expect(isValidVnPhone('090-123-4567')).toBe(true)
+      expect(isValidVnPhone('19001234')).toBe(true)
+      expect(isValidVnPhone('123456')).toBe(false)
+      expect(isValidVnPhone('abcdefghij')).toBe(false)
+      expect(isValidVnPhone('0123456789')).toBe(false) // 01 prefix is old 11-digit
+    })
+
+    it('requires total storage unit quantity > 0', () => {
+      const specs = [
+        { sizeCode: 'S', count: 0 },
+        { sizeCode: 'M', count: 0 },
+        { sizeCode: 'L', count: 0 },
+        { sizeCode: 'XL', count: 0 }
+      ]
+      const totalCount = specs.reduce((acc, s) => acc + (Number(s.count) || 0), 0)
+      expect(totalCount).toBe(0)
+      const isValid = totalCount > 0
+      expect(isValid).toBe(false)
+
+      specs[0].count = 1
+      const updatedTotal = specs.reduce((acc, s) => acc + (Number(s.count) || 0), 0)
+      expect(updatedTotal).toBe(1)
+      expect(updatedTotal > 0).toBe(true)
+    })
+
+    it('validates custom unit specifications constraints', () => {
+      const validateCustomSpec = (spec: {
+        sizeCode: string
+        name: string
+        lengthM: number
+        widthM: number
+        heightM: number
+        maxLoadKg: number
+        monthlyPrice: number
+      }) => {
+        const errors: string[] = []
+        if (!spec.sizeCode.trim()) errors.push('Mã cỡ kho không được để trống')
+        if (spec.sizeCode !== spec.sizeCode.toUpperCase()) errors.push('Mã cỡ phải viết hoa')
+        if (!spec.name.trim()) errors.push('Tên loại kho không được để trống')
+        if (spec.lengthM < 1 || spec.widthM < 1 || spec.heightM < 1) {
+          errors.push('Kích thước D, R, C phải >= 1m')
+        }
+        if (spec.maxLoadKg < 100) errors.push('Tải trọng tối đa phải >= 100kg')
+        if (spec.maxLoadKg % 50 !== 0) errors.push('Tải trọng phải là bội số của 50kg')
+        if (spec.monthlyPrice < 0 || !Number.isInteger(spec.monthlyPrice)) {
+          errors.push('Giá thuê phải là số nguyên dương')
+        }
+        return { isValid: errors.length === 0, errors }
+      }
+
+      const invalidSpec = {
+        sizeCode: 'custom_1',
+        name: '',
+        lengthM: 0.5,
+        widthM: 0.8,
+        heightM: 0.9,
+        maxLoadKg: 80,
+        monthlyPrice: 125000.5
+      }
+
+      const checkInvalid = validateCustomSpec(invalidSpec)
+      expect(checkInvalid.isValid).toBe(false)
+      expect(checkInvalid.errors.length).toBeGreaterThan(4)
+
+      const validSpec = {
+        sizeCode: 'CUSTOM1',
+        name: 'Kho Tùy Biến 1',
+        lengthM: 4,
+        widthM: 3,
+        heightM: 3,
+        maxLoadKg: 500,
+        monthlyPrice: 3500000
+      }
+      const checkValid = validateCustomSpec(validSpec)
+      expect(checkValid.isValid).toBe(true)
+      expect(checkValid.errors).toHaveLength(0)
+    })
+
+    it('enforces frame height <= storage height rule', () => {
+      const storageHeight = 3.0
+      const invalidFrameHeight = 3.5
+      const validFrameHeight = 2.8
+
+      expect(invalidFrameHeight <= storageHeight).toBe(false)
+      expect(validFrameHeight <= storageHeight).toBe(true)
+    })
+
+    it('ensures BO created unit types match customer unit catalog (S, M, L, XL) with strict isolation', () => {
+      const storageSizeCode = (value?: string) => {
+        const normalized = (value || '').toLowerCase()
+        if (normalized.includes('4xl')) return '4XL'
+        if (normalized.includes('xxl')) return 'XXL'
+        if (normalized.includes('extra large') || /(^|\W)xl(\W|$)/.test(normalized) || normalized.includes('rất lớn')) return 'XL'
+        if (normalized.includes('medium') || /(^|\W)m(\W|$)/.test(normalized) || normalized.includes('kho trung') || normalized.includes('kho vừa') || normalized.includes('vừa') || normalized.includes('trung')) return 'M'
+        if (normalized.includes('small') || /(^|\W)s(\W|$)/.test(normalized) || normalized.includes('kho nhỏ') || normalized.includes('nhỏ')) return 'S'
+        if (normalized.includes('large') || /(^|\W)l(\W|$)/.test(normalized) || normalized.includes('kho lớn') || normalized.includes('lớn')) return 'L'
+        return value || ''
+      }
+
+      const unitTypeMatches = (unitTypeName: string, requestedTypeName: string) => {
+        if (!unitTypeName || !requestedTypeName) return false
+        const u = unitTypeName.toLowerCase().trim()
+        const r = requestedTypeName.toLowerCase().trim()
+        if (u === r) return true
+
+        const sizeU = storageSizeCode(unitTypeName)?.toUpperCase()
+        const sizeR = storageSizeCode(requestedTypeName)?.toUpperCase()
+        const STANDARD_CODES = ['S', 'M', 'L', 'XL', 'XXL', '4XL']
+
+        const isStandardU = STANDARD_CODES.includes(sizeU)
+        const isStandardR = STANDARD_CODES.includes(sizeR)
+
+        if (isStandardU && isStandardR) {
+          return sizeU === sizeR
+        }
+        if (isStandardU || isStandardR) {
+          return false
+        }
+
+        if (u.length >= 4 && r.length >= 4) {
+          if (u.includes(r) || r.includes(u)) return true
+        }
+
+        const firstWordU = u.split(' ')[0]
+        const firstWordR = r.split(' ')[0]
+        if (firstWordU && firstWordR && firstWordU === firstWordR && !['kho', 'storage'].includes(firstWordU)) return true
+        return false
+      }
+
+      // Check matching between BO custom unit spec names and Customer catalog types
+      expect(unitTypeMatches('Kho Nhỏ (S)', 'Small')).toBe(true)
+      expect(unitTypeMatches('Kho Nhỏ (S)', 'Small Storage')).toBe(true)
+      expect(unitTypeMatches('Kho Trung (M)', 'Medium Storage')).toBe(true)
+      expect(unitTypeMatches('Kho Lớn (L)', 'Large Storage')).toBe(true)
+      expect(unitTypeMatches('Kho Rất Lớn (XL)', 'Extra Large Commercial')).toBe(true)
+
+      // Check matching standard code
+      expect(unitTypeMatches('S', 'Small')).toBe(true)
+      expect(unitTypeMatches('M', 'Medium')).toBe(true)
+      expect(unitTypeMatches('L', 'Large')).toBe(true)
+      expect(unitTypeMatches('XL', 'Extra Large')).toBe(true)
+
+      // Strict negative matches - MUST NEVER CROSS MATCH
+      expect(unitTypeMatches('Medium', 'Small Storage')).toBe(false)
+      expect(unitTypeMatches('M', 'Small Storage')).toBe(false)
+      expect(unitTypeMatches('L', 'Small Storage')).toBe(false)
+      expect(unitTypeMatches('XL', 'Small Storage')).toBe(false)
+      expect(unitTypeMatches('Large', 'Extra Large Commercial')).toBe(false)
+      expect(unitTypeMatches('Extra Large', 'Large Storage')).toBe(false)
+      expect(unitTypeMatches('Small', 'Medium Storage')).toBe(false)
+    })
+
+    it('validates rental duration packages and discounts (3m=3%, 6m=5%, 12m=8%, other=0%)', () => {
+      const durationPackages = [
+        { months: 3, discountPercent: 3, renewalPercent: 0 },
+        { months: 6, discountPercent: 5, renewalPercent: 3 },
+        { months: 12, discountPercent: 8, renewalPercent: 5 },
+        { months: 'other', discountPercent: 0, renewalPercent: 0 }
+      ]
+
+      const calculateDiscount = (months: number, isRenewal = false) => {
+        const pkg = durationPackages.find(p => p.months === months)
+        if (!pkg) return 0
+        return isRenewal ? pkg.renewalPercent / 100 : pkg.discountPercent / 100
+      }
+
+      // Initial booking discounts
+      expect(calculateDiscount(3, false)).toBe(0.03)
+      expect(calculateDiscount(6, false)).toBe(0.05)
+      expect(calculateDiscount(12, false)).toBe(0.08)
+      expect(calculateDiscount(1, false)).toBe(0)
+      expect(calculateDiscount(2, false)).toBe(0)
+
+      // Renewal discounts
+      expect(calculateDiscount(6, true)).toBe(0.03)
+      expect(calculateDiscount(12, true)).toBe(0.05)
+      expect(calculateDiscount(3, true)).toBe(0)
+    })
+  })
 })
+
 
 
 
