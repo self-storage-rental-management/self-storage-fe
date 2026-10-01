@@ -3,12 +3,22 @@ import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } f
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar } from '../../components/ui'
 import { formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
 import type { User } from '../../types'
-import type { Facility, StorageUnit, StorageHold, UnitType } from '../../types/storageHub'
+import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
-import { FACILITIES, type TicketItem } from '../../data/demoDatabase'
+import { FACILITIES, UNIT_SPECS, type TicketItem } from '../../data/demoDatabase'
+import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
+import {
+  getStoredPolicies,
+  getPoliciesForFacility,
+  evaluatePolicyBenefit,
+  type PolicyItem,
+  type ParsedPolicyBenefit
+} from '../../domain/policyMatching'
+import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
+
 
 const CUSTOMER_FACILITY_DISPLAY: Record<string, { code: string; name: string; address: string }> = Object.fromEntries(
   FACILITIES.map(facility => [facility.id, { code: facility.code, name: facility.name, address: facility.address }])
@@ -17,13 +27,17 @@ const CUSTOMER_FACILITY_IMAGE_BY_ID: Partial<Record<string, string>> = {
   'fac-002': '/images/facilities/binh-duong.jpg',
 }
 type CustomerCatalogUnit = StorageUnit & {
-  sizeCode: 'S' | 'M' | 'L' | 'XL'
+  sizeCode: string
   rackCount: number
   rackDimensions: string
   aisleWidthM: number
+  doorWidthM: number
+  doorHeightM: number
+  maxCargoDimCm: { lengthCm: number; widthCm: number; heightCm: number }
   smallBoxCapacity: number
   largeBoxCapacity: number
   trolley: string
+  trolleyDetail: string
 }
 type CustomerConfirmation = {
   title: string
@@ -32,33 +46,43 @@ type CustomerConfirmation = {
   tone?: 'danger' | 'primary'
   onConfirm: () => void
 }
+const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
+  const code = (sizeCode || '').toUpperCase()
+  if (code === 'S') return 'Xe đẩy tay / xe sàn nhỏ'
+  if (code === 'M') return 'Xe đẩy sàn phẳng'
+  if (code === 'L') return 'Xe nâng tay pallet'
+  if (code === 'XL') return 'Xe nâng điện dắt bộ'
+  if (!originalTrolley) return 'Xe đẩy tiêu chuẩn'
+  const t = originalTrolley.toLowerCase()
+  if (t.includes('electric') || t.includes('walkie')) return 'Xe nâng điện dắt bộ'
+  if (t.includes('platform')) return 'Xe đẩy sàn phẳng'
+  if (t.includes('pallet')) return 'Xe nâng tay pallet'
+  return originalTrolley
+}
+
 const CUSTOMER_UNIT_SPECS = {
-  S: { type: 'Small', dimensions: [8, 10, 5], volumeM3: 400, rackCount: 4, rackDimensions: [2, 4, 4.5], aisleWidthM: 1.8, smallBoxCapacity: 336, largeBoxCapacity: 200, trolley: 'Xe đẩy tay / xe sàn nhỏ (0,8×0,5 m)', price: 5_500_000 / USD_TO_VND_RATE, maxLoadKg: 1000 },
-  M: { type: 'Medium', dimensions: [12.6, 10.4, 5], volumeM3: 655.2, rackCount: 6, rackDimensions: [2, 4, 4.5], aisleWidthM: 2.2, smallBoxCapacity: 504, largeBoxCapacity: 300, trolley: 'Xe đẩy sàn (0,9×0,6 m)', price: 9_500_000 / USD_TO_VND_RATE, maxLoadKg: 1600 },
-  L: { type: 'Large', dimensions: [18.3, 10.8, 5], volumeM3: 988.2, rackCount: 8, rackDimensions: [2, 4, 4.5], aisleWidthM: 2.6, smallBoxCapacity: 672, largeBoxCapacity: 400, trolley: 'Xe nâng tay (1,6×0,7 m)', price: 15_000_000 / USD_TO_VND_RATE, maxLoadKg: 2800 },
-  XL: { type: 'Extra Large', dimensions: [25, 11.2, 5], volumeM3: 1400, rackCount: 10, rackDimensions: [2, 4, 4.5], aisleWidthM: 3, smallBoxCapacity: 840, largeBoxCapacity: 500, trolley: 'Xe nâng pallet điện dắt bộ (1,8×0,8 m)', price: 22_500_000 / USD_TO_VND_RATE, maxLoadKg: 4000 },
+  S: { type: 'Small', dimensions: [UNIT_SPECS.S.lengthM, UNIT_SPECS.S.widthM, UNIT_SPECS.S.heightM], volumeM3: UNIT_SPECS.S.volumeM3, rackCount: UNIT_SPECS.S.frameCount, rackDimensions: [UNIT_SPECS.S.frameDimensions.widthM, UNIT_SPECS.S.frameDimensions.depthM, UNIT_SPECS.S.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.S.aisleM, doorWidthM: UNIT_SPECS.S.doorWidthM, doorHeightM: UNIT_SPECS.S.doorHeightM, maxCargoDimCm: UNIT_SPECS.S.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.S.smallBoxes, largeBoxCapacity: UNIT_SPECS.S.largeBoxes, trolley: 'Xe đẩy tay / xe sàn nhỏ', trolleyDetail: UNIT_SPECS.S.cartEquipmentDetail, price: UNIT_SPECS.S.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.S.maxLoadKg },
+  M: { type: 'Medium', dimensions: [UNIT_SPECS.M.lengthM, UNIT_SPECS.M.widthM, UNIT_SPECS.M.heightM], volumeM3: UNIT_SPECS.M.volumeM3, rackCount: UNIT_SPECS.M.frameCount, rackDimensions: [UNIT_SPECS.M.frameDimensions.widthM, UNIT_SPECS.M.frameDimensions.depthM, UNIT_SPECS.M.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.M.aisleM, doorWidthM: UNIT_SPECS.M.doorWidthM, doorHeightM: UNIT_SPECS.M.doorHeightM, maxCargoDimCm: UNIT_SPECS.M.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.M.smallBoxes, largeBoxCapacity: UNIT_SPECS.M.largeBoxes, trolley: 'Xe đẩy sàn phẳng', trolleyDetail: UNIT_SPECS.M.cartEquipmentDetail, price: UNIT_SPECS.M.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.M.maxLoadKg },
+  L: { type: 'Large', dimensions: [UNIT_SPECS.L.lengthM, UNIT_SPECS.L.widthM, UNIT_SPECS.L.heightM], volumeM3: UNIT_SPECS.L.volumeM3, rackCount: UNIT_SPECS.L.frameCount, rackDimensions: [UNIT_SPECS.L.frameDimensions.widthM, UNIT_SPECS.L.frameDimensions.depthM, UNIT_SPECS.L.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.L.aisleM, doorWidthM: UNIT_SPECS.L.doorWidthM, doorHeightM: UNIT_SPECS.L.doorHeightM, maxCargoDimCm: UNIT_SPECS.L.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.L.smallBoxes, largeBoxCapacity: UNIT_SPECS.L.largeBoxes, trolley: 'Xe nâng tay pallet', trolleyDetail: UNIT_SPECS.L.cartEquipmentDetail, price: UNIT_SPECS.L.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.L.maxLoadKg },
+  XL: { type: 'Extra Large', dimensions: [UNIT_SPECS.XL.lengthM, UNIT_SPECS.XL.widthM, UNIT_SPECS.XL.heightM], volumeM3: UNIT_SPECS.XL.volumeM3, rackCount: UNIT_SPECS.XL.frameCount, rackDimensions: [UNIT_SPECS.XL.frameDimensions.widthM, UNIT_SPECS.XL.frameDimensions.depthM, UNIT_SPECS.XL.frameDimensions.heightM], aisleWidthM: UNIT_SPECS.XL.aisleM, doorWidthM: UNIT_SPECS.XL.doorWidthM, doorHeightM: UNIT_SPECS.XL.doorHeightM, maxCargoDimCm: UNIT_SPECS.XL.maxCargoDimCm, smallBoxCapacity: UNIT_SPECS.XL.smallBoxes, largeBoxCapacity: UNIT_SPECS.XL.largeBoxes, trolley: 'Xe nâng điện dắt bộ', trolleyDetail: UNIT_SPECS.XL.cartEquipmentDetail, price: UNIT_SPECS.XL.priceMonthly / USD_TO_VND_RATE, maxLoadKg: UNIT_SPECS.XL.maxLoadKg },
 } as const
 const storageTypeLabelVi = (value?: string) => {
   const normalized = (value || '').toLowerCase()
-  if (normalized.includes('extra large') || normalized === 'xl') return 'Kho rất lớn (XL)'
-  if (normalized.includes('medium') || normalized === 'm') return 'Kho vừa (M)'
-  if (normalized.includes('small') || normalized === 's') return 'Kho nhỏ (S)'
-  if (normalized.includes('large') || normalized === 'l') return 'Kho lớn (L)'
+  if (normalized.includes('4xl')) return 'Kho đặc biệt lớn (4XL)'
+  if (normalized.includes('xxl')) return 'Kho cực lớn (XXL)'
+  if (normalized.includes('extra large') || /(^|\W)xl(\W|$)/.test(normalized)) return 'Kho rất lớn (XL)'
+  if (normalized.includes('medium') || /(^|\W)m(\W|$)/.test(normalized)) return 'Kho vừa (M)'
+  if (normalized.includes('small') || /(^|\W)s(\W|$)/.test(normalized)) return 'Kho nhỏ (S)'
+  if (normalized.includes('large') || /(^|\W)l(\W|$)/.test(normalized)) return 'Kho lớn (L)'
   return value || 'Kho chưa xác định cỡ'
 }
-const storageSizeCode = (value?: string) => {
-  const normalized = (value || '').toLowerCase()
-  if (normalized.includes('extra large') || /(^|\W)xl(\W|$)/.test(normalized)) return 'XL'
-  if (normalized.includes('medium') || /(^|\W)m(\W|$)/.test(normalized)) return 'M'
-  if (normalized.includes('small') || /(^|\W)s(\W|$)/.test(normalized)) return 'S'
-  if (normalized.includes('large') || /(^|\W)l(\W|$)/.test(normalized)) return 'L'
-  return ''
-}
+
 
 const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = Object.entries({ 'fac-001': 'HCM-Q1-F01', 'fac-002': 'BD-F01' }).flatMap(([facilityId, prefix]) =>
-  (Object.entries(CUSTOMER_UNIT_SPECS) as [CustomerCatalogUnit['sizeCode'], (typeof CUSTOMER_UNIT_SPECS)[keyof typeof CUSTOMER_UNIT_SPECS]][]).flatMap(([sizeCode, spec]) =>
+  (Object.entries(CUSTOMER_UNIT_SPECS) as [keyof typeof CUSTOMER_UNIT_SPECS, (typeof CUSTOMER_UNIT_SPECS)[keyof typeof CUSTOMER_UNIT_SPECS]][]).flatMap(([sizeCode, spec]) =>
     Array.from({ length: 5 }, (_, index) => {
       const code = `${prefix}-${sizeCode}-${String(index + 1).padStart(3, '0')}`
+      const rawSpec = UNIT_SPECS[sizeCode]
       const [lengthM, widthM, heightM] = spec.dimensions
       return {
         id: code,
@@ -71,15 +95,19 @@ const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = Object.entries({ 'fac-001'
         sizeCode,
         areaM2: lengthM * widthM,
         dimensions: { lengthM, widthM, heightM },
-        doorDimensions: { widthM: 2, heightM: 2.4 },
+        doorDimensions: { widthM: spec.doorWidthM, heightM: spec.doorHeightM },
         volumeM3: spec.volumeM3,
         maxLoadKg: spec.maxLoadKg,
         rackCount: spec.rackCount,
-        rackDimensions: '2×4×4,5 m',
+        rackDimensions: `${rawSpec.frameDimensions.widthM}×${rawSpec.frameDimensions.depthM}×${rawSpec.frameDimensions.heightM} m`,
         aisleWidthM: spec.aisleWidthM,
+        doorWidthM: spec.doorWidthM,
+        doorHeightM: spec.doorHeightM,
+        maxCargoDimCm: spec.maxCargoDimCm,
         smallBoxCapacity: spec.smallBoxCapacity,
         largeBoxCapacity: spec.largeBoxCapacity,
         trolley: spec.trolley,
+        trolleyDetail: spec.trolleyDetail,
         allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
         prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
         price: spec.price,
@@ -93,7 +121,7 @@ const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = Object.entries({ 'fac-001'
   )
 )
 
-const CUSTOMER_UNITS_PER_PAGE = 6
+const CUSTOMER_UNIT_TYPES_PER_PAGE = 6
 type GoodsDeclarationItem = {
   id: string
   category: string
@@ -143,8 +171,41 @@ const MATERIALS_BY_CATEGORY: Record<Exclude<GoodsCategoryCode, 'OTHER'>, { norma
 }
 const createGoodsDeclarationItem = (id = `goods-${Date.now()}`): GoodsDeclarationItem => ({ id, category: '', materialType: '', materialName: '', customGoodsName: '', description: '', customMaterial: '', quantity: '', lengthCm: '', widthCm: '', heightCm: '', weightKg: '', fragile: '', customerNote: '', images: [] })
 
-const rentalDiscountRate = (months: number) => months === 3 ? 0.03 : months === 6 ? 0.05 : months === 12 ? 0.08 : 0
-const renewalDiscountRate = (months: number) => months === 6 ? 0.03 : months === 12 ? 0.05 : 0
+const rentalDiscountRate = (months: number, customPackages?: RentalPackage[]) => {
+  if (customPackages && customPackages.length > 0) {
+    const pkg = customPackages.find(p => p.months === months)
+    if (pkg) {
+      return pkg.status === 'active' && typeof pkg.discountPercent === 'number'
+        ? pkg.discountPercent / 100
+        : 0
+    }
+  }
+  try {
+    const raw = localStorage.getItem('storagehub:durationDiscounts')
+    if (raw) {
+      const list = JSON.parse(raw)
+      const found = list.find((item: any) => item.months === months && item.status === 'active')
+      if (found && typeof found.discountPercent === 'number') return found.discountPercent / 100
+      const inactive = list.find((item: any) => item.months === months && item.status === 'inactive')
+      if (inactive) return 0
+    }
+  } catch {}
+  return months === 3 ? 0.03 : months === 6 ? 0.05 : months === 12 ? 0.08 : months === 24 ? 0.12 : 0
+}
+
+const renewalDiscountRate = (months: number) => {
+  try {
+    const raw = localStorage.getItem('storagehub:durationDiscounts')
+    if (raw) {
+      const list = JSON.parse(raw)
+      const found = list.find((item: any) => item.months === months && item.status === 'active')
+      if (found && typeof found.renewalDiscountPercent === 'number') return found.renewalDiscountPercent / 100
+      const inactive = list.find((item: any) => item.months === months && item.status === 'inactive')
+      if (inactive) return 0
+    }
+  } catch {}
+  return months === 3 ? 0.02 : months === 6 ? 0.03 : months === 12 ? 0.05 : months === 24 ? 0.08 : 0
+}
 const parsePositiveNumber = (rawValue: string) => {
   if (rawValue.trim() === '') return null
   const value = Number(rawValue)
@@ -166,17 +227,29 @@ const packageCapacityPerFrame = (sample: PackageSample) => {
   const orientations = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]]
   return Math.max(...orientations.map(([x, y, z]) => Math.floor(2 / x) * Math.floor(4 / y) * Math.floor(4.5 / z)))
 }
-const CUSTOMER_UNIT_IMAGE_BY_SIZE: Record<CustomerCatalogUnit['sizeCode'], string> = {
+const CUSTOMER_UNIT_IMAGE_BY_SIZE: Record<string, string> = {
   S: '/images/customer-units/kho-s.jpg',
   M: '/images/customer-units/kho-m.jpg',
   L: '/images/customer-units/kho-l.jpg',
   XL: '/images/customer-units/kho-xl.jpg',
 }
-const CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE: Record<CustomerCatalogUnit['sizeCode'], string> = {
+const CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE: Record<string, string> = {
   S: '/images/customer-units/details/kho-s-chi-tiet.png',
   M: '/images/customer-units/details/kho-m-chi-tiet.png',
   L: '/images/customer-units/details/kho-l-chi-tiet.png',
   XL: '/images/customer-units/details/kho-xl-chi-tiet.png',
+}
+const getCustomerUnitImage = (sizeCode?: string) => {
+  if (sizeCode && CUSTOMER_UNIT_IMAGE_BY_SIZE[sizeCode]) {
+    return CUSTOMER_UNIT_IMAGE_BY_SIZE[sizeCode]
+  }
+  return CUSTOMER_UNIT_IMAGE_BY_SIZE.XL
+}
+const getCustomerUnitDetailImage = (sizeCode?: string) => {
+  if (sizeCode && CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE[sizeCode]) {
+    return CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE[sizeCode]
+  }
+  return CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE.XL
 }
 const SearchIcon = <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" /></svg>
 
@@ -240,14 +313,33 @@ interface SizeCategoryCardProps {
 function SizeCategoryCard({ facility, unitType, availableCount, onReserve, onViewSpecs }: SizeCategoryCardProps) {
   const isAvailable = availableCount > 0
   const usableCapacity = Math.round(unitType.volumeM3 * 0.75 * 10) / 10
+  // Map UnitType name → UNIT_SPECS key
+  const specKey = (() => {
+    const n = unitType.name.toLowerCase()
+    if (n.includes('extra') || n.includes('xl')) return 'XL'
+    if (n.includes('large') || n.includes('l)')) return 'L'
+    if (n.includes('medium') || n.includes('m)')) return 'M'
+    return 'S'
+  })() as 'S' | 'M' | 'L' | 'XL'
+  const spec = UNIT_SPECS[specKey]
+  const sizeCode = (unitType as any).sizeCode || specKey
 
   return (
     <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
+      <div className="relative h-44 overflow-hidden bg-stone-200">
+        <img src={getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
+        <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
+          📍 {facility.name}
+        </span>
+        <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Kho size {sizeCode}</span>
+      </div>
       <div className="flex flex-1 flex-col p-5">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
+            <p className="text-[11px] font-bold text-amber-700 truncate mb-0.5">{facility.name}</p>
             <p className="text-xs font-semibold uppercase tracking-[.12em] text-stone-500">{'Cỡ kho'}</p>
-            <h3 className="mt-1 text-xl font-bold leading-tight text-black">{storageTypeLabelVi(unitType.name)}</h3>
+            <h3 className="mt-0.5 text-xl font-bold leading-tight text-black">{storageTypeLabelVi(unitType.name)}</h3>
           </div>
           <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${isAvailable ? 'border-stone-300 bg-white text-black' : 'border-red-700 bg-red-700 text-white'}`}>
             {isAvailable ? `${availableCount} ${'kho trống'}` : ('Hết kho')}
@@ -255,9 +347,22 @@ function SizeCategoryCard({ facility, unitType, availableCount, onReserve, onVie
         </div>
         <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-stone-200 py-4 text-sm">
           <div><p className="text-xs text-stone-500">{'Diện tích'}</p><p className="mt-0.5 font-bold text-black">{unitType.areaM2} m²</p></div>
-          <div><p className="text-xs text-stone-500">{'Kích thước'}</p><p className="mt-0.5 font-bold text-black">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m</p></div>
-          <div><p className="text-xs text-stone-500">{'Sức chứa tham khảo'}</p><p className="mt-0.5 font-bold text-black">~{usableCapacity} m³</p></div>
-          <div><p className="text-xs text-stone-500">{'Tải trọng tối đa'}</p><p className="mt-0.5 font-bold text-black">{unitType.maxLoadKg} kg</p></div>
+          <div><p className="text-xs text-stone-500">{'Kích thước (D×R×C)'}</p><p className="mt-0.5 font-bold text-black">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m</p></div>
+          <div><p className="text-xs text-stone-500">{'Thể tích kho'}</p><p className="mt-0.5 font-bold text-black">{unitType.volumeM3} m³</p></div>
+          <div><p className="text-xs text-stone-500">{'Số khung kệ'}</p><p className="mt-0.5 font-bold text-black">{spec.frameCount} khung</p></div>
+          <div><p className="text-xs text-stone-500">{'Chiều rộng lối đi'}</p><p className="mt-0.5 font-bold text-black">{spec.aisleM} m</p></div>
+          <div><p className="text-xs text-stone-500">{'Tải trọng tối đa'}</p><p className="mt-0.5 font-bold text-black">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</p></div>
+        </div>
+        {/* Hàng hóa tối đa & xe đẩy */}
+        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-stone-50 px-3 py-2.5 text-xs">
+          <div>
+            <p className="text-stone-500">Hàng hóa tối đa</p>
+            <p className="mt-0.5 font-bold text-stone-800">{spec.maxCargoDimCm.lengthCm}×{spec.maxCargoDimCm.widthCm}×{spec.maxCargoDimCm.heightCm} cm</p>
+          </div>
+          <div>
+            <p className="text-stone-500">Xe đẩy hỗ trợ</p>
+            <p className="mt-0.5 font-bold text-stone-800">{customerTrolleyVi(sizeCode, spec.cartEquipment)}</p>
+          </div>
         </div>
         <p className="mt-4 line-clamp-3 min-h-[3.75rem] text-sm leading-5 text-stone-600">{unitType.descriptionVi}</p>
         <div className="mt-auto pt-5">
@@ -368,33 +473,67 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
   const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = useMemo(() => {
     return units.map(unit => {
-      let sizeCode: CustomerCatalogUnit['sizeCode'] = 'M'
-      if (unit.type === 'Small' || unit.code.includes('-S-') || unit.code.includes('-S')) sizeCode = 'S'
-      else if (unit.type === 'Large' || unit.code.includes('-L-') || unit.code.includes('-L')) sizeCode = 'L'
-      else if (unit.type === 'Extra Large' || unit.code.includes('-XL-') || unit.code.includes('-XL')) sizeCode = 'XL'
-      else if (unit.type === 'Medium' || unit.code.includes('-M-') || unit.code.includes('-M')) sizeCode = 'M'
+      let sizeCode = (unit as any).sizeCode || ''
+      if (!sizeCode) {
+        if (unit.type === 'Small' || unit.code.includes('-S-') || unit.code.includes('-S')) sizeCode = 'S'
+        else if (unit.type === 'Large' || unit.code.includes('-L-') || unit.code.includes('-L')) sizeCode = 'L'
+        else if (unit.type === 'Extra Large' || unit.code.includes('-XL-') || unit.code.includes('-XL')) sizeCode = 'XL'
+        else if (unit.type === 'Medium' || unit.code.includes('-M-') || unit.code.includes('-M')) sizeCode = 'M'
+        else {
+          const match = unit.code.match(/-([A-Za-z0-9]+)-\d+$/)
+          sizeCode = match ? match[1] : (unit.type ? unit.type.replace(/^Kho\s+/i, '') : 'M')
+        }
+      }
 
-      const spec = CUSTOMER_UNIT_SPECS[sizeCode]
+      const standardSpecKey = (['S', 'M', 'L', 'XL'].includes(sizeCode) ? sizeCode : 'XL') as keyof typeof CUSTOMER_UNIT_SPECS
+      const spec = CUSTOMER_UNIT_SPECS[standardSpecKey]
+      const rawSpec = UNIT_SPECS[standardSpecKey]
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
       const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
-      const [lengthM, widthM, heightM] = spec.dimensions
+      const [stdL, stdW, stdH] = spec.dimensions
+      const lengthM = unit.dimensions?.lengthM ?? stdL
+      const widthM = unit.dimensions?.widthM ?? stdW
+      const heightM = unit.dimensions?.heightM ?? stdH
+      const areaM2 = unit.areaM2 || (lengthM * widthM)
+      const volumeM3 = unit.volumeM3 || (lengthM * widthM * heightM)
+      const aisleWidthM = (unit as any).laneWidthM ?? spec.aisleWidthM
+      const doorWidthM = unit.doorDimensions?.widthM ?? spec.doorWidthM
+      const doorHeightM = unit.doorDimensions?.heightM ?? spec.doorHeightM
+      const maxLoadKg = unit.maxLoadKg || spec.maxLoadKg
+      const price = unit.price || spec.price
+
+      const maxCargoDimCm = unit.dimensions ? {
+        lengthCm: Math.min(Math.round(lengthM * 100 - 40), 400),
+        widthCm: Math.min(Math.round(doorWidthM * 100 - 20), 200),
+        heightCm: Math.min(Math.round(doorHeightM * 100 - 20), 220),
+      } : spec.maxCargoDimCm
+
+      const rackCount = (unit as any).rackCount || (unit as any).frameCount || spec.rackCount || rawSpec.frameCount
+      const smallBoxCapacity = Math.floor(volumeM3 * 8)
+      const largeBoxCapacity = Math.floor(volumeM3 * 2.5)
 
       return {
         ...unit,
         facilityName,
         sizeCode,
-        rackCount: spec.rackCount,
-        rackDimensions: '0,8×2,0 m',
-        aisleWidthM: spec.aisleWidthM,
-        smallBoxCapacity: spec.smallBoxCapacity,
-        largeBoxCapacity: spec.largeBoxCapacity,
-        trolley: spec.trolley,
-        dimensions: unit.dimensions || { lengthM, widthM, heightM },
-        doorDimensions: unit.doorDimensions || { widthM: 2, heightM: 2.4 },
-        volumeM3: unit.volumeM3 || spec.volumeM3,
-        maxLoadKg: unit.maxLoadKg || spec.maxLoadKg,
-        price: unit.price || spec.price,
-        deposit: unit.deposit || unit.price || spec.price,
+        areaM2,
+        rackCount,
+        rackDimensions: `${rawSpec.frameDimensions.widthM}×${rawSpec.frameDimensions.depthM}×${rawSpec.frameDimensions.heightM} m`,
+        aisleWidthM,
+        doorWidthM,
+        doorHeightM,
+        maxCargoDimCm,
+        smallBoxCapacity,
+        largeBoxCapacity,
+        trolley: customerTrolleyVi(sizeCode, lengthM >= 15 ? 'Xe nâng tay & Xe đẩy sàn thép 500kg' : spec.trolley),
+        trolleyDetail: lengthM >= 15 ? 'Trang bị xe nâng tay pallet (tải 2 tấn) và xe đẩy tải nặng 500kg hỗ trợ xuất nhập kho lớn.' : spec.trolleyDetail,
+        dimensions: { lengthM, widthM, heightM },
+        doorDimensions: { widthM: doorWidthM, heightM: doorHeightM },
+        volumeM3,
+        maxLoadKg,
+        price,
+        deposit: unit.deposit || price,
+        rentalPackages: unit.rentalPackages || fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages || generateDefaultRentalPackages(fac?.id || unit.facilityId, sizeCode, price),
         allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
         prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
       }
@@ -529,6 +668,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   const [moveInDate, setMoveInDate] = useState('2026-09-22')
   const [bookingAppointmentTime, setBookingAppointmentTime] = useState('09:00')
   const [rentalMonths, setRentalMonths] = useState(3)
+  const [selectedPackageId, setSelectedPackageId] = useState<string>('')
   const [customerIdCard, setCustomerIdCard] = useState('079203009988')
   const [customerPhone, setCustomerPhone] = useState('+84 908 123 456')
   const [customerEmail] = useState(user.email)
@@ -543,6 +683,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     setMoveInDate('2026-09-22')
     setBookingAppointmentTime('09:00')
     setRentalMonths(3)
+    setSelectedPackageId('')
     setCustomerIdCard('079203009988')
     setCustomerPhone('+84 908 123 456')
     setCustomerAddress('Quận 1, TP. Hồ Chí Minh')
@@ -669,7 +810,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
   })
-  const unitTypeMatches = (unitTypeName: string, requestedTypeName: string) => unitTypeName.toLowerCase().startsWith(requestedTypeName.split(' ')[0].toLowerCase())
+
   const activeUnassignedCapacityHolds = holds.filter(hold => {
     if (hold.assignedUnitId || ['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)) return false
     if (hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING') return true
@@ -678,7 +819,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   })
   const effectiveAvailableCount = (facilityId: string, unitTypeName?: string) => {
     const facCode = facilities.find(f => f.id === facilityId)?.code
-    const physical = units.filter(unit => (unit.facilityId === facilityId || (facCode && unit.facilityId === facCode)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName))).length
+    const physical = units.filter(unit => (unit.facilityId === facilityId || (facCode && unit.facilityId === facCode)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName) || (unit.size && unitTypeMatches(unit.size, unitTypeName)) || (unit.sizeCode && unitTypeMatches(unit.sizeCode, unitTypeName)))).length
     const capacityHeld = activeUnassignedCapacityHolds.filter(hold => (hold.facilityId === facilityId || (facCode && hold.facilityId === facCode)) && (!unitTypeName || unitTypeMatches(hold.unitTypeName, unitTypeName))).length
     return Math.max(0, physical - capacityHeld)
   }
@@ -762,7 +903,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   const selectedFacility = facilities.find(facility => facility.id === selectedFacilityId) ?? null
   const availableUnits = units.filter(unit =>
     (!selectedFacility || unit.facilityName === selectedFacility.name || unit.facilityId === selectedFacility.id || unit.facilityId === selectedFacility.code) &&
-    (sizeFilter === 'All' || unit.type === sizeFilter)
+    (sizeFilter === 'All' || unit.type === sizeFilter || unit.size === sizeFilter || unit.sizeCode === sizeFilter || storageSizeCode(unit.type) === sizeFilter)
   )
   const matchingFacilities = facilities.filter(facility => {
     const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
@@ -770,12 +911,6 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       .toLowerCase()
       .includes(searchFacility.toLowerCase())
   })
-  const customerHeldUnitIds = new Set([
-    ...holds.filter(item => !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && item.assignedUnitId).map(item => item.assignedUnitId as string),
-  ])
-  const customerRentedUnitIds = new Set(rentals.filter(item => ['active', 'return_requested', 'return_inspection', 'closing'].includes(item.status)).map(item => item.unitId))
-  const physicalUnitByCode = new Map(units.map(unit => [unit.code, unit]))
-
   const resetReservationDraft = () => {
     setBookingReview(false)
     setValidationViolation(null)
@@ -802,9 +937,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   }
 
   const handleStartReservation = (facility: Facility, unitType: UnitType, exactUnit?: StorageUnit) => {
-    const hasAvailablePhysicalUnit = exactUnit
-      ? exactUnit.status === 'available' || customerHeldUnitIds.has(exactUnit.id)
-      : effectiveAvailableCount(facility.id, unitType.name) > 0
+    const hasAvailablePhysicalUnit = effectiveAvailableCount(facility.id, unitType.name) > 0
     if (!hasAvailablePhysicalUnit) {
       showToast('Cơ sở hiện không còn gian kho trống cho loại này trong thời gian đã chọn.')
       return
@@ -816,6 +949,18 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     setBookingReview(false)
     setBookingErrors({})
     setSelectedTarget({ facility, unitType })
+    const sizeCode = storageSizeCode(unitType.name)
+    const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
+    const unitRentalPackages = exactUnit?.rentalPackages || customSpec?.rentalPackages || generateDefaultRentalPackages(facility.id, sizeCode, unitType.monthlyPrice)
+    const activePackages = unitRentalPackages.filter(p => p.status === 'active')
+    const initialPkg = activePackages.find(p => p.months === 3) || activePackages[0]
+    if (initialPkg) {
+      setSelectedPackageId(initialPkg.id)
+      setRentalMonths(initialPkg.months)
+    } else {
+      setSelectedPackageId('')
+      setRentalMonths(3)
+    }
     const repUnit: StorageUnit = exactUnit ?? {
       id: '',
       code: unitType.name,
@@ -835,6 +980,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       deposit: unitType.monthlyPrice,
       climate: true,
       status: 'available',
+      rentalPackages: unitRentalPackages,
       reservedPeriods: [],
       version: 1
     }
@@ -845,9 +991,12 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
   const handleOpenSpecs = (facility: Facility, unitType: UnitType, availableCount: number, exactUnit?: StorageUnit) => {
     setSelectedTarget({ facility, unitType })
+    const sizeCode = storageSizeCode(unitType.name)
+    const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
+    const unitRentalPackages = exactUnit?.rentalPackages || customSpec?.rentalPackages || generateDefaultRentalPackages(facility.id, sizeCode, unitType.monthlyPrice)
     const repUnit: StorageUnit = exactUnit ?? {
       id: '',
-      code: unitType.name,
+      code: `${CUSTOMER_FACILITY_DISPLAY[facility.id]?.code ?? facility.code ?? facility.id.toUpperCase()}-${storageSizeCode(unitType.name)}`,
       facilityId: facility.id,
       facilityName: facility.name,
       floor: 1,
@@ -864,6 +1013,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       deposit: unitType.monthlyPrice,
       climate: true,
       status: availableCount > 0 ? 'available' : 'reserved',
+      rentalPackages: unitRentalPackages,
       reservedPeriods: [],
       version: 1
     }
@@ -898,7 +1048,8 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           })
     : null
 
-  const selectedCatalogUnit = selectedUnit ? CUSTOMER_CATALOG_UNITS.find(unit => unit.id === selectedUnit.id) : undefined
+  const selectedSizeCode = storageSizeCode(selectedTarget?.unitType.name || selectedUnit?.type) as CustomerCatalogUnit['sizeCode']
+  const selectedCatalogUnit = selectedUnit ? CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === selectedSizeCode) : undefined
   const selectedRackCount = selectedCatalogUnit?.rackCount ?? 0
   const allPackageSamplesValid = capacitySamples.length > 0 && capacitySamples.every(isPackageSampleValid)
   const packageCapacityResults = allPackageSamplesValid ? capacitySamples.map(sample => {
@@ -928,9 +1079,57 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
     : undefined
   const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
   const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
-  const discountRate = rentalDiscountRate(rentalMonths)
+
+  // Active rental packages for the selected unit
+  const selectedUnitActivePackages = useMemo(() => {
+    if (!selectedUnit) return []
+    const fac = facilities.find(f => f.id === selectedUnit.facilityId || f.code === selectedUnit.facilityId)
+    const customSpec = fac?.unitCustomSpecs?.find(s => s.sizeCode === selectedSizeCode)
+    const packages = resolveRentalPackagesForUnit({
+      rentalPackages: selectedUnit.rentalPackages || customSpec?.rentalPackages,
+      monthlyPrice: selectedUnit.price,
+      sizeCode: selectedSizeCode,
+      facilityId: selectedUnit.facilityId
+    })
+    return packages.filter(p => p.status === 'active')
+  }, [selectedUnit, facilities, selectedSizeCode])
+
+  // Selected package for quote calculation
+  const selectedActivePackage = useMemo(() => {
+    if (selectedPackageId) {
+      const match = selectedUnitActivePackages.find(p => p.id === selectedPackageId)
+      if (match) return match
+    }
+    return selectedUnitActivePackages.find(p => p.months === rentalMonths)
+  }, [selectedPackageId, selectedUnitActivePackages, rentalMonths])
+
+  const discountRate = selectedActivePackage
+    ? (selectedActivePackage.discountPercent ?? 0) / 100
+    : rentalDiscountRate(rentalMonths, selectedUnitActivePackages)
+
   const grossTermValue = currentQuote ? currentQuote.baseMonthlyPrice * rentalMonths : 0
-  const promotionDiscount = Math.round(grossTermValue * discountRate * 100) / 100
+  const promotionDiscount = selectedActivePackage
+    ? Math.max(0, grossTermValue - selectedActivePackage.packagePrice)
+    : Math.round(grossTermValue * discountRate * 100) / 100
+
+  const facilityPoliciesForSelected = useMemo(() => {
+    const facilityName = selectedUnit?.facilityName || selectedTarget?.facility.name || (selectedFacilityId ? CUSTOMER_FACILITY_DISPLAY[selectedFacilityId]?.name : '')
+    const facilityCode = selectedTarget?.facility.code || (selectedFacilityId ? CUSTOMER_FACILITY_DISPLAY[selectedFacilityId]?.code : '')
+    return getPoliciesForFacility(facilityName, facilityCode)
+  }, [selectedUnit, selectedTarget, selectedFacilityId, CUSTOMER_FACILITY_DISPLAY])
+
+  const evaluatedPolicyBenefits = useMemo(() => {
+    if (!currentQuote) return []
+    return facilityPoliciesForSelected.map(p => evaluatePolicyBenefit(p, currentQuote.baseMonthlyPrice, rentalMonths))
+  }, [facilityPoliciesForSelected, currentQuote, rentalMonths])
+
+  const facilityPolicyDiscount = useMemo(() => {
+    return evaluatedPolicyBenefits
+      .filter(b => b.isDiscount)
+      .reduce((sum, b) => sum + b.discountAmount, 0)
+  }, [evaluatedPolicyBenefits])
+
+  const totalCombinedDiscount = Math.min(grossTermValue, Math.round((promotionDiscount + facilityPolicyDiscount) * 100) / 100)
 
   const handleNotificationClick = (notification: LayoutNotification) => {
     navigateTo(notification.page)
@@ -1092,7 +1291,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       customerPhone,
       customerAddress,
       appointmentTime: bookingAppointmentTime,
-      discountAmount: promotionDiscount,
+      discountAmount: totalCombinedDiscount,
+      packageId: selectedActivePackage?.id,
+      packageName: selectedActivePackage?.name,
+      packagePrice: selectedActivePackage?.packagePrice,
       largestItemDimensionsCm: {
         lengthCm: cargoLengthNumber,
         widthCm: cargoWidthNumber,
@@ -1100,11 +1302,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
       },
       capacityValidatedByFrames: packagesFitSelectedUnit,
       customerCatalogUnit: {
-        id: selectedUnit.id,
+        id: '',
         facilityName: selectedUnit.facilityName,
         doorWidthM: selectedUnit.doorDimensions.widthM,
         doorHeightM: selectedUnit.doorDimensions.heightM,
-        physicalUnitId: physicalUnitByCode.get(selectedUnit.code)?.id || selectedUnit.id,
       }
     })
 
@@ -1311,7 +1512,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
           />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             {matchingFacilities.map(facility => {
-               const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => (unit.facilityId === facility.id || unit.facilityId === facility.code) && physicalUnitByCode.has(unit.code))
+               const facilityCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit => unit.facilityId === facility.id || unit.facilityId === facility.code)
                const availCount = effectiveAvailableCount(facility.id)
               const minimumMonthlyPrice = facilityCatalogUnits.length ? Math.min(...facilityCatalogUnits.map(unit => unit.price)) : null
               const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
@@ -1374,16 +1575,19 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 ? (`Kho còn trống tại ${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.name ?? selectedFacility.name}`)
                 : ('Kho còn trống')}
               subtitle={selectedFacility
-                ? `${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address} · Chọn trực tiếp mã kho còn trống.`
+                ? `${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address} · Chọn loại kho phù hợp; Manager sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.`
                 : undefined}
               action={
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={sizeFilter} onChange={event => setSizeFilter(event.target.value)} className="w-full sm:w-56">
                     <option value="All">{'Tất cả kích thước'}</option>
-                    <option value="Small">{'Size S'}</option>
-                    <option value="Medium">{'Size M'}</option>
-                    <option value="Large">{'Size L'}</option>
-                    <option value="Extra Large">{'Size XL'}</option>
+                    <option value="S">{'Size S'}</option>
+                    <option value="M">{'Size M'}</option>
+                    <option value="L">{'Size L'}</option>
+                    <option value="XL">{'Size XL'}</option>
+                    {Array.from(new Set(CUSTOMER_CATALOG_UNITS.map(u => u.sizeCode?.toUpperCase()).filter(Boolean))).filter(code => !['S', 'M', 'L', 'XL'].includes(code)).map(code => (
+                      <option key={code} value={code}>{`Size ${code}`}</option>
+                    ))}
                   </Select>
                 </div>
               }
@@ -1394,27 +1598,29 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <Button size="sm" variant={!selectedFacilityId ? 'primary' : 'outline'} onClick={() => setSelectedFacilityId(null)}>Tất cả cơ sở</Button>
                 {facilities.map(facility => <Button key={facility.id} size="sm" variant={selectedFacilityId === facility.id ? 'primary' : 'outline'} onClick={() => setSelectedFacilityId(facility.id)}>{facility.id === 'fac-001' ? 'Xem kho Hồ Chí Minh' : facility.id === 'fac-002' ? 'Xem kho Bình Dương' : `Xem kho ${facility.name}`}</Button>)}
               </div>
-              <label className="relative ml-auto block w-full lg:w-[420px]"><span className="sr-only">Tìm kiếm kho</span><input value={unitSearch} onChange={event => setUnitSearch(event.target.value)} placeholder="Tìm theo mã kho hoặc size S, M, L, XL..." className="w-full rounded-xl border border-stone-300 py-2.5 pl-10 pr-4 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200" /><span className="pointer-events-none absolute left-3 top-3 text-stone-400">{SearchIcon}</span></label>
+              <label className="relative ml-auto block w-full lg:w-[420px]"><span className="sr-only">Tìm kiếm loại kho</span><input value={unitSearch} onChange={event => setUnitSearch(event.target.value)} placeholder="Tìm theo loại kho..." className="w-full rounded-xl border border-stone-300 py-2.5 pl-10 pr-4 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200" /><span className="pointer-events-none absolute left-3 top-3 text-stone-400">{SearchIcon}</span></label>
             </div>
 
             {/* List Facilities with their 3-4 Unit Sizes */}
             <div className="space-y-8">
               {displayedFacilities.map(facility => {
                 const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
-                const heldIds = customerHeldUnitIds
-                const rentedIds = customerRentedUnitIds
-                const matchingCatalogUnits = CUSTOMER_CATALOG_UNITS.filter(unit =>
-                   (unit.facilityId === facility.id || unit.facilityId === facility.code) &&
-                   Boolean(physicalUnitByCode.get(unit.code)) &&
-                   (physicalUnitByCode.get(unit.code)?.status === 'available' || heldIds.has(unit.id)) &&
-                   !rentedIds.has(unit.id) &&
-                  (sizeFilter === 'All' || unit.type === sizeFilter) &&
-                  `${unit.code} ${unit.sizeCode} ${unit.type}`.toLowerCase().includes(unitSearch.trim().toLowerCase())
-                )
-                const pageCount = Math.max(1, Math.ceil(matchingCatalogUnits.length / CUSTOMER_UNITS_PER_PAGE))
+                const matchingUnitTypes = unitTypes.filter(unitType => {
+                  const sizeCode = storageSizeCode(unitType.name)
+                  return (
+                    sizeFilter === 'All' ||
+                    unitType.name === sizeFilter ||
+                    sizeCode.toUpperCase() === sizeFilter.toUpperCase() ||
+                    (sizeFilter === 'S' && (unitType.name === 'Small' || sizeCode === 'S')) ||
+                    (sizeFilter === 'M' && (unitType.name === 'Medium' || sizeCode === 'M')) ||
+                    (sizeFilter === 'L' && (unitType.name === 'Large' || sizeCode === 'L')) ||
+                    (sizeFilter === 'XL' && (unitType.name === 'Extra Large' || sizeCode === 'XL'))
+                  ) && `${unitType.name} ${sizeCode} ${storageTypeLabelVi(unitType.name)}`.toLowerCase().includes(unitSearch.trim().toLowerCase())
+                })
+                const pageCount = Math.max(1, Math.ceil(matchingUnitTypes.length / CUSTOMER_UNIT_TYPES_PER_PAGE))
                 const currentPage = Math.min(unitPages[facility.id] ?? 1, pageCount)
-                const visibleCatalogUnits = matchingCatalogUnits.slice((currentPage - 1) * CUSTOMER_UNITS_PER_PAGE, currentPage * CUSTOMER_UNITS_PER_PAGE)
-                const availableCount = matchingCatalogUnits.filter(unit => !heldIds.has(unit.id)).length
+                const visibleUnitTypes = matchingUnitTypes.slice((currentPage - 1) * CUSTOMER_UNIT_TYPES_PER_PAGE, currentPage * CUSTOMER_UNIT_TYPES_PER_PAGE)
+                const availableCount = matchingUnitTypes.reduce((total, unitType) => total + effectiveAvailableCount(facility.id, unitType.name), 0)
 
                 return (
                   <section key={facility.id} className="space-y-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
@@ -1428,6 +1634,21 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           <span className="text-xs font-semibold text-black">★ {facility.rating}</span>
                         </div>
                         <p className="mt-1 text-sm text-stone-600">{display?.address ?? `${facility.address}, ${facility.city}`}</p>
+                        {(() => {
+                          const facilityPolicies = getPoliciesForFacility(display?.name ?? facility.name, display?.code ?? facility.code)
+                          const promoPolicies = facilityPolicies.filter(p => evaluatePolicyBenefit(p, 1000000, 3).isDiscount)
+                          if (promoPolicies.length === 0) return null
+                          return (
+                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                              {promoPolicies.map(p => (
+                                <span key={p.id} className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-300 px-3 py-1 text-xs font-bold text-emerald-900 shadow-sm">
+                                  <span>🎁</span>
+                                  <span>Ưu đãi cơ sở: <b>{p.name}</b> ({p.value})</span>
+                                </span>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </div>
                       <div className="flex items-center gap-3">
                         <span className={`rounded-full border px-3 py-1 text-xs font-bold ${availableCount > 0 ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{availableCount} {'kho còn trống'}</span>
@@ -1440,35 +1661,19 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                      {visibleCatalogUnits.map(unit => {
-                        const catalogUnit = unit as CustomerCatalogUnit
-                        const isHeld = heldIds.has(unit.id)
-                        const displayUnit: CustomerCatalogUnit = { ...catalogUnit, status: isHeld ? 'held' : 'available' }
-                        const unitType = unitTypes.find(item => item.id === (catalogUnit.sizeCode === 'XL' ? 'xlarge' : catalogUnit.sizeCode.toLowerCase())) ?? unitTypes[0]
-                        const typeAvailableCount = effectiveAvailableCount(facility.id, unitType.name)
-                        return <article key={unit.id} className="group flex h-full flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-1 hover:border-amber-300 hover:shadow-xl">
-                          <div className="relative h-44 overflow-hidden bg-stone-800">
-                            <img src={CUSTOMER_UNIT_IMAGE_BY_SIZE[catalogUnit.sizeCode]} alt={`Kho size ${catalogUnit.sizeCode} - ${unit.code}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/15 to-transparent" />
-                            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-white"><div><p className="text-xs font-bold tracking-wide text-amber-300">{unit.code}</p><h4 className="mt-1 text-xl font-bold">Kho size {catalogUnit.sizeCode}</h4></div><span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm ${isHeld ? 'border-amber-300/70 bg-amber-700/80 text-amber-50' : 'border-emerald-300/70 bg-emerald-700/80 text-emerald-50'}`}>● {isHeld ? 'Được giữ' : 'Còn trống'}</span></div>
-                          </div>
-                          <div className="flex flex-1 flex-col p-5">
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                              <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Kích thước D×R×C</p><b className="mt-1 block text-stone-950">{unit.dimensions.lengthM}×{unit.dimensions.widthM}×{unit.dimensions.heightM} m</b></div>
-                              <div className="rounded-xl bg-stone-50 p-3"><p className="text-[11px] text-stone-500">Thể tích kho</p><b className="mt-1 block text-stone-950">{unit.volumeM3.toLocaleString('vi-VN')} m³</b></div>
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold">{unit.climate ? <span className="rounded-full bg-sky-50 px-3 py-1.5 text-sky-800">❄ Có máy lạnh</span> : <span className="rounded-full bg-stone-100 px-3 py-1.5 text-stone-700">Thông gió tự nhiên</span>}<span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800">● An ninh 24/7</span><span className="rounded-full bg-rose-50 px-3 py-1.5 text-rose-800">PCCC tự động</span></div>
-                            <div className="mt-5 border-t border-stone-200 pt-4"><p className="text-xs text-stone-500">Giá thuê mỗi tháng</p><p className="mt-0.5 text-2xl font-extrabold text-stone-950">{formatVnd(unit.price)}<span className="text-xs font-normal text-stone-500">/tháng</span></p><p className="mt-1 text-[11px] font-medium text-amber-800">Cọc trước 20% tổng giá trị kỳ thuê</p></div>
-                          <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
-                            <Button size="sm" variant="outline" onClick={() => handleOpenSpecs(facility, unitType, isHeld ? 0 : 1, displayUnit)}>Xem chi tiết</Button>
-                            <Button size="sm" disabled={isHeld || typeAvailableCount === 0} onClick={() => handleStartReservation(facility, unitType, displayUnit)}>{isHeld ? 'Đang được giữ' : typeAvailableCount === 0 ? 'Hết kho' : 'Chọn kho này'}</Button>
-                          </div>
-                          </div>
-                        </article>
-                      })}
+                      {visibleUnitTypes.map(unitType => (
+                        <SizeCategoryCard
+                          key={unitType.id}
+                          facility={facility}
+                          unitType={unitType}
+                          availableCount={effectiveAvailableCount(facility.id, unitType.name)}
+                          onReserve={handleStartReservation}
+                          onViewSpecs={handleOpenSpecs}
+                        />
+                      ))}
                     </div>
-                    {matchingCatalogUnits.length === 0 && <div className="rounded-xl border border-dashed border-stone-300 py-10 text-center text-sm text-stone-500">Không tìm thấy kho phù hợp tại cơ sở này.</div>}
-                    {matchingCatalogUnits.length > CUSTOMER_UNITS_PER_PAGE && <div className="flex flex-wrap items-center justify-center gap-2 border-t border-stone-200 pt-5"><Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.max(1, currentPage - 1) }))}>← Trang trước</Button><span className="px-2 text-sm font-semibold text-stone-600">Trang {currentPage}/{pageCount}</span><Button size="sm" variant="outline" disabled={currentPage === pageCount} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.min(pageCount, currentPage + 1) }))}>Trang sau →</Button></div>}
+                    {matchingUnitTypes.length === 0 && <div className="rounded-xl border border-dashed border-stone-300 py-10 text-center text-sm text-stone-500">Không tìm thấy loại kho phù hợp tại cơ sở này.</div>}
+                    {matchingUnitTypes.length > CUSTOMER_UNIT_TYPES_PER_PAGE && <div className="flex flex-wrap items-center justify-center gap-2 border-t border-stone-200 pt-5"><Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.max(1, currentPage - 1) }))}>← Trang trước</Button><span className="px-2 text-sm font-semibold text-stone-600">Trang {currentPage}/{pageCount}</span><Button size="sm" variant="outline" disabled={currentPage === pageCount} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.min(pageCount, currentPage + 1) }))}>Trang sau →</Button></div>}
                   </section>
                 )
               })}
@@ -1513,7 +1718,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                       <h2 className="mt-1 text-lg font-bold text-stone-900">
                         {unitTypeLabel(hold.unitTypeName || hold.unitId)} · {hold.facilityName}
                       </h2>
-                      <p className="text-xs font-semibold text-blue-800">{'Gian kho đã chọn:'} {units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.unitId || '—'}</p>
+                      <p className="text-xs font-semibold text-blue-800">{hold.assignedUnitId ? 'Gian kho Manager đã phân:' : 'Trạng thái phân kho:'} {hold.assignedUnitId ? (units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId) : 'Chưa phân gian kho cụ thể'}</p>
                       <p className="text-xs text-stone-500">
                         {'Lịch nhận kho hiện tại:'} <b>{hold.appointmentDate || hold.moveInDate}{hold.appointmentTime ? ` · ${hold.appointmentTime}` : ''}</b> · {'Thời hạn:'} {hold.rentalMonths} {'tháng'}
                       </p>
@@ -1523,7 +1728,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           <p><b>Hàng hóa khai báo:</b> {hold.goods.category} ({hold.goods.packageCount} kiện, {hold.goods.weightKg}kg)</p>
                           {hold.assignedUnitId ? (
                             <div className="flex flex-wrap justify-end gap-1">
-                              <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Gian kho đã chọn: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
+                              <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Manager đã phân: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
                               {hold.status === 'awaiting_email' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ xác minh email</span>}
                               {hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ nhân viên cơ sở duyệt hàng hóa</span>}
                             </div>
@@ -1541,7 +1746,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                             </span>
                           ) : (
                             <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">
-                              Gian kho đã được xác định theo lựa chọn của bạn
+                              {hold.payment.status === 'paid' ? 'Đã cọc · Chờ Manager phân kho' : 'Chờ hoàn tất đặt loại kho'}
                             </span>
                           )}
                         </div>
@@ -1560,7 +1765,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           </div>
                         })()}
 
-                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{'Cọc đã thanh toán. Bạn cần hoàn tất nhận kho tại gian kho đã chọn trong 14 ngày từ ngày cọc.'}</p>}
+                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Manager đã phân gian kho; vui lòng hoàn tất nhận kho trong 14 ngày từ ngày cọc.' : 'Cọc đã thanh toán. Manager sẽ phân gian kho cụ thể trước lịch check-in của bạn.'}</p>}
 
                         {hold.generatedAccessPin && !holdInactive && (
                           <div className="mt-2 rounded bg-[#292a27] p-2 text-white text-xs flex items-center justify-between">
@@ -1575,24 +1780,24 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                           { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
                           { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa trong 12 giờ' : 'Hồ sơ được duyệt tự động' },
                           { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ 20%' },
+                          { label: 'Manager phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
                           { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
                         ]
-                        // Gian kho đã được khách chọn từ đầu; sau khi cọc chỉ còn Check-in và bàn giao.
-                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status) ? 3 : hold.status === 'COMPLETED' ? (receiptConfirmed ? 5 : 4) : -1
+                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : hold.status === 'DEPOSIT_PAID' ? 3 : ['UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status) ? 4 : hold.status === 'COMPLETED' ? (receiptConfirmed ? 6 : 5) : -1
                         const activeStep = progressSteps[currentIndex]
 
                         return <div className="mt-4 border-t border-stone-200 pt-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="text-xs font-bold text-black">{'Tiến trình đơn đặt kho'}</p>
-                              <p className="mt-0.5 text-[11px] text-stone-500">{`Đã hoàn thành ${Math.max(0, currentIndex)}/5 bước`}</p>
+                              <p className="mt-0.5 text-[11px] text-stone-500">{`Đã hoàn thành ${Math.max(0, currentIndex)}/${progressSteps.length} bước`}</p>
                             </div>
                             {activeStep && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">
                               {'Đang thực hiện: '} {activeStep.label}
                             </span>}
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
                             {progressSteps.map((step, index) => {
                               const completed = index < currentIndex || currentIndex === progressSteps.length
                               const current = index === currentIndex && currentIndex < progressSteps.length
@@ -2202,6 +2407,65 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
             <Card className="border-rose-200 p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-rose-700">{'Quy định trễ hạn'}</p><h3 className="mt-2 font-bold text-stone-950">{'Thời hạn và phụ thu được tính theo từng giai đoạn'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Quá 10 phút chưa thanh toán cọc giữ chỗ: đơn thuê hết hiệu lực.'}</li><li>• {'Quá 14 ngày kể từ ngày cọc mà chưa Check-in: không thể kích hoạt hồ sơ thuê và cọc giữ chỗ không được hoàn.'}</li><li>• {'Hợp đồng quá hạn không có thời gian ân hạn; từ ngày sau ngày hết hạn, phụ thu mỗi ngày bằng 50% đơn giá thuê ngày.'}</li><li>• {'Gia hạn hợp đồng đã quá hạn phải hoàn tất trong 3 ngày kể từ khi thanh toán cọc gia hạn.'}</li></ul></Card>
             <Card className="p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-stone-500">{'Tóm tắt thanh toán'}</p><h3 className="mt-2 font-bold text-stone-950">{'Khoản phải trả theo từng mốc'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Đặt giữ: 20% tổng tiền thuê của kỳ đầu.'}</li><li>• {'Check-in: 80% tiền thuê còn lại + tiền đảm bảo kho bằng một tháng tiền thuê.'}</li><li>• {'Gia hạn: trả trước 20%, sau đó thanh toán 80% còn lại trước khi gia hạn có hiệu lực.'}</li><li>• {'Trả kho: thanh toán công nợ và phí phát sinh; phần tiền đảm bảo còn lại được hoàn.'}</li></ul></Card>
           </div>
+
+          {/* Dynamic Facility & Branch Policies from Business Owner (storagehub:policies) */}
+          {(() => {
+            const storedPolicies = getStoredPolicies()
+            if (storedPolicies.length === 0) return null
+
+            return (
+              <section className="mt-8 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-amber-800">StorageHub Policy Hub</p>
+                    <h2 className="text-lg font-bold text-stone-950">Quy định & Chính sách ban hành theo từng cơ sở</h2>
+                    <p className="text-xs text-stone-600 mt-0.5">
+                      Được ban hành trực tiếp bởi Ban quản lý / Chủ cơ sở (Business Owner). Các chính sách có ưu đãi giảm tiền sẽ được hệ thống tự động khấu trừ vào đơn thuê khi khách hàng đặt kho.
+                    </p>
+                  </div>
+                  <Badge variant="warning">{storedPolicies.length} chính sách đang áp dụng</Badge>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {storedPolicies.map(pol => {
+                    const isFacilitySpecific = pol.scope && !['all facilities', 'toàn bộ cơ sở', 'all', 'toàn bộ'].includes(pol.scope.toLowerCase().trim())
+                    const benefitSample = evaluatePolicyBenefit(pol, 2000000, 3)
+                    return (
+                      <div key={pol.id} className="flex flex-col justify-between rounded-xl border border-stone-200 bg-stone-50 p-4 transition hover:border-amber-400 hover:bg-white hover:shadow-md">
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-bold text-stone-900 text-sm">{pol.name}</p>
+                            {benefitSample.isDiscount ? (
+                              <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                🎁 Tự động giảm giá
+                              </span>
+                            ) : (
+                              <span className="shrink-0 rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-semibold text-stone-700">
+                                Điều khoản
+                              </span>
+                            )}
+                          </div>
+                          <div className="rounded-lg bg-amber-50/80 border border-amber-200/60 p-2.5 text-xs">
+                            <p className="text-stone-500 text-[10px] uppercase font-bold">Nội dung quy định / Quyền lợi</p>
+                            <p className="font-bold text-amber-950 mt-0.5">{pol.value}</p>
+                          </div>
+                          {pol.description && (
+                            <p className="text-xs text-stone-600 line-clamp-3 leading-relaxed">{pol.description}</p>
+                          )}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-stone-200/80 flex items-center justify-between text-[11px] text-stone-500">
+                          <span className="font-medium text-stone-700">
+                            📍 {isFacilitySpecific ? pol.scope : 'Toàn hệ thống'}
+                          </span>
+                          {pol.lastUpdated && <span>{pol.lastUpdated}</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )
+          })()}
         </div>
       )}
 
@@ -2225,10 +2489,10 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         size="xl"
-        title={selectedUnit?.id ? (`Chi tiết kho ${selectedUnit.code}`) : selectedTarget ? (`Hồ Sơ Kỹ Thuật: ${unitTypeLabel(selectedTarget.unitType.name)} · ${selectedTarget.facility.name}`) : (selectedUnit ? (`Hồ Sơ Kỹ Thuật & Chi Tiết Cỡ Kho`) : '')}
+        title={selectedTarget ? (`Hồ Sơ Kỹ Thuật: ${unitTypeLabel(selectedTarget.unitType.name)} · ${selectedTarget.facility.name}`) : (selectedUnit ? (`Hồ Sơ Kỹ Thuật & Chi Tiết Cỡ Kho`) : '')}
       >
         {selectedUnit && (() => {
-          const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.id === selectedUnit.id)
+          const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 
           return (
             <div className="flex flex-col gap-5">
@@ -2242,9 +2506,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 </div>
                 <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <h3 className="text-2xl font-bold">{selectedUnit.code}</h3>
-                    <p className="mt-1 text-sm font-semibold text-amber-300">Size {catalogUnit?.sizeCode ?? selectedUnit.type}</p>
-                    <p className="mt-1 text-sm text-stone-300">{'Kích thước'}: {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m ({'dài × rộng × cao'})</p>
+                    <h3 className="text-2xl font-bold">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)}</h3>
+                    <p className="mt-1 text-sm font-semibold text-amber-300">Kích thước (Size) {catalogUnit?.sizeCode ?? storageSizeCode(selectedUnit.type)}</p>
+                    <p className="mt-1 text-sm text-stone-300">{'Kích thước kho'}: {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m ({'dài × rộng × cao'})</p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-white">{formatVnd(selectedUnit.price)}<span className="text-sm font-normal text-stone-300">/{'tháng'}</span></p>
@@ -2254,44 +2518,223 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               </div>
 
               {catalogUnit && <figure className="order-2 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-                <img src={CUSTOMER_UNIT_DETAIL_IMAGE_BY_SIZE[catalogUnit.sizeCode]} alt={`Sơ đồ chi tiết kho size ${catalogUnit.sizeCode}`} className="max-h-[520px] w-full object-contain bg-white" />
+                <img src={getCustomerUnitDetailImage(catalogUnit.sizeCode)} alt={`Sơ đồ chi tiết kho size ${catalogUnit.sizeCode}`} className="max-h-[520px] w-full object-contain bg-white" />
                 <figcaption className="border-t border-stone-200 px-4 py-3 text-center text-xs font-medium text-stone-600">Sơ đồ bố trí kho size {catalogUnit.sizeCode} · Kích thước và lối đi theo hồ sơ kho</figcaption>
               </figure>}
 
               <div className="order-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-5">
                 <p className="mb-4 text-xs font-bold uppercase tracking-wider text-amber-800">1. Thông tin kho chi tiết</p>
-                {catalogUnit && <ul className="divide-y divide-amber-200/70 overflow-hidden rounded-xl border border-amber-200 bg-white text-sm">
-                  {[
-                    ['Mã kho', selectedUnit.code],
-                    ['Size', catalogUnit.sizeCode],
-                    ['Kích thước kho (D × R × C)', `${selectedUnit.dimensions.lengthM} × ${selectedUnit.dimensions.widthM} × ${selectedUnit.dimensions.heightM} m`],
-                    ['Thể tích kho', `${selectedUnit.volumeM3.toLocaleString('vi-VN')} m³`],
-                    ['Số khung', `${catalogUnit.rackCount} khung`],
-                    ['Kích thước mỗi khung', catalogUnit.rackDimensions],
-                    ['Lối đi', `${catalogUnit.aisleWidthM.toLocaleString('vi-VN')} m`],
-                    ['Xe đẩy phù hợp', catalogUnit.trolley],
-                    ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
-                  ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="font-medium text-stone-500">{label}</span><b className="text-stone-950">{value}</b></li>)}
-                </ul>}
+                {catalogUnit && (() => {
+                  const rawSpec = (catalogUnit?.sizeCode && UNIT_SPECS[catalogUnit.sizeCode as keyof typeof UNIT_SPECS]) || UNIT_SPECS.XL
+                  const displayUnitCode = selectedUnit.code && !selectedUnit.code.toLowerCase().includes('storage')
+                    ? selectedUnit.code
+                    : `${CUSTOMER_FACILITY_DISPLAY[selectedUnit.facilityId]?.code ?? selectedUnit.facilityId.toUpperCase()}-${catalogUnit.sizeCode}`
+                  return (
+                    <ul className="divide-y divide-amber-200/70 overflow-hidden rounded-xl border border-amber-200 bg-white text-sm">
+                      {[
+                        ['Mã kho', displayUnitCode],
+                        ['Kích thước / Size', catalogUnit.sizeCode],
+                        ['Kích thước kho (D × R × C)', `${selectedUnit.dimensions.lengthM} × ${selectedUnit.dimensions.widthM} × ${selectedUnit.dimensions.heightM} m`],
+                        ['Thể tích kho', `${selectedUnit.volumeM3.toLocaleString('vi-VN')} m³`],
+                        ['Số khung kệ', `${catalogUnit.rackCount} khung`],
+                        ['Kích thước mỗi khung (R × S × C)', catalogUnit.rackDimensions],
+                        ['Chiều rộng lối đi', `${catalogUnit.aisleWidthM ?? rawSpec.aisleM} m`],
+                        ['Hàng hóa tối đa (D × R × C)', `${catalogUnit.maxCargoDimCm.lengthCm} × ${catalogUnit.maxCargoDimCm.widthCm} × ${catalogUnit.maxCargoDimCm.heightCm} cm`],
+                        ['Tải trọng tối đa', `${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg`],
+                        ['Xe đẩy hỗ trợ', customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)],
+                        ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
+                      ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="font-medium text-stone-500">{label}</span><b className="text-stone-950">{value}</b></li>)}
+                    </ul>
+                  )
+                })()}
               </div>
 
               <div className="order-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500">2. Sức chứa thùng hàng</p>
-                {catalogUnit && <ul className="space-y-3 text-sm">
-                  <li className="rounded-xl border border-stone-200 bg-white p-4"><b className="block text-stone-950">Thùng nhỏ</b><ul className="mt-2 list-disc space-y-1 pl-5 text-stone-600"><li>Kích thước: 50 × 40 × 40 cm</li><li>Số lượng tối đa: <b className="text-stone-950">{catalogUnit.smallBoxCapacity} thùng</b></li></ul></li>
-                  <li className="rounded-xl border border-stone-200 bg-white p-4"><b className="block text-stone-950">Thùng to</b><ul className="mt-2 list-disc space-y-1 pl-5 text-stone-600"><li>Kích thước: 70 × 50 × 50 cm</li><li>Số lượng tối đa: <b className="text-stone-950">{catalogUnit.largeBoxCapacity} thùng</b></li></ul></li>
-                </ul>}
+                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500">2. Giới hạn hàng hóa & xe đẩy hỗ trợ</p>
+                {catalogUnit && (
+                  <div className="space-y-3">
+                    {/* Max cargo dimensions card */}
+                    <div className="rounded-xl border border-stone-200 bg-white p-4">
+                      <p className="text-xs font-bold text-stone-700 mb-3">Kích cỡ hàng hóa tối đa có thể đưa vào kho</p>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        {[
+                          { label: 'Dài (D)', value: `${catalogUnit.maxCargoDimCm.lengthCm} cm`, color: 'bg-amber-50 border-amber-200 text-amber-900' },
+                          { label: 'Rộng (R)', value: `${catalogUnit.maxCargoDimCm.widthCm} cm`, color: 'bg-sky-50 border-sky-200 text-sky-900' },
+                          { label: 'Cao (C)', value: `${catalogUnit.maxCargoDimCm.heightCm} cm`, color: 'bg-emerald-50 border-emerald-200 text-emerald-900' },
+                        ].map(dim => (
+                          <div key={dim.label} className={`rounded-lg border p-3 ${dim.color}`}>
+                            <p className="text-[11px] font-semibold opacity-70">{dim.label}</p>
+                            <p className="mt-1 text-lg font-extrabold">{dim.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 rounded-lg bg-stone-50 px-3 py-2 text-[11px] text-stone-600 border border-stone-200">
+                        Hàng hóa vượt kích thước trên cần được khai báo đặc biệt và sẽ qua quy trình xét duyệt thủ công của nhân viên cơ sở.
+                      </p>
+                    </div>
+
+                    {/* Trolley card */}
+                    <div className="rounded-xl border border-stone-200 bg-white p-4">
+                      <p className="text-xs font-bold text-stone-700 mb-2">Xe đẩy hỗ trợ tại cơ sở</p>
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-900 text-white text-lg">
+                          🛒
+                        </div>
+                        <div>
+                          <p className="font-bold text-stone-950 text-sm">{customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Box capacity */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-stone-200 bg-white p-4">
+                        <p className="text-xs font-bold text-stone-700">Thùng nhỏ (50×40×40 cm)</p>
+                        <p className="mt-2 text-2xl font-extrabold text-stone-950">{catalogUnit.smallBoxCapacity}<span className="text-sm font-normal text-stone-500"> thùng</span></p>
+                      </div>
+                      <div className="rounded-xl border border-stone-200 bg-white p-4">
+                        <p className="text-xs font-bold text-stone-700">Thùng to (70×50×50 cm)</p>
+                        <p className="mt-2 text-2xl font-extrabold text-stone-950">{catalogUnit.largeBoxCapacity}<span className="text-sm font-normal text-stone-500"> thùng</span></p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="order-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Ưu đãi đặt kho ban đầu</p>
-                <p className="mt-2 text-xs leading-5 text-emerald-900">Ba mức giảm 3%, 5% và 8% dưới đây chỉ áp dụng cho kỳ thuê khi đặt kho lần đầu. Gói gia hạn áp dụng chính sách riêng: 6 tháng giảm 3%, 12 tháng giảm 5%.</p>
-                <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                  <li className="rounded-xl border border-emerald-200 bg-white p-3"><b>Thuê 3 tháng</b><span className="mt-1 block text-emerald-700">Giảm 3% tiền thuê</span></li>
-                  <li className="rounded-xl border border-emerald-200 bg-white p-3"><b>Thuê 6 tháng</b><span className="mt-1 block text-emerald-700">Giảm 5% tiền thuê</span></li>
-                  <li className="rounded-xl border border-emerald-200 bg-white p-3"><b>Thuê 12 tháng</b><span className="mt-1 block text-emerald-700">Giảm 8% tiền thuê</span></li>
-                </ul>
-              </div>
+              {/* Dynamic Rental Packages Configured by BO */}
+              {(() => {
+                const fac = facilities.find(f => f.id === selectedUnit.facilityId || f.code === selectedUnit.facilityId)
+                const unitSpec = fac?.unitCustomSpecs?.find(s => s.sizeCode === catalogUnit?.sizeCode)
+                const activePackages = resolveRentalPackagesForUnit({
+                  rentalPackages: selectedUnit.rentalPackages || unitSpec?.rentalPackages,
+                  monthlyPrice: selectedUnit.price,
+                  sizeCode: catalogUnit?.sizeCode,
+                  facilityId: selectedUnit.facilityId
+                }).filter(p => p.status === 'active')
+
+                if (activePackages.length === 0) return null
+
+                return (
+                  <div className="order-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                          <span>🏷️</span>
+                          <span>Gói thuê ưu đãi cho loại kho này</span>
+                        </p>
+                        <p className="mt-0.5 text-xs text-emerald-950">
+                          Được thiết lập bởi cơ sở cho cỡ kho {catalogUnit?.sizeCode}. Thuê dài hạn để nhận mức giá ưu đãi nhất.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[11px] font-bold text-emerald-900">
+                        {activePackages.length} gói khả dụng
+                      </span>
+                    </div>
+
+                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                      {activePackages.map((pkg) => (
+                        <div
+                          key={pkg.id}
+                          className="rounded-xl border border-emerald-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-extrabold text-stone-900 text-sm">{pkg.name}</span>
+                              {(pkg.discountPercent ?? 0) > 0 ? (
+                                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                                  Giảm {pkg.discountPercent}%
+                                </span>
+                              ) : (
+                                <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
+                                  Tiêu chuẩn
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-base font-extrabold text-emerald-900">
+                              {formatVnd(pkg.packagePrice)}
+                            </p>
+                            <p className="text-[11px] text-stone-500">
+                              ~ {formatVnd(pkg.monthlyEquivalentPrice)}/tháng
+                            </p>
+                          </div>
+                          {pkg.description && (
+                            <p className="mt-2 text-[10px] text-stone-600 border-t border-stone-100 pt-1.5 line-clamp-2">
+                              {pkg.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[11px] text-emerald-800">
+                      Gói gia hạn tiếp theo: 3 tháng giảm {Math.round(renewalDiscountRate(3) * 100)}%, 6 tháng giảm {Math.round(renewalDiscountRate(6) * 100)}%, 12 tháng giảm {Math.round(renewalDiscountRate(12) * 100)}%, 24 tháng giảm {Math.round(renewalDiscountRate(24) * 100)}%.
+                    </p>
+                  </div>
+                )
+              })()}
+
+              {/* Facility-Specific Policies & Rules */}
+              {(() => {
+                const facilityCode = CUSTOMER_FACILITY_DISPLAY[selectedUnit.facilityId]?.code || selectedUnit.facilityId
+                const facilityPolicies = getPoliciesForFacility(selectedUnit.facilityName || selectedUnit.facilityId, facilityCode)
+                if (facilityPolicies.length === 0) return null
+
+                return (
+                  <div className="order-4 rounded-2xl border border-blue-200 bg-blue-50/50 p-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/80 pb-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                          <span>📋</span>
+                          <span>Chính sách & Quy định áp dụng tại cơ sở</span>
+                        </p>
+                        <p className="text-xs text-stone-600 mt-0.5">
+                          Áp dụng cho khách thuê tại: <b>{selectedUnit.facilityName}</b>
+                        </p>
+                      </div>
+                      <Badge variant="info">
+                        {facilityPolicies.length} quy định đang hiệu lực
+                      </Badge>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {facilityPolicies.map(policy => {
+                        const benefit = evaluatePolicyBenefit(policy, selectedUnit.price || 1000000, 3)
+                        return (
+                          <div key={policy.id} className="rounded-xl border border-blue-100 bg-white p-3.5 shadow-sm space-y-2 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="font-bold text-sm text-stone-900">{policy.name}</p>
+                                {benefit.isDiscount ? (
+                                  <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
+                                    🎁 Có ưu đãi tiền thuê
+                                  </span>
+                                ) : (
+                                  <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-medium text-stone-600">
+                                    Quy chuẩn
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs font-semibold text-blue-900 bg-blue-50/80 rounded-lg px-2.5 py-1.5">
+                                Giá trị / Quyền lợi: <span className="font-bold">{policy.value}</span>
+                              </div>
+                              {policy.description && (
+                                <p className="text-xs text-stone-600 leading-relaxed">
+                                  {policy.description}
+                                </p>
+                              )}
+                            </div>
+                            {benefit.isDiscount && (
+                              <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                                ✓ Tự động tính toán giảm tiền khi tiến hành đặt kho
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* 3. Safety, Security & Operating Standards */}
               <div className="order-5">
@@ -2350,9 +2793,9 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                 <div className="mt-3 grid gap-2 sm:grid-cols-4">
                   {[
                     'Chọn cỡ kho phù hợp',
-                    'Xác nhận để giữ kho',
+                    'Xác nhận giữ suất theo loại kho',
                     'Thanh toán cọc 20% trong 10 phút',
-                    'Check-in tại gian kho đã chọn trong 14 ngày'
+                    'Manager phân gian và khách check-in trong 14 ngày'
                   ].map((item, index) => <div key={item} className="flex gap-2 rounded-xl bg-stone-50 p-3"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white">{index + 1}</span><span className="font-medium leading-4 text-stone-700">{item}</span></div>)}
                 </div>
               </div>
@@ -2363,14 +2806,14 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                   disabled={selectedUnit.status !== 'available' || effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0}
                   onClick={() => {
                     if (selectedTarget) {
-                      handleStartReservation(selectedTarget.facility, selectedTarget.unitType, selectedUnit)
+                      handleStartReservation(selectedTarget.facility, selectedTarget.unitType)
                     } else {
                       setDetailOpen(false)
                       setBookOpen(true)
                     }
                   }}
                 >
-                  {selectedUnit.status !== 'available' ? ('Kho đang được giữ') : effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0 ? ('Hết kho') : ('Khai báo hàng & Đặt kho này')}
+                  {selectedUnit.status !== 'available' ? ('Loại kho đang hết chỗ') : effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0 ? ('Hết kho') : ('Khai báo hàng & Đặt loại kho này')}
                 </Button>
               </div>
             </div>
@@ -2383,27 +2826,27 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         open={bookOpen}
         onClose={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã thoát biểu mẫu đặt kho.') }}
         size="xl"
-        title={selectedUnit?.id ? (`Đặt kho ${selectedUnit.code}`) : selectedTarget ? (`Đặt Kho: ${unitTypeLabel(selectedTarget.unitType.name)}`) : (selectedUnit ? ('Đặt kho') : '')}
+        title={selectedTarget ? (`Đặt Kho: ${unitTypeLabel(selectedTarget.unitType.name)}`) : (selectedUnit ? ('Đặt kho') : '')}
       >
         {selectedUnit && currentQuote && (
           <div className="space-y-4">
             <div className="sticky top-0 z-10 rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">{'Kho bạn đang chọn'}</p>
-                  <p className="mt-1 font-bold text-black">{selectedUnit.code} · {selectedUnit.facilityName}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">{'Loại kho bạn đang chọn'}</p>
+                  <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
                 </div>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-stone-700">{'Cỡ kho đã chọn:'}</span>
-                <b>{`${selectedUnit.code} · ${selectedUnit.type} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
+                <b>{`${unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
               </div>
               <div className="mt-2 flex justify-between text-sm">
                 <span className="text-stone-700">{'Kích thước & Sức chịu tải:'}</span>
                 <span>{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
               </div>
               <div className="mt-3 rounded-lg bg-stone-100 p-3 text-xs leading-5 text-stone-700">
-                {`Việc mở và điền biểu mẫu chưa giữ kho ${selectedUnit.code}. Khi bạn nhấn xác nhận, hệ thống sẽ kiểm tra lại tình trạng kho; yêu cầu hợp lệ được ghi nhận trước sẽ được ưu tiên.`}
+                {'Việc mở và điền biểu mẫu chưa giữ suất kho. Khi bạn nhấn xác nhận, hệ thống sẽ kiểm tra lại số lượng của loại kho; yêu cầu hợp lệ được ghi nhận trước sẽ được ưu tiên. Manager sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.'}
               </div>
             </div>
 
@@ -2422,11 +2865,37 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
               <Input label={'Địa chỉ'} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
               <Input label={'Ngày Check-in mong muốn'} type="date" value={moveInDate} min={dateInputValue(new Date())} max={dateInputValue(new Date(now + 14 * 86_400_000))} onChange={e => setMoveInDate(e.target.value)} />
               <div><Input label={'Giờ Check-in (đang mở 24/7 để kiểm thử)'} type="time" min="00:00" max="23:59" step="1800" value={bookingAppointmentTime} onChange={e => setBookingAppointmentTime(e.target.value)} /><p className="mt-1 text-[11px] text-blue-700">{'Bạn có thể chọn bất kỳ giờ nào trong ngày; giới hạn 14 ngày Check-in vẫn được áp dụng.'}</p></div>
-              <Select label={'Thời hạn thuê'} value={rentalMonths.toString()} onChange={e => setRentalMonths(Number(e.target.value))}>
-                <option value="1">1 {'tháng'}</option>
-                <option value="3">3 {'tháng'}</option>
-                <option value="6">6 {'tháng'}</option>
-                <option value="12">12 {'tháng'}</option>
+              <Select
+                label={'Gói thuê & Kỳ hạn'}
+                value={selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
+                onChange={e => {
+                  const val = e.target.value
+                  const pkg = selectedUnitActivePackages.find(p => p.id === val || p.months.toString() === val)
+                  if (pkg) {
+                    setSelectedPackageId(pkg.id)
+                    setRentalMonths(pkg.months)
+                  } else {
+                    const m = Number(val)
+                    if (!isNaN(m) && m > 0) {
+                      setRentalMonths(m)
+                    }
+                  }
+                }}
+              >
+                {selectedUnitActivePackages.length > 0 ? (
+                  selectedUnitActivePackages.map(pkg => (
+                    <option key={pkg.id} value={pkg.id}>
+                      {pkg.name} — {formatVnd(pkg.packagePrice)} {pkg.discountPercent ? `(Giảm ${pkg.discountPercent}%)` : ''}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="1">1 tháng — {formatVnd(currentQuote?.baseMonthlyPrice || selectedUnit?.price || 0)}</option>
+                    <option value="3">3 tháng — Giảm 3%</option>
+                    <option value="6">6 tháng — Giảm 5%</option>
+                    <option value="12">12 tháng — Giảm 8%</option>
+                  </>
+                )}
               </Select>
             </div>
 
@@ -2487,7 +2956,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
             {/* Storage Space & Cost Breakdown */}
             {(() => {
               const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
-              const totalTermValue = Math.max(0, currentQuote.baseMonthlyPrice * rentalMonths - promotionDiscount)
+              const totalTermValue = Math.max(0, currentQuote.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
               const reservationDeposit = Math.round(totalTermValue * 0.2 * 100) / 100
               const remainingPayment = Math.max(0, totalTermValue - reservationDeposit)
               const conditionSecurityDeposit = currentQuote.depositAmount || currentQuote.baseMonthlyPrice
@@ -2516,7 +2985,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
                   </div>
 
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Booking có hàng hóa “Khác” sẽ được giữ kho và chuyển cho Staff cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div><div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi {Math.round(discountRate * 100)}%</span><b>− {formatVnd(promotionDiscount)}</b></div><div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại Check-in (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng nghĩa vụ kỳ thuê và cọc đảm bảo</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
+                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Booking có hàng hóa “Khác” sẽ được giữ kho và chuyển cho Staff cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>− {formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>🎁</span><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>− {formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại Check-in (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng nghĩa vụ kỳ thuê và cọc đảm bảo</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
 
                     <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Kho chỉ được giữ tối đa 10 phút cho đơn thông thường; hồ sơ hàng hóa cần duyệt chưa khóa kho.</li><li>{hasOtherGoods ? 'Sau khi xác minh email, hàng hóa “Khác” được Staff cơ sở xét duyệt trong tối đa 12 giờ; chưa thu cọc trong thời gian chờ.' : 'Bạn cần xác minh email và thanh toán cọc 20% trong 10 phút kể từ khi tạo đơn.'}</li><li>Sau khi cọc, bạn cần hoàn tất Check-in tại gian kho đã chọn trong 14 ngày.</li></ul></div>
                 </div>
@@ -2568,7 +3037,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
             </div>
 
             {bookingReview && (() => {
-              const totalValue = Math.max(0, currentQuote.baseMonthlyPrice * rentalMonths - promotionDiscount)
+              const totalValue = Math.max(0, currentQuote.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
               const deposit = Math.round(totalValue * 0.2 * 100) / 100
               const securityDeposit = currentQuote.depositAmount || currentQuote.baseMonthlyPrice
               const dueAtCheckIn = totalValue - deposit + securityDeposit
@@ -2589,15 +3058,31 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · 2 × 4 × 4,5 m/khung</p></section>
                     <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa</p><ul className="list-disc space-y-1 pl-5">{goodsItems.map((item, index) => <li key={item.id}><b>Dòng {index + 1}:</b> {GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]} · {item.category === 'OTHER' ? item.customMaterial : item.materialName}</li>)}</ul><ul className="mt-3 list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · {sample.canFitFrame ? `cần ${sample.framesRequired} khung` : 'không thể xếp vào khung 2 × 4 × 4,5 m'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện tính sức chứa:</b> {packageCountNumber}</p><p><b>Tổng cân nặng tự động:</b> {goodsWeightNumber.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch Check-in:</b> {moveInDate} · {bookingAppointmentTime}</p><p><b>Kỳ thuê:</b> {rentalMonths} tháng</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, ngày mới vẫn phải nằm trong 14 ngày sau khi thanh toán cọc.</p></section>
+                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch Check-in:</b> {moveInDate} · {bookingAppointmentTime}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, ngày mới vẫn phải nằm trong 14 ngày sau khi thanh toán cọc.</p></section>
                   </div>
                   {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi Staff duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, Staff có tối đa 12 giờ để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
-                    <div><p className="text-xs text-stone-500">Giảm giá ({Math.round(discountRate * 100)}%)</p><p className="mt-1 font-bold text-emerald-700">− {formatVnd(promotionDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
+                    <div><p className="text-xs text-stone-500">Giảm giá {facilityPolicyDiscount > 0 ? '(Gồm ưu đãi cơ sở)' : `(${Math.round(discountRate * 100)}%)`}</p><p className="mt-1 font-bold text-emerald-700">− {formatVnd(totalCombinedDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
                     <div><p className="text-xs text-stone-500">Tiền thuê sau giảm</p><p className="mt-1 font-bold">{formatVnd(totalValue)}</p></div>
                     <div><p className="text-xs text-stone-500">{'Cọc giữ chỗ 20%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
                     <div><p className="text-xs text-stone-500">Tiền cọc đảm bảo kho</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
                     <div><p className="text-xs text-stone-500">{'Thu tại Check-in'}</p><p className="mt-1 font-bold">{formatVnd(dueAtCheckIn)}</p></div>
                   </div>}
+                  {evaluatedPolicyBenefits.some(b => b.isDiscount) && (
+                    <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950">
+                      <p className="font-bold flex items-center gap-1.5 text-emerald-900">
+                        <span>🎁</span>
+                        <span>Chính sách ưu đãi cơ sở được áp dụng:</span>
+                      </p>
+                      <div className="mt-2 space-y-1 pl-4">
+                        {evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => (
+                          <div key={b.policy.id} className="flex flex-wrap items-center justify-between gap-2">
+                            <span>• <b>{b.policy.name}</b> ({b.policy.value}): {b.descriptionVi}</span>
+                            <span className="font-bold text-emerald-800">− {formatVnd(b.discountAmount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi Manager chấp thuận, hệ thống mới mở bước thanh toán cọc 20%. Nếu bị từ chối, gian kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hủy trước Check-in. Tiền đảm bảo kho được thu riêng tại Check-in để bảo đảm nghĩa vụ về hư hại, vệ sinh và công nợ; khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
                 </div>
               )
@@ -3047,17 +3532,18 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
             </div>
 
             <Select label={'Chọn gói gia hạn'} value={renewalMonths.toString()} onChange={e => setRenewalMonths(Number(e.target.value))}>
-              <option value="1">1 {'tháng'}</option>
-              <option value="3">3 {'tháng'}</option>
-              <option value="6">6 {'tháng'} · {'giảm 3%'}</option>
-              <option value="12">12 {'tháng'} · {'giảm 5%'}</option>
+              <option value="1">1 {'tháng'} · {'không giảm'}</option>
+              <option value="3">3 {'tháng'} · {renewalDiscountRate(3) > 0 ? `giảm ${Math.round(renewalDiscountRate(3) * 100)}%` : 'không giảm'}</option>
+              <option value="6">6 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(6) * 100)}%`}</option>
+              <option value="12">12 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(12) * 100)}%`}</option>
+              <option value="24">24 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(24) * 100)}%`}</option>
             </Select>
             {(() => {
               const grossRenewalAmount = activeRentalForRenewal.monthlyRate * renewalMonths
               const discountRate = renewalDiscountRate(renewalMonths)
               const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
               const renewalTotal = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
-              return <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs sm:grid-cols-2"><div><p className="text-stone-500">{'Ngày hết hạn mới dự kiến'}</p><p className="mt-1 font-bold">{addMonthsForPreview(activeRentalForRenewal.endDate, renewalMonths)}</p></div><div className="space-y-1"><div className="flex justify-between gap-3"><span className="text-stone-500">{'Tiền gia hạn gốc'}</span><b>{formatVnd(grossRenewalAmount)}</b></div><div className="flex justify-between gap-3 text-emerald-700"><span>{`Giảm giá (${Math.round(discountRate * 100)}%)`}</span><b>− {formatVnd(discountAmount)}</b></div><div className="flex justify-between gap-3 border-t border-stone-200 pt-1"><span className="font-semibold">{'Phí gia hạn sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div></div><p className="sm:col-span-2 text-stone-600">{renewalMonths === 6 ? 'Gói gia hạn 6 tháng được giảm 3%.' : renewalMonths === 12 ? 'Gói gia hạn 12 tháng được giảm 5%.' : 'Gói gia hạn 1 và 3 tháng không áp dụng giảm giá.'}</p></div>
+              return <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs sm:grid-cols-2"><div><p className="text-stone-500">{'Ngày hết hạn mới dự kiến'}</p><p className="mt-1 font-bold">{addMonthsForPreview(activeRentalForRenewal.endDate, renewalMonths)}</p></div><div className="space-y-1"><div className="flex justify-between gap-3"><span className="text-stone-500">{'Tiền gia hạn gốc'}</span><b>{formatVnd(grossRenewalAmount)}</b></div><div className="flex justify-between gap-3 text-emerald-700"><span>{`Giảm giá (${Math.round(discountRate * 100)}%)`}</span><b>− {formatVnd(discountAmount)}</b></div><div className="flex justify-between gap-3 border-t border-stone-200 pt-1"><span className="font-semibold">{'Phí gia hạn sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div></div><p className="sm:col-span-2 text-stone-600">{discountRate > 0 ? `Gói gia hạn ${renewalMonths} tháng được áp dụng mức giảm ${Math.round(discountRate * 100)}%.` : 'Kỳ hạn dưới 3 tháng không áp dụng chiết khấu gia hạn.'}</p></div>
             })()}
 
             <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">

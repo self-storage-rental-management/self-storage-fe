@@ -4,7 +4,8 @@ import { Icon } from '../../components/Layout'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { CheckInRecord } from '../../types/storageHub'
-import { isFacilityVisible } from '../../domain/managerRules'
+import { isManagerFacilityVisible } from '../../domain/managerRules'
+import ManagerActionNotice from './ManagerActionNotice'
 
 interface ManagerCheckinsPanelProps {
   user: User
@@ -22,7 +23,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   // Filter checkins by facility (either match checkin.facilityId or unit's facility)
   const facilityCheckins = storeCheckins.filter(c => {
     const unit = storeUnits.find(u => u.id === c.unitId)
-    return isFacilityVisible(user, c.facilityId || unit?.facilityId, unit?.facilityName)
+    return isManagerFacilityVisible(user, c.facilityId || unit?.facilityId, unit?.facilityName)
   })
 
   const scheduledCount = facilityCheckins.filter(c => c.status === 'scheduled').length
@@ -66,6 +67,10 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
           'Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý 5 bước và biên bản kiểm đo thực tế'
         }
       />
+
+      <ManagerActionNotice>
+        Manager theo dõi tiến độ và hồ sơ bàn giao. Việc xác minh khách hàng, ký biên bản, cấp quyền truy cập và hoàn tất nhận kho do Staff thực hiện.
+      </ManagerActionNotice>
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -204,16 +209,16 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     </Td>
                     <Td>{sb(c.status)}</Td>
                     <Td className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedCheckin(c)
-                          setDetailOpen(true)
-                        }}
-                      >
-                        {'Chi tiết'}
-                      </Button>
+                      <div className="inline-flex max-w-52 flex-col items-end gap-2"><Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCheckin(c)
+                            setDetailOpen(true)
+                          }}
+                        >
+                          {'Chi tiết'}
+                        </Button><ManagerActionNotice compact tone={c.status === 'completed' ? 'success' : c.status === 'cancelled' ? 'warning' : 'info'}>{c.status === 'scheduled' ? 'Chờ Staff thực hiện nhận kho.' : c.status === 'completed' ? 'Staff đã hoàn tất bàn giao.' : 'Lịch nhận kho đã hủy; không còn thao tác.'}</ManagerActionNotice></div>
                     </Td>
                   </Tr>
                 )
