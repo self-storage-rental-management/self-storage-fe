@@ -11,6 +11,41 @@ export const DEFAULT_PACKAGE_DISCOUNTS: Record<number, number> = {
 }
 
 /**
+ * Lấy mức chiết khấu kỳ hạn từ localStorage nếu có, fallback về DEFAULT_PACKAGE_DISCOUNTS
+ */
+export function getActiveDurationDiscounts(facilityId?: string): Record<number, number> {
+  try {
+    const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null)
+    const raw = storage?.getItem('storagehub:durationDiscounts')
+    if (raw) {
+      const list = JSON.parse(raw)
+      if (Array.isArray(list) && list.length > 0) {
+        const discounts: Record<number, number> = { ...DEFAULT_PACKAGE_DISCOUNTS }
+        list.forEach((item: any) => {
+          if (!item || typeof item.months !== 'number') return
+          // Kiểm tra cơ sở áp dụng nếu có chỉ định facilityId
+          if (
+            facilityId &&
+            item.scopeType === 'specific' &&
+            Array.isArray(item.facilityIds) &&
+            item.facilityIds.length > 0
+          ) {
+            if (!item.facilityIds.includes(facilityId)) return
+          }
+          if (item.status === 'active' && typeof item.discountPercent === 'number') {
+            discounts[item.months] = item.discountPercent
+          } else if (item.status === 'inactive') {
+            discounts[item.months] = 0
+          }
+        })
+        return discounts
+      }
+    }
+  } catch {}
+  return DEFAULT_PACKAGE_DISCOUNTS
+}
+
+/**
  * Tính toán giá gói và giá tương đương theo tháng dựa trên giá cơ bản và % chiết khấu
  */
 export function calculatePackagePrice(
@@ -44,7 +79,7 @@ export function calculateDiscountPercent(
 }
 
 /**
- * Sinh danh sách các gói thuê mặc định (1, 3, 6, 12 tháng) cho một cỡ kho
+ * Sinh danh sách các gói thuê mặc định (1, 3, 6, 12, 24 tháng) cho một cỡ kho
  */
 export function generateDefaultRentalPackages(
   facilityId: string = '',
@@ -54,9 +89,10 @@ export function generateDefaultRentalPackages(
   const safeMonthlyPrice = Math.max(0, monthlyPrice)
   const prefix = facilityId ? `${facilityId}-` : ''
   const safeUnitType = (unitTypeId || 'S').toLowerCase()
+  const activeDiscounts = getActiveDurationDiscounts(facilityId)
 
   return DEFAULT_PACKAGE_DURATIONS.map((months) => {
-    const discount = DEFAULT_PACKAGE_DISCOUNTS[months] ?? 0
+    const discount = activeDiscounts[months] ?? DEFAULT_PACKAGE_DISCOUNTS[months] ?? 0
     const { packagePrice, monthlyEquivalentPrice } = calculatePackagePrice(
       safeMonthlyPrice,
       months,
