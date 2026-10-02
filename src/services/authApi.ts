@@ -59,7 +59,18 @@ export function actorToUser(actor: ApiActor): User {
     phone: actor.phone || undefined,
     role: primaryRole(actor.roles),
     facilityId: Object.keys(actor.facilityScopes)[0],
+    mustChangePassword: actor.mustChangePassword,
   }
+}
+
+function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage: string): ApiActor {
+  if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
+    throw new Error(invalidMessage)
+  }
+  setAccessToken(response.data.accessToken)
+  setRefreshToken(response.data.refreshToken)
+  currentActor = response.data.actor
+  return currentActor
 }
 
 export async function loginWithApi(email: string, password: string): Promise<ApiActor> {
@@ -69,9 +80,30 @@ export async function loginWithApi(email: string, password: string): Promise<Api
     method: 'POST',
     body: JSON.stringify({ email, password }),
     skipAuth: true,
+    timeoutMs: 10_000,
+  })
+  return completeApiLogin(response, 'Backend trả về dữ liệu đăng nhập không hợp lệ.')
+}
+
+export async function loginWithGoogleApi(idToken: string): Promise<ApiActor> {
+  clearAuthTokens()
+  currentActor = null
+  const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ idToken }),
+    skipAuth: true,
+    timeoutMs: 10_000,
+  })
+  return completeApiLogin(response, 'Backend trả về dữ liệu đăng nhập Google không hợp lệ.')
+}
+
+export async function changePasswordWithApi(currentPassword: string, newPassword: string): Promise<ApiActor> {
+  const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
   })
   if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
-    throw new Error('Backend trả về dữ liệu đăng nhập không hợp lệ.')
+    throw new Error('Backend trả về dữ liệu đổi mật khẩu không hợp lệ.')
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)

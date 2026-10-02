@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
-import { useStorageHub } from '../store/StorageHubContext'
-import { ApiClientError } from '../services/apiClient'
-import { actorToUser, loginWithApi, logoutFromApi, registerWithApi, requestPasswordResetWithApi, resetPasswordWithApi, verifyEmailWithApi } from '../services/authApi'
+import GoogleLoginButton from '../components/GoogleLoginButton'
+import { actorToUser, loginWithApi, loginWithGoogleApi, registerWithApi, requestPasswordResetWithApi, resetPasswordWithApi, verifyEmailWithApi } from '../services/authApi'
+import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 
 interface LoginProps {
   onLogin: (user: User) => void
@@ -14,22 +14,7 @@ type AuthTab = 'login' | 'register'
 type ResetStep = 'identify' | 'verify' | 'new-password' | 'success'
 type RecoveryPurpose = 'password-reset' | 'email-verification'
 
-const DEMO_PASSWORD = 'demo123'
-const DEMO_CODE = '123456'
-function GoogleIcon() {
-  return (
-    <svg className="show-icon w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
-      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
-      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
-      <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-    </svg>
-  )
-}
-
-
 export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
-  const { users, registerCustomer, recordLoginAttempt } = useStorageHub()
   const [tab, setTab] = useState<AuthTab>(initialTab)
 
   useEffect(() => {
@@ -53,7 +38,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const [recoveryPurpose, setRecoveryPurpose] = useState<RecoveryPurpose>('password-reset')
   const [pendingRegistrationPassword, setPendingRegistrationPassword] = useState('')
   const [debugCodeHint, setDebugCodeHint] = useState('')
-  const [googleModal, setGoogleModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
@@ -79,36 +63,24 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       onLogin(actorToUser(actor))
       return
     } catch (apiError) {
-      const demoUser = users.find(user => user.status === 'active' && user.email === normalizedEmail)
-      const canUseDemoFallback = (apiError instanceof ApiClientError && apiError.code === 'NETWORK_ERROR')
-        || (apiError instanceof ApiClientError && apiError.status === 401 && demoUser && password === DEMO_PASSWORD)
-      if (!canUseDemoFallback) {
-        recordLoginAttempt({ email: normalizedEmail, success: false, reason: apiError instanceof Error ? apiError.message : 'Đăng nhập thất bại.' })
-        setError(apiError instanceof Error ? apiError.message : 'Email hoặc mật khẩu không đúng.')
-        return
-      }
-      if (!demoUser || password !== DEMO_PASSWORD) {
-        recordLoginAttempt({ email: normalizedEmail, success: false, reason: 'Email hoặc mật khẩu không đúng.' })
-        setError('Email hoặc mật khẩu không đúng.')
-        return
-      }
-      recordLoginAttempt({ email: normalizedEmail, userId: demoUser.id, success: true })
-      onLogin(demoUser as unknown as User)
+      setError(apiError instanceof Error ? apiError.message : 'Đăng nhập thất bại.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  function handleGoogleCustomerLogin(googleUser: { name: string; email: string }) {
+  const handleGoogleCredential = useCallback(async (idToken: string) => {
+    setError('')
+    setIsSubmitting(true)
     try {
-      const customer = registerCustomer({ name: googleUser.name, email: googleUser.email, phone: '' })
-      recordLoginAttempt({ email: customer.email, userId: customer.id, success: true })
-      setGoogleModal(false)
-      onLogin(customer)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : ('Không thể tạo tài khoản Customer.'))
+      const actor = await loginWithGoogleApi(idToken)
+      onLogin(actorToUser(actor))
+    } catch (googleError) {
+      setError(googleError instanceof Error ? googleError.message : 'Đăng nhập Google thất bại.')
+    } finally {
+      setIsSubmitting(false)
     }
-  }
+  }, [onLogin])
 
   async function handleRegister(event: React.FormEvent) {
     event.preventDefault()
@@ -116,8 +88,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError('Vui lòng điền đầy đủ các thông tin bắt buộc.')
       return
     }
-    if (password.length < 12) {
-      setError('Mật khẩu phải có ít nhất 12 ký tự.')
+    const passwordError = getPasswordValidationError(password)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     if (password !== confirmPassword) {
@@ -141,18 +114,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
         ? `Tài khoản đã tạo. Mã xác minh dev: ${registration.debugCode}`
         : 'Tài khoản đã tạo. Hãy nhập mã xác minh được gửi đến email.')
     } catch (registrationError) {
-      const canUseDemoFallback = registrationError instanceof ApiClientError && registrationError.code === 'NETWORK_ERROR'
-      if (!canUseDemoFallback) {
-        setError(registrationError instanceof Error ? registrationError.message : 'Không thể tạo tài khoản Customer.')
-        return
-      }
-      try {
-        const customer = registerCustomer({ name: fullName, email: normalizedEmail, phone })
-        recordLoginAttempt({ email: customer.email, userId: customer.id, success: true })
-        onLogin(customer)
-      } catch (fallbackError) {
-        setError(fallbackError instanceof Error ? fallbackError.message : 'Không thể tạo tài khoản Customer.')
-      }
+      setError(registrationError instanceof Error ? registrationError.message : 'Không thể tạo tài khoản Customer.')
     } finally {
       setIsSubmitting(false)
     }
@@ -198,12 +160,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setResetStep('verify')
       setError(challenge.debugCode ? `Mã xác minh dev: ${challenge.debugCode}` : 'Hãy nhập mã được gửi đến email của bạn.')
     } catch (recoveryError) {
-      if (!(recoveryError instanceof ApiClientError && recoveryError.code === 'NETWORK_ERROR')) {
-        setError(recoveryError instanceof Error ? recoveryError.message : 'Không thể tạo yêu cầu khôi phục.')
-        return
-      }
-      setRecoveryPurpose('password-reset')
-      setResetStep('verify')
+      setError(recoveryError instanceof Error ? recoveryError.message : 'Không thể tạo yêu cầu khôi phục.')
     } finally {
       setIsSubmitting(false)
     }
@@ -227,15 +184,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
         setError('Email đã được xác minh. Bạn có thể đăng nhập bằng mật khẩu của mình.')
         setResetStep(null)
       } catch (verificationError) {
-        if (!(verificationError instanceof ApiClientError && verificationError.code === 'NETWORK_ERROR')) {
-          setError(verificationError instanceof Error ? verificationError.message : 'Mã xác minh không hợp lệ.')
-          return
-        }
-        if (verificationCode !== DEMO_CODE) {
-          setError(`Nhập mã xác thực demo: ${DEMO_CODE}.`)
-          return
-        }
-        setResetStep('success')
+        setError(verificationError instanceof Error ? verificationError.message : 'Mã xác minh không hợp lệ.')
       } finally {
         setIsSubmitting(false)
       }
@@ -247,8 +196,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   async function saveNewPassword(event: React.FormEvent) {
     event.preventDefault()
-    if (newPassword.length < 12) {
-      setError('Mật khẩu mới phải có ít nhất 12 ký tự.')
+    const passwordError = getPasswordValidationError(newPassword)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     if (newPassword !== newPasswordConfirm) {
@@ -262,16 +212,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setPassword(newPassword)
       setResetStep('success')
     } catch (resetError) {
-      if (!(resetError instanceof ApiClientError && resetError.code === 'NETWORK_ERROR')) {
-        setError(resetError instanceof Error ? resetError.message : 'Không thể đặt lại mật khẩu.')
-        return
-      }
-      if (verificationCode !== DEMO_CODE) {
-        setError(`Nhập mã xác thực demo: ${DEMO_CODE}.`)
-        return
-      }
-      setPassword(newPassword)
-      setResetStep('success')
+      setError(resetError instanceof Error ? resetError.message : 'Không thể đặt lại mật khẩu.')
     } finally {
       setIsSubmitting(false)
     }
@@ -405,26 +346,13 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                 {'Đăng nhập để truy cập bảng điều khiển StorageHub của bạn.'}
               </p>
 
-              {/* Continue with Google button */}
-              <button
-                type="button"
-                onClick={() => setGoogleModal(true)}
-                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-stone-300 bg-white hover:bg-stone-50 hover:border-stone-400 text-stone-700 font-medium text-sm transition-all shadow-sm active:scale-[0.99] mb-4"
-              >
-                <GoogleIcon />
-                <span>{'Tiếp tục với Google'}</span>
-              </button>
+              <div className="mb-4"><GoogleLoginButton onCredential={handleGoogleCredential} disabled={isSubmitting} /></div>
 
               <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-stone-200" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-[#fcfbf7] sm:bg-white px-2.5 text-stone-400 font-medium">
-                    {'hoặc tiếp tục với email'}
-                  </span>
-                </div>
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-200" /></div>
+                <div className="relative flex justify-center text-xs"><span className="bg-[#fcfbf7] px-2.5 font-medium text-stone-400 sm:bg-white">hoặc tiếp tục với email</span></div>
               </div>
+
             </div>
 
             <form onSubmit={handleLogin} noValidate>
@@ -471,25 +399,11 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               {'Tạo tài khoản khách hàng để đặt giữ chỗ và quản lý kho lưu trữ.'}
             </p>
 
-            {/* Google sign up option */}
-            <button
-              type="button"
-              onClick={() => setGoogleModal(true)}
-              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-stone-300 bg-white hover:bg-stone-50 hover:border-stone-400 text-stone-700 font-medium text-sm transition-all shadow-sm active:scale-[0.99] mb-4"
-            >
-              <GoogleIcon />
-              <span>{'Đăng ký nhanh với Google'}</span>
-            </button>
+            <div className="mb-4"><GoogleLoginButton onCredential={handleGoogleCredential} text="signup_with" disabled={isSubmitting} /></div>
 
             <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-stone-200" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-[#fcfbf7] sm:bg-white px-2.5 text-stone-400 font-medium">
-                  {'hoặc điền thông tin bên dưới'}
-                </span>
-              </div>
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-200" /></div>
+              <div className="relative flex justify-center text-xs"><span className="bg-[#fcfbf7] px-2.5 font-medium text-stone-400 sm:bg-white">hoặc điền thông tin bên dưới</span></div>
             </div>
 
             <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
@@ -507,10 +421,10 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               <input id="phone" value={phone} onChange={event => setPhone(event.target.value)} type="tel" autoComplete="tel" placeholder="0901 234 567" />
             </Field>
             <Field id="register-password" label={'Mật khẩu'}>
-              <PasswordInput id="register-password" value={password} onChange={setPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" />
+              <PasswordInput id="register-password" value={password} onChange={setPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
             </Field>
             <Field id="confirm-password" label={'Xác nhận mật khẩu'}>
-              <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" />
+              <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
             </Field>
             <ErrorMessage message={error} />
             <PrimaryButton disabled={isSubmitting}>{isSubmitting ? 'Đang tạo tài khoản…' : 'Hoàn Tất Đăng Ký'}</PrimaryButton>
@@ -521,75 +435,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
         )}
       </section>
 
-      {/* Google OAuth Account Chooser Modal */}
-      {googleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 fade-in">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 overflow-hidden text-stone-900">
-            {/* Header */}
-            <div className="p-6 text-center border-b border-stone-100">
-              <div className="flex justify-center mb-3">
-                <GoogleIcon />
-              </div>
-              <h3 className="text-lg font-bold text-stone-900">
-                {'Đăng nhập bằng Google'}
-              </h3>
-              <p className="text-xs text-stone-500 mt-1">
-                {'để tiếp tục đến StorageHub Platform'}
-              </p>
-            </div>
-
-            {/* Account List */}
-            <div className="p-4 space-y-2 divide-y divide-stone-100">
-              <button
-                type="button"
-                onClick={() => handleGoogleCustomerLogin({ name: 'Alex Morgan', email: 'alex.morgan@gmail.com' })}
-                className="w-full flex items-center gap-3.5 p-3 rounded-xl hover:bg-stone-50 transition text-left group"
-              >
-                <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0">
-                  A
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-stone-800 group-hover:text-blue-600 truncate">Alex Morgan</p>
-                  <p className="text-xs text-stone-400 truncate">alex.morgan@gmail.com</p>
-                </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {'Khách Hàng'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleGoogleCustomerLogin({ name: 'Google Demo User', email: 'user.google@storagehub.vn' })}
-                className="w-full flex items-center gap-3.5 p-3 rounded-xl hover:bg-stone-50 transition text-left group pt-3"
-              >
-                <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center flex-shrink-0">
-                  G
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-stone-800 group-hover:text-amber-600 truncate">
-                    {'Tài khoản Google bất kỳ'}
-                  </p>
-                  <p className="text-xs text-stone-400 truncate">user.google@storagehub.vn</p>
-                </div>
-              </button>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 bg-stone-50 border-t border-stone-100 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setGoogleModal(false)}
-                className="text-xs text-stone-500 hover:text-stone-800 font-medium px-3 py-1.5 rounded-lg hover:bg-stone-200/60"
-              >
-                {'Hủy'}
-              </button>
-              <span className="text-[11px] text-stone-400">
-                StorageHub Google Identity Service
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </AuthShell>
   )
 }
@@ -717,6 +562,8 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
               show={false}
               toggle={() => undefined}
               autoComplete="new-password"
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
               hideToggle
             />
           </Field>
@@ -728,11 +575,13 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
               show={false}
               toggle={() => undefined}
               autoComplete="new-password"
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
               hideToggle
             />
           </Field>
           <p className="-mt-2 mb-4 text-xs text-stone-500">
-            {'Sử dụng ít nhất 12 ký tự.'}
+            {PASSWORD_POLICY_HINT}
           </p>
           <ErrorMessage message={error} />
           <PrimaryButton disabled={submitting}>{submitting ? 'Đang lưu…' : 'Lưu Mật Khẩu Mới'}</PrimaryButton>
@@ -752,8 +601,8 @@ function Field({ id, label, children }: { id: string; label: string; children: R
   return <div className="mb-4"><label htmlFor={id} className="mb-1.5 block text-[12.5px] font-semibold text-[#3f403a]">{label}</label>{children}</div>
 }
 
-function PasswordInput({ id, value, onChange, show, toggle, autoComplete, hideToggle = false }: { id: string; value: string; onChange: (value: string) => void; show: boolean; toggle: () => void; autoComplete: string; hideToggle?: boolean }) {
-  return <div className="relative"><input id={id} value={value} onChange={event => onChange(event.target.value)} type={show ? 'text' : 'password'} autoComplete={autoComplete} placeholder="••••••••" className={hideToggle ? '' : 'pr-10'} />{!hideToggle && <button type="button" onClick={toggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2.5 top-1/2 -translate-y-1/2 border-0 bg-transparent text-[#77766d]"><Eye open={show} /></button>}</div>
+function PasswordInput({ id, value, onChange, show, toggle, autoComplete, hideToggle = false, minLength, maxLength }: { id: string; value: string; onChange: (value: string) => void; show: boolean; toggle: () => void; autoComplete: string; hideToggle?: boolean; minLength?: number; maxLength?: number }) {
+  return <div className="relative"><input id={id} value={value} onChange={event => onChange(event.target.value)} type={show ? 'text' : 'password'} autoComplete={autoComplete} minLength={minLength} maxLength={maxLength} placeholder="••••••••" className={hideToggle ? '' : 'pr-10'} />{!hideToggle && <button type="button" onClick={toggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2.5 top-1/2 -translate-y-1/2 border-0 bg-transparent text-[#77766d]"><Eye open={show} /></button>}</div>
 }
 
 function PrimaryButton({ children, className = '', onClick, disabled = false }: { children: React.ReactNode; className?: string; onClick?: () => void; disabled?: boolean }) {

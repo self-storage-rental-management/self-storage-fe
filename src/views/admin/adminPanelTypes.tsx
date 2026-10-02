@@ -31,8 +31,8 @@ export function LockIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) 
   return <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
 }
 
-export function SearchIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+export function SearchIcon({ className = '' }: { className?: string }) {
+  return <svg className={`show-icon h-4 w-4 ${className}`} style={{ display: 'inline-block', width: '1rem', height: '1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
 }
 
 export function RefreshIcon({ className = 'w-4 h-4' }: { className?: string }) {

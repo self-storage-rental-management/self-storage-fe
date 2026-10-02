@@ -11,6 +11,9 @@ import {
   type ManagerReturnSettlementFees
 } from '../../domain/managerRules'
 import ManagerActionNotice from './ManagerActionNotice'
+import ManagerPagination from './ManagerPagination'
+import { formatManagerDate, formatManagerDateTime, formatManagerMoney, managerDateValue, matchesManagerSearch, normalizeManagerMoney, paginateManagerItems } from './managerList'
+import useManagerSoftDelete from './useManagerSoftDelete'
 
 interface ManagerReturnsPanelProps {
   user: User
@@ -23,6 +26,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
   const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
   const [returnSearch, setReturnSearch] = useState('')
+  const [damageFilter, setDamageFilter] = useState('all')
+  const [settlementFilter, setSettlementFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sortBy, setSortBy] = useState('priority')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [selectedReturn, setSelectedReturn] = useState<ReturnCase | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [disputeModalOpen, setDisputeModalOpen] = useState(false)
@@ -30,14 +40,19 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('')
   const [disputeSettlement, setDisputeSettlement] = useState<ManagerReturnSettlementFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
   const [refundTxnRef, setRefundTxnRef] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<ReturnCase | null>(null)
+  const returnHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-returns`)
 
   // Filter returns by facility
-  const facilityReturns = storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
+  const scopedReturns = storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
+  const facilityReturns = scopedReturns.filter(r => !returnHistory.isHidden(r.id))
+  const hiddenFacilityCount = scopedReturns.length - facilityReturns.length
+  const moneyValue = (value?: number) => normalizeManagerMoney(value) ?? 0
 
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
   useEffect(() => { if (disputedCount > 0) setReturnTab('disputed') }, [disputedCount])
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length
-  const completedCount = facilityReturns.filter(r => r.status === 'completed').length
+  const completedCount = scopedReturns.filter(r => r.status === 'completed').length
   const inspectingCount = facilityReturns.filter(
     r => r.status === 'requested' || r.status === 'scheduled' || r.status === 'inspected' || r.status === 'awaiting_customer_confirmation'
   ).length
@@ -52,17 +67,21 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       (returnTab === 'completed' && r.status === 'completed') ||
       (returnTab === 'in_progress' && (r.status === 'requested' || r.status === 'scheduled' || r.status === 'inspected' || r.status === 'awaiting_customer_confirmation'))
 
-    const q = returnSearch.toLowerCase().trim()
-    const matchSearch =
-      !q ||
-      r.id.toLowerCase().includes(q) ||
-      r.customerName.toLowerCase().includes(q) ||
-      r.unitId.toLowerCase().includes(q) ||
-      (r.customerEmail && r.customerEmail.toLowerCase().includes(q)) ||
-      (r.customerPhone && r.customerPhone.includes(q))
-
-    return matchTab && matchSearch
+    const matchSearch = matchesManagerSearch(returnSearch, [r.id, r.rentalId, r.customerId, r.customerName, r.unitId, r.customerEmail, r.customerPhone, r.staffNotes, r.customerDecisionNote])
+    const matchDamage = damageFilter === 'all' || r.damageClassification === damageFilter
+    const matchSettlement = settlementFilter === 'all' || (settlementFilter === 'refund' ? r.netRefundAmount > 0 : settlementFilter === 'customer_due' ? (r.amountDueFromCustomer || 0) > 0 : r.netRefundAmount === 0 && (r.amountDueFromCustomer || 0) === 0)
+    const matchDate = (!dateFrom || r.scheduledDate >= dateFrom) && (!dateTo || r.scheduledDate <= dateTo)
+    return matchTab && matchSearch && matchDamage && matchSettlement && matchDate
+  }).sort((left, right) => {
+    if (sortBy === 'date-asc') return managerDateValue(left.scheduledDate) - managerDateValue(right.scheduledDate)
+    if (sortBy === 'date-desc') return managerDateValue(right.scheduledDate) - managerDateValue(left.scheduledDate)
+    if (sortBy === 'amount-desc') return ((right.amountDueFromCustomer || 0) + right.netRefundAmount) - ((left.amountDueFromCustomer || 0) + left.netRefundAmount)
+    const statusPriority: Record<string, number> = { disputed: 0, refund_pending: 1, payment_due: 2, awaiting_customer_confirmation: 3, inspected: 4, scheduled: 5, requested: 6, completed: 7 }
+    return (statusPriority[left.status] ?? 99) - (statusPriority[right.status] ?? 99) || managerDateValue(left.requestedAt) - managerDateValue(right.requestedAt)
   })
+  const pagination = paginateManagerItems(filteredReturns, page, pageSize)
+
+  useEffect(() => setPage(1), [returnTab, returnSearch, damageFilter, settlementFilter, dateFrom, dateTo, sortBy, pageSize])
 
   const getDamageLabel = (d?: DamageClassification) => {
     switch (d) {
@@ -91,11 +110,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     setSelectedReturn(returnCase)
     setDisputeResolutionNote(returnCase.staffNotes || '')
     setDisputeSettlement({
-      damageFee: Math.round((returnCase.damageFee || 0) * USD_TO_VND_RATE),
-      cleaningFee: Math.round((returnCase.cleaningFee || 0) * USD_TO_VND_RATE),
-      lostItemFee: Math.round((returnCase.lostItemFee || 0) * USD_TO_VND_RATE),
-      overdueFee: Math.round((returnCase.overdueFee || 0) * USD_TO_VND_RATE),
-      outstandingFee: Math.round((returnCase.outstandingFee || 0) * USD_TO_VND_RATE)
+      damageFee: Math.round(moneyValue(returnCase.damageFee) * USD_TO_VND_RATE),
+      cleaningFee: Math.round(moneyValue(returnCase.cleaningFee) * USD_TO_VND_RATE),
+      lostItemFee: Math.round(moneyValue(returnCase.lostItemFee) * USD_TO_VND_RATE),
+      overdueFee: Math.round(moneyValue(returnCase.overdueFee) * USD_TO_VND_RATE),
+      outstandingFee: Math.round(moneyValue(returnCase.outstandingFee) * USD_TO_VND_RATE)
     })
     setDisputeModalOpen(true)
   }
@@ -129,7 +148,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     try {
       completeReturnRefund(selectedReturn.id, user, refundTxnRef.trim())
       showToast(
-        `Đã xác nhận hoàn tiền cọc ${formatVnd(selectedReturn.netRefundAmount)} cho ${selectedReturn.customerName}!`
+        `Đã xác nhận hoàn tiền cọc ${formatManagerMoney(selectedReturn.netRefundAmount)} cho ${selectedReturn.customerName}!`
       )
       setRefundModalOpen(false)
       setRefundTxnRef('')
@@ -148,7 +167,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   }
 
   const disputePreview = selectedReturn
-    ? calculateManagerReturnSettlement(selectedReturn.depositAmount, settlementInBaseCurrency)
+    ? calculateManagerReturnSettlement(moneyValue(selectedReturn.depositAmount), settlementInBaseCurrency)
     : null
 
   return (
@@ -164,7 +183,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title={'Tổng yêu cầu trả kho'}
-          value={facilityReturns.length}
+          value={scopedReturns.length}
           icon={Icon.box}
           iconBg="bg-blue-50 text-blue-700"
         />
@@ -230,6 +249,24 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
           />
         </div>
       </div>
+      <Card className="p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <Select label="Mức hư hại" value={damageFilter} onChange={event => setDamageFilter(event.target.value)}><option value="all">Tất cả mức độ</option><option value="no_damage">Không hư hại</option><option value="minor_damage">Hư hại nhẹ</option><option value="major_damage">Hư hại nặng</option><option value="abandoned_goods">Bỏ lại hàng hóa</option></Select>
+          <Select label="Kết quả quyết toán" value={settlementFilter} onChange={event => setSettlementFilter(event.target.value)}><option value="all">Tất cả kết quả</option><option value="refund">Có tiền hoàn khách</option><option value="customer_due">Khách phải nộp thêm</option><option value="balanced">Không phát sinh</option></Select>
+          <Input label="Từ ngày hẹn" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} />
+          <Input label="Đến ngày hẹn" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} />
+          <Select label="Sắp xếp" value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="priority">Cần xử lý trước</option><option value="date-asc">Ngày hẹn gần nhất</option><option value="date-desc">Ngày hẹn xa nhất</option><option value="amount-desc">Giá trị quyết toán lớn nhất</option></Select>
+        </div>
+      </Card>
+
+      {hiddenFacilityCount > 0 && (
+        <ManagerActionNotice tone="info">
+          <div className="flex items-center justify-between gap-3">
+            <span>{hiddenFacilityCount} hồ sơ trả kho đã được soft-delete khỏi danh sách Manager. Dữ liệu nguồn và báo cáo vẫn được giữ nguyên.</span>
+            <Button size="sm" variant="outline" onClick={() => returnHistory.restoreAll()}>Khôi phục tất cả</Button>
+          </div>
+        </ManagerActionNotice>
+      )}
 
       {/* Returns Table */}
       <Card className="overflow-hidden border border-stone-200/80 shadow-sm">
@@ -254,13 +291,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                 </td>
               </tr>
             ) : (
-              filteredReturns.map(ret => {
+              pagination.items.map(ret => {
                 const totalDeductions =
-                  (ret.damageFee || 0) +
-                  (ret.cleaningFee || 0) +
-                  (ret.lostItemFee || 0) +
-                  (ret.overdueFee || 0) +
-                  (ret.outstandingFee || 0)
+                  moneyValue(ret.damageFee) +
+                  moneyValue(ret.cleaningFee) +
+                  moneyValue(ret.lostItemFee) +
+                  moneyValue(ret.overdueFee) +
+                  moneyValue(ret.outstandingFee)
 
                 return (
                   <Tr
@@ -275,7 +312,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   >
                     <Td>
                       <span className="font-mono text-xs font-bold text-stone-800">{ret.id}</span>
-                      <p className="text-[11px] text-stone-400 font-mono">HĐ: {ret.rentalId}</p>
+                      <p className="text-[11px] text-stone-400 font-mono">Hồ sơ thuê: {ret.rentalId}</p>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
@@ -293,9 +330,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     </Td>
                     <Td>
                       <div className="text-xs">
-                        <p className="text-stone-700 font-medium">{ret.scheduledDate}</p>
+                        <p className="text-stone-700 font-medium">{formatManagerDate(ret.scheduledDate)}</p>
                         <p className="text-[11px] text-stone-400">
-                          {'Yêu cầu:'} {ret.requestedAt.slice(0, 10)}
+                          {'Yêu cầu:'} {formatManagerDate(ret.requestedAt)}
                         </p>
                       </div>
                     </Td>
@@ -322,15 +359,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     <Td>
                       <div className="text-xs">
                         <p className="text-stone-500">
-                          {'Cọc:'} <span className="font-mono">{formatVnd(ret.depositAmount)}</span>
+                          {'Cọc:'} <span className="font-mono">{formatManagerMoney(ret.depositAmount)}</span>
                         </p>
                         {ret.amountDueFromCustomer && ret.amountDueFromCustomer > 0 ? (
                           <p className="font-bold text-rose-600">
-                            {`Khách nộp thêm: ${formatVnd(ret.amountDueFromCustomer ?? 0)}`}
+                            {`Khách nộp thêm: ${formatManagerMoney(ret.amountDueFromCustomer ?? 0)}`}
                           </p>
                         ) : (
                           <p className="font-bold text-emerald-700">
-                            {`Hoàn lại: ${formatVnd(ret.netRefundAmount)}`}
+                            {`Hoàn lại: ${formatManagerMoney(ret.netRefundAmount)}`}
                           </p>
                         )}
                       </div>
@@ -376,6 +413,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             {'Hoàn cọc'}
                           </Button>
                         )}
+                        {ret.status === 'completed' && (
+                          <Button variant="danger" size="sm" onClick={() => setDeleteTarget(ret)}>
+                            Xóa
+                          </Button>
+                        )}
                         {getReturnActionReason(ret) && <div className="max-w-48 text-left"><ManagerActionNotice compact tone={ret.status === 'completed' ? 'success' : 'info'}>{getReturnActionReason(ret)}</ManagerActionNotice></div>}
                       </div>
                     </Td>
@@ -385,6 +427,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             )}
           </Tbody>
         </Table>
+        <ManagerPagination {...pagination} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </Card>
 
       {/* Return Details Modal */}
@@ -434,7 +477,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               <div>
                 <span className="text-stone-400 block">{'Ngày nghiệm thu'}</span>
                 <span className="font-medium text-stone-700">
-                  {selectedReturn.inspectedAt ? selectedReturn.inspectedAt.slice(0, 16).replace('T', ' ') : 'Chưa nghiệm thu'}
+                  {selectedReturn.inspectedAt ? formatManagerDateTime(selectedReturn.inspectedAt) : 'Chưa nghiệm thu'}
                 </span>
               </div>
               <div>
@@ -454,42 +497,42 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </p>
               <div className="flex justify-between py-0.5">
                 <span className="text-stone-500">{'Tiền đặt cọc ban đầu'}</span>
-                <span className="font-mono font-semibold text-stone-800">{formatVnd(selectedReturn.depositAmount)}</span>
+                <span className="font-mono font-semibold text-stone-800">{formatManagerMoney(selectedReturn.depositAmount)}</span>
               </div>
               {selectedReturn.damageFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{'Phí sửa chữa hư hại'}</span>
-                  <span className="font-mono">-{formatVnd(selectedReturn.damageFee)}</span>
+                  <span className="font-mono">-{formatManagerMoney(selectedReturn.damageFee)}</span>
                 </div>
               )}
               {selectedReturn.cleaningFee && selectedReturn.cleaningFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{'Phí vệ sinh kho'}</span>
-                  <span className="font-mono">-{formatVnd(selectedReturn.cleaningFee)}</span>
+                  <span className="font-mono">-{formatManagerMoney(selectedReturn.cleaningFee)}</span>
                 </div>
               )}
               {selectedReturn.overdueFee && selectedReturn.overdueFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{`Phí phạt trễ hạn (${selectedReturn.overdueDays || 0} ngày)`}</span>
-                  <span className="font-mono">-{formatVnd(selectedReturn.overdueFee)}</span>
+                  <span className="font-mono">-{formatManagerMoney(selectedReturn.overdueFee)}</span>
                 </div>
               )}
               {selectedReturn.outstandingFee && selectedReturn.outstandingFee > 0 && (
                 <div className="flex justify-between py-0.5 text-red-600">
                   <span>{'Cước thuê còn nợ'}</span>
-                  <span className="font-mono">-{formatVnd(selectedReturn.outstandingFee)}</span>
+                  <span className="font-mono">-{formatManagerMoney(selectedReturn.outstandingFee)}</span>
                 </div>
               )}
               <div className="pt-2 border-t flex justify-between font-bold text-sm">
                 <span>{'Thực hoàn lại cho khách'}</span>
                 <span className={selectedReturn.netRefundAmount > 0 ? 'text-emerald-700 font-mono' : 'text-stone-600 font-mono'}>
-                  {formatVnd(selectedReturn.netRefundAmount)}
+                  {formatManagerMoney(selectedReturn.netRefundAmount)}
                 </span>
               </div>
               {selectedReturn.amountDueFromCustomer && selectedReturn.amountDueFromCustomer > 0 && (
                 <div className="flex justify-between font-bold text-sm text-rose-600 pt-1">
                   <span>{'Khách còn phải nộp thêm'}</span>
-                  <span className="font-mono">{formatVnd(selectedReturn.amountDueFromCustomer ?? 0)}</span>
+                  <span className="font-mono">{formatManagerMoney(selectedReturn.amountDueFromCustomer ?? 0)}</span>
                 </div>
               )}
             </div>
@@ -632,7 +675,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-emerald-200 text-sm">
                 <span className="font-bold text-emerald-900">{'Số tiền hoàn cọc'}</span>
-                <span className="font-mono font-extrabold text-emerald-700 text-lg">{formatVnd(selectedReturn.netRefundAmount)}</span>
+                <span className="font-mono font-extrabold text-emerald-700 text-lg">{formatManagerMoney(selectedReturn.netRefundAmount)}</span>
               </div>
             </div>
 
@@ -657,6 +700,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title="Soft-delete hồ sơ trả kho">
+        {deleteTarget && <div className="space-y-4"><ManagerActionNotice tone="warning">Hồ sơ {deleteTarget.id} chỉ bị ẩn khỏi lịch sử của Manager. Dữ liệu dùng chung, quyết toán và báo cáo không bị xóa.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Hủy</Button><Button variant="danger" onClick={() => { returnHistory.hide(deleteTarget.id); setDeleteTarget(null); showToast(`Đã ẩn hồ sơ ${deleteTarget.id} khỏi lịch sử Manager.`) }}>Xóa khỏi lịch sử</Button></div></div>}
       </Modal>
     </div>
   )
