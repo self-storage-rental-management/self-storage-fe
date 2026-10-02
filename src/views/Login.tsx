@@ -14,6 +14,24 @@ type AuthTab = 'login' | 'register'
 type ResetStep = 'identify' | 'verify' | 'new-password' | 'success'
 type RecoveryPurpose = 'password-reset' | 'email-verification'
 
+function normalizeVietnamesePhone(value: string) {
+  let phone = value.replace(/[\s().-]/g, '')
+  if (phone.startsWith('+84')) phone = `0${phone.slice(3)}`
+  if (phone.startsWith('84')) phone = `0${phone.slice(2)}`
+  return /^0(?:3|5|7|8|9)\d{8}$/.test(phone) ? phone : ''
+}
+
+function formatAuthError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : ''
+  const translations: Record<string, string> = {
+    'The email delivery service is unavailable': 'Dịch vụ gửi email hiện không khả dụng. Vui lòng thử lại sau.',
+    'The email delivery service is not configured': 'Dịch vụ gửi email chưa được cấu hình. Vui lòng báo Admin.',
+    'An account with this email already exists': 'Email này đã được đăng ký.',
+    'Invalid email or password': 'Email hoặc mật khẩu không chính xác.',
+  }
+  return translations[message] || message || fallback
+}
+
 export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
   const [tab, setTab] = useState<AuthTab>(initialTab)
 
@@ -25,9 +43,12 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
+  const [permanentAddress, setPermanentAddress] = useState('')
+  const [emergencyContactName, setEmergencyContactName] = useState('')
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [resetStep, setResetStep] = useState<ResetStep | null>(null)
@@ -38,18 +59,55 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const [recoveryPurpose, setRecoveryPurpose] = useState<RecoveryPurpose>('password-reset')
   const [pendingRegistrationPassword, setPendingRegistrationPassword] = useState('')
   const [debugCodeHint, setDebugCodeHint] = useState('')
+  const [notice, setNotice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     const url = new URL(window.location.href)
+    const pathname = url.pathname.replace(/\/+$/, '') || '/'
     const verificationToken = url.searchParams.get('verifyEmail')
+      || (pathname === '/verify-email' ? url.searchParams.get('token') : null)
     const resetToken = url.searchParams.get('resetPassword')
-    if (verificationToken || resetToken) {
-      setRecoveryAccount('')
-      setVerificationCode(verificationToken || resetToken || '')
-      setRecoveryPurpose(verificationToken ? 'email-verification' : 'password-reset')
-      setResetStep(verificationToken || resetToken ? 'verify' : null)
+      || (pathname === '/reset-password' ? url.searchParams.get('token') : null)
+    if (!verificationToken && !resetToken) {
+      if (pathname === '/reset-password') {
+        setRecoveryPurpose('password-reset')
+        setResetStep('identify')
+      } else if (pathname === '/verify-email') {
+        setTab('login')
+        setError('Liên kết xác minh email thiếu token hoặc không hợp lệ.')
+      }
+      return
     }
+
+    setRecoveryAccount('')
+    setVerificationCode('')
+    setRecoveryPurpose(verificationToken ? 'email-verification' : 'password-reset')
+    setError('')
+    setNotice('')
+
+    if (verificationToken) {
+      setResetStep(null)
+      setIsSubmitting(true)
+      void verifyEmailWithApi(undefined, verificationToken)
+        .then(() => {
+          window.history.replaceState({}, document.title, '/login')
+          setTab('login')
+          setNotice('Xác minh email thành công. Bạn có thể đăng nhập ngay.')
+        })
+        .catch(verificationError => {
+          window.history.replaceState({}, document.title, '/login')
+          setTab('login')
+          setError(formatAuthError(verificationError, 'Liên kết xác minh không hợp lệ hoặc đã hết hạn.'))
+        })
+        .finally(() => setIsSubmitting(false))
+      return
+    }
+
+    window.history.replaceState({}, document.title, '/reset-password')
+    setVerificationCode(resetToken || '')
+    setResetStep('new-password')
+    setNotice('Liên kết đặt lại mật khẩu hợp lệ. Hãy tạo mật khẩu mới.')
   }, [])
 
 
@@ -57,13 +115,14 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     event.preventDefault()
     const normalizedEmail = email.trim().toLowerCase()
     setError('')
+    setNotice('')
     setIsSubmitting(true)
     try {
       const actor = await loginWithApi(normalizedEmail, password)
       onLogin(actorToUser(actor))
       return
     } catch (apiError) {
-      setError(apiError instanceof Error ? apiError.message : 'Đăng nhập thất bại.')
+      setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -71,12 +130,13 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   const handleGoogleCredential = useCallback(async (idToken: string) => {
     setError('')
+    setNotice('')
     setIsSubmitting(true)
     try {
       const actor = await loginWithGoogleApi(idToken)
       onLogin(actorToUser(actor))
     } catch (googleError) {
-      setError(googleError instanceof Error ? googleError.message : 'Đăng nhập Google thất bại.')
+      setError(formatAuthError(googleError, 'Đăng nhập Google thất bại.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -84,8 +144,19 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   async function handleRegister(event: React.FormEvent) {
     event.preventDefault()
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim() || !password || !confirmPassword) {
+    setNotice('')
+    if (!fullName.trim() || !email.trim() || !phone.trim() || !permanentAddress.trim() || !emergencyContactName.trim() || !emergencyContactPhone.trim() || !password || !confirmPassword) {
       setError('Vui lòng điền đầy đủ các thông tin bắt buộc.')
+      return
+    }
+    const normalizedPhone = normalizeVietnamesePhone(phone)
+    if (!normalizedPhone) {
+      setError('Số điện thoại phải là số điện thoại Việt Nam hợp lệ (10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09).')
+      return
+    }
+    const normalizedEmergencyPhone = normalizeVietnamesePhone(emergencyContactPhone)
+    if (!normalizedEmergencyPhone) {
+      setError('Số điện thoại người liên hệ khẩn cấp không hợp lệ.')
       return
     }
     const passwordError = getPasswordValidationError(password)
@@ -97,43 +168,57 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError('Mật khẩu nhập lại không khớp.')
       return
     }
-    const fullName = `${firstName.trim()} ${lastName.trim()}`
     const normalizedEmail = email.trim().toLowerCase()
     setError('')
     setIsSubmitting(true)
     try {
-      const registration = await registerWithApi({ email: normalizedEmail, password, fullName, phone })
+      const registration = await registerWithApi({
+        email: normalizedEmail,
+        password,
+        fullName: fullName.trim(),
+        phone: normalizedPhone,
+        permanentAddress: permanentAddress.trim(),
+        emergencyContactName: emergencyContactName.trim(),
+        emergencyContactPhone: normalizedEmergencyPhone,
+      })
       setRecoveryAccount(normalizedEmail)
       setPendingRegistrationPassword(password)
       setRecoveryPurpose('email-verification')
       setDebugCodeHint(registration.debugCode || '')
-      setVerificationCode(registration.debugCode || '')
+      setVerificationCode('')
       setResetStep('verify')
       setTab('login')
-      setError(registration.debugCode
-        ? `Tài khoản đã tạo. Mã xác minh dev: ${registration.debugCode}`
-        : 'Tài khoản đã tạo. Hãy nhập mã xác minh được gửi đến email.')
+      setError('')
+      setNotice(registration.debugCode
+        ? 'Mã xác minh development đã được tạo. Nhập mã hiển thị bên dưới để tiếp tục.'
+        : `Mã xác minh đã được gửi đến ${normalizedEmail}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
     } catch (registrationError) {
-      setError(registrationError instanceof Error ? registrationError.message : 'Không thể tạo tài khoản Customer.')
+      setNotice('')
+      setError(formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.'))
     } finally {
       setIsSubmitting(false)
     }
   }
 
   function switchTab(next: AuthTab) {
+    window.history.pushState({ tab: next }, '', next === 'login' ? '/login' : '/register')
     setTab(next)
     setError('')
+    setNotice('')
   }
 
   function startRecovery() {
+    window.history.pushState({ recovery: true }, '', '/reset-password')
     setRecoveryAccount(email)
     setRecoveryPurpose('password-reset')
     setDebugCodeHint('')
     setResetStep('identify')
     setError('')
+    setNotice('')
   }
 
   function leaveRecovery() {
+    window.history.replaceState({ tab: 'login' }, '', '/login')
     setResetStep(null)
     setVerificationCode('')
     setNewPassword('')
@@ -142,6 +227,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     setDebugCodeHint('')
     setRecoveryPurpose('password-reset')
     setError('')
+    setNotice('')
   }
 
   async function findAccount(event: React.FormEvent) {
@@ -156,11 +242,15 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       const challenge = await requestPasswordResetWithApi(recoveryAccount.trim())
       setRecoveryPurpose('password-reset')
       setDebugCodeHint(challenge.debugCode || '')
-      setVerificationCode(challenge.debugCode || '')
+      setVerificationCode('')
       setResetStep('verify')
-      setError(challenge.debugCode ? `Mã xác minh dev: ${challenge.debugCode}` : 'Hãy nhập mã được gửi đến email của bạn.')
+      setError('')
+      setNotice(challenge.debugCode
+        ? 'Mã khôi phục development đã được tạo. Nhập mã hiển thị bên dưới để tiếp tục.'
+        : `Mã đặt lại mật khẩu đã được gửi đến ${recoveryAccount.trim()}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
     } catch (recoveryError) {
-      setError(recoveryError instanceof Error ? recoveryError.message : 'Không thể tạo yêu cầu khôi phục.')
+      setNotice('')
+      setError(formatAuthError(recoveryError, 'Không thể tạo yêu cầu khôi phục.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -168,8 +258,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   async function verifyCode(event: React.FormEvent) {
     event.preventDefault()
+    setNotice('')
     if (!verificationCode.trim()) {
-      setError('Nhập mã xác thực hoặc token trong email.')
+      setError(recoveryPurpose === 'email-verification' ? 'Nhập mã xác minh email.' : 'Nhập mã khôi phục tài khoản.')
       return
     }
     if (recoveryPurpose === 'email-verification') {
@@ -181,10 +272,12 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
           onLogin(actorToUser(authenticated))
           return
         }
-        setError('Email đã được xác minh. Bạn có thể đăng nhập bằng mật khẩu của mình.')
+        setTab('login')
+        window.history.replaceState({ tab: 'login' }, '', '/login')
+        setNotice('Email đã được xác minh thành công. Bạn có thể đăng nhập ngay.')
         setResetStep(null)
       } catch (verificationError) {
-        setError(verificationError instanceof Error ? verificationError.message : 'Mã xác minh không hợp lệ.')
+        setError(formatAuthError(verificationError, 'Mã xác minh không hợp lệ hoặc đã hết hạn.'))
       } finally {
         setIsSubmitting(false)
       }
@@ -212,7 +305,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setPassword(newPassword)
       setResetStep('success')
     } catch (resetError) {
-      setError(resetError instanceof Error ? resetError.message : 'Không thể đặt lại mật khẩu.')
+      setError(formatAuthError(resetError, 'Không thể đặt lại mật khẩu.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -244,6 +337,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
           confirmPassword={newPasswordConfirm}
           setConfirmPassword={setNewPasswordConfirm}
           error={error}
+          notice={notice}
           onFindAccount={findAccount}
           onVerify={verifyCode}
           onSavePassword={saveNewPassword}
@@ -385,6 +479,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                   {'Quên mật khẩu?'}
                 </button>
               </div>
+              <NoticeMessage message={notice} />
               <ErrorMessage message={error} />
               <PrimaryButton disabled={isSubmitting}>{isSubmitting ? 'Đang đăng nhập…' : 'Đăng Nhập'}</PrimaryButton>
             </form>
@@ -395,9 +490,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
             <h2 className="mb-1.5 text-xl font-bold text-[#24241f]">
               {'Đăng ký tài khoản'}
             </h2>
-            <p className="mb-5 text-[13px] text-[#77766d]">
-              {'Tạo tài khoản khách hàng để đặt giữ chỗ và quản lý kho lưu trữ.'}
-            </p>
 
             <div className="mb-4"><GoogleLoginButton onCredential={handleGoogleCredential} text="signup_with" disabled={isSubmitting} /></div>
 
@@ -406,25 +498,31 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               <div className="relative flex justify-center text-xs"><span className="bg-[#fcfbf7] px-2.5 font-medium text-stone-400 sm:bg-white">hoặc điền thông tin bên dưới</span></div>
             </div>
 
-            <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-              <Field id="first-name" label={'Tên'}>
-                <input id="first-name" value={firstName} onChange={event => setFirstName(event.target.value)} autoComplete="given-name" />
-              </Field>
-              <Field id="last-name" label={'Họ và đệm'}>
-                <input id="last-name" value={lastName} onChange={event => setLastName(event.target.value)} autoComplete="family-name" />
-              </Field>
-            </div>
+            <Field id="register-full-name" label={'Họ và tên'}>
+              <input id="register-full-name" value={fullName} onChange={event => setFullName(event.target.value)} autoComplete="name" placeholder="Nguyễn Văn An" maxLength={120} />
+            </Field>
             <Field id="register-email" label={'Địa chỉ email'}>
               <input id="register-email" value={email} onChange={event => setEmail(event.target.value)} type="email" autoComplete="email" />
             </Field>
-            <Field id="phone" label={'Số điện thoại'}>
-              <input id="phone" value={phone} onChange={event => setPhone(event.target.value)} type="tel" autoComplete="tel" placeholder="0901 234 567" />
+            <Field id="phone" label={'Số điện thoại Việt Nam'}>
+              <input id="phone" value={phone} onChange={event => setPhone(event.target.value)} type="tel" inputMode="tel" autoComplete="tel" placeholder="0901 234 567" maxLength={15} />
             </Field>
+            <Field id="permanent-address" label={'Địa chỉ thường trú'}>
+              <textarea id="permanent-address" value={permanentAddress} onChange={event => setPermanentAddress(event.target.value)} autoComplete="street-address" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố" maxLength={500} rows={2} />
+            </Field>
+            <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+              <Field id="emergency-contact-name" label={'Người liên hệ khẩn cấp'}>
+                <input id="emergency-contact-name" value={emergencyContactName} onChange={event => setEmergencyContactName(event.target.value)} autoComplete="off" placeholder="Họ và tên" maxLength={160} />
+              </Field>
+              <Field id="emergency-contact-phone" label={'SĐT liên hệ khẩn cấp'}>
+                <input id="emergency-contact-phone" value={emergencyContactPhone} onChange={event => setEmergencyContactPhone(event.target.value)} type="tel" inputMode="tel" autoComplete="off" placeholder="0901 234 567" maxLength={15} />
+              </Field>
+            </div>
             <Field id="register-password" label={'Mật khẩu'}>
               <PasswordInput id="register-password" value={password} onChange={setPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
             </Field>
             <Field id="confirm-password" label={'Xác nhận mật khẩu'}>
-              <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showPassword} toggle={() => setShowPassword(!showPassword)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
+              <PasswordInput id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} show={showConfirmPassword} toggle={() => setShowConfirmPassword(!showConfirmPassword)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />
             </Field>
             <ErrorMessage message={error} />
             <PrimaryButton disabled={isSubmitting}>{isSubmitting ? 'Đang tạo tài khoản…' : 'Hoàn Tất Đăng Ký'}</PrimaryButton>
@@ -440,7 +538,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 }
 
 
-function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, setNewPassword, confirmPassword, setConfirmPassword, error, onFindAccount, onVerify, onSavePassword, onBack, onReturnToLogin, purpose, debugCodeHint, submitting }: {
+function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, setNewPassword, confirmPassword, setConfirmPassword, error, notice, onFindAccount, onVerify, onSavePassword, onBack, onReturnToLogin, purpose, debugCodeHint, submitting }: {
   step: ResetStep
   account: string
   setAccount: (value: string) => void
@@ -451,6 +549,7 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
   confirmPassword: string
   setConfirmPassword: (value: string) => void
   error: string
+  notice: string
   onFindAccount: (event: React.FormEvent) => void
   onVerify: (event: React.FormEvent) => void
   onSavePassword: (event: React.FormEvent) => void
@@ -460,6 +559,8 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
   debugCodeHint: string
   submitting: boolean
 }) {
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   if (step === 'success') {
     return (
@@ -484,10 +585,10 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
       text: 'Nhập số điện thoại hoặc email liên kết với tài khoản StorageHub.'
     },
     verify: {
-      title: 'Nhập mã xác thực bảo mật',
+      title: purpose === 'email-verification' ? 'Xác minh email để hoàn tất đăng ký' : 'Nhập mã khôi phục tài khoản',
       text: purpose === 'email-verification'
-        ? `Chúng tôi đã gửi mã xác minh đến ${account || 'email của bạn'}. Nhập mã hoặc token liên kết bên dưới.`
-        : `Chúng tôi đã gửi mã 6 chữ số đến ${account}. Nhập mã bên dưới để tiếp tục.`
+        ? `Mã xác minh đã được gửi đến ${account || 'email của bạn'}. Nhập mã 6 chữ số bên dưới.`
+        : `Mã đặt lại mật khẩu đã được gửi đến ${account}. Nhập mã 6 chữ số để tiếp tục.`
     },
     'new-password': {
       title: 'Tạo mật khẩu mới',
@@ -498,7 +599,7 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
   return (
     <div>
       <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#9a5a05]">
-        {'KHÔI PHỤC TÀI KHOẢN'}
+        {purpose === 'email-verification' ? 'XÁC MINH EMAIL' : 'KHÔI PHỤC TÀI KHOẢN'}
       </p>
       <h1 className="text-2xl font-bold text-stone-900">{copy.title}</h1>
       <p className="mt-2 text-sm leading-6 text-stone-500">{copy.text}</p>
@@ -532,18 +633,20 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
 
       {step === 'verify' && (
         <form onSubmit={onVerify}>
-          <Field id="verification-code" label={purpose === 'email-verification' ? 'Mã hoặc liên kết xác thực' : 'Mã hoặc liên kết đặt lại mật khẩu'}>
+          <Field id="verification-code" label={purpose === 'email-verification' ? 'Mã xác minh email' : 'Mã đặt lại mật khẩu'}>
             <input
               id="verification-code"
               value={code}
-              onChange={event => setCode(event.target.value.trim().slice(0, 128))}
+              onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
               autoComplete="one-time-code"
               autoFocus
-              placeholder={purpose === 'email-verification' ? '123456 hoặc token từ email' : '123456 hoặc token từ email'}
+              inputMode="numeric"
+              placeholder="Nhập mã 6 chữ số"
               className="text-center font-mono text-lg tracking-[.35em]"
             />
           </Field>
-          {debugCodeHint && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{'Mã xác minh development: '}<strong className="font-mono">{debugCodeHint}</strong></div>}
+          {debugCodeHint && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{purpose === 'email-verification' ? 'Mã xác minh email development: ' : 'Mã khôi phục development: '}<strong className="font-mono">{debugCodeHint}</strong></div>}
+          <NoticeMessage message={notice} />
           <ErrorMessage message={error} />
           <PrimaryButton disabled={submitting}>{submitting ? 'Đang xác minh…' : 'Xác Nhận Mã'}</PrimaryButton>
           <SecondaryButton onClick={onBack}>
@@ -559,12 +662,10 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
               id="new-password"
               value={newPassword}
               onChange={setNewPassword}
-              show={false}
-              toggle={() => undefined}
+              show={showNewPassword}
+              toggle={() => setShowNewPassword(current => !current)}
               autoComplete="new-password"
-              minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
-              hideToggle
             />
           </Field>
           <Field id="new-password-confirm" label={'Xác nhận mật khẩu mới'}>
@@ -572,17 +673,16 @@ function RecoveryFlow({ step, account, setAccount, code, setCode, newPassword, s
               id="new-password-confirm"
               value={confirmPassword}
               onChange={setConfirmPassword}
-              show={false}
-              toggle={() => undefined}
+              show={showConfirmPassword}
+              toggle={() => setShowConfirmPassword(current => !current)}
               autoComplete="new-password"
-              minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
-              hideToggle
             />
           </Field>
           <p className="-mt-2 mb-4 text-xs text-stone-500">
             {PASSWORD_POLICY_HINT}
           </p>
+          <NoticeMessage message={notice} />
           <ErrorMessage message={error} />
           <PrimaryButton disabled={submitting}>{submitting ? 'Đang lưu…' : 'Lưu Mật Khẩu Mới'}</PrimaryButton>
           <SecondaryButton onClick={onBack}>{'Quay Lại'}</SecondaryButton>
@@ -601,8 +701,15 @@ function Field({ id, label, children }: { id: string; label: string; children: R
   return <div className="mb-4"><label htmlFor={id} className="mb-1.5 block text-[12.5px] font-semibold text-[#3f403a]">{label}</label>{children}</div>
 }
 
-function PasswordInput({ id, value, onChange, show, toggle, autoComplete, hideToggle = false, minLength, maxLength }: { id: string; value: string; onChange: (value: string) => void; show: boolean; toggle: () => void; autoComplete: string; hideToggle?: boolean; minLength?: number; maxLength?: number }) {
-  return <div className="relative"><input id={id} value={value} onChange={event => onChange(event.target.value)} type={show ? 'text' : 'password'} autoComplete={autoComplete} minLength={minLength} maxLength={maxLength} placeholder="••••••••" className={hideToggle ? '' : 'pr-10'} />{!hideToggle && <button type="button" onClick={toggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2.5 top-1/2 -translate-y-1/2 border-0 bg-transparent text-[#77766d]"><Eye open={show} /></button>}</div>
+function PasswordInput({ id, value, onChange, show, toggle, autoComplete, minLength, maxLength }: { id: string; value: string; onChange: (value: string) => void; show: boolean; toggle: () => void; autoComplete: string; minLength?: number; maxLength?: number }) {
+  return (
+    <div className="relative">
+      <input id={id} value={value} onChange={event => onChange(event.target.value)} type={show ? 'text' : 'password'} autoComplete={autoComplete} minLength={minLength} maxLength={maxLength} placeholder="••••••••" className="pr-11" />
+      <button type="button" onClick={toggle} aria-label={show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={show} className="absolute right-2.5 top-1/2 -translate-y-1/2 border-0 bg-transparent text-[#77766d] hover:text-stone-900">
+        <Eye open={show} />
+      </button>
+    </div>
+  )
 }
 
 function PrimaryButton({ children, className = '', onClick, disabled = false }: { children: React.ReactNode; className?: string; onClick?: () => void; disabled?: boolean }) {
@@ -617,13 +724,17 @@ function ErrorMessage({ message }: { message: string }) {
   return message ? <p role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p> : null
 }
 
+function NoticeMessage({ message }: { message: string }) {
+  return message ? <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null
+}
+
 function StatusIcon() {
   return null
 }
 
 function Eye({ open }: { open: boolean }) {
   return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+    <svg className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
       <circle cx="12" cy="12" r="2.5" />
       {open && <path d="m4 4 16 16" />}

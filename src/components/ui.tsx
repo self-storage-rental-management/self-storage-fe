@@ -1,4 +1,4 @@
-import { type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
+import { useState, type ChangeEvent, type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
 
 // ─── Badge ───────────────────────────────────────────────────────────────────
 
@@ -135,14 +135,14 @@ export function Tr({ children, className = '', ...rest }: HTMLAttributes<HTMLTab
 
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 
-export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' | 'lg' }) {
+export function Avatar({ name, size = 'md', imageUrl }: { name: string; size?: 'sm' | 'md' | 'lg'; imageUrl?: string }) {
   const initials = name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
   const colors = ['bg-[#e9a12c]', 'bg-stone-600', 'bg-emerald-700', 'bg-amber-700', 'bg-rose-700']
   const color = colors[name.charCodeAt(0) % colors.length]
   const sizeClass = size === 'sm' ? 'w-7 h-7 text-xs' : size === 'lg' ? 'w-10 h-10 text-sm' : 'w-8 h-8 text-xs'
   return (
-    <div className={`${color} ${sizeClass} rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0`}>
-      {initials}
+    <div className={`${color} ${sizeClass} overflow-hidden rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0`}>
+      {imageUrl ? <img src={imageUrl} alt={`Ảnh đại diện của ${name}`} className="h-full w-full object-cover" /> : initials}
     </div>
   )
 }
@@ -167,6 +167,66 @@ export function Input({ label, className = '', ...props }: InputProps) {
         {...props}
       />
     </div>
+  )
+}
+
+export function PasswordField({
+  label,
+  value,
+  onChange,
+  error,
+  helperText,
+  id = 'password-field',
+  className = '',
+  ...props
+}: Omit<InputProps, 'type' | 'value' | 'onChange'> & {
+  value: string
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void
+  error?: string
+  helperText?: string
+}) {
+  const [visible, setVisible] = useState(false)
+  const errorId = `${id}-error`
+  const hintId = `${id}-hint`
+  const describedBy = [props['aria-describedby'], error ? errorId : '', helperText ? hintId : ''].filter(Boolean).join(' ') || undefined
+
+  return (
+    <div className="space-y-1">
+      {label && <label htmlFor={id} className="text-sm font-medium text-stone-700">{label}</label>}
+      <div className="relative">
+        <input
+          {...props}
+          id={id}
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={onChange}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
+          className={`w-full rounded-lg border px-3 py-2 pr-16 text-sm text-stone-800 placeholder-stone-400 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-300 bg-red-50/30' : 'border-stone-300'} ${className}`}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible(current => !current)}
+          aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+          aria-pressed={visible}
+          className="absolute inset-y-0 right-3 inline-flex items-center text-stone-500 transition hover:text-stone-800"
+        >
+          <PasswordVisibilityIcon visible={visible} />
+        </button>
+      </div>
+      {error && <p id={errorId} role="alert" className="text-xs text-red-600">{error}</p>}
+      {!error && helperText && <p id={hintId} className="text-xs leading-5 text-stone-500">{helperText}</p>}
+    </div>
+  )
+}
+
+function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+      {visible && <path d="m4 4 16 16" />}
+    </svg>
   )
 }
 
