@@ -107,7 +107,7 @@ function normalizeUsers(value: unknown): StoredUser[] {
 
 export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   dimDivisor: 5000,
-  gracePeriodDays: 0,
+  gracePeriodDays: 3,
   lateFeeAmount: 25,
   defaultDepositRatio: 0.2,
   holdExpiryHours: 1 / 6
@@ -4029,17 +4029,30 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     let countL = 0
     let countXL = 0
 
-    if (data.unitDistribution) {
+    const hasCustomSpecs = Boolean(data.unitCustomSpecs && Array.isArray(data.unitCustomSpecs) && data.unitCustomSpecs.length > 0)
+
+    if (hasCustomSpecs) {
+      data.unitCustomSpecs?.forEach(s => {
+        if (s.sizeCode === 'S') countS = s.count
+        else if (s.sizeCode === 'M') countM = s.count
+        else if (s.sizeCode === 'L') countL = s.count
+        else if (s.sizeCode === 'XL') countXL = s.count
+      })
+    } else if (data.unitDistribution) {
       countS = Math.max(0, Number(data.unitDistribution.S) || 0)
       countM = Math.max(0, Number(data.unitDistribution.M) || 0)
       countL = Math.max(0, Number(data.unitDistribution.L) || 0)
       countXL = Math.max(0, Number(data.unitDistribution.XL) || 0)
     }
 
-    const customTotal = countS + countM + countL + countXL
+    const customTotal = hasCustomSpecs
+      ? (data.unitCustomSpecs?.reduce((sum, s) => sum + (s.count || 0), 0) ?? 0)
+      : (countS + countM + countL + countXL)
+
     let unitsCount = customTotal > 0 ? customTotal : (data.units ?? 20)
 
-    if (customTotal === 0 && unitsCount > 0) {
+    // Chỉ dùng default allocation khi CHƯA có custom allocation
+    if (!hasCustomSpecs && customTotal === 0 && unitsCount > 0) {
       // Smart proportional distribution fallback if unitDistribution was not provided
       const base = Math.floor(unitsCount / 4)
       let rem = unitsCount % 4
@@ -4047,9 +4060,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       countM = base + (rem-- > 0 ? 1 : 0)
       countL = base + (rem-- > 0 ? 1 : 0)
       countXL = base + (rem-- > 0 ? 1 : 0)
+      unitsCount = countS + countM + countL + countXL
+    } else if (hasCustomSpecs) {
+      unitsCount = customTotal
+    } else {
+      unitsCount = countS + countM + countL + countXL
     }
 
-    unitsCount = countS + countM + countL + countXL
     const defaultOccupied = Math.max(0, Math.min(unitsCount, data.occupied ?? 0))
     const defaultRevenue = data.revenue ?? 0
     const defaultGrowth = data.growth ?? 0
@@ -4058,7 +4075,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       S: countS,
       M: countM,
       L: countL,
-      XL: countXL
+      XL: countXL,
+      ...(data.unitDistribution || {})
+    }
+    if (hasCustomSpecs) {
+      data.unitCustomSpecs?.forEach(s => {
+        unitDistribution[s.sizeCode] = s.count
+      })
     }
 
     const newFacility: Facility = {
