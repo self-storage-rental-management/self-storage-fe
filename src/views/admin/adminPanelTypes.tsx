@@ -32,7 +32,7 @@ export function LockIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) 
 }
 
 export function SearchIcon({ className = '' }: { className?: string }) {
-  return <svg className={`h-4 w-4 ${className}`} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+  return <svg className={`show-icon h-4 w-4 ${className}`} style={{ display: 'inline-block', width: '1rem', height: '1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
 }
 
 export function RefreshIcon({ className = 'w-4 h-4' }: { className?: string }) {
