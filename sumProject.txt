@@ -1,0 +1,104 @@
+SELF-STORAGE-FE PROJECT SUMMARY
+================================
+
+Project
+-------
+Self-storage management system frontend for StorageHub. The application is a Vite + React + TypeScript single-page application. The current implementation is a frontend demo backed by seeded data and browser localStorage; the seed module explicitly notes that it should be replaced with API calls when a backend is connected.
+
+Technology
+----------
+- React 19 and React DOM
+- TypeScript 5.7
+- Vite 8 with the React plugin
+- Tailwind CSS 4 through the Vite plugin
+- Recharts for reports and dashboard charts
+- SheetJS (xlsx) for Excel export
+- Vitest for automated tests
+- oxfmt for formatting
+
+Commands
+--------
+- npm run dev       Start the Vite development server
+- npm run build     Build the production bundle
+- npm test          Run the Vitest suite once
+- npm run typecheck Run TypeScript checking without emitting files
+- npm run preview   Preview the production build
+
+Application entry and routing
+-----------------------------
+- src/main.tsx mounts the React application.
+- src/App.tsx wraps the application in ErrorBoundary and StorageHubProvider.
+- App.tsx resolves the canonical user record from the in-memory context, starts and ends sessions, and routes users by role.
+- Guest users see HomePage or Login. Authenticated users are routed to one of five role applications:
+  - customer: src/views/customer/CustomerApp.tsx
+  - staff: src/views/staff/StaffApp.tsx
+  - manager: src/views/manager/ManagerApp.tsx
+  - business: src/views/business/BusinessApp.tsx
+  - admin: src/views/admin/AdminApp.tsx
+- Role applications use the shared Layout and UI primitives. Pages are selected through local component state rather than a client-side router.
+- Lazy-loaded role applications include one-time chunk-load recovery through sessionStorage.
+
+State and data architecture
+---------------------------
+- src/store/StorageHubContext.tsx is the central application state layer.
+- It initializes facilities, units, users, tickets, reservations, rentals, contracts, payments, check-ins, returns, staff tasks, maintenance tasks, renewals, activities, and configuration from demo data.
+- The context exposes read models and mutation methods used by all role screens.
+- State is persisted in browser localStorage under StorageHub-specific keys. Authentication session state is kept in the React application flow and session records are tracked by the context.
+- User normalization prevents persisted data from promoting accounts to company roles. Provisioned staff, manager, business, and admin roles come from seeded identity records; unknown self-registered accounts become customers.
+- Currency helpers are in src/i18n/currency.ts and primarily format Vietnamese dong.
+
+Users and permissions
+---------------------
+- src/types.ts defines the Role union: customer, staff, manager, business, and admin.
+- src/auth/rbac.ts defines permission keys, labels, default role permissions, and normalization of persisted permissions.
+- Permissions cover navigation and operations such as reservations, unit assignment, check-in, rentals, returns, payments, support, inventory, policies, staff tasks, reports, users, roles, and settings.
+- Business users manage facilities, performance, policies, pricing/fees, and revenue reports.
+- Managers are facility-scoped and manage inventory, rentals and renewals, moves, payments and debt, staff tasks, and facility reports.
+- Staff handle reservations, check-ins, returns, payments, and support workflows.
+- Customers book storage and view their rentals, reservations, payments, returns, contracts, and support.
+- Admin has the complete permission set.
+- Manager-specific operational restrictions and facility scoping are enforced in src/domain/managerRules.ts and by context mutations, not only by hiding UI navigation.
+
+Core domain flows
+-----------------
+- Reservation lifecycle is implemented in src/domain/reservationFlow.ts:
+  awaiting_email -> awaiting_review -> awaiting_payment -> DEPOSIT_PAID -> UNIT_RESERVED -> READY_FOR_CHECKIN -> COMPLETED.
+- Reservation transitions require the expected event order: email verification, approval, deposit payment, unit assignment, check-in readiness, and completed check-in.
+- Manager business rules cover facility visibility, unit allocation conflicts, due-date and overdue calculations, late fees, return settlements, operational locks, task assignment, task lifecycle, and sanitization of orphan/test records.
+- Support automation in src/services/supportBotService.ts maps customer storage context, matches FAQs, detects urgency, assigns staff using workload, escalates when staff are offline, and stores bot feedback statistics.
+- Revenue export is implemented in src/utils/excelExport.ts.
+
+Seed data
+---------
+- src/data/demoDatabase.ts contains demo facilities, storage unit specifications, individual units, rentals, payments, tickets, users, staff roster data, charts, pricing, discounts, policies, and fees.
+- The current seeded facilities are Kho Viet - Co so Quan 1 (HCM-Q1-F01) and Kho Viet - Co so Binh Duong (BD-F01).
+- Storage units use S, M, L, and XL size codes with dimensions, volume, load limits, prices, facility IDs, and statuses such as available or occupied.
+- src/store/StorageHubContext.tsx also defines runtime unit types and the default business configuration, including dimensional divisor, grace period, late fee, deposit ratio, and hold expiry.
+
+Business workspace
+------------------
+- src/views/business/BusinessApp.tsx provides navigation for facility management, operational performance, rental policies, pricing and fees, and revenue reports.
+- Facility CRUD operations are delegated to StorageHubContext.
+- Policies are loaded from and saved to localStorage under storagehub:policies.
+- Recharts components display revenue and conversion data, and revenue can be exported to Excel.
+
+Testing
+-------
+- src/domain/reservationFlow.test.ts tests valid reservation ordering and invalid transitions.
+- tests/managerRules.test.ts tests manager scoping, payment and overdue logic, permissions, task lifecycle, unit locks and conflicts, settlement calculations, and runtime data sanitization.
+- tests/supportBotService.test.ts tests support context mapping, workload assignment, urgency and offline escalation, and feedback statistics.
+- Recommended validation after changes: pnpm typecheck, pnpm test, and pnpm build.
+
+Styling and shared UI
+---------------------
+- src/index.css contains global styling and Tailwind-related setup.
+- src/components/Layout.tsx provides the application shell, navigation, notifications, role presentation, and shared icons.
+- src/components/ui.tsx provides reusable controls such as Button, Card, Table, Modal, Tabs, Input, Select, Badge, StatCard, and ProgressBar.
+- The interface text is predominantly Vietnamese, while many domain identifiers and some data labels remain English.
+
+Important implementation notes
+------------------------------
+- This is currently a browser/demo architecture, not a production backend integration. LocalStorage is mutable client state and should not be treated as an authorization boundary in a deployed system.
+- Stable facilityId values are preferred for authorization and cross-screen filtering; facility names are used as compatibility fallbacks in several screens.
+- Avoid changing role authority or manager operational restrictions only in the UI. Update the domain/context enforcement and corresponding tests when changing those rules.
+- Keep the reservation state machine and manager rule tests aligned with any workflow changes.

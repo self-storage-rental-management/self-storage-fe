@@ -34,6 +34,7 @@ const statusLabel: Record<TicketItem["status"], string> = {
   open: "Chờ xử lý",
   "in-progress": "Đang xử lý",
   resolved: "Đã giải quyết",
+  "waiting-customer": "Chờ khách phản hồi",
 }
 const priorityLabel: Record<TicketItem["priority"], string> = {
   high: "Khẩn cấp",
