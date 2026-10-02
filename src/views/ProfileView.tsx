@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { User } from '../types'
 import { Card, Button, Input, Badge, Avatar, Modal } from '../components/ui'
 import { useStorageHub } from '../store/StorageHubContext'
+import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 
 interface ProfileViewProps {
   user: User
@@ -111,8 +112,9 @@ export default function ProfileView({ user }: ProfileViewProps) {
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault()
     if (!isCustomer) return
-    if (newPassword && newPassword.length < 6) {
-      showToast('Mật khẩu mới phải có ít nhất 6 ký tự.')
+    const passwordError = getPasswordValidationError(newPassword)
+    if (passwordError) {
+      showToast(passwordError)
       return
     }
     if (newPassword && newPassword !== confirmPassword) {
@@ -497,7 +499,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
               <Card className="p-6">
                 <div className="pb-4 mb-5 border-b border-stone-100">
                   <h2 className="text-lg font-bold text-stone-900">Đổi Mật Khẩu Đăng Nhập</h2>
-                  <p className="text-xs text-stone-500">Sử dụng mật khẩu mạnh có ít nhất 6 ký tự để bảo vệ tài khoản</p>
+                  <p className="text-xs text-stone-500">{PASSWORD_POLICY_HINT}</p>
                 </div>
 
                 <form onSubmit={handleChangePassword} className="space-y-4">
@@ -512,9 +514,11 @@ export default function ProfileView({ user }: ProfileViewProps) {
                     <Input
                       label="Mật Khẩu Mới"
                       type="password"
-                      placeholder="Ít nhất 6 ký tự..."
+                      placeholder={`Ít nhất ${PASSWORD_MIN_LENGTH} ký tự...`}
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
+                      minLength={PASSWORD_MIN_LENGTH}
+                      maxLength={PASSWORD_MAX_LENGTH}
                     />
                     <Input
                       label="Xác Nhận Mật Khẩu Mới"
@@ -522,6 +526,8 @@ export default function ProfileView({ user }: ProfileViewProps) {
                       placeholder="Nhập lại mật khẩu mới..."
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
+                      minLength={PASSWORD_MIN_LENGTH}
+                      maxLength={PASSWORD_MAX_LENGTH}
                     />
                   </div>
                   <div className="flex justify-end pt-2">

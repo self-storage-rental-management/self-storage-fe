@@ -20,6 +20,7 @@ import {
   type ApiUserStatus,
 } from '../../services/authApi'
 import { roleColors, roleLabels, type AdminToast } from './adminPanelTypes'
+import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy'
 
 type AccountStatus = 'active' | 'inactive' | 'suspended' | 'locked'
 type FormRole = Exclude<Role, 'customer'>
@@ -152,7 +153,8 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
 
   const saveNew = async () => {
     if (!form.name.trim() || !form.email.trim()) throw new Error('Họ tên và email là bắt buộc.')
-    if (form.password.length < 12) throw new Error('Mật khẩu khởi tạo phải có ít nhất 12 ký tự.')
+    const passwordError = getPasswordValidationError(form.password)
+    if (passwordError) throw new Error(passwordError)
     const role = mode === 'customer-support' ? ['CUSTOMER'] as ApiRoleCode[] : [toApiRole(form.role)]
     const created = await createAdminUser({
       email: form.email.trim(), password: form.password, fullName: form.name.trim(), phone: form.phone.trim() || undefined,
@@ -208,8 +210,9 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
 
   const resetPassword = async () => {
     if (!selected) return
-    if (form.resetPassword.length < 12) {
-      showToast('Mật khẩu reset phải có ít nhất 12 ký tự.')
+    const passwordError = getPasswordValidationError(form.resetPassword)
+    if (passwordError) {
+      showToast(passwordError)
       return
     }
     try {
@@ -243,8 +246,9 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Select label="Vai Trò" value={selectedRole === 'customer' ? 'customer' : form.role} disabled={selectedRole === 'customer'} onChange={event => setField('role', event.target.value as FormRole)}>{selectedRole === 'customer' && <option value="customer">Khách hàng</option>}<option value="staff">Nhân viên</option><option value="manager">Quản lý cơ sở</option><option value="business">Giám đốc kinh doanh</option><option value="admin">Quản trị viên</option></Select><Select label="Trạng Thái" value={selected ? toUiStatus(selected.status) : 'active'} disabled={!selected} onChange={() => undefined}><option value="active">Hoạt động</option><option value="inactive">Ngưng hoạt động</option><option value="suspended">Đình chỉ</option></Select></div>
         <Input label="Số điện thoại" value={form.phone} onChange={event => setField('phone', event.target.value)} placeholder="0901 234 567" />
         {hasFacilityRole && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Select label="Cơ sở kho" value={form.facilityId} onChange={event => setField('facilityId', event.target.value)}><option value="">Chưa gán cơ sở</option>{facilities.map(facility => <option key={facility.id} value={facility.id}>{facility.name}</option>)}</Select><Select label="Mức scope" value={form.scopeLevel} onChange={event => setField('scopeLevel', event.target.value as ApiFacilityScopeLevel)}><option value="READ">Chỉ đọc</option><option value="OPERATE">Vận hành</option><option value="MANAGE">Quản lý</option></Select></div>}
-        {!selected && <Input label="Mật khẩu khởi tạo (tối thiểu 12 ký tự)" type="password" value={form.password} onChange={event => setField('password', event.target.value)} autoComplete="new-password" />}
-        {selected && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><p>Mật khẩu: {selected.mustChangePassword ? 'Bắt buộc đổi sau reset' : 'Đang hoạt động'}</p><Input label="Mật khẩu reset (tối thiểu 12 ký tự)" type="password" value={form.resetPassword} onChange={event => setField('resetPassword', event.target.value)} autoComplete="new-password" /><Button variant="outline" size="sm" onClick={() => void resetPassword()}>Reset mật khẩu</Button></div>}
+        {!selected && <Input label={`Mật khẩu khởi tạo (8-128 ký tự)`} type="password" value={form.password} onChange={event => setField('password', event.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} />}
+        {selected && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><p>Mật khẩu: {selected.mustChangePassword ? 'Bắt buộc đổi sau reset' : 'Đang hoạt động'}</p><Input label={`Mật khẩu reset (8-128 ký tự)`} type="password" value={form.resetPassword} onChange={event => setField('resetPassword', event.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} /><Button variant="outline" size="sm" onClick={() => void resetPassword()}>Reset mật khẩu</Button></div>}
+        {!selected && <p className="mt-1 text-xs text-stone-500">{PASSWORD_POLICY_HINT}</p>}
         <div className="flex justify-end gap-2 pt-2"><Button variant="outline" onClick={() => setModalOpen(false)}>Hủy Bỏ</Button><Button onClick={() => void save()}>{selected ? 'Lưu thay đổi' : 'Tạo tài khoản'}</Button></div>
       </div>
       {selected && <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_auto]"><Select label="Trạng thái khi lưu" value={form.status} onChange={event => setField('status', event.target.value as AccountStatus)}><option value="active">Hoạt động</option><option value="inactive">Ngưng hoạt động</option><option value="suspended">Tạm khóa</option><option value="locked">Đã khóa</option></Select><span className="self-end pb-2 text-xs text-slate-500">Thay đổi trạng thái sẽ gọi API riêng và ghi audit log.</span></div>}
