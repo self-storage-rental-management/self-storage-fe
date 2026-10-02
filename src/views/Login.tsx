@@ -622,5 +622,11 @@ function StatusIcon() {
 }
 
 function Eye({ open }: { open: boolean }) {
-  return open ? 'Ẩn' : 'Hiện'
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+      {open && <path d="m4 4 16 16" />}
+    </svg>
+  )
 }
