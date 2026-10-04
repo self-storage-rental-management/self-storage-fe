@@ -8,6 +8,8 @@ export interface PolicyItem {
   editable?: boolean
   description?: string
   lastUpdated?: string
+  scopeType?: 'all' | 'specific'
+  facilityIds?: string[]
 }
 
 export interface ParsedPolicyBenefit {
@@ -29,7 +31,41 @@ export function getStoredPolicies(): PolicyItem[] {
     const raw = storage?.getItem('storagehub:policies')
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        let changed = false
+        // Lọc bỏ các bản ghi test cũ hoặc gói thuê kỳ hạn bị lưu nhầm vào bảng chính sách
+        const sanitized = parsed.filter((item: PolicyItem) => {
+          const name = (item.name || '').trim().toLowerCase()
+          const val = (item.value || '').trim().toLowerCase()
+          // Lọc bỏ bản ghi rác "thời gian gia hạn" có giá trị chiết khấu gói thuê (3 tháng giảm 3%)
+          if (name === 'thời gian gia hạn' || name === 'thoi gian gia han') {
+            changed = true
+            return false
+          }
+          if (name.includes('gia hạn') && val.includes('tháng') && val.includes('giảm')) {
+            changed = true
+            return false
+          }
+          return true
+        })
+
+        // Chuẩn hóa lại các policy vận hành chuẩn nếu có giá trị cũ
+        const normalized = sanitized.map((item: PolicyItem) => {
+          const def = (POLICIES as any[]).find(p => p.id === item.id)
+          if (def && (!item.description || item.value === '650.000 ₫ / month' || item.value === '5 days')) {
+            changed = true
+            return { ...item, name: def.name, value: def.value, description: item.description || def.description }
+          }
+          return item
+        })
+
+        if (changed && storage) {
+          try {
+            storage.setItem('storagehub:policies', JSON.stringify(normalized))
+          } catch {}
+        }
+        return normalized
+      }
     }
   } catch {}
   return (POLICIES as any[]).map(p => ({ ...p, description: p.description || '' }))
@@ -58,6 +94,28 @@ export function getPoliciesForFacility(facilityNameOrId?: string, facilityCode?:
   const normCode = normalizeCompare(facilityCode || '')
 
   return policies.filter(p => {
+    // 1. Áp dụng cho toàn bộ cơ sở
+    if (p.scopeType === 'all') return true
+
+    // 2. Khớp theo danh sách facilityIds cụ thể nếu có
+    if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
+      const matched = p.facilityIds.some(id => {
+        if (!id) return false
+        const normId = normalizeCompare(id)
+        return (
+          id === facilityNameOrId ||
+          id === facilityCode ||
+          normId === normName ||
+          normId === normCode ||
+          (targetName && normId.includes(normName)) ||
+          (normName && normName.includes(normId))
+        )
+      })
+      if (matched) return true
+      if (p.scopeType === 'specific') return false
+    }
+
+    // 3. Fallback theo chuỗi text p.scope (tương thích dữ liệu cũ)
     const scope = (p.scope || '').trim().toLowerCase()
     const normScope = normalizeCompare(p.scope || '')
 

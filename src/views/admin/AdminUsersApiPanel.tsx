@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Avatar, Badge, Button, Card, Input, Modal, SectionHeader, Select, StatCard, Table, Tabs, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { Avatar, Badge, Button, Card, Input, Modal, PasswordField, SectionHeader, Select, StatCard, Table, Tabs, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import type { Role, User } from '../../types'
 import {
   createAdminUser,
@@ -20,6 +20,7 @@ import {
   type ApiUserStatus,
 } from '../../services/authApi'
 import { roleColors, roleLabels, type AdminToast } from './adminPanelTypes'
+import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy'
 
 type AccountStatus = 'active' | 'inactive' | 'suspended' | 'locked'
 type FormRole = Exclude<Role, 'customer'>
@@ -78,6 +79,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
   const [selected, setSelected] = useState<AdminApiUser | null>(null)
   const [mode, setMode] = useState<AccountMode>('internal')
   const [form, setForm] = useState<UserForm>(emptyForm)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [modalOpen, setModalOpen] = useState(false)
 
   const activeRoleFilter = roleFilter !== 'all'
@@ -118,12 +120,16 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
   const scopesForForm = hasFacilityRole && form.facilityId ? { [form.facilityId]: form.scopeLevel } : {}
   const displayedAccounts = accounts
 
-  const setField = <K extends keyof UserForm>(key: K, value: UserForm[K]) => setForm(previous => ({ ...previous, [key]: value }))
+  const setField = <K extends keyof UserForm>(key: K, value: UserForm[K]) => {
+    setForm(previous => ({ ...previous, [key]: value }))
+    setFieldErrors(previous => ({ ...previous, [key]: '' }))
+  }
 
   const openCreate = (nextMode: AccountMode) => {
     setSelected(null)
     setMode(nextMode)
     setForm(emptyForm)
+    setFieldErrors({})
     setModalOpen(true)
   }
 
@@ -142,6 +148,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       scopeLevel: facilityId ? account.facilityScopes[facilityId] : role === 'manager' ? 'MANAGE' : 'OPERATE',
       status: toUiStatus(account.status),
     })
+    setFieldErrors({})
     setModalOpen(true)
   }
 
@@ -150,9 +157,19 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
     setSelected(next)
   }
 
+  const validateNewForm = () => {
+    const errors: Record<string, string> = {}
+    const email = form.email.trim()
+    if (!form.name.trim()) errors.name = 'Vui lòng nhập họ và tên.'
+    if (!email) errors.email = 'Vui lòng nhập email.'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Email chưa đúng định dạng. Ví dụ: ten@congty.com.'
+    const passwordError = getPasswordValidationError(form.password)
+    if (passwordError) errors.password = passwordError
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const saveNew = async () => {
-    if (!form.name.trim() || !form.email.trim()) throw new Error('Họ tên và email là bắt buộc.')
-    if (form.password.length < 12) throw new Error('Mật khẩu khởi tạo phải có ít nhất 12 ký tự.')
     const role = mode === 'customer-support' ? ['CUSTOMER'] as ApiRoleCode[] : [toApiRole(form.role)]
     const created = await createAdminUser({
       email: form.email.trim(), password: form.password, fullName: form.name.trim(), phone: form.phone.trim() || undefined,
@@ -186,6 +203,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
   }
 
   const save = async () => {
+    if (!selected && !validateNewForm()) return
     try {
       if (selected) await saveExisting()
       else await saveNew()
@@ -208,10 +226,13 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
 
   const resetPassword = async () => {
     if (!selected) return
-    if (form.resetPassword.length < 12) {
-      showToast('Mật khẩu reset phải có ít nhất 12 ký tự.')
+    const passwordError = getPasswordValidationError(form.resetPassword)
+    if (passwordError) {
+      setFieldErrors(previous => ({ ...previous, resetPassword: passwordError }))
+      showToast(passwordError)
       return
     }
+    setFieldErrors(previous => ({ ...previous, resetPassword: '' }))
     try {
       const next = await resetAdminUserPassword(selected.id, form.resetPassword)
       replaceAccount(next)
@@ -239,12 +260,15 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
 
     <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={selected ? `Chỉnh Sửa Người Dùng – ${selected.fullName}` : mode === 'customer-support' ? 'Tạo khách hàng theo yêu cầu hỗ trợ' : 'Tạo tài khoản nội bộ'}>
       <div className="space-y-4">{selected && <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3"><Avatar name={selected.fullName} size="lg" /><div><p className="font-semibold text-slate-800">{selected.fullName}</p><p className="text-xs text-slate-400">{selected.id} · Tham gia {formatDate(selected.createdAt)}</p></div></div>}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Input label="Họ và Tên" value={form.name} onChange={event => setField('name', event.target.value)} placeholder="Jane Smith" /><Input label="Email" type="email" value={form.email} onChange={event => setField('email', event.target.value)} placeholder="jane@example.com" /></div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Select label="Vai Trò" value={selectedRole === 'customer' ? 'customer' : form.role} disabled={selectedRole === 'customer'} onChange={event => setField('role', event.target.value as FormRole)}>{selectedRole === 'customer' && <option value="customer">Khách hàng</option>}<option value="staff">Nhân viên</option><option value="manager">Quản lý cơ sở</option><option value="business">Giám đốc kinh doanh</option><option value="admin">Quản trị viên</option></Select><Select label="Trạng Thái" value={selected ? toUiStatus(selected.status) : 'active'} disabled={!selected} onChange={() => undefined}><option value="active">Hoạt động</option><option value="inactive">Ngưng hoạt động</option><option value="suspended">Đình chỉ</option></Select></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div><Input label="Họ và Tên" value={form.name} onChange={event => setField('name', event.target.value)} placeholder="Jane Smith" />{fieldErrors.name && <p role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}</div><div><Input label="Email" type="email" value={form.email} onChange={event => setField('email', event.target.value)} placeholder="jane@example.com" />{fieldErrors.email && <p role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}</div></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {mode === 'internal' ? <Select label="Vai Trò" value={selectedRole === 'customer' ? 'customer' : form.role} disabled={selectedRole === 'customer'} onChange={event => setField('role', event.target.value as FormRole)}>{selectedRole === 'customer' && <option value="customer">Khách hàng</option>}<option value="staff">Nhân viên</option><option value="manager">Quản lý cơ sở</option><option value="business">Giám đốc kinh doanh</option><option value="admin">Quản trị viên</option></Select> : <div className="space-y-1"><span className="text-sm font-medium text-stone-700">Vai Trò</span><div className="flex h-[38px] items-center rounded-lg border border-stone-200 bg-stone-50 px-3 text-sm text-stone-600">Khách hàng</div></div>}
+          {selected ? <Select label="Trạng Thái" value={form.status} onChange={event => setField('status', event.target.value as AccountStatus)}><option value="active">Hoạt động</option><option value="inactive">Ngưng hoạt động</option><option value="suspended">Đình chỉ</option></Select> : <div className="space-y-1"><span className="text-sm font-medium text-stone-700">Trạng Thái</span><div className="flex h-[38px] items-center rounded-lg border border-stone-200 bg-stone-50 px-3 text-sm text-stone-600">Hoạt động</div></div>}
+        </div>
         <Input label="Số điện thoại" value={form.phone} onChange={event => setField('phone', event.target.value)} placeholder="0901 234 567" />
         {hasFacilityRole && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Select label="Cơ sở kho" value={form.facilityId} onChange={event => setField('facilityId', event.target.value)}><option value="">Chưa gán cơ sở</option>{facilities.map(facility => <option key={facility.id} value={facility.id}>{facility.name}</option>)}</Select><Select label="Mức scope" value={form.scopeLevel} onChange={event => setField('scopeLevel', event.target.value as ApiFacilityScopeLevel)}><option value="READ">Chỉ đọc</option><option value="OPERATE">Vận hành</option><option value="MANAGE">Quản lý</option></Select></div>}
-        {!selected && <Input label="Mật khẩu khởi tạo (tối thiểu 12 ký tự)" type="password" value={form.password} onChange={event => setField('password', event.target.value)} autoComplete="new-password" />}
-        {selected && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><p>Mật khẩu: {selected.mustChangePassword ? 'Bắt buộc đổi sau reset' : 'Đang hoạt động'}</p><Input label="Mật khẩu reset (tối thiểu 12 ký tự)" type="password" value={form.resetPassword} onChange={event => setField('resetPassword', event.target.value)} autoComplete="new-password" /><Button variant="outline" size="sm" onClick={() => void resetPassword()}>Reset mật khẩu</Button></div>}
+        {!selected && <PasswordField id="admin-create-password" label="Mật khẩu khởi tạo" value={form.password} onChange={event => setField('password', event.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} error={fieldErrors.password} helperText={PASSWORD_POLICY_HINT} />}
+        {selected && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><p>Mật khẩu: {selected.mustChangePassword ? 'Bắt buộc đổi sau reset' : 'Đang hoạt động'}</p><PasswordField id="admin-reset-password" label="Mật khẩu reset" value={form.resetPassword} onChange={event => setField('resetPassword', event.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} error={fieldErrors.resetPassword} helperText={PASSWORD_POLICY_HINT} /><Button type="button" variant="outline" size="sm" onClick={() => void resetPassword()}>Reset mật khẩu</Button></div>}
         <div className="flex justify-end gap-2 pt-2"><Button variant="outline" onClick={() => setModalOpen(false)}>Hủy Bỏ</Button><Button onClick={() => void save()}>{selected ? 'Lưu thay đổi' : 'Tạo tài khoản'}</Button></div>
       </div>
       {selected && <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_auto]"><Select label="Trạng thái khi lưu" value={form.status} onChange={event => setField('status', event.target.value as AccountStatus)}><option value="active">Hoạt động</option><option value="inactive">Ngưng hoạt động</option><option value="suspended">Tạm khóa</option><option value="locked">Đã khóa</option></Select><span className="self-end pb-2 text-xs text-slate-500">Thay đổi trạng thái sẽ gọi API riêng và ghi audit log.</span></div>}

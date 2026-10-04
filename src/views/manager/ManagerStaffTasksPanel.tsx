@@ -13,6 +13,9 @@ import {
 } from '../../domain/managerRules'
 import { managerDateLabel, managerPriorityLabel, managerStatusLabel, managerTaskTypeLabel } from './managerI18n'
 import ManagerActionNotice from './ManagerActionNotice'
+import ManagerPagination from './ManagerPagination'
+import { managerDateValue, matchesManagerSearch, paginateManagerItems } from './managerList'
+import useManagerSoftDelete from './useManagerSoftDelete'
 
 interface Props {
   user: User
@@ -79,9 +82,15 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
   const [staffFilter, setStaffFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<'all' | FacilityTask['priority']>('all')
+  const [query, setQuery] = useState('')
+  const [sortBy, setSortBy] = useState('priority')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [cancelTaskId, setCancelTaskId] = useState<string | null>(null)
   const [cancellationReason, setCancellationReason] = useState('')
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
+  const taskHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-tasks`)
 
   useEffect(() => {
     if (!initialDraft) return
@@ -97,6 +106,8 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     () => tasks.filter(task => isManagerFacilityVisible(user, task.facilityId, task.facilityName)),
     [tasks, user]
   )
+  const displayedTasks = facilityTasks.filter(task => !taskHistory.isHidden(task.id))
+  const hiddenTaskCount = facilityTasks.length - displayedTasks.length
   const staff = useMemo(
     () => users.filter(member => canManagerAssignStaff(user, member)),
     [users, user]
@@ -120,7 +131,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
           id: item.id,
           type: 'return' as const,
           label: `${item.id} · ${item.customerName} · gian ${item.unitId} · ${managerStatusLabel(item.status, 'vi')}`,
-          summary: `Hồ sơ trả kho ${item.id}, hợp đồng ${item.rentalId}, khách ${item.customerName}, gian ${item.unitId}.`,
+          summary: `Hồ sơ trả kho ${item.id}, hồ sơ thuê ${item.rentalId}, khách ${item.customerName}, gian ${item.unitId}.`,
           suggestedTitle: `Xử lý hồ sơ trả kho ${item.id}`
         })),
       ...maintenanceTasks
@@ -152,7 +163,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
   const selectedReference = referenceOptions.find(option => option.id === referenceId)
   const today = new Date().toISOString().slice(0, 10)
   const overdueTasks = facilityTasks.filter(task => isFacilityTaskOverdue(task, today))
-  const filteredTasks = facilityTasks
+  const filteredTasks = displayedTasks
     .filter(task => {
       if (statusFilter === 'unassigned') return !task.assignedStaffId && task.status !== 'cancelled'
       if (statusFilter === 'overdue') return isFacilityTaskOverdue(task, today)
@@ -160,12 +171,18 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       if (staffFilter !== 'all' && task.assignedStaffId !== staffFilter && task.lastAssignedStaffId !== staffFilter) return false
       if (dateFilter && task.dueAt !== dateFilter) return false
       if (priorityFilter !== 'all' && task.priority !== priorityFilter) return false
-      return true
+      return matchesManagerSearch(query, [task.id, task.title, task.referenceId, task.assignedStaffId, task.assignedStaffName, task.notes, task.resultReport, task.unableReason])
     })
     .sort((left, right) => {
+      if (sortBy === 'newest') return managerDateValue(right.createdAt) - managerDateValue(left.createdAt)
+      if (sortBy === 'due-asc') return managerDateValue(left.dueAt) - managerDateValue(right.dueAt)
       const overdueDifference = Number(isFacilityTaskOverdue(right, today)) - Number(isFacilityTaskOverdue(left, today))
-      return overdueDifference || left.dueAt.localeCompare(right.dueAt) || right.createdAt.localeCompare(left.createdAt)
+      const priorityRank = { high: 0, medium: 1, low: 2 }
+      return overdueDifference || priorityRank[left.priority] - priorityRank[right.priority] || left.dueAt.localeCompare(right.dueAt) || right.createdAt.localeCompare(left.createdAt)
     })
+  const pagination = paginateManagerItems(filteredTasks, page, pageSize)
+
+  useEffect(() => setPage(1), [statusFilter, staffFilter, dateFilter, priorityFilter, query, sortBy, pageSize])
   const detailTask = detailTaskId ? facilityTasks.find(task => task.id === detailTaskId) : undefined
   const detailProgress = detailTask ? deriveTaskProgress(detailTask, activities) : undefined
   const cancelTask = cancelTaskId ? facilityTasks.find(task => task.id === cancelTaskId) : undefined
@@ -246,18 +263,21 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
 
     {!staff.length && <ManagerActionNotice tone="warning">Cơ sở chưa có tài khoản Staff phù hợp. Manager không thể tạo nhiệm vụ cho đến khi có người phụ trách hợp lệ.</ManagerActionNotice>}
     {overdueTasks.length > 0 && <ManagerActionNotice tone="warning">Có {overdueTasks.length} nhiệm vụ quá hạn cần theo dõi hoặc giao lại.</ManagerActionNotice>}
+    {hiddenTaskCount > 0 && <ManagerActionNotice tone="info"><div className="flex items-center justify-between gap-3"><span>{hiddenTaskCount} nhiệm vụ lịch sử đã được soft-delete khỏi danh sách Manager. Dữ liệu nhiệm vụ và nhật ký vẫn giữ nguyên.</span><Button size="sm" variant="outline" onClick={() => taskHistory.restoreAll()}>Khôi phục tất cả</Button></div></ManagerActionNotice>}
 
     <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">Staff · {'shift' in member && typeof member.shift === 'string' ? member.shift : '—'}</p><p className="mt-2 text-xs text-stone-600">{member.email} · {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
 
-    <Card className="p-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <Card className="p-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <Input label="Tìm kiếm" value={query} onChange={event => setQuery(event.target.value)} placeholder="Nhiệm vụ, mã hồ sơ, nhân viên…" />
       <Select label="Trạng thái" value={statusFilter} onChange={event => setStatusFilter(event.target.value as TaskFilter)}><option value="all">Tất cả</option><option value="unassigned">Chưa phân công</option><option value="open">Chờ nhận</option><option value="in_progress">Đang thực hiện</option><option value="completed">Đã hoàn thành</option><option value="overdue">Quá hạn</option><option value="cancelled">Đã hủy</option></Select>
       <Select label="Nhân viên" value={staffFilter} onChange={event => setStaffFilter(event.target.value)}><option value="all">Tất cả nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>
       <Input label="Ngày đến hạn" type="date" value={dateFilter} onChange={event => setDateFilter(event.target.value)} />
       <Select label="Mức ưu tiên" value={priorityFilter} onChange={event => setPriorityFilter(event.target.value as 'all' | FacilityTask['priority'])}><option value="all">Tất cả mức ưu tiên</option><option value="high">Cao</option><option value="medium">Trung bình</option><option value="low">Thấp</option></Select>
+      <Select label="Sắp xếp" value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="priority">Quá hạn / ưu tiên cao</option><option value="due-asc">Hạn gần nhất</option><option value="newest">Mới tạo nhất</option></Select>
     </div></Card>
 
     <Card className="overflow-x-auto"><Table><Thead><tr><Th>Nhiệm vụ</Th><Th>Người phụ trách</Th><Th>Tiến độ</Th><Th>Hạn & ưu tiên</Th><Th>Kết quả</Th><Th>Trạng thái</Th><Th /></tr></Thead><Tbody>
-      {filteredTasks.map(task => {
+      {pagination.items.map(task => {
         const displayedAssignee = task.assignedStaffName || task.lastAssignedStaffName
         const canReassign = canManagerReassignFacilityTask(task)
         const progress = deriveTaskProgress(task, activities)
@@ -268,11 +288,11 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
           <Td><p className={isFacilityTaskOverdue(task, today) ? 'font-semibold text-red-700' : 'text-stone-700'}>{managerDateLabel(task.dueAt, 'vi')}</p><div className="mt-2"><Badge variant={task.priority === 'high' ? 'error' : task.priority === 'medium' ? 'warning' : 'info'}>{managerPriorityLabel(task.priority, 'vi')}</Badge></div></Td>
           <Td className="max-w-52 text-xs"><p className="line-clamp-2">{progress.resultReport || 'Chưa có báo cáo kết quả'}</p><p className="mt-1 text-stone-500">{progress.evidence.length ? `${progress.evidence.length} minh chứng` : 'Chưa có minh chứng'}</p>{progress.unableReason && <p className="mt-1 font-semibold text-red-700">Không thể thực hiện: {progress.unableReason}</p>}</Td>
           <Td><Badge variant={taskStatusVariant(task)}>{isFacilityTaskOverdue(task, today) ? `Quá hạn · ${managerStatusLabel(task.status, 'vi')}` : managerStatusLabel(task.status, 'vi')}</Badge></Td>
-          <Td className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setDetailTaskId(task.id)}>Chi tiết</Button>{canManagerCancelFacilityTask(task) && <Button size="sm" variant="danger" onClick={() => { setCancelTaskId(task.id); setCancellationReason('') }}>Hủy</Button>}</div></Td>
+          <Td className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setDetailTaskId(task.id)}>Chi tiết</Button>{canManagerCancelFacilityTask(task) && <Button size="sm" variant="danger" onClick={() => { setCancelTaskId(task.id); setCancellationReason('') }}>Hủy</Button>}{['completed', 'cancelled'].includes(task.status) && <Button size="sm" variant="danger" onClick={() => setDeleteTaskId(task.id)}>Xóa</Button>}</div></Td>
         </Tr>
       })}
       {!filteredTasks.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có nhiệm vụ phù hợp bộ lọc.</td></tr>}
-    </Tbody></Table></Card>
+    </Tbody></Table><ManagerPagination {...pagination} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} /></Card>
 
     <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Tạo nhiệm vụ vận hành"><div className="space-y-4">
       <Input label="Tiêu đề" value={title} onChange={event => setTitle(event.target.value)} />
@@ -299,5 +319,6 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       {detailTask.cancellationReason && <ManagerActionNotice tone="warning">Đã hủy lúc {managerDateLabel(detailTask.cancelledAt, 'vi', true)} bởi {detailTask.cancelledByName || 'Manager'}. Lý do: {detailTask.cancellationReason}</ManagerActionNotice>}
       <div className="flex justify-end"><Button variant="outline" onClick={() => setDetailTaskId(null)}>Đóng</Button></div>
     </div>}</Modal>
+    <Modal open={Boolean(deleteTaskId)} onClose={() => setDeleteTaskId(null)} title="Soft-delete nhiệm vụ lịch sử"><div className="space-y-4"><ManagerActionNotice tone="warning">Nhiệm vụ đã hoàn thành hoặc đã hủy chỉ bị ẩn khỏi danh sách Manager. Dữ liệu và nhật ký của Staff vẫn được giữ nguyên.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTaskId(null)}>Hủy</Button><Button variant="danger" onClick={() => { if (deleteTaskId) taskHistory.hide(deleteTaskId); if (detailTaskId === deleteTaskId) setDetailTaskId(null); setDeleteTaskId(null); showToast('Đã ẩn nhiệm vụ khỏi lịch sử Manager.') }}>Xóa khỏi lịch sử</Button></div></div></Modal>
   </div>
 }

@@ -43,6 +43,8 @@ export function hasAccessToken() {
   return Boolean(accessToken)
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object')
 }
@@ -84,17 +86,24 @@ async function refreshAccessToken(): Promise<boolean> {
   return refreshInFlight
 }
 
-export async function apiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean } = {}): Promise<T> {
-  const { skipAuth, ...requestOptions } = options
+export async function apiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {}): Promise<T> {
+  const { skipAuth, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...requestOptions } = options
   const headers = new Headers(requestOptions.headers)
   if (requestOptions.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (!skipAuth && accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
 
   let response: Response
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { ...requestOptions, headers })
-  } catch {
+    response = await fetch(`${API_BASE_URL}${path}`, { ...requestOptions, headers, signal: controller.signal })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiClientError('Backend phản hồi quá lâu. Vui lòng kiểm tra backend StorageHub.', { code: 'TIMEOUT' })
+    }
     throw new ApiClientError('Không thể kết nối tới backend StorageHub.', { code: 'NETWORK_ERROR' })
+  } finally {
+    window.clearTimeout(timeoutId)
   }
 
   const payload = await readPayload(response)
