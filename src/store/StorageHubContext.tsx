@@ -69,7 +69,7 @@ const clientSecurityContext = () => ({
 
 type CompanyRole = Exclude<User['role'], 'customer'>
 type AccountStatus = 'active' | 'inactive' | 'suspended'
-type StoredUser = (typeof USERS)[number] & {
+type StoredUser = (typeof USERS)[number] & Partial<Pick<User, 'permanentAddress' | 'emergencyContactName' | 'emergencyContactPhone' | 'avatar'>> & {
   passwordResetAt?: string
   mustChangePassword?: boolean
 }
@@ -1073,10 +1073,16 @@ interface StorageHubContextValue extends StorageHubState {
   endSession: (sessionId: string, user: User) => void
   revokeSession: (sessionId: string, actor: User) => boolean
   revokeAllUserSessions: (userId: string, actor: User) => number
-  updateCustomerProfile: (updates: { name: string; email: string; phone?: string }, customer: User) => void
-  requestOwnPasswordReset: (customer: User) => void
+  updateCustomerProfile: (updates: {
+    name: string
+    email: string
+    phone?: string
+    permanentAddress?: string
+    emergencyContactName?: string
+    emergencyContactPhone?: string
+    avatar?: string
+  }, customer: User) => void
   submitProfileChangeRequest: (params: { requestedFields: string[]; reason: string }, requester: User) => ProfileChangeRequest
-  deleteOwnCustomerAccount: (customer: User) => void
   // Pricing & DIM calculation
   calculateDIMAndQuote: (
     unit: StorageUnit,
@@ -1659,6 +1665,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     name: account.name,
     email: account.email,
     phone: account.phone,
+    permanentAddress: account.permanentAddress,
+    emergencyContactName: account.emergencyContactName,
+    emergencyContactPhone: account.emergencyContactPhone,
+    avatar: account.avatar,
     role: account.role as User['role'],
     facility: account.facility
   })
@@ -1671,6 +1681,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     facility: account.facility,
     status: account.status,
     phone: account.phone,
+    permanentAddress: account.permanentAddress,
+    emergencyContactName: account.emergencyContactName,
+    emergencyContactPhone: account.emergencyContactPhone,
+    avatar: account.avatar,
     mustChangePassword: account.mustChangePassword ?? false,
     passwordResetAt: account.passwordResetAt
   } : null
@@ -3846,7 +3860,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const updateCustomerProfile = (updates: { name: string; email: string; phone?: string }, customer: User) => {
+  const updateCustomerProfile = (updates: {
+    name: string
+    email: string
+    phone?: string
+    permanentAddress?: string
+    emergencyContactName?: string
+    emergencyContactPhone?: string
+    avatar?: string
+  }, customer: User) => {
     const canonicalCustomer = resolveCanonicalActor(customer)
     if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Customer được tự cập nhật thông tin cá nhân.')
     const name = updates.name.trim()
@@ -3854,7 +3876,16 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const phone = updates.phone?.trim() || ''
     if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error('Họ tên và email hợp lệ là bắt buộc.')
     if (state.users.some(item => item.id !== canonicalCustomer.id && item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
-    const updated = { ...canonicalCustomer, name, email, phone } as StoredUser
+    const updated = {
+      ...canonicalCustomer,
+      name,
+      email,
+      phone,
+      permanentAddress: updates.permanentAddress?.trim() || '',
+      emergencyContactName: updates.emergencyContactName?.trim() || '',
+      emergencyContactPhone: updates.emergencyContactPhone?.trim() || '',
+      avatar: updates.avatar || canonicalCustomer.avatar,
+    } as StoredUser
     const before = accountSnapshot(canonicalCustomer)
     const after = accountSnapshot(updated)
     if (JSON.stringify(before) === JSON.stringify(after)) throw new Error('Thông tin cá nhân chưa có thay đổi.')
@@ -3875,31 +3906,6 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         beforeState: before,
         afterState: after,
         notes: 'Customer tự cập nhật thông tin cá nhân.',
-        timestamp: now
-      }, ...prev.activities]
-    }))
-  }
-
-  const requestOwnPasswordReset = (customer: User) => {
-    const canonicalCustomer = resolveCanonicalActor(customer)
-    if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Customer được yêu cầu đổi mật khẩu qua email.')
-    const now = new Date().toISOString()
-    const updated = { ...canonicalCustomer, passwordResetAt: now, mustChangePassword: true } as StoredUser
-    setState(prev => ({
-      ...prev,
-      users: prev.users.map(item => item.id === canonicalCustomer.id ? updated : item),
-      activities: [{
-        id: createRecordId('act'),
-        action: 'CUSTOMER_PASSWORD_RESET_REQUESTED',
-        actorId: canonicalCustomer.id,
-        actorName: canonicalCustomer.name,
-        actorRole: canonicalCustomer.role,
-        facilityId: canonicalCustomer.facility || 'ALL',
-        entityType: 'user',
-        entityId: canonicalCustomer.id,
-        beforeState: accountSnapshot(canonicalCustomer),
-        afterState: accountSnapshot(updated),
-        notes: 'Customer yêu cầu auth backend gửi email đổi mật khẩu; frontend không tự đặt mật khẩu mới.',
         timestamp: now
       }, ...prev.activities]
     }))
@@ -3944,46 +3950,6 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       }, ...prev.activities]
     }))
     return request
-  }
-
-  const deleteOwnCustomerAccount = (customer: User) => {
-    const canonicalCustomer = resolveCanonicalActor(customer)
-    if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Customer được tự xoá tài khoản.')
-    const nowMs = Date.now()
-    const closedHoldStatuses = ['CANCELLED', 'COMPLETED', 'cancelled', 'completed', 'REJECTED', 'rejected', 'NO_SHOW', 'no_show']
-    const activeHolds = state.holds.filter(hold => hold.customerId === canonicalCustomer.id && ![...closedHoldStatuses, 'EXPIRED', 'expired'].includes(String(hold.status)))
-    const overdueHolds = state.holds.filter(hold => hold.customerId === canonicalCustomer.id && !closedHoldStatuses.includes(String(hold.status)) && Boolean(hold.expiresAt) && Date.parse(hold.expiresAt) < nowMs)
-    const unpaidHolds = state.holds.filter(hold => hold.customerId === canonicalCustomer.id && !closedHoldStatuses.includes(String(hold.status)) && hold.payment.status !== 'paid')
-    const activeRentals = state.rentals.filter(rental => rental.customerId === canonicalCustomer.id && rental.status !== 'completed')
-    const overdueRentals = activeRentals.filter(rental => rental.paymentStatus === 'overdue' || (rental.paymentStatus !== 'paid' && Boolean(rental.nextDue) && Date.parse(rental.nextDue) < nowMs))
-    const unpaidRentals = activeRentals.filter(rental => rental.paymentStatus !== 'paid')
-    const activeRenewals = state.renewals.filter(renewal => renewal.customerId === canonicalCustomer.id && !['completed', 'cancelled', 'rejected', 'payment_expired'].includes(renewal.status))
-    const blockers: string[] = []
-    if (activeHolds.length || activeRentals.length || activeRenewals.length) blockers.push('đơn/hồ sơ đang xử lý')
-    if (overdueHolds.length || overdueRentals.length) blockers.push('đơn quá hạn')
-    if (unpaidHolds.length || unpaidRentals.length || activeRenewals.some(renewal => renewal.status !== 'cancelled' && renewal.status !== 'completed')) blockers.push('đơn chưa thanh toán')
-    if (blockers.length) throw new Error(`Không thể xoá tài khoản khi còn ${blockers.join(', ')}. Vui lòng hoàn tất hoặc huỷ các hồ sơ trước.`)
-    const before = accountSnapshot(canonicalCustomer)
-    const timestamp = new Date().toISOString()
-    setState(prev => ({
-      ...prev,
-      users: prev.users.filter(item => item.id !== canonicalCustomer.id),
-      sessions: prev.sessions.map(session => session.userId === canonicalCustomer.id && session.status === 'active' ? { ...session, status: 'revoked' as const, revokedAt: timestamp, lastSeenAt: timestamp } : session),
-      activities: [{
-        id: createRecordId('act'),
-        action: 'CUSTOMER_ACCOUNT_DELETED',
-        actorId: canonicalCustomer.id,
-        actorName: canonicalCustomer.name,
-        actorRole: canonicalCustomer.role,
-        facilityId: canonicalCustomer.facility || 'ALL',
-        entityType: 'user',
-        entityId: canonicalCustomer.id,
-        beforeState: before,
-        afterState: null,
-        notes: 'Customer tự xoá tài khoản sau khi vượt qua kiểm tra hồ sơ, quá hạn và thanh toán.',
-        timestamp
-      }, ...prev.activities]
-    }))
   }
 
   const resetToDemoData = () => {
@@ -5252,9 +5218,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     revokeSession,
     revokeAllUserSessions,
     updateCustomerProfile,
-    requestOwnPasswordReset,
     submitProfileChangeRequest,
-    deleteOwnCustomerAccount,
     calculateDIMAndQuote,
     payStorageHold,
     verifyHoldEmail,

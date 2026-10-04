@@ -10,6 +10,10 @@ export interface ApiActor {
   email: string
   fullName: string
   phone: string | null
+  permanentAddress: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
+  avatarUrl: string | null
   status: ApiUserStatus
   roles: ApiRoleCode[]
   facilityScopes: Record<string, ApiFacilityScopeLevel>
@@ -57,6 +61,10 @@ export function actorToUser(actor: ApiActor): User {
     name: actor.fullName,
     email: actor.email,
     phone: actor.phone || undefined,
+    permanentAddress: actor.permanentAddress || undefined,
+    emergencyContactName: actor.emergencyContactName || undefined,
+    emergencyContactPhone: actor.emergencyContactPhone || undefined,
+    avatar: actor.avatarUrl || undefined,
     role: primaryRole(actor.roles),
     facilityId: Object.keys(actor.facilityScopes)[0],
     mustChangePassword: actor.mustChangePassword,
@@ -111,13 +119,56 @@ export async function changePasswordWithApi(currentPassword: string, newPassword
   return currentActor
 }
 
-export async function registerWithApi(input: { email: string; password: string; fullName: string; phone?: string }) {
+export async function registerWithApi(input: {
+  email: string
+  password: string
+  fullName: string
+  phone?: string
+  permanentAddress?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+}) {
   const response = await apiRequest<ApiEnvelope<ApiRegistrationResponse>>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(input),
     skipAuth: true,
   })
   if (!response?.data?.actor) throw new Error('Backend trả về dữ liệu đăng ký không hợp lệ.')
+  return response.data
+}
+
+export interface ApiSession {
+  id: string
+  createdIp: string | null
+  userAgent: string | null
+  createdAt: string
+  lastSeenAt: string | null
+  expiresAt: string
+  revokedAt: string | null
+  active: boolean
+}
+
+export async function updateCurrentProfileWithApi(input: {
+  fullName: string
+  phone?: string
+  permanentAddress?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+  avatarUrl?: string
+}): Promise<ApiActor> {
+  const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+  if (!response?.data) throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+  currentActor = response.data
+  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  return currentActor
+}
+
+export async function listMySessions(): Promise<ApiSession[]> {
+  const response = await apiRequest<ApiEnvelope<ApiSession[]>>('/api/auth/sessions')
+  if (!response?.data) throw new Error('Backend trả về dữ liệu phiên đăng nhập không hợp lệ.')
   return response.data
 }
 
