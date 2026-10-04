@@ -1195,7 +1195,7 @@ export const SETTINGS_GROUPS: SettingGroup[] = [
     group: 'Billing & Invoicing Rules',
     description: 'Automated invoice generation, grace periods, and late penalty triggers.',
     items: [
-      { id: 'gracePeriod', label: 'Late Fee Grace Period (Days)', type: 'number', value: 5 },
+      { id: 'gracePeriod', label: 'Late Fee Grace Period (Days)', type: 'number', value: 3 },
       { id: 'lateFeeAmount', label: 'Fixed Late Fee Amount (VND)', type: 'number', value: 650000 },
       { id: 'autoInvoiceDays', label: 'Advance Invoice Generation (Days)', type: 'select', value: '7 days before due date', options: ['3 days before due date', '7 days before due date', '14 days before due date', '30 days before due date'] },
       { id: 'autoProrate', label: 'Prorate First Month Rent on Move-in', type: 'toggle', value: true }
