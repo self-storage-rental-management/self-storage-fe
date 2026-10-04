@@ -1,254 +1,310 @@
 ================================================================================
-                 TÓM TẮT DỰ ÁN: STORAGEHUB — SELF-STORAGE MANAGEMENT SYSTEM
+BÁO CÁO AUDIT TECHNICAL & BUSINESS LOGIC - DỰ ÁN STORAGEHUB (FRONTEND)
+Vai trò: Senior Frontend Engineer + Business Logic Reviewer
+Thời gian kiểm tra: 2026-10-01
+Mục đích: Cung cấp bằng chứng thực tế từ source code FE để thiết kế kiến trúc Backend
 ================================================================================
 
-1. TỔNG QUAN
-─────────────
-  • Tên dự án   : StorageHub — Secure Self-Storage
-  • Loại dự án  : Hệ thống quản lý cho thuê kho tự phục vụ (Self-Storage Rental Management)
-  • Mã môn học  : SWP391
-  • Phần        : Front-End (FE)
-  • Ngôn ngữ UI : Tiếng Việt (chính), hỗ trợ song ngữ Anh-Việt ở một số trường
+--------------------------------------------------------------------------------
+1. TỔNG QUAN FILE, STATE & DEMO DATA THỰC TẾ TRONG CODE
+--------------------------------------------------------------------------------
+1.1 Quản lý Cơ sở kho (Facility):
+- File định nghĩa Type: src/types/storageHub.ts (interface Facility, FacilityCustomUnitSpec)
+- File Demo Data: src/data/demoDatabase.ts (const FACILITIES)
+- State quản lý: src/store/StorageHubContext.tsx (state facilities, setFacilities)
+- CRUD Functions:
+  + createFacility: src/store/StorageHubContext.tsx (dòng 3986)
+  + updateFacility: src/store/StorageHubContext.tsx (dòng 4064)
+  + deleteFacility: src/store/StorageHubContext.tsx (dòng 4134)
+- Component UI quản lý & Modal:
+  + src/views/business/BusinessApp.tsx (quản lý state form, tab 'facilities')
+  + src/views/business/facility/FacilityFormFields.tsx (các trường nhập thông tin kho)
+  + src/views/business/facility/UnitAllocationTable.tsx (bảng phân bổ loại kho & cấu hình gói thuê)
+  + src/views/business/facility/AddUnitSpecModal.tsx (modal thêm loại kho tùy biến)
 
-2. CÔNG NGHỆ SỬ DỤNG
-─────────────────────
-  • Framework       : React 19 + TypeScript 5.7
-  • Build Tool      : Vite 8.3
-  • CSS Framework   : Tailwind CSS 4
-  • Biểu đồ         : Recharts 3.10
-  • Xuất Excel      : SheetJS (xlsx)
-  • Test            : Vitest 5
-  • Formatter       : oxfmt
-  • Dev Server Port : 8443
+1.2 Quản lý Loại kho (Storage Type S / M / L / XL):
+- File định nghĩa Type: src/types/storageHub.ts (interface StorageUnit, FacilityCustomUnitSpec, UnitSize)
+- File Demo Data: src/data/demoDatabase.ts (const UNIT_SPECS)
+- Domain Rules: src/domain/facilityRules.ts (storageSizeCode, getUnitTypeVehicleStandard, unitTypeMatches)
+- Phân bổ mặc định khi tạo kho: src/domain/packageRules.ts (DEFAULT_FACILITY_UNIT_SPECS)
 
-3. KIẾN TRÚC ỨNG DỤNG
-──────────────────────
-  Ứng dụng theo mô hình SPA (Single Page Application), sử dụng React Context
-  (StorageHubContext) làm state store trung tâm. Không dùng React Router — 
-  điều hướng dựa trên state nội bộ + query parameter (?page=...).
+1.3 Quản lý Giá cơ sở (Base Price) & Bảng giá niêm yết:
+- File Demo Data: src/data/demoDatabase.ts (const PRICING_TIERS)
+- Component hiển thị / chỉnh sửa:
+  + src/views/business/BusinessApp.tsx (Tab 'policies' -> Section "Bảng Giá Cơ Sở Theo Kích Thước")
+  + Modal chỉnh giá: modalPricingTier, hàm handleSavePricingTier (dòng 1506)
 
-  Cấu trúc thư mục src/:
-  ┌─────────────┬──────────────────────────────────────────────────────┐
-  │ Thư mục     │ Vai trò                                            │
-  ├─────────────┼──────────────────────────────────────────────────────┤
-  │ auth/       │ Hệ thống phân quyền RBAC (Role-Based Access Ctrl)  │
-  │ components/ │ UI components dùng chung (Layout, ErrorBoundary,    │
-  │             │ BrandLogo, ui.tsx, SupportBot)                      │
-  │ data/       │ Dữ liệu demo / seed database (demoDatabase.ts)     │
-  │ domain/     │ Logic nghiệp vụ: managerRules, policyMatching,     │
-  │             │ reservationFlow                                     │
-  │ i18n/       │ Đa ngôn ngữ & định dạng tiền tệ VNĐ               │
-  │ services/   │ Dịch vụ: supportBotService (chatbot hỗ trợ)        │
-  │ store/      │ StorageHubContext — state management trung tâm      │
-  │             │ (file ~272KB, quản lý toàn bộ entities & actions)   │
-  │ types/      │ Định nghĩa kiểu dữ liệu domain (storageHub.ts)    │
-  │ utils/      │ Tiện ích xuất Excel (excelExport.ts)               │
-  │ views/      │ Giao diện theo từng role (xem bên dưới)            │
-  └─────────────┴──────────────────────────────────────────────────────┘
+1.4 Quản lý Gói thuê (Rental Package) & Giảm giá thời hạn (Duration Discount):
+- File định nghĩa Type: src/types/storageHub.ts (interface RentalPackage, DurationDiscountItem)
+- Domain Logic: src/domain/packageRules.ts
+  + DEFAULT_PACKAGE_DURATIONS = [3, 6, 12, 24] (dòng 12)
+  + calculatePackagePrice (dòng 45)
+  + generateDefaultRentalPackages (dòng 67)
+  + resolveRentalPackagesForUnit (dòng 92)
+- State BO quản lý discount:
+  + src/views/business/BusinessApp.tsx (state durationDiscounts, lưu vào localStorage 'storagehub:durationDiscounts')
+  + Hàm lưu: handleSaveDurationDiscounts (dòng 1544)
 
-4. HỆ THỐNG PHÂN QUYỀN (RBAC)
-──────────────────────────────
-  5 vai trò (Role):
-  ┌──────────┬────────────────────────────────────────────────────────┐
-  │ Role     │ Mô tả                                                │
-  ├──────────┼────────────────────────────────────────────────────────┤
-  │ Customer │ Khách thuê kho: đặt kho, xem hợp đồng, thanh toán,  │
-  │          │ yêu cầu gia hạn/trả kho, gửi hỗ trợ                 │
-  ├──────────┼────────────────────────────────────────────────────────┤
-  │ Staff    │ Nhân viên cơ sở: phê duyệt đặt kho, check-in,       │
-  │          │ xử lý trả kho, thu tiền, hỗ trợ khách hàng          │
-  ├──────────┼────────────────────────────────────────────────────────┤
-  │ Manager  │ Quản lý cơ sở: quản lý tồn kho, hợp đồng & gia hạn,│
-  │          │ thu cước & công nợ, điều phối nhân viên, báo cáo     │
-  ├──────────┼────────────────────────────────────────────────────────┤
-  │ Business │ Chủ doanh nghiệp: xem tổng quan, cơ sở, báo cáo,   │
-  │          │ quản lý chính sách & biểu phí                        │
-  ├──────────┼────────────────────────────────────────────────────────┤
-  │ Admin    │ Quản trị hệ thống: toàn quyền — quản lý tài khoản,  │
-  │          │ bảng quyền, cài đặt hệ thống, nhật ký kiểm toán     │
-  └──────────┴────────────────────────────────────────────────────────┘
+1.5 Quản lý Chính sách thuê (Rental Policy):
+- File Demo Data: src/data/demoDatabase.ts (const POLICIES)
+- Domain Logic & Parser: src/domain/policyMatching.ts
+  + getStoredPolicies, saveStoredPolicies (lưu vào localStorage 'storagehub:policies')
+  + getPoliciesForFacility (lọc theo ALL_FACILITIES hoặc facilityId cụ thể)
+  + evaluatePolicyBenefit (dòng 169)
+- Cấu hình vận hành (Grace Period, Late Fee): src/types/storageHub.ts (interface BusinessConfig)
+  + Mặc định: src/store/StorageHubContext.tsx (defaultBusinessConfig)
 
-  28 quyền (permission) được chia 3 nhóm: Điều hướng, Nghiệp vụ, Quản trị.
-  Admin có toàn bộ quyền; các role khác có quyền theo nghiệp vụ.
-
-5. CÁC MODULE CHỨC NĂNG CHÍNH
-──────────────────────────────
-
-  5.1 Trang chủ (HomePage)
-      - Landing page giới thiệu StorageHub
-      - Cho phép khách truy cập xem thông tin & chuyển đến Đăng nhập/Đăng ký
-
-  5.2 Xác thực (Login / Register)
-      - Đăng nhập / Đăng ký tài khoản
-      - Quản lý session, login history, security alerts
-      - Lazy loading module theo role sau đăng nhập
-
-  5.3 Customer App (~305KB)
-      - Duyệt cơ sở & gian kho (facility browsing, unit search)
-      - Luồng đặt kho hoàn chỉnh:
-          Khai báo hàng hóa → Báo giá tự động → Xác minh email →
-          Duyệt/ngoại lệ → Thanh toán cọc 20% → Phân kho → Check-in
-      - Quản lý hợp đồng thuê & gia hạn
-      - Yêu cầu trả kho
-      - Xem lịch sử thanh toán
-      - Gửi hỗ trợ (Customer Support)
-
-  5.4 Staff App (~110KB)
-      - Bảng điều khiển nhân viên
-      - Duyệt yêu cầu đặt kho (approve/reject)
-      - Thực hiện check-in & bàn giao (checklist 5 bước)
-      - Xử lý trả kho (nghiệm thu, phân loại hư hại, quyết toán)
-      - Thu tiền & upload biên lai
-      - Hỗ trợ khách hàng (trả lời ticket)
-
-  5.5 Manager App (~240KB tổng cộng các panel)
-      - Dashboard tổng quan cơ sở
-      - Quản lý tồn kho (CRUD gian kho, bảo trì)
-      - Quản lý hợp đồng & gia hạn (phê duyệt gia hạn)
-      - Giám sát nhận kho & trả kho
-      - Quản lý thanh toán & công nợ (late fee, overlock, reminder)
-      - Điều phối nhân viên & nhiệm vụ
-      - Báo cáo cơ sở (biểu đồ Recharts)
-
-  5.6 Business App (~251KB)
-      - Tổng quan đa cơ sở
-      - Quản lý chính sách thuê & biểu phí
-      - Xem báo cáo doanh thu toàn hệ thống
-
-  5.7 Admin App (~65KB)
-      - Quản lý tài khoản người dùng
-      - Quản lý bảng quyền (RBAC)
-      - Cài đặt hệ thống
-      - Nhật ký kiểm toán (Audit Log)
-      - Quản lý session & bảo mật
-
-  5.8 Hồ sơ cá nhân (ProfileView)
-      - Xem & chỉnh sửa thông tin cá nhân
-      - Yêu cầu thay đổi hồ sơ (cho staff/manager)
-
-6. CÁC ENTITY / MODEL DỮ LIỆU CHÍNH
-──────────────────────────────────────
-  • Facility           — Cơ sở / nhà kho
-  • StorageUnit         — Gian kho (S/M/L/XL), kích thước, giá, trạng thái
-  • UnitType            — Loại gian kho (kích thước chuẩn, giá/m³)
-  • StorageReservation  — Đặt giữ kho (luồng 10+ trạng thái)
-  • StorageContract     — Hợp đồng thuê kho
-  • RentalRecord        — Hồ sơ thuê kho đang hoạt động
-  • RenewalRecord       — Gia hạn hợp đồng
-  • CheckInRecord       — Bản ghi check-in & bàn giao
-  • ReturnCase          — Xử lý trả kho & quyết toán
-  • StoragePayment      — Giao dịch thanh toán
-  • GoodsDeclaration    — Khai báo hàng hóa gửi kho
-  • PricingQuote        — Báo giá tự động
-  • AccessCredential    — Mã PIN / thẻ truy cập kho
-  • FacilityTask        — Nhiệm vụ nhân viên tại cơ sở
-  • MaintenanceTask     — Công việc bảo trì gian kho
-  • ActivityRecord      — Nhật ký hoạt động (audit log)
-  • DiscountRule        — Quy tắc giảm giá / khuyến mãi
-  • BusinessConfig      — Cấu hình nghiệp vụ (dimDivisor, lateFee, v.v.)
-
-7. LUỒNG NGHIỆP VỤ CHÍNH (RESERVATION FLOW)
-─────────────────────────────────────────────
-  CREATED → awaiting_email → awaiting_review → awaiting_payment →
-  DEPOSIT_PAID → UNIT_RESERVED → READY_FOR_CHECKIN → COMPLETED
-
-  Ngoại lệ (Soft Exception): hàng quá khổ, quá nặng, vật phẩm hạn chế →
-  chuyển sang review thủ công bởi Staff.
-
-  Thanh toán cọc = 20% tổng tiền tháng đầu + phí bảo đảm.
-  Định giá dựa trên: thể tích (m³), trọng lượng quy đổi (dim weight),
-  phí phụ trội kích thước, mã giảm giá.
-
-8. TÍNH NĂNG KỸ THUẬT NỔI BẬT
-───────────────────────────────
-  • Lazy loading theo role (code splitting)
-  • Chunk error recovery (tự động reload khi chunk load lỗi)
-  • RBAC động — Admin có thể thay đổi quyền từng role tại runtime
-  • Session management — theo dõi phiên đăng nhập, revoke session
-  • Notification system — thông báo real-time trong Layout
-  • Support Bot — chatbot hỗ trợ khách hàng tự động
-  • Excel export — xuất dữ liệu ra file .xlsx
-  • Tiền tệ VNĐ — tất cả giá hiển thị bằng Việt Nam Đồng
-  • Error Boundary — bắt lỗi render & hiển thị fallback
-  • Responsive Layout — giao diện tương thích đa thiết bị
-
-9. CẤU TRÚC THƯ MỤC
-─────────────────────
-  self-storage-FE/
-  ├── index.html                    # Entry HTML
-  ├── package.json                  # Dependencies & scripts
-  ├── vite.config.ts                # Vite + Tailwind config
-  ├── tsconfig.json                 # TypeScript config
-  ├── public/                       # Static assets
-  ├── src/
-  │   ├── main.tsx                  # React entry point
-  │   ├── App.tsx                   # Root component & routing
-  │   ├── types.ts                  # Shared types (User, Session, etc.)
-  │   ├── index.css                 # Global styles
-  │   ├── auth/
-  │   │   └── rbac.ts               # Role permissions & RBAC logic
-  │   ├── components/
-  │   │   ├── Layout.tsx            # Shared layout (sidebar, header, notifs)
-  │   │   ├── ui.tsx                # Reusable UI primitives (Badge, etc.)
-  │   │   ├── BrandLogo.tsx         # Brand logo component
-  │   │   ├── ErrorBoundary.tsx     # Error boundary
-  │   │   └── support/              # Support widget
-  │   ├── data/
-  │   │   └── demoDatabase.ts       # Demo/seed data (~62KB)
-  │   ├── domain/
-  │   │   ├── managerRules.ts       # Manager business rules
-  │   │   ├── policyMatching.ts     # Policy matching engine
-  │   │   ├── reservationFlow.ts    # Reservation state machine
-  │   │   └── reservationFlow.test.ts
-  │   ├── i18n/
-  │   │   └── currency.ts           # VNĐ formatting
-  │   ├── services/
-  │   │   └── supportBotService.ts  # Chatbot AI service
-  │   ├── store/
-  │   │   └── StorageHubContext.tsx  # Central state (~272KB)
-  │   ├── types/
-  │   │   └── storageHub.ts         # Domain type definitions
-  │   ├── utils/
-  │   │   └── excelExport.ts        # Excel export utility
-  │   └── views/
-  │       ├── Login.tsx             # Login & Register
-  │       ├── ProfileView.tsx       # User profile
-  │       ├── home/
-  │       │   └── HomePage.tsx      # Landing page
-  │       ├── customer/
-  │       │   ├── CustomerApp.tsx   # Customer dashboard (~305KB)
-  │       │   └── CustomerSupportSection.tsx
-  │       ├── staff/
-  │       │   ├── StaffApp.tsx      # Staff dashboard (~110KB)
-  │       │   ├── StaffCheckinsPanel.tsx
-  │       │   ├── StaffReservationsPanel.tsx
-  │       │   ├── StaffReturnsPanel.tsx
-  │       │   ├── StaffSupportPanel.tsx
-  │       │   └── ... (Fee, Upload components)
-  │       ├── manager/
-  │       │   ├── ManagerApp.tsx    # Manager shell + nav
-  │       │   ├── ManagerDashboardPanel.tsx
-  │       │   ├── ManagerInventoryPanel.tsx
-  │       │   ├── ManagerRentalsPanel.tsx
-  │       │   ├── ManagerPaymentsPanel.tsx
-  │       │   ├── ManagerReportsPanel.tsx
-  │       │   ├── ManagerStaffTasksPanel.tsx
-  │       │   └── ... (Moves, Returns, Exceptions, i18n)
-  │       ├── business/
-  │       │   └── BusinessApp.tsx   # Business owner dashboard (~251KB)
-  │       └── admin/
-  │           └── AdminApp.tsx      # Admin dashboard (~65KB)
-  └── tests/                        # Test files
-
-10. SCRIPTS
-───────────
-  npm run dev       — Khởi chạy dev server (port 8443)
-  npm run build     — Build production
-  npm run test      — Chạy test (Vitest)
-  npm run typecheck — Kiểm tra TypeScript
-  npm run preview   — Xem bản build production
-  npm run format    — Format code (oxfmt)
+1.6 Quản lý Đặt chỗ, Tính giá & Doanh thu (Pricing & Reservation Calculation):
+- Component đặt chỗ phía Customer: src/views/customer/CustomerApp.tsx
+  + Modal đặt chỗ: UnitBookingModal (dòng 3014)
+  + Tính discount & cọc: tính toán trong useMemo/render (dòng 3060 - 3175)
+- Hàm tạo đơn & xác thực phía Context: src/store/StorageHubContext.tsx
+  + validateAndCreateReservation (dòng 3429)
 
 ================================================================================
-  Tạo bởi: Antigravity AI | Ngày: 29/09/2026
+2. AUDIT BUSINESS LOGIC: RENTAL PACKAGE (GLOBAL HAY FACILITY-SPECIFIC?)
+================================================================================
+Kết luận kỹ thuật: CONFLICTING IMPLEMENTATION (TỒN TẠI 2 LUỒNG DỮ LIỆU SONG SONG VÀ MÂU THUẪN NHAU)
+
+A. Chi tiết 2 luồng:
+1. Luồng 1 (Global Duration Discount - Giao diện Quản lý Chính sách BO):
+   - Nơi lưu: localStorage key 'storagehub:durationDiscounts'.
+   - Cấu trúc: DurationDiscountItem[] gồm:
+     + 3 tháng: discount 3%, renewalDiscount 2%
+     + 6 tháng: discount 5%, renewalDiscount 3%
+     + 12 tháng: discount 8%, renewalDiscount 5%
+     + 24 tháng: discount 12%, renewalDiscount 8%
+   - KHÔNG CÓ trường facilityId hay unitTypeId.
+   - Bản chất: Đây là chính sách giảm giá toàn hệ thống (Global Policy).
+
+2. Luồng 2 (Facility/Unit-specific Rental Package - Cấu hình Loại kho & Domain):
+   - Nơi lưu: Thuộc tính `customUnitSpecs` trong Facility, `rentalPackages` trong StorageUnit.
+   - Cấu trúc: RentalPackage[] có:
+     + id: string (vd: 'pkg-fac-1-S-3m')
+     + facilityId: string
+     + unitTypeId: string
+     + durationMonths: 3 | 6 | 12 | 24
+     + packagePrice: number (tổng tiền sau giảm)
+     + discountPercent: number
+   - Bản chất: Facility-specific và UnitType-specific.
+
+B. Bằng chứng mâu thuẫn khi Customer đặt thuê (CustomerApp.tsx dòng 3060 - 3110):
+- Khi Customer chọn thuê 1 kho:
+  Bước 1: Hệ thống kiểm tra `unit.rentalPackages`. Nếu có package khớp duration -> Lấy packagePrice từ unit đó (Facility-specific).
+  Bước 2: Nếu không có `rentalPackages` trên unit -> Hệ thống fallback sang `localStorage['storagehub:durationDiscounts']` (Global).
+  Bước 3: Nếu localStorage rỗng -> Hệ thống fallback sang ternary hard-code:
+    3m -> 3%, 6m -> 5%, 12m -> 8%, 24m -> 12%, còn lại -> 0%.
+- Bằng chứng về Gia hạn hợp đồng (Renewal):
+  + Khi gia hạn, code HOÀN TOÀN KHÔNG DÙNG package của Facility/Unit, mà đọc thẳng từ Global `durationDiscounts` hoặc hard-code (2%, 3%, 5%, 8%).
+
+C. Khi tạo / sửa Facility:
+- Khi tạo mới Facility (createFacility trong StorageHubContext.tsx):
+  + Nếu có truyền `customUnitSpecs` (chứa rentalPackages riêng) -> Lưu vào facility.
+  + Nếu không truyền -> Tự sinh `StorageUnit` nhưng `rentalPackages` bị để rỗng ([]), buộc customer phải fallback về Global discount!
+- Khi edit Facility:
+  + Admin có thể cấu hình package riêng từng loại kho trong UnitAllocationTable.tsx. Tuy nhiên, nếu Admin vào tab "Chính Sách Thuê" sửa discount chung thì các kho đã có custom package không bị ảnh hưởng, gây lệch giá giữa 2 màn hình quản trị.
+
+================================================================================
+3. AUDIT CÔNG THỨC TÍNH GIÁ (PRICING CALCULATION)
+================================================================================
+Bằng chứng code tại:
+- src/domain/packageRules.ts (hàm calculatePackagePrice dòng 45)
+- src/views/customer/CustomerApp.tsx (dòng 3070 - 3175)
+- src/store/StorageHubContext.tsx (hàm validateAndCreateReservation dòng 3429)
+
+3.1 Các biến đầu vào:
+- effectiveMonthlyPrice: Giá cơ sở 1 tháng (Base Price của Unit).
+- rentalMonths: Số tháng thuê (1, 3, 6, 12, 24...).
+- discountRate: Tỷ lệ giảm giá (vd: 0.05 đối với 5%).
+
+3.2 Công thức chi tiết:
+1. Tổng tiền gốc chưa giảm (Gross Rental Term Amount):
+   grossRentalTermAmount = effectiveMonthlyPrice * rentalMonths
+
+2. Số tiền giảm giá khuyến mãi (Promotion Discount Amount):
+   - Trường hợp dùng RentalPackage có sẵn:
+     promotionDiscount = Math.max(0, grossRentalTermAmount - selectedActivePackage.packagePrice)
+   - Trường hợp tính theo tỷ lệ %:
+     promotionDiscount = Math.round(grossRentalTermAmount * discountRate * 100) / 100
+
+3. Tổng tiền thuê sau giảm giá (Rental Term Amount):
+   totalCombinedDiscount = promotionDiscount + policyDiscountAmount
+   rentalTermAmount = grossRentalTermAmount - totalCombinedDiscount
+
+4. Tiền cọc giữ chỗ online (Reservation Deposit Amount):
+   reservationDepositAmount = Math.round(rentalTermAmount * 0.2 * 100) / 100
+   (Quy định: Cọc giữ chỗ online = 20% tổng tiền thuê của cả kỳ).
+
+5. Tiền cọc an ninh / thế chân tài sản (Security Deposit Amount):
+   securityDepositAmount = effectiveMonthlyPrice
+   (Quy định: Cọc an ninh = đúng 1 tháng tiền thuê gốc, KHÔNG ÁP DỤNG GIẢM GIÁ).
+   Lưu ý: Tiền cọc an ninh được thanh toán khi nhận kho (check-in), không thu lúc cọc online.
+
+6. Số tiền còn lại phải thanh toán khi nhận bàn giao kho (Remaining Amount):
+   remainingAmount = rentalTermAmount - reservationDepositAmount + securityDepositAmount
+
+3.3 Hệ thống đang lưu gì? (Monthly Price vs Total Package Price):
+- HỆ THỐNG LƯU:
+  + baseMonthlyPrice: Giá cơ sở 1 tháng (chưa giảm).
+  + discountAmount: Tổng số tiền VND được giảm trong kỳ.
+  + packagePrice / rentalTermAmount: TỔNG GIÁ TOÀN BỘ KỲ HẠN THUÊ.
+- Hệ thống KHÔNG LƯU trường "giá/tháng sau giảm" vào cơ sở dữ liệu.
+- Giá tương đương mỗi tháng sau giảm (monthlyEquivalentPrice) chỉ là giá trị tính toán hiển thị (Display-only calculation) trên UI:
+  monthlyEquivalentPrice = Math.round(packagePrice / durationMonths)
+
+3.4 Các trường hợp biên (Edge Cases):
+- Thuê 1 tháng: Không có gói giảm giá, discount = 0, rentalTermAmount = effectiveMonthlyPrice.
+- Discount = 0 hoặc null: Math.max(0, ...) đảm bảo discountAmount = 0.
+- Làm tròn: Sử dụng `Math.round(value * 100) / 100` (làm tròn 2 chữ số thập phân, thừa hưởng từ chuẩn float, tuy nhiên với tiền VNĐ thì thực tế không có số lẻ thập phân).
+
+================================================================================
+4. AUDIT CƠ SỞ KHO & STORAGE TYPE (FACILITY & ALLOCATION)
+================================================================================
+4.1 Modal "Thêm cơ sở kho mới":
+- Vị trí: src/views/business/BusinessApp.tsx (dòng 1974 - 2000).
+- Hiện tượng thực tế trong code:
+  Khi ấn nút "Thêm cơ sở mới":
+  Dòng 1979: `setFormFacUnitSpecs([])` -> State danh sách loại kho bị reset về RỖNG ([]).
+  Mặc dù file `src/domain/packageRules.ts` có hằng số `DEFAULT_FACILITY_UNIT_SPECS` chứa sẵn S, M, L, XL, nhưng hàm mở modal lại set rỗng, khiến Admin phải bấm "Thêm loại kho" thủ công hoặc dựa vào backend fallback.
+- Khả năng Xóa / Thêm:
+  + User CÓ THỂ xóa từng loại kho (hàm removeUnitSpec trong UnitAllocationTable.tsx).
+  + User CÓ THỂ thêm loại kho mới hoặc loại kho tùy biến (AddUnitSpecModal.tsx).
+  + User CÓ THỂ nhập số lượng units (totalUnits) cho từng loại kho riêng biệt.
+
+4.2 Công thức phân bổ tự động (Auto Allocation Fallback):
+- Bằng chứng tại: src/store/StorageHubContext.tsx (dòng 4044 - 4050).
+- Khi tạo kho nếu KHÔNG CÓ `customUnitSpecs`, hệ thống tự sinh số lượng kho cho 4 size S, M, L, XL theo công thức:
+  + basePerSize = Math.floor(unitsCount / 4)
+  + remainder = unitsCount % 4
+  + Size S nhận: basePerSize + remainder
+  + Size M, L, XL nhận: basePerSize
+  => ĐÚNG LÀ CÓ CÔNG THỨC `floor(totalUnits / 4)` chia đều trong code!
+
+4.3 Edit Facility:
+- Khi bấm Edit Facility (dòng 1993 BusinessApp.tsx):
+  Code đọc `fac.customUnitSpecs`. Nếu facility đã có allocation trước đó -> Giữ nguyên allocation cũ đưa vào form edit.
+
+================================================================================
+5. AUDIT UI/UX & CODE BUGS
+================================================================================
+5.1 Bug: Nút "Chỉnh giá cơ sở" (Tab Quản lý chính sách):
+- Vị trí: src/views/business/BusinessApp.tsx (dòng 1506 - 1530).
+- Hiện tượng:
+  Khi Admin sửa giá cơ sở cho Size S/M/L/XL trong modal, hàm `handleSavePricingTier` thực hiện:
+  ```typescript
+  const spec = UNIT_SPECS[modalPricingTier.id as keyof typeof UNIT_SPECS]
+  if (spec) {
+    spec.basePrice = modalPricingTier.basePrice
+  }
+  ```
+  => NGUY HIỂM: Code đang MUTATE TRỰC TIẾP object `UNIT_SPECS` import từ file `demoDatabase.ts` trong bộ nhớ RAM!
+  Không hề lưu qua StorageHubContext hay persistence layer cho từng Facility.
+  Bảng giá này là bảng giá niêm yết chuẩn toàn hệ thống (Global Tier), không phải giá riêng từng facility.
+
+5.2 Bug: Chuỗi "24/7 đối với kho VIP":
+- Kết quả kiểm tra toàn bộ codebase: NOT FOUND (Không tồn tại chuỗi này trong code).
+- Giờ hoạt động thực tế trong code (demoDatabase.ts & FacilityFormFields.tsx):
+  + Giờ mở cửa: "06:00 - 22:00 (Hàng ngày)"
+  + Hoặc boolean: `access247: true/false`.
+
+5.3 Bug: Reset form khi mở modal tạo mới Facility:
+- Dòng 1979 BusinessApp.tsx gọi `setFormFacUnitSpecs([])`.
+- Người dùng vào tạo kho sẽ thấy bảng loại kho trống trơn thay vì được load sẵn mẫu chuẩn S, M, L, XL.
+
+================================================================================
+6. AUDIT RENTAL POLICY (BẢNG ĐỐI SOÁT CHÍNH SÁCH THUÊ)
+================================================================================
+| Field Tên chính sách      | Hành vi hiện tại trong code                          | Nơi lưu trữ                                       | Có dùng trong tính toán?          | Hard-coded?             |
+|---------------------------|------------------------------------------------------|---------------------------------------------------|-----------------------------------|-------------------------|
+| Rental Duration (Thời hạn)| Cho phép 1, 3, 6, 12, 24 tháng                       | packageRules.ts, durationDiscounts                | CÓ (tính grossAmount & package)   | CÓ ([3, 6, 12, 24])     |
+| Duration Discount (%)     | Giảm 3%, 5%, 8%, 12%                                 | localStorage['storagehub:durationDiscounts']      | CÓ (tính rentalTermAmount)        | CÓ (fallback ternary)   |
+| Renewal Discount (%)      | Giảm 2%, 3%, 5%, 8% khi gia hạn                      | localStorage['storagehub:durationDiscounts']      | CÓ (tính tiền khi renew contract) | CÓ (fallback ternary)   |
+| Security Deposit (Cọc an ninh) | Thu đúng 1 tháng tiền thuê cơ sở               | demoDatabase.ts (POLICIES[1]), CustomerApp:3125   | CÓ (cộng vào remainingAmount)     | CÓ (1 month base price) |
+| Reservation Deposit (Cọc giữ chỗ) | Thu đúng 20% tổng tiền thuê toàn kỳ         | CustomerApp:3124, StorageHubContext:3452          | CÓ (tính reservationDepositAmount)| CÓ (0.2)                |
+| Grace Period (Ân hạn nợ)  | XUNG ĐỘT: Demo data ghi 3 ngày, Config ghi 5 ngày    | demoDatabase (POLICIES[3]) vs BusinessConfig.ts   | CHƯA (chỉ lưu config, chưa trừ phạt)| CÓ (3 ngày vs 5 ngày)  |
+| Late Penalty (Phạt trễ)   | 0.5%/ngày trên số tiền nợ quá hạn                    | demoDatabase (POLICIES[3]), StorageHubContext     | CÓ (hàm calculateInvoiceOverdue)  | CÓ (0.005 / ngày)       |
+| Notice Period (Báo trả kho)| Báo trước 15 ngày trước khi kết thúc hợp đồng       | demoDatabase (POLICIES[2])                        | KHÔNG (chỉ hiển thị text UI)      | CÓ ("15 ngày")          |
+| Min Lease Term (Tối thiểu)| Thời hạn thuê tối thiểu 1 tháng                      | demoDatabase (POLICIES[0])                        | CÓ (Validation min = 1 tháng)     | CÓ (1 tháng)            |
+
+================================================================================
+7. DANH SÁCH HARD-CODED VALUES VÀ PHÂN LOẠI
+================================================================================
+| Giá trị                 | Vị trí xuất hiện                                  | Phân loại         | Đề xuất đưa vào Cấu hình (BE) |
+|-------------------------|---------------------------------------------------|-------------------|--------------------------------|
+| 3, 6, 12, 24 (tháng)    | packageRules.ts:12, CustomerApp.tsx:3075         | CONFIG / HARDCODE | CÓ (Cho phép admin tạo gói tùy ý) |
+| 3%, 5%, 8%, 12%         | demoDatabase.ts, CustomerApp.tsx:3076             | DEMO / FALLBACK   | CÓ (Lưu bảng DurationDiscount) |
+| 2%, 3%, 5%, 8% (Renew)  | demoDatabase.ts, CustomerApp.tsx:3080             | DEMO / FALLBACK   | CÓ (Lưu cùng bảng Discount)    |
+| S, M, L, XL             | demoDatabase.ts, packageRules.ts, facilityRules.ts| CONFIG / ENUM     | CÓ (Danh mục StorageType)      |
+| 20% (Cọc giữ chỗ)       | CustomerApp.tsx:3124, StorageHubContext.tsx:3452  | BUSINESS LOGIC    | CÓ (reservationDepositRate)    |
+| 1 tháng (Cọc an ninh)   | CustomerApp.tsx:3125, demoDatabase.ts             | BUSINESS LOGIC    | CÓ (securityDepositMonths = 1) |
+| 0.5% / ngày (Phạt trễ)  | StorageHubContext.tsx:4310                        | BUSINESS LOGIC    | CÓ (lateFeeDailyRate = 0.005)  |
+| 5 ngày (Ân hạn nợ)      | StorageHubContext.tsx:4290 (gracePeriodDays)      | BUSINESS LOGIC    | CÓ (gracePeriodDays = 5)       |
+| 3 ngày (Ân hạn nợ)      | demoDatabase.ts (POLICIES[3].value)               | DEMO DATA CONFLICT| CẦN LOẠI BỎ (Đồng bộ về 5 ngày)|
+| 15 ngày (Báo trả kho)   | demoDatabase.ts (POLICIES[2].value)               | UI TEXT / POLICY  | CÓ (noticePeriodDays = 15)     |
+| 06:00 - 22:00           | FacilityFormFields.tsx:105, demoDatabase.ts       | UI DEFAULT        | CÓ (operatingHours per facility)|
+
+================================================================================
+8. MÔ HÌNH QUAN HỆ DỮ LIỆU HIỆN TẠI (DATA MODEL RELATIONSHIP)
+================================================================================
+Hiện trạng FE đang kết hợp 2 mô hình lai:
+
+[Cấp Hệ Thống / Global]:
+GlobalConfig
+ ├── GlobalPricingTiers (S, M, L, XL -> basePrice niêm yết)
+ ├── GlobalDurationDiscounts (3m: 3%, 6m: 5%, 12m: 8%, 24m: 12%)
+ ├── GlobalRentalPolicies (Cọc 1 tháng, Cọc online 20%, Ân hạn 5 ngày, Phạt 0.5%/ngày)
+ └── GlobalUnitSpecs (Kích thước m2, m3, chiều cao chuẩn)
+
+[Cấp Chi Nhánh / Facility-Specific]:
+Facility
+ ├── id, name, code, address, status, operatingHours, access247
+ ├── customUnitSpecs[] (Cấu hình riêng của từng chi nhánh)
+ │    ├── unitTypeId ('S', 'M', 'L', 'XL' hoặc Custom)
+ │    ├── basePrice (Giá cơ sở riêng của chi nhánh - override Global)
+ │    ├── totalUnits (Số lượng phân bổ)
+ │    └── rentalPackages[] (Gói giá riêng của chi nhánh)
+ │         ├── durationMonths (3, 6, 12, 24)
+ │         ├── packagePrice (Tổng tiền sau chiết khấu riêng)
+ │         └── discountPercent (% chiết khấu riêng)
+ └── StorageUnit[] (Các kho vật lý cụ thể)
+      ├── unitNumber (vd: 'F1-S01')
+      ├── status ('AVAILABLE', 'OCCUPIED', 'RESERVED', 'MAINTENANCE')
+      ├── currentPrice (Thừa hưởng từ customUnitSpecs.basePrice)
+      └── rentalPackages[] (Thừa hưởng từ customUnitSpecs.rentalPackages)
+
+================================================================================
+9. RỦI RO NGHIỆP VỤ (BUSINESS LOGIC RISKS) TỪ CODE THỰC TẾ
+================================================================================
+1. Rủi ro lệch giá giữa BackOffice và Customer Booking:
+   Nếu Admin cập nhật giảm giá ở màn hình "Chính Sách Thuê" (Global Duration Discount), nhưng chi nhánh đó đã sinh kho kèm `customUnitSpecs.rentalPackages`, thì Customer đặt phòng sẽ lấy giá trong `rentalPackages` của kho, bỏ qua toàn bộ chính sách mới của Admin!
+
+2. Rủi ro bất đồng bộ thời gian Ân hạn nợ (Grace Period):
+   Bảng chính sách cam kết với khách hàng ghi "3 ngày sau hạn thanh toán", nhưng code xử lý tính phạt tự động trong hệ thống lại lấy config mặc định là "5 ngày". Có thể dẫn đến tranh chấp pháp lý / khiếu nại của khách hàng.
+
+3. Rủi ro mất cấu hình khi reload:
+   Hàm sửa bảng giá cơ sở `handleSavePricingTier` sửa trực tiếp vào biến bộ nhớ `UNIT_SPECS`. Khi người dùng F5 / reload trình duyệt, giá này biến mất và quay về giá ban đầu trong demoDatabase.
+
+4. Thiếu rule kiểm tra khi trả kho (Notice Period):
+   Chính sách quy định khách phải thông báo trước 15 ngày, nhưng trong toàn bộ code kết thúc hợp đồng / trả phòng không có validation nào kiểm tra ngày thông báo so với ngày trả kho thực tế.
+
+================================================================================
+10. THÔNG TIN CÒN THIẾU (INSUFFICIENT EVIDENCE)
+================================================================================
+1. Chưa rõ quyết định nghiệp vụ: Giá cơ sở là Cố định toàn hệ thống hay Mỗi chi nhánh được quyền tự định giá riêng? (Code đang hỗ trợ cả 2 nhưng không đồng bộ).
+2. Chính sách giảm giá gia hạn (Renewal Discount) có được phép cấu hình theo từng Facility không, hay bắt buộc chung toàn sàn?
+3. Khi xóa 1 Storage Type trong Facility, các hợp đồng đang thuê kho thuộc Type đó sẽ được xử lý như thế nào? (FE hiện tại chỉ xóa unit vật lý nếu status là AVAILABLE).
+4. Tiền cọc an ninh (Security Deposit) khi gia hạn hợp đồng có phải nộp bổ sung nếu giá thuê tăng lên không?
+
+================================================================================
+11. DANH SÁCH CÂU HỎI ĐỀ XUẤT CHO GPT KHI THIẾT KẾ BACKEND DATABASE
+================================================================================
+1. [Data Model Architecture]: Bảng `rental_packages` và `duration_discounts` nên được gắn vào cấp nào:
+   - Phương án A: Thuộc về `facilities` (Mỗi cơ sở kho tự quản lý gói và mức giảm giá riêng).
+   - Phương án B: Thuộc về `system_policies` (Toàn hệ thống dùng chung 1 khung giảm giá theo tháng).
+   - Phương án C: Hybrid (Hệ thống có khung mặc định, cơ sở nào muốn khác thì tạo override).
+2. [Pricing Calculation]: Backend nên lưu trữ `monthly_discounted_price` hay lưu `total_package_price`? Khuyến nghị: Lưu `base_price`, `discount_rate`, `total_price` và `deposit_amount` để tránh sai số làm tròn khi chia cho số tháng.
+3. [Policy Clarification]: Thời gian ân hạn nợ (Grace Period) chính xác là bao nhiêu ngày: 3 ngày (theo bản điều khoản khách hàng) hay 5 ngày (theo cấu hình hệ thống)?
+4. [Storage Type Taxonomy]: Danh mục loại kho S/M/L/XL có phải là Enum cố định không, hay cho phép chi nhánh tự định nghĩa loại kho tùy biến (Custom dimensions)?
+================================================================================
+HẾT BÁO CÁO AUDIT
 ================================================================================

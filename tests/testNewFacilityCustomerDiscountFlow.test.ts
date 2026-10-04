@@ -131,4 +131,41 @@ describe('Flow Test: Tạo cơ sở mới -> Gắn ưu đãi -> Customer nhìn t
     const deposit20Percent = totalAfterDiscount * 0.2
     expect(deposit20Percent).toBe(2970000) // Khách chỉ cần cọc 2.97m thay vì 3.3m
   })
+
+  it('Kịch bản 3: BO xóa "Tiền đặt cọc an ninh" (Security Deposit) -> Phía Customer lập tức mất đi thẻ chính sách này', () => {
+    // 1. Giả lập ban đầu hệ thống có đầy đủ 5 chính sách chuẩn
+    const initialPolicies = [
+      { id: 'pol-1', name: 'Grace Period', value: '3 days', scope: 'All Facilities', description: 'Thời gian ân hạn 3 ngày' },
+      { id: 'pol-2', name: 'Late Fee', value: '50% đơn giá ngày / ngày trễ', scope: 'All Facilities', description: 'Phí phạt trễ' },
+      { id: 'pol-3', name: 'Security Deposit', value: '1 month', scope: 'All Facilities', description: 'Tiền cọc an ninh 1 tháng' },
+      { id: 'pol-4', name: 'Notice to Vacate', value: '15 days', scope: 'All Facilities', description: 'Báo trước 15 ngày' },
+      { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', description: 'Thuê tối thiểu 1 tháng' },
+    ]
+    localStorage.setItem('storagehub:policies', JSON.stringify(initialPolicies))
+
+    // Customer ban đầu nhìn thấy đủ 5 chính sách (bao gồm Security Deposit)
+    let customerPolicies = getPoliciesForFacility('Kho Việt – Cơ sở Quận 1', 'HCM-Q1')
+    expect(customerPolicies).toHaveLength(5)
+    expect(customerPolicies.some(p => p.id === 'pol-3' || p.name === 'Security Deposit')).toBe(true)
+
+    // 2. Bên BO thực hiện thao tác xóa: handleDeletePolicy('pol-3')
+    const remainingPolicies = initialPolicies.filter(p => p.id !== 'pol-3')
+    localStorage.setItem('storagehub:policies', JSON.stringify(remainingPolicies))
+
+    // 3. Phía Customer kiểm tra lại danh sách chính sách hiển thị tại cơ sở
+    customerPolicies = getPoliciesForFacility('Kho Việt – Cơ sở Quận 1', 'HCM-Q1')
+
+    // KẾT QUẢ:
+    // - Số lượng quy định giảm từ 5 xuống 4
+    expect(customerPolicies).toHaveLength(4)
+    // - Thẻ "Security Deposit" / "Tiền đặt cọc an ninh" hoàn toàn MẤT ĐI (undefined)
+    expect(customerPolicies.find(p => p.id === 'pol-3' || p.name === 'Security Deposit')).toBeUndefined()
+    // - Các chính sách còn lại (Ân hạn, Phạt trễ, Báo trước, Thuê tối thiểu) vẫn hoạt động bình thường
+    expect(customerPolicies.map(p => p.name)).toEqual([
+      'Grace Period',
+      'Late Fee',
+      'Notice to Vacate',
+      'Minimum Lease'
+    ])
+  })
 })

@@ -1,8 +1,9 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   Badge,
   Button,
   Card,
+  Modal,
   ProgressBar,
   SectionHeader,
   StatCard,
@@ -17,13 +18,24 @@ import { Icon } from "../../components/Layout"
 import { formatVnd } from "../../i18n/currency"
 import { useStorageHub } from "../../store/StorageHubContext"
 import type { User } from "../../types"
-import { isManagerFacilityVisible, isManagerRentalOverdue, parseManagerActivityTimestamp } from "../../domain/managerRules"
+import type { ActivityRecord } from "../../types/storageHub"
+import {
+  isManagerFacilityVisible,
+  isManagerRentalOverdue,
+  parseManagerActivityTimestamp,
+} from "../../domain/managerRules"
 import {
   managerActivityLabel,
   managerEntityLabel,
   managerStatusLabel,
   managerUnitTypeLabel,
 } from "./managerI18n"
+import {
+  formatManagerDate,
+  formatManagerDateTime,
+  normalizeManagerMoney,
+} from "./managerList"
+import useManagerSoftDelete from "./useManagerSoftDelete"
 
 interface Props {
   user: User
@@ -57,28 +69,9 @@ const addDays = (date: Date, days: number) => {
 const datePart = (value?: string) =>
   value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || ""
 
-const formatDate = (value: string) => {
-  const key = datePart(value)
-  if (!key) return "Chưa xác định"
-  return new Date(`${key}T00:00:00`).toLocaleDateString("vi-VN", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-  })
-}
-
-const formatActivityTime = (value: string) => {
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return "Chưa xác định"
-  return parsed.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
 export default function ManagerDashboardPanel({ user, setPage }: Props) {
+  const [deleteActivity, setDeleteActivity] = useState<ActivityRecord | null>(null)
+  const activityHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-activities`)
   const {
     units,
     holds,
@@ -89,11 +82,12 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     renewals,
     maintenanceTasks,
     staffTasks,
+    tickets,
     activities,
   } = useStorageHub()
 
   const today = localDateKey()
-  const sevenDaysFromNow = addDays(new Date(), 7)
+  const sevenDayWindowEnd = addDays(new Date(), 6)
   const currentMonth = today.slice(0, 7)
 
   const facilityUnits = units.filter((unit) =>
@@ -122,6 +116,9 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
   })
   const facilityTasks = staffTasks.filter((task) =>
     isManagerFacilityVisible(user, task.facilityId, task.facilityName),
+  )
+  const facilityTickets = tickets.filter((ticket) =>
+    isManagerFacilityVisible(user, ticket.facilityId, ticket.facility),
   )
   const facilityActivities = activities.filter((activity) =>
     isManagerFacilityVisible(user, activity.facilityId),
@@ -157,29 +154,19 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
   const occupancy = facilityUnits.length
     ? Math.round((occupied / facilityUnits.length) * 100)
     : 0
-  const monthlyExpectedRent = activeRentals.reduce(
-    (sum, item) => sum + item.monthlyRate,
-    0,
-  )
-
   const paidThisMonth = facilityPayments.filter((payment) => {
     const paymentDate = datePart(payment.paidAt || payment.receivedAt)
     return payment.status === "PAID" && paymentDate.startsWith(currentMonth)
   })
   const collectedThisMonth = paidThisMonth
     .filter((payment) => payment.type !== "REFUND")
-    .reduce((sum, payment) => sum + payment.amount, 0)
+    .reduce((sum, payment) => sum + (normalizeManagerMoney(payment.amount) ?? 0), 0)
   const refundedThisMonth = paidThisMonth
     .filter((payment) => payment.type === "REFUND")
-    .reduce((sum, payment) => sum + payment.amount, 0)
+    .reduce((sum, payment) => sum + (normalizeManagerMoney(payment.amount) ?? 0), 0)
   const pendingPaymentCount = facilityPayments.filter(
     (payment) => payment.status === "PENDING",
   ).length
-  const recordedLateFees = overdueRentals.reduce(
-    (sum, rental) => sum + (rental.lateFeeAmount || 0),
-    0,
-  )
-
   const disputedReturns = facilityReturns.filter(
     (item) => item.status === "disputed",
   )
@@ -189,63 +176,123 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
   const openMaintenance = facilityMaintenance.filter(
     (item) => item.status !== "completed",
   )
-  const openTasks = facilityTasks.filter((item) => item.status !== "completed")
+  const openTasks = facilityTasks.filter((item) =>
+    ["open", "in_progress"].includes(item.status),
+  )
   const overdueTasks = openTasks.filter(
     (item) => datePart(item.dueAt) && datePart(item.dueAt) < today,
   )
   const unassignedTasks = openTasks.filter((item) => !item.assignedStaffId)
+  const supportRequestsWaitingDispatch = facilityTickets.filter(
+    (ticket) =>
+      ticket.status !== "resolved" &&
+      !openTasks.some(
+        (task) => task.type === "support" && task.referenceId === ticket.id,
+      ),
+  )
+  const reservationsWaitingAssignment = facilityHolds.filter(
+    (item) =>
+      ["DEPOSIT_PAID", "UNIT_RESERVED"].includes(item.status) &&
+      item.payment.status === "paid" &&
+      !item.assignedUnitId,
+  )
+  const todayMoveIns = facilityCheckins.filter(
+    (item) => item.status === "scheduled" && datePart(item.scheduledDate) === today,
+  )
+  const todayMoveOuts = facilityReturns.filter(
+    (item) => item.status !== "completed" && datePart(item.scheduledDate) === today,
+  )
   const priorityItems = [
     {
-      label: "Khiếu nại quyết toán trả kho",
-      count: disputedReturns.length,
-      detail: disputedReturns.length
-        ? "Cần xem xét phương án quyết toán"
-        : "Không có khiếu nại đang chờ",
-      page: "moves",
-      variant: "error",
+      rank: 1,
+      label: "Đặt chỗ chờ phân gian",
+      count: reservationsWaitingAssignment.length,
+      detail: "Đã thanh toán cọc và đủ điều kiện phân gian vật lý",
+      page: "rentals",
+      variant: "warning",
     },
     {
-      label: "Hợp đồng thanh toán quá hạn",
+      rank: 2,
+      label: "Nhận kho hôm nay",
+      count: todayMoveIns.length,
+      detail: "Lịch nhận kho đang chờ Staff thực hiện",
+      page: "moves",
+      variant: "info",
+    },
+    {
+      rank: 3,
+      label: "Trả kho / kiểm tra hôm nay",
+      count: todayMoveOuts.length,
+      detail: "Hồ sơ trả kho chưa hoàn tất theo lịch hôm nay",
+      page: "moves",
+      variant: "warning",
+    },
+    {
+      rank: 4,
+      label: "Thanh toán quá hạn",
       count: overdueRentals.length,
-      detail: overdueRentals.length
-        ? "Cần thu tiền hoặc xử lý quyền truy cập"
-        : "Không có hợp đồng quá hạn",
+      detail: "Cần thu tiền hoặc xử lý quyền truy cập",
       page: "payments",
       variant: "error",
     },
     {
+      rank: 5,
+      label: "Nhiệm vụ chưa phân công",
+      count: unassignedTasks.length,
+      detail: "Cần giao cho nhân viên thuộc cơ sở",
+      page: "staff-tasks",
+      variant: "warning",
+    },
+    {
+      rank: 6,
       label: "Nhiệm vụ đã quá hạn",
       count: overdueTasks.length,
-      detail: overdueTasks.length
-        ? "Cần điều phối nhân viên xử lý"
-        : "Không có nhiệm vụ quá hạn",
+      detail: "Cần điều phối nhân viên xử lý",
       page: "staff-tasks",
       variant: "error",
     },
     {
+      rank: 7,
+      label: "Yêu cầu hỗ trợ chưa giao việc",
+      count: supportRequestsWaitingDispatch.length,
+      detail: "Cần tạo nhiệm vụ hỗ trợ và giao Staff phù hợp",
+      page: "staff-tasks",
+      variant: "warning",
+    },
+    {
+      rank: 8,
+      label: "Gian kho đang bảo trì",
+      count: maintenanceUnits,
+      detail: openMaintenance.length
+        ? `${openMaintenance.length} phiếu bảo trì đang mở`
+        : "Cần kiểm tra trạng thái và kế hoạch đưa kho hoạt động lại",
+      page: "inventory",
+      variant: "warning",
+    },
+    {
+      rank: 9,
       label: "Yêu cầu gia hạn chờ duyệt",
       count: pendingRenewals.length,
-      detail: pendingRenewals.length
-        ? "Cần xem xét thời hạn mới"
-        : "Không có yêu cầu chờ duyệt",
+      detail: "Cần xem xét thời hạn mới",
       page: "rentals",
       variant: "info",
     },
     {
-      label: "Gian kho đang bảo trì",
-      count: openMaintenance.length,
-      detail: openMaintenance.length
-        ? "Cần theo dõi sửa chữa và nghiệm thu"
-        : "Không có gian kho chờ bảo trì",
-      page: "inventory",
-      variant: "info",
+      rank: 10,
+      label: "Khiếu nại quyết toán trả kho",
+      count: disputedReturns.length,
+      detail: "Cần xem xét phương án quyết toán",
+      page: "moves",
+      variant: "error",
     },
-  ].sort((left, right) => Number(right.count > 0) - Number(left.count > 0))
+  ]
+    .filter((item) => item.count > 0)
+    .sort((left, right) => left.rank - right.rank || right.count - left.count)
 
   const scheduleItems = useMemo<ScheduleItem[]>(() => {
     const inRange = (value?: string) => {
       const key = datePart(value)
-      return Boolean(key && key >= today && key <= sevenDaysFromNow)
+      return Boolean(key && key >= today && key <= sevenDayWindowEnd)
     }
 
     const checkinItems: ScheduleItem[] = facilityCheckins
@@ -257,7 +304,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         date: item.scheduledDate,
         time: item.scheduledTime,
         title: "Nhận kho",
-        detail: `${item.customerName} · Gian ${item.unitId}`,
+        detail: `${item.customerName} · Gian ${item.unitId}${item.staffName ? ` · ${item.staffName}` : ""}`,
         status: item.status,
         page: "moves",
         variant: "info",
@@ -271,7 +318,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         id: `tra-kho-${item.id}`,
         date: item.scheduledDate,
         title: "Trả kho",
-        detail: `${item.customerName} · Gian ${item.unitId}`,
+        detail: `${item.customerName} · Gian ${item.unitId}${item.staffId ? ` · Staff ${item.staffId}` : ""}`,
         status: item.status,
         page: "moves",
         variant: item.status === "disputed" ? "error" : "warning",
@@ -323,7 +370,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     facilityReturns,
     facilityRenewals,
     openTasks,
-    sevenDaysFromNow,
+    sevenDayWindowEnd,
     today,
   ])
 
@@ -354,7 +401,9 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     })
   }, [facilityUnits])
 
-  const recentActivities = [...facilityActivities]
+  const displayedActivities = facilityActivities.filter((activity) => !activityHistory.isHidden(activity.id))
+  const hiddenActivityCount = facilityActivities.length - displayedActivities.length
+  const recentActivities = [...displayedActivities]
     .sort(
       (left, right) =>
         parseManagerActivityTimestamp(right.timestamp) -
@@ -380,9 +429,55 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3">
+      <section aria-labelledby="manager-priority-heading">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
+              Theo mức độ ưu tiên
+            </p>
+            <h2 id="manager-priority-heading" className="mt-1 text-lg font-bold text-stone-900">
+              Việc cần xử lý
+            </h2>
+          </div>
+          <span className="text-xs text-stone-500">
+            Chỉ sử dụng hồ sơ thuộc cơ sở đang quản lý
+          </span>
+        </div>
+        {priorityItems.length ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {priorityItems.map((item) => (
+              <Card key={item.label} className="border-amber-300 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-stone-900">{item.label}</p>
+                    <p className="mt-2 text-2xl font-extrabold">{item.count}</p>
+                  </div>
+                  <Badge variant={item.variant}>Cần xử lý</Badge>
+                </div>
+                <p className="mt-2 min-h-8 text-xs text-stone-500">
+                  {item.detail}
+                </p>
+                <Button
+                  className="mt-3 w-full"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPage(item.page)}
+                >
+                  Mở danh sách
+                </Button>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card className="p-6 text-center text-sm text-stone-500">
+            Không có hồ sơ vận hành nào cần Manager xử lý tại thời điểm này.
+          </Card>
+        )}
+      </section>
+
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard
-          title="Tổng gian kho"
+          title="Tổng số gian kho"
           value={facilityUnits.length}
           icon={Icon.box}
         />
@@ -392,22 +487,12 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
           icon={Icon.chart}
         />
         <StatCard
-          title="Hợp đồng hiệu lực"
+          title="Lượt thuê đang hoạt động"
           value={activeRentals.length}
           icon={Icon.policy}
         />
         <StatCard
-          title="Tiền thuê dự kiến mỗi tháng"
-          value={formatVnd(monthlyExpectedRent)}
-          icon={Icon.dollar}
-        />
-        <StatCard
-          title="Đã thu trong tháng"
-          value={formatVnd(collectedThisMonth)}
-          icon={Icon.credit}
-        />
-        <StatCard
-          title="Hợp đồng quá hạn"
+          title="Thanh toán quá hạn"
           value={overdueRentals.length}
           icon={Icon.alert}
         />
@@ -448,51 +533,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         </div>
       </Card>
 
-      <section>
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
-              Theo mức độ ưu tiên
-            </p>
-            <h2 className="mt-1 text-lg font-bold text-stone-900">
-              Việc cần xử lý
-            </h2>
-          </div>
-          <span className="text-xs text-stone-500">
-            Chỉ sử dụng hồ sơ thuộc cơ sở đang quản lý
-          </span>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {priorityItems.map((item) => (
-            <Card
-              key={item.label}
-              className={`p-4 ${item.count ? "border-amber-300" : ""}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-stone-900">{item.label}</p>
-                  <p className="mt-2 text-2xl font-extrabold">{item.count}</p>
-                </div>
-                <Badge variant={item.count ? item.variant : "success"}>
-                  {item.count ? "Cần xử lý" : "Ổn định"}
-                </Badge>
-              </div>
-              <p className="mt-2 min-h-8 text-xs text-stone-500">
-                {item.detail}
-              </p>
-              <Button
-                className="mt-3 w-full"
-                size="sm"
-                variant="outline"
-                onClick={() => setPage(item.page)}
-              >
-                Mở danh sách
-              </Button>
-            </Card>
-          ))}
-        </div>
-      </section>
-
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card>
           <div className="flex items-center justify-between border-b border-stone-200 p-4">
@@ -522,7 +562,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
                 >
                   <div className="w-24 flex-shrink-0">
                     <p className="text-sm font-bold text-stone-900">
-                      {formatDate(item.date)}
+                      {formatManagerDate(item.date)}
                     </p>
                     <p className="text-xs text-stone-500">
                       {item.time || "Cả ngày"}
@@ -550,43 +590,41 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold text-stone-900">
-                Tình hình tài chính tháng này
-              </h2>
+              <h2 className="font-bold text-stone-900">Nhiệm vụ nhân viên</h2>
               <p className="mt-1 text-xs text-stone-500">
-                Tổng hợp từ các khoản thanh toán đã ghi nhận
+                Tình trạng điều phối công việc tại cơ sở
               </p>
             </div>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setPage("payments")}
+              onClick={() => setPage("staff-tasks")}
             >
-              Xem thanh toán
+              Xem nhiệm vụ
             </Button>
           </div>
-          <div className="mt-5 space-y-3 text-sm">
-            <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
-              <span>Đã thu trong tháng</span>
-              <b className="text-emerald-800">
-                {formatVnd(collectedThisMonth)}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-stone-50 p-4">
+              <p className="text-xs text-stone-500">Đang mở</p>
+              <b className="mt-1 block text-2xl">{openTasks.length}</b>
+            </div>
+            <div className="rounded-lg bg-red-50 p-4">
+              <p className="text-xs text-red-700">Đã quá hạn</p>
+              <b className="mt-1 block text-2xl text-red-800">
+                {overdueTasks.length}
               </b>
             </div>
-            <div className="flex items-center justify-between rounded-lg bg-stone-50 p-3">
-              <span>Đã hoàn trong tháng</span>
-              <b>{formatVnd(refundedThisMonth)}</b>
+            <div className="rounded-lg bg-amber-50 p-4">
+              <p className="text-xs text-amber-700">Chưa phân công</p>
+              <b className="mt-1 block text-2xl text-amber-800">
+                {unassignedTasks.length}
+              </b>
             </div>
-            <div className="flex items-center justify-between rounded-lg bg-stone-50 p-3">
-              <span>Khoản đang chờ thanh toán</span>
-              <b>{pendingPaymentCount}</b>
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-red-50 p-3">
-              <span>Phí trễ đã ghi nhận</span>
-              <b className="text-red-700">{formatVnd(recordedLateFees)}</b>
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-amber-50 p-3">
-              <span>Tiền thuê dự kiến mỗi tháng</span>
-              <b className="text-amber-800">{formatVnd(monthlyExpectedRent)}</b>
+            <div className="rounded-lg bg-stone-50 p-4">
+              <p className="text-xs text-stone-500">Ưu tiên cao</p>
+              <b className="mt-1 block text-2xl">
+                {openTasks.filter((item) => item.priority === "high").length}
+              </b>
             </div>
           </div>
         </Card>
@@ -652,41 +690,39 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold text-stone-900">Nhiệm vụ nhân viên</h2>
+              <h2 className="font-bold text-stone-900">
+                Tình hình tài chính tháng này
+              </h2>
               <p className="mt-1 text-xs text-stone-500">
-                Tình trạng điều phối công việc tại cơ sở
+                Tổng hợp từ các khoản thanh toán đã ghi nhận
               </p>
             </div>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setPage("staff-tasks")}
+              onClick={() => setPage("payments")}
             >
-              Xem nhiệm vụ
+              Xem thanh toán
             </Button>
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-stone-50 p-4">
-              <p className="text-xs text-stone-500">Đang mở</p>
-              <b className="mt-1 block text-2xl">{openTasks.length}</b>
-            </div>
-            <div className="rounded-lg bg-red-50 p-4">
-              <p className="text-xs text-red-700">Đã quá hạn</p>
-              <b className="mt-1 block text-2xl text-red-800">
-                {overdueTasks.length}
+          <div className="mt-5 space-y-3 text-sm">
+            <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
+              <span>Đã thu trong tháng</span>
+              <b className="text-emerald-800">
+                {formatVnd(collectedThisMonth)}
               </b>
             </div>
-            <div className="rounded-lg bg-amber-50 p-4">
-              <p className="text-xs text-amber-700">Chưa phân công</p>
-              <b className="mt-1 block text-2xl text-amber-800">
-                {unassignedTasks.length}
-              </b>
+            <div className="flex items-center justify-between rounded-lg bg-stone-50 p-3">
+              <span>Đã hoàn trong tháng</span>
+              <b>{formatVnd(refundedThisMonth)}</b>
             </div>
-            <div className="rounded-lg bg-stone-50 p-4">
-              <p className="text-xs text-stone-500">Ưu tiên cao</p>
-              <b className="mt-1 block text-2xl">
-                {openTasks.filter((item) => item.priority === "high").length}
-              </b>
+            <div className="flex items-center justify-between rounded-lg bg-stone-50 p-3">
+              <span>Giao dịch đã thu trong tháng</span>
+              <b>{paidThisMonth.filter((payment) => payment.type !== "REFUND").length}</b>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-amber-50 p-3">
+              <span>Khoản đang chờ thanh toán</span>
+              <b className="text-amber-800">{pendingPaymentCount}</b>
             </div>
           </div>
         </Card>
@@ -702,13 +738,20 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
               Nhật ký thay đổi thuộc cơ sở đang quản lý
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setPage("reports")}
-          >
-            Xem báo cáo
-          </Button>
+          <div className="flex gap-2">
+            {hiddenActivityCount > 0 && (
+              <Button size="sm" variant="outline" onClick={() => activityHistory.restoreAll()}>
+                Khôi phục ({hiddenActivityCount})
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPage("reports")}
+            >
+              Xem báo cáo
+            </Button>
+          </div>
         </div>
         {recentActivities.length ? (
           <Table>
@@ -718,13 +761,14 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
                 <Th>Hoạt động</Th>
                 <Th>Đối tượng</Th>
                 <Th>Người thực hiện</Th>
+                <Th />
               </tr>
             </Thead>
             <Tbody>
               {recentActivities.map((activity) => (
                 <Tr key={activity.id}>
                   <Td className="whitespace-nowrap text-xs">
-                    {formatActivityTime(activity.timestamp)}
+                    {formatManagerDateTime(activity.timestamp)}
                   </Td>
                   <Td className="font-semibold text-stone-900">
                     {managerActivityLabel(activity.action, "vi")}
@@ -736,6 +780,11 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
                     </span>
                   </Td>
                   <Td>{activity.actorName}</Td>
+                  <Td className="text-right">
+                    <Button size="sm" variant="danger" onClick={() => setDeleteActivity(activity)}>
+                      Xóa
+                    </Button>
+                  </Td>
                 </Tr>
               ))}
             </Tbody>
@@ -746,6 +795,32 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
           </p>
         )}
       </Card>
+
+      <Modal
+        open={Boolean(deleteActivity)}
+        onClose={() => setDeleteActivity(null)}
+        title="Soft-delete hoạt động gần đây"
+      >
+        {deleteActivity && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Bản ghi chỉ bị ẩn khỏi giao diện Manager. Nhật ký nguồn và số liệu báo cáo vẫn được giữ nguyên.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDeleteActivity(null)}>Hủy</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  activityHistory.hide(deleteActivity.id)
+                  setDeleteActivity(null)
+                }}
+              >
+                Xóa khỏi lịch sử
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

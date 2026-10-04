@@ -1,11 +1,60 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { User } from '../types'
-import { Card, Button, Input, Badge, Avatar, Modal } from '../components/ui'
+import { Card, Button, Input, PasswordField, Badge, Avatar, Modal } from '../components/ui'
 import { useStorageHub } from '../store/StorageHubContext'
+import { actorToUser, changePasswordWithApi, isApiAuthenticated, listMySessions, updateCurrentProfileWithApi, type ApiSession } from '../services/authApi'
+import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 
 interface ProfileViewProps {
   user: User
   onUpdateUser?: (updated: Partial<User>) => void
+}
+
+const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024
+const MAX_AVATAR_DATA_LENGTH = 450_000
+type ProfileTab = 'profile' | 'security' | 'notifications'
+
+function profileTabFromLocation(): ProfileTab {
+  const url = new URL(window.location.href)
+  const pathname = url.pathname.replace(/\/+$/, '') || '/'
+  if (pathname === '/profile/security') return 'security'
+  if (url.searchParams.get('tab') === 'notifications') return 'notifications'
+  return 'profile'
+}
+
+function compressAvatar(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) return Promise.reject(new Error('Vui lòng chọn tệp hình ảnh.'))
+  if (file.size > MAX_AVATAR_FILE_SIZE) return Promise.reject(new Error('Ảnh đại diện không được vượt quá 5 MB.'))
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Không thể đọc tệp ảnh.'))
+    reader.onload = () => {
+      const image = new Image()
+      image.onerror = () => reject(new Error('Tệp ảnh không hợp lệ.'))
+      image.onload = () => {
+        const maxSide = 256
+        const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(image.width * scale))
+        canvas.height = Math.max(1, Math.round(image.height * scale))
+        const context = canvas.getContext('2d')
+        if (!context) {
+          reject(new Error('Trình duyệt không hỗ trợ xử lý ảnh.'))
+          return
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+        if (dataUrl.length > MAX_AVATAR_DATA_LENGTH) {
+          reject(new Error('Ảnh đại diện sau khi nén vẫn quá lớn. Vui lòng chọn ảnh khác.'))
+          return
+        }
+        resolve(dataUrl)
+      }
+      image.src = String(reader.result)
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 function ToggleSwitch({
@@ -40,33 +89,32 @@ function ToggleSwitch({
   )
 }
 
-export default function ProfileView({ user }: ProfileViewProps) {
+export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const {
     sessions,
     revokeSession,
     revokeAllUserSessions,
     updateCustomerProfile,
-    requestOwnPasswordReset,
     submitProfileChangeRequest,
-    deleteOwnCustomerAccount
   } = useStorageHub()
   const isCustomer = user.role === 'customer'
   const isInternal = !isCustomer
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile')
+  const [activeTab, setActiveTab] = useState<ProfileTab>(profileTabFromLocation)
 
   // Form states
   const [name, setName] = useState(user.name)
   const [email, setEmail] = useState(user.email)
   const [phone, setPhone] = useState(user.phone || '')
-  const [address, setAddress] = useState('125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh')
-  const [emergencyContact, setEmergencyContact] = useState('Nguyễn Văn An (+84 909 777 888)')
-  const [idCard, setIdCard] = useState('079098001234')
+  const [permanentAddress, setPermanentAddress] = useState(user.permanentAddress || '')
+  const [emergencyContactName, setEmergencyContactName] = useState(user.emergencyContactName || '')
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(user.emergencyContactPhone || '')
+  const [avatarUrl, setAvatarUrl] = useState(user.avatar || '')
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   // Security states
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [twoFactorEnabled] = useState(true)
 
   // Notification states (interactive toggles)
   const [notifEmailRent, setNotifEmailRent] = useState(true)
@@ -79,7 +127,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [requestReason, setRequestReason] = useState('')
   const [requestFields, setRequestFields] = useState<string[]>(['Họ và Tên', 'Email liên hệ'])
-  const [deleteAccountConfirmationOpen, setDeleteAccountConfirmationOpen] = useState(false)
+  const [apiSessions, setApiSessions] = useState<ApiSession[]>([])
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
@@ -91,11 +139,25 @@ export default function ProfileView({ user }: ProfileViewProps) {
     showToast(`Đã ${nextVal ? 'bật' : 'tắt'} ${key}.`)
   }
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isCustomer) return
     try {
-      updateCustomerProfile({ name, email, phone }, user)
+      const profile = {
+        fullName: name.trim(),
+        phone: phone.trim(),
+        permanentAddress: permanentAddress.trim(),
+        emergencyContactName: emergencyContactName.trim(),
+        emergencyContactPhone: emergencyContactPhone.trim(),
+        avatarUrl,
+      }
+      if (isApiAuthenticated()) {
+        const actor = await updateCurrentProfileWithApi(profile)
+        setAvatarUrl(actor.avatarUrl || '')
+        onUpdateUser?.(actorToUser(actor))
+      } else {
+        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, avatar: avatarUrl }, user)
+      }
       showToast('Đã cập nhật thông tin cá nhân.')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Không thể cập nhật thông tin cá nhân.')
@@ -106,27 +168,105 @@ export default function ProfileView({ user }: ProfileViewProps) {
     setName(user.name)
     setEmail(user.email)
     setPhone(user.phone || '')
-  }, [user.id, user.name, user.email, user.phone])
+    setPermanentAddress(user.permanentAddress || '')
+    setEmergencyContactName(user.emergencyContactName || '')
+    setEmergencyContactPhone(user.emergencyContactPhone || '')
+    setAvatarUrl(user.avatar || '')
+  }, [user.id, user.name, user.email, user.phone, user.permanentAddress, user.emergencyContactName, user.emergencyContactPhone, user.avatar])
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  useEffect(() => {
+    const syncProfileTab = () => setActiveTab(profileTabFromLocation())
+    window.addEventListener('popstate', syncProfileTab)
+    return () => window.removeEventListener('popstate', syncProfileTab)
+  }, [])
+
+  const selectProfileTab = (tab: ProfileTab) => {
+    const url = new URL(window.location.href)
+    url.pathname = tab === 'security' ? '/profile/security' : '/profile'
+    url.searchParams.delete('page')
+    if (tab === 'notifications') url.searchParams.set('tab', 'notifications')
+    else url.searchParams.delete('tab')
+    window.history.pushState({ page: 'profile', tab }, '', url)
+    setActiveTab(tab)
+  }
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const nextAvatarUrl = await compressAvatar(file)
+      setAvatarUrl(nextAvatarUrl)
+      if (isApiAuthenticated()) {
+        const actor = await updateCurrentProfileWithApi({
+          fullName: name.trim(),
+          phone: phone.trim(),
+          permanentAddress: permanentAddress.trim(),
+          emergencyContactName: emergencyContactName.trim(),
+          emergencyContactPhone: emergencyContactPhone.trim(),
+          avatarUrl: nextAvatarUrl,
+        })
+        onUpdateUser?.(actorToUser(actor))
+      } else if (isCustomer) {
+        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, avatar: nextAvatarUrl }, user)
+      }
+      showToast('Đã cập nhật ảnh đại diện.')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể cập nhật ảnh đại diện.')
+    }
+  }
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setApiSessions([])
+      return
+    }
+    let cancelled = false
+    void listMySessions()
+      .then(nextSessions => {
+        if (!cancelled) setApiSessions(nextSessions)
+      })
+      .catch(() => {
+        if (!cancelled) setApiSessions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user.id, activeTab])
+
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isCustomer) return
-    if (newPassword && newPassword.length < 6) {
-      showToast('Mật khẩu mới phải có ít nhất 6 ký tự.')
+    if (!currentPassword) {
+      showToast('Vui lòng nhập mật khẩu hiện tại.')
+      return
+    }
+    const passwordError = getPasswordValidationError(newPassword)
+    if (passwordError) {
+      showToast(passwordError)
       return
     }
     if (newPassword && newPassword !== confirmPassword) {
       showToast('Mật khẩu xác nhận không khớp.')
       return
     }
+    if (newPassword === currentPassword) {
+      showToast('Mật khẩu mới phải khác mật khẩu hiện tại.')
+      return
+    }
     try {
-      requestOwnPasswordReset(user)
-      showToast('Đã gửi yêu cầu đặt lại mật khẩu tới email của bạn.')
+      await changePasswordWithApi(currentPassword, newPassword)
+      showToast('Đổi mật khẩu thành công.')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể tạo yêu cầu đổi mật khẩu.')
+      const message = error instanceof Error ? error.message : ''
+      showToast(message === 'The current password is incorrect'
+        ? 'Mật khẩu hiện tại không chính xác.'
+        : message === 'The new password must be different from the current password'
+          ? 'Mật khẩu mới phải khác mật khẩu hiện tại.'
+          : message || 'Không thể đổi mật khẩu.')
     }
   }
 
@@ -141,21 +281,6 @@ export default function ProfileView({ user }: ProfileViewProps) {
     }
   }
 
-  const handleDeleteAccount = () => {
-    if (!isCustomer) return
-    setDeleteAccountConfirmationOpen(true)
-  }
-
-  const confirmDeleteAccount = () => {
-    try {
-      deleteOwnCustomerAccount(user)
-      setDeleteAccountConfirmationOpen(false)
-      showToast('Đã xoá tài khoản. Phiên đăng nhập sẽ kết thúc.')
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể xoá tài khoản.')
-    }
-  }
-
   const roleLabelMap: Record<string, string> = {
     customer: 'Khách Hàng Thuê Kho',
     staff: 'Chuyên Viên Vận Hành Cơ Sở',
@@ -165,6 +290,17 @@ export default function ProfileView({ user }: ProfileViewProps) {
   }
 
   const userSessions = sessions.filter(session => session.userId === user.id)
+  const apiSessionRows = apiSessions.map(session => ({
+    id: session.id,
+    userId: user.id,
+    userName: user.name,
+    email: user.email,
+    status: session.active ? 'active' as const : session.revokedAt ? 'revoked' as const : 'signed_out' as const,
+    device: session.userAgent || 'Thiết bị không xác định',
+    location: session.createdIp || 'Địa chỉ IP không xác định',
+    createdAt: new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(session.createdAt)),
+  }))
+  const sessionRows = isApiAuthenticated() ? apiSessionRows : userSessions
   const handleRevokeAllSessions = () => {
     try {
       const count = revokeAllUserSessions(user.id, user)
@@ -190,12 +326,14 @@ export default function ProfileView({ user }: ProfileViewProps) {
         <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5 justify-between">
           <div className="flex items-center gap-5">
             <div className="relative">
-              <Avatar name={user.name} size="lg" />
+              <Avatar name={user.name} size="lg" imageUrl={avatarUrl} />
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
               <button
                 type="button"
                 className="absolute -bottom-1 -right-1 bg-[#e9a12c] text-[#292a27] p-1.5 rounded-full hover:bg-amber-400 transition shadow cursor-pointer"
-                title={'Đổi ảnh đại diện'}
-                disabled
+                title="Đổi ảnh đại diện"
+                aria-label="Đổi ảnh đại diện"
+                onClick={() => avatarInputRef.current?.click()}
               >
                 <svg className="show-icon w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -214,21 +352,8 @@ export default function ProfileView({ user }: ProfileViewProps) {
               </div>
               <p className="text-sm text-stone-300 flex items-center gap-3 flex-wrap">
                 <span>{user.email}</span>
-                <span>•</span>
-                <span>{'Thành viên từ Th1 2026'}</span>
-                <span>•</span>
-                <span className="text-amber-300 font-medium">
-                  {'Trạng thái: Đã định danh CCCD'}
-                </span>
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-xs font-mono tracking-wide text-stone-200 border border-white/15">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              {'PHIÊN HOẠT ĐỘNG'}
-            </span>
           </div>
         </div>
       </div>
@@ -236,7 +361,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
       {/* Tabs */}
       <div className="flex border-b border-[#deddd2] gap-2 pb-1">
         <button
-          onClick={() => setActiveTab('profile')}
+          onClick={() => selectProfileTab('profile')}
           className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === 'profile'
               ? 'border-[#e9a12c] text-stone-900 bg-white shadow-xs'
@@ -246,7 +371,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
           {'Thông Tin Cá Nhân'}
         </button>
         <button
-          onClick={() => setActiveTab('security')}
+          onClick={() => selectProfileTab('security')}
           className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === 'security'
               ? 'border-[#e9a12c] text-stone-900 bg-white shadow-xs'
@@ -256,7 +381,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
           {'Bảo Mật & Mật Khẩu'}
         </button>
         <button
-          onClick={() => setActiveTab('notifications')}
+          onClick={() => selectProfileTab('notifications')}
           className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === 'notifications'
               ? 'border-[#e9a12c] text-stone-900 bg-white shadow-xs'
@@ -277,10 +402,9 @@ export default function ProfileView({ user }: ProfileViewProps) {
                 <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-100">
                   <div>
                     <h2 className="text-lg font-bold text-stone-900">Chi Tiết Hồ Sơ Nhân Sự</h2>
-                    <p className="text-xs text-stone-500">Thông tin định danh và liên hệ chính thức trong hệ thống</p>
+                    <p className="text-xs text-stone-500">Thông tin tài khoản được cấp trong hệ thống</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="success">✓ Đã Định Danh</Badge>
                     <span className="text-xs font-semibold px-2.5 py-1 rounded bg-stone-100 text-stone-700">Hồ sơ nội bộ</span>
                   </div>
                 </div>
@@ -301,20 +425,6 @@ export default function ProfileView({ user }: ProfileViewProps) {
                     <span className="font-semibold text-stone-900 text-sm">{phone || 'Chưa cập nhật'}</span>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Số CCCD / Hộ Chiếu</span>
-                    <span className="font-mono font-bold text-stone-900 text-sm">{idCard}</span>
-                  </div>
-
-                  <div className="sm:col-span-2 p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Địa Chỉ Thường Trú</span>
-                    <span className="text-stone-800 text-sm leading-relaxed">{address}</span>
-                  </div>
-
-                  <div className="sm:col-span-2 p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Người Liên Hệ Khẩn Cấp (Tên & SĐT)</span>
-                    <span className="text-stone-800 text-sm font-medium">{emergencyContact}</span>
-                  </div>
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-500">
@@ -335,15 +445,14 @@ export default function ProfileView({ user }: ProfileViewProps) {
                 <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
                   <div>
                     <h2 className="text-lg font-bold text-stone-900">Chi Tiết Cá Nhân</h2>
-                    <p className="text-xs text-stone-500">Cập nhật thông tin liên hệ và định danh pháp lý của bạn</p>
+                    <p className="text-xs text-stone-500">Cập nhật thông tin liên hệ của bạn</p>
                   </div>
-                  <Badge variant="success">Đã Định Danh</Badge>
                 </div>
 
                 <form onSubmit={handleSaveProfile} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input
-                      label="Họ và Tên"
+                      label="Họ và tên"
                       value={name}
                       onChange={e => setName(e.target.value)}
                       required
@@ -352,31 +461,47 @@ export default function ProfileView({ user }: ProfileViewProps) {
                       label="Địa Chỉ Email"
                       type="email"
                       value={email}
-                      onChange={e => setEmail(e.target.value)}
+                      readOnly
+                      title="Email đăng nhập không thể thay đổi"
+                    />
+                  </div>
+
+                  <Input
+                    label="Số điện thoại Việt Nam"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="0901 234 567"
+                    inputMode="tel"
+                  />
+
+                  <label className="space-y-1 block text-sm font-medium text-stone-700">
+                    <span>Địa chỉ thường trú</span>
+                    <textarea
+                      value={permanentAddress}
+                      onChange={e => setPermanentAddress(e.target.value)}
+                      placeholder="Nhập số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
+                      rows={3}
+                      className="w-full resize-y rounded-lg border border-stone-300 px-3 py-2 text-sm font-normal text-stone-800 placeholder-stone-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-amber-500"
                       required
                     />
-                  </div>
+                  </label>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Input
-                      label="Số Điện Thoại Chính"
-                      value={phone}
-                      onChange={e => setPhone(e.target.value)}
+                      label="Người liên hệ khẩn cấp"
+                      value={emergencyContactName}
+                      onChange={e => setEmergencyContactName(e.target.value)}
+                      placeholder="Họ và tên người liên hệ"
+                      required
                     />
-                    <div className="p-3 rounded-lg bg-stone-50 border border-stone-200">
-                      <span className="text-xs font-medium text-stone-500 block mb-1">Số CCCD / Hộ Chiếu (Đã xác minh)</span>
-                      <span className="font-mono font-bold text-stone-800 text-sm">{idCard}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-stone-50 border border-stone-200">
-                    <span className="text-xs font-medium text-stone-500 block mb-1">Địa Chỉ Thường Trú</span>
-                    <span className="text-stone-800 text-sm">{address}</span>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-stone-50 border border-stone-200">
-                    <span className="text-xs font-medium text-stone-500 block mb-1">Người Liên Hệ Khẩn Cấp (Tên & SĐT)</span>
-                    <span className="text-stone-800 text-sm font-medium">{emergencyContact}</span>
+                    <Input
+                      label="SĐT liên hệ khẩn cấp"
+                      value={emergencyContactPhone}
+                      onChange={e => setEmergencyContactPhone(e.target.value)}
+                      placeholder="0901 234 567"
+                      inputMode="tel"
+                      required
+                    />
                   </div>
 
                   <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
@@ -389,43 +514,8 @@ export default function ProfileView({ user }: ProfileViewProps) {
             )}
           </div>
 
-          {/* Quick Account Summary */}
+          {/* Supporting information */}
           <div className="space-y-4">
-            <Card className="p-5">
-              <h3 className="font-semibold text-stone-900 mb-3 text-sm flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                {'Tổng Quan Tài Khoản'}
-              </h3>
-              <div className="space-y-3 text-sm">
-                {isInternal && (
-                  <>
-                    <div className="flex justify-between py-1.5 border-b border-stone-100">
-                      <span className="text-stone-500">{'Vai Trò'}</span>
-                      <span className="font-semibold uppercase font-mono text-xs text-stone-800">
-                        {roleLabelMap[user.role] ?? user.role}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-1.5 border-b border-stone-100">
-                      <span className="text-stone-500">{'Cơ Sở Kho'}</span>
-                      <span className="font-medium text-stone-800">{user.facility || 'Toàn hệ thống'}</span>
-                    </div>
-                  </>
-                )}
-                <div className="flex justify-between py-1.5 border-b border-stone-100">
-                  <span className="text-stone-500">{'Cấp Độ An Ninh'}</span>
-                  <span className="font-medium text-emerald-700">
-                    {'Cấp 1 · Đã Xác Thực'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-stone-500">{'Xác Thực 2 Bước'}</span>
-                  <Badge variant={twoFactorEnabled ? 'success' : 'warning'}>
-                    {twoFactorEnabled ? ('Đang Bật') : ('Đã Tắt')}
-                  </Badge>
-                </div>
-              </div>
-            </Card>
-
             {isInternal && (
               <Card className="p-5 bg-[#fbfaf6] border-stone-200">
                 <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông Tin Tổ Chức</h3>
@@ -441,7 +531,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
                 <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-stone-500 mb-2">
                   Bảo vệ tài khoản Khách hàng
                 </h3>
-                <p className="text-xs text-stone-600 leading-relaxed">Hồ sơ khách hàng được mã hóa và bảo mật theo tiêu chuẩn StorageHub. Bạn có thể yêu cầu đổi mật khẩu ở tab Bảo mật.</p>
+                <p className="text-xs text-stone-600 leading-relaxed">Hồ sơ khách hàng được bảo mật theo tiêu chuẩn StorageHub. Bạn có thể đổi mật khẩu trực tiếp ở tab Bảo mật.</p>
               </Card>
             )}
           </div>
@@ -450,8 +540,8 @@ export default function ProfileView({ user }: ProfileViewProps) {
 
       {/* TAB 2: Security & Credentials */}
       {activeTab === 'security' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
+          <div className="max-w-3xl space-y-6">
             {isInternal ? (
               /* Internal Staff / Manager / Business / Admin: Enterprise Security Card */
               <Card className="p-6">
@@ -466,21 +556,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
                       <p className="font-bold text-stone-900 text-sm">Mật Khẩu Đăng Nhập</p>
                       <p className="text-xs text-stone-500 mt-0.5">Mật khẩu được đồng bộ và quản lý theo chính sách bảo mật nội bộ.</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-stone-500 bg-white px-3 py-1.5 rounded-lg border border-stone-200">••••••••</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setRequestReason('Đề nghị cấp lại mật khẩu tài khoản nội bộ')
-                          setRequestFields(['Mật khẩu'])
-                          setRequestModalOpen(true)
-                        }}
-                        className="text-xs whitespace-nowrap cursor-pointer"
-                      >
-                        Yêu Cầu Cấp Lại Mật Khẩu
-                      </Button>
-                    </div>
+                    <span className="font-mono text-xs font-bold text-stone-500 bg-white px-3 py-1.5 rounded-lg border border-stone-200">••••••••</span>
                   </div>
 
                   <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -493,40 +569,42 @@ export default function ProfileView({ user }: ProfileViewProps) {
                 </div>
               </Card>
             ) : (
-              /* Customer: Password Reset & Change Card */
+              /* Customer: Password Change Card */
               <Card className="p-6">
                 <div className="pb-4 mb-5 border-b border-stone-100">
                   <h2 className="text-lg font-bold text-stone-900">Đổi Mật Khẩu Đăng Nhập</h2>
-                  <p className="text-xs text-stone-500">Sử dụng mật khẩu mạnh có ít nhất 6 ký tự để bảo vệ tài khoản</p>
+                  <p className="text-xs text-stone-500">{PASSWORD_POLICY_HINT}</p>
                 </div>
 
                 <form onSubmit={handleChangePassword} className="space-y-4">
-                  <Input
+                  <PasswordField
+                    id="profile-current-password"
                     label="Mật Khẩu Hiện Tại"
-                    type="password"
                     placeholder="Nhập mật khẩu hiện tại..."
                     value={currentPassword}
                     onChange={e => setCurrentPassword(e.target.value)}
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
+                    <PasswordField
+                      id="profile-new-password"
                       label="Mật Khẩu Mới"
-                      type="password"
-                      placeholder="Ít nhất 6 ký tự..."
+                      placeholder={`Ít nhất ${PASSWORD_MIN_LENGTH} ký tự...`}
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
+                      maxLength={PASSWORD_MAX_LENGTH}
                     />
-                    <Input
+                    <PasswordField
+                      id="profile-confirm-password"
                       label="Xác Nhận Mật Khẩu Mới"
-                      type="password"
                       placeholder="Nhập lại mật khẩu mới..."
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
+                      maxLength={PASSWORD_MAX_LENGTH}
                     />
                   </div>
                   <div className="flex justify-end pt-2">
                     <Button type="submit" variant="primary" className="cursor-pointer">
-                      Gửi Email Đặt Lại Mật Khẩu
+                      Đổi Mật Khẩu
                     </Button>
                   </div>
                 </form>
@@ -544,7 +622,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
                     {'Các thiết bị hiện đang được xác thực với tài khoản này'}
                   </p>
                 </div>
-                <Button
+                {!isApiAuthenticated() && <Button
                   variant="outline"
                   size="sm"
                   onClick={handleRevokeAllSessions}
@@ -552,12 +630,12 @@ export default function ProfileView({ user }: ProfileViewProps) {
                   className="cursor-pointer"
                 >
                   {'Đăng Xuất Tất Cả Thiết Bị'}
-                </Button>
+                </Button>}
               </div>
 
               <div className="space-y-3">
-                {!userSessions.length && <p className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-500">Chưa có phiên nào được ghi nhận cho tài khoản này.</p>}
-                {userSessions.map(session => (
+                {!sessionRows.length && <p className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-500">Chưa có phiên nào được ghi nhận cho tài khoản này.</p>}
+                {sessionRows.map(session => (
                   <div key={session.id} className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${session.status === 'active' ? 'border-emerald-200 bg-emerald-50/50' : 'border-stone-200 bg-white'}`}>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -568,7 +646,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
                       </div>
                       <p className="text-xs text-stone-500">{session.location} · Bắt đầu {session.createdAt}</p>
                     </div>
-                    {session.status === 'active' && (
+                    {session.status === 'active' && !isApiAuthenticated() && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -589,36 +667,8 @@ export default function ProfileView({ user }: ProfileViewProps) {
               </div>
             </Card>
 
-            {isCustomer && (
-              <Card className="border-red-200 bg-red-50/40 p-6">
-                <h2 className="text-lg font-bold text-red-900">Xoá tài khoản Customer</h2>
-                <p className="mt-2 text-xs leading-relaxed text-red-800">Không thể xoá khi còn đơn đặt hiện tại, đơn quá hạn, đơn chưa thanh toán hoặc hợp đồng thuê chưa hoàn tất. Hệ thống sẽ kiểm tra dữ liệu trước khi xoá.</p>
-                <Button type="button" variant="danger" className="mt-4 cursor-pointer" onClick={handleDeleteAccount}>
-                  Xoá tài khoản
-                </Button>
-              </Card>
-            )}
           </div>
 
-          {/* 2FA Sidebar Card */}
-          <div className="space-y-4">
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-stone-900 text-sm">
-                  {'Xác Thực 2 Bước (2FA)'}
-                </h3>
-                <Badge variant={twoFactorEnabled ? 'success' : 'muted'}>
-                  {twoFactorEnabled ? ('Đang Bật') : ('Đã Tắt')}
-                </Badge>
-              </div>
-              <p className="text-xs text-stone-500 leading-relaxed mb-4">
-                {'Bổ sung thêm lớp bảo mật bằng cách yêu cầu mã OTP từ ứng dụng Google Authenticator hoặc tin nhắn SMS khi đăng nhập.'}
-              </p>
-              <div className="pt-2">
-                <span className="text-xs text-stone-500 block">Liên hệ Admin/HR để kích hoạt xác thực 2 bước.</span>
-              </div>
-            </Card>
-          </div>
         </div>
       )}
 
@@ -789,12 +839,6 @@ export default function ProfileView({ user }: ProfileViewProps) {
         </div>
       </Modal>
 
-      <Modal open={deleteAccountConfirmationOpen && isCustomer} onClose={() => setDeleteAccountConfirmationOpen(false)} title="Xác nhận xóa tài khoản">
-        <div className="space-y-5">
-          <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">Bạn chắc chắn muốn xóa tài khoản? Chỉ có thể xóa khi không còn đơn hiện tại, đơn quá hạn hoặc khoản chưa thanh toán.</p>
-          <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => setDeleteAccountConfirmationOpen(false)}>Quay lại</Button><Button variant="danger" onClick={confirmDeleteAccount}>Xóa tài khoản</Button></div>
-        </div>
-      </Modal>
     </div>
   )
 }

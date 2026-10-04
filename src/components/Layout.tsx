@@ -61,8 +61,14 @@ function resolveNavPage(navItems: NavItem[], requested: string | null): string |
   return null
 }
 
+function requestedPageFromLocation() {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (pathname === '/profile' || pathname === '/profile/security') return 'profile'
+  return new URLSearchParams(window.location.search).get('page')
+}
+
 export function getInitialPage(navItems: NavItem[], fallback: string) {
-  const requestedPage = new URLSearchParams(window.location.search).get('page')
+  const requestedPage = requestedPageFromLocation()
   return resolveNavPage(navItems, requestedPage) ?? fallback
 }
 
@@ -107,7 +113,7 @@ export default function Layout({
 
   useEffect(() => {
     const restorePage = () => {
-      const requestedPage = new URLSearchParams(window.location.search).get('page')
+      const requestedPage = requestedPageFromLocation()
       const target = resolveNavPage(visibleNavItems, requestedPage)
       if (target) {
         onNavigate(target)
@@ -125,6 +131,16 @@ export default function Layout({
 
   useEffect(() => {
     const url = new URL(window.location.href)
+    const pathname = url.pathname.replace(/\/+$/, '') || '/'
+    const isProfilePath = pathname === '/profile' || pathname === '/profile/security'
+    if (currentPage === 'profile' && isProfilePath) {
+      if (url.searchParams.has('page')) {
+        url.searchParams.delete('page')
+        window.history.replaceState({ page: currentPage }, '', url)
+      }
+      return
+    }
+    if (isProfilePath) url.pathname = '/'
     if (url.searchParams.get('page') === currentPage) return
     url.searchParams.set('page', currentPage)
     window.history.replaceState({ page: currentPage }, '', url)
@@ -132,7 +148,13 @@ export default function Layout({
 
   const navigate = (page: string) => {
     const url = new URL(window.location.href)
-    url.searchParams.set('page', page)
+    if (page === 'profile') {
+      url.pathname = '/profile'
+      url.searchParams.delete('page')
+    } else {
+      if (url.pathname === '/profile' || url.pathname === '/profile/security') url.pathname = '/'
+      url.searchParams.set('page', page)
+    }
     window.history.pushState({ page }, '', url)
     onNavigate(page)
   }
