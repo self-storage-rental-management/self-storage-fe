@@ -1439,18 +1439,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
     const endDate = addMonthsForPreview(moveInDate, rentalMonths)
     if (endDate === '—') return
-    const overlappingReservation = backendReservations.find(reservation =>
-      reservation.unitTypeId === selectedTarget.unitType.id
-      && !['CANCELLED', 'EXPIRED', 'REJECTED', 'COMPLETED'].includes(reservation.status)
-      && reservation.startDate < endDate
-      && reservation.endDate > moveInDate
-    )
-    if (overlappingReservation) {
-      const message = `Bạn đã có đơn ${overlappingReservation.reservationCode} cho loại kho này trong thời gian ${overlappingReservation.startDate} → ${overlappingReservation.endDate}. Vui lòng chọn loại kho hoặc kỳ thuê khác.`
-      setReservationSubmitError(message)
-      showToast(message)
-      return
-    }
     const apiGoodsItems: GoodsItemInput[] = goodsItems.map(item => {
       const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
       return {
@@ -1529,7 +1517,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
     } catch (error) {
       const message = error instanceof ApiClientError && error.status === 409
-        ? 'Không thể đặt trùng loại kho trong cùng kỳ thuê. Bạn có thể chọn loại kho khác hoặc đổi ngày nhận kho.'
+        ? error.message.includes('No storage unit is available')
+          ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
+          : error.message
         : error instanceof Error ? error.message : 'Không thể tạo đơn đặt kho.'
       setReservationSubmitError(message)
       showToast(message)
