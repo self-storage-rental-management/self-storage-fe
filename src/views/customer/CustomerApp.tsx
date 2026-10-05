@@ -1517,11 +1517,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
     } catch (error) {
       const message = error instanceof ApiClientError && error.status === 409
-        ? error.message.includes('Reservation creation limit reached')
-          ? 'Bạn đã tạo nhiều đơn giữ kho trong thời gian ngắn. Vui lòng thử lại sau hoặc liên hệ hỗ trợ nếu cần đặt thêm ngay.'
-          : error.message.includes('No storage unit is available')
-            ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
-            : error.message
+        ? error.message.includes('No storage unit is available')
+          ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
+          : error.message
         : error instanceof Error ? error.message : 'Không thể tạo đơn đặt kho.'
       setReservationSubmitError(message)
       showToast(message)
