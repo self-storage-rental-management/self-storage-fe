@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { User } from '../types'
 import { Card, Button, Input, Badge, Avatar, Modal } from '../components/ui'
 import { useStorageHub } from '../store/StorageHubContext'
+import { actorToUser, isApiAuthenticated, updateProfileWithApi } from '../services/authApi'
 
 interface ProfileViewProps {
   user: User
@@ -40,7 +41,7 @@ function ToggleSwitch({
   )
 }
 
-export default function ProfileView({ user }: ProfileViewProps) {
+export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const {
     sessions,
     revokeSession,
@@ -51,6 +52,8 @@ export default function ProfileView({ user }: ProfileViewProps) {
     deleteOwnCustomerAccount
   } = useStorageHub()
   const isCustomer = user.role === 'customer'
+  const apiProfile = isApiAuthenticated()
+  const [savingProfile, setSavingProfile] = useState(false)
   const isInternal = !isCustomer
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile')
 
@@ -91,14 +94,25 @@ export default function ProfileView({ user }: ProfileViewProps) {
     showToast(`Đã ${nextVal ? 'bật' : 'tắt'} ${key}.`)
   }
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isCustomer) return
+    if (!isCustomer || savingProfile) return
+    setSavingProfile(true)
     try {
-      updateCustomerProfile({ name, email, phone }, user)
+      if (apiProfile) {
+        const actor = await updateProfileWithApi({ fullName: name.trim(), phone: phone.trim() })
+        setName(actor.fullName)
+        setEmail(actor.email)
+        setPhone(actor.phone || '')
+        onUpdateUser?.(actorToUser(actor))
+      } else {
+        updateCustomerProfile({ name, email, phone }, user)
+      }
       showToast('Đã cập nhật thông tin cá nhân.')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Không thể cập nhật thông tin cá nhân.')
+    } finally {
+      setSavingProfile(false)
     }
   }
 
@@ -352,6 +366,7 @@ export default function ProfileView({ user }: ProfileViewProps) {
                       label="Địa Chỉ Email"
                       type="email"
                       value={email}
+                      readOnly={apiProfile}
                       onChange={e => setEmail(e.target.value)}
                       required
                     />
@@ -380,8 +395,8 @@ export default function ProfileView({ user }: ProfileViewProps) {
                   </div>
 
                   <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
-                    <Button type="submit" variant="primary" className="cursor-pointer">
-                      Lưu Thay Đổi
+                    <Button type="submit" variant="primary" className="cursor-pointer" disabled={savingProfile}>
+                      {savingProfile ? 'Đang lưu…' : 'Lưu Thay Đổi'}
                     </Button>
                   </div>
                 </form>
