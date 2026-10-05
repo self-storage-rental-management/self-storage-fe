@@ -172,6 +172,60 @@ export interface CustomerReservation {
   createdAt: string
 }
 
+export interface ReservationGoodsItem extends GoodsItemInput {
+  id: string
+  requiresStaffReview: boolean
+  reviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  reviewNote: string | null
+}
+
+export interface CustomerReservationDetail {
+  reservation: CustomerReservation
+  goodsCondition: string | null
+  notes: string | null
+  paymentExpiresAt: string | null
+  complaintExpiresAt: string | null
+  archivedAt: string | null
+  confirmedAt: string | null
+  cancelledAt: string | null
+  cancelReason: string | null
+  goodsItems: ReservationGoodsItem[]
+}
+
+export interface ReservationEmailVerificationResult {
+  reservationId: string
+  reservationStatus: ReservationStatus
+  verified: boolean
+  expiresAt: string
+  nextResendAt: string
+  developmentCode: string | null
+}
+
+export interface ReservationPaymentResult {
+  paymentId: string
+  reservationId: string
+  amount: number
+  currency: string
+  outcome: 'SUCCESS' | 'FAILED' | 'NOT_RECEIVED'
+  paymentStatus: string
+  reservationStatus: ReservationStatus
+  message: string
+  processedAt: string
+}
+
+export async function payReservationDeposit(reservationId: string, idempotencyKey: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(
+    `/api/customer/reservations/${reservationId}/simulated-payment`,
+    { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } },
+  )
+  return response.data
+}
+
+export async function getReservationPayment(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(`/api/customer/reservations/${reservationId}/payment`)
+  return response.data
+}
+
 function query(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
@@ -236,4 +290,35 @@ export async function listCustomerReservations(status?: ReservationStatus, page 
   return apiRequest<PageResponse<CustomerReservation>>(
     `/api/customer/reservations${query({ status, page, size })}`,
   )
+}
+
+export async function getCustomerReservation(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${reservationId}`,
+  )
+  return response.data
+}
+
+export async function cancelCustomerReservation(reservationId: string, reason: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${reservationId}/cancel`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  )
+  return response.data
+}
+
+export async function resendReservationOtp(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationEmailVerificationResult>>(
+    `/api/customer/reservations/${reservationId}/email-verification/resend`,
+    { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function verifyReservationOtp(reservationId: string, code: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationEmailVerificationResult>>(
+    `/api/customer/reservations/${reservationId}/email-verification`,
+    { method: 'POST', body: JSON.stringify({ code }) },
+  )
+  return response.data
 }

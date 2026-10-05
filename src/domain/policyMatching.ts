@@ -1,4 +1,5 @@
 import { POLICIES } from '../data/demoDatabase'
+import { vietnamesePolicy } from '../i18n/customerLabels'
 
 export interface PolicyItem {
   id: string
@@ -68,7 +69,7 @@ export function getStoredPolicies(): PolicyItem[] {
       }
     }
   } catch {}
-  return (POLICIES as any[]).map(p => ({ ...p, description: p.description || '' }))
+  return (POLICIES as any[]).map(p => vietnamesePolicy({ ...p, description: p.description || '' }))
 }
 
 function normalizeCompare(str: string): string {
