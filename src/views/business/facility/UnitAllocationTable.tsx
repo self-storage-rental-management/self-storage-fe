@@ -46,6 +46,9 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
     count: number
   } | null>(null)
 
+  // Thông báo khi sao chép / áp dụng cấu hình gói thuê thành công
+  const [appliedMessage, setAppliedMessage] = useState<string | null>(null)
+
   // Map dữ liệu gốc để so sánh unsaved changes
   const initialMap = useMemo(() => {
     const map = new Map<string, FacilityCustomUnitSpec>()
@@ -240,6 +243,64 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
     )
   }
 
+  const handleApplyPackagesToAll = (sourceSizeCode: string) => {
+    const sourceSpec = specs.find((s) => s.sizeCode === sourceSizeCode)
+    if (!sourceSpec) return
+
+    const sourcePackages =
+      sourceSpec.rentalPackages && sourceSpec.rentalPackages.length > 0
+        ? sourceSpec.rentalPackages
+        : generateDefaultRentalPackages('', sourceSpec.sizeCode, sourceSpec.monthlyPrice)
+
+    const otherSpecs = specs.filter((s) => s.sizeCode !== sourceSizeCode)
+    if (otherSpecs.length === 0) return
+
+    const confirmMsg =
+      lang === 'vi'
+        ? `Bạn có chắc muốn sao chép toàn bộ cấu hình gói thuê (${sourcePackages.length} kỳ hạn) của cỡ ${sourceSpec.sizeCode} sang ${otherSpecs.length} cỡ kho còn lại trong cơ sở này?\n\n(Tỷ lệ % chiết khấu và trạng thái mở bán sẽ được đồng bộ; giá trọn gói sẽ tự động tính theo giá niêm yết của từng cỡ kho)`
+        : `Apply package settings of size ${sourceSpec.sizeCode} to all other ${otherSpecs.length} unit sizes?`
+
+    if (!window.confirm(confirmMsg)) return
+
+    const nextSpecs = specs.map((targetSpec) => {
+      if (targetSpec.sizeCode === sourceSizeCode) return targetSpec
+
+      const copiedPackages: RentalPackage[] = sourcePackages.map((srcPkg) => {
+        const calc = calculatePackagePrice(
+          targetSpec.monthlyPrice,
+          srcPkg.months,
+          srcPkg.discountPercent ?? 0
+        )
+        return {
+          id: `pkg-${targetSpec.sizeCode.toLowerCase()}-${srcPkg.months}m`,
+          facilityId: srcPkg.facilityId,
+          unitTypeId: targetSpec.sizeCode,
+          months: srcPkg.months,
+          name: srcPkg.name,
+          packagePrice: calc.packagePrice,
+          monthlyEquivalentPrice: calc.monthlyEquivalentPrice,
+          discountPercent: srcPkg.discountPercent ?? 0,
+          description: srcPkg.description,
+          status: srcPkg.status,
+        }
+      })
+
+      return {
+        ...targetSpec,
+        rentalPackages: copiedPackages,
+      }
+    })
+
+    onChangeSpecs(nextSpecs)
+    setAppliedMessage(
+      lang === 'vi'
+        ? `Đã sao chép cấu hình gói thuê từ cỡ ${sourceSpec.sizeCode} sang tất cả ${otherSpecs.length} cỡ kho còn lại!`
+        : `Applied package settings from ${sourceSpec.sizeCode} to all other sizes!`
+    )
+    setTimeout(() => {
+      setAppliedMessage(null)
+    }, 4500)
+  }
 
   // Helper cập nhật kích thước khung kệ
   const handleUpdateFrameDim = (
@@ -387,13 +448,13 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
         <div className="overflow-x-auto unit-allocation-table">
           <table className="w-full table-fixed text-left text-xs border-collapse min-w-[780px]">
             <colgroup>
-              <col style={{ width: '24%' }} />
-              <col style={{ width: '25%' }} />
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '22%' }} />
               <col style={{ width: '10%' }} />
               <col style={{ width: '11%' }} />
               <col style={{ width: '14%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '6%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '12%' }} />
             </colgroup>
             <thead className="bg-stone-100/90 border-b border-stone-200 text-stone-700 font-bold uppercase tracking-wider text-[11px]">
               <tr>
@@ -1003,16 +1064,45 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                         </div>
                                       </div>
 
-                                      <button
-                                        type="button"
-                                        onClick={() => handleAddCustomPackage(spec.sizeCode)}
-                                        className="text-[11px] font-bold px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                                        title={lang === 'vi' ? 'Thêm kỳ hạn thuê tùy chọn' : 'Add custom rental duration'}
-                                      >
-                                        <span className="font-bold">+</span>
-                                        <span>{lang === 'vi' ? 'Thêm kỳ hạn khác' : 'Add duration'}</span>
-                                      </button>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        {specs.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleApplyPackagesToAll(spec.sizeCode)}
+                                            className="text-[11px] font-bold px-2.5 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                            title={
+                                              lang === 'vi'
+                                                ? `Sao chép tỷ lệ chiết khấu & trạng thái mở bán của cỡ ${spec.sizeCode} cho ${specs.length - 1} cỡ kho còn lại`
+                                                : 'Apply these package settings to all other sizes'
+                                            }
+                                          >
+                                            <span>⚡</span>
+                                            <span>
+                                              {lang === 'vi'
+                                                ? 'Áp dụng cho tất cả cỡ kho còn lại'
+                                                : 'Apply to all other sizes'}
+                                            </span>
+                                          </button>
+                                        )}
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAddCustomPackage(spec.sizeCode)}
+                                          className="text-[11px] font-bold px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                                          title={lang === 'vi' ? 'Thêm kỳ hạn thuê tùy chọn' : 'Add custom rental duration'}
+                                        >
+                                          <span className="font-bold">+</span>
+                                          <span>{lang === 'vi' ? 'Thêm kỳ hạn khác' : 'Add duration'}</span>
+                                        </button>
+                                      </div>
                                     </div>
+
+                                    {appliedMessage && (
+                                      <div className="flex items-center gap-2 p-2 px-3 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold shadow-2xs">
+                                        <span>✅</span>
+                                        <span>{appliedMessage}</span>
+                                      </div>
+                                    )}
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                                       {rowPackages.map((pkg) => {
