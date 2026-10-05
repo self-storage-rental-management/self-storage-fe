@@ -12,6 +12,7 @@ import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
 import CustomerPaymentHistory from './CustomerPaymentHistory'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
+import { ApiClientError } from '../../services/apiClient'
 import { reservationProgress } from './reservationPresentation'
 import { FACILITIES, UNIT_SPECS, type TicketItem } from '../../data/demoDatabase'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
@@ -806,6 +807,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [customerEmail] = useState(user.email)
   const [customerAddress, setCustomerAddress] = useState('Quận 1, TP. Hồ Chí Minh')
   const [bookingErrors, setBookingErrors] = useState<Record<string, string>>({})
+  const [reservationSubmitError, setReservationSubmitError] = useState<string | null>(null)
   const bookingErrorRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -836,6 +838,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setCustomerPhone('+84 908 123 456')
     setCustomerAddress('Quận 1, TP. Hồ Chí Minh')
     setBookingErrors({})
+    setReservationSubmitError(null)
     setValidationViolation(null)
     setBookingReview(false)
   }
@@ -1431,6 +1434,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const confirmReservation = async () => {
     if (!selectedUnit || !selectedTarget || reservationSubmitting) return
+    setReservationSubmitError(null)
     if (!validateBookingForm()) return
 
     const endDate = addMonthsForPreview(moveInDate, rentalMonths)
@@ -1512,7 +1516,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể tạo đơn đặt kho.')
+      const message = error instanceof ApiClientError && error.status === 409
+        ? error.message.includes('No storage unit is available')
+          ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
+          : error.message
+        : error instanceof Error ? error.message : 'Không thể tạo đơn đặt kho.'
+      setReservationSubmitError(message)
+      showToast(message)
     } finally {
       setReservationSubmitting(false)
     }
@@ -3383,9 +3393,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               )
             })()}
 
+            {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
+              <p className="font-bold">Chưa thể xác nhận đặt kho</p>
+              <p className="mt-1 leading-5">{reservationSubmitError}</p>
+            </div>}
+
             <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
               {bookingReview ? (
-                <Button variant="outline" disabled={reservationSubmitting} onClick={() => { setBookingReview(false); setServerQuote(null) }}>{'Quay lại chỉnh sửa'}</Button>
+                <Button variant="outline" disabled={reservationSubmitting} onClick={() => { setBookingReview(false); setServerQuote(null); setReservationSubmitError(null) }}>{'Quay lại chỉnh sửa'}</Button>
               ) : (
                 <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>{'Hủy đặt kho'}</Button>
               )}
