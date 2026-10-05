@@ -33,6 +33,33 @@ const ManagerApp = lazyWithChunkRecovery(() => import('./views/manager/ManagerAp
 const BusinessApp = lazyWithChunkRecovery(() => import('./views/business/BusinessApp'))
 const AdminApp = lazyWithChunkRecovery(() => import('./views/admin/AdminApp'))
 
+type GuestView = 'home' | 'login' | 'register'
+
+function normalizedPathname() {
+  return window.location.pathname.replace(/\/+$/, '') || '/'
+}
+
+function resolveGuestView(): GuestView {
+  const url = new URL(window.location.href)
+  const pathname = normalizedPathname()
+  if (pathname === '/register') return 'register'
+  if (
+    pathname === '/login'
+    || pathname === '/verify-email'
+    || pathname === '/reset-password'
+    || pathname === '/profile'
+    || pathname === '/profile/security'
+    || url.searchParams.has('verifyEmail')
+    || url.searchParams.has('resetPassword')
+  ) return 'login'
+  return 'home'
+}
+
+function navigateGuest(pathname: string, view: GuestView, setGuestView: (view: GuestView) => void) {
+  window.history.pushState({ view }, '', pathname)
+  setGuestView(view)
+}
+
 function MainContent() {
   const { users, sessions, startSession, endSession } = useStorageHub()
   // Keep only the session identity in memory. The role is always resolved
@@ -41,10 +68,7 @@ function MainContent() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
-  const [guestView, setGuestView] = useState<'home' | 'login' | 'register'>(() => {
-    const url = new URL(window.location.href)
-    return url.searchParams.has('verifyEmail') || url.searchParams.has('resetPassword') ? 'login' : 'home'
-  })
+  const [guestView, setGuestView] = useState<GuestView>(resolveGuestView)
 
   const canonicalRecord = sessionUserId ? users.find(item => item.id === sessionUserId) : null
   const accountStatus = canonicalRecord && 'status' in canonicalRecord ? String(canonicalRecord.status) : 'active'
@@ -56,9 +80,14 @@ function MainContent() {
           name: canonicalRecord.name,
           email: canonicalRecord.email,
           phone: canonicalRecord.phone,
+          permanentAddress: canonicalRecord.permanentAddress,
+          emergencyContactName: canonicalRecord.emergencyContactName,
+          emergencyContactPhone: canonicalRecord.emergencyContactPhone,
+          avatar: canonicalRecord.avatar,
           role: canonicalRecord.role as User['role'],
           facility: canonicalRecord.facility,
-          facilityId: canonicalRecord.facilityId
+          facilityId: canonicalRecord.facilityId,
+          mustChangePassword: canonicalRecord.mustChangePassword,
         }
       : null
 
@@ -95,7 +124,23 @@ function MainContent() {
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
   }, [user])
 
+  useEffect(() => {
+    const syncUpdatedActor = () => setApiActor(getAuthenticatedActor())
+    window.addEventListener('storagehub:actor-updated', syncUpdatedActor)
+    return () => window.removeEventListener('storagehub:actor-updated', syncUpdatedActor)
+  }, [])
+
+  useEffect(() => {
+    if (user) return
+    const syncGuestRoute = () => setGuestView(resolveGuestView())
+    window.addEventListener('popstate', syncGuestRoute)
+    return () => window.removeEventListener('popstate', syncGuestRoute)
+  }, [user])
+
   const handleLogin = (nextUser: User) => {
+    if (['/login', '/register', '/verify-email', '/reset-password'].includes(normalizedPathname())) {
+      window.history.replaceState(null, '', '/')
+    }
     const authenticatedActor = getAuthenticatedActor()
     if (authenticatedActor) {
       setApiActor(authenticatedActor)
@@ -114,15 +159,15 @@ function MainContent() {
     setSessionUserId(null)
     setSessionId(null)
     setGuestView('home')
-    history.replaceState(null, '', window.location.pathname)
+    window.history.replaceState(null, '', '/')
   }
 
   if (!user) {
     if (guestView === 'home') {
       return (
         <HomePage
-          onOpenLogin={() => setGuestView('login')}
-          onOpenRegister={() => setGuestView('register')}
+          onOpenLogin={() => navigateGuest('/login', 'login', setGuestView)}
+          onOpenRegister={() => navigateGuest('/register', 'register', setGuestView)}
         />
       )
     }
@@ -130,7 +175,7 @@ function MainContent() {
       <Login
         onLogin={handleLogin}
         initialTab={guestView === 'register' ? 'register' : 'login'}
-        onBackToHome={() => setGuestView('home')}
+        onBackToHome={() => navigateGuest('/', 'home', setGuestView)}
       />
     )
   }

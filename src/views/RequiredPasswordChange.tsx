@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import BrandLogo from '../components/BrandLogo'
-import { Button, Card, Input } from '../components/ui'
+import { Button, Card, PasswordField } from '../components/ui'
 import { changePasswordWithApi, type ApiActor } from '../services/authApi'
+import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 
 interface RequiredPasswordChangeProps {
   actor: ApiActor
@@ -14,17 +15,25 @@ export default function RequiredPasswordChange({ actor, onChanged, onLogout }: R
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({ current: '', next: '', confirm: '' })
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setError('')
-    if (newPassword.length < 12) {
-      setError('Mật khẩu mới phải có ít nhất 12 ký tự.')
-      return
+    const nextErrors = {
+      current: currentPassword ? '' : 'Vui lòng nhập mật khẩu hiện tại.',
+      next: getPasswordValidationError(newPassword) ?? '',
+      confirm: !confirmPassword
+        ? 'Vui lòng nhập lại mật khẩu mới.'
+        : newPassword === currentPassword
+          ? 'Mật khẩu mới phải khác mật khẩu hiện tại.'
+        : newPassword !== confirmPassword
+          ? 'Mật khẩu xác nhận chưa khớp với mật khẩu mới.'
+          : '',
     }
-    if (newPassword !== confirmPassword) {
-      setError('Mật khẩu xác nhận không khớp.')
+    setFieldErrors(nextErrors)
+    if (nextErrors.current || nextErrors.next || nextErrors.confirm) {
       return
     }
 
@@ -53,38 +62,47 @@ export default function RequiredPasswordChange({ actor, onChanged, onLogout }: R
             Tài khoản <strong>{actor.email}</strong> đang dùng mật khẩu tạm thời hoặc vừa được cấp lại. Hãy đặt mật khẩu mới để mở khóa không gian làm việc.
           </p>
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            <Input
+            <PasswordField
+              id="required-current-password"
               label="Mật khẩu hiện tại"
-              type="password"
               value={currentPassword}
-              onChange={event => setCurrentPassword(event.target.value)}
+              onChange={event => {
+                setCurrentPassword(event.target.value)
+                setFieldErrors(previous => ({ ...previous, current: '' }))
+              }}
+              error={fieldErrors.current}
               autoComplete="current-password"
-              required
             />
-            <Input
+            <PasswordField
+              id="required-new-password"
               label="Mật khẩu mới"
-              type="password"
               value={newPassword}
-              onChange={event => setNewPassword(event.target.value)}
+              onChange={event => {
+                setNewPassword(event.target.value)
+                setFieldErrors(previous => ({ ...previous, next: '' }))
+              }}
               autoComplete="new-password"
-              minLength={12}
-              required
+              maxLength={PASSWORD_MAX_LENGTH}
+              error={fieldErrors.next}
             />
-            <Input
+            <PasswordField
+              id="required-confirm-password"
               label="Xác nhận mật khẩu mới"
-              type="password"
               value={confirmPassword}
-              onChange={event => setConfirmPassword(event.target.value)}
+              onChange={event => {
+                setConfirmPassword(event.target.value)
+                setFieldErrors(previous => ({ ...previous, confirm: '' }))
+              }}
               autoComplete="new-password"
-              minLength={12}
-              required
+              maxLength={PASSWORD_MAX_LENGTH}
+              error={fieldErrors.confirm}
             />
             {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? 'Đang cập nhật…' : 'Đổi mật khẩu và tiếp tục'}
             </Button>
           </form>
-          <p className="mt-4 text-xs text-stone-500">Mật khẩu mới cần từ 12 đến 128 ký tự và phải khác mật khẩu hiện tại.</p>
+          <p className="mt-4 text-xs text-stone-500">{PASSWORD_POLICY_HINT} Mật khẩu mới cũng phải khác mật khẩu hiện tại.</p>
         </Card>
       </div>
     </main>

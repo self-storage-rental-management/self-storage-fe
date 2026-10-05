@@ -2982,11 +2982,31 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="grid gap-3 sm:grid-cols-2">
                       {facilityPolicies.map(policy => {
                         const benefit = evaluatePolicyBenefit(policy, selectedUnit.price || 1000000, 3)
+                        const displayName =
+                          policy.name === "Grace Period" || policy.name === "Thời gian gia hạn nợ" || policy.name === "Thời gian ân hạn thanh toán"
+                            ? "Thời gian ân hạn thanh toán"
+                            : policy.name === "Late Fee" || policy.name === "Mức phí phạt trễ hạn"
+                              ? "Mức phí phạt trễ hạn"
+                              : policy.name === "Security Deposit" || policy.name === "Tiền đặt cọc an ninh"
+                                ? "Tiền đặt cọc an ninh"
+                                : policy.name === "Notice to Vacate" || policy.name === "Thời hạn báo trước khi trả kho sớm"
+                                  ? "Thời hạn báo trước khi trả kho sớm"
+                                  : policy.name === "Minimum Lease" || policy.name === "Thời hạn thuê tối thiểu"
+                                    ? "Thời hạn thuê tối thiểu"
+                                    : policy.name
+
+                        const displayValue =
+                          policy.value.includes("days")
+                            ? policy.value.replace("days", "ngày")
+                            : policy.value === "1 month"
+                              ? (policy.name.includes("Deposit") || policy.name.includes("cọc") ? "1 tháng tiền thuê" : "1 tháng")
+                              : (policy.value ?? "—")
+
                         return (
                           <div key={policy.id} className="rounded-xl border border-blue-100 bg-white p-3.5 shadow-sm space-y-2 flex flex-col justify-between">
                             <div className="space-y-1.5">
                               <div className="flex items-start justify-between gap-2">
-                                <p className="font-bold text-sm text-stone-900">{policy.name}</p>
+                                <p className="font-bold text-sm text-stone-900">{displayName}</p>
                                 {benefit.isDiscount ? (
                                   <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
                                     🎁 Có ưu đãi tiền thuê
@@ -2998,7 +3018,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                                 )}
                               </div>
                               <div className="text-xs font-semibold text-blue-900 bg-blue-50/80 rounded-lg px-2.5 py-1.5">
-                                Giá trị / Quyền lợi: <span className="font-bold">{policy.value}</span>
+                                Giá trị / Quyền lợi: <span className="font-bold">{displayValue}</span>
                               </div>
                               {policy.description && (
                                 <p className="text-xs text-stone-600 leading-relaxed">
