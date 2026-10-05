@@ -6,6 +6,15 @@ import { paymentCountdown, reservationProgress, reservationStatusLabels } from '
 import ReservationReceipt from './ReservationReceipt'
 import { ApiClientError } from '../../services/apiClient'
 
+const GOODS_CATEGORY_LABELS: Record<string, string> = {
+  FURNITURE: 'Nội thất', KITCHENWARE: 'Đồ dùng nhà bếp', DECOR: 'Đồ trang trí',
+  ELECTRONICS: 'Thiết bị điện tử', OFFICE: 'Đồ dùng văn phòng', TOYS: 'Đồ chơi',
+  SPORTS: 'Dụng cụ thể thao', GIFTS: 'Quà tặng', MUSICAL_INSTRUMENTS: 'Nhạc cụ',
+  CAMERA_EQUIPMENT: 'Thiết bị máy ảnh', EVENT_EQUIPMENT: 'Thiết bị sự kiện',
+  STORE_FIXTURES: 'Thiết bị cửa hàng', FINE_ART: 'Mỹ thuật',
+  CERAMIC_GLASS: 'Gốm, sứ và thủy tinh', MOVING_ITEMS: 'Đồ chuyển nhà', OTHER: 'Khác',
+}
+
 interface Props {
   reservation: CustomerReservation
   facilityName: string
@@ -22,6 +31,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [busy, setBusy] = useState(false)
   const [payment, setPayment] = useState<ReservationPaymentResult | null>(null)
   const [receiptOpen, setReceiptOpen] = useState(false)
+  const [goodsDetailOpen, setGoodsDetailOpen] = useState(false)
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -84,6 +94,20 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 space-y-1.5">
           <p><b>Hàng hóa khai báo:</b> {detail?.goodsItems.map(item => `${item.description || item.customGoodsName || item.category} (${item.quantity} kiện)`).join(' · ') || 'Đang tải chi tiết…'}</p>
           <p><b>Thể tích / trọng lượng:</b> {r.totalGoodsVolumeM3} m³ · {r.totalGoodsWeightKg} kg</p>
+          <Button type="button" variant="outline" size="sm" className="mt-2" disabled={!detail} onClick={() => setGoodsDetailOpen(open => !open)}>{goodsDetailOpen ? 'Ẩn thông tin đã khai báo' : 'Xem thông tin đã khai báo'}</Button>
+          {goodsDetailOpen && detail && <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
+            <div><p className="font-bold text-stone-900">Tình trạng đóng gói chung</p><p className="mt-1">{detail.goodsCondition || 'Không có mô tả'}</p></div>
+            {detail.goodsItems.map((item, index) => <div key={item.id} className="rounded-lg border border-stone-200 bg-white p-3 leading-5">
+              <p className="font-bold text-stone-900">Hàng hóa {index + 1}: {item.customGoodsName || GOODS_CATEGORY_LABELS[item.category] || item.category}</p>
+              <p><b>Mô tả:</b> {item.description || 'Không có'}</p>
+              <p><b>Chất liệu:</b> {item.customMaterial || item.materialName || 'Không có'}</p>
+              <p><b>Số lượng:</b> {item.quantity} kiện</p>
+              <p><b>Kích thước mỗi kiện:</b> {item.lengthCm} × {item.widthCm} × {item.heightCm} cm</p>
+              <p><b>Cân nặng:</b> {item.weightPerItemKg} kg/kiện · tổng {(item.quantity * item.weightPerItemKg).toLocaleString('vi-VN')} kg</p>
+              <p><b>Hàng dễ bể / dễ vỡ:</b> {item.fragile ? 'Có' : 'Không'}</p>
+              {item.customerNote && <p><b>Ghi chú:</b> {item.customerNote}</p>}
+            </div>)}
+          </div>}
           <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
             <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</p><p>Tiền thuê cả kỳ: {formatVnd(r.totalRentalAmount)}</p><p>Cọc giữ chỗ: {formatVnd(r.reservationDepositAmount)}</p><p>Tiền thuê còn lại: {formatVnd(r.remainingRentalAmount)}</p></div>
             <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">Khoản thu khi nhận kho</p><p>Tiền đảm bảo kho: {formatVnd(r.securityDepositAmount)}</p><p className="border-t border-amber-200 pt-1 font-bold">Tổng thu khi nhận kho: {formatVnd(r.dueAtCheckIn)}</p></div>
@@ -112,7 +136,18 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     </div>
     {message && <p role="status" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
     <Modal open={payOpen} onClose={() => { if (!busy) setPayOpen(false) }} title="Thanh toán cọc giữ chỗ">
-      <div className="space-y-4"><p>Đơn giữ kho: <b>{r.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>Kỳ thuê: <b>{r.startDate} → {r.endDate}</b></p><div className="rounded-lg bg-stone-50 p-3 text-sm"><p>Cọc giữ chỗ: <b>{formatVnd(r.reservationDepositAmount)}</b></p><p>Tiền thuê còn lại: {formatVnd(r.remainingRentalAmount)}</p><p>Tiền đảm bảo kho: {formatVnd(r.securityDepositAmount)}</p><p>Tổng thu khi nhận kho: <b>{formatVnd(r.dueAtCheckIn)}</b></p></div><p className="text-sm text-red-700">Thời gian còn lại: <b className="tabular-nums">{countdown.text}</b></p><p className="text-sm text-stone-500">Sau khi thanh toán được ghi nhận, đơn giữ kho và biên lai sẽ được cập nhật.</p><Button disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang xử lý…' : 'Xác nhận thanh toán'}</Button></div>
+      <div className="space-y-4">
+        <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{r.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>Kỳ thuê: <b>{r.startDate} → {r.endDate}</b></p></div>
+        <div className="rounded-xl border-2 border-amber-500 bg-amber-50 p-4 text-center">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Số tiền cần thanh toán ngay</p>
+          <p className="mt-1 text-3xl font-extrabold text-stone-950">{formatVnd(r.reservationDepositAmount)}</p>
+          <p className="mt-1 text-xs text-stone-600">Cọc giữ chỗ được khấu trừ vào tiền thuê của kỳ này.</p>
+        </div>
+        <div className="rounded-lg bg-stone-50 p-3 text-sm space-y-1"><div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(r.remainingRentalAmount)}</b></div><div className="flex justify-between gap-4"><span>Tiền đảm bảo kho</span><b>{formatVnd(r.securityDepositAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng thanh toán khi nhận kho</span><b>{formatVnd(r.dueAtCheckIn)}</b></div><p className="pt-1 text-xs text-stone-500">Các khoản trên chưa thu trong bước này.</p></div>
+        <div className="rounded-lg bg-red-700 p-3 text-center text-white"><p className="text-xs font-bold uppercase tracking-wide">Thời gian thanh toán còn lại</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
+        <p className="text-sm text-stone-600">Sau khi thanh toán thành công, đơn giữ kho và biên lai sẽ được cập nhật tự động.</p>
+        <Button className="w-full" disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang xử lý…' : `Thanh toán ${formatVnd(r.reservationDepositAmount)}`}</Button>
+      </div>
     </Modal>
     <Modal open={receiptOpen} onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán">
       {payment && <ReservationReceipt payment={payment} reservationCode={r.reservationCode} />}
