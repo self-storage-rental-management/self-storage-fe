@@ -1,4 +1,6 @@
 import type { Role, User } from '../types'
+import type { PermissionKey } from '../types'
+import { DEFAULT_ROLE_PERMISSIONS } from '../auth/rbac'
 import { ApiClientError, apiRequest, clearAuthTokens, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
 
 export type ApiRoleCode = 'CUSTOMER' | 'STAFF' | 'MANAGER' | 'BUSINESS' | 'ADMIN'
@@ -10,6 +12,7 @@ export interface ApiActor {
   email: string
   fullName: string
   phone: string | null
+  avatarUrl?: string | null
   status: ApiUserStatus
   roles: ApiRoleCode[]
   facilityScopes: Record<string, ApiFacilityScopeLevel>
@@ -170,5 +173,30 @@ export function getAuthenticatedActor() {
 
 export function isApiAuthenticated() {
   return hasAccessToken() && Boolean(currentActor)
+}
+
+// Customer navigation uses role capabilities, not the local demo user registry.
+// Backend endpoints remain authoritative for ownership and authorization.
+export function canApiCustomerNavigate(user: User, permission: PermissionKey): boolean {
+  return isApiAuthenticated() && currentActor?.id === user.id
+    && currentActor.status === 'ACTIVE' && primaryRole(currentActor.roles) === 'customer'
+    && Boolean(DEFAULT_ROLE_PERMISSIONS.customer[permission])
+}
+
+export function canApiActor(user: User, permission: PermissionKey): boolean {
+  return isApiAuthenticated() && currentActor?.id === user.id && currentActor.status === 'ACTIVE'
+    && currentActor.permissions.includes(permission)
+}
+
+export async function updateProfileWithApi(input: { fullName: string; phone: string }): Promise<ApiActor> {
+  const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me', {
+    method: 'PUT',
+    body: JSON.stringify({ ...input, avatarUrl: currentActor?.avatarUrl ?? null }),
+  })
+  if (!response?.data?.id || response.data.id !== currentActor?.id) {
+    throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+  }
+  currentActor = response.data
+  return currentActor
 }
 

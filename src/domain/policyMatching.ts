@@ -1,4 +1,5 @@
 import { POLICIES } from '../data/demoDatabase'
+import { vietnamesePolicy } from '../i18n/customerLabels'
 
 export interface PolicyItem {
   id: string
@@ -29,10 +30,10 @@ export function getStoredPolicies(): PolicyItem[] {
     const raw = storage?.getItem('storagehub:policies')
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(vietnamesePolicy)
     }
   } catch {}
-  return (POLICIES as any[]).map(p => ({ ...p, description: p.description || '' }))
+  return (POLICIES as any[]).map(p => vietnamesePolicy({ ...p, description: p.description || '' }))
 }
 
 function normalizeCompare(str: string): string {
