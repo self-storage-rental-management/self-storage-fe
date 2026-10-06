@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import CustomerReservationCard from './CustomerReservationCard'
-import { paymentCountdown, reservationProgress } from './reservationPresentation'
+import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
 import type { CustomerReservation, ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
 
@@ -61,6 +61,13 @@ describe('customer reservation layout regression', () => {
     for (const status of ['AWAITING_EMAIL', 'AWAITING_REVIEW', 'CONFIRMED', 'EXPIRED'] as const) {
       expect(render(status)).not.toContain('>Thanh toán cọc</button>')
     }
+  })
+  it('describes PAYMENT_GRACE as a complaint window instead of a payment extension', () => {
+    expect(reservationStatusLabels.PAYMENT_GRACE).toBe('Chờ khiếu nại thanh toán')
+    const html = render('PAYMENT_GRACE')
+    expect(html).toContain('Đối soát thanh toán')
+    expect(html).toContain('Chờ khách hàng gửi chứng từ')
+    expect(html).not.toContain('Gia hạn thanh toán')
   })
   it.each([
     ['AWAITING_EMAIL', 0], ['AWAITING_REVIEW', 1], ['AWAITING_PAYMENT', 2],
