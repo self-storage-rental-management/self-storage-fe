@@ -30,11 +30,31 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       ['Kiểm tra theo khung kệ', `Đối chiếu kích thước từng kiện với ${t.rackCount} khung kệ, mỗi khung ${t.rackLengthM} × ${t.rackWidthM} × ${t.rackHeightM} m.`],
       ['Kiểm tra cân nặng', `Tổng trọng lượng hàng không vượt quá ${t.maxLoadKg.toLocaleString('vi-VN')} kg.`],
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
+    {layout && <section className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
+      <h4 className="font-bold text-stone-900">Bố trí và sức chứa kho</h4>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <article className="rounded-xl border border-stone-200 bg-white p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Kích thước hàng hóa tối đa</p>
+          <p className="mt-2 text-lg font-extrabold text-stone-950">{layout.maxCargoDimCm.lengthCm} × {layout.maxCargoDimCm.widthCm} × {layout.maxCargoDimCm.heightCm} cm</p>
+          <p className="mt-2 text-xs leading-5 text-stone-600">Đối chiếu với kích thước từng kiện khi khai báo hàng hóa.</p>
+        </article>
+        <article className="rounded-xl border border-stone-200 bg-white p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Lối đi và thiết bị hỗ trợ</p>
+          <p className="mt-2 text-sm"><b>Chiều rộng lối đi:</b> {layout.aisleWidthM.toLocaleString('vi-VN')} m</p>
+          <p className="mt-2 text-sm"><b>Thiết bị xe đẩy:</b> {layout.trolley}</p>
+        </article>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <article className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold text-amber-900">Mẫu thùng nhỏ 50 × 40 × 40 cm</p><p className="mt-2 text-2xl font-extrabold text-stone-950">{layout.smallBoxCapacity.toLocaleString('vi-VN')} <span className="text-sm font-normal text-stone-600">thùng</span></p></article>
+        <article className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold text-amber-900">Mẫu thùng lớn 70 × 50 × 50 cm</p><p className="mt-2 text-2xl font-extrabold text-stone-950">{layout.largeBoxCapacity.toLocaleString('vi-VN')} <span className="text-sm font-normal text-stone-600">thùng</span></p></article>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-stone-500">Số thùng chỉ dùng để tham khảo cách bố trí. Kết quả phù hợp chính thức được kiểm tra từ kích thước, số lượng và cân nặng bạn khai báo.</p>
+    </section>}
     <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, cọc giữ chỗ, cọc đảm bảo và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng; nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><h4 className="font-bold text-emerald-900">2. Báo giá theo kỳ thuê</h4><p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận giá thuê, mức giảm, cọc giữ chỗ 40%, tiền thuê còn lại và tiền đảm bảo kho. Mọi số tiền được lấy từ báo giá chính thức của hệ thống.</p></section>
     <section><h4 className="mb-3 font-bold">3. An ninh và tiện ích vận hành</h4><div className="grid gap-3 sm:grid-cols-2"><article className="rounded-xl border border-blue-200 bg-blue-50 p-4"><b>An ninh và kiểm soát ra vào</b><p className="mt-2 text-sm">Mã PIN cá nhân và camera giám sát theo thông tin của cơ sở.</p></article><article className="rounded-xl border border-rose-200 bg-rose-50 p-4"><b>Hệ thống phòng cháy chữa cháy</b><p className="mt-2 text-sm">Cảm biến khói, nhiệt và đầu phun nước tự động theo thông tin của cơ sở.</p></article></div></section>
     <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/70 to-white p-5 sm:p-6">
-      <h4 className="font-bold text-stone-900">5. Quy trình đặt kho và thanh toán</h4>
+      <h4 className="font-bold text-stone-900">4. Quy trình đặt kho và thanh toán</h4>
       <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
         ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá và xác minh email.'],
