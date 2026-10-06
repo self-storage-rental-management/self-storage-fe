@@ -12,6 +12,7 @@ import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
 import CustomerPaymentHistory from './CustomerPaymentHistory'
+import CustomerReservationOtpModal from './CustomerReservationOtpModal'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
@@ -29,8 +30,10 @@ import {
   cancelCustomerReservation,
   createCustomerReservation,
   createReservationQuote,
+  getCustomerReservation,
   listCustomerReservations,
   resendReservationOtp,
+  uploadReservationGoodsImage,
   verifyReservationOtp,
   type CustomerFacility,
   type CustomerReservation,
@@ -103,7 +106,7 @@ type GoodsDeclarationItem = {
   weightKg: string
   fragile: '' | 'yes' | 'no'
   customerNote: string
-  images: string[]
+  images: File[]
 }
 type PackageSample = { id: string; quantity: string; lengthCm: string; widthCm: string; heightCm: string; weightKg: string; sourceLabel?: string }
 type CapacityStatus = 'invalid' | 'fits' | 'not-fit'
@@ -1352,6 +1355,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (parsePositiveNumber(item.heightCm) === null) errors[`goodsHeight-${item.id}`] = 'Chiều cao phải lớn hơn 0.'
       if (parsePositiveNumber(item.weightKg) === null) errors[`goodsWeight-${item.id}`] = 'Cân nặng mỗi kiện phải lớn hơn 0.'
       if (!item.fragile) errors[`goodsFragile-${item.id}`] = 'Vui lòng chọn hàng có dễ vỡ hay không.'
+      if (item.images.length > 10) errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
       if (item.category === 'OTHER') {
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
         if (!item.customMaterial.trim()) errors[`customMaterial-${item.id}`] = 'Vui lòng nhập chất liệu chính.'
@@ -1437,6 +1441,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | ') || null,
         goodsItems: apiGoodsItems,
       }, idempotencyKey)
+      let goodsImageMessage = ''
+      const imageCount = goodsItems.reduce((total, item) => total + item.images.length, 0)
+      if (imageCount > 0) {
+        try {
+          const detail = await getCustomerReservation(reservation.id)
+          await Promise.all(detail.goodsItems.flatMap((savedItem, index) =>
+            (goodsItems[index]?.images ?? []).map(file => uploadReservationGoodsImage(savedItem.id, file)),
+          ))
+          goodsImageMessage = ` Đã tải ${imageCount} ảnh hàng hóa.`
+        } catch (error) {
+          goodsImageMessage = ` Đơn đã được tạo nhưng chưa tải đủ ảnh hàng hóa: ${error instanceof Error ? error.message : 'Lỗi tải ảnh'}.`
+        }
+      }
       // Creation does not send an email in the current BE contract. Issue the first OTP here.
       setBackendReservations(current => [reservation, ...current.filter(item => item.id !== reservation.id)])
       setAvailabilityRevision(value => value + 1)
@@ -1452,9 +1469,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         try {
           const sent = await resendReservationOtp(reservation.id)
           setBackendOtpNextResendAt(current => ({ ...current, [reservation.id]: new Date(sent.nextResendAt).getTime() }))
-          setBackendOtpMessage(`Đã gửi OTP tới email của bạn. Có thể gửi lại sau ${new Date(sent.nextResendAt).toLocaleTimeString('vi-VN')}.`)
+          setBackendOtpMessage(`Đã gửi OTP tới email của bạn. Có thể gửi lại sau ${new Date(sent.nextResendAt).toLocaleTimeString('vi-VN')}.${goodsImageMessage}`)
         } catch (error) {
-          setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${error instanceof Error ? error.message : 'Lỗi kết nối'}. Bạn có thể gửi lại.`)
+          setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${error instanceof Error ? error.message : 'Lỗi kết nối'}. Bạn có thể gửi lại.${goodsImageMessage}`)
         } finally { setBackendOtpBusy(false) }
       }
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
@@ -2582,11 +2599,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <h2 className="mt-1 text-lg font-bold text-stone-950">{'Cọc giữ chỗ và tiền đảm bảo kho là hai khoản khác nhau'}</h2>
             </div>
             <div className="grid gap-px bg-amber-200 md:grid-cols-3">
-              <div className="bg-white p-5"><p className="text-sm font-bold text-blue-800">{'1. Cọc giữ chỗ 20%'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tính trên toàn bộ tiền thuê của kỳ đã chọn. Khoản này được trừ vào tiền thuê, không cộng thêm vào giá thuê và không hoàn nếu khách hủy trước Check-in.'}</p></div>
+              <div className="bg-white p-5"><p className="text-sm font-bold text-blue-800">{'1. Cọc giữ chỗ 40%'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tính trên tổng tiền thuê sau giảm của kỳ đã chọn. Khoản này được trừ vào tiền thuê, không cộng thêm vào giá thuê và không hoàn nếu khách hủy trước khi nhận kho.'}</p></div>
               <div className="bg-white p-5"><p className="text-sm font-bold text-emerald-800">{'2. Tiền đảm bảo kho'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Bằng một tháng tiền thuê và được thu riêng tại Check-in. Đây không phải tiền thuê; khoản còn lại được hoàn sau khi trả kho và hoàn tất nghiệm thu.'}</p></div>
               <div className="bg-white p-5"><p className="text-sm font-bold text-amber-800">{'3. Số tiền thu tại Check-in'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tiền thuê còn lại sau khi trừ cọc giữ chỗ + tiền đảm bảo kho. Mọi khoản thu phải có mã giao dịch hoặc biên nhận trong hồ sơ.'}</p></div>
             </div>
-            <div className="px-5 py-3 text-sm font-semibold text-amber-950 sm:px-6">{'Công thức: Tổng cần chuẩn bị = Tổng tiền thuê kỳ đầu + Tiền đảm bảo kho. Cọc giữ chỗ 20% chỉ là phần trả trước của tiền thuê.'}</div>
+            <div className="px-5 py-3 text-sm font-semibold text-amber-950 sm:px-6">{'Công thức: Tổng cần chuẩn bị = Tổng tiền thuê kỳ đầu + Tiền đảm bảo kho. Cọc giữ chỗ 40% chỉ là phần trả trước của tiền thuê.'}</div>
           </section>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -2621,7 +2638,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="border-rose-200 p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-rose-700">{'Quy định trễ hạn'}</p><h3 className="mt-2 font-bold text-stone-950">{'Thời hạn và phụ thu được tính theo từng giai đoạn'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Quá 24 giờ chưa ghi nhận thanh toán cọc: đơn được chuyển sang bước đối soát để bảo vệ quyền lợi khách hàng.'}</li><li>• {'Quá 14 ngày kể từ ngày cọc mà chưa nhận kho: không thể kích hoạt hồ sơ thuê và cọc giữ chỗ không được hoàn.'}</li><li>• {'Hợp đồng quá hạn không có thời gian ân hạn; từ ngày sau ngày hết hạn, phụ thu mỗi ngày bằng 50% đơn giá thuê ngày.'}</li><li>• {'Gia hạn hợp đồng đã quá hạn phải hoàn tất trong 3 ngày kể từ khi thanh toán cọc gia hạn.'}</li></ul></Card>
-            <Card className="p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-stone-500">{'Tóm tắt thanh toán'}</p><h3 className="mt-2 font-bold text-stone-950">{'Khoản phải trả theo từng mốc'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Đặt giữ: 20% tổng tiền thuê của kỳ đầu.'}</li><li>• {'Check-in: 80% tiền thuê còn lại + tiền đảm bảo kho bằng một tháng tiền thuê.'}</li><li>• {'Gia hạn: trả trước 20%, sau đó thanh toán 80% còn lại trước khi gia hạn có hiệu lực.'}</li><li>• {'Trả kho: thanh toán công nợ và phí phát sinh; phần tiền đảm bảo còn lại được hoàn.'}</li></ul></Card>
+            <Card className="p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-stone-500">{'Tóm tắt thanh toán giữ kho'}</p><h3 className="mt-2 font-bold text-stone-950">{'Khoản phải trả theo báo giá'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Đặt giữ: 40% tổng tiền thuê sau giảm của kỳ đầu.'}</li><li>• {'Khi nhận kho: tiền thuê còn lại và tiền đảm bảo kho theo báo giá.'}</li><li>• {'Số tiền chính thức luôn lấy từ báo giá đã lưu cùng đơn giữ kho.'}</li></ul></Card>
           </div>
 
         </div>
@@ -3025,7 +3042,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                    {item.category === 'OTHER' && <div className="mt-4 space-y-3 border-t border-stone-200 pt-4">
                     <p className="font-bold text-stone-900">Thông tin hàng hóa khác</p>
                     <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
-                    <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label>{isApiAuthenticated() && <p className="mt-1 text-xs text-stone-500">Tính năng tải ảnh đang được hoàn thiện. Các thông tin mô tả, kích thước và cân nặng vẫn được gửi để nhân viên thẩm định.</p>}<input disabled={isApiAuthenticated()} type="file" accept="image/*" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={e => { const names = Array.from(e.target.files || []).map(file => file.name); setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, images: names } : row)) }} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">{item.images.join(', ')}</p>}</div>
+                    <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={e => { const files = Array.from(e.target.files || []).slice(0, 10); setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, images: files } : row)) }} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">{item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>ℹ Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi xác nhận email, yêu cầu sẽ được xem xét trong tối đa 24 giờ. Kho chưa bị khóa trong thời gian chờ duyệt; có 24 giờ thanh toán sau khi hồ sơ được duyệt.</p></div>
                   </div>}
                 </div>)}
@@ -3200,40 +3217,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         )}
       </Modal>
 
-      <Modal
-        open={Boolean(backendOtpReservation)}
+      <CustomerReservationOtpModal
+        reservation={backendOtpReservation}
+        code={backendOtpCode}
+        busy={backendOtpBusy}
+        message={backendOtpMessage}
+        nextResendAt={backendOtpReservation ? backendOtpNextResendAt[backendOtpReservation.id] || 0 : 0}
+        now={now}
+        onCodeChange={setBackendOtpCode}
         onClose={() => { if (!backendOtpBusy) setBackendOtpReservation(null) }}
-        title="Xác minh email cho đơn đặt kho"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-stone-600">
-            Nhập mã OTP 6 chữ số đã gửi tới email của bạn cho đơn <b>{backendOtpReservation?.reservationCode}</b>.
-          </p>
-          <Input
-            label="Mã OTP"
-            value={backendOtpCode}
-            maxLength={6}
-            inputMode="numeric"
-            onChange={event => setBackendOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="000000"
-          />
-          {backendOtpMessage && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-              {backendOtpMessage}
-            </div>
-          )}
-          <div className="flex flex-wrap justify-end gap-2 border-t border-stone-200 pt-4">
-            <Button variant="outline" disabled={backendOtpBusy || Boolean(backendOtpReservation && (backendOtpNextResendAt[backendOtpReservation.id] || 0) > now)} onClick={() => void resendBackendReservationOtp()}>
-              {backendOtpReservation && (backendOtpNextResendAt[backendOtpReservation.id] || 0) > now
-                ? `Gửi lại sau ${Math.ceil((backendOtpNextResendAt[backendOtpReservation.id] - now) / 1000)} giây`
-                : 'Gửi lại OTP'}
-            </Button>
-            <Button disabled={backendOtpBusy || backendOtpCode.length !== 6} onClick={() => void verifyBackendReservationOtp()}>
-              {backendOtpBusy ? 'Đang xử lý...' : 'Xác minh'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onResend={() => void resendBackendReservationOtp()}
+        onVerify={() => void verifyBackendReservationOtp()}
+      />
 
       {/* ── MODAL 3: EMAIL VERIFICATION SIMULATION (P0.4) ─────── */}
       <Modal
