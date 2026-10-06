@@ -350,7 +350,7 @@ function addMonthsForPreview(value: string, months: number): string {
 
 export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAppProps) {
   const hub = useStorageHub()
-    const {
+  const {
     facilities: sharedFacilities,
     units: sharedUnits,
     holds,
@@ -387,7 +387,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     createSupportTicket,
     replySupportTicket,
     deleteResolvedSupportTicket
-  } = useStorageHub()
+  } = hub
 
   const [backendFacilities, setBackendFacilities] = useState<CustomerFacility[]>([])
   const [backendUnitTypes, setBackendUnitTypes] = useState<CustomerUnitType[]>([])
