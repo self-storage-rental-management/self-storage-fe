@@ -13,6 +13,7 @@ import CustomerReservationCard from './CustomerReservationCard'
 import CustomerPaymentHistory from './CustomerPaymentHistory'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
+import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { reservationProgress } from './reservationPresentation'
 import { FACILITIES, UNIT_SPECS, type TicketItem } from '../../data/demoDatabase'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
@@ -489,6 +490,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
   const [backendReservations, setBackendReservations] = useState<CustomerReservation[]>([])
+  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
   const [reservationSubmitting, setReservationSubmitting] = useState(false)
   const [backendOtpReservation, setBackendOtpReservation] = useState<CustomerReservation | null>(null)
   const [backendOtpCode, setBackendOtpCode] = useState('')
@@ -694,6 +696,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     // Remove the retired client-only hold list. Live holds in shared state are
     // now the only source allowed to mark a physical unit as “Được giữ”.
     localStorage.removeItem('customerBookedUnitIds')
+  }, [])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let cancelled = false
+    const load = async () => {
+      try {
+        const result = await listNotifications(0, 50)
+        if (!cancelled) setBackendNotifications(result.data)
+      } catch { /* The reservation screens remain usable if notifications are temporarily unavailable. */ }
+    }
+    void load()
+    const timer = window.setInterval(() => void load(), 10_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
   }, [])
 
   useEffect(() => {
@@ -1023,6 +1039,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return [{ id: `expiry-${rental.id}`, date: reminderDate.toISOString(), title: 'Hợp đồng sắp hết hạn', message: `${rental.unitId} · ${remainingDays} ${'ngày còn lại'} · ${'Hết hạn'} ${rental.endDate}`, page: 'rental-records', targetId: rental.id }]
   })
   const customerNotifications: LayoutNotification[] = [
+    ...backendNotifications.map(notification => ({
+      id: `api-notification-${notification.id}`,
+      date: notification.createdAt,
+      title: notification.title,
+      message: notification.content,
+      page: notification.type === 'RETURN' || notification.type === 'CHECKIN' ? 'rental-records'
+        : notification.type === 'SUPPORT' ? 'support'
+          : notification.type === 'SYSTEM' ? 'overview' : 'reservations',
+      targetId: notification.relatedEntityId || undefined,
+      isRead: notification.isRead,
+    })),
     ...myHolds.filter(hold => hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING').map(hold => ({ id: `goods-review-submitted-${hold.id}`, date: hold.goodsReviewSubmittedAt || hold.createdAt, title: 'Yêu cầu hàng hóa đã được gửi', message: `${hold.id} · Kho đang được giữ · Chưa yêu cầu tiền cọc`, page: 'reservations', targetId: hold.id })),
     ...myHolds.filter(hold => hold.goodsReviewStatus === 'APPROVED').map(hold => ({ id: `goods-review-approved-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa đã được chấp thuận', message: `${hold.id} · Vui lòng thanh toán tiền cọc để hoàn tất đặt kho`, page: 'reservations', targetId: hold.id })),
     ...myHolds.filter(hold => hold.goodsReviewStatus === 'REJECTED').map(hold => ({ id: `goods-review-rejected-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa chưa được chấp thuận', message: `${hold.id} · Lý do: ${hold.staffReviewNotes || 'Hàng hóa chưa phù hợp điều kiện lưu trữ'}`, page: 'reservations', targetId: hold.id })),
@@ -1344,6 +1371,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const totalCombinedDiscount = Math.min(grossTermValue, Math.round((promotionDiscount + facilityPolicyDiscount) * 100) / 100)
 
   const handleNotificationClick = (notification: LayoutNotification) => {
+    if (notification.id.startsWith('api-notification-')) {
+      const notificationId = notification.id.slice('api-notification-'.length)
+      void markNotificationRead(notificationId).then(updated => {
+        setBackendNotifications(current => current.map(item => item.id === updated.id ? updated : item))
+      }).catch(() => undefined)
+    }
     navigateTo(notification.page)
     if (notification.id.startsWith('ticket-')) {
       setSupportTab('All')
