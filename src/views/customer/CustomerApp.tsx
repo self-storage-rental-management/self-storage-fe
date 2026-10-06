@@ -1757,7 +1757,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <h2 className="font-bold text-stone-900">{displayName}</h2>
                         <p className="mt-1 text-xs text-stone-500">{displayAddress}</p>
                       </div>
-                      <span className="text-sm font-semibold text-amber-700"> {facility.rating}</span>
+                      {facility.rating > 0 && <span className="text-sm font-semibold text-amber-700">★ {facility.rating}</span>}
                     </div>
                     <div className="my-4 flex flex-wrap gap-2">
                       <Badge variant="muted">{'Camera 24/7'}</Badge>
@@ -1864,7 +1864,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                             {display?.code ?? facility.id.toUpperCase()}
                           </span>
                           <h3 className="text-xl font-bold text-black">{display?.name ?? facility.name}</h3>
-                          <span className="text-xs font-semibold text-black">★ {facility.rating}</span>
+                          {facility.rating > 0 && <span className="text-xs font-semibold text-black">★ {facility.rating}</span>}
                         </div>
                         <p className="mt-1 text-sm text-stone-600">{display?.address ?? `${facility.address}, ${facility.city}`}</p>
                       </div>
@@ -2944,7 +2944,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         size="xl"
         title={selectedTarget ? (`Đặt Kho: ${unitTypeLabel(selectedTarget.unitType.name)}`) : (selectedUnit ? ('Đặt kho') : '')}
       >
-        {selectedUnit && (!isApiAuthenticated() || currentQuote) && (
+        {selectedUnit && (
           <div className="space-y-4">
             <div className="sticky top-0 z-10 rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
