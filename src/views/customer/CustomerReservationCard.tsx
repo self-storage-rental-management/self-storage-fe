@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { getCustomerReservation, getReservationPayment, payReservationDeposit, type CustomerReservation, type CustomerReservationDetail, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { getCustomerReservation, getPaymentComplaint, getReservationPayment, payReservationDeposit, submitPaymentComplaint, uploadComplaintImage, withdrawPaymentComplaint, type CustomerReservation, type CustomerReservationDetail, type PaymentComplaint, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
 import { ApiClientError } from '../../services/apiClient'
@@ -32,12 +32,19 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [payment, setPayment] = useState<ReservationPaymentResult | null>(null)
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [goodsDetailOpen, setGoodsDetailOpen] = useState(false)
+  const [complaint, setComplaint] = useState<PaymentComplaint | null>(null)
+  const [complaintOpen, setComplaintOpen] = useState(false)
+  const [complaintReason, setComplaintReason] = useState('')
+  const [complaintFiles, setComplaintFiles] = useState<File[]>([])
+  const [complaintError, setComplaintError] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
   const paymentKey = useRef<string | null>(null)
+  const onRefreshRef = useRef(onRefresh)
+  useEffect(() => { onRefreshRef.current = onRefresh }, [onRefresh])
   useEffect(() => {
     let disposed = false
     void getCustomerReservation(r.id).then(value => { if (!disposed) setDetail(value) })
@@ -51,13 +58,31 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       .catch(error => { if (!disposed && !(error instanceof ApiClientError && error.status === 404)) setMessage(error instanceof Error ? error.message : 'Không thể tải biên lai.') })
     return () => { disposed = true }
   }, [r.id, r.status])
+  useEffect(() => {
+    if (!['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status)) { setComplaint(null); return }
+    let disposed = false
+    void getPaymentComplaint(r.id).then(value => { if (!disposed) setComplaint(value) })
+      .catch(error => { if (!disposed && !(error instanceof ApiClientError && error.status === 404)) setMessage(error instanceof Error ? error.message : 'Không thể tải khiếu nại.') })
+    return () => { disposed = true }
+  }, [r.id, r.status])
   const countdown = paymentCountdown(detail?.paymentExpiresAt || r.holdExpiresAt, now)
+  const complaintCountdown = paymentCountdown(detail?.complaintExpiresAt, now)
+  useEffect(() => {
+    const deadlineExpired = r.status === 'AWAITING_PAYMENT' ? countdown.expired
+      : r.status === 'PAYMENT_GRACE' ? complaintCountdown.expired : false
+    if (!deadlineExpired) return
+    let disposed = false
+    const refreshStatus = async () => { if (!disposed) await onRefreshRef.current() }
+    void refreshStatus()
+    const timer = window.setInterval(() => void refreshStatus(), 5000)
+    return () => { disposed = true; window.clearInterval(timer) }
+  }, [r.status, countdown.expired, complaintCountdown.expired])
   const progress = reservationProgress(r.status)
   const inactive = progress === null
   const steps = [
     { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
     { label: 'Phê duyệt hồ sơ', detail: r.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa' : 'Hồ sơ được duyệt tự động' },
-    { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ' },
+    { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán cọc', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất cọc giữ chỗ' },
     { label: 'quản lý phân kho', detail: 'Chờ phân gian kho cụ thể' },
     { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
     { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' },
@@ -81,6 +106,32 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Không thể thanh toán cọc.')
     } finally { setBusy(false) }
+  }
+  const sendComplaint = async () => {
+    if (busy || complaintCountdown.expired || !complaintReason.trim() || complaintFiles.length === 0) return
+    setBusy(true); setMessage(null); setComplaintError(null)
+    try {
+      const uploaded = await Promise.all(complaintFiles.map(uploadComplaintImage))
+      const result = await submitPaymentComplaint(r.id, complaintReason.trim(), uploaded.map(file => file.id))
+      setComplaint(result); setComplaintOpen(false); setComplaintReason(''); setComplaintFiles([])
+      setMessage('Khiếu nại thanh toán đã được gửi và đang chờ xử lý.')
+      await onRefresh()
+    } catch (error) {
+      const errorMessage = error instanceof ApiClientError && error.status === 413
+        ? 'Ảnh tải lên vượt quá dung lượng cho phép. Mỗi ảnh tối đa 10 MB.'
+        : error instanceof Error ? error.message : 'Không thể gửi khiếu nại.'
+      setComplaintError(errorMessage)
+    }
+    finally { setBusy(false) }
+  }
+  const withdrawComplaint = async () => {
+    if (!complaint || busy) return
+    setBusy(true); setMessage(null)
+    try {
+      const result = await withdrawPaymentComplaint(complaint.id)
+      setComplaint(result); setMessage('Đã rút khiếu nại thanh toán.'); await onRefresh()
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể rút khiếu nại.') }
+    finally { setBusy(false) }
   }
   return <Card className={`p-6 border-l-4 ${inactive ? 'border-l-stone-300 text-stone-500' : 'border-l-amber-500'}`}>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
@@ -130,7 +181,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         {r.status === 'AWAITING_PAYMENT' && <div className="rounded-lg bg-red-700 p-3 text-right text-xs text-white"><p className="font-bold">Thời gian thanh toán cọc còn lại</p><p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p><Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => setPayOpen(true)}>Thanh toán cọc</Button></div>}
         {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)}>Xem biên lai thanh toán</Button>}
-        {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <p className="text-xs text-amber-900">{reservationStatusLabels[r.status]} — chưa được xác nhận thanh toán.</p>}
+        {r.status === 'PAYMENT_GRACE' && !complaint && <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900"><p className="font-bold">Chưa ghi nhận thanh toán</p><p className="mt-1">Nếu tài khoản đã bị trừ tiền, hãy gửi thông tin và ảnh giao dịch để được kiểm tra.</p><p className="mt-2 font-bold">Thời gian gửi khiếu nại còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{complaintCountdown.text}</p><Button className="mt-2" size="sm" disabled={complaintCountdown.expired} onClick={() => setComplaintOpen(true)}>{complaintCountdown.expired ? 'Đã hết thời hạn khiếu nại' : 'Gửi khiếu nại thanh toán'}</Button></div>}
+        {complaint && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Khiếu nại: {{ PENDING: 'Đang chờ xử lý', REVIEW_OVERDUE: 'Quá hạn xử lý', APPROVED: 'Đã chấp thuận', REJECTED: 'Đã từ chối', WITHDRAWN: 'Đã rút' }[complaint.status]}</p><p className="mt-1">{complaint.reason}</p>{['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Dự kiến xử lý trước: <b>{new Date(complaint.reviewDueAt).toLocaleString('vi-VN')}</b></p>}{complaint.decisionReason && <p className="mt-1"><b>Phản hồi:</b> {complaint.decisionReason}</p>}{['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => void withdrawComplaint()}>Rút khiếu nại</Button>}</div>}
         {!inactive && r.status !== 'COMPLETED' && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={onCancel}>✕ Hủy giữ kho</Button>}
       </div>
     </div>
@@ -151,6 +203,17 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     </Modal>
     <Modal open={receiptOpen} onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán">
       {payment && <ReservationReceipt payment={payment} reservationCode={r.reservationCode} />}
+    </Modal>
+    <Modal open={complaintOpen} onClose={() => { if (!busy) { setComplaintOpen(false); setComplaintError(null) } }} title="Khiếu nại thanh toán">
+      <div className="space-y-4">
+        <p className="text-sm text-stone-600">Chỉ gửi khi tài khoản của bạn đã bị trừ tiền nhưng đơn chưa ghi nhận thanh toán.</p>
+        <label className="block text-sm font-bold text-stone-800">Lý do và thông tin giao dịch<textarea className="mt-2 min-h-28 w-full rounded-lg border border-stone-300 p-3 font-normal" maxLength={2000} value={complaintReason} onChange={event => setComplaintReason(event.target.value)} placeholder="Mô tả thời gian, số tiền và mã giao dịch…" /></label>
+        <label className="block text-sm font-bold text-stone-800">Ảnh chứng minh giao dịch<input className="mt-2 block w-full rounded-lg border border-stone-300 p-3 font-normal" type="file" accept="image/*" multiple onChange={event => setComplaintFiles(Array.from(event.target.files || []).slice(0, 10))} /></label>
+        <p className="text-xs text-stone-500">Tối đa 10 ảnh. Đã chọn: {complaintFiles.length} ảnh.</p>
+        {complaintError && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">{complaintError}</p>}
+        <div className="rounded-lg bg-red-50 p-3 text-center text-red-800"><p className="text-xs font-bold">Thời gian gửi khiếu nại còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{complaintCountdown.text}</p></div>
+        <Button className="w-full" disabled={busy || complaintCountdown.expired || !complaintReason.trim() || complaintFiles.length === 0} onClick={() => void sendComplaint()}>{busy ? 'Đang gửi…' : complaintCountdown.expired ? 'Đã hết thời hạn khiếu nại' : 'Gửi khiếu nại'}</Button>
+      </div>
     </Modal>
   </Card>
 }

@@ -213,6 +213,54 @@ export interface ReservationPaymentResult {
   processedAt: string
 }
 
+export type PaymentComplaintStatus = 'PENDING' | 'REVIEW_OVERDUE' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
+
+export interface PaymentComplaint {
+  id: string
+  reservationId: string
+  reservationCode: string
+  status: PaymentComplaintStatus
+  paymentStatus: string
+  reservationStatus: ReservationStatus
+  reason: string
+  imageIds: string[]
+  depositAmount: number
+  netRentalAmount: number | null
+  images: Array<{ id: string; originalName: string; contentType: string; sizeBytes: number; downloadUrl: string }>
+  submittedAt: string
+  reviewDueAt: string
+  reviewedAt: string | null
+  withdrawnAt: string | null
+  decisionReason: string | null
+}
+
+export async function uploadComplaintImage(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  const response = await apiRequest<ApiEnvelope<{ id: string }>>('/api/files', { method: 'POST', body })
+  return response.data
+}
+
+export async function submitPaymentComplaint(reservationId: string, reason: string, imageIds: string[]) {
+  const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(
+    `/api/customer/reservations/${reservationId}/payment-complaints`,
+    { method: 'POST', body: JSON.stringify({ reason, imageIds }) },
+  )
+  return response.data
+}
+
+export async function getPaymentComplaint(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(`/api/customer/reservations/${reservationId}/payment-complaint`)
+  return response.data
+}
+
+export async function withdrawPaymentComplaint(complaintId: string) {
+  const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(
+    `/api/customer/payment-complaints/${complaintId}/withdraw`, { method: 'POST' },
+  )
+  return response.data
+}
+
 export async function payReservationDeposit(reservationId: string, idempotencyKey: string) {
   const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(
     `/api/customer/reservations/${reservationId}/simulated-payment`,
