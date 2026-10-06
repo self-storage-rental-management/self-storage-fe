@@ -2963,7 +2963,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       >
         {selectedUnit && (
           <div className="space-y-4">
-            <div className="sticky top-0 z-10 rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">{'Loại kho bạn đang chọn'}</p>
