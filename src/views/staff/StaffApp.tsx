@@ -1942,7 +1942,7 @@ export default function StaffApp({
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · TỔNG QUAN VẬN HÀNH"}
             title={"Tổng quan ca làm việc"}
-            subtitle={`${user.facility ?? "Cơ sở được phân quyền"} · ${new Date().toLocaleDateString("vi-VN")}`}
+            subtitle={`${user.facility ?? "Chưa được gán cơ sở"} · ${new Date().toLocaleDateString("vi-VN")}`}
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
@@ -2377,7 +2377,7 @@ export default function StaffApp({
       )}
 
       {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'approve_reservations')} />}
+      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'approve_reservations')} facilityNames={user.facilityNames} />}
       {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
