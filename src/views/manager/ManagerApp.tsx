@@ -9,11 +9,12 @@ import ManagerInventoryPanel from './ManagerInventoryPanel'
 import ManagerMovesPanel from './ManagerMovesPanel'
 import ManagerPaymentsPanel from './ManagerPaymentsPanel'
 import ManagerRentalsPanel from './ManagerRentalsPanel'
+import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
 import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerUnitReleasePanel from './ManagerUnitReleasePanel'
 import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
-import { canApiActor, isApiAuthenticated } from '../../services/authApi'
+import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
 
@@ -23,7 +24,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'dashboard', label: 'Bảng điều khiển', icon: Icon.home, group: 'Tổng quan', permission: 'view_dashboard' },
     { id: 'inventory', label: 'Quản lý gian kho', icon: Icon.box, group: 'Vận hành', permission: 'manage_inventory' },
     { id: 'unit-releases', label: 'Giải phóng kho đã hủy', icon: Icon.alert, group: 'Vận hành', permission: 'assign_units' },
-    { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: 'manage_rentals' },
+    { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: isApiAuthenticated() ? 'view_rentals' : 'manage_rentals' },
     { id: 'moves', label: 'Nhận kho & Trả kho', icon: Icon.truck, group: 'Vận hành', permission: 'view_checkins' },
     { id: 'payments', label: 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: 'manage_payments' },
     { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'manage_payments' },
@@ -56,7 +57,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     const renewalFacilityName = rental?.facilityName
     return isManagerFacilityVisible({ ...user, facilityId: managerFacilityId }, renewalFacilityId, renewalFacilityName)
   })
-  const renewalNotifications: LayoutNotification[] = facilityRenewals
+  const renewalNotifications: LayoutNotification[] = (isApiAuthenticated() ? [] : facilityRenewals)
     .filter(renewal => ['pending', 'appointment_scheduled'].includes(renewal.status))
     .map(renewal => ({
       id: `manager-renewal-${renewal.id}-${renewal.status}`,
@@ -85,7 +86,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'dashboard' && <ManagerDashboardPanel user={user} setPage={setPage} />}
     {page === 'inventory' && <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} showToast={showToast} />}
     {page === 'unit-releases' && <ManagerUnitReleasePanel showToast={showToast} />}
-    {page === 'rentals' && <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} approveRenewal={hub.approveRenewal} rejectRenewal={hub.rejectRenewal} showToast={showToast} />}
+    {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} approveRenewal={hub.approveRenewal} rejectRenewal={hub.rejectRenewal} showToast={showToast} />)}
 
     {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} />}
     {page === 'payments' && <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />}
