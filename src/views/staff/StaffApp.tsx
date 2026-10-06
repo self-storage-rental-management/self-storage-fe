@@ -30,6 +30,8 @@ import StaffPaymentUpload from "./StaffPaymentUpload"
 
 import StaffSupportPanel from "./StaffSupportPanel"
 
+import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
@@ -2605,7 +2607,8 @@ export default function StaffApp({
       )}
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
-      {page === "checkin" && (
+      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {page === "checkin-legacy" && (
         <div className="fade-in">
           <SectionHeader
             title={"Nhận kho và bàn giao"}
