@@ -18,6 +18,7 @@ export interface LayoutNotification {
   date?: string
   page: string
   targetId?: string
+  isRead?: boolean
 }
 
 function resolveNavPage(navItems: NavItem[], requested: string | null): string | null {
@@ -61,8 +62,14 @@ function resolveNavPage(navItems: NavItem[], requested: string | null): string |
   return null
 }
 
+function requestedPageFromLocation() {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (pathname === '/profile' || pathname === '/profile/security') return 'profile'
+  return new URLSearchParams(window.location.search).get('page')
+}
+
 export function getInitialPage(navItems: NavItem[], fallback: string) {
-  const requestedPage = new URLSearchParams(window.location.search).get('page')
+  const requestedPage = requestedPageFromLocation()
   return resolveNavPage(navItems, requestedPage) ?? fallback
 }
 
@@ -107,7 +114,7 @@ export default function Layout({
 
   useEffect(() => {
     const restorePage = () => {
-      const requestedPage = new URLSearchParams(window.location.search).get('page')
+      const requestedPage = requestedPageFromLocation()
       const target = resolveNavPage(visibleNavItems, requestedPage)
       if (target) {
         onNavigate(target)
@@ -125,6 +132,16 @@ export default function Layout({
 
   useEffect(() => {
     const url = new URL(window.location.href)
+    const pathname = url.pathname.replace(/\/+$/, '') || '/'
+    const isProfilePath = pathname === '/profile' || pathname === '/profile/security'
+    if (currentPage === 'profile' && isProfilePath) {
+      if (url.searchParams.has('page')) {
+        url.searchParams.delete('page')
+        window.history.replaceState({ page: currentPage }, '', url)
+      }
+      return
+    }
+    if (isProfilePath) url.pathname = '/'
     if (url.searchParams.get('page') === currentPage) return
     url.searchParams.set('page', currentPage)
     window.history.replaceState({ page: currentPage }, '', url)
@@ -132,7 +149,13 @@ export default function Layout({
 
   const navigate = (page: string) => {
     const url = new URL(window.location.href)
-    url.searchParams.set('page', page)
+    if (page === 'profile') {
+      url.pathname = '/profile'
+      url.searchParams.delete('page')
+    } else {
+      if (url.pathname === '/profile' || url.pathname === '/profile/security') url.pathname = '/'
+      url.searchParams.set('page', page)
+    }
     window.history.pushState({ page }, '', url)
     onNavigate(page)
   }
@@ -252,7 +275,8 @@ export default function Layout({
     ...(suppliedNotifications ?? fallbackNotifications),
     ...(additionalNotifications ?? [])
   ]
-  const unreadCount = notifications.filter(item => !badgeSeenNotificationIds.includes(item.id)).length
+  const isNotificationRead = (item: LayoutNotification) => Boolean(item.isRead || readNotificationIds.includes(item.id))
+  const unreadCount = notifications.filter(item => !item.isRead && !badgeSeenNotificationIds.includes(item.id)).length
 
   const formatNotificationDate = (value?: string) => {
     if (!value) return ''
@@ -426,10 +450,10 @@ export default function Layout({
                       type="button"
                       key={item.id}
                       onClick={() => openNotificationDetail(item)}
-                      className={`block w-full border-b border-stone-100 px-4 py-3 text-left transition last:border-0 hover:bg-amber-100 ${readNotificationIds.includes(item.id) ? 'bg-white' : 'bg-amber-50'}`}
+                      className={`block w-full border-b border-stone-100 px-4 py-3 text-left transition last:border-0 hover:bg-amber-100 ${isNotificationRead(item) ? 'bg-white' : 'bg-amber-50'}`}
                     >
                       <span className="flex items-start gap-2">
-                        {!readNotificationIds.includes(item.id) && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />}
+                        {!isNotificationRead(item) && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />}
                         <span className="block text-sm font-medium text-stone-800">{item.title}</span>
                       </span>
                       {item.message && <span className="mt-1 block text-xs text-stone-500">{item.message}</span>}

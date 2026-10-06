@@ -33,6 +33,8 @@ import StaffSupportPanel from "./StaffSupportPanel"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 
 import ProfileView from "../ProfileView"
+import StaffReservationReviews from './StaffReservationReviews'
+import { canApiActor, isApiAuthenticated } from '../../services/authApi'
 
 import type { User } from "../../types"
 
@@ -1931,7 +1933,7 @@ export default function StaffApp({
 
         if (task) openOperationalTask(task)
       }}
-      canAccess={(permission) => hub.can(user, permission)}
+      canAccess={(permission) => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)}
       roleLabel="Nhân viên"
       roleColor="bg-green-100 text-green-700"
     >
@@ -2375,7 +2377,8 @@ export default function StaffApp({
       )}
 
       {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && (
+      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'approve_reservations')} />}
+      {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
             title={"Theo dõi đơn đặt giữ kho"}
