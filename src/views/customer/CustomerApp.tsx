@@ -624,12 +624,22 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => {
     let cancelled = false
-    void listCustomerReservations(undefined, 0, 50)
-      .then(result => { if (!cancelled) setBackendReservations(result.data) })
-      .catch(error => {
-        if (!cancelled) showToast(error instanceof Error ? error.message : 'Không thể tải danh sách đặt kho.')
-      })
-    return () => { cancelled = true }
+    let initialLoad = true
+    const loadReservations = async () => {
+      try {
+        const result = await listCustomerReservations(undefined, 0, 50)
+        if (!cancelled) setBackendReservations(result.data)
+      } catch (error) {
+        if (!cancelled && initialLoad) {
+          showToast(error instanceof Error ? error.message : 'Không thể tải danh sách đặt kho.')
+        }
+      } finally {
+        initialLoad = false
+      }
+    }
+    void loadReservations()
+    const timer = window.setInterval(() => void loadReservations(), 5_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
   }, [])
 
   const [payModalOpen, setPayModalOpen] = useState(false)
@@ -816,9 +826,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => {
     let cancelled = false
+    let initialLoad = true
     const loadCatalog = async () => {
-      setCatalogLoading(true)
-      setCatalogError(null)
+      if (initialLoad) {
+        setCatalogLoading(true)
+        setCatalogError(null)
+      }
       try {
         const facilityPage = await listCustomerFacilities()
         const activeFacilities = facilityPage.data
@@ -831,14 +844,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       } catch (error) {
         if (cancelled) return
         const message = error instanceof Error ? error.message : 'Không thể tải danh mục kho. Vui lòng thử lại.'
-        setCatalogError(message)
-        showToast(message)
+        if (initialLoad) {
+          setCatalogError(message)
+          showToast(message)
+        }
       } finally {
-        if (!cancelled) setCatalogLoading(false)
+        if (!cancelled && initialLoad) setCatalogLoading(false)
+        initialLoad = false
       }
     }
     void loadCatalog()
-    return () => { cancelled = true }
+    const timer = window.setInterval(() => void loadCatalog(), 10_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
   }, [])
 
   const badgeFor = (status: string) => {
