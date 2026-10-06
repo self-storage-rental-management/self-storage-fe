@@ -62,6 +62,12 @@ describe('customer reservation layout regression', () => {
       expect(render(status)).not.toContain('>Thanh toán cọc</button>')
     }
   })
+  it('shows booking confirmation only after the reservation is confirmed', () => {
+    expect(render('AWAITING_PAYMENT')).not.toContain('Xem xác nhận đặt kho')
+    for (const status of ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'] as const) {
+      expect(render(status)).toContain('Xem xác nhận đặt kho')
+    }
+  })
   it('describes PAYMENT_GRACE as a complaint window instead of a payment extension', () => {
     expect(reservationStatusLabels.PAYMENT_GRACE).toBe('Chờ khiếu nại thanh toán')
     const html = render('PAYMENT_GRACE')
