@@ -273,6 +273,15 @@ export async function uploadComplaintImage(file: File) {
   return response.data
 }
 
+export async function uploadReservationGoodsImage(goodsItemId: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('entityType', 'RESERVATION_GOODS_ITEM')
+  body.append('entityId', goodsItemId)
+  const response = await apiRequest<ApiEnvelope<{ id: string }>>('/api/files', { method: 'POST', body })
+  return response.data
+}
+
 export async function submitPaymentComplaint(reservationId: string, reason: string, imageIds: string[]) {
   const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(
     `/api/customer/reservations/${reservationId}/payment-complaints`,
