@@ -138,7 +138,7 @@ function MainContent() {
   }, [user])
 
   const handleLogin = (nextUser: User) => {
-    if (['/login', '/register', '/verify-email', '/reset-password'].includes(normalizedPathname())) {
+    if (['/login', '/register', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
       window.history.replaceState(null, '', '/')
     }
     const authenticatedActor = getAuthenticatedActor()
