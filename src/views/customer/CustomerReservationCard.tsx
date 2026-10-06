@@ -74,7 +74,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     let disposed = false
     const refreshStatus = async () => { if (!disposed) await onRefreshRef.current() }
     void refreshStatus()
-    const timer = window.setInterval(() => void refreshStatus(), 5000)
+    const timer = window.setInterval(() => void refreshStatus(), 1000)
     return () => { disposed = true; window.clearInterval(timer) }
   }, [r.status, countdown.expired, complaintCountdown.expired])
   const progress = reservationProgress(r.status)
@@ -129,7 +129,11 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     setBusy(true); setMessage(null)
     try {
       const result = await withdrawPaymentComplaint(complaint.id)
-      setComplaint(result); setMessage('Đã rút khiếu nại thanh toán.'); await onRefresh()
+      setComplaint(result)
+      setPayment(null)
+      setReceiptOpen(false)
+      setMessage('Đã rút khiếu nại. Đơn giữ kho đã bị hủy và chưa ghi nhận thanh toán.')
+      await onRefresh()
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể rút khiếu nại.') }
     finally { setBusy(false) }
   }
