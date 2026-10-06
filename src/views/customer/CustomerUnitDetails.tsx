@@ -29,8 +29,6 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
         ['Chiều rộng lối đi', `${layout.aisleWidthM.toLocaleString('vi-VN')} m`],
         ['Thiết bị xe đẩy', layout.trolley],
       ] : []),
-      ['Kiểm tra theo khung kệ', `Đối chiếu kích thước từng kiện với ${t.rackCount} khung kệ, mỗi khung ${t.rackLengthM} × ${t.rackWidthM} × ${t.rackHeightM} m.`],
-      ['Kiểm tra cân nặng', `Tổng trọng lượng hàng không vượt quá ${t.maxLoadKg.toLocaleString('vi-VN')} kg.`],
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
     {layout && <section className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
       <h4 className="font-bold text-stone-900">Bố trí và sức chứa kho</h4>
@@ -63,6 +61,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Phí quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">50% đơn giá thuê ngày cho mỗi ngày trễ</p><p className="text-sm leading-6 text-stone-600">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.</p></article>
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Tiền đảm bảo kho</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">{formatVndAmount(t.securityDepositAmount)}</p><p className="text-sm leading-6 text-stone-600">Thu khi nhận kho và được quyết toán sau khi kiểm tra bàn giao, công nợ, vệ sinh và hư hại.</p></article>
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Thời hạn thuê tối thiểu</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">01 tháng</p><p className="text-sm leading-6 text-stone-600">Kỳ thuê sử dụng trọn tháng; thời gian và ưu đãi cụ thể được xác nhận trong báo giá.</p></article>
+        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Gia hạn quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">Tối đa 7 ngày</p><p className="text-sm leading-6 text-stone-600">Đặt cọc hoặc đặt lịch không dừng hạn thu hồi. Từ ngày quá hạn thứ 8, hồ sơ chuyển sang thu hồi kho.</p></article>
       </div>
     </section>
     <section><h4 className="mb-3 font-bold">3. An ninh và tiện ích vận hành</h4><div className="grid gap-3 sm:grid-cols-2"><article className="rounded-xl border border-blue-200 bg-blue-50 p-4"><b>An ninh và kiểm soát ra vào</b><p className="mt-2 text-sm">Mã PIN cá nhân và camera giám sát theo thông tin của cơ sở.</p></article><article className="rounded-xl border border-rose-200 bg-rose-50 p-4"><b>Hệ thống phòng cháy chữa cháy</b><p className="mt-2 text-sm">Cảm biến khói, nhiệt và đầu phun nước tự động theo thông tin của cơ sở.</p></article></div></section>

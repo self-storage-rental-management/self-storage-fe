@@ -19,6 +19,7 @@ export interface ApiActor {
   status: ApiUserStatus
   roles: ApiRoleCode[]
   facilityScopes: Record<string, ApiFacilityScopeLevel>
+  facilityNames?: Record<string, string>
   mustChangePassword: boolean
   permissions: string[]
 }
@@ -58,6 +59,10 @@ export function primaryRole(roles: readonly ApiRoleCode[]): Role {
 }
 
 export function actorToUser(actor: ApiActor): User {
+  const assignedFacilityIds = Object.keys(actor.facilityScopes)
+  const assignedFacilityNames = assignedFacilityIds
+    .map(id => actor.facilityNames?.[id])
+    .filter((name): name is string => Boolean(name))
   return {
     id: actor.id,
     name: actor.fullName,
@@ -68,7 +73,10 @@ export function actorToUser(actor: ApiActor): User {
     emergencyContactPhone: actor.emergencyContactPhone || undefined,
     avatar: actor.avatarUrl || undefined,
     role: primaryRole(actor.roles),
-    facilityId: Object.keys(actor.facilityScopes)[0],
+    facility: assignedFacilityNames.join(', ') || undefined,
+    facilityId: assignedFacilityIds[0],
+    facilityScopes: actor.facilityScopes,
+    facilityNames: actor.facilityNames,
     mustChangePassword: actor.mustChangePassword,
   }
 }
