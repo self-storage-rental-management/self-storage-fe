@@ -9,7 +9,10 @@ import {
   verifyReservationOtp,
   payReservationDeposit,
   getReservationPayment,
+  generateBookingDocument,
+  downloadBookingDocument,
 } from './customerReservationApi'
+import { clearAuthTokens, setAccessToken } from './apiClient'
 
 const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200,
@@ -17,7 +20,7 @@ const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), {
 })
 
 describe('customerReservationApi', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { clearAuthTokens(); vi.unstubAllGlobals() })
 
   it('reloads stored payment details from the backend for receipts', async () => {
     const result = { paymentId: 'payment-1', reservationId: 'reservation-1', paymentStatus: 'PAID', amount: 600000 }
@@ -139,5 +142,31 @@ describe('customerReservationApi', () => {
       'http://localhost:8080/api/customer/reservations/reservation-1/email-verification',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ code: '123456' }) }),
     ])
+  })
+
+  it('generates and downloads the booking confirmation with customer authentication', async () => {
+    const document = { id: 'document-1', reservationId: 'reservation-1', fileName: 'booking-confirmation.pdf' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: document }))
+      .mockResolvedValueOnce(new Response(new Blob(['%PDF-1.4']), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'attachment; filename="booking-confirmation.pdf"',
+        },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    setAccessToken('customer-access-token')
+
+    await expect(generateBookingDocument('reservation-1')).resolves.toEqual(document)
+    const downloaded = await downloadBookingDocument('reservation-1')
+
+    expect(downloaded.contentType).toBe('application/pdf')
+    expect(downloaded.fileName).toBe('booking-confirmation.pdf')
+    expect(await downloaded.blob.text()).toBe('%PDF-1.4')
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/customer/reservations/reservation-1/booking-document')
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('POST')
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8080/api/customer/reservations/reservation-1/booking-document/download')
+    expect(new Headers((fetchMock.mock.calls[1][1] as RequestInit).headers).get('Authorization')).toBe('Bearer customer-access-token')
   })
 })
