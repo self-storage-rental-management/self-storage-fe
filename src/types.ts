@@ -39,6 +39,9 @@ export interface User {
   name: string
   email: string
   phone?: string
+  permanentAddress?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
   role: Role
   avatar?: string
   facility?: string

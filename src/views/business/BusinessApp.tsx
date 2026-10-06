@@ -86,7 +86,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     laneWidthM: UNIT_SPECS.S.vehicleLaneWidthM,
     maxLoadKg: UNIT_SPECS.S.maxLoadKg,
     monthlyPrice: UNIT_SPECS.S.priceMonthly,
-    count: 0,
+    count: 5,
     badgeClass: "bg-sky-50 text-sky-700 border-sky-200",
     floor: 1,
     zone: "Khu A",
@@ -97,6 +97,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.S.frameDimensions.heightM,
       depthM: UNIT_SPECS.S.frameDimensions.depthM,
     },
+    rentalPackages: generateDefaultRentalPackages('', 'S', UNIT_SPECS.S.priceMonthly),
   },
   {
     sizeCode: "M",
@@ -107,7 +108,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     laneWidthM: UNIT_SPECS.M.vehicleLaneWidthM,
     maxLoadKg: UNIT_SPECS.M.maxLoadKg,
     monthlyPrice: UNIT_SPECS.M.priceMonthly,
-    count: 0,
+    count: 5,
     badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
     floor: 2,
     zone: "Khu B",
@@ -118,6 +119,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.M.frameDimensions.heightM,
       depthM: UNIT_SPECS.M.frameDimensions.depthM,
     },
+    rentalPackages: generateDefaultRentalPackages('', 'M', UNIT_SPECS.M.priceMonthly),
   },
   {
     sizeCode: "L",
@@ -128,7 +130,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     laneWidthM: UNIT_SPECS.L.vehicleLaneWidthM,
     maxLoadKg: UNIT_SPECS.L.maxLoadKg,
     monthlyPrice: UNIT_SPECS.L.priceMonthly,
-    count: 0,
+    count: 5,
     badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
     floor: 3,
     zone: "Khu C",
@@ -139,6 +141,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.L.frameDimensions.heightM,
       depthM: UNIT_SPECS.L.frameDimensions.depthM,
     },
+    rentalPackages: generateDefaultRentalPackages('', 'L', UNIT_SPECS.L.priceMonthly),
   },
   {
     sizeCode: "XL",
@@ -149,7 +152,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
     laneWidthM: UNIT_SPECS.XL.vehicleLaneWidthM,
     maxLoadKg: UNIT_SPECS.XL.maxLoadKg,
     monthlyPrice: UNIT_SPECS.XL.priceMonthly,
-    count: 0,
+    count: 5,
     badgeClass: "bg-amber-50 text-amber-800 border-amber-200",
     floor: 4,
     zone: "Khu D",
@@ -160,6 +163,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.XL.frameDimensions.heightM,
       depthM: UNIT_SPECS.XL.frameDimensions.depthM,
     },
+    rentalPackages: generateDefaultRentalPackages('', 'XL', UNIT_SPECS.XL.priceMonthly),
   },
 ]
 
@@ -177,6 +181,10 @@ export interface PolicyItem {
   description?: string
 
   lastUpdated?: string
+
+  scopeType?: 'all' | 'specific'
+
+  facilityIds?: string[]
 }
 
 export interface DurationDiscountItem {
@@ -189,6 +197,8 @@ export interface DurationDiscountItem {
   description: string
   appliesTo: string
   status: 'active' | 'inactive'
+  scopeType?: 'all' | 'specific'
+  facilityIds?: string[]
 }
 
 export const DEFAULT_DURATION_DISCOUNTS: DurationDiscountItem[] = [
@@ -504,6 +514,34 @@ export default function BusinessApp({
 
   const [policyFormScope, setPolicyFormScope] = useState("Toàn bộ cơ sở")
 
+  const [policyFormScopeType, setPolicyFormScopeType] = useState<'all' | 'specific'>('all')
+
+  const [policyFormFacilityIds, setPolicyFormFacilityIds] = useState<string[]>([])
+
+  const [policyFacilityFilter, setPolicyFacilityFilter] = useState<string>('all')
+
+  const filteredPoliciesList = useMemo(() => {
+    if (policyFacilityFilter === 'all') return policiesList
+    const targetFac = facilitiesList.find((f) => f.id === policyFacilityFilter)
+    if (!targetFac) return policiesList
+
+    return policiesList.filter((p) => {
+      if (p.scopeType === 'all') return true
+      if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
+        return (
+          p.facilityIds.includes(targetFac.id) ||
+          (targetFac.code && p.facilityIds.includes(targetFac.code))
+        )
+      }
+      const s = (p.scope || '').trim().toLowerCase()
+      if (['all facilities', 'toàn bộ cơ sở', 'all', 'toàn bộ'].includes(s)) return true
+      return (
+        s.includes(targetFac.name.toLowerCase()) ||
+        targetFac.name.toLowerCase().includes(s)
+      )
+    })
+  }, [policiesList, policyFacilityFilter, facilitiesList])
+
   const [policyFormDesc, setPolicyFormDesc] = useState("")
 
   const savePolicies = (next: PolicyItem[]) => {
@@ -516,6 +554,10 @@ export default function BusinessApp({
     setPolicyFormName("")
 
     setPolicyFormValue("")
+
+    setPolicyFormScopeType("all")
+
+    setPolicyFormFacilityIds([])
 
     setPolicyFormScope(lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities")
 
@@ -545,6 +587,30 @@ export default function BusinessApp({
       return
     }
 
+    if (policyFormScopeType === 'specific' && policyFormFacilityIds.length === 0) {
+      showToast(
+        lang === "vi"
+          ? "Vui lòng chọn ít nhất một cơ sở áp dụng chính sách này!"
+          : "Please select at least one facility!",
+      )
+      return
+    }
+
+    let computedScope = lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"
+    if (policyFormScopeType === 'specific') {
+      const selectedNames = facilitiesList
+        .filter((f) => policyFormFacilityIds.includes(f.id) || (f.code && policyFormFacilityIds.includes(f.code)))
+        .map((f) => f.name)
+
+      if (selectedNames.length === 1) {
+        computedScope = selectedNames[0]
+      } else if (selectedNames.length > 1) {
+        computedScope = `${selectedNames.length} cơ sở áp dụng`
+      } else {
+        computedScope = lang === "vi" ? "Cơ sở chỉ định" : "Specific Facilities"
+      }
+    }
+
     const newPolicy: PolicyItem = {
       id: `pol-${Date.now()}`,
 
@@ -552,8 +618,11 @@ export default function BusinessApp({
 
       value: policyFormValue.trim(),
 
-      scope:
-        policyFormScope || (lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"),
+      scope: computedScope,
+
+      scopeType: policyFormScopeType,
+
+      facilityIds: policyFormScopeType === 'specific' ? policyFormFacilityIds : [],
 
       editable: true,
 
@@ -609,6 +678,32 @@ export default function BusinessApp({
 
     setPolicyFormName(displayName)
     setPolicyFormValue(policy.value)
+
+    let detectedScopeType: 'all' | 'specific' = 'all'
+    let detectedFacilityIds: string[] = []
+
+    if (policy.scopeType) {
+      detectedScopeType = policy.scopeType
+      detectedFacilityIds = policy.facilityIds || []
+    } else if (policy.facilityIds && policy.facilityIds.length > 0) {
+      detectedScopeType = 'specific'
+      detectedFacilityIds = policy.facilityIds
+    } else {
+      const s = (policy.scope || '').trim().toLowerCase()
+      if (s && !['all facilities', 'toàn bộ cơ sở', 'all', 'toàn bộ'].includes(s)) {
+        detectedScopeType = 'specific'
+        const matched = facilitiesList.filter((f) =>
+          f.name.toLowerCase().includes(s) ||
+          s.includes(f.name.toLowerCase()) ||
+          (f.code && f.code.toLowerCase() === s) ||
+          f.id.toLowerCase() === s
+        )
+        detectedFacilityIds = matched.map((f) => f.id)
+      }
+    }
+
+    setPolicyFormScopeType(detectedScopeType)
+    setPolicyFormFacilityIds(detectedFacilityIds)
     setPolicyFormScope(policy.scope === "All Facilities" ? "Toàn bộ cơ sở" : policy.scope)
     setPolicyFormDesc(policy.description || "")
     setPolicyModal(true)
@@ -627,6 +722,30 @@ export default function BusinessApp({
       return
     }
 
+    if (policyFormScopeType === 'specific' && policyFormFacilityIds.length === 0) {
+      showToast(
+        lang === "vi"
+          ? "Vui lòng chọn ít nhất một cơ sở áp dụng chính sách này!"
+          : "Please select at least one facility!",
+      )
+      return
+    }
+
+    let computedScope = lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"
+    if (policyFormScopeType === 'specific') {
+      const selectedNames = facilitiesList
+        .filter((f) => policyFormFacilityIds.includes(f.id) || (f.code && policyFormFacilityIds.includes(f.code)))
+        .map((f) => f.name)
+
+      if (selectedNames.length === 1) {
+        computedScope = selectedNames[0]
+      } else if (selectedNames.length > 1) {
+        computedScope = `${selectedNames.length} cơ sở áp dụng`
+      } else {
+        computedScope = lang === "vi" ? "Cơ sở chỉ định" : "Specific Facilities"
+      }
+    }
+
     const next = policiesList.map((p) =>
       p.id === selectedPolicy.id
         ? {
@@ -636,7 +755,11 @@ export default function BusinessApp({
 
           value: policyFormValue.trim(),
 
-          scope: policyFormScope || p.scope,
+          scope: computedScope,
+
+          scopeType: policyFormScopeType,
+
+          facilityIds: policyFormScopeType === 'specific' ? policyFormFacilityIds : [],
 
           description: policyFormDesc.trim(),
 
@@ -757,17 +880,88 @@ export default function BusinessApp({
     return DEFAULT_DURATION_DISCOUNTS
   })
 
+  // ── QUẢN LÝ GÓI THUÊ & CHIẾT KHẤU KỲ HẠN ──
+  const [createDurationModal, setCreateDurationModal] = useState(false)
+  const [formCreateDurationTitle, setFormCreateDurationTitle] = useState("")
+  const [formCreateDurationLabel, setFormCreateDurationLabel] = useState("")
+  const [formCreateDurationMonths, setFormCreateDurationMonths] = useState<number | string>(9)
+  const [formCreateDurationPercent, setFormCreateDurationPercent] = useState<number>(6)
+  const [formCreateDurationRenewalPercent, setFormCreateDurationRenewalPercent] = useState<number>(4)
+  const [formCreateDurationAppliesTo, setFormCreateDurationAppliesTo] = useState("Đặt mới & Gia hạn")
+  const [formCreateDurationScopeType, setFormCreateDurationScopeType] = useState<'all' | 'specific'>('all')
+  const [formCreateDurationFacilityIds, setFormCreateDurationFacilityIds] = useState<string[]>([])
+  const [formCreateDurationDesc, setFormCreateDurationDesc] = useState("")
+  const [formCreateDurationStatus, setFormCreateDurationStatus] = useState<'active' | 'inactive'>('active')
+
   const [editDurationModal, setEditDurationModal] = useState(false)
   const [selectedDurationItem, setSelectedDurationItem] = useState<DurationDiscountItem | null>(null)
+  const [formDurationTitle, setFormDurationTitle] = useState("")
+  const [formDurationLabel, setFormDurationLabel] = useState("")
   const [formDurationPercent, setFormDurationPercent] = useState<number>(0)
   const [formDurationRenewalPercent, setFormDurationRenewalPercent] = useState<number>(0)
+  const [formDurationAppliesTo, setFormDurationAppliesTo] = useState("Đặt mới & Gia hạn")
+  const [formDurationScopeType, setFormDurationScopeType] = useState<'all' | 'specific'>('all')
+  const [formDurationFacilityIds, setFormDurationFacilityIds] = useState<string[]>([])
   const [formDurationDesc, setFormDurationDesc] = useState<string>("")
   const [formDurationStatus, setFormDurationStatus] = useState<'active' | 'inactive'>('active')
 
+  const handleOpenCreateDuration = () => {
+    setFormCreateDurationTitle("")
+    setFormCreateDurationLabel("")
+    setFormCreateDurationMonths(9)
+    setFormCreateDurationPercent(6)
+    setFormCreateDurationRenewalPercent(4)
+    setFormCreateDurationAppliesTo("Đặt mới & Gia hạn")
+    setFormCreateDurationScopeType("all")
+    setFormCreateDurationFacilityIds([])
+    setFormCreateDurationDesc("")
+    setFormCreateDurationStatus("active")
+    setCreateDurationModal(true)
+  }
+
+  const handleSaveNewDurationDiscount = () => {
+    const rawMonths = formCreateDurationMonths
+    const parsedMonths = typeof rawMonths === 'number' ? rawMonths : parseInt(String(rawMonths), 10)
+    const validMonths = !isNaN(parsedMonths) && parsedMonths > 0 ? parsedMonths : 'other'
+
+    const title = formCreateDurationTitle.trim() || (typeof validMonths === 'number' ? `Gói thuê ${validMonths} tháng` : 'Gói thuê linh hoạt')
+    const label = formCreateDurationLabel.trim() || (typeof validMonths === 'number' ? `${validMonths} tháng` : 'Kỳ hạn khác')
+
+    if (formCreateDurationScopeType === 'specific' && formCreateDurationFacilityIds.length === 0) {
+      showToast(lang === 'vi' ? 'Vui lòng chọn ít nhất 1 cơ sở áp dụng gói thuê này!' : 'Please select at least one facility!')
+      return
+    }
+
+    const newPkg: DurationDiscountItem = {
+      id: `pkg-${validMonths}m-${Date.now().toString().slice(-4)}`,
+      months: validMonths,
+      title,
+      label,
+      discountPercent: Math.max(0, Math.min(100, Number(formCreateDurationPercent) || 0)),
+      renewalDiscountPercent: Math.max(0, Math.min(100, Number(formCreateDurationRenewalPercent) || 0)),
+      description: formCreateDurationDesc.trim() || `Giảm ${formCreateDurationPercent}% cho hợp đồng mới và giảm ${formCreateDurationRenewalPercent}% khi gia hạn ${label}.`,
+      appliesTo: formCreateDurationAppliesTo,
+      status: formCreateDurationStatus,
+      scopeType: formCreateDurationScopeType,
+      facilityIds: formCreateDurationScopeType === 'specific' ? formCreateDurationFacilityIds : [],
+    }
+
+    const next = [...durationDiscounts, newPkg]
+    setDurationDiscounts(next)
+    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    setCreateDurationModal(false)
+    showToast(lang === 'vi' ? `Đã tạo gói thuê "${newPkg.title}" thành công!` : `Created package "${newPkg.title}"!`)
+  }
+
   const handleOpenEditDuration = (item: DurationDiscountItem) => {
     setSelectedDurationItem(item)
+    setFormDurationTitle(item.title)
+    setFormDurationLabel(item.label)
     setFormDurationPercent(item.discountPercent)
     setFormDurationRenewalPercent(item.renewalDiscountPercent)
+    setFormDurationAppliesTo(item.appliesTo || "Đặt mới & Gia hạn")
+    setFormDurationScopeType(item.scopeType || "all")
+    setFormDurationFacilityIds(item.facilityIds || [])
     setFormDurationDesc(item.description)
     setFormDurationStatus(item.status)
     setEditDurationModal(true)
@@ -775,12 +969,23 @@ export default function BusinessApp({
 
   const handleSaveDurationDiscount = () => {
     if (!selectedDurationItem) return
+
+    if (formDurationScopeType === 'specific' && formDurationFacilityIds.length === 0) {
+      showToast(lang === 'vi' ? 'Vui lòng chọn ít nhất 1 cơ sở áp dụng gói thuê này!' : 'Please select at least one facility!')
+      return
+    }
+
     const next = durationDiscounts.map((d) => {
       if (d.id === selectedDurationItem.id) {
         return {
           ...d,
+          title: formDurationTitle.trim() || d.title,
+          label: formDurationLabel.trim() || d.label,
           discountPercent: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)),
           renewalDiscountPercent: Math.max(0, Math.min(100, Number(formDurationRenewalPercent) || 0)),
+          appliesTo: formDurationAppliesTo,
+          scopeType: formDurationScopeType,
+          facilityIds: formDurationScopeType === 'specific' ? formDurationFacilityIds : [],
           description: formDurationDesc.trim() || d.description,
           status: formDurationStatus,
         }
@@ -792,9 +997,39 @@ export default function BusinessApp({
     setEditDurationModal(false)
     showToast(
       lang === "vi"
-        ? `Đã cập nhật mức chiết khấu cho ${selectedDurationItem.title}!`
-        : `Updated discount for ${selectedDurationItem.title}!`,
+        ? `Đã cập nhật cấu hình cho ${formDurationTitle.trim() || selectedDurationItem.title}!`
+        : `Updated package ${selectedDurationItem.title}!`,
     )
+  }
+
+  const handleDeleteDurationDiscount = (id: string) => {
+    const item = durationDiscounts.find((d) => d.id === id)
+    if (!item) return
+
+    if (window.confirm(lang === 'vi' ? `Bạn có chắc muốn xóa gói "${item.title}"?` : `Delete package "${item.title}"?`)) {
+      const next = durationDiscounts.filter((d) => d.id !== id)
+      setDurationDiscounts(next)
+      localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+      if (selectedDurationItem?.id === id) setEditDurationModal(false)
+      showToast(lang === 'vi' ? `Đã xóa gói "${item.title}"!` : `Package deleted!`)
+    }
+  }
+
+  const handleToggleDurationStatus = (id: string) => {
+    const next = durationDiscounts.map((d) => {
+      if (d.id === id) {
+        const nextStatus = d.status === 'active' ? 'inactive' : 'active'
+        showToast(
+          lang === 'vi'
+            ? `${nextStatus === 'active' ? 'Đã kích hoạt' : 'Đã tạm dừng'} gói "${d.title}"!`
+            : `Package "${d.title}" is now ${nextStatus}!`
+        )
+        return { ...d, status: nextStatus as 'active' | 'inactive' }
+      }
+      return d
+    })
+    setDurationDiscounts(next)
+    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
   }
 
   const [revenueFacilityFilter, setRevenueFacilityFilter] =
@@ -1193,8 +1428,16 @@ export default function BusinessApp({
       ? Math.ceil(maxRevenueValue / 5000000) * 5000000
       : 10000000
 
-  const [pricingTiers, setPricingTiers] =
-    useState<PricingTierItem[]>(PRICING_TIERS)
+  const [pricingTiers, setPricingTiers] = useState<PricingTierItem[]>(() => {
+    try {
+      const stored = localStorage.getItem("storagehub:pricingTiers")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return PRICING_TIERS
+  })
 
   const [selectedTier, setSelectedTier] =
     useState<PricingTierItem | null>(null)
@@ -1397,13 +1640,16 @@ export default function BusinessApp({
         if (!isNaN(parsed) && parsed > 0) return parsed
       }
 
-      // 5. Mặc định theo quy chuẩn UNIT_SPECS hoặc custom spec
+      // 5. Mặc định theo quy chuẩn pricingTiers hoặc custom spec hoặc UNIT_SPECS
       const customP = fac.unitCustomSpecs?.find((cs: any) => cs.sizeCode === size)?.monthlyPrice
       if (customP && customP > 0) return customP
 
+      const tierMatch = pricingTiers.find((t) => t.sizeCode === size || t.name.includes(`(${size})`))
+      if (tierMatch && tierMatch.basePrice > 0) return tierMatch.basePrice
+
       return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
     },
-    [facilityPricingOverrides, unitsList],
+    [facilityPricingOverrides, unitsList, pricingTiers],
   )
 
   const getFacilitySizePriceFormatted = useCallback(
@@ -1483,19 +1729,20 @@ export default function BusinessApp({
       }
     } else {
       // Cập nhật giá niêm yết chuẩn toàn hệ thống
-      setPricingTiers((prev) =>
-        prev.map((t) =>
-          t.id === selectedTier.id
-            ? {
-              ...t,
-              basePrice: updatedPrice,
-              highDemandMultiplier: updatedMultiplier,
-            }
-            : t,
-        ),
+      const nextTiers = pricingTiers.map((t) =>
+        t.id === selectedTier.id
+          ? {
+            ...t,
+            basePrice: updatedPrice,
+            highDemandMultiplier: updatedMultiplier,
+          }
+          : t,
       )
+      setPricingTiers(nextTiers)
+      try {
+        localStorage.setItem("storagehub:pricingTiers", JSON.stringify(nextTiers))
+      } catch { }
 
-      // Đồng bộ ngược lại UNIT_SPECS
       const sizeCode =
         selectedTier.sizeCode ||
         (selectedTier.name.includes("(S)")
@@ -1506,11 +1753,7 @@ export default function BusinessApp({
               ? "XL"
               : "L")
 
-      if (sizeCode && UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS]) {
-        UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS].priceMonthly = updatedPrice
-        UNIT_SPECS[sizeCode as keyof typeof UNIT_SPECS].priceFormatted = `${Math.round(updatedPrice).toLocaleString("vi-VN")}đ`
-      }
-
+      // Không mutate trực tiếp object UNIT_SPECS!
       // Cập nhật giá cho các gian kho chưa bị override riêng
       unitsList
         .filter(
@@ -1976,7 +2219,17 @@ export default function BusinessApp({
 
     setFormFacStatus("active")
 
-    setFormFacUnitSpecs([])
+    const defaultSpecs = DEFAULT_FACILITY_UNIT_SPECS.map((s) => ({
+      ...s,
+      count: 5,
+      rentalPackages: generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice),
+    }))
+    setFormFacUnitSpecs(defaultSpecs)
+    setFormFacUnits(20)
+    setFormFacUnitS(5)
+    setFormFacUnitM(5)
+    setFormFacUnitL(5)
+    setFormFacUnitXL(5)
 
     setCreateFacilityModal(true)
   }
@@ -3250,6 +3503,49 @@ export default function BusinessApp({
                               </p>
                             </div>
                           </div>
+
+                          {/* Hàng 2.8: Chính sách đang áp dụng */}
+                          {(() => {
+                            const activePoliciesForFac = policiesList.filter((p) => {
+                              if (p.scopeType === "all") return true
+                              if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
+                                return p.facilityIds.includes(f.id) || (f.code && p.facilityIds.includes(f.code))
+                              }
+                              const s = (p.scope || "").trim().toLowerCase()
+                              if (["all facilities", "toàn bộ cơ sở", "all", "toàn bộ"].includes(s)) return true
+                              return s.includes(f.name.toLowerCase()) || f.name.toLowerCase().includes(s)
+                            })
+                            const specificCount = activePoliciesForFac.filter(
+                              (p) => p.scopeType === "specific" || (p.facilityIds && p.facilityIds.length > 0),
+                            ).length
+
+                            return (
+                              <div className="flex items-center justify-between pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPolicyFacilityFilter(f.id)
+                                    setPage("policies")
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition cursor-pointer"
+                                  title={lang === "vi" ? "Xem và quản lý các chính sách của cơ sở này" : "View and manage policies for this facility"}
+                                >
+                                  <span>📜</span>
+                                  <span>
+                                    {lang === "vi"
+                                      ? `${activePoliciesForFac.length} chính sách áp dụng`
+                                      : `${activePoliciesForFac.length} policies`}
+                                  </span>
+                                  {specificCount > 0 && (
+                                    <span className="bg-amber-200/90 text-amber-950 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                                      {specificCount} {lang === "vi" ? "riêng" : "custom"}
+                                    </span>
+                                  )}
+                                  <span className="text-amber-700 text-[11px] font-bold">→</span>
+                                </button>
+                              </div>
+                            )
+                          })()}
                         </div>
                       </div>
 
@@ -3327,9 +3623,6 @@ export default function BusinessApp({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-sm font-bold">
-                    🏷️
-                  </span>
                   <h3 className="font-bold text-slate-900 text-base">
                     Gói Thuê & Mức Giảm Giá Kỳ Hạn
                   </h3>
@@ -3341,14 +3634,25 @@ export default function BusinessApp({
                   Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
                 </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50 self-start sm:self-auto flex items-center gap-1.5 shrink-0"
+                onClick={handleOpenCreateDuration}
+              >
+                {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
+              </Button>
             </div>
 
-            {/* 5 Cards Tóm Tắt Nhanh Các Gói */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 my-4">
+            {/* Cards Tóm Tắt Nhanh Các Gói */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 my-4">
               {durationDiscounts.map((item) => {
                 const isActive = item.status === "active"
                 const hasDiscount = item.discountPercent > 0
                 const hasRenewal = item.renewalDiscountPercent > 0
+                const isSpecific = item.scopeType === "specific"
+                const facCount = item.facilityIds?.length || 0
+
                 return (
                   <div
                     key={item.id}
@@ -3361,25 +3665,45 @@ export default function BusinessApp({
                     }`}
                   >
                     <div>
-                      <div className="flex items-start justify-between gap-1 mb-2">
-                        <span className="font-bold text-slate-900 text-sm">
+                      <div className="flex items-start justify-between gap-1 mb-1.5">
+                        <span className="font-bold text-slate-900 text-sm truncate" title={item.title}>
                           {item.label}
                         </span>
-                        <Badge
-                          variant={
-                            !isActive
-                              ? "warning"
-                              : hasDiscount || hasRenewal
-                                ? "success"
-                                : "muted"
-                          }
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDurationStatus(item.id)}
+                          title={isActive ? (lang === 'vi' ? "Bấm để tạm dừng gói này" : "Click to pause") : (lang === 'vi' ? "Bấm để kích hoạt lại" : "Click to activate")}
+                          className="cursor-pointer transition-transform hover:scale-105"
                         >
-                          {!isActive
-                            ? "Tạm dừng"
-                            : hasDiscount
-                              ? `Giảm ${item.discountPercent}%`
-                              : "Không giảm"}
-                        </Badge>
+                          <Badge
+                            variant={
+                              !isActive
+                                ? "warning"
+                                : hasDiscount || hasRenewal
+                                  ? "success"
+                                  : "muted"
+                            }
+                          >
+                            {!isActive
+                              ? "Tạm dừng"
+                              : hasDiscount
+                                ? `Giảm ${item.discountPercent}%`
+                                : "Không giảm"}
+                          </Badge>
+                        </button>
+                      </div>
+
+                      {/* Huy hiệu phạm vi cơ sở áp dụng */}
+                      <div className="mb-2">
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            isSpecific
+                              ? "bg-amber-50 text-amber-800 border border-amber-200"
+                              : "bg-blue-50 text-blue-800 border border-blue-200"
+                          }`}
+                        >
+                          {isSpecific ? `${facCount} cơ sở` : "Toàn hệ thống"}
+                        </span>
                       </div>
 
                       {/* Phân tách rõ ràng: Đặt mới vs Gia hạn */}
@@ -3404,112 +3728,35 @@ export default function BusinessApp({
                     </div>
 
                     <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[130px]">
+                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[100px]" title={item.appliesTo}>
                         {item.appliesTo}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditDuration(item)}
-                        className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
-                      >
-                        Sửa
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditDuration(item)}
+                          className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDurationDiscount(item.id)}
+                          className="text-xs font-medium text-red-600 hover:text-red-800 underline cursor-pointer"
+                        >
+                          Xóa
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
               })}
             </div>
-
-            {/* Bảng Chi Tiết Gói Thuê & Mức Giảm */}
-            <div className="rounded-xl border border-stone-200 overflow-hidden">
-              <Table>
-                <Thead>
-                  <tr>
-                    <Th>Gói Thuê & Thời Hạn</Th>
-                    <Th>Giảm Giá Đặt Mới</Th>
-                    <Th>Giảm Giá Gia Hạn</Th>
-                    <Th>Phạm Vi Áp Dụng</Th>
-                    <Th>Quy Định & Ghi Chú</Th>
-                    <Th>Trạng Thái</Th>
-                    <Th className="text-right">Thao Tác</Th>
-                  </tr>
-                </Thead>
-                <Tbody>
-                  {durationDiscounts.map((item) => (
-                    <Tr key={item.id}>
-                      <Td className="font-semibold text-slate-900">
-                        <div>
-                          <span>{item.title}</span>
-                          <span className="block text-[11px] font-normal text-slate-400">
-                            {item.months === "other"
-                              ? "Linh hoạt theo nhu cầu"
-                              : `Kỳ hạn hợp đồng ${item.months} tháng`}
-                          </span>
-                        </div>
-                      </Td>
-                      <Td>
-                        <span
-                          className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
-                            item.discountPercent > 0
-                              ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                              : "bg-stone-100 text-stone-600"
-                          }`}
-                        >
-                          {item.discountPercent > 0
-                            ? `-${item.discountPercent}%`
-                            : "0%"}
-                        </span>
-                      </Td>
-                      <Td>
-                        <span
-                          className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
-                            item.renewalDiscountPercent > 0
-                              ? "bg-blue-100 text-blue-900 border border-blue-300"
-                              : "bg-stone-100 text-stone-600"
-                          }`}
-                        >
-                          {item.renewalDiscountPercent > 0
-                            ? `-${item.renewalDiscountPercent}%`
-                            : "0%"}
-                        </span>
-                      </Td>
-                      <Td className="text-xs text-slate-700 font-medium">
-                        {item.appliesTo}
-                      </Td>
-                      <Td className="text-xs text-slate-500 max-w-xs">
-                        {item.description}
-                      </Td>
-                      <Td>
-                        <Badge
-                          variant={
-                            item.status === "active" ? "success" : "warning"
-                          }
-                        >
-                          {item.status === "active"
-                            ? "Đang áp dụng"
-                            : "Tạm dừng"}
-                        </Badge>
-                      </Td>
-                      <Td className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenEditDuration(item)}
-                          className="text-amber-800 hover:text-amber-950 font-semibold"
-                        >
-                          Sửa
-                        </Button>
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </div>
           </Card>
 
           {/* ── KHỐI 2: QUY ĐỊNH & CHÍNH SÁCH CHUNG ── */}
           <Card className="p-5 border border-stone-200/90 shadow-sm bg-white">
-            <div className="flex items-center justify-between mb-4 border-b border-stone-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-stone-100 pb-3">
               <div>
                 <h3 className="font-bold text-slate-900 text-base">
                   Quy Định & Điều Khoản Thuê Chung
@@ -3518,6 +3765,39 @@ export default function BusinessApp({
                   Các điều khoản về tiền đặt cọc, thời gian ân hạn thanh toán, phí trễ hạn và thông báo trả kho
                 </p>
               </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                  {lang === "vi" ? "Lọc theo cơ sở:" : "Filter by facility:"}
+                </span>
+                <select
+                  value={policyFacilityFilter}
+                  onChange={(e) => setPolicyFacilityFilter(e.target.value)}
+                  className="text-xs font-semibold border border-stone-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                >
+                  <option value="all">
+                    {lang === "vi"
+                      ? `Tất cả cơ sở (${policiesList.length} chính sách)`
+                      : `All Facilities (${policiesList.length})`}
+                  </option>
+                  {facilitiesList.map((f) => {
+                    const count = policiesList.filter((p) => {
+                      if (p.scopeType === "all") return true
+                      if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
+                        return p.facilityIds.includes(f.id) || (f.code && p.facilityIds.includes(f.code))
+                      }
+                      const s = (p.scope || "").trim().toLowerCase()
+                      if (["all facilities", "toàn bộ cơ sở", "all", "toàn bộ"].includes(s)) return true
+                      return s.includes(f.name.toLowerCase()) || f.name.toLowerCase().includes(s)
+                    }).length
+                    return (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({count} chính sách)
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
             </div>
 
             <Table>
@@ -3525,7 +3805,7 @@ export default function BusinessApp({
                 <tr>
                   <Th>{lang === "vi" ? "Tên Chính Sách" : "Policy Name"}</Th>
                   <Th>{lang === "vi" ? "Giá Trị Áp Dụng" : "Current Value"}</Th>
-                  <Th>{lang === "vi" ? "Phạm Vi" : "Scope"}</Th>
+                  <Th>{lang === "vi" ? "Phạm Vi Áp Dụng" : "Scope"}</Th>
                   <Th>
                     {lang === "vi"
                       ? "Ghi Chú / Căn Cứ"
@@ -3537,16 +3817,18 @@ export default function BusinessApp({
                 </tr>
               </Thead>
               <Tbody>
-                {policiesList.length === 0 ? (
+                {filteredPoliciesList.length === 0 ? (
                   <Tr>
                     <Td colSpan={5} className="text-center py-8 text-slate-400">
                       {lang === "vi"
-                        ? 'Chưa có chính sách nào. Hãy bấm "Thêm Chính Sách" để bắt đầu.'
+                        ? policyFacilityFilter === "all"
+                          ? 'Chưa có chính sách nào. Hãy bấm "Thêm Chính Sách" để bắt đầu.'
+                          : 'Cơ sở này hiện chưa có chính sách riêng nào. Các chính sách toàn hệ thống sẽ áp dụng mặc định.'
                         : "No policies found."}
                     </Td>
                   </Tr>
                 ) : (
-                  policiesList.map((p) => {
+                  filteredPoliciesList.map((p) => {
                     const displayName =
                       lang === "vi"
                         ? p.name === "Grace Period" || p.name === "Thời gian gia hạn nợ" || p.name === "Thời gian ân hạn thanh toán"
@@ -3593,13 +3875,59 @@ export default function BusinessApp({
                         </Td>
 
                         <Td>
-                          <Badge variant="muted">
-                            {lang === "vi"
-                              ? p.scope === "All Facilities"
-                                ? "Toàn bộ cơ sở"
-                                : p.scope
-                              : p.scope}
-                          </Badge>
+                          {(() => {
+                            const isGlobal =
+                              p.scopeType === "all" ||
+                              (!p.scopeType &&
+                                (!p.facilityIds || p.facilityIds.length === 0) &&
+                                (p.scope === "All Facilities" || p.scope === "Toàn bộ cơ sở"))
+
+                            if (isGlobal) {
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                                  {lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"}
+                                </span>
+                              )
+                            }
+
+                            // Match specific facilities
+                            const matchedFacs = facilitiesList.filter(
+                              (f) =>
+                                p.facilityIds?.includes(f.id) ||
+                                (f.code && p.facilityIds?.includes(f.code)) ||
+                                (p.scope &&
+                                  (p.scope.toLowerCase().includes(f.name.toLowerCase()) ||
+                                    f.name.toLowerCase().includes(p.scope.toLowerCase()))),
+                            )
+
+                            if (matchedFacs.length === 1) {
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                                  {matchedFacs[0].name}
+                                </span>
+                              )
+                            }
+
+                            return (
+                              <div className="space-y-1">
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  {matchedFacs.length > 0 ? `${matchedFacs.length} cơ sở áp dụng` : p.scope}
+                                </span>
+                                {matchedFacs.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 max-w-[240px]">
+                                    {matchedFacs.map((f) => (
+                                      <span
+                                        key={f.id}
+                                        className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded border border-stone-200 font-medium"
+                                      >
+                                        {f.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </Td>
                         <Td className="text-xs text-slate-500 max-w-[250px] truncate">
                           {p.description || "—"}
@@ -5141,7 +5469,11 @@ export default function BusinessApp({
       <Modal
         open={pricingModal}
         onClose={() => setPricingModal(false)}
-        title={lang === "vi" ? "Chỉnh Sửa Phân Tầng Giá" : "Edit Pricing Tier"}
+        title={
+          selectedPricingFacility
+            ? (lang === "vi" ? `Chỉnh Sửa Biểu Giá: ${selectedPricingFacility.name}` : `Edit Facility Pricing: ${selectedPricingFacility.name}`)
+            : (lang === "vi" ? "Chỉnh Sửa Bảng Giá Cơ Sở Toàn Hệ Thống (Global Base Pricing)" : "Edit Global Base Pricing Tier")
+        }
       >
         {selectedTier && (
           <div className="space-y-4">
@@ -5150,16 +5482,21 @@ export default function BusinessApp({
                 {lang === "vi" ? "Đang chỉnh sửa:" : "Editing:"}{" "}
                 <strong className="text-slate-900">{selectedTier.name}</strong>
               </p>
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1 mt-1.5 inline-block">
-                {lang === "vi" ? "Cơ sở áp dụng: " : "Target facility: "}
-                <strong>
+              <div className={`p-3 rounded-xl border text-xs mt-2 ${selectedPricingFacility ? 'bg-blue-50 text-blue-900 border-blue-200' : 'bg-amber-50 text-amber-950 border-amber-200'}`}>
+                <p className="font-bold flex items-center gap-1.5">
+                  <span>{selectedPricingFacility ? '🏢' : '🌐'}</span>
+                  <span>
+                    {selectedPricingFacility
+                      ? `Cơ sở áp dụng: ${selectedPricingFacility.name} (${selectedPricingFacility.code || selectedPricingFacility.id})`
+                      : "Phạm vi: Bảng giá cơ sở toàn hệ thống (Global Pricing)"}
+                  </span>
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
                   {selectedPricingFacility
-                    ? `${selectedPricingFacility.name} (${selectedPricingFacility.code || selectedPricingFacility.id})`
-                    : lang === "vi"
-                      ? "Toàn bộ hệ thống cơ sở"
-                      : "All facilities"}
-                </strong>
-              </p>
+                    ? `Giá này sẽ chỉ áp dụng riêng cho cơ sở ${selectedPricingFacility.name}, không ảnh hưởng đến các cơ sở khác.`
+                    : "Lưu ý: Mức giá cơ sở này áp dụng chung cho toàn hệ thống đối với các cơ sở không có cấu hình giá riêng."}
+                </p>
+              </div>
             </div>
             <Input
               label={
@@ -5541,22 +5878,128 @@ export default function BusinessApp({
               onChange={(e) => setPolicyFormValue(e.target.value)}
             />
 
-            <Select
-              label={lang === "vi" ? "Phạm vi áp dụng" : "Scope"}
-              value={policyFormScope}
-              onChange={(e) => setPolicyFormScope(e.target.value)}
-            >
-              <option
-                value={lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"}
-              >
-                {lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"}
-              </option>
-              {facilitiesList.map((f) => (
-                <option key={f.id} value={f.name}>
-                  {f.name} ({f.city})
-                </option>
-              ))}
-            </Select>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-800 block">
+                {lang === "vi" ? "Phạm vi áp dụng chính sách" : "Policy Application Scope"}
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <label
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                    policyFormScopeType === "all"
+                      ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
+                      : "border-stone-200 bg-white hover:bg-stone-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="editPolicyScopeType"
+                    checked={policyFormScopeType === "all"}
+                    onChange={() => setPolicyFormScopeType("all")}
+                    className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 block">
+                      {lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"}
+                    </span>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      {lang === "vi"
+                        ? "Áp dụng chung cho tất cả cơ sở kho hiện có & tạo mới"
+                        : "Apply universally across all current & future facilities"}
+                    </span>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                    policyFormScopeType === "specific"
+                      ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
+                      : "border-stone-200 bg-white hover:bg-stone-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="editPolicyScopeType"
+                    checked={policyFormScopeType === "specific"}
+                    onChange={() => setPolicyFormScopeType("specific")}
+                    className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 block">
+                      {lang === "vi" ? "Chỉ định cơ sở kho" : "Specific Facilities"}
+                    </span>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      {lang === "vi"
+                        ? "Chỉ áp dụng cho các cơ sở kho được tick chọn"
+                        : "Apply only to designated facilities selected below"}
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {policyFormScopeType === "specific" && (
+                <div className="mt-2.5 p-3 rounded-xl border border-amber-200/80 bg-amber-50/30 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-800">
+                      {lang === "vi"
+                        ? `Chọn cơ sở áp dụng (${policyFormFacilityIds.length}/${facilitiesList.length})`
+                        : `Select Facilities (${policyFormFacilityIds.length}/${facilitiesList.length})`}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPolicyFormFacilityIds(facilitiesList.map((f) => f.id))}
+                        className="text-amber-800 hover:text-amber-950 font-medium underline cursor-pointer text-[11px]"
+                      >
+                        {lang === "vi" ? "Chọn tất cả" : "Select All"}
+                      </button>
+                      <span className="text-stone-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setPolicyFormFacilityIds([])}
+                        className="text-stone-500 hover:text-stone-800 font-medium underline cursor-pointer text-[11px]"
+                      >
+                        {lang === "vi" ? "Bỏ chọn" : "Deselect All"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {facilitiesList.map((f) => {
+                      const isChecked = policyFormFacilityIds.includes(f.id)
+                      return (
+                        <label
+                          key={f.id}
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                            isChecked
+                              ? "border-amber-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-amber-300"
+                              : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setPolicyFormFacilityIds([...policyFormFacilityIds, f.id])
+                              } else {
+                                setPolicyFormFacilityIds(policyFormFacilityIds.filter((id) => id !== f.id))
+                              }
+                            }}
+                            className="rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+                          />
+                          <div className="min-w-0 flex-1 truncate">
+                            <div className="font-semibold text-slate-900 truncate">{f.name}</div>
+                            <div className="text-[10px] text-slate-500 truncate">
+                              {f.city} • Mã: {f.code || f.id}
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-1">
               <label className="text-sm font-medium text-slate-700">
@@ -5620,20 +6063,128 @@ export default function BusinessApp({
             onChange={(e) => setPolicyFormValue(e.target.value)}
           />
 
-          <Select
-            label={lang === "vi" ? "Phạm vi áp dụng" : "Scope"}
-            value={policyFormScope}
-            onChange={(e) => setPolicyFormScope(e.target.value)}
-          >
-            <option value={lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"}>
-              {lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"}
-            </option>
-            {facilitiesList.map((f) => (
-              <option key={f.id} value={f.name}>
-                {f.name} ({f.city})
-              </option>
-            ))}
-          </Select>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-800 block">
+              {lang === "vi" ? "Phạm vi áp dụng chính sách" : "Policy Application Scope"}
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  policyFormScopeType === "all"
+                    ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
+                    : "border-stone-200 bg-white hover:bg-stone-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="createPolicyScopeType"
+                  checked={policyFormScopeType === "all"}
+                  onChange={() => setPolicyFormScopeType("all")}
+                  className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">
+                    {lang === "vi" ? "Toàn bộ cơ sở" : "All Facilities"}
+                  </span>
+                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                    {lang === "vi"
+                      ? "Áp dụng chung cho tất cả cơ sở kho hiện có & tạo mới"
+                      : "Apply universally across all current & future facilities"}
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  policyFormScopeType === "specific"
+                    ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
+                    : "border-stone-200 bg-white hover:bg-stone-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="createPolicyScopeType"
+                  checked={policyFormScopeType === "specific"}
+                  onChange={() => setPolicyFormScopeType("specific")}
+                  className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">
+                    {lang === "vi" ? "Chỉ định cơ sở kho" : "Specific Facilities"}
+                  </span>
+                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                    {lang === "vi"
+                      ? "Chỉ áp dụng cho các cơ sở kho được tick chọn"
+                      : "Apply only to designated facilities selected below"}
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {policyFormScopeType === "specific" && (
+              <div className="mt-2.5 p-3 rounded-xl border border-amber-200/80 bg-amber-50/30 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-800">
+                    {lang === "vi"
+                      ? `Chọn cơ sở áp dụng (${policyFormFacilityIds.length}/${facilitiesList.length})`
+                      : `Select Facilities (${policyFormFacilityIds.length}/${facilitiesList.length})`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPolicyFormFacilityIds(facilitiesList.map((f) => f.id))}
+                      className="text-amber-800 hover:text-amber-950 font-medium underline cursor-pointer text-[11px]"
+                    >
+                      {lang === "vi" ? "Chọn tất cả" : "Select All"}
+                    </button>
+                    <span className="text-stone-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setPolicyFormFacilityIds([])}
+                      className="text-stone-500 hover:text-stone-800 font-medium underline cursor-pointer text-[11px]"
+                    >
+                      {lang === "vi" ? "Bỏ chọn" : "Deselect All"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {facilitiesList.map((f) => {
+                    const isChecked = policyFormFacilityIds.includes(f.id)
+                    return (
+                      <label
+                        key={f.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                          isChecked
+                            ? "border-amber-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-amber-300"
+                            : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setPolicyFormFacilityIds([...policyFormFacilityIds, f.id])
+                            } else {
+                              setPolicyFormFacilityIds(policyFormFacilityIds.filter((id) => id !== f.id))
+                            }
+                          }}
+                          className="rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        <div className="min-w-0 flex-1 truncate">
+                          <div className="font-semibold text-slate-900 truncate">{f.name}</div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {f.city} • Mã: {f.code || f.id}
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700">
@@ -5668,13 +6219,249 @@ export default function BusinessApp({
         </div>
       </Modal>
 
+      {/* ── MODAL: THÊM GÓI THUÊ MỚI ── */}
+      <Modal
+        open={createDurationModal}
+        onClose={() => setCreateDurationModal(false)}
+        title={lang === "vi" ? "Thêm Gói Thuê Mới" : "Add New Rental Package"}
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950 space-y-1">
+            <p className="font-bold text-sm text-slate-900">
+              {lang === "vi" ? "Thiết lập gói kỳ hạn mới" : "Set up new duration package"}
+            </p>
+            <p className="text-slate-600 leading-relaxed">
+              {lang === "vi"
+                ? "Gói thuê mới sẽ được hiển thị khi khách hàng chọn thời gian thuê kho hoặc gia hạn trên giao diện đặt kho."
+                : "The new package will be available when customers choose rental or renewal duration."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label={lang === "vi" ? "Tên gói thuê đầy đủ" : "Package Title"}
+              placeholder="VD: Gói thuê 9 tháng"
+              value={formCreateDurationTitle}
+              onChange={(e) => setFormCreateDurationTitle(e.target.value)}
+            />
+            <Input
+              label={lang === "vi" ? "Nhãn ngắn gọn (Hiển thị thẻ)" : "Short Label"}
+              placeholder="VD: 9 tháng"
+              value={formCreateDurationLabel}
+              onChange={(e) => setFormCreateDurationLabel(e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Input
+              label={lang === "vi" ? "Số tháng kỳ hạn" : "Months"}
+              type="number"
+              min={1}
+              max={120}
+              value={formCreateDurationMonths.toString()}
+              onChange={(e) => setFormCreateDurationMonths(Number(e.target.value))}
+            />
+            <Input
+              label={lang === "vi" ? "Giảm giá đặt mới (%)" : "New Booking (%)"}
+              type="number"
+              min={0}
+              max={100}
+              value={formCreateDurationPercent.toString()}
+              onChange={(e) => setFormCreateDurationPercent(Number(e.target.value))}
+            />
+            <Input
+              label={lang === "vi" ? "Giảm giá gia hạn (%)" : "Renewal (%)"}
+              type="number"
+              min={0}
+              max={100}
+              value={formCreateDurationRenewalPercent.toString()}
+              onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label={lang === "vi" ? "Phạm vi giao dịch áp dụng" : "Applies To"}
+              value={formCreateDurationAppliesTo}
+              onChange={(e) => setFormCreateDurationAppliesTo(e.target.value)}
+            >
+              <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
+              <option value="Chỉ đặt mới">Chỉ đặt mới</option>
+              <option value="Chỉ gia hạn">Chỉ gia hạn</option>
+              <option value="Không áp dụng giảm">Không áp dụng giảm</option>
+            </Select>
+
+            <Select
+              label={lang === "vi" ? "Trạng thái ban đầu" : "Status"}
+              value={formCreateDurationStatus}
+              onChange={(e) => setFormCreateDurationStatus(e.target.value as "active" | "inactive")}
+            >
+              <option value="active">{lang === "vi" ? "Đang áp dụng (Có hiệu lực)" : "Active"}</option>
+              <option value="inactive">{lang === "vi" ? "Tạm dừng (Chưa kích hoạt)" : "Inactive"}</option>
+            </Select>
+          </div>
+
+          {/* Phạm vi cơ sở áp dụng gói thuê */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-800 flex items-center justify-between">
+              <span>{lang === "vi" ? "Phạm vi cơ sở áp dụng gói thuê" : "Applicable Facilities"}</span>
+              <span className="text-xs font-normal text-slate-500">
+                {formCreateDurationScopeType === "all"
+                  ? (lang === "vi" ? "Áp dụng cho toàn bộ cơ sở" : "Applies to all facilities")
+                  : (lang === "vi" ? `${formCreateDurationFacilityIds.length} cơ sở đã chọn` : `${formCreateDurationFacilityIds.length} facilities selected`)}
+              </span>
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label
+                className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
+                  formCreateDurationScopeType === "all"
+                    ? "border-emerald-300 bg-emerald-50/50 font-semibold text-slate-900 ring-1 ring-emerald-300"
+                    : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="createDurationScope"
+                  checked={formCreateDurationScopeType === "all"}
+                  onChange={() => setFormCreateDurationScopeType("all")}
+                  className="text-emerald-600 focus:ring-emerald-500"
+                />
+                <div>
+                  <div className="font-semibold text-slate-900">
+                    {lang === "vi" ? "Toàn bộ cơ sở kho (Toàn hệ thống)" : "All facilities"}
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-normal">
+                    {lang === "vi"
+                      ? "Áp dụng đồng bộ cho tất cả các chi nhánh kho StorageHub"
+                      : "Uniformly applied across all branches"}
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
+                  formCreateDurationScopeType === "specific"
+                    ? "border-emerald-300 bg-emerald-50/50 font-semibold text-slate-900 ring-1 ring-emerald-300"
+                    : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="createDurationScope"
+                  checked={formCreateDurationScopeType === "specific"}
+                  onChange={() => setFormCreateDurationScopeType("specific")}
+                  className="text-emerald-600 focus:ring-emerald-500"
+                />
+                <div>
+                  <div className="font-semibold text-slate-900">
+                    {lang === "vi" ? "Chỉ định cơ sở cụ thể" : "Specific facilities"}
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-normal">
+                    {lang === "vi"
+                      ? "Chỉ áp dụng cho các cơ sở kho được tick chọn"
+                      : "Apply only to designated facilities selected below"}
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {formCreateDurationScopeType === "specific" && (
+              <div className="mt-2.5 p-3 rounded-xl border border-emerald-200/80 bg-emerald-50/30 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-800">
+                    {lang === "vi"
+                      ? `Chọn cơ sở áp dụng (${formCreateDurationFacilityIds.length}/${facilitiesList.length})`
+                      : `Select Facilities (${formCreateDurationFacilityIds.length}/${facilitiesList.length})`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormCreateDurationFacilityIds(facilitiesList.map((f) => f.id))}
+                      className="text-emerald-800 hover:text-emerald-950 font-medium underline cursor-pointer text-[11px]"
+                    >
+                      {lang === "vi" ? "Chọn tất cả" : "Select All"}
+                    </button>
+                    <span className="text-stone-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormCreateDurationFacilityIds([])}
+                      className="text-stone-500 hover:text-stone-800 font-medium underline cursor-pointer text-[11px]"
+                    >
+                      {lang === "vi" ? "Bỏ chọn" : "Deselect All"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {facilitiesList.map((f) => {
+                    const isChecked = formCreateDurationFacilityIds.includes(f.id)
+                    return (
+                      <label
+                        key={f.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                          isChecked
+                            ? "border-emerald-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-emerald-300"
+                            : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormCreateDurationFacilityIds([...formCreateDurationFacilityIds, f.id])
+                            } else {
+                              setFormCreateDurationFacilityIds(formCreateDurationFacilityIds.filter((id) => id !== f.id))
+                            }
+                          }}
+                          className="rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="min-w-0 flex-1 truncate">
+                          <div className="font-semibold text-slate-900 truncate">{f.name}</div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {f.city} • Mã: {f.code || f.id}
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700">
+              {lang === "vi" ? "Ghi chú điều khoản & mô tả gói" : "Description / Terms"}
+            </label>
+            <textarea
+              rows={3}
+              value={formCreateDurationDesc}
+              onChange={(e) => setFormCreateDurationDesc(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+              placeholder={lang === "vi" ? "VD: Giảm 6% khi khách thuê hoặc gia hạn kỳ hạn 9 tháng..." : "Package terms description..."}
+            />
+          </div>
+
+          <div className="flex gap-2 justify-end pt-3 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setCreateDurationModal(false)}>
+              {lang === "vi" ? "Hủy" : "Cancel"}
+            </Button>
+            <Button variant="primary" onClick={handleSaveNewDurationDiscount}>
+              {lang === "vi" ? "Tạo Gói Thuê" : "Create Package"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* ── MODAL: CHỈNH SỬA GÓI THUÊ & MỨC GIẢM GIÁ KỲ HẠN ── */}
       <Modal
         open={editDurationModal}
         onClose={() => setEditDurationModal(false)}
         title={
           selectedDurationItem
-            ? `Chỉnh Sửa Chiết Khấu: ${selectedDurationItem.title}`
+            ? `Chỉnh Sửa Gói Thuê: ${selectedDurationItem.title}`
             : "Chỉnh Sửa Gói Thuê"
         }
       >
@@ -5687,6 +6474,19 @@ export default function BusinessApp({
               <p className="text-slate-600 leading-relaxed">
                 Tỷ lệ chiết khấu (%) thiết lập ở đây sẽ được đồng bộ trực tiếp vào công thức tính tiền và báo giá trên ứng dụng của Khách Hàng.
               </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Tên gói thuê"
+                value={formDurationTitle}
+                onChange={(e) => setFormDurationTitle(e.target.value)}
+              />
+              <Input
+                label="Nhãn ngắn gọn"
+                value={formDurationLabel}
+                onChange={(e) => setFormDurationLabel(e.target.value)}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -5709,14 +6509,151 @@ export default function BusinessApp({
               />
             </div>
 
-            <Select
-              label="Trạng thái chính sách"
-              value={formDurationStatus}
-              onChange={(e) => setFormDurationStatus(e.target.value as "active" | "inactive")}
-            >
-              <option value="active">Đang áp dụng (Có hiệu lực)</option>
-              <option value="inactive">Tạm dừng (Không chiết khấu)</option>
-            </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="Phạm vi giao dịch áp dụng"
+                value={formDurationAppliesTo}
+                onChange={(e) => setFormDurationAppliesTo(e.target.value)}
+              >
+                <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
+                <option value="Chỉ đặt mới">Chỉ đặt mới</option>
+                <option value="Chỉ gia hạn">Chỉ gia hạn</option>
+                <option value="Không áp dụng giảm">Không áp dụng giảm</option>
+              </Select>
+
+              <Select
+                label="Trạng thái chính sách"
+                value={formDurationStatus}
+                onChange={(e) => setFormDurationStatus(e.target.value as "active" | "inactive")}
+              >
+                <option value="active">Đang áp dụng (Có hiệu lực)</option>
+                <option value="inactive">Tạm dừng (Không chiết khấu)</option>
+              </Select>
+            </div>
+
+            {/* Phạm vi cơ sở áp dụng gói thuê */}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-800 flex items-center justify-between">
+                <span>Phạm vi cơ sở áp dụng</span>
+                <span className="text-xs font-normal text-slate-500">
+                  {formDurationScopeType === "all"
+                    ? "Áp dụng cho toàn bộ cơ sở"
+                    : `${formDurationFacilityIds.length} cơ sở đã chọn`}
+                </span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
+                    formDurationScopeType === "all"
+                      ? "border-amber-300 bg-amber-50/50 font-semibold text-slate-900 ring-1 ring-amber-300"
+                      : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="editDurationScope"
+                    checked={formDurationScopeType === "all"}
+                    onChange={() => setFormDurationScopeType("all")}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <div className="font-semibold text-slate-900">
+                      Toàn bộ cơ sở kho (Toàn hệ thống)
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-normal">
+                      Áp dụng đồng bộ cho tất cả các chi nhánh kho
+                    </span>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
+                    formDurationScopeType === "specific"
+                      ? "border-amber-300 bg-amber-50/50 font-semibold text-slate-900 ring-1 ring-amber-300"
+                      : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="editDurationScope"
+                    checked={formDurationScopeType === "specific"}
+                    onChange={() => setFormDurationScopeType("specific")}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <div className="font-semibold text-slate-900">
+                      Chỉ định cơ sở cụ thể
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-normal">
+                      Chỉ áp dụng cho các cơ sở kho được tick chọn
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {formDurationScopeType === "specific" && (
+                <div className="mt-2.5 p-3 rounded-xl border border-amber-200/80 bg-amber-50/30 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-800">
+                      Chọn cơ sở áp dụng ({formDurationFacilityIds.length}/{facilitiesList.length})
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFormDurationFacilityIds(facilitiesList.map((f) => f.id))}
+                        className="text-amber-800 hover:text-amber-950 font-medium underline cursor-pointer text-[11px]"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span className="text-stone-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormDurationFacilityIds([])}
+                        className="text-stone-500 hover:text-stone-800 font-medium underline cursor-pointer text-[11px]"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {facilitiesList.map((f) => {
+                      const isChecked = formDurationFacilityIds.includes(f.id)
+                      return (
+                        <label
+                          key={f.id}
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                            isChecked
+                              ? "border-amber-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-amber-300"
+                              : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormDurationFacilityIds([...formDurationFacilityIds, f.id])
+                              } else {
+                                setFormDurationFacilityIds(formDurationFacilityIds.filter((id) => id !== f.id))
+                              }
+                            }}
+                            className="rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+                          />
+                          <div className="min-w-0 flex-1 truncate">
+                            <div className="font-semibold text-slate-900 truncate">{f.name}</div>
+                            <div className="text-[10px] text-slate-500 truncate">
+                              {f.city} • Mã: {f.code || f.id}
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-1">
               <label className="text-sm font-medium text-slate-700">
@@ -5731,13 +6668,22 @@ export default function BusinessApp({
               />
             </div>
 
-            <div className="flex gap-2 justify-end pt-3 border-t border-slate-100">
-              <Button variant="outline" onClick={() => setEditDurationModal(false)}>
-                Hủy
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <Button
+                variant="outline"
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 text-xs font-semibold"
+                onClick={() => handleDeleteDurationDiscount(selectedDurationItem.id)}
+              >
+                Xóa Gói Này
               </Button>
-              <Button variant="primary" onClick={handleSaveDurationDiscount}>
-                Lưu Thay Đổi
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setEditDurationModal(false)}>
+                  Hủy
+                </Button>
+                <Button variant="primary" onClick={handleSaveDurationDiscount}>
+                  Lưu Thay Đổi
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -6672,6 +7618,99 @@ export default function BusinessApp({
                     </tfoot>
                   </table>
                 </div>
+
+                {/* Khối chính sách đang áp dụng tại cơ sở này */}
+                {(() => {
+                  const activePoliciesForFac = policiesList.filter((p) => {
+                    if (p.scopeType === "all") return true
+                    if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
+                      return (
+                        p.facilityIds.includes(selectedFacility.id) ||
+                        (selectedFacility.code && p.facilityIds.includes(selectedFacility.code))
+                      )
+                    }
+                    const s = (p.scope || "").trim().toLowerCase()
+                    if (["all facilities", "toàn bộ cơ sở", "all", "toàn bộ"].includes(s)) return true
+                    return (
+                      s.includes(selectedFacility.name.toLowerCase()) ||
+                      selectedFacility.name.toLowerCase().includes(s)
+                    )
+                  })
+
+                  return (
+                    <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">📜</span>
+                          <h4 className="font-bold text-slate-900 text-sm">
+                            {lang === "vi" ? "Chính Sách & Quy Định Đang Áp Dụng" : "Active Policies & Rules"}
+                          </h4>
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                            {activePoliciesForFac.length} {lang === "vi" ? "chính sách" : "policies"}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewFacilityModal(false)
+                            setPolicyFacilityFilter(selectedFacility.id)
+                            setPage("policies")
+                          }}
+                          className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                        >
+                          {lang === "vi" ? "Quản lý chính sách kho này →" : "Manage Policies →"}
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {activePoliciesForFac.map((pol) => {
+                          const isGlobal =
+                            pol.scopeType === "all" ||
+                            (!pol.scopeType &&
+                              (!pol.facilityIds || pol.facilityIds.length === 0) &&
+                              (pol.scope === "All Facilities" || pol.scope === "Toàn bộ cơ sở"))
+
+                          return (
+                            <div
+                              key={pol.id}
+                              className="p-3 rounded-lg border border-stone-200 bg-white space-y-1 shadow-2xs"
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-semibold text-slate-900 text-xs truncate">
+                                  {pol.name}
+                                </span>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
+                                    isGlobal
+                                      ? "bg-blue-50 text-blue-800 border border-blue-200"
+                                      : "bg-amber-50 text-amber-900 border border-amber-200"
+                                  }`}
+                                >
+                                  {isGlobal
+                                    ? lang === "vi"
+                                      ? "Toàn hệ thống"
+                                      : "Global"
+                                    : lang === "vi"
+                                      ? "Riêng cơ sở"
+                                      : "Branch-specific"}
+                                </span>
+                              </div>
+                              <div className="text-xs font-mono font-bold text-amber-800">
+                                {pol.value}
+                              </div>
+                              {pol.description && (
+                                <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                                  {pol.description}
+                                </p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 <div className="flex justify-end pt-2 border-t border-slate-100">
                   <Button

@@ -1,4 +1,5 @@
 import { POLICIES } from '../data/demoDatabase'
+import { vietnamesePolicy } from '../i18n/customerLabels'
 
 export interface PolicyItem {
   id: string
@@ -8,6 +9,8 @@ export interface PolicyItem {
   editable?: boolean
   description?: string
   lastUpdated?: string
+  scopeType?: 'all' | 'specific'
+  facilityIds?: string[]
 }
 
 export interface ParsedPolicyBenefit {
@@ -66,7 +69,7 @@ export function getStoredPolicies(): PolicyItem[] {
       }
     }
   } catch {}
-  return (POLICIES as any[]).map(p => ({ ...p, description: p.description || '' }))
+  return (POLICIES as any[]).map(p => vietnamesePolicy({ ...p, description: p.description || '' }))
 }
 
 function normalizeCompare(str: string): string {
@@ -92,6 +95,28 @@ export function getPoliciesForFacility(facilityNameOrId?: string, facilityCode?:
   const normCode = normalizeCompare(facilityCode || '')
 
   return policies.filter(p => {
+    // 1. Áp dụng cho toàn bộ cơ sở
+    if (p.scopeType === 'all') return true
+
+    // 2. Khớp theo danh sách facilityIds cụ thể nếu có
+    if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
+      const matched = p.facilityIds.some(id => {
+        if (!id) return false
+        const normId = normalizeCompare(id)
+        return (
+          id === facilityNameOrId ||
+          id === facilityCode ||
+          normId === normName ||
+          normId === normCode ||
+          (targetName && normId.includes(normName)) ||
+          (normName && normName.includes(normId))
+        )
+      })
+      if (matched) return true
+      if (p.scopeType === 'specific') return false
+    }
+
+    // 3. Fallback theo chuỗi text p.scope (tương thích dữ liệu cũ)
     const scope = (p.scope || '').trim().toLowerCase()
     const normScope = normalizeCompare(p.scope || '')
 
