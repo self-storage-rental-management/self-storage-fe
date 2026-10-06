@@ -47,6 +47,7 @@ describe('changePasswordWithApi', () => {
 describe('backend customer navigation and profile', () => {
   const actor: ApiActor = {
     id: 'real-customer', email: 'customer@example.com', fullName: 'Customer', phone: null,
+    permanentAddress: null, emergencyContactName: null, emergencyContactPhone: null,
     avatarUrl: 'https://example.com/avatar.png', status: 'ACTIVE', roles: ['CUSTOMER'],
     facilityScopes: {}, mustChangePassword: false, permissions: [],
   }
