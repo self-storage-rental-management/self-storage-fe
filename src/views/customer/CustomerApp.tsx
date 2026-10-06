@@ -14,7 +14,6 @@ import CustomerReservationCard from './CustomerReservationCard'
 import CustomerPaymentHistory from './CustomerPaymentHistory'
 import CustomerReservationOtpModal from './CustomerReservationOtpModal'
 import CustomerUnitTypeCard, { storageTypeLabelVi } from './CustomerUnitTypeCard'
-import CustomerFacilityCard from './CustomerFacilityCard'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
@@ -1646,7 +1645,41 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               const displayName = display?.name ?? facility.name
               const displayAddress = display?.address ?? facility.address
 
-              return <CustomerFacilityCard key={facility.id} facility={facility} displayCode={displayCode} displayName={displayName} displayAddress={displayAddress} availableCount={availCount} minimumMonthlyPrice={minimumMonthlyPrice} onViewUnits={() => navigateTo('browse-units', { facilityId: facility.id })} />
+              return (
+                <Card key={facility.id} className="overflow-hidden stat-card-hover">
+                  <div className="relative h-44 bg-stone-200">
+                    <img src={facility.image?.startsWith('/') || facility.image?.startsWith('http') ? facility.image : `https://images.unsplash.com/${facility.image || 'photo-1586528116311-ad8dd3c8310d'}?w=720&h=352&fit=crop&auto=format`} alt={`Hình ảnh ${displayName}`} className="h-full w-full object-cover" />
+                    <div className="absolute left-3 top-3 z-10">
+                      <span className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-extrabold backdrop-blur-sm ${availCount > 0 ? 'border-emerald-300 bg-emerald-700/95 text-white shadow-[0_8px_22px_rgba(4,120,87,0.55)]' : 'border-red-300 bg-red-700/95 text-white shadow-[0_8px_22px_rgba(185,28,28,0.5)]'}`}>
+                        {availCount} {'gian kho còn trống'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-semibold text-amber-700">{displayCode}</p>
+                        <h2 className="font-bold text-stone-900">{displayName}</h2>
+                        <p className="mt-1 text-xs text-stone-500">{displayAddress}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-amber-700"> {facility.rating}</span>
+                    </div>
+                    <div className="my-4 flex flex-wrap gap-2">
+                      <Badge variant="muted">{'Camera 24/7'}</Badge>
+                      {facility.climate && <Badge variant="info">{'Điều hòa độ ẩm'}</Badge>}
+                    </div>
+                    <div className="flex items-end justify-between border-t border-stone-100 pt-4">
+                      <div>
+                        <p className="text-xs text-stone-500">{'Giá chỉ từ'}</p>
+                        <p className="text-xl font-bold text-stone-900">{minimumMonthlyPrice === null ? 'Chưa có gian kho' : <>{formatVnd(minimumMonthlyPrice)}<span className="text-xs font-normal text-stone-500">/{'tháng'}</span></>}</p>
+                      </div>
+                      <Button size="sm" onClick={() => navigateTo('browse-units', { facilityId: facility.id })}>
+                        {'Xem các gian kho'}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )
             })}
           </div>
         </div>
