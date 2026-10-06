@@ -94,7 +94,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
 
   let response: Response
   const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...requestOptions, headers, signal: controller.signal })
   } catch (error) {
@@ -103,7 +103,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
     }
     throw new ApiClientError('Không thể kết nối tới backend StorageHub.', { code: 'NETWORK_ERROR' })
   } finally {
-    window.clearTimeout(timeoutId)
+    globalThis.clearTimeout(timeoutId)
   }
 
   const payload = await readPayload(response)
