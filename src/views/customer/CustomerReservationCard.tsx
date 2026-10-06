@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { getCustomerReservation, getPaymentComplaint, getReservationPayment, payReservationDeposit, submitPaymentComplaint, uploadComplaintImage, withdrawPaymentComplaint, type CustomerReservation, type CustomerReservationDetail, type PaymentComplaint, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { downloadBookingDocument, generateBookingDocument, getBookingDocument, getCustomerReservation, getPaymentComplaint, getReservationPayment, payReservationDeposit, submitPaymentComplaint, uploadComplaintImage, withdrawPaymentComplaint, type BookingDocument, type CustomerReservation, type CustomerReservationDetail, type PaymentComplaint, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
 import { ApiClientError } from '../../services/apiClient'
@@ -37,6 +37,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [complaintReason, setComplaintReason] = useState('')
   const [complaintFiles, setComplaintFiles] = useState<File[]>([])
   const [complaintError, setComplaintError] = useState<string | null>(null)
+  const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
+  const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -137,6 +139,48 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể rút khiếu nại.') }
     finally { setBusy(false) }
   }
+  const prepareBookingDocument = async () => {
+    if (busy) return
+    setBusy(true); setMessage(null)
+    try {
+      let result: BookingDocument
+      try {
+        result = await getBookingDocument(r.id)
+      } catch (error) {
+        if (!(error instanceof ApiClientError) || error.status !== 404) throw error
+        result = await generateBookingDocument(r.id)
+      }
+      setBookingDocument(result)
+      setBookingDocumentOpen(true)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tạo phiếu xác nhận giữ kho.') }
+    finally { setBusy(false) }
+  }
+  const viewBookingDocument = async () => {
+    const preview = window.open('', '_blank')
+    if (preview) preview.opener = null
+    try {
+      const file = await downloadBookingDocument(r.id)
+      const url = URL.createObjectURL(file.blob)
+      if (preview) preview.location.href = url
+      else window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) {
+      preview?.close()
+      setMessage(error instanceof Error ? error.message : 'Không thể xem phiếu xác nhận giữ kho.')
+    }
+  }
+  const saveBookingDocument = async () => {
+    try {
+      const file = await downloadBookingDocument(r.id)
+      const url = URL.createObjectURL(file.blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = file.fileName || bookingDocument?.fileName || `phieu-xac-nhan-giu-kho-${r.reservationCode}.pdf`
+      document.body.appendChild(link); link.click(); link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải phiếu xác nhận giữ kho.') }
+  }
+  const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   return <Card className={`p-6 border-l-4 ${inactive ? 'border-l-stone-300 text-stone-500' : 'border-l-amber-500'}`}>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
       <div className="min-w-0">
@@ -185,6 +229,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         {r.status === 'AWAITING_PAYMENT' && <div className="rounded-lg bg-red-700 p-3 text-right text-xs text-white"><p className="font-bold">Thời gian thanh toán cọc còn lại</p><p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p><Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => setPayOpen(true)}>Thanh toán cọc</Button></div>}
         {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)}>Xem biên lai thanh toán</Button>}
+        {documentAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {r.status === 'PAYMENT_GRACE' && !complaint && <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900"><p className="font-bold">Chưa ghi nhận thanh toán</p><p className="mt-1">Nếu tài khoản đã bị trừ tiền, hãy gửi thông tin và ảnh giao dịch để được kiểm tra.</p><p className="mt-2 font-bold">Thời gian gửi khiếu nại còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{complaintCountdown.text}</p><Button className="mt-2" size="sm" disabled={complaintCountdown.expired} onClick={() => setComplaintOpen(true)}>{complaintCountdown.expired ? 'Đã hết thời hạn khiếu nại' : 'Gửi khiếu nại thanh toán'}</Button></div>}
         {complaint && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Khiếu nại: {{ PENDING: 'Đang chờ xử lý', REVIEW_OVERDUE: 'Quá hạn xử lý', APPROVED: 'Đã chấp thuận', REJECTED: 'Đã từ chối', WITHDRAWN: 'Đã rút' }[complaint.status]}</p><p className="mt-1">{complaint.reason}</p>{['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Dự kiến xử lý trước: <b>{new Date(complaint.reviewDueAt).toLocaleString('vi-VN')}</b></p>}{complaint.decisionReason && <p className="mt-1"><b>Phản hồi:</b> {complaint.decisionReason}</p>}{['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => void withdrawComplaint()}>Rút khiếu nại</Button>}</div>}
         {!inactive && r.status !== 'COMPLETED' && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={onCancel}>✕ Hủy giữ kho</Button>}
@@ -207,6 +252,21 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     </Modal>
     <Modal open={receiptOpen} onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán">
       {payment && <ReservationReceipt payment={payment} reservationCode={r.reservationCode} />}
+    </Modal>
+    <Modal open={bookingDocumentOpen} onClose={() => setBookingDocumentOpen(false)} title="Phiếu xác nhận giữ kho">
+      {bookingDocument && <div className="space-y-4">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+          <p className="font-bold">Phiếu xác nhận giữ kho đã được phát hành</p>
+          <p className="mt-2">Đơn giữ kho: <b>{bookingDocument.reservationCode}</b></p>
+          <p>Tệp: <b>{bookingDocument.fileName}</b></p>
+          <p>Ngày phát hành: <b>{new Date(bookingDocument.issuedAt).toLocaleString('vi-VN')}</b></p>
+        </div>
+        <p className="text-sm text-stone-600">Phiếu ghi nhận loại kho đã giữ và khoản cọc giữ chỗ đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Button variant="outline" onClick={() => void viewBookingDocument()}>Xem PDF</Button>
+          <Button onClick={() => void saveBookingDocument()}>Tải PDF</Button>
+        </div>
+      </div>}
     </Modal>
     <Modal open={complaintOpen} onClose={() => { if (!busy) { setComplaintOpen(false); setComplaintError(null) } }} title="Khiếu nại thanh toán">
       <div className="space-y-4">

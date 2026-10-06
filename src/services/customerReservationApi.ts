@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient'
+import { apiDownload, apiRequest } from './apiClient'
 
 export type FacilityStatus = 'active' | 'maintenance' | 'inactive' | 'coming_soon'
 export type UnitTypeStatus = 'active' | 'inactive'
@@ -232,6 +232,38 @@ export interface PaymentComplaint {
   reviewedAt: string | null
   withdrawnAt: string | null
   decisionReason: string | null
+}
+
+export interface BookingDocument {
+  id: string
+  reservationId: string
+  reservationCode: string
+  documentType: 'BOOKING_CONFIRMATION'
+  fileId: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  checksumSha256: string
+  issuedAt: string
+  downloadUrl: string
+}
+
+export async function generateBookingDocument(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<BookingDocument>>(
+    `/api/customer/reservations/${reservationId}/booking-document`, { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function getBookingDocument(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<BookingDocument>>(
+    `/api/customer/reservations/${reservationId}/booking-document`,
+  )
+  return response.data
+}
+
+export function downloadBookingDocument(reservationId: string) {
+  return apiDownload(`/api/customer/reservations/${reservationId}/booking-document/download`)
 }
 
 export async function uploadComplaintImage(file: File) {
