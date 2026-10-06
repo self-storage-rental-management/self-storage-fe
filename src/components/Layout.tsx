@@ -18,6 +18,7 @@ export interface LayoutNotification {
   date?: string
   page: string
   targetId?: string
+  isRead?: boolean
 }
 
 function resolveNavPage(navItems: NavItem[], requested: string | null): string | null {
@@ -274,7 +275,8 @@ export default function Layout({
     ...(suppliedNotifications ?? fallbackNotifications),
     ...(additionalNotifications ?? [])
   ]
-  const unreadCount = notifications.filter(item => !badgeSeenNotificationIds.includes(item.id)).length
+  const isNotificationRead = (item: LayoutNotification) => Boolean(item.isRead || readNotificationIds.includes(item.id))
+  const unreadCount = notifications.filter(item => !item.isRead && !badgeSeenNotificationIds.includes(item.id)).length
 
   const formatNotificationDate = (value?: string) => {
     if (!value) return ''
@@ -448,10 +450,10 @@ export default function Layout({
                       type="button"
                       key={item.id}
                       onClick={() => openNotificationDetail(item)}
-                      className={`block w-full border-b border-stone-100 px-4 py-3 text-left transition last:border-0 hover:bg-amber-100 ${readNotificationIds.includes(item.id) ? 'bg-white' : 'bg-amber-50'}`}
+                      className={`block w-full border-b border-stone-100 px-4 py-3 text-left transition last:border-0 hover:bg-amber-100 ${isNotificationRead(item) ? 'bg-white' : 'bg-amber-50'}`}
                     >
                       <span className="flex items-start gap-2">
-                        {!readNotificationIds.includes(item.id) && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />}
+                        {!isNotificationRead(item) && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />}
                         <span className="block text-sm font-medium text-stone-800">{item.title}</span>
                       </span>
                       {item.message && <span className="mt-1 block text-xs text-stone-500">{item.message}</span>}
