@@ -89,7 +89,8 @@ async function refreshAccessToken(): Promise<boolean> {
 export async function apiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {}): Promise<T> {
   const { skipAuth, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...requestOptions } = options
   const headers = new Headers(requestOptions.headers)
-  if (requestOptions.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  const isFormData = typeof FormData !== 'undefined' && requestOptions.body instanceof FormData
+  if (requestOptions.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (!skipAuth && accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
 
   let response: Response
