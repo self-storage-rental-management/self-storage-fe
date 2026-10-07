@@ -30,7 +30,11 @@ import StaffPaymentUpload from "./StaffPaymentUpload"
 
 import StaffSupportPanel from "./StaffSupportPanel"
 
+import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+
 import ProfileView from "../ProfileView"
+import StaffReservationReviews from './StaffReservationReviews'
+import { canApiActor, isApiAuthenticated } from '../../services/authApi'
 
 import type { User } from "../../types"
 
@@ -1929,7 +1933,7 @@ export default function StaffApp({
 
         if (task) openOperationalTask(task)
       }}
-      canAccess={(permission) => hub.can(user, permission)}
+      canAccess={(permission) => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)}
       roleLabel="Nhân viên"
       roleColor="bg-green-100 text-green-700"
     >
@@ -1938,7 +1942,7 @@ export default function StaffApp({
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · TỔNG QUAN VẬN HÀNH"}
             title={"Tổng quan ca làm việc"}
-            subtitle={`${user.facility ?? "Cơ sở được phân quyền"} · ${new Date().toLocaleDateString("vi-VN")}`}
+            subtitle={`${user.facility ?? "Chưa được gán cơ sở"} · ${new Date().toLocaleDateString("vi-VN")}`}
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
@@ -2373,7 +2377,8 @@ export default function StaffApp({
       )}
 
       {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && (
+      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'approve_reservations')} facilityNames={user.facilityNames} />}
+      {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
             title={"Theo dõi đơn đặt giữ kho"}
@@ -2602,7 +2607,8 @@ export default function StaffApp({
       )}
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
-      {page === "checkin" && (
+      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {page === "checkin-legacy" && (
         <div className="fade-in">
           <SectionHeader
             title={"Nhận kho và bàn giao"}

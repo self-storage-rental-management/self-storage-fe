@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient'
+import { apiDownload, apiRequest } from './apiClient'
 
 export type FacilityStatus = 'active' | 'maintenance' | 'inactive' | 'coming_soon'
 export type UnitTypeStatus = 'active' | 'inactive'
@@ -172,6 +172,149 @@ export interface CustomerReservation {
   createdAt: string
 }
 
+export interface ReservationGoodsItem extends GoodsItemInput {
+  id: string
+  requiresStaffReview: boolean
+  reviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  reviewNote: string | null
+}
+
+export interface CustomerReservationDetail {
+  reservation: CustomerReservation
+  goodsCondition: string | null
+  notes: string | null
+  paymentExpiresAt: string | null
+  complaintExpiresAt: string | null
+  archivedAt: string | null
+  confirmedAt: string | null
+  cancelledAt: string | null
+  cancelReason: string | null
+  goodsItems: ReservationGoodsItem[]
+}
+
+export interface ReservationEmailVerificationResult {
+  reservationId: string
+  reservationStatus: ReservationStatus
+  verified: boolean
+  expiresAt: string
+  nextResendAt: string
+  developmentCode: string | null
+}
+
+export interface ReservationPaymentResult {
+  paymentId: string
+  reservationId: string
+  amount: number
+  currency: string
+  outcome: 'SUCCESS' | 'FAILED' | 'NOT_RECEIVED'
+  paymentStatus: string
+  reservationStatus: ReservationStatus
+  message: string
+  processedAt: string
+}
+
+export type PaymentComplaintStatus = 'PENDING' | 'REVIEW_OVERDUE' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
+
+export interface PaymentComplaint {
+  id: string
+  reservationId: string
+  reservationCode: string
+  status: PaymentComplaintStatus
+  paymentStatus: string
+  reservationStatus: ReservationStatus
+  reason: string
+  imageIds: string[]
+  depositAmount: number
+  netRentalAmount: number | null
+  images: Array<{ id: string; originalName: string; contentType: string; sizeBytes: number; downloadUrl: string }>
+  submittedAt: string
+  reviewDueAt: string
+  reviewedAt: string | null
+  withdrawnAt: string | null
+  decisionReason: string | null
+}
+
+export interface BookingDocument {
+  id: string
+  reservationId: string
+  reservationCode: string
+  documentType: 'BOOKING_CONFIRMATION'
+  fileId: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  checksumSha256: string
+  issuedAt: string
+  downloadUrl: string
+}
+
+export async function generateBookingDocument(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<BookingDocument>>(
+    `/api/customer/reservations/${reservationId}/booking-document`, { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function getBookingDocument(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<BookingDocument>>(
+    `/api/customer/reservations/${reservationId}/booking-document`,
+  )
+  return response.data
+}
+
+export function downloadBookingDocument(reservationId: string) {
+  return apiDownload(`/api/customer/reservations/${reservationId}/booking-document/download`)
+}
+
+export async function uploadComplaintImage(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  const response = await apiRequest<ApiEnvelope<{ id: string }>>('/api/files', { method: 'POST', body })
+  return response.data
+}
+
+export async function uploadReservationGoodsImage(goodsItemId: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('entityType', 'RESERVATION_GOODS_ITEM')
+  body.append('entityId', goodsItemId)
+  const response = await apiRequest<ApiEnvelope<{ id: string }>>('/api/files', { method: 'POST', body })
+  return response.data
+}
+
+export async function submitPaymentComplaint(reservationId: string, reason: string, imageIds: string[]) {
+  const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(
+    `/api/customer/reservations/${reservationId}/payment-complaints`,
+    { method: 'POST', body: JSON.stringify({ reason, imageIds }) },
+  )
+  return response.data
+}
+
+export async function getPaymentComplaint(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(`/api/customer/reservations/${reservationId}/payment-complaint`)
+  return response.data
+}
+
+export async function withdrawPaymentComplaint(complaintId: string) {
+  const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(
+    `/api/customer/payment-complaints/${complaintId}/withdraw`, { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function payReservationDeposit(reservationId: string, idempotencyKey: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(
+    `/api/customer/reservations/${reservationId}/simulated-payment`,
+    { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } },
+  )
+  return response.data
+}
+
+export async function getReservationPayment(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(`/api/customer/reservations/${reservationId}/payment`)
+  return response.data
+}
+
 function query(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
@@ -236,4 +379,35 @@ export async function listCustomerReservations(status?: ReservationStatus, page 
   return apiRequest<PageResponse<CustomerReservation>>(
     `/api/customer/reservations${query({ status, page, size })}`,
   )
+}
+
+export async function getCustomerReservation(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${reservationId}`,
+  )
+  return response.data
+}
+
+export async function cancelCustomerReservation(reservationId: string, reason: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${reservationId}/cancel`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  )
+  return response.data
+}
+
+export async function resendReservationOtp(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationEmailVerificationResult>>(
+    `/api/customer/reservations/${reservationId}/email-verification/resend`,
+    { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function verifyReservationOtp(reservationId: string, code: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationEmailVerificationResult>>(
+    `/api/customer/reservations/${reservationId}/email-verification`,
+    { method: 'POST', body: JSON.stringify({ code }) },
+  )
+  return response.data
 }
