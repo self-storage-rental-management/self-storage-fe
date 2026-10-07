@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
-import { completeCheckIn, listCheckIns, markCheckInNoShow, scheduleCheckIn, uploadCheckInEvidence } from './checkInApi'
+import { completeCheckIn, downloadCheckInEvidence, listCheckIns, markCheckInNoShow, rejectCheckIn, scheduleCheckIn, uploadCheckInEvidence } from './checkInApi'
 
 const responseCase = {
   checkInId: 'checkin-1',
@@ -72,6 +72,7 @@ describe('checkInApi', () => {
         lengthCm: 100, widthCm: 100, heightCm: 100,
         weightKg: 100, actualVolumeM3: 1, varianceAccepted: true,
       },
+      varianceReason: null,
       initialUnitCondition: 'Tốt',
       goodsCondition: 'Nguyên vẹn',
       packageCount: 2,
@@ -86,6 +87,24 @@ describe('checkInApi', () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain('/checkin-1/complete')
     expect(fetchMock.mock.calls[1][0]).toContain('/checkin-1/no-show')
+  })
+
+  it('rejects check-in with evidence and a safe unit disposition', async () => {
+    const fetchMock = mockEnvelope({ ...responseCase, checkInStatus: 'rejected' })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await rejectCheckIn('checkin-1', {
+      reason: 'Hàng hóa không đúng khai báo',
+      disposition: 'MAINTENANCE',
+      evidenceReferences: ['asset-1'],
+    })
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/checkin-1/reject')
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      reason: 'Hàng hóa không đúng khai báo',
+      disposition: 'MAINTENANCE',
+      evidenceReferences: ['asset-1'],
+    })
   })
 
   it('uploads handover evidence as multipart data linked to the check-in', async () => {
@@ -108,5 +127,22 @@ describe('checkInApi', () => {
     expect((options.headers as Headers).has('Content-Type')).toBe(false)
     expect((options.body as FormData).get('entityType')).toBe('CHECK_IN')
     expect((options.body as FormData).get('entityId')).toBe('checkin-1')
+  })
+
+  it('downloads check-in evidence through the authenticated file endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Blob(['evidence']), {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': 'attachment; filename="handover.png"',
+      },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await downloadCheckInEvidence('asset-1')
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/files/asset-1')
+    expect(result.fileName).toBe('handover.png')
+    expect(result.contentType).toBe('image/png')
   })
 })
