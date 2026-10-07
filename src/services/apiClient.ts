@@ -89,12 +89,12 @@ async function refreshAccessToken(): Promise<boolean> {
 export async function apiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {}): Promise<T> {
   const { skipAuth, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...requestOptions } = options
   const headers = new Headers(requestOptions.headers)
-  if (requestOptions.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (requestOptions.body && !(requestOptions.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (!skipAuth && accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
 
   let response: Response
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...requestOptions, headers, signal: controller.signal })
   } catch (error) {
@@ -103,7 +103,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
     }
     throw new ApiClientError('Không thể kết nối tới backend StorageHub.', { code: 'NETWORK_ERROR' })
   } finally {
-    clearTimeout(timeoutId)
+    globalThis.clearTimeout(timeoutId)
   }
 
   const payload = await readPayload(response)
@@ -121,5 +121,53 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
   }
 
   return payload as T
+}
+
+export interface ApiDownload {
+  blob: Blob
+  contentType: string
+  fileName: string | null
+}
+
+function downloadFileName(response: Response) {
+  const disposition = response.headers.get('content-disposition') || ''
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (encoded) {
+    try { return decodeURIComponent(encoded) } catch { return encoded }
+  }
+  return disposition.match(/filename="?([^";]+)"?/i)?.[1] || null
+}
+
+export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): Promise<ApiDownload> {
+  const headers = new Headers()
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+  const controller = new AbortController()
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { headers, signal: controller.signal })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiClientError('Backend phản hồi quá lâu. Vui lòng kiểm tra backend StorageHub.', { code: 'TIMEOUT' })
+    }
+    throw new ApiClientError('Không thể kết nối tới backend StorageHub.', { code: 'NETWORK_ERROR' })
+  } finally {
+    globalThis.clearTimeout(timeoutId)
+  }
+
+  if (response.status === 401 && await refreshAccessToken()) return apiDownload(path, timeoutMs)
+  if (!response.ok) {
+    const payload = await readPayload(response)
+    const error = isRecord(payload) && isRecord(payload.error) ? payload.error : {}
+    throw new ApiClientError(
+      typeof error.message === 'string' ? error.message : `API request failed (${response.status})`,
+      { status: response.status, code: typeof error.code === 'string' ? error.code : 'API_ERROR', details: error.details },
+    )
+  }
+  return {
+    blob: await response.blob(),
+    contentType: response.headers.get('content-type') || 'application/octet-stream',
+    fileName: downloadFileName(response),
+  }
 }
 

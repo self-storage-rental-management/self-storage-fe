@@ -98,6 +98,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     submitProfileChangeRequest,
   } = useStorageHub()
   const isCustomer = user.role === 'customer'
+  const apiProfile = isApiAuthenticated()
+  const [savingProfile, setSavingProfile] = useState(false)
   const isInternal = !isCustomer
   const [activeTab, setActiveTab] = useState<ProfileTab>(profileTabFromLocation)
 
@@ -141,7 +143,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isCustomer) return
+    if (!isCustomer || savingProfile) return
+    setSavingProfile(true)
     try {
       const profile = {
         fullName: name.trim(),
@@ -161,6 +164,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
       showToast('Đã cập nhật thông tin cá nhân.')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Không thể cập nhật thông tin cá nhân.')
+    } finally {
+      setSavingProfile(false)
     }
   }
 
@@ -505,8 +510,8 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
                   </div>
 
                   <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
-                    <Button type="submit" variant="primary" className="cursor-pointer">
-                      Lưu Thay Đổi
+                    <Button type="submit" variant="primary" className="cursor-pointer" disabled={savingProfile}>
+                      {savingProfile ? 'Đang lưu…' : 'Lưu Thay Đổi'}
                     </Button>
                   </div>
                 </form>
