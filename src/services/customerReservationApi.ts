@@ -111,6 +111,10 @@ export interface CompatibilityCheckResult {
   totalGoodsWeightKg: number
   unitVolumeM3: number
   unitMaxLoadKg: number
+  rackUtilizationRate: number
+  usableVolumePerRackM3: number
+  requiredRackCount: number
+  unitRackCount: number
   availableUnitCount: number
   staffReviewRequired: boolean
   issues: string[]
