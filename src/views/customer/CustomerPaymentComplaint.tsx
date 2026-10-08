@@ -30,6 +30,7 @@ const complaintStatusLabels: Record<PaymentComplaint['status'], string> = {
 export default function CustomerPaymentComplaint({ reservation, complaintExpiresAt, now, onMessage, onRefresh }: Props) {
   const [complaint, setComplaint] = useState<PaymentComplaint | null>(null)
   const [open, setOpen] = useState(false)
+  const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -87,6 +88,7 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
     try {
       const result = await withdrawPaymentComplaint(complaint.id)
       setComplaint(result)
+      setWithdrawConfirmOpen(false)
       onMessage('Đã rút khiếu nại. Đơn giữ kho đã bị hủy và chưa ghi nhận thanh toán.')
       await onRefresh()
     } catch (error) {
@@ -109,7 +111,7 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
       <p className="mt-1">{complaint.reason}</p>
       {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Dự kiến xử lý trước: <b>{new Date(complaint.reviewDueAt).toLocaleString('vi-VN')}</b></p>}
       {complaint.decisionReason && <p className="mt-1"><b>Phản hồi:</b> {complaint.decisionReason}</p>}
-      {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => void withdraw()}>Rút khiếu nại</Button>}
+      {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => setWithdrawConfirmOpen(true)}>Rút khiếu nại</Button>}
     </div>}
     <Modal open={open} onClose={() => { if (!busy) { setOpen(false); setErrorMessage(null) } }} title="Khiếu nại thanh toán">
       <div className="space-y-4">
@@ -122,5 +124,31 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
         <Button className="w-full" disabled={busy || countdown.expired || !reason.trim() || files.length === 0} onClick={() => void send()}>{busy ? 'Đang gửi…' : countdown.expired ? 'Đã hết thời hạn khiếu nại' : 'Gửi khiếu nại'}</Button>
       </div>
     </Modal>
+    <PaymentComplaintWithdrawalConfirmation
+      open={withdrawConfirmOpen}
+      busy={busy}
+      onCancel={() => setWithdrawConfirmOpen(false)}
+      onConfirm={() => void withdraw()}
+    />
   </>
+}
+
+export function PaymentComplaintWithdrawalConfirmation({ open, busy, onCancel, onConfirm }: {
+  open: boolean
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return <Modal open={open} onClose={() => { if (!busy) onCancel() }} title="Xác nhận rút khiếu nại">
+    <div className="space-y-4">
+      <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm leading-6 text-red-900">
+        <p className="font-bold">Rút khiếu nại sẽ hủy đơn giữ kho.</p>
+        <p className="mt-1">Suất kho hiện tại sẽ được giải phóng và không được đảm bảo có thể khôi phục nếu bạn đổi ý hoặc đã chuyển tiền.</p>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" disabled={busy} onClick={onCancel}>Giữ khiếu nại</Button>
+        <Button disabled={busy} onClick={onConfirm}>{busy ? 'Đang rút…' : 'Xác nhận rút'}</Button>
+      </div>
+    </div>
+  </Modal>
 }

@@ -11,6 +11,7 @@ import ManagerPaymentsPanel from './ManagerPaymentsPanel'
 import ManagerRentalsPanel from './ManagerRentalsPanel'
 import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
 import ManagerOverdueApiPanel from './ManagerOverdueApiPanel'
+import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerUnitAssignmentPanel from './ManagerUnitAssignmentPanel'
@@ -22,19 +23,20 @@ import { managerStatusLabel } from './managerI18n'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
-  const nav: NavItem[] = [
-    { id: 'dashboard', label: 'Bảng điều khiển', icon: Icon.home, group: 'Tổng quan', permission: 'view_dashboard' },
-    { id: 'inventory', label: 'Quản lý gian kho', icon: Icon.box, group: 'Vận hành', permission: 'manage_inventory' },
-    { id: 'unit-assignments', label: 'Phân kho reservation', icon: Icon.box, group: 'Vận hành', permission: 'assign_units' },
-    { id: 'unit-releases', label: 'Giải phóng kho đã hủy', icon: Icon.alert, group: 'Vận hành', permission: 'assign_units' },
-    { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: isApiAuthenticated() ? 'view_rentals' : 'manage_rentals' },
-    { id: 'moves', label: 'Nhận kho & Trả kho', icon: Icon.truck, group: 'Vận hành', permission: 'view_checkins' },
-    { id: 'payments', label: 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: 'manage_payments' },
-    ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'view_rentals' as const }] : []),
-    { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'manage_payments' },
-    { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'manage_staff_tasks' },
-    { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'view_reports' }
-  ]
+const nav: NavItem[] = [
+  { id: 'dashboard', label: 'Bảng điều khiển', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' },
+  { id: 'inventory', label: 'Quản lý gian kho', icon: Icon.box, group: 'Vận hành', permission: 'inventory:update' },
+  { id: 'unit-assignments', label: 'Phân kho reservation', icon: Icon.box, group: 'Vận hành', permission: 'storage_units:assign' },
+  { id: 'unit-releases', label: 'Giải phóng kho đã hủy', icon: Icon.alert, group: 'Vận hành', permission: 'storage_units:assign' },
+  { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: isApiAuthenticated() ? 'rentals:read' : 'rentals:update' },
+  { id: 'moves', label: 'Nhận kho & Trả kho', icon: Icon.truck, group: 'Vận hành', permission: 'checkins:read' },
+  { id: 'payments', label: 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: 'payments:collect' },
+  { id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'rentals:read' },
+  { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:collect' },
+  { id: 'support-api', label: 'Hỗ trợ', icon: Icon.support, group: 'Điều phối', permission: 'support:read' },
+  { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
+  { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'reports:read' }
+]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
@@ -96,6 +98,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} />}
     {page === 'payments' && <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
+    {page === 'support-api' && isApiAuthenticated() && <SupportApiWorkspace role="manager" />}
     {page === 'payment-complaints' && <ManagerPaymentComplaintsPanel showToast={showToast} />}
     {page === 'staff-tasks' && <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />}
     {page === 'reports' && <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />}

@@ -2,6 +2,7 @@ import type { TicketItem, StaffRosterMember } from '../data/demoDatabase'
 import { STAFF_ROSTER } from '../data/demoDatabase'
 import type { User } from '../types'
 import type { StorageHold } from '../types/storageHub'
+import { DEMO_DATA_ENABLED } from '../config/runtime'
 
 export interface CustomerRentalRecord {
   id: string
@@ -49,7 +50,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Cách gia hạn hợp đồng thuê kho',
     category: 'Hợp đồng',
     keywords: ['gia hạn', 'thêm tháng', 'kéo dài', 'tiếp tục thuê', 'hợp đồng', 'renew', 'extension'],
-    answer: 'Bạn vào mục "Hồ sơ thuê của tôi", chọn hợp đồng cần gia hạn và bấm nút "Gia hạn". Lưu ý nên gửi yêu cầu trước ngày kết thúc ít nhất 3 ngày và thanh toán cọc 20% kỳ mới để giữ nguyên đơn giá ưu đãi.',
+    answer: 'Bạn vào mục "Hồ sơ thuê của tôi", chọn hợp đồng cần gia hạn và bấm nút "Gia hạn". Lưu ý nên gửi yêu cầu trước ngày kết thúc ít nhất 3 ngày và thanh toán cọc 40% kỳ mới để giữ nguyên đơn giá ưu đãi.',
     solved: true,
     actionHint: 'Vào Hồ sơ thuê → Gia hạn'
   },
@@ -237,7 +238,7 @@ export function assignStaffWithWorkloadAndUrgency(params: {
   rosterOverride?: StaffRosterMember[]
 }): StaffAssignmentResult {
   const { category, questionText, facilityId, currentTickets, rosterOverride } = params
-  const roster = rosterOverride || STAFF_ROSTER
+  const roster = rosterOverride || (DEMO_DATA_ENABLED ? STAFF_ROSTER : [])
 
   const urgentRegex = /(cổng|gate|mã pin|pin|mã khóa|kẹt|không vào được|không mở được|hư hỏng|mất đồ|chập|cháy|nước|ngập|khẩn cấp|sos|emergency|leak|flood|broken|alarm)/i
   const isUrgent =

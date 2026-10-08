@@ -1,33 +1,33 @@
 export type Role = 'customer' | 'staff' | 'manager' | 'business' | 'admin'
 
 export const PERMISSION_KEYS = [
-  'view_dashboard',
-  'view_facilities',
-  'view_units',
-  'book_storage',
-  'view_reservations',
-  'approve_reservations',
-  'assign_units',
-  'view_contracts',
-  'view_checkins',
-  'perform_checkin',
-  'view_rentals',
-  'manage_rentals',
-  'view_returns',
-  'process_returns',
-  'view_payments',
-  'view_policies',
-  'manage_payments',
-  'view_support',
-  'manage_support',
-  'manage_inventory',
-  'manage_policies',
-  'manage_staff_tasks',
-  'view_reports',
-  'view_audit_logs',
-  'manage_users',
-  'manage_roles',
-  'manage_settings',
+  'dashboard:read',
+  'facilities:read',
+  'storage_units:read',
+  'reservations:create',
+  'reservations:read',
+  'reservations:approve',
+  'storage_units:assign',
+  'contracts:read',
+  'checkins:read',
+  'checkins:process',
+  'rentals:read',
+  'rentals:update',
+  'returns:read',
+  'returns:process',
+  'payments:read',
+  'policies:read',
+  'payments:collect',
+  'support:read',
+  'support:update',
+  'inventory:update',
+  'policies:update',
+  'staff_tasks:update',
+  'reports:read',
+  'audit_logs:read',
+  'users:manage',
+  'roles:manage',
+  'settings:manage',
 ] as const
 
 export type PermissionKey = typeof PERMISSION_KEYS[number]
@@ -50,6 +50,8 @@ export interface User {
   facilityScopes?: Record<string, 'READ' | 'OPERATE' | 'MANAGE'>
   facilityNames?: Record<string, string>
   mustChangePassword?: boolean
+  /** Permissions returned by the backend for the current authenticated actor. */
+  permissions?: PermissionKey[]
 }
 
 export type LoginEventStatus = 'success' | 'failed' | 'logout'
