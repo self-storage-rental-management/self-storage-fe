@@ -11,8 +11,12 @@ import RenewalOperationsPanel, {
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
 import { rentalDate } from "../rental-api/presentation"
+import SupportApiEntry from "../support-api/SupportApiEntry"
 
 export default function StaffRenewalOperationsApiPanel() {
+  return <SupportApiEntry role="staff"><StaffRenewalWorkspace /></SupportApiEntry>
+}
+function StaffRenewalWorkspace() {
   const actor = getAuthenticatedActor()
   if (
     !actor ||

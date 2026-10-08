@@ -11,6 +11,7 @@ import ManagerPaymentsPanel from './ManagerPaymentsPanel'
 import ManagerRentalsPanel from './ManagerRentalsPanel'
 import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
 import ManagerOverdueApiPanel from './ManagerOverdueApiPanel'
+import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerUnitAssignmentPanel from './ManagerUnitAssignmentPanel'
@@ -33,6 +34,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'view_rentals' as const }] : []),
     { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'manage_payments' },
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'manage_staff_tasks' },
+    ...(isApiAuthenticated() ? [{ id: 'support-api', label: 'Hỗ trợ (API)', icon: Icon.support, group: 'Điều phối', permission: 'view_support' as const }] : []),
     { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'view_reports' }
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
@@ -96,6 +98,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} />}
     {page === 'payments' && <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
+    {page === 'support-api' && isApiAuthenticated() && <SupportApiWorkspace role="manager" />}
     {page === 'payment-complaints' && <ManagerPaymentComplaintsPanel showToast={showToast} />}
     {page === 'staff-tasks' && <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />}
     {page === 'reports' && <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />}
