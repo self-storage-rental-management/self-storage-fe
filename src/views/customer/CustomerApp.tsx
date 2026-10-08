@@ -12,6 +12,8 @@ import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
 import CustomerPaymentHistory from './CustomerPaymentHistory'
+import CustomerRentalsApiPanel from './CustomerRentalsApiPanel'
+import { customerRentalApiNav, CUSTOMER_RENTAL_API_PAGE } from './customerRentalApiIntegration'
 import CustomerReservationOtpModal from './CustomerReservationOtpModal'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
@@ -587,6 +589,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'view_units' },
     { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'view_reservations' },
     { id: 'rental-records', label: 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'view_rentals' },
+    ...customerRentalApiNav(isApiAuthenticated()),
     { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'view_payments' },
     { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'view_policies' },
     { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'view_support' }
@@ -2199,6 +2202,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
+      {/* D1–D4 API workspace is separate; preserve the team's existing lifecycle page. */}
+      {page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />}
       {page === 'rental-records' && (
         <div className="fade-in space-y-4">
           <SectionHeader
