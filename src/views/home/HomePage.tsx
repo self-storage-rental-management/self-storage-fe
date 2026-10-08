@@ -878,7 +878,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'unit_types' && (
               <div className="mt-4 space-y-5 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub cung cấp 4 quy cách kho đa dạng, đáp ứng mọi nhu cầu từ cá nhân đến doanh nghiệp. Kích cỡ hàng hóa tối đa, lối đi và xe đẩy tăng dần theo size kho.
+                  StorageHub cung cấp 4 quy cách kho đa dạng, đáp ứng mọi nhu cầu từ cá nhân đến doanh nghiệp. Không gian, lối đi và thiết bị hỗ trợ thay đổi theo từng cỡ kho.
                 </p>
 
                 {(Object.values(UNIT_SPECS) as (typeof UNIT_SPECS)[keyof typeof UNIT_SPECS][]).map((spec, idx) => {
@@ -952,18 +952,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                         </div>
                       </div>
 
-                      {/* Cargo max + trolley */}
-                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium text-[11px] mb-1">Kích cỡ hàng tối đa (D×R×C)</p>
-                          <div className="flex items-center gap-1.5">
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{spec.maxCargoDimCm.lengthCm} cm</span>
-                            <span className="text-stone-300">×</span>
-                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">{spec.maxCargoDimCm.widthCm} cm</span>
-                            <span className="text-stone-300">×</span>
-                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{spec.maxCargoDimCm.heightCm} cm</span>
-                          </div>
-                        </div>
+                      <div className="mt-2">
                         <div className="rounded-lg bg-white/80 border border-white p-2.5">
                           <p className="text-stone-400 font-medium text-[11px] mb-1">Xe đẩy hỗ trợ</p>
                           <p className="font-bold text-stone-900">{spec.cartEquipment}</p>

@@ -65,8 +65,6 @@ export interface UnitSpec {
   /** Kích thước khung cửa kho: rộng × cao (m) */
   doorWidthM: number
   doorHeightM: number
-  /** Kích cỡ hàng hóa tối đa có thể đưa vào kho (cm) – Dài × Rộng × Cao */
-  maxCargoDimCm: { lengthCm: number; widthCm: number; heightCm: number }
   /** Tải trọng sàn tối đa (kg) */
   maxLoadKg: number
   priceMonthly: number
@@ -101,7 +99,6 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     aisleM: 1.8,
     doorWidthM: 1.0,
     doorHeightM: 2.1,
-    maxCargoDimCm: { lengthCm: 160, widthCm: 80, heightCm: 150 },
     maxLoadKg: 600,
     priceMonthly: 5500000,
     priceFormatted: '5.500.000đ',
@@ -128,7 +125,6 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     aisleM: 2.2,
     doorWidthM: 1.2,
     doorHeightM: 2.2,
-    maxCargoDimCm: { lengthCm: 200, widthCm: 100, heightCm: 180 },
     maxLoadKg: 1200,
     priceMonthly: 9500000,
     priceFormatted: '9.500.000đ',
@@ -155,7 +151,6 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     aisleM: 2.6,
     doorWidthM: 1.5,
     doorHeightM: 2.4,
-    maxCargoDimCm: { lengthCm: 240, widthCm: 120, heightCm: 210 },
     maxLoadKg: 2400,
     priceMonthly: 15000000,
     priceFormatted: '15.000.000đ',
@@ -182,7 +177,6 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     aisleM: 3.0,
     doorWidthM: 2.0,
     doorHeightM: 2.8,
-    maxCargoDimCm: { lengthCm: 300, widthCm: 180, heightCm: 260 },
     maxLoadKg: 3600,
     priceMonthly: 22500000,
     priceFormatted: '22.500.000đ',
