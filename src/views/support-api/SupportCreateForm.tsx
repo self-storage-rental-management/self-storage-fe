@@ -17,7 +17,11 @@ import SupportReadState from "./SupportReadState"
 import { supportInputClass } from "./presentation"
 
 type Source = "facility" | "rental" | "reservation" | "unit" | "payment"
-type Choice = { id: string label: string facilityId: string }
+type Choice = {
+  id: string
+  label: string
+  facilityId: string
+}
 async function loadChoices(
   source: Source,
   page: number,

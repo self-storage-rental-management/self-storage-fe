@@ -40,6 +40,15 @@ beforeEach(() => {
 })
 
 describe("D5 role and lifecycle boundaries", () => {
+  it("does not promise auto-close from resolved timestamp or invent a delivery deadline", () => {
+    const html = renderToStaticMarkup(<SupportTicketSummary ticket={{
+      ...supportActive, status: "resolved", resolvedAt: "2026-10-08T03:00:00Z",
+      resolvedBy: supportIds.staff,
+    }} />)
+    expect(html).toContain("Đã xử lý xong, chưa đóng")
+    expect(html).toContain("bằng chứng notification đúng lần xử lý này")
+    expect(html).not.toContain("Tự đóng sau 7 ngày")
+  })
   it("Manager coordinates only; cannot resolve, reply or accept as Staff", () => {
     expect(
       supportActions(supportActor("manager"), "manager", supportActive),

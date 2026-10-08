@@ -104,7 +104,10 @@ export interface SupportCreate {
   subject: string
   description: string
   facilityId?: string
-  linkedRecord?: { type: SupportLinkType id: string }
+  linkedRecord?: {
+    type: SupportLinkType
+    id: string
+  }
   evidenceFileIds?: string[]
 }
 type Versioned = { expectedVersion: number }
@@ -116,15 +119,23 @@ export type SupportCommand = {
 } & Versioned | { kind: "accept" } & Versioned | {
   kind: "message"
   body: string
-  visibility?: SupportVisibility
+  visibility?: never
   expectedVersion?: number
+} & Evidence | {
+  kind: "message"
+  body: string
+  visibility: SupportVisibility
+  expectedVersion?: never
 } & Evidence | {
   kind: "information"
   message: string
 } & Versioned & Evidence | {
   kind: "resolve"
   summary: string
-} & Versioned & Evidence | { kind: "close" feedback?: string } & Versioned | {
+} & Versioned & Evidence | {
+  kind: "close"
+  feedback?: string
+} & Versioned | {
   kind: "reopen"
   reason: string
 } & Versioned | {

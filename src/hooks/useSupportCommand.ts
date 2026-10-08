@@ -12,12 +12,21 @@ export type SupportSubmission = {
   kind: "create"
   body: SupportCreate
   parentId?: string
-} | { kind: "command" role: SupportRole id: string command: SupportCommand }
+} | {
+  kind: "command"
+  role: SupportRole
+  id: string
+  command: SupportCommand
+}
 
 // Transport metadata only, in memory and keyed by API actor + role. No business/demo store.
 // Keep uncertain attempts through modal/page unmount so navigation cannot mint a second key.
 export class SupportAttempt {
-  pending?: { signature: string key: string submission: SupportSubmission }
+  pending?: {
+    signature: string
+    key: string
+    submission: SupportSubmission
+  }
   private listeners = new Set<() => void>()
   subscribe = (listener: () => void) => {
     this.listeners.add(listener)

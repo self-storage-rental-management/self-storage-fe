@@ -84,6 +84,13 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
           backfill hoặc gán version 0.
         </p>
       )}
+      {t.status === "resolved" && (
+        <p role="status" className="rounded bg-blue-50 p-3 text-blue-900">
+          Đã xử lý xong, chưa đóng. Customer có thể xác nhận kết quả hoặc yêu cầu mở lại;
+          backend vẫn kiểm tra policy và quyền. Không mặc định ticket sẽ tự đóng:
+          tự đóng còn cần policy chung và bằng chứng notification đúng lần xử lý này.
+        </p>
+      )}
       <div
         role="status"
         className="space-y-1 rounded border border-amber-200 bg-amber-50 p-3 text-amber-900"

@@ -228,7 +228,29 @@ describe("D5 transport and response boundaries", () => {
   })
 })
 describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
-  const cases: { role: SupportRole command: SupportCommand route: string }[] = [
+  it("rejects expectedVersion on Staff messages before sending a strict BE DTO", async () => {
+    const fetch = respond({ data: supportMessage })
+    await expect(
+      sendSupportCommand("staff", ids.ticket, {
+        kind: "message", body: "Progress", visibility: "PUBLIC", expectedVersion: 2,
+      } as unknown as SupportCommand, "staff-version"),
+    ).rejects.toMatchObject({ code: "CLIENT_VALIDATION" })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it("preserves Customer message version for resuming waiting_customer", async () => {
+    const fetch = respond({ data: supportMessage })
+    await sendSupportCommand("customer", ids.ticket, {
+      kind: "message", body: "Requested details", expectedVersion: 2,
+    }, "customer-version")
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      body: "Requested details", expectedVersion: 2,
+    })
+  })
+  const cases: {
+    role: SupportRole
+    command: SupportCommand
+    route: string
+  }[] = [
     {
       role: "manager",
       command: {
