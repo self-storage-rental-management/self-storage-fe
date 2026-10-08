@@ -1,5 +1,6 @@
 import { POLICIES } from '../data/demoDatabase'
 import { vietnamesePolicy } from '../i18n/customerLabels'
+import { DEMO_DATA_ENABLED } from '../config/runtime'
 
 export interface PolicyItem {
   id: string
@@ -29,7 +30,7 @@ export interface ParsedPolicyBenefit {
 export function getStoredPolicies(): PolicyItem[] {
   try {
     const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null)
-    const raw = storage?.getItem('storagehub:policies')
+    const raw = DEMO_DATA_ENABLED ? storage?.getItem('storagehub:policies') : null
     if (raw) {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -69,7 +70,9 @@ export function getStoredPolicies(): PolicyItem[] {
       }
     }
   } catch {}
-  return (POLICIES as any[]).map(p => vietnamesePolicy({ ...p, description: p.description || '' }))
+  return DEMO_DATA_ENABLED
+    ? (POLICIES as any[]).map(p => vietnamesePolicy({ ...p, description: p.description || '' }))
+    : []
 }
 
 function normalizeCompare(str: string): string {
