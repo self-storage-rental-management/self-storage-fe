@@ -107,9 +107,18 @@ function XMarkIcon({ className = "w-5 h-5" }: { className?: string }) {
   )
 }
 
+function MenuIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} style={{ display: 'inline-block' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  )
+}
+
 export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps) {
   const { facilities: contextFacilities, units, rentals, holds } = useStorageHub()
   const [activeModal, setActiveModal] = useState<'facilities' | 'unit_types' | 'how_it_works' | null>(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId)
@@ -153,8 +162,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     {
       id: 'small',
       name: 'Gian Kho Nhỏ (Small Storage)',
-      size: '5,6 × 6 × 3,2 m · 33,6 m² · 107,52 m³',
-      desc: 'Phù hợp để lưu trữ đồ gia dụng, thiết bị văn phòng và hàng hóa đóng kiện.',
+      size: '8,0 × 10,0 × 5,0 m · 80 m² · 400 m³',
+      desc: 'Phù hợp lưu trữ gia đình, văn phòng. 4 khung kệ (2×4×4,5m), sức chứa ~336 thùng nhỏ / 200 thùng to.',
       estRate: 'Từ 5.500.000 ₫ / tháng',
       badge: 'Cá nhân & Gia đình',
       highlight: 'Khóa mã PIN 24/7'
@@ -162,8 +171,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     {
       id: 'medium',
       name: 'Gian Kho Vừa (Medium Storage)',
-      size: '9 × 6,4 × 3,4 m · 57,6 m² · 195,84 m³',
-      desc: 'Phù hợp với đồ đạc gia đình, thiết bị văn phòng và hàng kinh doanh.',
+      size: '12,6 × 10,4 × 5,0 m · 131,04 m² · 655,2 m³',
+      desc: 'Phù hợp tồn kho kinh doanh, nội thất. 6 khung kệ, lối xe 2,2m, sức chứa ~504 thùng nhỏ / 300 thùng to.',
       estRate: 'Từ 9.500.000 ₫ / tháng',
       badge: 'Phổ biến nhất',
       highlight: 'Kiểm soát nhiệt độ 24°C'
@@ -171,8 +180,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     {
       id: 'large',
       name: 'Gian Kho Lớn (Large Storage)',
-      size: '13,5 × 6,8 × 3,6 m · 91,8 m² · 330,48 m³',
-      desc: 'Phù hợp với đồ chuyển nhà, pallet và tồn kho kinh doanh quy mô lớn.',
+      size: '18,3 × 10,8 × 5,0 m · 197,64 m² · 988,2 m³',
+      desc: 'Phù hợp pallet, chuyển nhà quy mô lớn. 8 khung kệ, lối xe 2,6m, xe nâng pallet tay, chứa ~672 thùng nhỏ / 400 thùng to.',
       estRate: 'Từ 15.000.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
       highlight: 'Xe tải bốc dỡ tận cửa'
@@ -180,11 +189,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     {
       id: 'xlarge',
       name: 'Gian Kho Rất Lớn (Extra Large)',
-      size: '19 × 7,2 × 4 m · 136,8 m² · 547,2 m³',
-      desc: 'Dành cho kho thương mại, pallet số lượng lớn và máy móc.',
+      size: '25,0 × 11,2 × 5,0 m · 280 m² · 1400 m³',
+      desc: 'Kho thương mại, máy móc nặng & pallet công nghiệp. 10 khung kệ, lối xe 3,0m, xe nâng điện, chứa ~840 thùng nhỏ / 500 thùng to.',
       estRate: 'Từ 22.500.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
-      highlight: 'Xe tải bốc dỡ tận cửa'
+      highlight: 'Xe nâng pallet điện 24/7'
     }
   ]
 
@@ -217,11 +226,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
       <header className="sticky top-0 z-40 bg-[#1F1F1D] text-white border-b border-[#353630] shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo & Slogan */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <div className="flex items-center gap-3 cursor-pointer shrink-0" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <BrandLogo light subtitle="Hệ Thống Tự Lưu Trữ" />
           </div>
 
-          {/* Navigation Links */}
+          {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-6 text-xs font-semibold uppercase tracking-wider text-stone-300">
             <button
               type="button"
@@ -260,25 +269,115 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             </button>
           </nav>
 
-          {/* Auth Action Buttons */}
-          <div className="flex items-center gap-2.5">
+          {/* Auth Action Buttons & Mobile Hamburger */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <button
               type="button"
               onClick={onOpenRegister}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-stone-200 border border-[#44453F] hover:bg-[#2D2E29] hover:text-white hover:border-stone-400 transition-all cursor-pointer"
+              className="hidden sm:inline-flex px-3.5 py-1.5 rounded-lg text-xs font-semibold text-stone-200 border border-[#44453F] hover:bg-[#2D2E29] hover:text-white hover:border-stone-400 transition-all cursor-pointer"
             >
               Đăng Ký
             </button>
             <button
               type="button"
               onClick={onOpenLogin}
-              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#E89520] hover:bg-[#D98514] text-white shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold bg-[#E89520] hover:bg-[#D98514] text-white shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
             >
               <span>Đăng Nhập</span>
               <ArrowRightIcon className="w-3.5 h-3.5" />
             </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(prev => !prev)}
+              className="md:hidden p-2 text-stone-300 hover:text-white hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
+              aria-label="Mở trình đơn di động"
+            >
+              {mobileMenuOpen ? <XMarkIcon className="w-5 h-5" /> : <MenuIcon className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-[#18191C] border-b border-[#353630] px-4 py-4 space-y-3">
+            <div className="flex flex-col space-y-1 text-xs font-semibold uppercase tracking-wider text-stone-300">
+              <button
+                type="button"
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                  setMobileMenuOpen(false)
+                }}
+                className="text-left py-2.5 px-3 rounded-lg text-[#E89520] bg-amber-500/10 font-bold"
+              >
+                Trang Chủ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveModal('facilities')
+                  setMobileMenuOpen(false)
+                }}
+                className="text-left py-2.5 px-3 rounded-lg hover:bg-stone-800 text-stone-200 transition"
+              >
+                Cơ Sở Kho
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveModal('unit_types')
+                  setMobileMenuOpen(false)
+                }}
+                className="text-left py-2.5 px-3 rounded-lg hover:bg-stone-800 text-stone-200 transition"
+              >
+                Loại Gian Kho
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveModal('how_it_works')
+                  setMobileMenuOpen(false)
+                }}
+                className="text-left py-2.5 px-3 rounded-lg hover:bg-stone-800 text-stone-200 transition"
+              >
+                Quy Trình Thuê
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  scrollToSection('features')
+                  setMobileMenuOpen(false)
+                }}
+                className="text-left py-2.5 px-3 rounded-lg hover:bg-stone-800 text-stone-200 transition"
+              >
+                Ưu Điểm
+              </button>
+            </div>
+
+            <div className="pt-3 border-t border-stone-800 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenRegister()
+                  setMobileMenuOpen(false)
+                }}
+                className="w-full py-2.5 rounded-lg text-xs font-semibold text-center text-stone-200 border border-[#44453F] hover:bg-[#2D2E29]"
+              >
+                Đăng Ký Tài Khoản Mới
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenLogin()
+                  setMobileMenuOpen(false)
+                }}
+                className="w-full py-2.5 rounded-lg text-xs font-bold text-center bg-[#E89520] text-white flex items-center justify-center gap-1.5"
+              >
+                <span>Đăng Nhập Ngay</span>
+                <ArrowRightIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ── 2. HERO SECTION ───────────────────────────────── */}
@@ -287,17 +386,17 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
           <div className="bg-white rounded-2xl border border-stone-200 shadow-xl p-6 sm:p-10 lg:p-12 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
 
             {/* Left Column: Value Proposition */}
-            <div className="lg:col-span-7 space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-[#9A5A05] text-xs font-semibold tracking-wide">
-                <span className="w-2 h-2 rounded-full bg-[#E89520] animate-ping" />
-                <span>GIẢI PHÁP LƯU KHO THÔNG MINH CHO CÁ NHÂN & DOANH NGHIỆP</span>
+            <div className="lg:col-span-7 space-y-5 sm:space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-[#9A5A05] text-[11px] sm:text-xs font-semibold tracking-wide max-w-full">
+                <span className="w-2 h-2 rounded-full bg-[#E89520] animate-ping shrink-0" />
+                <span className="leading-snug">GIẢI PHÁP LƯU KHO THÔNG MINH CHO CÁ NHÂN & DOANH NGHIỆP</span>
               </div>
 
               <div className="space-y-2">
-                <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-extrabold text-stone-900 leading-tight tracking-tight">
+                <h1 className="text-2xl sm:text-4xl lg:text-[44px] font-extrabold text-stone-900 leading-tight tracking-tight">
                   Lưu trữ thông minh,
                 </h1>
-                <p className="text-3xl sm:text-4xl lg:text-[44px] font-extrabold text-[#E89520] leading-tight tracking-tight">
+                <p className="text-2xl sm:text-4xl lg:text-[44px] font-extrabold text-[#E89520] leading-tight tracking-tight">
                   An tâm mỗi ngày & Linh hoạt 24/7
                 </p>
               </div>
@@ -307,11 +406,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </p>
 
               {/* Call to Action Buttons */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
                 <button
                   type="button"
                   onClick={onOpenRegister}
-                  className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+                  className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Đặt Giữ Kho Ngay</span>
                   <ArrowRightIcon className="w-4 h-4 stroke-[2.5]" />
@@ -320,7 +419,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 <button
                   type="button"
                   onClick={() => scrollToSection('facilities')}
-                  className="bg-stone-50 hover:bg-stone-100 text-stone-800 font-semibold text-sm px-5 py-3 rounded-xl border border-stone-300 hover:border-stone-400 transition-all cursor-pointer flex items-center gap-2"
+                  className="bg-stone-50 hover:bg-stone-100 text-stone-800 font-semibold text-sm px-5 py-3 rounded-xl border border-stone-300 hover:border-stone-400 transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   <MapPinIcon className="w-4 h-4 text-[#E89520]" />
                   <span>Khám Phá Cơ Sở</span>
@@ -328,38 +427,38 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
 
               {/* Quick Trust Badges */}
-              <div className="grid grid-cols-3 gap-3 pt-4 border-t border-stone-100 text-center sm:text-left">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-stone-100 text-center sm:text-left">
                 <div>
-                   <div className="text-xl sm:text-2xl font-black text-stone-900">{availableUnitCount}</div>
-                   <div className="text-xs text-stone-500 mt-0.5">Gian kho còn trống</div>
+                   <div className="text-lg sm:text-2xl font-black text-stone-900">{availableUnitCount}</div>
+                   <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Gian kho còn trống</div>
                 </div>
                 <div>
-                   <div className="text-xl sm:text-2xl font-black text-stone-900">{totalUnitCount}</div>
-                   <div className="text-xs text-stone-500 mt-0.5">Tổng gian kho</div>
+                   <div className="text-lg sm:text-2xl font-black text-stone-900">{totalUnitCount}</div>
+                   <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Tổng gian kho</div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-black text-emerald-600">99.8%</div>
-                  <div className="text-xs text-stone-500 mt-0.5">Độ an tâm khách hàng</div>
+                  <div className="text-lg sm:text-2xl font-black text-emerald-600">99.8%</div>
+                  <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Độ an tâm khách hàng</div>
                 </div>
               </div>
             </div>
 
             {/* Right Column: Live Operational Graphic */}
-            <div className="lg:col-span-5 relative overflow-hidden bg-gradient-to-br from-[#1C1D20] via-[#18191C] to-[#121315] text-white rounded-2xl border border-stone-700/80 p-5 sm:p-6 flex flex-col justify-between shadow-2xl">
+            <div className="lg:col-span-5 relative overflow-hidden bg-gradient-to-br from-[#1C1D20] via-[#18191C] to-[#121315] text-white rounded-2xl border border-stone-700/80 p-4 sm:p-6 flex flex-col justify-between shadow-2xl">
               {/* Decorative ambient glows */}
               <div className="absolute -top-16 -right-16 w-44 h-44 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
               <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
               {/* Graphic Header */}
-              <div className="relative flex items-center justify-between pb-3.5 border-b border-stone-800 text-xs">
-                <div className="flex items-center gap-2.5">
-                  <span className="relative flex h-2.5 w-2.5">
+              <div className="relative flex items-center justify-between gap-2 pb-3.5 border-b border-stone-800 text-xs">
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
                   </span>
-                  <span className="font-bold text-stone-200 uppercase tracking-wider text-xs">MẠNG LƯỚI VẬN HÀNH KHO</span>
+                  <span className="font-bold text-stone-200 uppercase tracking-wider text-[11px] sm:text-xs truncate">MẠNG LƯỚI VẬN HÀNH KHO</span>
                 </div>
-                <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold border border-emerald-500/30 flex items-center gap-1.5 tracking-wider">
+                <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold border border-emerald-500/30 flex items-center gap-1.5 tracking-wider shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   HOẠT ĐỘNG
                 </span>
@@ -370,28 +469,29 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 {/* Small */}
                 <div
                   onClick={() => setActiveModal('unit_types')}
-                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-amber-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 sm:p-3.5 rounded-xl border border-stone-700/60 hover:border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
                   title="Nhấn để xem thông số chi tiết"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
                       <BoxIcon className="w-5 h-5" />
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors whitespace-nowrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
                           Gian Nhỏ (Small)
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
-                          33,6 m²
+                          80 m²
                         </span>
                       </div>
                       <div className="text-[11px] text-stone-400 truncate mt-0.5">
-                        107,52 m³ · Khóa PIN điện tử
+                        400 m³ · Khóa PIN điện tử
                       </div>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t border-stone-800/80 sm:border-t-0 shrink-0">
+                    <span className="text-[11px] text-stone-400 font-medium sm:hidden">Giá khởi điểm:</span>
                     <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
                       Từ 5.500.000 ₫
                     </span>
@@ -401,28 +501,29 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 {/* Medium */}
                 <div
                   onClick={() => setActiveModal('unit_types')}
-                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-sky-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 sm:p-3.5 rounded-xl border border-stone-700/60 hover:border-sky-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
                   title="Nhấn để xem thông số chi tiết"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-105 transition-transform">
                       <WarehouseIcon className="w-5 h-5" />
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors whitespace-nowrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
                           Gian Vừa (Medium)
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
-                          57,6 m²
+                          131 m²
                         </span>
                       </div>
                       <div className="text-[11px] text-stone-400 truncate mt-0.5">
-                        195,84 m³ · 24/7 ra vào tự do
+                        655,2 m³ · 24/7 ra vào tự do
                       </div>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t border-stone-800/80 sm:border-t-0 shrink-0">
+                    <span className="text-[11px] text-stone-400 font-medium sm:hidden">Giá khởi điểm:</span>
                     <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
                       Từ 9.500.000 ₫
                     </span>
@@ -432,28 +533,29 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 {/* Large */}
                 <div
                   onClick={() => setActiveModal('unit_types')}
-                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-indigo-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 sm:p-3.5 rounded-xl border border-stone-700/60 hover:border-indigo-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
                   title="Nhấn để xem thông số chi tiết"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0 group-hover:scale-105 transition-transform">
                       <TruckIcon className="w-5 h-5" />
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-indigo-300 transition-colors whitespace-nowrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
                           Kho Lớn (Large)
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
-                          91,8 m²
+                          197,6 m²
                         </span>
                       </div>
                       <div className="text-[11px] text-stone-400 truncate mt-0.5">
-                        330,48 m³ · Cửa xe tải bốc dỡ
+                        988,2 m³ · Cửa xe tải bốc dỡ
                       </div>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t border-stone-800/80 sm:border-t-0 shrink-0">
+                    <span className="text-[11px] text-stone-400 font-medium sm:hidden">Giá khởi điểm:</span>
                     <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
                       Từ 15.000.000 ₫
                     </span>
@@ -463,28 +565,29 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 {/* Extra Large */}
                 <div
                   onClick={() => setActiveModal('unit_types')}
-                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 rounded-xl border border-stone-700/60 hover:border-purple-500/50 flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
+                  className="group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 sm:p-3.5 rounded-xl border border-stone-700/60 hover:border-purple-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
                   title="Nhấn để xem thông số chi tiết"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0 group-hover:scale-105 transition-transform">
                       <LayersIcon className="w-5 h-5" />
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-purple-300 transition-colors whitespace-nowrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-white group-hover:text-purple-300 transition-colors">
                           Gian Rất Lớn (XL)
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
-                          136,8 m²
+                          280 m²
                         </span>
                       </div>
                       <div className="text-[11px] text-stone-400 truncate mt-0.5">
-                        547,2 m³ · Pallet & tải trọng nặng
+                        1400 m³ · Pallet & tải trọng nặng
                       </div>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t border-stone-800/80 sm:border-t-0 shrink-0">
+                    <span className="text-[11px] text-stone-400 font-medium sm:hidden">Giá khởi điểm:</span>
                     <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
                       Từ 22.500.000 ₫
                     </span>
@@ -493,12 +596,12 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
 
               {/* Graphic Bottom Status */}
-              <div className="relative pt-3.5 border-t border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
+              <div className="relative pt-3.5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-400">
                 <span className="flex items-center gap-1.5 text-stone-300 font-medium">
                   <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>Bảo vệ & Giám sát CCTV 24/7</span>
                 </span>
-                <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60">
+                <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60 text-[10px] sm:text-[11px]">
                   HCM-Q1 · BD-F01
                 </span>
               </div>
@@ -592,7 +695,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {unitCategories.map(cat => (
               <div key={cat.id} className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition">
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 mb-3">
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-[#9A5A05] border border-amber-200">
                       {cat.badge}
                     </span>
@@ -606,7 +709,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   <p className="mt-3 text-xs text-stone-600 leading-relaxed">{cat.desc}</p>
                 </div>
 
-                <div className="mt-5 pt-4 border-t border-stone-100 flex items-center justify-between">
+                <div className="mt-5 pt-4 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Ước tính giá</div>
                     <div className="text-xs font-bold text-stone-900">{cat.estRate}</div>
@@ -614,7 +717,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   <button
                     type="button"
                     onClick={onOpenRegister}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-stone-900 hover:bg-[#E89520] text-white transition cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-stone-900 hover:bg-[#E89520] text-white transition cursor-pointer"
                   >
                     Chọn Thuê
                   </button>
@@ -628,7 +731,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
       {/* ── 5. FACILITIES NETWORK SECTION ───────────────────── */}
       <section id="facilities" className="scroll-mt-16 py-12 bg-white border-t border-stone-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-[#E89520]">MẠNG LƯỚI KHO BÃI</span>
               <h2 className="mt-1 text-2xl sm:text-3xl font-bold text-stone-900">
@@ -638,7 +741,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                  Hai cơ sở tại Quận 1 và Bình Dương, thuận tiện di chuyển và vận chuyển hàng hóa.
               </p>
             </div>
-            <div className="mt-4 md:mt-0 flex gap-2">
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setActiveModal('facilities')}
@@ -652,8 +755,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
             {facilitiesList.map(fac => (
               <div key={fac.id} className="rounded-xl border border-stone-200 bg-stone-50 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between">
-                <div className="p-5">
-                  <div className="flex items-center justify-between mb-2">
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-[10px] font-mono font-bold bg-amber-100 text-[#9A5A05] px-2 py-0.5 rounded">
                        MÃ: {fac.code ?? fac.id}
                     </span>
@@ -680,7 +783,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   </div>
                 </div>
 
-                <div className="p-4 bg-stone-100 border-t border-stone-200 flex items-center justify-between">
+                <div className="p-3.5 sm:p-4 bg-stone-100 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-stone-600 font-medium">
                      Giá từ <strong className="text-stone-900">{fac.price ?? '5.500.000'} đ</strong>/tháng
                   </span>
@@ -723,18 +826,18 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             ))}
           </div>
 
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               type="button"
               onClick={() => setActiveModal('how_it_works')}
-              className="mr-2 border border-stone-300 bg-white text-stone-800 hover:border-stone-400 font-semibold text-sm px-6 py-3 rounded-xl transition cursor-pointer inline-flex items-center gap-2"
+              className="w-full sm:w-auto border border-stone-300 bg-white text-stone-800 hover:border-stone-400 font-semibold text-sm px-6 py-3 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-2"
             >
               Xem quy trình chi tiết
             </button>
             <button
               type="button"
               onClick={onOpenRegister}
-              className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer inline-flex items-center gap-2"
+              className="w-full sm:w-auto bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer inline-flex items-center justify-center gap-2"
             >
               <span>Bắt Đầu Tạo Yêu Cầu Thuê Kho</span>
               <ArrowRightIcon className="w-4 h-4" />
@@ -795,7 +898,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
 
           <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-stone-500 gap-4">
             <p>© {new Date().getFullYear()} StorageHub Self-Storage Management System. Tất cả các quyền được bảo lưu.</p>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap justify-center sm:justify-start gap-4">
               <span className="hover:text-stone-400 cursor-pointer">Điều khoản dịch vụ</span>
               <span>·</span>
               <span className="hover:text-stone-400 cursor-pointer">Chính sách bảo mật</span>
@@ -808,14 +911,14 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
 
       {/* ── 8. INFORMATIONAL POPUP MODALS ──────────────────── */}
       {activeModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => setActiveModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150" onClick={() => setActiveModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-2xl w-full max-h-[88vh] overflow-y-auto p-4 sm:p-6" onClick={e => e.stopPropagation()}>
 
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-              <h3 className="font-bold text-lg text-stone-900 flex items-center gap-2">
-                <WarehouseIcon className="w-5 h-5 text-[#E89520]" />
-                <span>
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200 gap-2">
+              <h3 className="font-bold text-base sm:text-lg text-stone-900 flex items-center gap-2 min-w-0">
+                <WarehouseIcon className="w-5 h-5 text-[#E89520] shrink-0" />
+                <span className="truncate">
                   {activeModal === 'facilities' && 'Danh Sách Cơ Sở Lưu Trữ StorageHub'}
                   {activeModal === 'unit_types' && 'Danh Mục Chi Tiết Các Loại Gian Kho'}
                   {activeModal === 'how_it_works' && 'Quy Trình Đặt Giữ & Bàn Giao Kho'}
@@ -824,11 +927,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
-                className="px-3 py-1.5 text-xs font-bold text-stone-600 hover:text-stone-900 rounded-lg hover:bg-stone-100 border border-stone-300 cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                className="px-2.5 py-1 text-xs font-bold text-stone-600 hover:text-stone-900 rounded-lg hover:bg-stone-100 border border-stone-300 cursor-pointer flex items-center gap-1 shadow-2xs shrink-0"
                 title="Đóng (hoặc nhấn Esc)"
               >
                 <span className="text-sm font-bold">✕</span>
-                <span>Đóng</span>
+                <span className="hidden sm:inline">Đóng</span>
               </button>
             </div>
 
@@ -890,73 +993,73 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   ]
                   const color = accentColors[idx]
                   return (
-                    <div key={spec.size} className={`rounded-2xl border ${color.border} ${color.bg} p-4`}>
+                    <div key={spec.size} className={`rounded-2xl border ${color.border} ${color.bg} p-3.5 sm:p-4`}>
                       {/* Header */}
-                      <div className="flex items-center justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <div className={`w-9 h-9 rounded-lg ${color.icon} flex items-center justify-center shrink-0`}>
                             <BoxIcon className="w-5 h-5" />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <h4 className="font-bold text-stone-900 text-sm">{spec.name}</h4>
                             <p className="text-[11px] font-mono text-stone-500 mt-0.5">{spec.dimensions}</p>
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold ${color.badge}`}>Size {color.tag}</span>
-                          <p className="mt-1 text-sm font-bold text-stone-900">{spec.priceFormatted}<span className="text-[10px] font-normal text-stone-500">/tháng</span></p>
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${color.badge}`}>Size {color.tag}</span>
+                          <p className="mt-0.5 text-xs sm:text-sm font-bold text-stone-900">{spec.priceFormatted}<span className="text-[10px] font-normal text-stone-500">/tháng</span></p>
                         </div>
                       </div>
 
                       {/* Specs grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Diện tích</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Diện tích</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.areaM2} m²</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Chiều cao</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Chiều cao</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.heightM} m</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Thể tích</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Thể tích</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.volumeM3.toLocaleString('vi-VN')} m³</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Số khung kệ</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Số khung kệ</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.frameCount} khung</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Kích thước khung (R×S×C)</p>
-                          <p className="mt-0.5 font-bold text-stone-900">{spec.frameDimensions.widthM}×{spec.frameDimensions.depthM}×{spec.frameDimensions.heightM} m</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Kích thước khung</p>
+                          <p className="mt-0.5 font-bold text-stone-900 text-[10px] sm:text-[11px] break-words">{spec.frameDimensions.widthM}×{spec.frameDimensions.depthM}×{spec.frameDimensions.heightM} m</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Khoảng cách 2 khung</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Khoảng cách khung</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.frameDistanceM} m</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Lối đi bộ</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Lối đi bộ</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.aisleM} m</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Lối xe</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Lối xe</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.vehicleLaneWidthM} m</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Khung cửa (R×C)</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Khung cửa (R×C)</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.doorWidthM} × {spec.doorHeightM} m</p>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium">Tải trọng tối đa</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px]">Tải trọng tối đa</p>
                           <p className="mt-0.5 font-bold text-stone-900">{spec.maxLoadKg.toLocaleString('vi-VN')} kg</p>
                         </div>
                       </div>
 
                       {/* Cargo max + trolley */}
                       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium text-[11px] mb-1">Kích cỡ hàng tối đa (D×R×C)</p>
-                          <div className="flex items-center gap-1.5">
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px] mb-1">Kích cỡ hàng tối đa (D×R×C)</p>
+                          <div className="flex flex-wrap items-center gap-1">
                             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{spec.maxCargoDimCm.lengthCm} cm</span>
                             <span className="text-stone-300">×</span>
                             <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">{spec.maxCargoDimCm.widthCm} cm</span>
@@ -964,24 +1067,24 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                             <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{spec.maxCargoDimCm.heightCm} cm</span>
                           </div>
                         </div>
-                        <div className="rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-medium text-[11px] mb-1">Xe đẩy hỗ trợ</p>
-                          <p className="font-bold text-stone-900">{spec.cartEquipment}</p>
+                        <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px] mb-1">Xe đẩy hỗ trợ</p>
+                          <p className="font-bold text-stone-900 text-xs">{spec.cartEquipment}</p>
                           <p className="text-[10px] text-stone-500 mt-0.5 leading-4">{spec.cartEquipmentDetail}</p>
                         </div>
                       </div>
 
                       {/* Box capacity */}
-                      <div className="mt-2 flex gap-2 text-[11px]">
-                        <div className="flex-1 rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-semibold mb-1">Thùng nhỏ</p>
-                          <p className="font-bold text-stone-900">{spec.smallBox.lengthCm}×{spec.smallBox.widthCm}×{spec.smallBox.heightCm} cm · {spec.smallBox.volumeM3} m³</p>
-                          <p className="mt-1 text-base font-black text-stone-900">{spec.smallBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
+                      <div className="mt-2 flex flex-col sm:flex-row gap-2 text-[11px]">
+                        <div className="flex-1 rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-semibold mb-1 text-[10px] sm:text-[11px]">Thùng nhỏ</p>
+                          <p className="font-bold text-stone-900 text-[10px] sm:text-[11px]">{spec.smallBox.lengthCm}×{spec.smallBox.widthCm}×{spec.smallBox.heightCm} cm · {spec.smallBox.volumeM3} m³</p>
+                          <p className="mt-1 text-sm sm:text-base font-black text-stone-900">{spec.smallBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
                         </div>
-                        <div className="flex-1 rounded-lg bg-white/80 border border-white p-2.5">
-                          <p className="text-stone-400 font-semibold mb-1">Thùng to</p>
-                          <p className="font-bold text-stone-900">{spec.largeBox.lengthCm}×{spec.largeBox.widthCm}×{spec.largeBox.heightCm} cm · {spec.largeBox.volumeM3} m³</p>
-                          <p className="mt-1 text-base font-black text-stone-900">{spec.largeBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
+                        <div className="flex-1 rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
+                          <p className="text-stone-400 font-semibold mb-1 text-[10px] sm:text-[11px]">Thùng to</p>
+                          <p className="font-bold text-stone-900 text-[10px] sm:text-[11px]">{spec.largeBox.lengthCm}×{spec.largeBox.widthCm}×{spec.largeBox.heightCm} cm · {spec.largeBox.volumeM3} m³</p>
+                          <p className="mt-1 text-sm sm:text-base font-black text-stone-900">{spec.largeBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
                         </div>
                       </div>
                     </div>

@@ -185,6 +185,10 @@ export async function listCustomerFacilities(page = 0, size = 50) {
   return apiRequest<PageResponse<CustomerFacility>>(`/api/facilities${query({ status: 'active', page, size })}`)
 }
 
+export async function listAccessibleFacilities(page = 0, size = 100) {
+  return apiRequest<PageResponse<CustomerFacility>>(`/api/facilities${query({ page, size })}`)
+}
+
 export async function listCustomerUnitTypes(facilityId: string, options: {
   startDate?: string
   endDate?: string

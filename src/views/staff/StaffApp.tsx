@@ -788,7 +788,7 @@ export default function StaffApp({
 
       group: "Ca làm việc",
 
-      permission: "view_dashboard",
+      permission: "dashboard:read",
     },
 
     {
@@ -800,7 +800,7 @@ export default function StaffApp({
 
       group: "Ca làm việc",
 
-      permission: "view_dashboard",
+      permission: "dashboard:read",
     },
 
     {
@@ -812,7 +812,7 @@ export default function StaffApp({
 
       group: "Vận hành",
 
-      permission: "approve_reservations",
+      permission: "reservations:approve",
     },
 
     {
@@ -824,7 +824,7 @@ export default function StaffApp({
 
       group: "Vận hành",
 
-      permission: "view_checkins",
+      permission: "checkins:read",
     },
 
     {
@@ -836,7 +836,7 @@ export default function StaffApp({
 
       group: "Vận hành",
 
-      permission: "view_returns",
+      permission: "returns:read",
     },
 
     {
@@ -848,7 +848,7 @@ export default function StaffApp({
 
       group: "Chăm sóc",
 
-      permission: "view_support",
+      permission: "support:read",
     },
   ]
 

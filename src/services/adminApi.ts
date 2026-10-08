@@ -24,7 +24,11 @@ export interface AdminApiFacility {
 export interface AdminApiRole {
   code: ApiRoleCode
   name: string
+  parentRole: ApiRoleCode | null
   permissions: string[]
+  directPermissions: string[]
+  inheritedPermissions: string[]
+  userCount: number
 }
 
 export interface AdminApiLoginHistory {
@@ -173,10 +177,13 @@ export async function revokeAdminSession(id: string) {
   return readData<AdminApiSession>(response)
 }
 
-export async function listAdminActivityLogs(params: { page: number; size: number; search?: string; entityType?: string }) {
+export async function listAdminActivityLogs(params: { page: number; size: number; search?: string; entityType?: string; actorId?: string; from?: string; to?: string }) {
   const query = new URLSearchParams({ page: String(params.page), size: String(params.size) })
   if (params.search?.trim()) query.set('search', params.search.trim())
   if (params.entityType && params.entityType !== 'all') query.set('entityType', params.entityType)
+  if (params.actorId && params.actorId !== 'all') query.set('actorId', params.actorId)
+  if (params.from) query.set('from', params.from)
+  if (params.to) query.set('to', params.to)
   const response = await apiRequest<unknown>(`/api/admin/activity-logs?${query.toString()}`)
   return readPage<AdminApiActivityLog>(response)
 }

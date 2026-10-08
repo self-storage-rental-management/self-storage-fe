@@ -64,6 +64,10 @@ function resolveNavPage(navItems: NavItem[], requested: string | null): string |
 function requestedPageFromLocation() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
   if (pathname === '/profile' || pathname === '/profile/security') return 'profile'
+  if (pathname.startsWith('/admin/')) {
+    const adminSub = pathname.replace('/admin/', '').split('/')[0]
+    if (adminSub) return adminSub
+  }
   return new URLSearchParams(window.location.search).get('page')
 }
 
@@ -131,30 +135,26 @@ export default function Layout({
 
   useEffect(() => {
     const url = new URL(window.location.href)
-    const pathname = url.pathname.replace(/\/+$/, '') || '/'
-    const isProfilePath = pathname === '/profile' || pathname === '/profile/security'
-    if (currentPage === 'profile' && isProfilePath) {
-      if (url.searchParams.has('page')) {
-        url.searchParams.delete('page')
-        window.history.replaceState({ page: currentPage }, '', url)
-      }
-      return
+    const legacyPathname = url.pathname.replace(/\/+$/, '') || '/'
+
+    // Always clean up lingering tab query param when leaving profile/notifications
+    if (currentPage !== 'profile' && url.searchParams.has('tab')) {
+      url.searchParams.delete('tab')
+    } else if (currentPage === 'profile' && legacyPathname === '/profile/security' && !url.searchParams.has('tab')) {
+      url.searchParams.set('tab', 'security')
     }
-    if (isProfilePath) url.pathname = '/'
-    if (url.searchParams.get('page') === currentPage) return
+
+    // Keep every authenticated portal page shareable through /?page={page}.
+    url.pathname = '/'
     url.searchParams.set('page', currentPage)
     window.history.replaceState({ page: currentPage }, '', url)
   }, [currentPage])
 
   const navigate = (page: string) => {
     const url = new URL(window.location.href)
-    if (page === 'profile') {
-      url.pathname = '/profile'
-      url.searchParams.delete('page')
-    } else {
-      if (url.pathname === '/profile' || url.pathname === '/profile/security') url.pathname = '/'
-      url.searchParams.set('page', page)
-    }
+    url.pathname = '/'
+    url.searchParams.set('page', page)
+    url.searchParams.delete('tab')
     window.history.pushState({ page }, '', url)
     onNavigate(page)
   }
@@ -247,7 +247,7 @@ export default function Layout({
     if (lower.includes('staff') || lower.includes('nhân viên')) return 'Nhân Viên'
     if (lower.includes('customer') || lower.includes('khách hàng')) return 'Khách Hàng'
     if (lower.includes('manager') || lower.includes('quản lý')) return 'Quản Lý Cơ Sở'
-    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh')) return 'Đối Tác Kinh Doanh'
+    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh')) return 'Quản Lý Vận Hành Kinh Doanh'
     if (lower.includes('admin') || lower.includes('quản trị')) return 'Quản Trị Viên'
     return roleLabel
   }
@@ -362,7 +362,7 @@ export default function Layout({
             }`}
             title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
           >
-            <Avatar name={user.name} size="md" />
+            <Avatar name={user.name} size="md" imageUrl={user.avatar} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-stone-100 truncate group-hover:text-amber-200 transition">{user.name}</p>
               <p className="text-xs text-stone-400 truncate">{user.email}</p>
@@ -470,13 +470,13 @@ export default function Layout({
             className={`p-0.5 rounded-full ring-offset-2 transition ${currentPage === 'profile' ? 'ring-2 ring-[#e9a12c]' : 'hover:opacity-80'}`}
             title="Go to profile"
           >
-            <Avatar name={user.name} size="sm" />
+            <Avatar name={user.name} size="sm" imageUrl={user.avatar} />
           </button>
         </header>
 
         {/* Content */}
         <main data-layout-scroll-container className="flex-1 overflow-y-auto p-4 lg:p-7 fade-in">
-          <div className="mx-auto w-full max-w-[1440px]">{children}</div>
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
 
         </main>
       </div>

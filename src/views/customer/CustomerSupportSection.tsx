@@ -1,8 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { User } from '../../types'
 import type { TicketItem } from '../../data/demoDatabase'
 import { Badge, Button, Card, SectionHeader, Input, Modal, Select } from '../../components/ui'
 import { getBotFeedbackStats } from '../../services/supportBotService'
+import { isApiAuthenticated } from '../../services/authApi'
+import {
+  addCustomerSupportMessage,
+  createCustomerSupportTicket,
+  listCustomerSupportTickets,
+  type CustomerSupportTicket,
+  type SupportTicketStatus,
+} from '../../services/customerSupportApi'
 
 interface CustomerSupportSectionProps {
   user: User
@@ -24,7 +32,199 @@ export default function CustomerSupportSection({
   const [activeTab, setActiveTab] = useState<'all' | 'open' | 'in-progress' | 'resolved' | 'ai'>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Filter tickets belonging to this customer
+  const [apiTickets, setApiTickets] = useState<CustomerSupportTicket[]>([])
+  const [apiLoading, setApiLoading] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [apiCreateOpen, setApiCreateOpen] = useState(false)
+  const [apiSubject, setApiSubject] = useState('')
+  const [apiDescription, setApiDescription] = useState('')
+  const [apiReply, setApiReply] = useState('')
+  const [apiSelectedTicketId, setApiSelectedTicketId] = useState<string | null>(null)
+  const [apiSubmitting, setApiSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let mounted = true
+    setApiLoading(true)
+    listCustomerSupportTickets()
+      .then(response => {
+        if (mounted) {
+          setApiTickets(response.data)
+          setApiError(null)
+        }
+      })
+      .catch(error => {
+        if (mounted) setApiError(error instanceof Error ? error.message : 'Không tải được yêu cầu hỗ trợ từ backend.')
+      })
+      .finally(() => {
+        if (mounted) setApiLoading(false)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const apiStatusLabel = (status: SupportTicketStatus) => ({
+    open: 'Chờ tiếp nhận',
+    in_progress: 'Đang xử lý',
+    waiting_customer: 'Chờ bạn phản hồi',
+    resolved: 'Đã giải quyết',
+    closed: 'Đã đóng',
+  }[status])
+
+  const reloadApiTickets = async () => {
+    const response = await listCustomerSupportTickets()
+    setApiTickets(response.data)
+  }
+
+  if (isApiAuthenticated()) {
+    return (
+      <div className="fade-in space-y-6">
+        <SectionHeader
+          title="Hỗ trợ khách hàng"
+          subtitle="Theo dõi yêu cầu đã gửi và trao đổi trực tiếp với bộ phận hỗ trợ StorageHub."
+          action={<Button onClick={() => setApiCreateOpen(true)}>Tạo yêu cầu</Button>}
+        />
+        {apiError && <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800">{apiError}</Card>}
+        {apiLoading ? (
+          <Card className="p-6 text-sm text-stone-500">Đang tải yêu cầu hỗ trợ...</Card>
+        ) : apiTickets.length === 0 ? (
+          <Card className="p-10 text-center">
+            <p className="font-semibold text-stone-800">Bạn chưa có yêu cầu hỗ trợ nào.</p>
+            <p className="mt-1 text-sm text-stone-500">Tạo yêu cầu mới để bộ phận hỗ trợ tiếp nhận và phản hồi.</p>
+            <Button className="mt-4" onClick={() => setApiCreateOpen(true)}>Tạo yêu cầu đầu tiên</Button>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {apiTickets.map(ticket => {
+              const latestMessage = ticket.messages[ticket.messages.length - 1]
+              return (
+                <Card key={ticket.id} className="p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-stone-900">{ticket.subject}</p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {ticket.facilityName || 'Chưa gắn cơ sở'} · Cập nhật {new Date(ticket.updatedAt).toLocaleString('vi-VN')}
+                      </p>
+                    </div>
+                    <Badge variant={ticket.status === 'resolved' || ticket.status === 'closed' ? 'success' : 'warning'}>
+                      {apiStatusLabel(ticket.status)}
+                    </Badge>
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap text-sm text-stone-700">{ticket.description}</p>
+                  {latestMessage && (
+                    <div className="mt-3 rounded-lg bg-stone-50 p-3 text-sm text-stone-700">
+                      <b>{latestMessage.customerMessage ? 'Bạn' : latestMessage.authorName}:</b> {latestMessage.body}
+                    </div>
+                  )}
+                  <div className="mt-4 flex items-center justify-between gap-3 border-t border-stone-100 pt-3">
+                    <span className="text-xs text-stone-500">{ticket.messages.length} trao đổi</span>
+                    <Button size="sm" variant="outline" onClick={() => setApiSelectedTicketId(ticket.id)}>Mở trao đổi</Button>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+
+        <Modal title="Tạo yêu cầu hỗ trợ" open={apiCreateOpen} onClose={() => setApiCreateOpen(false)}>
+          <form
+            className="space-y-4"
+            onSubmit={async event => {
+              event.preventDefault()
+              if (!apiSubject.trim() || !apiDescription.trim()) return
+              setApiSubmitting(true)
+              try {
+                await createCustomerSupportTicket({
+                  subject: apiSubject.trim(),
+                  description: apiDescription.trim(),
+                  ...(user.facilityId ? { facilityId: user.facilityId } : {}),
+                })
+                await reloadApiTickets()
+                setApiSubject('')
+                setApiDescription('')
+                setApiCreateOpen(false)
+                setApiError(null)
+              } catch (error) {
+                setApiError(error instanceof Error ? error.message : 'Không tạo được yêu cầu hỗ trợ.')
+              } finally {
+                setApiSubmitting(false)
+              }
+            }}
+          >
+            <Input label="Tiêu đề" value={apiSubject} onChange={event => setApiSubject(event.target.value)} maxLength={200} required />
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-stone-700">Nội dung</label>
+              <textarea
+                value={apiDescription}
+                onChange={event => setApiDescription(event.target.value)}
+                maxLength={4000}
+                required
+                rows={5}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setApiCreateOpen(false)}>Hủy</Button>
+              <Button type="submit" disabled={apiSubmitting}>{apiSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}</Button>
+            </div>
+          </form>
+        </Modal>
+
+        {(() => {
+          const selectedTicket = apiTickets.find(ticket => ticket.id === apiSelectedTicketId)
+          return (
+            <Modal title={selectedTicket?.subject || 'Trao đổi hỗ trợ'} open={Boolean(selectedTicket)} onClose={() => setApiSelectedTicketId(null)}>
+              {selectedTicket && (
+                <div className="space-y-4">
+                  <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg bg-stone-50 p-3">
+                    {selectedTicket.messages.map(message => (
+                      <div key={message.id} className={`rounded-lg p-3 text-sm ${message.customerMessage ? 'ml-6 bg-white' : 'mr-6 bg-amber-50'}`}>
+                        <p className="text-xs font-semibold text-stone-500">{message.customerMessage ? 'Bạn' : message.authorName}</p>
+                        <p className="mt-1 whitespace-pre-wrap text-stone-800">{message.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedTicket.status !== 'closed' && (
+                    <form
+                      className="space-y-3"
+                      onSubmit={async event => {
+                        event.preventDefault()
+                        if (!apiReply.trim()) return
+                        setApiSubmitting(true)
+                        try {
+                          const response = await addCustomerSupportMessage(selectedTicket.id, apiReply.trim())
+                          setApiTickets(current => current.map(ticket => ticket.id === response.data.id ? response.data : ticket))
+                          setApiReply('')
+                          setApiError(null)
+                        } catch (error) {
+                          setApiError(error instanceof Error ? error.message : 'Không gửi được phản hồi.')
+                        } finally {
+                          setApiSubmitting(false)
+                        }
+                      }}
+                    >
+                      <textarea
+                        value={apiReply}
+                        onChange={event => setApiReply(event.target.value)}
+                        rows={3}
+                        maxLength={4000}
+                        placeholder="Nhập nội dung trao đổi..."
+                        className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                      <div className="flex justify-end"><Button type="submit" disabled={apiSubmitting}>{apiSubmitting ? 'Đang gửi...' : 'Gửi phản hồi'}</Button></div>
+                    </form>
+                  )}
+                </div>
+              )}
+            </Modal>
+          )
+        })()}
+      </div>
+    )
+  }
+
+  // Demo-only data is intentionally unreachable for backend-authenticated users.
   const myTickets = tickets.filter(
     t => t.email?.toLowerCase() === user.email?.toLowerCase() ||
          t.customer?.toLowerCase() === user.name?.toLowerCase()
@@ -75,7 +275,7 @@ export default function CustomerSupportSection({
             Hỏi trợ lý StorageHub trước — nếu cần, yêu cầu sẽ tự động chuyển cho nhân viên kèm lịch sử trao đổi.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             onClick={onOpenCreateModal}

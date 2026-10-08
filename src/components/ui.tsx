@@ -161,7 +161,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export function Input({ label, className = '', ...props }: InputProps) {
   return (
     <div className="space-y-1">
-      {label && <label className="text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
       <input
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition ${className}`}
         {...props}
@@ -192,7 +192,7 @@ export function PasswordField({
 
   return (
     <div className="space-y-1">
-      {label && <label htmlFor={id} className="text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label htmlFor={id} className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
       <div className="relative">
         <input
           {...props}
@@ -240,7 +240,7 @@ export function Select({ label, children, className = '', value, onChange, disab
 }) {
   return (
     <div className="space-y-1">
-      {label && <label className="text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
       <select
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition bg-white ${className}`}
         value={value}
@@ -322,29 +322,29 @@ export function Modal({
               : 'max-w-lg'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-stone-200 shadow-2xl w-full ${sizeClass} ${customHeader || hideHeader ? 'overflow-hidden' : 'p-6'} fade-in ${className}`}
+        className={`relative max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-stone-200 shadow-2xl w-full ${sizeClass} ${customHeader || hideHeader ? 'overflow-hidden' : 'p-4 sm:p-6'} fade-in ${className}`}
       >
         {customHeader ? (
           <>
             {customHeader}
-            <div className={contentClassName || 'p-6'}>{children}</div>
+            <div className={contentClassName || 'p-4 sm:p-6'}>{children}</div>
           </>
         ) : hideHeader ? (
-          <div className={contentClassName || 'p-6'}>{children}</div>
+          <div className={contentClassName || 'p-4 sm:p-6'}>{children}</div>
         ) : (
           <>
             {title && (
-              <div className="flex items-center justify-between mb-5">
-                <h2 id="modal-title" className="text-lg font-bold text-stone-900">{title}</h2>
+              <div className="flex items-center justify-between mb-4 sm:mb-5 gap-2">
+                <h2 id="modal-title" className="text-base sm:text-lg font-bold text-stone-900 truncate">{title}</h2>
                 <button
                   aria-label={closeLabel}
-                  className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
+                  className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer shrink-0"
                   onClick={onClose}
                 >
                   <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
