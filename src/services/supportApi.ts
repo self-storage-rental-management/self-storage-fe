@@ -406,8 +406,7 @@ export async function sendSupportCommand(
     message: [
       "body",
       "evidenceFileIds",
-      "expectedVersion",
-      ...(role === "staff" ? ["visibility"] : []),
+      ...(role === "staff" ? ["visibility"] : ["expectedVersion"]),
     ],
     information: ["message", "evidenceFileIds", "expectedVersion"],
     resolve: ["summary", "evidenceFileIds", "expectedVersion"],

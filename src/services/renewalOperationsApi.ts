@@ -301,12 +301,29 @@ const eventKinds = {
   exception: "EXCEPTION",
   refund: "REFUND",
 } as const
+// Match RenewalOperationCommands exactly; UI/actor/money fields must never reach strict BE DTOs.
+const commandFields: Record<RenewalOperationCommand["action"], readonly string[]> = {
+  deposit: ["expectedVersion"],
+  appointment: ["appointmentAt", "reason", "expectedVersion"],
+  reschedule: ["appointmentAt", "reason", "expectedVersion"],
+  confirmation: ["decisionRef", "expectedVersion"],
+  arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion"],
+  incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
+  cash: ["payableStatementRef", "receiptReference", "received", "expectedVersion"],
+  completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion"],
+  exception: ["incidentId", "action", "appointmentAt", "revisedDeadline", "reason", "evidenceFileIds", "expectedVersion"],
+  refund: ["incidentId", "decision", "reason", "evidenceFileIds", "expectedVersion"],
+}
 export async function sendRenewalOperation(
   id: string,
   command: RenewalOperationCommand,
   key: string,
 ) {
   const b = command.body
+  if (!Object.prototype.hasOwnProperty.call(commandFields, command.action) ||
+    !b || typeof b !== "object" || Array.isArray(b) ||
+    !Object.keys(b).every(field => commandFields[command.action].includes(field)))
+    throw new Error("Trường lệnh vận hành gia hạn không thuộc API contract.")
   validateMutation(b.expectedVersion, key)
   if ("evidenceFileIds" in b) validateEvidence(b.evidenceFileIds)
   for (const field of [

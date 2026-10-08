@@ -133,28 +133,41 @@ export async function listRentals(
     isRentalRecord,
   )
 }
+function isFinancialSummary(value: unknown): boolean {
+  const f = value as RentalApiDetail["financialSummary"] | null
+  const money = (v: unknown): v is number =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0
+  const date = (v: unknown) => v === null || (
+    typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) &&
+    Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v
+  )
+  if (!f || f.currency !== "VND" || !date(f.nextDueDate) ||
+    !(f.reason === null || typeof f.reason === "string")) return false
+  if (f.completeness === "UNKNOWN") return (
+    f.outstandingAmount === null && f.overdueAmount === null &&
+    f.securityDepositAmount == null && f.billingMode == null &&
+    f.nextDueDate === null && !!f.reason?.trim()
+  )
+  if (!money(f.outstandingAmount) || !money(f.overdueAmount) ||
+    f.overdueAmount > f.outstandingAmount ||
+    !["PREPAID_FULL_PERIOD", "OTHER"].includes(f.billingMode ?? "") ||
+    (f.billingMode === "PREPAID_FULL_PERIOD" && f.nextDueDate !== null)) return false
+  if (f.completeness === "PARTIAL")
+    return f.securityDepositAmount === null && !!f.reason?.trim()
+  return f.completeness === "COMPLETE" && money(f.securityDepositAmount)
+}
 export async function getRental(role: RentalApiRole, id: string) {
   return readRentalEnvelope<RentalApiDetail>(
     await apiRequest(`/api/${role}/rentals/${encodeURIComponent(id)}`),
-    (value) =>
-      isRentalRecord(value) &&
-      !!(value as RentalApiDetail).financialSummary &&
-      typeof (value as RentalApiDetail).financialSummary.completeness ===
-        "string" &&
-      ["outstandingAmount", "overdueAmount"].every((field) => {
-        const money = (value as RentalApiDetail).financialSummary[
-          (field as "outstandingAmount" | "overdueAmount")
-        ]
-        return money === null || Number.isFinite(money)
-      }) &&
-      ((value as RentalApiDetail).financialSummary.securityDepositAmount == null ||
-        (Number.isFinite((value as RentalApiDetail).financialSummary.securityDepositAmount) &&
-          Number((value as RentalApiDetail).financialSummary.securityDepositAmount) >= 0)) &&
-      ((value as RentalApiDetail).financialSummary.billingMode == null ||
-        ["PREPAID_FULL_PERIOD", "OTHER"].includes((value as RentalApiDetail).financialSummary.billingMode!)) &&
-      ((value as RentalApiDetail).financialSummary.billingMode !== "PREPAID_FULL_PERIOD" ||
-        (value as RentalApiDetail).financialSummary.nextDueDate === null) &&
-      !!(value as RentalApiDetail).access &&
-      typeof (value as RentalApiDetail).access.completeness === "string",
+    (value) => {
+      const r = value as RentalApiDetail | null
+      if (!isRentalRecord(value) || !r || r.id !== id ||
+        !isFinancialSummary(r.financialSummary) || !r.access ||
+        !(r.access.reason === null || typeof r.access.reason === "string")) return false
+      return r.access.completeness === "UNKNOWN"
+        ? r.access.status === null && !!r.access.reason?.trim()
+        : r.access.completeness === "COMPLETE" &&
+          ["ACTIVE", "INACTIVE", "SUSPENDED", "REVOKED", "EXPIRED"].includes(r.access.status ?? "")
+    },
   )
 }
