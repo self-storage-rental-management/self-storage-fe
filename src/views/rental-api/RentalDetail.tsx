@@ -53,7 +53,8 @@ export default function RentalDetail({
           </div>
           <div>
             <dt>Tình trạng tài chính</dt>
-            <dd>{f.completeness === "UNKNOWN" ? unknown : f.completeness}</dd>
+            <dd>{f.completeness === "UNKNOWN" ? unknown :
+              f.completeness === "PARTIAL" ? "Đã xác minh một phần" : "Đã xác minh đầy đủ"}</dd>
           </div>
           <div>
             <dt>Hạn nghĩa vụ thanh toán kế tiếp</dt>

@@ -46,7 +46,7 @@ export interface RentalApiDetail extends RentalApiRecord {
   actualReturnedAt: string | null
   completedAt: string | null
   financialSummary: {
-    completeness: string
+    completeness: "COMPLETE" | "PARTIAL" | "UNKNOWN"
     currency: string
     outstandingAmount: number | null
     overdueAmount: number | null

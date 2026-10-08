@@ -34,6 +34,25 @@ afterEach(() => {
 })
 
 describe("D1/D2 wire contracts", () => {
+  it("accepts PARTIAL verified balances without inventing a missing security deposit", async () => {
+    const data = { ...rental, financialSummary: {
+      ...rental.financialSummary, completeness: "PARTIAL", outstandingAmount: 1000,
+      overdueAmount: 200, securityDepositAmount: null, billingMode: "PREPAID_FULL_PERIOD",
+      reason: "Security deposit source missing",
+    } }
+    response({ data })
+    expect((await getRental("manager", "r1")).financialSummary).toEqual(data.financialSummary)
+  })
+  it.each([
+    { securityDepositAmount: null }, { outstandingAmount: -1 }, { overdueAmount: 1001 },
+    { completeness: "READY" }, { billingMode: null }, { currency: "USD" },
+  ])("rejects inconsistent COMPLETE financial projection %j", async fields => {
+    response({ data: { ...rental, financialSummary: {
+      ...rental.financialSummary, completeness: "COMPLETE", outstandingAmount: 1000,
+      overdueAmount: 200, securityDepositAmount: 500, billingMode: "PREPAID_FULL_PERIOD", ...fields,
+    } } })
+    await expect(getRental("manager", "r1")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
   it("reads additive financial fields without converting or calculating deposit", async () => {
     const data={...rental,financialSummary:{...rental.financialSummary,completeness:"COMPLETE",outstandingAmount:0,overdueAmount:0,securityDepositAmount:1234567,billingMode:"PREPAID_FULL_PERIOD"}}
     response({data})

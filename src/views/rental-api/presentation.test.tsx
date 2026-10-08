@@ -14,6 +14,18 @@ import { ApiClientError } from "../../services/apiClient"
 import { manager, rental, renewal, quote } from "../../../tests/rentalApiFixtures"
 
 describe("Rental/Renewal business presentation", () => {
+  it("labels PARTIAL finance and preserves known balances while deposit remains unknown", () => {
+    const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, financialSummary: {
+      ...rental.financialSummary, completeness: "PARTIAL", outstandingAmount: 1234,
+      overdueAmount: 234, securityDepositAmount: null, billingMode: "PREPAID_FULL_PERIOD",
+      reason: "Chưa xác minh cọc bảo đảm",
+    } }} />)
+    expect(html).toContain("Đã xác minh một phần")
+    expect(html).toContain("1.234 đ")
+    expect(html).toContain("234 đ")
+    expect(html).toContain("Chưa xác minh cọc bảo đảm")
+    expect(html).toContain(unknown)
+  })
   it("renders authoritative prepaid financial details without inventing a recurring due date", () => {
     const html=renderToStaticMarkup(<RentalDetail rental={{...rental, financialSummary:{...rental.financialSummary, completeness:"COMPLETE", outstandingAmount:0, overdueAmount:0, securityDepositAmount:1234567, billingMode:"PREPAID_FULL_PERIOD"}}} />)
     expect(html).toContain("1.234.567 đ")
