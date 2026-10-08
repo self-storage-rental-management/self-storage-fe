@@ -50,7 +50,7 @@ describe('customer reservation layout regression', () => {
   })
   it('restores the amber card, financial breakdown and six-step progress for real reservations', () => {
     const html = render('AWAITING_EMAIL')
-    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Tiền thuê và cọc giữ chỗ', 'Khoản thu khi nhận kho', 'Tiến trình đơn đặt kho', 'quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
+    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Tiền thuê và cọc giữ chỗ', 'Khoản thu khi nhận kho', 'Tiến trình đơn đặt kho', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
       expect(html).toContain(text)
     }
     expect(html).toContain('aria-current="step"')

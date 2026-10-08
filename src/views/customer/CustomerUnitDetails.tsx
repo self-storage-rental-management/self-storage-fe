@@ -33,13 +33,6 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
     {layout && <section className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
       <h4 className="font-bold text-stone-900">Bố trí và sức chứa kho</h4>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <article className="rounded-xl border border-stone-200 bg-white p-4 sm:col-span-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Kích thước hàng hóa tối đa</p>
-          <p className="mt-2 text-lg font-extrabold text-stone-950">{layout.maxCargoDimCm.lengthCm} × {layout.maxCargoDimCm.widthCm} × {layout.maxCargoDimCm.heightCm} cm</p>
-          <p className="mt-2 text-xs leading-5 text-stone-600">Đối chiếu với kích thước từng kiện khi khai báo hàng hóa.</p>
-        </article>
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <article className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold text-amber-900">Mẫu thùng nhỏ 50 × 40 × 40 cm</p><p className="mt-2 text-2xl font-extrabold text-stone-950">{layout.smallBoxCapacity.toLocaleString('vi-VN')} <span className="text-sm font-normal text-stone-600">thùng</span></p></article>
         <article className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold text-amber-900">Mẫu thùng lớn 70 × 50 × 50 cm</p><p className="mt-2 text-2xl font-extrabold text-stone-950">{layout.largeBoxCapacity.toLocaleString('vi-VN')} <span className="text-sm font-normal text-stone-600">thùng</span></p></article>
       </div>
