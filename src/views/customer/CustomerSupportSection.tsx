@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { User } from '../../types'
-import type { TicketItem } from '../../data/demoDatabase'
+import type { TicketItem } from '../../types/support'
 import { Badge, Button, Card, SectionHeader, Input, Modal, Select } from '../../components/ui'
 import { getBotFeedbackStats } from '../../services/supportBotService'
 
