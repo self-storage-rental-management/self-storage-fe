@@ -18,6 +18,7 @@ import { ApiClientError } from '../../services/apiClient'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { reservationProgress } from './reservationPresentation'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
+import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
@@ -2426,7 +2427,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               {renewal.updatedAt && <p className="mt-1 text-stone-500">{'Cập nhật gần nhất'}: {new Date(renewal.updatedAt).toLocaleString('vi-VN')}</p>}
                               {renewal.status === 'payment_expired' && <p className="mt-1 text-red-700">{'Yêu cầu đã hết hiệu lực. Hãy gửi yêu cầu mới để Manager kiểm tra lại khả dụng.'}</p>}
                               {renewal.status === 'rejected' && renewal.notes && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">{'Lý do Manager từ chối'}: {renewal.notes}</p>}
-                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Đã cọc 20% · Hẹn ký ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Còn thu tại cơ sở: ${formatVnd(renewal.remainingAmount ?? 0)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
+                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Đã cọc gia hạn · Hẹn ký ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Còn thu tại cơ sở: ${formatVnd(renewal.remainingAmount ?? 0)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
                               {renewal.status === 'completed' && <p className="mt-1 text-emerald-700">{`Phụ lục ${renewal.addendumNumber} · Hiệu lực từ ${renewal.effectiveAt ? new Date(renewal.effectiveAt).toLocaleString('vi-VN') : renewal.paidAt}`}</p>}
                             </div>
                             <div className="flex items-center gap-3">
@@ -2633,8 +2634,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-extrabold text-emerald-800">3</span><div><h3 className="font-bold text-stone-950">{'Gia hạn thuê kho'}</h3><p className="text-xs text-stone-500">{'Hoàn tất trước khi kỳ thuê mới có hiệu lực'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
               'Khách gửi yêu cầu, chọn số tháng muốn gia hạn và theo dõi trạng thái xác nhận trên hồ sơ thuê.',
-              'Khi yêu cầu được chấp thuận, khách thanh toán trước 20% giá trị kỳ gia hạn trong thời hạn hiển thị.',
-              'Khách thanh toán 80% còn lại và hoàn tất phụ lục trước khi kỳ gia hạn có hiệu lực.',
+              'Khi yêu cầu được chấp thuận, khách thanh toán trước 40% giá trị kỳ gia hạn trong thời hạn hiển thị.',
+              'Khách thanh toán 60% còn lại và hoàn tất phụ lục trước khi kỳ gia hạn có hiệu lực.',
               'Nếu quá hạn thanh toán, yêu cầu gia hạn hết hiệu lực và khách cần gửi yêu cầu mới.'
             ].map(item => <p key={item} className="flex gap-2"><span className="text-emerald-700">✓</span><span>{item}</span></p>)}</div></Card>
 
@@ -3419,9 +3420,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 const initialTermValue = activeHoldForContract.quote.baseMonthlyPrice * activeHoldForContract.rentalMonths
                 const completedRenewalValue = completedRenewals.reduce((sum, renewal) => sum + (renewal.totalAmount ?? renewal.renewalFee), 0)
                 const currentTermValue = initialTermValue + completedRenewalValue
-                const totalBookingDeposit = deposit + pricedRenewals.reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? Math.round((renewal.totalAmount ?? renewal.renewalFee) * 0.2 * 100) / 100), 0)
-                const depositDueNow = activeRenewals.filter(renewal => renewal.status === 'approved').reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? Math.round((renewal.totalAmount ?? renewal.renewalFee) * 0.2 * 100) / 100), 0)
-                const balance = activeRenewals.reduce((sum, renewal) => ['approved', 'appointment_scheduled'].includes(renewal.status) ? sum + (renewal.remainingAmount ?? Math.round((renewal.totalAmount ?? renewal.renewalFee) * 0.8 * 100) / 100) + (renewal.lateFeeAmount ?? 0) : sum, 0)
+                const totalBookingDeposit = deposit + pricedRenewals.reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).depositAmount), 0)
+                const depositDueNow = activeRenewals.filter(renewal => renewal.status === 'approved').reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).depositAmount), 0)
+                const balance = activeRenewals.reduce((sum, renewal) => ['approved', 'appointment_scheduled'].includes(renewal.status) ? sum + (renewal.remainingAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).remainingAmount) + (renewal.lateFeeAmount ?? 0) : sum, 0)
                 const totalRentalMonths = activeHoldForContract.rentalMonths + completedRenewals.reduce((sum, renewal) => sum + renewal.renewalMonths, 0)
                 return <>
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-4">
@@ -3698,8 +3699,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const renewalGrossTotal = (activeRenewalForPayment.originalMonthlyRate ?? rental?.monthlyRate ?? 0) * activeRenewalForPayment.renewalMonths
           const renewalDiscountAmount = activeRenewalForPayment.discountAmount ?? Math.max(0, Math.round((renewalGrossTotal - renewalTotal) * 100) / 100)
           const appliedRenewalDiscountRate = activeRenewalForPayment.discountRate ?? (renewalGrossTotal > 0 ? renewalDiscountAmount / renewalGrossTotal : 0)
-          const renewalDeposit = activeRenewalForPayment.bookingDepositAmount ?? Math.round(renewalTotal * 0.2 * 100) / 100
-          const remainingAtFacility = activeRenewalForPayment.remainingAmount ?? Math.round(renewalTotal * 0.8 * 100) / 100
+          const renewalPaymentSplit = calculateRenewalPaymentSplit(renewalTotal)
+          const renewalDeposit = activeRenewalForPayment.bookingDepositAmount ?? renewalPaymentSplit.depositAmount
+          const remainingAtFacility = activeRenewalForPayment.remainingAmount ?? renewalPaymentSplit.remainingAmount
           const oldEndAt = new Date(`${activeRenewalForPayment.oldEndDate}T23:59:59`)
           const isOverdue = oldEndAt.getTime() < now
           const latestAppointment = new Date(now); latestAppointment.setDate(latestAppointment.getDate() + 7)
@@ -3718,7 +3720,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <div className="overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white">
               <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-amber-700">{'Hóa đơn gia hạn đã được duyệt'}</p><p className="mt-1 text-xl font-extrabold text-stone-950">{activeRenewalForPayment.invoiceNumber}</p><p className="mt-1 text-stone-600">Gian kho <b>{activeRenewalForPayment.unitId}</b> · Gói <b>{activeRenewalForPayment.renewalMonths} tháng</b></p></div>
-                <div className="rounded-xl bg-stone-950 px-5 py-4 text-left text-white sm:min-w-56 sm:text-right"><p className="text-xs text-stone-300">{'Cần thanh toán cọc (20%)'}</p><p className="mt-1 text-2xl font-extrabold">{formatVnd(renewalDeposit)}</p></div>
+                <div className="rounded-xl bg-stone-950 px-5 py-4 text-left text-white sm:min-w-56 sm:text-right"><p className="text-xs text-stone-300">{'Cần thanh toán cọc (40%)'}</p><p className="mt-1 text-2xl font-extrabold">{formatVnd(renewalDeposit)}</p></div>
               </div>
               <div className="grid border-t border-amber-200 bg-white/70 sm:grid-cols-4">
                 <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Hợp đồng cũ đến'}</p><p className="mt-1 font-bold text-stone-900">{activeRenewalForPayment.oldEndDate}</p></div>
@@ -3746,10 +3748,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div className="space-y-4">
                 <div className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm">
                   <div className="border-b border-stone-200 bg-stone-50 px-4 py-3"><p className="font-bold text-stone-950">{'Tóm tắt thanh toán'}</p><p className="mt-0.5 text-xs text-stone-500">{'Kiểm tra số tiền trước khi xác nhận'}</p></div>
-                  <div className="space-y-3 p-4 text-stone-700"><div className="flex justify-between gap-4"><span>{'Tiền gia hạn gốc'}</span><b>{formatVnd(renewalGrossTotal)}</b></div><div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700"><span>{`Ưu đãi gói ${activeRenewalForPayment.renewalMonths} tháng (${Math.round(appliedRenewalDiscountRate * 100)}%)`}</span><b>− {formatVnd(renewalDiscountAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-3"><span>{'Giá sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div><div className="flex justify-between gap-4 text-blue-700"><span>{'Thanh toán cọc ngay (20%)'}</span><b>{formatVnd(renewalDeposit)}</b></div><div className="flex justify-between gap-4"><span>{'Còn lại tại cơ sở (80%)'}</span><b>{formatVnd(remainingAtFacility)}</b></div><div className={`flex justify-between gap-4 ${projectedLateFee > 0 ? 'font-semibold text-red-700' : ''}`}><span>{`Phí muộn dự kiến (${projectedOverdueDays} ngày)`}</span><b>{formatVnd(projectedLateFee)}</b></div></div>
+                  <div className="space-y-3 p-4 text-stone-700"><div className="flex justify-between gap-4"><span>{'Tiền gia hạn gốc'}</span><b>{formatVnd(renewalGrossTotal)}</b></div><div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700"><span>{`Ưu đãi gói ${activeRenewalForPayment.renewalMonths} tháng (${Math.round(appliedRenewalDiscountRate * 100)}%)`}</span><b>− {formatVnd(renewalDiscountAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-3"><span>{'Giá sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div><div className="flex justify-between gap-4 text-blue-700"><span>{'Thanh toán cọc ngay (40%)'}</span><b>{formatVnd(renewalDeposit)}</b></div><div className="flex justify-between gap-4"><span>{'Còn lại tại cơ sở (60%)'}</span><b>{formatVnd(remainingAtFacility)}</b></div><div className={`flex justify-between gap-4 ${projectedLateFee > 0 ? 'font-semibold text-red-700' : ''}`}><span>{`Phí muộn dự kiến (${projectedOverdueDays} ngày)`}</span><b>{formatVnd(projectedLateFee)}</b></div></div>
                   <div className="flex items-center justify-between gap-4 border-t border-stone-200 bg-stone-950 px-4 py-4 text-white"><span className="font-semibold">{'Dự kiến đóng tại cơ sở'}</span><span className="text-lg font-extrabold">{formatVnd(projectedOnSiteTotal)}</span></div>
                 </div>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-4 text-xs leading-5"><input type="checkbox" className="mt-1 h-4 w-4 accent-stone-900" checked={renewalTermsAccepted} onChange={event => setRenewalTermsAccepted(event.target.checked)} /><span>{'Tôi đồng ý thanh toán cọc 20%, đến cơ sở đúng lịch để ký hợp đồng và đóng phần còn lại. Tôi hiểu phí muộn sẽ tăng theo từng ngày nếu ký sau ngày hết hạn.'}</span></label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-4 text-xs leading-5"><input type="checkbox" className="mt-1 h-4 w-4 accent-stone-900" checked={renewalTermsAccepted} onChange={event => setRenewalTermsAccepted(event.target.checked)} /><span>{'Tôi đồng ý thanh toán cọc 40%, đến cơ sở đúng lịch để ký hợp đồng và đóng phần còn lại. Tôi hiểu phí muộn sẽ tăng theo từng ngày nếu ký sau ngày hết hạn.'}</span></label>
               </div>
             </div>
             {paymentExpired && <p className="rounded-lg bg-red-50 p-3 font-semibold text-red-700">{'Đã quá thời hạn thanh toán 72 giờ. Vui lòng gửi yêu cầu gia hạn mới.'}</p>}
@@ -3759,7 +3761,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 payRenewal(activeRenewalForPayment.id, user, renewalPaymentMethod, reference, renewalTermsAccepted, renewalAppointmentDate, renewalAppointmentTime)
                 setRenewalPaymentOpen(false)
                 setRenewalTermsAccepted(false)
-                showToast('Đã cọc 20% và đặt lịch ký. Hợp đồng chỉ được gia hạn sau khi nhân viên xác nhận ký và thu phần còn lại.')
+                showToast('Đã cọc 40% và đặt lịch ký. Hợp đồng chỉ được gia hạn sau khi nhân viên xác nhận ký và thu phần còn lại.')
               } catch (error) {
                 showToast(error instanceof Error ? error.message : 'Không thể xác minh thanh toán gia hạn.')
               }
