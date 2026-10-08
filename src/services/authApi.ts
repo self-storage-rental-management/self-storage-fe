@@ -1,4 +1,5 @@
 import { PERMISSION_KEYS, type PermissionKey, type Role, type User } from '../types'
+import { DEFAULT_ROLE_PERMISSIONS } from '../auth/rbac'
 import { ApiClientError, apiRequest, clearAuthTokens, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
 
 export type ApiRoleCode = 'CUSTOMER' | 'STAFF' | 'MANAGER' | 'BUSINESS' | 'ADMIN'
@@ -17,6 +18,7 @@ export interface ApiActor {
   status: ApiUserStatus
   roles: ApiRoleCode[]
   facilityScopes: Record<string, ApiFacilityScopeLevel>
+  facilityNames?: Record<string, string>
   mustChangePassword: boolean
   permissions: string[]
 }
@@ -99,6 +101,10 @@ export function primaryRole(roles: readonly ApiRoleCode[]): Role {
 }
 
 export function actorToUser(actor: ApiActor): User {
+  const assignedFacilityIds = Object.keys(actor.facilityScopes)
+  const assignedFacilityNames = assignedFacilityIds
+    .map(id => actor.facilityNames?.[id])
+    .filter((name): name is string => Boolean(name))
   return {
     id: actor.id,
     name: actor.fullName,
@@ -109,7 +115,10 @@ export function actorToUser(actor: ApiActor): User {
     emergencyContactPhone: actor.emergencyContactPhone || undefined,
     avatar: actor.avatarUrl || undefined,
     role: primaryRole(actor.roles),
-    facilityId: Object.keys(actor.facilityScopes)[0],
+    facility: assignedFacilityNames.join(', ') || undefined,
+    facilityId: assignedFacilityIds[0],
+    facilityScopes: actor.facilityScopes,
+    facilityNames: actor.facilityNames,
     mustChangePassword: actor.mustChangePassword,
     permissions: normalizeApiPermissions(actor.permissions),
   }
@@ -282,5 +291,30 @@ export function getAuthenticatedActor() {
 
 export function isApiAuthenticated() {
   return hasAccessToken() && Boolean(currentActor)
+}
+
+// Customer navigation uses role capabilities, not the local demo user registry.
+// Backend endpoints remain authoritative for ownership and authorization.
+export function canApiCustomerNavigate(user: User, permission: PermissionKey): boolean {
+  return isApiAuthenticated() && currentActor?.id === user.id
+    && currentActor.status === 'ACTIVE' && primaryRole(currentActor.roles) === 'customer'
+    && Boolean(DEFAULT_ROLE_PERMISSIONS.customer[permission])
+}
+
+export function canApiActor(user: User, permission: PermissionKey): boolean {
+  return isApiAuthenticated() && currentActor?.id === user.id && currentActor.status === 'ACTIVE'
+    && currentActor.permissions.includes(permission)
+}
+
+export async function updateProfileWithApi(input: { fullName: string; phone: string }): Promise<ApiActor> {
+  const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me', {
+    method: 'PUT',
+    body: JSON.stringify({ ...input, avatarUrl: currentActor?.avatarUrl ?? null }),
+  })
+  if (!response?.data?.id || response.data.id !== currentActor?.id) {
+    throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+  }
+  currentActor = response.data
+  return currentActor
 }
 

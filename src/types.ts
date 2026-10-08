@@ -47,6 +47,8 @@ export interface User {
   facility?: string
   /** Stable facility key used for authorization and cross-screen filtering. */
   facilityId?: string
+  facilityScopes?: Record<string, 'READ' | 'OPERATE' | 'MANAGE'>
+  facilityNames?: Record<string, string>
   mustChangePassword?: boolean
   /** Permissions returned by the backend for the current authenticated actor. */
   permissions?: PermissionKey[]

@@ -231,7 +231,6 @@ export default function ManagerInventoryPanel({
     const filtered = facilityUnits.filter(unit => {
       const rental = operationalRentalFor(unit)
       const reservation = activeReservationFor(unit)
-      const maintenance = openMaintenanceFor(unit)
       const searchValues = [
         unit.code,
         managerUnitTypeLabel(unit.type, 'vi'),
@@ -248,7 +247,7 @@ export default function ManagerInventoryPanel({
         (floorFilter === 'all' || String(unit.floor) === floorFilter) &&
         (zoneFilter === 'all' || unit.zone === zoneFilter) &&
         (climateFilter === 'all' || (climateFilter === 'yes' ? unit.climate : !unit.climate)) &&
-        (maintenanceFilter === 'all' || (maintenanceFilter === 'open' ? Boolean(maintenance) : !maintenance)) &&
+        (maintenanceFilter === 'all' || (maintenanceFilter === 'maintenance' ? unit.status === 'maintenance' : unit.status !== 'maintenance')) &&
         matchesManagerSearch(query, searchValues)
       )
     })
@@ -449,10 +448,10 @@ export default function ManagerInventoryPanel({
             <option value="yes">Có kiểm soát nhiệt độ</option>
             <option value="no">Không kiểm soát nhiệt độ</option>
           </Select>
-          <Select value={maintenanceFilter} onChange={event => setMaintenanceFilter(event.target.value)}>
-            <option value="all">Mọi tình trạng bảo trì</option>
-            <option value="open">Có nhiệm vụ bảo trì</option>
-            <option value="none">Không có nhiệm vụ bảo trì</option>
+          <Select label="Trạng thái bảo trì" value={maintenanceFilter} onChange={event => setMaintenanceFilter(event.target.value)}>
+            <option value="all">Tất cả gian kho</option>
+            <option value="maintenance">Kho đang bảo trì</option>
+            <option value="none">Kho không bảo trì</option>
           </Select>
           <Select value={sortBy} onChange={event => setSortBy(event.target.value)}>
             <option value="attention">Cần chú ý trước</option>
