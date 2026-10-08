@@ -50,7 +50,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
     { label: 'Phê duyệt hồ sơ', detail: r.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa' : 'Hồ sơ được duyệt tự động' },
     { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán cọc', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất cọc giữ chỗ' },
-    { label: 'quản lý phân kho', detail: 'Chờ phân gian kho cụ thể' },
+    { label: 'Quản lý phân kho', detail: 'Chờ phân gian kho cụ thể' },
     { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
     { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' },
   ]

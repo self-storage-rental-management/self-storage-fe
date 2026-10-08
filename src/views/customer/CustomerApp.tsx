@@ -18,6 +18,7 @@ import { ApiClientError } from '../../services/apiClient'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { reservationProgress } from './reservationPresentation'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
+import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
@@ -51,7 +52,6 @@ type CustomerCatalogUnit = StorageUnit & {
   aisleWidthM: number
   doorWidthM: number
   doorHeightM: number
-  maxCargoDimCm: { lengthCm: number; widthCm: number; heightCm: number }
   smallBoxCapacity: number
   largeBoxCapacity: number
   trolley: string
@@ -304,12 +304,7 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           <div><p className="text-xs text-stone-500">{'Chiều rộng lối đi'}</p><p className="mt-0.5 font-bold text-black">{amenities ? `${amenities.aisleWidthM} m` : 'Chưa có dữ liệu'}</p></div>
           <div><p className="text-xs text-stone-500">{'Tải trọng tối đa'}</p><p className="mt-0.5 font-bold text-black">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</p></div>
         </div>
-        {/* Hàng hóa tối đa & xe đẩy */}
-        {amenities && <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-stone-50 px-3 py-2.5 text-xs">
-          <div>
-            <p className="text-stone-500">Hàng hóa tối đa</p>
-            <p className="mt-0.5 font-bold text-stone-800">{amenities.maxCargoDimCm.lengthCm}×{amenities.maxCargoDimCm.widthCm}×{amenities.maxCargoDimCm.heightCm} cm</p>
-          </div>
+        {amenities && <div className="mt-3 rounded-xl bg-stone-50 px-3 py-2.5 text-xs">
           <div>
             <p className="text-stone-500">Xe đẩy hỗ trợ</p>
             <p className="mt-0.5 font-bold text-stone-800">{amenities.trolley}</p>
@@ -551,12 +546,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const maxLoadKg = unit.maxLoadKg || backendSpec?.maxLoadKg || 0
       const price = unit.price
 
-      const maxCargoDimCm = amenities?.maxCargoDimCm ?? (unit.dimensions ? {
-        lengthCm: Math.min(Math.round(lengthM * 100 - 40), 400),
-        widthCm: Math.min(Math.round(doorWidthM * 100 - 20), 200),
-        heightCm: Math.min(Math.round(doorHeightM * 100 - 20), 220),
-      } : { lengthCm: 0, widthCm: 0, heightCm: 0 })
-
       const rackCount = backendSpec?.rackCount ?? (unit as any).rackCount ?? 0
       const smallBoxCapacity = amenities?.smallBoxCapacity ?? Math.floor(volumeM3 * 8)
       const largeBoxCapacity = amenities?.largeBoxCapacity ?? Math.floor(volumeM3 * 2.5)
@@ -573,7 +562,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         aisleWidthM,
         doorWidthM,
         doorHeightM,
-        maxCargoDimCm,
         smallBoxCapacity,
         largeBoxCapacity,
         trolley: amenities?.trolley ?? customerTrolleyVi(sizeCode),
@@ -1968,7 +1956,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-amber-700">{hold.id}</span>
                         {badgeFor(hold.status)}
-                        {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã cọc giữ chỗ 20%'}</span>}
+                        {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã cọc giữ chỗ 40%'}</span>}
                       </div>
                       <h2 className="mt-1 text-lg font-bold text-stone-900">
                         {unitTypeLabel(hold.unitTypeName || hold.unitId)} · {hold.facilityName}
@@ -2012,10 +2000,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           const discountAmount = hold.discountAmount ?? 0
                           const rentTotal = Math.max(0, grossRent - discountAmount)
                           const rentBeforeDiscount = grossRent
-                          const bookingDeposit = hold.reservationDepositAmount ?? Math.round(rentTotal * 0.2 * 100) / 100
+                          const bookingDeposit = hold.reservationDepositAmount ?? Math.round(rentTotal * 0.4 * 100) / 100
                           const rentBalance = Math.max(0, rentTotal - bookingDeposit)
                           return <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
-                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và cọc giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 20%: ${formatVnd(rentTotal)} × 20% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
+                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và cọc giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 40%: ${formatVnd(rentTotal)} × 40% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
                             <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">{'Khoản thu khi nhận kho'}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentBalance)}`}</p><p>{`+ Tiền đảm bảo kho: ${formatVnd(hold.securityDepositAmount)}`}</p><p className="border-t border-amber-200 pt-1 font-bold">{`Tổng thu khi nhận kho: ${formatVnd(hold.remainingAmount)}`}</p></div>
                           </div>
                         })()}
@@ -2034,7 +2022,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         const progressSteps = [
                           { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
                           { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa trong tối đa 24 giờ' : 'Hồ sơ được duyệt tự động' },
-                          { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ 20%' },
+                          { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ 40%' },
                           { label: 'Manager phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
                           { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
@@ -2104,7 +2092,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <div className="min-w-[220px] rounded-lg border border-red-700 bg-red-700 p-3 text-right text-xs text-white shadow-sm">
                           <p className="font-bold text-white">{'Cần thanh toán cọc trong 24 giờ'}</p>
                           <p className="mt-1 text-lg font-bold text-white">{formatCountdown(hold.paymentExpiresAt).text}</p>
-                          <Button className="mt-2" size="sm" disabled={formatCountdown(hold.paymentExpiresAt).isExpired} onClick={() => { setActiveHoldForPayment(hold); setPayModalOpen(true) }}>{'Thanh toán cọc 20%'}</Button>
+                          <Button className="mt-2" size="sm" disabled={formatCountdown(hold.paymentExpiresAt).isExpired} onClick={() => { setActiveHoldForPayment(hold); setPayModalOpen(true) }}>{'Thanh toán cọc 40%'}</Button>
                         </div>
                       )}
 
@@ -2278,7 +2266,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               const rentalDurationDays = rentalStart && rentalEnd ? Math.max(1, Math.round((rentalEnd.getTime() - rentalStart.getTime()) / 86_400_000)) : 30
                               const syntheticRentalMonths = Math.max(1, Math.round(rentalDurationDays / 30))
                               const syntheticTermValue = rental.monthlyRate * syntheticRentalMonths
-                              const syntheticBookingDeposit = Math.round(syntheticTermValue * 0.2 * 100) / 100
+                              const syntheticBookingDeposit = Math.round(syntheticTermValue * 0.4 * 100) / 100
                               const syntheticSecurityDeposit = rental.securityDeposit ?? rental.deposit
                               const syntheticHold: StorageHold = {
                                 id: `CTR-${rental.id}`,
@@ -2439,7 +2427,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               {renewal.updatedAt && <p className="mt-1 text-stone-500">{'Cập nhật gần nhất'}: {new Date(renewal.updatedAt).toLocaleString('vi-VN')}</p>}
                               {renewal.status === 'payment_expired' && <p className="mt-1 text-red-700">{'Yêu cầu đã hết hiệu lực. Hãy gửi yêu cầu mới để Manager kiểm tra lại khả dụng.'}</p>}
                               {renewal.status === 'rejected' && renewal.notes && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">{'Lý do Manager từ chối'}: {renewal.notes}</p>}
-                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Đã cọc 20% · Hẹn ký ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Còn thu tại cơ sở: ${formatVnd(renewal.remainingAmount ?? 0)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
+                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Đã cọc gia hạn · Hẹn ký ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Còn thu tại cơ sở: ${formatVnd(renewal.remainingAmount ?? 0)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
                               {renewal.status === 'completed' && <p className="mt-1 text-emerald-700">{`Phụ lục ${renewal.addendumNumber} · Hiệu lực từ ${renewal.effectiveAt ? new Date(renewal.effectiveAt).toLocaleString('vi-VN') : renewal.paidAt}`}</p>}
                             </div>
                             <div className="flex items-center gap-3">
@@ -2557,7 +2545,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 {myPayments.map(payment => {
                   const rental = myRentals.find(r => r.id === payment.rentalId)
                   const hold = myHolds.find(h => h.id === payment.reservationId)
-                  const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Cọc giữ chỗ 20%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
+                  const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Cọc giữ chỗ 40%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
                   return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || payment.type}</Td><Td><span className="text-xs text-stone-500">{payment.paymentMethod || '—'}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
                 })}
                 {!myPayments.length && <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">{'Chưa có giao dịch nào.'}</p></td></tr>}
@@ -2646,8 +2634,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-extrabold text-emerald-800">3</span><div><h3 className="font-bold text-stone-950">{'Gia hạn thuê kho'}</h3><p className="text-xs text-stone-500">{'Hoàn tất trước khi kỳ thuê mới có hiệu lực'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
               'Khách gửi yêu cầu, chọn số tháng muốn gia hạn và theo dõi trạng thái xác nhận trên hồ sơ thuê.',
-              'Khi yêu cầu được chấp thuận, khách thanh toán trước 20% giá trị kỳ gia hạn trong thời hạn hiển thị.',
-              'Khách thanh toán 80% còn lại và hoàn tất phụ lục trước khi kỳ gia hạn có hiệu lực.',
+              'Khi yêu cầu được chấp thuận, khách thanh toán trước 40% giá trị kỳ gia hạn trong thời hạn hiển thị.',
+              'Khách thanh toán 60% còn lại và hoàn tất phụ lục trước khi kỳ gia hạn có hiệu lực.',
               'Nếu quá hạn thanh toán, yêu cầu gia hạn hết hiệu lực và khách cần gửi yêu cầu mới.'
             ].map(item => <p key={item} className="flex gap-2"><span className="text-emerald-700">✓</span><span>{item}</span></p>)}</div></Card>
 
@@ -2715,7 +2703,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-white">{formatVnd(selectedUnit.price)}<span className="text-sm font-normal text-stone-300">/{'tháng'}</span></p>
-                    <p className="text-xs font-medium text-white/70">{isApiAuthenticated() ? 'Cọc giữ chỗ theo báo giá của hệ thống' : 'Tiền cọc = 20% tổng giá trị kỳ thuê đã chọn'}</p>
+                    <p className="text-xs font-medium text-white/70">{isApiAuthenticated() ? 'Cọc giữ chỗ theo báo giá của hệ thống' : 'Tiền cọc = 40% tổng giá trị kỳ thuê đã chọn'}</p>
                   </div>
                 </div>
               </div>
@@ -2741,7 +2729,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         ['Số khung kệ', `${catalogUnit.rackCount} khung`],
                         ['Kích thước mỗi khung (R × S × C)', catalogUnit.rackDimensions],
                         ['Chiều rộng lối đi', catalogUnit.aisleWidthM > 0 ? `${catalogUnit.aisleWidthM} m` : 'Chưa có dữ liệu'],
-                        ['Hàng hóa tối đa (D × R × C)', `${catalogUnit.maxCargoDimCm.lengthCm} × ${catalogUnit.maxCargoDimCm.widthCm} × ${catalogUnit.maxCargoDimCm.heightCm} cm`],
                         ['Tải trọng tối đa', `${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg`],
                         ['Xe đẩy hỗ trợ', customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)],
                         ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
@@ -2752,29 +2739,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
 
               <div className="order-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500">2. Giới hạn hàng hóa & xe đẩy hỗ trợ</p>
+                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500">2. Thiết bị hỗ trợ</p>
                 {catalogUnit && (
                   <div className="space-y-3">
-                    {/* Max cargo dimensions card */}
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                      <p className="text-xs font-bold text-stone-700 mb-3">Kích cỡ hàng hóa tối đa có thể đưa vào kho</p>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        {[
-                          { label: 'Dài (D)', value: `${catalogUnit.maxCargoDimCm.lengthCm} cm`, color: 'bg-amber-50 border-amber-200 text-amber-900' },
-                          { label: 'Rộng (R)', value: `${catalogUnit.maxCargoDimCm.widthCm} cm`, color: 'bg-sky-50 border-sky-200 text-sky-900' },
-                          { label: 'Cao (C)', value: `${catalogUnit.maxCargoDimCm.heightCm} cm`, color: 'bg-emerald-50 border-emerald-200 text-emerald-900' },
-                        ].map(dim => (
-                          <div key={dim.label} className={`rounded-lg border p-3 ${dim.color}`}>
-                            <p className="text-[11px] font-semibold opacity-70">{dim.label}</p>
-                            <p className="mt-1 text-lg font-extrabold">{dim.value}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="mt-3 rounded-lg bg-stone-50 px-3 py-2 text-[11px] text-stone-600 border border-stone-200">
-                        Hàng hóa vượt kích thước trên cần được khai báo đặc biệt và sẽ qua quy trình xét duyệt thủ công của nhân viên cơ sở.
-                      </p>
-                    </div>
-
                     {/* Trolley card */}
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                       <p className="text-xs font-bold text-stone-700 mb-2">Xe đẩy hỗ trợ tại cơ sở</p>
@@ -2933,7 +2900,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {[
                     'Chọn cỡ kho phù hợp',
                     'Xác nhận giữ suất theo loại kho',
-                    'Thanh toán cọc 20% trong 10 phút',
+                    'Thanh toán cọc 40% trong 24 giờ',
                     'quản lý phân gian và khách nhận kho trong 14 ngày'
                   ].map((item, index) => <div key={item} className="flex gap-2 rounded-xl bg-stone-50 p-3"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white">{index + 1}</span><span className="font-medium leading-4 text-stone-700">{item}</span></div>)}
                 </div>
@@ -3087,7 +3054,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
               const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
               const totalTermValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
-              const reservationDeposit = Math.round(totalTermValue * 0.2 * 100) / 100
+              const reservationDeposit = Math.round(totalTermValue * 0.4 * 100) / 100
               const remainingPayment = Math.max(0, totalTermValue - reservationDeposit)
               const conditionSecurityDeposit = currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice
               const dueAtCheckIn = remainingPayment + conditionSecurityDeposit
@@ -3115,7 +3082,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
                   </div>
 
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>− {formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>🎁</span><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>− {formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng nghĩa vụ kỳ thuê và cọc đảm bảo</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
+                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>− {formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>🎁</span><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>− {formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 40% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng nghĩa vụ kỳ thuê và cọc đảm bảo</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
 
                     <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Mã OTP có hiệu lực 10 phút; thời hạn thanh toán bắt đầu sau khi xác minh hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Sau khi xác minh email, hàng hóa “Khác” được nhân viên cơ sở xét duyệt trong tối đa 24 giờ; sau khi duyệt có 24 giờ để thanh toán.' : 'Sau khi xác minh email, bạn có 24 giờ để thanh toán cọc 40% theo báo giá.'}</li><li>Sau khi cọc, bạn cần hoàn tất nhận kho tại gian kho đã chọn trong 14 ngày.</li></ul></div>
                 </div>
@@ -3169,7 +3136,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={serverQuote} needsReview={hasOtherGoods} />}
             {bookingReview && !isApiAuthenticated() && (() => {
               const totalValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
-              const deposit = Math.round(totalValue * 0.2 * 100) / 100
+              const deposit = Math.round(totalValue * 0.4 * 100) / 100
               const securityDeposit = currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice
               const dueAtCheckIn = totalValue - deposit + securityDeposit
               return (
@@ -3194,7 +3161,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, nhân viên có tối đa 24 giờ để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
                     <div><p className="text-xs text-stone-500">Giảm giá {facilityPolicyDiscount > 0 ? '(Gồm ưu đãi cơ sở)' : `(${Math.round(discountRate * 100)}%)`}</p><p className="mt-1 font-bold text-emerald-700">− {formatVnd(totalCombinedDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
                     <div><p className="text-xs text-stone-500">Tiền thuê sau giảm</p><p className="mt-1 font-bold">{formatVnd(totalValue)}</p></div>
-                    <div><p className="text-xs text-stone-500">{'Cọc giữ chỗ 20%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
+                    <div><p className="text-xs text-stone-500">{'Cọc giữ chỗ 40%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
                     <div><p className="text-xs text-stone-500">Tiền cọc đảm bảo kho</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
                     <div><p className="text-xs text-stone-500">{'Thu tại nhận kho'}</p><p className="mt-1 font-bold">{formatVnd(dueAtCheckIn)}</p></div>
                   </div>}
@@ -3214,7 +3181,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       </div>
                     </div>
                   )}
-                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi quản lý chấp thuận, hệ thống mới mở bước thanh toán cọc 20%. Nếu bị từ chối, gian kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hủy trước nhận kho. Tiền đảm bảo kho được thu riêng tại nhận kho để bảo đảm nghĩa vụ về hư hại, vệ sinh và công nợ; khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
+                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi nhân viên cơ sở chấp thuận, hệ thống mới mở bước thanh toán cọc 40%. Nếu bị từ chối, suất kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hủy trước nhận kho. Tiền đảm bảo kho được thu riêng tại nhận kho để bảo đảm nghĩa vụ về hư hại, vệ sinh và công nợ; khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
                 </div>
               )
             })()}
@@ -3329,7 +3296,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const grossTotal = originalRent * activeHoldForPayment.rentalMonths
           const discountAmount = activeHoldForPayment.discountAmount ?? 0
           const totalDue = Math.max(0, grossTotal - discountAmount)
-          const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round(totalDue * 0.2 * 100) / 100
+          const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round(totalDue * 0.4 * 100) / 100
           const securityDeposit = activeHoldForPayment.securityDepositAmount ?? originalRent
           const dueAtCheckIn = activeHoldForPayment.remainingAmount ?? totalDue - reservationDeposit + securityDeposit
 
@@ -3354,10 +3321,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span>{'Tổng giá trị kỳ thuê:'}</span>
                     <span className="">{formatVnd(totalDue)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (20%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
+                  <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (40%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Tiền đảm bảo kho:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Còn thu tại nhận kho:'}</span><span>{formatVnd(dueAtCheckIn)}</span></div>
-                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Cọc giữ chỗ 20% được khấu trừ vào tiền thuê. Tiền đảm bảo kho được thu riêng tại nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ; phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
+                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Cọc giữ chỗ 40% được khấu trừ vào tiền thuê. Tiền đảm bảo kho được thu riêng tại nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ; phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
                 </div>
               </div>
 
@@ -3453,9 +3420,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 const initialTermValue = activeHoldForContract.quote.baseMonthlyPrice * activeHoldForContract.rentalMonths
                 const completedRenewalValue = completedRenewals.reduce((sum, renewal) => sum + (renewal.totalAmount ?? renewal.renewalFee), 0)
                 const currentTermValue = initialTermValue + completedRenewalValue
-                const totalBookingDeposit = deposit + pricedRenewals.reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? Math.round((renewal.totalAmount ?? renewal.renewalFee) * 0.2 * 100) / 100), 0)
-                const depositDueNow = activeRenewals.filter(renewal => renewal.status === 'approved').reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? Math.round((renewal.totalAmount ?? renewal.renewalFee) * 0.2 * 100) / 100), 0)
-                const balance = activeRenewals.reduce((sum, renewal) => ['approved', 'appointment_scheduled'].includes(renewal.status) ? sum + (renewal.remainingAmount ?? Math.round((renewal.totalAmount ?? renewal.renewalFee) * 0.8 * 100) / 100) + (renewal.lateFeeAmount ?? 0) : sum, 0)
+                const totalBookingDeposit = deposit + pricedRenewals.reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).depositAmount), 0)
+                const depositDueNow = activeRenewals.filter(renewal => renewal.status === 'approved').reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).depositAmount), 0)
+                const balance = activeRenewals.reduce((sum, renewal) => ['approved', 'appointment_scheduled'].includes(renewal.status) ? sum + (renewal.remainingAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).remainingAmount) + (renewal.lateFeeAmount ?? 0) : sum, 0)
                 const totalRentalMonths = activeHoldForContract.rentalMonths + completedRenewals.reduce((sum, renewal) => sum + renewal.renewalMonths, 0)
                 return <>
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-4">
@@ -3479,7 +3446,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     ].map(([label, value]) => <div key={label} className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</p><p className="mt-1 font-bold leading-5 text-stone-900">{value}</p></div>)}</div></section>
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'3. Điều khoản chính'}</p><div className="grid gap-2 sm:grid-cols-2">{[
                       `Đơn giá hiện hành: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng; tổng giá trị tiền thuê sau gia hạn là ${formatVnd(currentTermValue)}.`,
-                      `Tổng cọc giữ chỗ 20% đã ghi nhận (${formatVnd(totalBookingDeposit)}) được trừ vào tiền thuê; tiền đảm bảo kho ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ, phần còn lại được hoàn sau nghiệm thu.`,
+                      `Tổng cọc giữ chỗ đã ghi nhận (${formatVnd(totalBookingDeposit)}) được trừ vào tiền thuê; tiền đảm bảo kho ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ, phần còn lại được hoàn sau nghiệm thu.`,
                       'Khách hoàn tất nhận kho trong 14 ngày sau khi thanh toán cọc; đổi lịch cũng phải nằm trong thời hạn này.',
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
                       'Gia hạn theo gói tháng, chỉ thanh toán sau khi quản lý cơ sở kiểm tra lịch và phê duyệt.',
@@ -3493,7 +3460,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                   <div className="grid gap-3 border-t border-stone-200 p-5 sm:grid-cols-4">
                     <div className="rounded-lg bg-stone-50 p-3"><p className="text-stone-500">{'Tổng giá trị thuê hiện hành'}</p><p className="mt-1 text-base font-bold text-stone-950">{formatVnd(currentTermValue)}</p><p className="mt-1 text-[10px] text-stone-500">{totalRentalMonths} {'tháng, gồm các kỳ gia hạn đã hoàn tất'}</p></div>
-                    <div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Tổng cọc giữ chỗ 20%'}</p><p className="mt-1 text-base font-bold text-blue-800">{formatVnd(totalBookingDeposit)}</p>{depositDueNow > 0 && <p className="mt-1 text-[10px] font-semibold text-blue-700">{`Cần thanh toán ngay: ${formatVnd(depositDueNow)}`}</p>}</div>
+                    <div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Tổng cọc giữ chỗ đã ghi nhận'}</p><p className="mt-1 text-base font-bold text-blue-800">{formatVnd(totalBookingDeposit)}</p>{depositDueNow > 0 && <p className="mt-1 text-[10px] font-semibold text-blue-700">{`Cần thanh toán ngay: ${formatVnd(depositDueNow)}`}</p>}</div>
                     <div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền đảm bảo kho'}</p><p className="mt-1 text-base font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div>
                     <div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn thanh toán tại cơ sở'}</p><p className="mt-1 text-base font-bold text-amber-900">{formatVnd(balance)}</p><p className="mt-1 text-[10px] text-amber-700">{balance > 0 ? ('Theo lịch gia hạn đang chờ hoàn tất') : ('Không còn khoản gia hạn phải thanh toán')}</p></div>
                   </div>
@@ -3549,7 +3516,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   ['Ngày giờ thanh toán', payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—'],
                   ['Người nộp tiền', `${activeHoldForContract.customerName} · ${activeHoldForContract.customerEmail}`],
                   ['Đơn vị nhận tiền', `StorageHub · ${activeHoldForContract.facilityName}`],
-                  ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Cọc giữ chỗ 20% giá trị kỳ thuê') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : payment.type)],
+                  ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Cọc giữ chỗ 40% giá trị kỳ thuê') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : payment.type)],
                   ['Số hóa đơn', payment.invoiceNumber || '—'],
                   ['Mã đơn / hợp đồng', `${activeHoldForContract.id} · ${contracts.find(item => item.reservationId === activeHoldForContract.id)?.contractNumber || '—'}`],
                   ['Phương thức', payment.paymentMethod || activeHoldForContract.payment.method || '—'],
@@ -3732,8 +3699,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const renewalGrossTotal = (activeRenewalForPayment.originalMonthlyRate ?? rental?.monthlyRate ?? 0) * activeRenewalForPayment.renewalMonths
           const renewalDiscountAmount = activeRenewalForPayment.discountAmount ?? Math.max(0, Math.round((renewalGrossTotal - renewalTotal) * 100) / 100)
           const appliedRenewalDiscountRate = activeRenewalForPayment.discountRate ?? (renewalGrossTotal > 0 ? renewalDiscountAmount / renewalGrossTotal : 0)
-          const renewalDeposit = activeRenewalForPayment.bookingDepositAmount ?? Math.round(renewalTotal * 0.2 * 100) / 100
-          const remainingAtFacility = activeRenewalForPayment.remainingAmount ?? Math.round(renewalTotal * 0.8 * 100) / 100
+          const renewalPaymentSplit = calculateRenewalPaymentSplit(renewalTotal)
+          const renewalDeposit = activeRenewalForPayment.bookingDepositAmount ?? renewalPaymentSplit.depositAmount
+          const remainingAtFacility = activeRenewalForPayment.remainingAmount ?? renewalPaymentSplit.remainingAmount
           const oldEndAt = new Date(`${activeRenewalForPayment.oldEndDate}T23:59:59`)
           const isOverdue = oldEndAt.getTime() < now
           const latestAppointment = new Date(now); latestAppointment.setDate(latestAppointment.getDate() + 7)
@@ -3752,7 +3720,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <div className="overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white">
               <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-amber-700">{'Hóa đơn gia hạn đã được duyệt'}</p><p className="mt-1 text-xl font-extrabold text-stone-950">{activeRenewalForPayment.invoiceNumber}</p><p className="mt-1 text-stone-600">Gian kho <b>{activeRenewalForPayment.unitId}</b> · Gói <b>{activeRenewalForPayment.renewalMonths} tháng</b></p></div>
-                <div className="rounded-xl bg-stone-950 px-5 py-4 text-left text-white sm:min-w-56 sm:text-right"><p className="text-xs text-stone-300">{'Cần thanh toán cọc (20%)'}</p><p className="mt-1 text-2xl font-extrabold">{formatVnd(renewalDeposit)}</p></div>
+                <div className="rounded-xl bg-stone-950 px-5 py-4 text-left text-white sm:min-w-56 sm:text-right"><p className="text-xs text-stone-300">{'Cần thanh toán cọc (40%)'}</p><p className="mt-1 text-2xl font-extrabold">{formatVnd(renewalDeposit)}</p></div>
               </div>
               <div className="grid border-t border-amber-200 bg-white/70 sm:grid-cols-4">
                 <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Hợp đồng cũ đến'}</p><p className="mt-1 font-bold text-stone-900">{activeRenewalForPayment.oldEndDate}</p></div>
@@ -3780,10 +3748,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div className="space-y-4">
                 <div className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm">
                   <div className="border-b border-stone-200 bg-stone-50 px-4 py-3"><p className="font-bold text-stone-950">{'Tóm tắt thanh toán'}</p><p className="mt-0.5 text-xs text-stone-500">{'Kiểm tra số tiền trước khi xác nhận'}</p></div>
-                  <div className="space-y-3 p-4 text-stone-700"><div className="flex justify-between gap-4"><span>{'Tiền gia hạn gốc'}</span><b>{formatVnd(renewalGrossTotal)}</b></div><div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700"><span>{`Ưu đãi gói ${activeRenewalForPayment.renewalMonths} tháng (${Math.round(appliedRenewalDiscountRate * 100)}%)`}</span><b>− {formatVnd(renewalDiscountAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-3"><span>{'Giá sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div><div className="flex justify-between gap-4 text-blue-700"><span>{'Thanh toán cọc ngay (20%)'}</span><b>{formatVnd(renewalDeposit)}</b></div><div className="flex justify-between gap-4"><span>{'Còn lại tại cơ sở (80%)'}</span><b>{formatVnd(remainingAtFacility)}</b></div><div className={`flex justify-between gap-4 ${projectedLateFee > 0 ? 'font-semibold text-red-700' : ''}`}><span>{`Phí muộn dự kiến (${projectedOverdueDays} ngày)`}</span><b>{formatVnd(projectedLateFee)}</b></div></div>
+                  <div className="space-y-3 p-4 text-stone-700"><div className="flex justify-between gap-4"><span>{'Tiền gia hạn gốc'}</span><b>{formatVnd(renewalGrossTotal)}</b></div><div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700"><span>{`Ưu đãi gói ${activeRenewalForPayment.renewalMonths} tháng (${Math.round(appliedRenewalDiscountRate * 100)}%)`}</span><b>− {formatVnd(renewalDiscountAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-3"><span>{'Giá sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div><div className="flex justify-between gap-4 text-blue-700"><span>{'Thanh toán cọc ngay (40%)'}</span><b>{formatVnd(renewalDeposit)}</b></div><div className="flex justify-between gap-4"><span>{'Còn lại tại cơ sở (60%)'}</span><b>{formatVnd(remainingAtFacility)}</b></div><div className={`flex justify-between gap-4 ${projectedLateFee > 0 ? 'font-semibold text-red-700' : ''}`}><span>{`Phí muộn dự kiến (${projectedOverdueDays} ngày)`}</span><b>{formatVnd(projectedLateFee)}</b></div></div>
                   <div className="flex items-center justify-between gap-4 border-t border-stone-200 bg-stone-950 px-4 py-4 text-white"><span className="font-semibold">{'Dự kiến đóng tại cơ sở'}</span><span className="text-lg font-extrabold">{formatVnd(projectedOnSiteTotal)}</span></div>
                 </div>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-4 text-xs leading-5"><input type="checkbox" className="mt-1 h-4 w-4 accent-stone-900" checked={renewalTermsAccepted} onChange={event => setRenewalTermsAccepted(event.target.checked)} /><span>{'Tôi đồng ý thanh toán cọc 20%, đến cơ sở đúng lịch để ký hợp đồng và đóng phần còn lại. Tôi hiểu phí muộn sẽ tăng theo từng ngày nếu ký sau ngày hết hạn.'}</span></label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-4 text-xs leading-5"><input type="checkbox" className="mt-1 h-4 w-4 accent-stone-900" checked={renewalTermsAccepted} onChange={event => setRenewalTermsAccepted(event.target.checked)} /><span>{'Tôi đồng ý thanh toán cọc 40%, đến cơ sở đúng lịch để ký hợp đồng và đóng phần còn lại. Tôi hiểu phí muộn sẽ tăng theo từng ngày nếu ký sau ngày hết hạn.'}</span></label>
               </div>
             </div>
             {paymentExpired && <p className="rounded-lg bg-red-50 p-3 font-semibold text-red-700">{'Đã quá thời hạn thanh toán 72 giờ. Vui lòng gửi yêu cầu gia hạn mới.'}</p>}
@@ -3793,7 +3761,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 payRenewal(activeRenewalForPayment.id, user, renewalPaymentMethod, reference, renewalTermsAccepted, renewalAppointmentDate, renewalAppointmentTime)
                 setRenewalPaymentOpen(false)
                 setRenewalTermsAccepted(false)
-                showToast('Đã cọc 20% và đặt lịch ký. Hợp đồng chỉ được gia hạn sau khi nhân viên xác nhận ký và thu phần còn lại.')
+                showToast('Đã cọc 40% và đặt lịch ký. Hợp đồng chỉ được gia hạn sau khi nhân viên xác nhận ký và thu phần còn lại.')
               } catch (error) {
                 showToast(error instanceof Error ? error.message : 'Không thể xác minh thanh toán gia hạn.')
               }
