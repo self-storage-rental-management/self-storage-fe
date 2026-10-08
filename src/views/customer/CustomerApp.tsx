@@ -51,7 +51,6 @@ type CustomerCatalogUnit = StorageUnit & {
   aisleWidthM: number
   doorWidthM: number
   doorHeightM: number
-  maxCargoDimCm: { lengthCm: number; widthCm: number; heightCm: number }
   smallBoxCapacity: number
   largeBoxCapacity: number
   trolley: string
@@ -304,12 +303,7 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           <div><p className="text-xs text-stone-500">{'Chiều rộng lối đi'}</p><p className="mt-0.5 font-bold text-black">{amenities ? `${amenities.aisleWidthM} m` : 'Chưa có dữ liệu'}</p></div>
           <div><p className="text-xs text-stone-500">{'Tải trọng tối đa'}</p><p className="mt-0.5 font-bold text-black">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</p></div>
         </div>
-        {/* Hàng hóa tối đa & xe đẩy */}
-        {amenities && <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-stone-50 px-3 py-2.5 text-xs">
-          <div>
-            <p className="text-stone-500">Hàng hóa tối đa</p>
-            <p className="mt-0.5 font-bold text-stone-800">{amenities.maxCargoDimCm.lengthCm}×{amenities.maxCargoDimCm.widthCm}×{amenities.maxCargoDimCm.heightCm} cm</p>
-          </div>
+        {amenities && <div className="mt-3 rounded-xl bg-stone-50 px-3 py-2.5 text-xs">
           <div>
             <p className="text-stone-500">Xe đẩy hỗ trợ</p>
             <p className="mt-0.5 font-bold text-stone-800">{amenities.trolley}</p>
@@ -551,12 +545,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const maxLoadKg = unit.maxLoadKg || backendSpec?.maxLoadKg || 0
       const price = unit.price
 
-      const maxCargoDimCm = amenities?.maxCargoDimCm ?? (unit.dimensions ? {
-        lengthCm: Math.min(Math.round(lengthM * 100 - 40), 400),
-        widthCm: Math.min(Math.round(doorWidthM * 100 - 20), 200),
-        heightCm: Math.min(Math.round(doorHeightM * 100 - 20), 220),
-      } : { lengthCm: 0, widthCm: 0, heightCm: 0 })
-
       const rackCount = backendSpec?.rackCount ?? (unit as any).rackCount ?? 0
       const smallBoxCapacity = amenities?.smallBoxCapacity ?? Math.floor(volumeM3 * 8)
       const largeBoxCapacity = amenities?.largeBoxCapacity ?? Math.floor(volumeM3 * 2.5)
@@ -573,7 +561,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         aisleWidthM,
         doorWidthM,
         doorHeightM,
-        maxCargoDimCm,
         smallBoxCapacity,
         largeBoxCapacity,
         trolley: amenities?.trolley ?? customerTrolleyVi(sizeCode),
@@ -2741,7 +2728,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         ['Số khung kệ', `${catalogUnit.rackCount} khung`],
                         ['Kích thước mỗi khung (R × S × C)', catalogUnit.rackDimensions],
                         ['Chiều rộng lối đi', catalogUnit.aisleWidthM > 0 ? `${catalogUnit.aisleWidthM} m` : 'Chưa có dữ liệu'],
-                        ['Hàng hóa tối đa (D × R × C)', `${catalogUnit.maxCargoDimCm.lengthCm} × ${catalogUnit.maxCargoDimCm.widthCm} × ${catalogUnit.maxCargoDimCm.heightCm} cm`],
                         ['Tải trọng tối đa', `${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg`],
                         ['Xe đẩy hỗ trợ', customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)],
                         ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
@@ -2752,29 +2738,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
 
               <div className="order-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500">2. Giới hạn hàng hóa & xe đẩy hỗ trợ</p>
+                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500">2. Thiết bị hỗ trợ</p>
                 {catalogUnit && (
                   <div className="space-y-3">
-                    {/* Max cargo dimensions card */}
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                      <p className="text-xs font-bold text-stone-700 mb-3">Kích cỡ hàng hóa tối đa có thể đưa vào kho</p>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        {[
-                          { label: 'Dài (D)', value: `${catalogUnit.maxCargoDimCm.lengthCm} cm`, color: 'bg-amber-50 border-amber-200 text-amber-900' },
-                          { label: 'Rộng (R)', value: `${catalogUnit.maxCargoDimCm.widthCm} cm`, color: 'bg-sky-50 border-sky-200 text-sky-900' },
-                          { label: 'Cao (C)', value: `${catalogUnit.maxCargoDimCm.heightCm} cm`, color: 'bg-emerald-50 border-emerald-200 text-emerald-900' },
-                        ].map(dim => (
-                          <div key={dim.label} className={`rounded-lg border p-3 ${dim.color}`}>
-                            <p className="text-[11px] font-semibold opacity-70">{dim.label}</p>
-                            <p className="mt-1 text-lg font-extrabold">{dim.value}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="mt-3 rounded-lg bg-stone-50 px-3 py-2 text-[11px] text-stone-600 border border-stone-200">
-                        Hàng hóa vượt kích thước trên cần được khai báo đặc biệt và sẽ qua quy trình xét duyệt thủ công của nhân viên cơ sở.
-                      </p>
-                    </div>
-
                     {/* Trolley card */}
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                       <p className="text-xs font-bold text-stone-700 mb-2">Xe đẩy hỗ trợ tại cơ sở</p>
