@@ -47,7 +47,7 @@ export function rentalError(error: unknown) {
       return "Bạn không có quyền hoặc phạm vi cơ sở để thực hiện thao tác này."
     if (error.status === 404)
       return "Không tìm thấy hồ sơ hoặc hồ sơ không thuộc phạm vi truy cập."
-    if (error.message.includes("DEFERRED_SOURCE"))
+    if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))
       return `Chưa có nguồn dữ liệu/policy chung để xử lý. ${error.message}`
     if (error.status === 409)
       return `Xung đột nghiệp vụ hoặc phiên bản. Hãy tải lại hồ sơ; nếu điều khoản thay đổi, Customer cần xác nhận báo giá mới. ${error.message}`

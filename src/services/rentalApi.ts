@@ -147,6 +147,13 @@ export async function getRental(role: RentalApiRole, id: string) {
         ]
         return money === null || Number.isFinite(money)
       }) &&
+      ((value as RentalApiDetail).financialSummary.securityDepositAmount == null ||
+        (Number.isFinite((value as RentalApiDetail).financialSummary.securityDepositAmount) &&
+          Number((value as RentalApiDetail).financialSummary.securityDepositAmount) >= 0)) &&
+      ((value as RentalApiDetail).financialSummary.billingMode == null ||
+        ["PREPAID_FULL_PERIOD", "OTHER"].includes((value as RentalApiDetail).financialSummary.billingMode!)) &&
+      ((value as RentalApiDetail).financialSummary.billingMode !== "PREPAID_FULL_PERIOD" ||
+        (value as RentalApiDetail).financialSummary.nextDueDate === null) &&
       !!(value as RentalApiDetail).access &&
       typeof (value as RentalApiDetail).access.completeness === "string",
   )

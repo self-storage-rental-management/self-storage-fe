@@ -11,9 +11,32 @@ import {
 } from "./presentation"
 import { RenewalAttempt, newRenewalIdempotencyKey } from "../../hooks/useRenewalCommand"
 import { ApiClientError } from "../../services/apiClient"
-import { manager, rental, renewal } from "../../../tests/rentalApiFixtures"
+import { manager, rental, renewal, quote } from "../../../tests/rentalApiFixtures"
 
 describe("Rental/Renewal business presentation", () => {
+  it("renders authoritative prepaid financial details without inventing a recurring due date", () => {
+    const html=renderToStaticMarkup(<RentalDetail rental={{...rental, financialSummary:{...rental.financialSummary, completeness:"COMPLETE", outstandingAmount:0, overdueAmount:0, securityDepositAmount:1234567, billingMode:"PREPAID_FULL_PERIOD"}}} />)
+    expect(html).toContain("1.234.567 đ")
+    expect(html).toContain("Trả trước toàn kỳ; không có kỳ thu tiền định kỳ")
+    expect(html).not.toContain("API D1 chưa cung cấp")
+  })
+  it("UNKNOWN financial source does not expose an unverified deposit value", () => {
+    const html=renderToStaticMarkup(<RentalDetail rental={{...rental,financialSummary:{...rental.financialSummary,securityDepositAmount:1234567}}} />)
+    expect(html).not.toContain("1.234.567 đ")
+  })
+  it("shows accepted terms and persisted cancellation reason without recalculating", () => {
+    const html=renderToStaticMarkup(<RenewalDetail role="customer" renewal={{...renewal,acceptedTerms:quote,cancellationReason:"Khách đổi kế hoạch"}} onAction={()=>{}} />)
+    expect(html).toContain("3.201.000 đ")
+    expect(html).toContain("12.804.000 đ")
+    expect(html).toContain("Khách đổi kế hoạch")
+    expect(html).toContain("không phải xác nhận đã thanh toán")
+    expect(html).toContain("policy1")
+  })
+  it("legacy renewal has honest missing snapshot state", () => {
+    const html=renderToStaticMarkup(<RenewalDetail role="customer" renewal={renewal} onAction={()=>{}} />)
+    expect(html).toContain("không tính lại giá/cọc từ catalog hiện tại")
+    expect(html).not.toContain("3.201.000 đ")
+  })
   it("generates secure retry keys on LAN HTTP without randomUUID", () => {
     const fill = vi.fn((bytes: Uint8Array) => bytes.fill(42))
     vi.stubGlobal("crypto", { getRandomValues: fill })
@@ -111,7 +134,8 @@ describe("Rental/Renewal business presentation", () => {
       />,
     )
     expect(html).toContain("không tự thay đổi")
-    expect(html).toContain("Chưa có tích hợp thanh toán D3")
+    expect(html).toContain("Xem tiến độ ký/thanh toán D3")
+    expect(html).toContain("chỉ khả dụng khi BE đã kết nối đủ nguồn dùng chung")
     expect(html).not.toContain("Thanh toán ngay")
   })
   it("source missing error is distinct from empty authorized result", () => {

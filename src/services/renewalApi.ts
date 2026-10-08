@@ -8,6 +8,22 @@ import type {
   RenewalApiRecord,
 } from "../types/renewalApi"
 
+type AcceptedTerms = NonNullable<RenewalApiRecord["acceptedTerms"]>
+function isAcceptedTerms(value: unknown): value is AcceptedTerms {
+  if (!value || typeof value !== "object") return false
+  const t = value as AcceptedTerms
+  const money = [t.monthlyPrice, t.subtotal, t.discountAmount, t.totalAfterDiscount,
+    t.renewalDepositAmount, t.remainingRentalAmount]
+  return money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
+    typeof t.discountRate === "number" && Number.isFinite(t.discountRate) && t.discountRate >= 0 && t.discountRate <= 1 &&
+    Number.isInteger(t.rentalMonths) && t.rentalMonths > 0 &&
+    [t.unitTypeId, t.storageUnitId, t.facilityId, t.pricingPackageCode, t.packagePolicyRef,
+      t.packagePolicyVersion, t.renewalPolicyRef, t.renewalPolicyVersion, t.currency]
+      .every(s => typeof s === "string" && s.trim().length > 0) &&
+    [t.oldEndDate, t.extensionStartDate, t.extensionEndExclusive, t.newEndDate]
+      .every(d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(d)))
+}
+
 export function isRenewalRecord(value: unknown): boolean {
   const r = value as RenewalApiRecord | null
   return (
@@ -50,7 +66,13 @@ export function isRenewalRecord(value: unknown): boolean {
     (r.version === null ||
       (Number.isInteger(r.version) && Number(r.version) >= 0)) &&
     Number.isFinite(r.amount) &&
-    typeof r.currency === "string"
+    typeof r.currency === "string" &&
+    (r.cancellationReason == null || typeof r.cancellationReason === "string") &&
+    (r.acceptedTerms == null ||
+      (isAcceptedTerms(r.acceptedTerms) && r.acceptedTerms.facilityId === r.facility.id &&
+        r.acceptedTerms.storageUnitId === r.storageUnit.id &&
+        r.acceptedTerms.oldEndDate === r.oldEndDate && r.acceptedTerms.newEndDate === r.newEndDate &&
+        r.acceptedTerms.totalAfterDiscount === r.amount && r.acceptedTerms.currency === r.currency))
   )
 }
 export async function listRenewals(
@@ -110,7 +132,7 @@ export async function quoteRenewal(
         !!q &&
         typeof q.id === "string" &&
         q.rentalId === rentalId &&
-        typeof q.pricingPackageCode === "string" &&
+        isAcceptedTerms(q) &&
         Number.isFinite(Date.parse(q.expiresAt)) &&
         [
           "monthlyPrice",

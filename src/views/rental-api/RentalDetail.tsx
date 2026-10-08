@@ -49,18 +49,20 @@ export default function RentalDetail({
           </div>
           <div>
             <dt>Cọc hồ sơ thuê</dt>
-            <dd>{unknown} (API D1 chưa cung cấp)</dd>
+            <dd>{f.completeness === "COMPLETE" ? rentalMoney(f.securityDepositAmount ?? null, f.currency) : unknown}</dd>
           </div>
           <div>
             <dt>Tình trạng tài chính</dt>
             <dd>{f.completeness === "UNKNOWN" ? unknown : f.completeness}</dd>
           </div>
           <div>
-            <dt>Kỳ thanh toán kế tiếp</dt>
+            <dt>Hạn nghĩa vụ thanh toán kế tiếp</dt>
             <dd>
               {f.completeness === "UNKNOWN"
                 ? unknown
-                : rentalDate(f.nextDueDate)}
+                : f.billingMode === "PREPAID_FULL_PERIOD"
+                  ? "Trả trước toàn kỳ; không có kỳ thu tiền định kỳ"
+                  : rentalDate(f.nextDueDate)}
             </dd>
           </div>
           <div>

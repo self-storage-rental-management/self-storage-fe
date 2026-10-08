@@ -19,6 +19,7 @@ export default function RenewalDetail({
   onAction: (action: RenewalApiAction) => void
 }) {
   const actor = getAuthenticatedActor()
+  const terms = r.acceptedTerms
   const actions: {
     action: RenewalApiAction
     label: string
@@ -60,6 +61,7 @@ export default function RenewalDetail({
         {rentalDate(r.reviewedAt)}
       </p>
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
+      {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason}</p>}
       <p>
         Nguồn kiểm tra tài chính: {r.financialCheck.completeness} ·{" "}
         {rentalDate(r.financialCheck.checkedAt)}
@@ -82,15 +84,30 @@ export default function RenewalDetail({
       {r.approvedPaymentDeadline && (
         <p>Hạn thanh toán đã khóa: {rentalDate(r.approvedPaymentDeadline)}</p>
       )}
-      <p className="text-sm text-stone-500">
-        Chi tiết phân rã giá/cọc của điều khoản đã chấp nhận chưa được API hồ sơ
-        gia hạn cung cấp.
-      </p>
+      {terms ? (
+        <section className="rounded border border-stone-200 p-3 space-y-2">
+          <h4 className="font-semibold">Điều khoản đã được Customer chấp nhận</h4>
+          <p>Gói: {terms.pricingPackageCode} · {terms.rentalMonths} tháng</p>
+          <p>Kỳ gia hạn: {rentalDate(terms.extensionStartDate)} → {rentalDate(terms.newEndDate)}</p>
+          <dl className="grid gap-2 sm:grid-cols-2">
+            <div><dt>Đơn giá/tháng</dt><dd>{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
+            <div><dt>Trước giảm giá</dt><dd>{rentalMoney(terms.subtotal, terms.currency)}</dd></div>
+            <div><dt>Giảm giá</dt><dd>{rentalMoney(terms.discountAmount, terms.currency)}</dd></div>
+            <div><dt>Tổng tiền gia hạn</dt><dd>{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>
+            <div><dt>Cọc gia hạn</dt><dd>{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
+            <div><dt>Tiền thuê còn lại</dt><dd>{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
+          </dl>
+          <p className="text-sm text-stone-500 break-all">Policy áp dụng: {terms.renewalPolicyRef} · phiên bản {terms.renewalPolicyVersion}. Gói: {terms.packagePolicyRef} · phiên bản {terms.packagePolicyVersion}.</p>
+          <p className="text-sm text-stone-500">Giá theo điều khoản đã lưu; không phải xác nhận đã thanh toán.</p>
+        </section>
+      ) : (
+        <p className="text-sm text-stone-500">Chưa có snapshot điều khoản đã chấp nhận; không tính lại giá/cọc từ catalog hiện tại.</p>
+      )}
       {r.status === "approved" && (
         <p className="rounded bg-amber-50 p-3">
           Đã duyệt; chờ bước thanh toán và hoàn tất D3. Duyệt không tự thay đổi
-          ngày kết thúc hồ sơ thuê. Chưa có tích hợp thanh toán D3 trên màn hình
-          này.
+          ngày kết thúc hồ sơ thuê. Xem tiến độ ký/thanh toán D3 ở bên dưới;
+          các thao tác chỉ khả dụng khi BE đã kết nối đủ nguồn dùng chung.
         </p>
       )}
       {r.version === null && (

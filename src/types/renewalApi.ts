@@ -31,6 +31,8 @@ export interface RenewalApiRecord {
   }
   allowedActions: RenewalApiAction[]
   disabledReasons: string[]
+  acceptedTerms?: Omit<RenewalApiQuote, "id" | "rentalId" | "customerId" | "quotedAt" | "expiresAt"> | null
+  cancellationReason?: string | null
 }
 export interface RenewalApiOption {
   pricingPackageCode: string

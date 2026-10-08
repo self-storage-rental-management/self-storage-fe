@@ -6,7 +6,7 @@ export function newRenewalIdempotencyKey() {
   // LAN HTTP preview can lack randomUUID (secure-context only).
   // Keep transport keys cryptographically random without inventing business IDs.
   const bytes = crypto.getRandomValues(new Uint8Array(16))
-  return `renewal-${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}`
+  return `renewal-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`
 }
 
 export class RenewalAttempt {
@@ -25,6 +25,15 @@ export class RenewalAttempt {
   clear() {
     this.attempt = null
   }
+}
+export function isUncertainRenewalOutcome(error: unknown) {
+  // A gateway/server failure can occur after the transaction committed.
+  // Reuse the original key instead of creating a second money/coordination command.
+  return (
+    !(error instanceof ApiClientError) ||
+    error.status === null ||
+    error.status >= 500
+  )
 }
 export function useRenewalCommand() {
   const attempt = useRef(new RenewalAttempt())
@@ -47,7 +56,7 @@ export function useRenewalCommand() {
       attempt.current.clear()
       setUncertain(false)
     } catch (e) {
-      const unknownOutcome = !(e instanceof ApiClientError) || e.status === null
+      const unknownOutcome = isUncertainRenewalOutcome(e)
       if (!unknownOutcome) attempt.current.clear()
       setUncertain(unknownOutcome)
       setError(e)
