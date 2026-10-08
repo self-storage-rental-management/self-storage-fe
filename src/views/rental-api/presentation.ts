@@ -72,7 +72,7 @@ export function hasRenewalAction(
   if (role === "manager")
     return (
       actor.roles.includes("MANAGER") &&
-      actor.permissions.includes("manage_rentals") &&
+      actor.permissions.includes("rentals:update") &&
       actor.facilityScopes[record.facility.id] === "MANAGE" &&
       ["APPROVE", "REJECT"].includes(action)
     )

@@ -41,7 +41,7 @@ export function supportError(error: unknown) {
     if (error.status === 401)
       return "Phiên đăng nhập API đã hết hạn. Vui lòng đăng nhập lại."
     if (error.status === 403)
-      return "Không có quyền Hỗ trợ hoặc phạm vi cơ sở phù hợp. Staff cần quyền manage_support thật từ BE."
+      return "Không có quyền Hỗ trợ hoặc phạm vi cơ sở phù hợp. Staff cần quyền support:update thật từ BE."
     if (error.status === 404)
       return "Không tìm thấy yêu cầu trong phạm vi hiện tại hoặc bạn không còn là Staff phụ trách."
     if (error.status === 409)
@@ -65,8 +65,8 @@ export function canReadSupport(actor: ApiActor | null, role: SupportRole) {
   )
     return false
   if (role === "customer") return true
-  if (!actor.permissions.includes("view_support")) return false
-  if (role === "staff" && !actor.permissions.includes("manage_support"))
+  if (!actor.permissions.includes("support:read")) return false
+  if (role === "staff" && !actor.permissions.includes("support:update"))
     return false
   return Object.values(actor.facilityScopes).some((s) =>
     role === "manager"
@@ -107,7 +107,7 @@ export function supportActions(
         : ["message"]
   }
   const scope = actor!.facilityScopes[t.facilityId]
-  if (!actor!.permissions.includes("manage_support")) return []
+  if (!actor!.permissions.includes("support:update")) return []
   if (role === "manager")
     return scope === "MANAGE" && !["resolved", "closed"].includes(t.status)
       ? ["assign", "decision"]

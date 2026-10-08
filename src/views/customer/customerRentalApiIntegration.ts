@@ -9,6 +9,6 @@ export function customerRentalApiNav(apiAuthenticated: boolean): NavItem[] {
     label: "Thuê & Gia hạn (API)",
     icon: Icon.calendar,
     group: "Kho của tôi",
-    permission: "view_rentals",
+    permission: "rentals:read",
   }] : []
 }
