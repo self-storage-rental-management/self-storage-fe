@@ -1,9 +1,5 @@
 import * as XLSX from 'xlsx'
-import {
-  REVENUE_DATA,
-  REVENUE_BREAKDOWN,
-  type MonthlyRevenueRecord
-} from '../data/demoDatabase'
+import type { MonthlyRevenueRecord } from '../data/demoDatabase'
 
 export interface RevenueExportOptions {
   facilityName?: string
@@ -16,7 +12,7 @@ export interface RevenueExportOptions {
  * Sheet 2: Cơ cấu doanh thu (Tỷ trọng các nguồn thu tiền thuê, phí dịch vụ...)
  */
 export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
-  const data = options.revenueData && options.revenueData.length > 0 ? options.revenueData : REVENUE_DATA
+  const data = options.revenueData || []
   const facilityName = options.facilityName || 'Toàn bộ cơ sở'
 
   const wb = XLSX.utils.book_new()
@@ -123,7 +119,8 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
     ['Nguồn doanh thu', 'Tỷ trọng']
   ]
 
-  REVENUE_BREAKDOWN.forEach(item => {
+  const revenueBreakdown: Array<{ category: string; percentage: number; color: string }> = []
+  revenueBreakdown.forEach(item => {
     sheet2AOA.push([item.category, `${item.percentage}%`])
   })
 

@@ -41,8 +41,8 @@ export default function SupportApiWorkspace({
         </p>
         {role === "staff" && (
           <p className="text-sm text-amber-800">
-            Staff cần view_support + manage_support và OPERATE/MANAGE tại cơ sở.
-            Quyền manage_support hiện phải được owner cấp trên BE; FE không tự
+            Staff cần support:read + support:update và OPERATE/MANAGE tại cơ sở.
+            Quyền support:update hiện phải được owner cấp trên BE; FE không tự
             mở quyền.
           </p>
         )}
@@ -296,7 +296,7 @@ function SupportSession({
         {role === "manager" &&
           query.facilityId &&
           actor.facilityScopes[query.facilityId] === "MANAGE" &&
-          actor.permissions.includes("manage_support") && (
+          actor.permissions.includes("support:update") && (
             <div className="max-w-xl">
               <SupportStaffPicker
                 key={query.facilityId}

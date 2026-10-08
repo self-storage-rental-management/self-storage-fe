@@ -2,6 +2,7 @@ import type { TicketItem, StaffRosterMember } from '../data/demoDatabase'
 import { STAFF_ROSTER } from '../data/demoDatabase'
 import type { User } from '../types'
 import type { StorageHold } from '../types/storageHub'
+import { DEMO_DATA_ENABLED } from '../config/runtime'
 
 export interface CustomerRentalRecord {
   id: string
@@ -237,7 +238,7 @@ export function assignStaffWithWorkloadAndUrgency(params: {
   rosterOverride?: StaffRosterMember[]
 }): StaffAssignmentResult {
   const { category, questionText, facilityId, currentTickets, rosterOverride } = params
-  const roster = rosterOverride || STAFF_ROSTER
+  const roster = rosterOverride || (DEMO_DATA_ENABLED ? STAFF_ROSTER : [])
 
   const urgentRegex = /(cổng|gate|mã pin|pin|mã khóa|kẹt|không vào được|không mở được|hư hỏng|mất đồ|chập|cháy|nước|ngập|khẩn cấp|sos|emergency|leak|flood|broken|alarm)/i
   const isUrgent =

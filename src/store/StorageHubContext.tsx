@@ -26,7 +26,7 @@ import type {
 } from '../types/storageHub'
 import { generateDefaultRentalPackages } from '../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../domain/renewalPricing'
-import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
+import { PERMISSION_KEYS, type PermissionKey, type Role, type RolePermissionsState, type User, type LoginHistoryRecord, type SessionRecord, type SecurityAlert, type ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
 import {
@@ -52,6 +52,7 @@ import {
 import { formatVnd, USD_TO_VND_RATE } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
 import { storageSizeCode, unitTypeMatches } from '../domain/facilityRules'
+import { DEMO_DATA_ENABLED } from '../config/runtime'
 
 const STORAGE_KEY = 'storagehub:v5:released-orphan-holds'
 
@@ -81,7 +82,7 @@ type StoredUser = (typeof USERS)[number] & Partial<Pick<User, 'permanentAddress'
  * be able to promote an account by changing its role field.
  */
 function normalizeUsers(value: unknown): StoredUser[] {
-  if (!Array.isArray(value)) return USERS
+  if (!Array.isArray(value)) return DEMO_DATA_ENABLED ? USERS : []
 
   return value
     .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate && typeof candidate === 'object'))
@@ -1236,9 +1237,15 @@ const StorageHubContext = createContext<StorageHubContextValue | null>(null)
 const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
 
 function normalizeRuntimeRolePermissions(value: unknown) {
-  const normalized = normalizeRolePermissions(value)
+  const empty = Object.fromEntries(
+    (['customer', 'staff', 'manager', 'business', 'admin'] as Role[]).map(role => [
+      role,
+      Object.fromEntries(PERMISSION_KEYS.map(key => [key, false]))
+    ])
+  ) as RolePermissionsState
+  const normalized = !DEMO_DATA_ENABLED && !value ? empty : normalizeRolePermissions(value)
   try {
-    if (!localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
+    if (DEMO_DATA_ENABLED && !localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
       normalized.manager['storage_units:assign'] = true
       localStorage.setItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY, 'done')
     }
@@ -1323,7 +1330,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StorageHubState>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
+      if (DEMO_DATA_ENABLED && saved) {
         const parsed = JSON.parse(saved)
         const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.filter((hold: StorageReservation) => !['RSV-6618', 'RSV-2104', 'RSV-9654'].includes(hold.id) && !isExcludedRelated(hold)).map((hold: StorageReservation) => {
             const facility = findCanonicalFacility(hold.facilityId, hold.facilityName)
@@ -1338,7 +1345,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         let rawFacilities = Array.isArray(parsed.facilities) && parsed.facilities.length ? [...parsed.facilities] : []
         try {
           const directFacsStr = localStorage.getItem('storagehub:facilities')
-          if (directFacsStr) {
+          if (DEMO_DATA_ENABLED && directFacsStr) {
             const directFacs = JSON.parse(directFacsStr)
             if (Array.isArray(directFacs)) {
               const knownIds = new Set(rawFacilities.map((f: any) => f.id))
@@ -1356,7 +1363,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         let rawUnits = Array.isArray(parsed.units) && parsed.units.length ? [...parsed.units] : []
         try {
           const directUnitsStr = localStorage.getItem('storagehub:units')
-          if (directUnitsStr) {
+          if (DEMO_DATA_ENABLED && directUnitsStr) {
             const directUnits = JSON.parse(directUnitsStr)
             if (Array.isArray(directUnits)) {
               const knownUnitIds = new Set(rawUnits.map((u: any) => u.id))
@@ -1370,8 +1377,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           }
         } catch {}
 
-        const normalizedFacilities = rawFacilities.length ? normalizeStoredFacilities(rawFacilities as Facility[]) : INITIAL_FACILITIES
-        const normalizedUnits = rawUnits.length ? normalizeStoredUnits(rawUnits as StorageUnit[]) : INITIAL_UNITS
+        const normalizedFacilities = rawFacilities.length ? normalizeStoredFacilities(rawFacilities as Facility[]) : (DEMO_DATA_ENABLED ? INITIAL_FACILITIES : [])
+        const normalizedUnits = rawUnits.length ? normalizeStoredUnits(rawUnits as StorageUnit[]) : (DEMO_DATA_ENABLED ? INITIAL_UNITS : [])
 
         return {
           ...parsed,
@@ -1380,7 +1387,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           rolePermissions: normalizeRuntimeRolePermissions(parsed.rolePermissions),
           units: normalizedUnits.map(unit => unit.currentRentalId === 'RNT-9654' || (unit.currentRentalId && RETIRED_EXPIRY_TEST_RENTAL_IDS.has(unit.currentRentalId)) ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(period.reservationId)) } : unit),
           holds: normalizedHolds,
-          contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654' && !isExcludedRelated(contract))) : INITIAL_CONTRACTS,
+          contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654' && !isExcludedRelated(contract))) : (DEMO_DATA_ENABLED ? INITIAL_CONTRACTS : []),
           payments: Array.isArray(parsed.payments) ? parsed.payments.filter((payment: StoragePayment) => payment.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(payment.reservationId) && payment.rentalId !== 'RNT-9654' && (!payment.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(payment.rentalId)) && !isExcludedRelated(payment)) : [],
           renewals: Array.isArray(parsed.renewals)
             ? parsed.renewals.filter((renewal: RenewalRecord) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(renewal.rentalId) && !isExcludedRelated(renewal)).map((renewal: RenewalRecord) => {
@@ -1414,14 +1421,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654' && !isExcludedRelated(checkin)) : []),
           rentals: Array.isArray(parsed.rentals)
             ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654' && !isExcludedRelated(rental))))
-            : INITIAL_RENTALS,
+            : (DEMO_DATA_ENABLED ? INITIAL_RENTALS : []),
           returns: Array.isArray(parsed.returns) ? parsed.returns.filter((returnCase: ReturnCase) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(returnCase.rentalId) && !isExcludedRelated(returnCase)) : [],
-          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId) && !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(activity.entityId) && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(activity.entityId) && !isExcludedRelated(activity)) : INITIAL_ACTIVITIES,
-          loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
-          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
-          securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : INITIAL_SECURITY_ALERTS,
+          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId) && !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(activity.entityId) && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(activity.entityId) && !isExcludedRelated(activity)) : (DEMO_DATA_ENABLED ? INITIAL_ACTIVITIES : []),
+          loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : (DEMO_DATA_ENABLED ? INITIAL_LOGIN_HISTORY : []),
+          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : (DEMO_DATA_ENABLED ? INITIAL_SESSIONS : []),
+          securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : (DEMO_DATA_ENABLED ? INITIAL_SECURITY_ALERTS : []),
           profileChangeRequests: Array.isArray(parsed.profileChangeRequests) ? parsed.profileChangeRequests : INITIAL_PROFILE_CHANGE_REQUESTS,
-          tickets: Array.isArray(parsed.tickets) ? normalizeStoredTickets((parsed.tickets as TicketItem[]).filter(t => !isExcludedRelated(t))) : TICKETS,
+          tickets: Array.isArray(parsed.tickets) ? normalizeStoredTickets((parsed.tickets as TicketItem[]).filter(t => !isExcludedRelated(t))) : (DEMO_DATA_ENABLED ? TICKETS : []),
           config: parsed.config || DEFAULT_BUSINESS_CONFIG
         }
       }
@@ -1429,18 +1436,18 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       console.error('Failed to load storageHub state from localStorage', e)
     }
 
-    let fallbackFacilities = INITIAL_FACILITIES
-    let fallbackUnits = INITIAL_UNITS
+    let fallbackFacilities = DEMO_DATA_ENABLED ? INITIAL_FACILITIES : []
+    let fallbackUnits = DEMO_DATA_ENABLED ? INITIAL_UNITS : []
     try {
       const directFacsStr = localStorage.getItem('storagehub:facilities')
-      if (directFacsStr) {
+      if (DEMO_DATA_ENABLED && directFacsStr) {
         const directFacs = JSON.parse(directFacsStr)
         if (Array.isArray(directFacs) && directFacs.length > 0) {
           fallbackFacilities = normalizeStoredFacilities(directFacs)
         }
       }
       const directUnitsStr = localStorage.getItem('storagehub:units')
-      if (directUnitsStr) {
+      if (DEMO_DATA_ENABLED && directUnitsStr) {
         const directUnits = JSON.parse(directUnitsStr)
         if (Array.isArray(directUnits) && directUnits.length > 0) {
           fallbackUnits = normalizeStoredUnits(directUnits)
@@ -1449,26 +1456,26 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     return {
-      users: USERS,
-      rolePermissions: normalizeRolePermissions(undefined),
+      users: DEMO_DATA_ENABLED ? USERS : [],
+      rolePermissions: normalizeRuntimeRolePermissions(undefined),
       facilities: fallbackFacilities,
       units: fallbackUnits,
       holds: [],
       contracts: [],
       payments: [],
       checkins: [],
-      rentals: INITIAL_RENTALS,
+      rentals: DEMO_DATA_ENABLED ? INITIAL_RENTALS : [],
       returns: [],
       renewals: [],
       maintenanceTasks: [],
       staffTasks: [],
       accessCredentials: [],
-      activities: INITIAL_ACTIVITIES,
-      loginHistory: INITIAL_LOGIN_HISTORY,
-      sessions: INITIAL_SESSIONS,
-      securityAlerts: INITIAL_SECURITY_ALERTS,
+      activities: DEMO_DATA_ENABLED ? INITIAL_ACTIVITIES : [],
+      loginHistory: DEMO_DATA_ENABLED ? INITIAL_LOGIN_HISTORY : [],
+      sessions: DEMO_DATA_ENABLED ? INITIAL_SESSIONS : [],
+      securityAlerts: DEMO_DATA_ENABLED ? INITIAL_SECURITY_ALERTS : [],
       profileChangeRequests: INITIAL_PROFILE_CHANGE_REQUESTS,
-      tickets: TICKETS,
+      tickets: DEMO_DATA_ENABLED ? TICKETS : [],
       config: DEFAULT_BUSINESS_CONFIG
     }
   })
@@ -1769,6 +1776,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // Save to localStorage on state change
   useEffect(() => {
+    if (!DEMO_DATA_ENABLED) {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem('storagehub:facilities')
+      localStorage.removeItem('storagehub:units')
+      return
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch (e) {
@@ -3981,6 +3994,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const resetToDemoData = () => {
+    if (!DEMO_DATA_ENABLED) throw new Error('Dữ liệu demo đang tắt; dữ liệu phải được đọc từ backend.')
     localStorage.removeItem(STORAGE_KEY)
     try {
       localStorage.removeItem('storagehub:facilities')
