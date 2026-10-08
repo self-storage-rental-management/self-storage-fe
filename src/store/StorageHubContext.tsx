@@ -25,6 +25,7 @@ import type {
   RentalPackage
 } from '../types/storageHub'
 import { generateDefaultRentalPackages } from '../domain/packageRules'
+import { calculateRenewalPaymentSplit } from '../domain/renewalPricing'
 import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
@@ -1391,10 +1392,17 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 const unit = INITIAL_UNITS.find(
                   item => item.id === (rental?.unitId || renewal.unitId)
                 )
+                const renewalTotal = renewal.totalAmount ?? renewal.renewalFee
+                const paymentSplit = calculateRenewalPaymentSplit(renewalTotal)
+                const shouldApplyCurrentPolicy = ['pending', 'approved', 'payment_expired'].includes(renewal.status)
 
                 return {
                   ...renewal,
                   renewalMonths: renewal.renewalMonths || 1,
+                  ...(shouldApplyCurrentPolicy ? {
+                    bookingDepositAmount: paymentSplit.depositAmount,
+                    remainingAmount: paymentSplit.remainingAmount,
+                  } : {}),
                   facilityId:
                     unit?.facilityId || rental?.facilityId || renewal.facilityId
                 }
@@ -2787,6 +2795,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const discountRate = renewalMonths === 6 ? 0.03 : renewalMonths === 12 ? 0.05 : 0
     const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
     const renewalTotal = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
+    const paymentSplit = calculateRenewalPaymentSplit(renewalTotal)
 
     const renewalRecord: RenewalRecord = {
       id: `RNW-${Date.now().toString().slice(-6)}`,
@@ -2803,8 +2812,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       discountRate,
       discountAmount,
       totalAmount: renewalTotal,
-      bookingDepositAmount: Math.round(renewalTotal * 0.2 * 100) / 100,
-      remainingAmount: Math.round(renewalTotal * 0.8 * 100) / 100,
+      bookingDepositAmount: paymentSplit.depositAmount,
+      remainingAmount: paymentSplit.remainingAmount,
       status: 'pending',
       requestedAt: new Date().toISOString()
     }
@@ -2846,9 +2855,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const discountRate = renewalMonths === 6 ? 0.03 : renewalMonths === 12 ? 0.05 : 0
     const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
     const totalAmount = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
+    const paymentSplit = calculateRenewalPaymentSplit(totalAmount)
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, oldEndDate: rental.endDate, newEndDate, renewalMonths, renewalFee: totalAmount, discountRate, discountAmount, totalAmount, bookingDepositAmount: Math.round(totalAmount * 0.2 * 100) / 100, remainingAmount: Math.round(totalAmount * 0.8 * 100) / 100, originalMonthlyRate: rental.monthlyRate, updatedAt } : item),
+      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, oldEndDate: rental.endDate, newEndDate, renewalMonths, renewalFee: totalAmount, discountRate, discountAmount, totalAmount, bookingDepositAmount: paymentSplit.depositAmount, remainingAmount: paymentSplit.remainingAmount, originalMonthlyRate: rental.monthlyRate, updatedAt } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_UPDATED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: `Khách đã sửa yêu cầu ${renewal.id}: gia hạn ${renewalMonths} tháng, đến ${newEndDate}. Manager cần xét duyệt theo thông tin mới.`, timestamp: updatedAt }, ...prev.activities]
     }))
   }
@@ -2863,7 +2873,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const depositWasPaid = renewal.status === 'appointment_scheduled'
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'cancelled', cancelledAt, notes: depositWasPaid ? 'Customer hủy sau khi đã cọc; cọc gia hạn 20% không hoàn lại.' : wasApproved ? 'Customer hủy sau khi được duyệt; hóa đơn gia hạn đã mất hiệu lực.' : 'Customer chủ động hủy trước khi Manager xét duyệt.' } : item),
+      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'cancelled', cancelledAt, notes: depositWasPaid ? 'Customer hủy sau khi đã cọc; cọc gia hạn không hoàn lại.' : wasApproved ? 'Customer hủy sau khi được duyệt; hóa đơn gia hạn đã mất hiệu lực.' : 'Customer chủ động hủy trước khi Manager xét duyệt.' } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_CANCELLED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: depositWasPaid ? `Khách đã hủy yêu cầu ${renewal.id} sau khi cọc; cọc ${formatVnd(renewal.bookingDepositAmount ?? 0)} không hoàn lại. Manager đã được thông báo.` : wasApproved ? `Khách đã hủy yêu cầu gia hạn ${renewal.id} sau khi duyệt. Hóa đơn ${renewal.invoiceNumber || 'gia hạn'} đã mất hiệu lực.` : `Khách đã hủy yêu cầu gia hạn ${renewal.id}. Manager không cần tiếp tục xét duyệt.`, timestamp: cancelledAt }, ...prev.activities]
     }))
   }
@@ -2989,7 +2999,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const lateFeeAmount = Math.round(overdueDays * lateFeePerDay * 100) / 100
     const txId = transactionId.trim()
     const paymentId = `PAY-RNW-${Date.now().toString().slice(-8)}`
-    const bookingDepositAmount = renewal.bookingDepositAmount ?? Math.round(renewal.renewalFee * 0.2 * 100) / 100
+    const paymentSplit = calculateRenewalPaymentSplit(renewal.renewalFee)
+    const bookingDepositAmount = renewal.bookingDepositAmount ?? paymentSplit.depositAmount
 
     setState(prev => ({
       ...prev,
@@ -3023,12 +3034,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           paidAt: now.toISOString(),
           recordedBy: renewal.customerId,
           invoiceNumber: renewal.invoiceNumber,
-          description: `Cọc giữ chỗ gia hạn 20% cho ${renewal.renewalMonths} tháng (${renewal.oldEndDate} → ${renewal.newEndDate})`,
+          description: `Cọc giữ chỗ gia hạn 40% cho ${renewal.renewalMonths} tháng (${renewal.oldEndDate} → ${renewal.newEndDate})`,
           gatewayVerifiedAt: now.toISOString()
         },
         ...prev.payments
       ],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 20% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 40% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -3057,7 +3068,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
     if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn hoạt động.')
     const now = new Date()
-    const remainingAmount = renewal.remainingAmount ?? Math.round(renewal.renewalFee * 0.8 * 100) / 100
+    const remainingAmount = renewal.remainingAmount ?? calculateRenewalPaymentSplit(renewal.renewalFee).remainingAmount
     const overdueStart = new Date(`${renewal.oldEndDate}T00:00:00`)
     overdueStart.setDate(overdueStart.getDate() + 1)
     const today = new Date(now); today.setHours(0, 0, 0, 0)

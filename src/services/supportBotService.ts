@@ -49,7 +49,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Cách gia hạn hợp đồng thuê kho',
     category: 'Hợp đồng',
     keywords: ['gia hạn', 'thêm tháng', 'kéo dài', 'tiếp tục thuê', 'hợp đồng', 'renew', 'extension'],
-    answer: 'Bạn vào mục "Hồ sơ thuê của tôi", chọn hợp đồng cần gia hạn và bấm nút "Gia hạn". Lưu ý nên gửi yêu cầu trước ngày kết thúc ít nhất 3 ngày và thanh toán cọc 20% kỳ mới để giữ nguyên đơn giá ưu đãi.',
+    answer: 'Bạn vào mục "Hồ sơ thuê của tôi", chọn hợp đồng cần gia hạn và bấm nút "Gia hạn". Lưu ý nên gửi yêu cầu trước ngày kết thúc ít nhất 3 ngày và thanh toán cọc 40% kỳ mới để giữ nguyên đơn giá ưu đãi.',
     solved: true,
     actionHint: 'Vào Hồ sơ thuê → Gia hạn'
   },
