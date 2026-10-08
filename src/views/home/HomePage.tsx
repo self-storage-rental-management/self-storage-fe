@@ -981,7 +981,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'unit_types' && (
               <div className="mt-4 space-y-5 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub cung cấp 4 quy cách kho đa dạng, đáp ứng mọi nhu cầu từ cá nhân đến doanh nghiệp. Kích cỡ hàng hóa tối đa, lối đi và xe đẩy tăng dần theo size kho.
+                  StorageHub cung cấp 4 quy cách kho đa dạng, đáp ứng mọi nhu cầu từ cá nhân đến doanh nghiệp. Không gian, lối đi và thiết bị hỗ trợ thay đổi theo từng cỡ kho.
                 </p>
 
                 {(Object.values(UNIT_SPECS) as (typeof UNIT_SPECS)[keyof typeof UNIT_SPECS][]).map((spec, idx) => {
@@ -1054,8 +1054,6 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                           <p className="mt-0.5 font-bold text-stone-900">{spec.maxLoadKg.toLocaleString('vi-VN')} kg</p>
                         </div>
                       </div>
-
-                      {/* Cargo max + trolley */}
                       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
                           <p className="text-stone-400 font-medium text-[10px] sm:text-[11px] mb-1">Kích cỡ hàng tối đa (D×R×C)</p>

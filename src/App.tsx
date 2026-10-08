@@ -163,7 +163,7 @@ function MainContent() {
   }, [user])
 
   const handleLogin = (nextUser: User) => {
-    if (['/login', '/register', '/verify-email', '/reset-password'].includes(normalizedPathname())) {
+    if (['/login', '/register', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
       window.history.replaceState(null, '', '/')
     }
     const authenticatedActor = getAuthenticatedActor()
@@ -215,7 +215,7 @@ function MainContent() {
 
   const roleApp = (() => {
     switch (user.role) {
-      case 'customer': return <CustomerApp user={user} onLogout={handleLogout} />
+      case 'customer': return <CustomerApp user={user} onLogout={handleLogout} onUpdateUser={() => setApiActor(getAuthenticatedActor())} />
       case 'staff': return <StaffApp user={user} onLogout={handleLogout} />
       case 'manager': return <ManagerApp user={user} onLogout={handleLogout} />
       case 'business': return <BusinessApp user={user} onLogout={handleLogout} />

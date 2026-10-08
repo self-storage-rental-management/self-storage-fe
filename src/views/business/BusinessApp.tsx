@@ -646,7 +646,7 @@ export default function BusinessApp({
       const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
       try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch { }
     } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
-      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch { }
+      try { updateBusinessConfig({ defaultDepositRatio: 0.4 }, user) } catch { }
     }
 
     setCreatePolicyModal(false)
@@ -781,7 +781,7 @@ export default function BusinessApp({
       const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
       try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch { }
     } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
-      try { updateBusinessConfig({ defaultDepositRatio: 0.2 }, user) } catch { }
+      try { updateBusinessConfig({ defaultDepositRatio: 0.4 }, user) } catch { }
     }
 
     setPolicyModal(false)
