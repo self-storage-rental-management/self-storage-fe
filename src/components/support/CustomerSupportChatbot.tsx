@@ -294,7 +294,7 @@ export default function CustomerSupportChatbot({
           type="button"
           onClick={handleOpen}
           aria-label="Mở Trợ lý StorageHub"
-          className="fixed right-6 bottom-6 z-50 flex items-center gap-2.5 rounded-full bg-[#181b22] px-5 py-3.5 text-xs font-bold text-white shadow-2xl transition-all duration-300 hover:bg-[#20242d] hover:scale-105 border border-amber-600/30"
+          className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-50 flex items-center gap-2 rounded-full bg-[#181b22] px-4 sm:px-5 py-3 sm:py-3.5 text-xs font-bold text-white shadow-2xl transition-all duration-300 hover:bg-[#20242d] hover:scale-105 border border-amber-600/30"
           style={{ boxShadow: '0 10px 28px rgba(24, 27, 34, 0.45)' }}
         >
           <span className="relative flex h-2.5 w-2.5">
@@ -310,7 +310,7 @@ export default function CustomerSupportChatbot({
         <div
           role="dialog"
           aria-label="Trợ lý StorageHub"
-          className="fixed right-4 bottom-4 z-50 flex h-[620px] max-h-[85vh] w-[390px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl transition-all duration-300"
+          className="fixed right-3 bottom-3 sm:right-4 sm:bottom-4 z-50 flex h-[620px] max-h-[88vh] w-[390px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl transition-all duration-300"
           style={{ boxShadow: '0 20px 60px rgba(24, 27, 34, 0.35)' }}
         >
           {/* Header */}

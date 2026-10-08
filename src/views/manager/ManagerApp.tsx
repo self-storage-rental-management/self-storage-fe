@@ -18,18 +18,18 @@ import { managerStatusLabel } from './managerI18n'
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
   const nav: NavItem[] = [
-    { id: 'dashboard', label: 'Bảng điều khiển', icon: Icon.home, group: 'Tổng quan', permission: 'view_dashboard' },
-    { id: 'inventory', label: 'Quản lý gian kho', icon: Icon.box, group: 'Vận hành', permission: 'manage_inventory' },
-    { id: 'unit-releases', label: 'Giải phóng kho đã hủy', icon: Icon.alert, group: 'Vận hành', permission: 'assign_units' },
-    { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: 'manage_rentals' },
+    { id: 'dashboard', label: 'Bảng điều khiển', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' },
+    { id: 'inventory', label: 'Quản lý gian kho', icon: Icon.box, group: 'Vận hành', permission: 'inventory:update' },
+    { id: 'unit-releases', label: 'Giải phóng kho đã hủy', icon: Icon.alert, group: 'Vận hành', permission: 'storage_units:assign' },
+    { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: 'rentals:update' },
 
-    { id: 'inventory', label: 'Quản lý gian kho', icon: Icon.box, group: 'Vận hành', permission: 'manage_inventory' },
-    { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: 'manage_rentals' },
+    { id: 'inventory', label: 'Quản lý gian kho', icon: Icon.box, group: 'Vận hành', permission: 'inventory:update' },
+    { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: 'rentals:update' },
 
-    { id: 'moves', label: 'Nhận kho & Trả kho', icon: Icon.truck, group: 'Vận hành', permission: 'view_checkins' },
-    { id: 'payments', label: 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: 'manage_payments' },
-    { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'manage_staff_tasks' },
-    { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'view_reports' }
+    { id: 'moves', label: 'Nhận kho & Trả kho', icon: Icon.truck, group: 'Vận hành', permission: 'checkins:read' },
+    { id: 'payments', label: 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: 'payments:collect' },
+    { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
+    { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'reports:read' }
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)

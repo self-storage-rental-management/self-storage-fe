@@ -10,6 +10,7 @@ import { FACILITIES, UNIT_SPECS, type TicketItem } from '../../data/demoDatabase
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
+import { isApiAuthenticated } from '../../services/authApi'
 import {
   getStoredPolicies,
   getPoliciesForFacility,
@@ -541,14 +542,14 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
   }, [units, facilities])
 
   const NAV: NavItem[] = [
-    { id: 'overview', label: 'Tổng quan', icon: Icon.home, group: 'Kho của tôi', permission: 'view_dashboard' },
-    { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'view_facilities' },
-    { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'view_units' },
-    { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'view_reservations' },
-    { id: 'rental-records', label: 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'view_rentals' },
-    { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'view_payments' },
-    { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'view_policies' },
-    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'view_support' }
+    { id: 'overview', label: 'Tổng quan', icon: Icon.home, group: 'Kho của tôi', permission: 'dashboard:read' },
+    { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'facilities:read' },
+    { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'storage_units:read' },
+    { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'reservations:read' },
+    { id: 'rental-records', label: 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'rentals:read' },
+    { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'payments:read' },
+    { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'policies:read' },
+    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'support:read' }
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, 'overview'))
@@ -1379,15 +1380,15 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3 lg:grid-cols-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2.5 sm:gap-3">
                 {[
-                  ['30', 'phút tạm giữ suất kho'],
-                  ['12', 'giờ thanh toán cọc'],
-                  ['14', 'ngày để Check-in']
+                  ['30', 'Phút tạm giữ suất kho trực tuyến'],
+                  ['12', 'Giờ thanh toán tiền cọc giữ kho'],
+                  ['14', 'Ngày tối đa để Check-in nhận kho']
                 ].map(([value, label]) => (
-                  <div key={value} className="rounded-2xl border border-white/15 bg-white/[.06] p-4 backdrop-blur">
-                    <p className="text-3xl font-bold">{value}</p>
-                    <p className="mt-1 text-xs leading-5 text-white/65">{label}</p>
+                  <div key={value} className="flex sm:flex-col lg:flex-row items-center sm:items-start lg:items-center gap-3 sm:gap-1 lg:gap-3 rounded-2xl border border-white/15 bg-white/[.06] p-3.5 sm:p-4 backdrop-blur">
+                    <p className="text-2xl sm:text-3xl font-bold text-amber-400 sm:text-white shrink-0">{value}</p>
+                    <p className="text-xs leading-4 sm:leading-5 text-white/75">{label}</p>
                   </div>
                 ))}
               </div>
@@ -2857,13 +2858,13 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
                   <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
                 </div>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex flex-col sm:flex-row sm:justify-between text-sm gap-0.5 sm:gap-2">
                 <span className="text-stone-700">{'Cỡ kho đã chọn:'}</span>
                 <b>{`${unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
               </div>
-              <div className="mt-2 flex justify-between text-sm">
+              <div className="mt-2 flex flex-col sm:flex-row sm:justify-between text-sm gap-0.5 sm:gap-2">
                 <span className="text-stone-700">{'Kích thước & Sức chịu tải:'}</span>
-                <span>{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
+                <span className="text-stone-900 font-medium">{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
               </div>
               <div className="mt-3 rounded-lg bg-stone-100 p-3 text-xs leading-5 text-stone-700">
                 {'Việc mở và điền biểu mẫu chưa giữ suất kho. Khi bạn nhấn xác nhận, hệ thống sẽ kiểm tra lại số lượng của loại kho; yêu cầu hợp lệ được ghi nhận trước sẽ được ưu tiên. Manager sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.'}
@@ -3690,7 +3691,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
       {/* ── MODAL 7: SUPPORT TICKET CONVERSATION ───────────────── */}
       <Modal
-        open={conversationOpen}
+        open={conversationOpen && !isApiAuthenticated()}
         onClose={() => setConversationOpen(false)}
         title={'Trao Đổi Trực Tuyến Hỗ Trợ'}
       >
@@ -3743,7 +3744,7 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
 
       {/* ── MODAL 8: CREATE TICKET ─────────────────────────────── */}
       <Modal
-        open={ticketOpen}
+        open={ticketOpen && !isApiAuthenticated()}
         onClose={() => setTicketOpen(false)}
         title={'Tạo Yêu Cầu Hỗ Trợ Mới'}
       >
@@ -3820,13 +3821,13 @@ export default function CustomerApp({ user, onLogout }: CustomerAppProps) {
         </div>
       </Modal>
 
-      <CustomerSupportChatbot
+      {!isApiAuthenticated() && <CustomerSupportChatbot
         user={user}
         isOpen={supportChatbotOpen}
         onToggleOpen={setSupportChatbotOpen}
         onOpenTicketList={() => setPage('support')}
         showToast={showToast}
-      />
+      />}
       </div>
     </Layout>
   )

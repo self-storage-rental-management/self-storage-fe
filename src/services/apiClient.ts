@@ -14,8 +14,18 @@ export class ApiClientError extends Error {
   }
 }
 
+const REFRESH_TOKEN_STORAGE_KEY = 'storagehub:refresh_token'
+
+function readStoredRefreshToken(): string | null {
+  try {
+    return sessionStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
 let accessToken: string | null = null
-let refreshToken: string | null = null
+let refreshToken: string | null = readStoredRefreshToken()
 let refreshInFlight: Promise<boolean> | null = null
 
 export function setAccessToken(token: string) {
@@ -28,6 +38,9 @@ export function clearAccessToken() {
 
 export function setRefreshToken(token: string) {
   refreshToken = token
+  try {
+    sessionStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, token)
+  } catch {}
 }
 
 export function getRefreshToken() {
@@ -37,6 +50,9 @@ export function getRefreshToken() {
 export function clearAuthTokens() {
   accessToken = null
   refreshToken = null
+  try {
+    sessionStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+  } catch {}
 }
 
 export function hasAccessToken() {
@@ -94,7 +110,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
 
   let response: Response
   const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...requestOptions, headers, signal: controller.signal })
   } catch (error) {
@@ -103,7 +119,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
     }
     throw new ApiClientError('Không thể kết nối tới backend StorageHub.', { code: 'NETWORK_ERROR' })
   } finally {
-    window.clearTimeout(timeoutId)
+    clearTimeout(timeoutId)
   }
 
   const payload = await readPayload(response)

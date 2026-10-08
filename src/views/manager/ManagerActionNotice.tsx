@@ -7,6 +7,6 @@ export default function ManagerActionNotice({ children, tone = 'info', compact =
       ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
       : 'border-blue-200 bg-blue-50 text-blue-900'
   return <div role="status" className={`rounded-lg border ${colors} ${compact ? 'px-2 py-1.5 text-[11px]' : 'px-4 py-3 text-sm'}`}>
-    <span className="font-semibold">Trạng thái thao tác: </span>{children}
+    {children}
   </div>
 }

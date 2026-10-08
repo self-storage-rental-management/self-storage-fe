@@ -1,4 +1,4 @@
-import type { Role, User } from '../types'
+import { PERMISSION_KEYS, type PermissionKey, type Role, type User } from '../types'
 import { ApiClientError, apiRequest, clearAuthTokens, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
 
 export type ApiRoleCode = 'CUSTOMER' | 'STAFF' | 'MANAGER' | 'BUSINESS' | 'ADMIN'
@@ -50,6 +50,49 @@ let currentActor: ApiActor | null = null
 
 const rolePriority: ApiRoleCode[] = ['ADMIN', 'BUSINESS', 'MANAGER', 'STAFF', 'CUSTOMER']
 
+const LEGACY_PERMISSION_ALIASES: Record<string, PermissionKey> = {
+  view_dashboard: 'dashboard:read',
+  view_facilities: 'facilities:read',
+  view_units: 'storage_units:read',
+  book_storage: 'reservations:create',
+  view_reservations: 'reservations:read',
+  approve_reservations: 'reservations:approve',
+  assign_units: 'storage_units:assign',
+  view_contracts: 'contracts:read',
+  view_checkins: 'checkins:read',
+  perform_checkin: 'checkins:process',
+  view_rentals: 'rentals:read',
+  manage_rentals: 'rentals:update',
+  view_returns: 'returns:read',
+  process_returns: 'returns:process',
+  view_payments: 'payments:read',
+  view_policies: 'policies:read',
+  manage_payments: 'payments:collect',
+  view_support: 'support:read',
+  manage_support: 'support:update',
+  manage_inventory: 'inventory:update',
+  manage_policies: 'policies:update',
+  manage_staff_tasks: 'staff_tasks:update',
+  view_reports: 'reports:read',
+  view_audit_logs: 'audit_logs:read',
+  manage_users: 'users:manage',
+  manage_roles: 'roles:manage',
+  manage_settings: 'settings:manage',
+}
+
+export function normalizeApiPermissions(value: unknown): PermissionKey[] {
+  if (!Array.isArray(value)) return []
+
+  return [...new Set(value
+    .filter((permission): permission is string => typeof permission === 'string')
+    .map(permission => LEGACY_PERMISSION_ALIASES[permission] ?? permission)
+    .filter((permission): permission is PermissionKey => (PERMISSION_KEYS as readonly string[]).includes(permission)))]
+}
+
+export function normalizeApiActor(actor: ApiActor): ApiActor {
+  return { ...actor, permissions: normalizeApiPermissions(actor.permissions) }
+}
+
 export function primaryRole(roles: readonly ApiRoleCode[]): Role {
   const role = rolePriority.find(candidate => roles.includes(candidate)) || 'CUSTOMER'
   return role.toLowerCase() as Role
@@ -68,6 +111,7 @@ export function actorToUser(actor: ApiActor): User {
     role: primaryRole(actor.roles),
     facilityId: Object.keys(actor.facilityScopes)[0],
     mustChangePassword: actor.mustChangePassword,
+    permissions: normalizeApiPermissions(actor.permissions),
   }
 }
 
@@ -77,7 +121,7 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = response.data.actor
+  currentActor = normalizeApiActor(response.data.actor)
   return currentActor
 }
 
@@ -115,7 +159,7 @@ export async function changePasswordWithApi(currentPassword: string, newPassword
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = response.data.actor
+  currentActor = normalizeApiActor(response.data.actor)
   return currentActor
 }
 
@@ -161,7 +205,7 @@ export async function updateCurrentProfileWithApi(input: {
     body: JSON.stringify(input),
   })
   if (!response?.data) throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
-  currentActor = response.data
+  currentActor = normalizeApiActor(response.data)
   window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor
 }
@@ -228,7 +272,7 @@ export async function refreshApiSession(): Promise<ApiActor> {
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = response.data.actor
+  currentActor = normalizeApiActor(response.data.actor)
   return currentActor
 }
 

@@ -422,7 +422,7 @@ export default function BusinessApp({
       label: "Quản lý cơ sở",
       icon: Icon.building,
       group: "Danh mục",
-      permission: "view_facilities",
+      permission: "facilities:read",
     },
 
     {
@@ -430,7 +430,7 @@ export default function BusinessApp({
       label: "Hiệu suất vận hành",
       icon: Icon.eye,
       group: "Danh mục",
-      permission: "view_reports",
+      permission: "reports:read",
     },
 
     {
@@ -438,7 +438,7 @@ export default function BusinessApp({
       label: "Chính sách thuê",
       icon: Icon.policy,
       group: "Thương mại",
-      permission: "view_policies",
+      permission: "policies:read",
     },
 
     {
@@ -446,19 +446,19 @@ export default function BusinessApp({
       label: "Bảng giá & Phí",
       icon: Icon.dollar,
       group: "Thương mại",
-      permission: "view_policies",
+      permission: "policies:read",
     },
 
     // Ẩn tab Khuyến mãi & Voucher trên UI (giữ nguyên logic nghiệp vụ bên dưới)
 
-    // { id: 'discounts', label: 'Khuyến mãi & Voucher', icon: Icon.tag, group: 'Thương mại', permission: 'view_policies' },
+    // { id: 'discounts', label: 'Khuyến mãi & Voucher', icon: Icon.tag, group: 'Thương mại', permission: 'policies:read' },
 
     {
       id: "revenue",
       label: "Báo cáo doanh thu",
       icon: Icon.chart,
       group: "Báo cáo",
-      permission: "view_reports",
+      permission: "reports:read",
     },
   ]
 

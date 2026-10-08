@@ -229,7 +229,7 @@ export const UNITS = [
   // Size S: 8.0 × 10.0 × 5.0 m · 400.0 m³
   { id: 'BD-F01-S-001', code: 'BD-F01-S-001', customerCode: 'BD-F01-S-001', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '8,0×10,0×5,0 m', dimensionsM: [8.0, 10.0, 5.0], areaM2: 80.0, volumeM3: 400.0, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
   { id: 'BD-F01-S-002', code: 'BD-F01-S-002', customerCode: 'BD-F01-S-002', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '8,0×10,0×5,0 m', dimensionsM: [8.0, 10.0, 5.0], areaM2: 80.0, volumeM3: 400.0, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'occupied', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
-  { id: 'BD-F01-S-003', code: 'BD-F01-S-003', customerCode: 'BD-F01-S-003', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '5,6×6,0×3,2 m', dimensionsM: [5.6, 6.0, 3.2], areaM2: 33.6, volumeM3: 107.52, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
+  { id: 'BD-F01-S-003', code: 'BD-F01-S-003', customerCode: 'BD-F01-S-003', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '8,0×10,0×5,0 m', dimensionsM: [8.0, 10.0, 5.0], areaM2: 80.0, volumeM3: 400.0, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
   { id: 'BD-F01-S-004', code: 'BD-F01-S-004', customerCode: 'BD-F01-S-004', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '8,0×10,0×5,0 m', dimensionsM: [8.0, 10.0, 5.0], areaM2: 80.0, volumeM3: 400.0, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
   { id: 'BD-F01-S-005', code: 'BD-F01-S-005', customerCode: 'BD-F01-S-005', size: 'S', sizeCode: 'S', type: 'Small', dimensions: '8,0×10,0×5,0 m', dimensionsM: [8.0, 10.0, 5.0], areaM2: 80.0, volumeM3: 400.0, maxLoadKg: 600, price: 5500000, floor: 1, zone: 'Khu A', climate: true, status: 'available', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002' },
 
@@ -256,8 +256,8 @@ export const UNITS = [
 ]
 
 export const MY_RENTALS = [
-  { id: 'rent-001', unit: 'HCM-Q1-F01-M-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 57.6, sizeCode: 'M', status: 'active', paid: true, amount: 9500000, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
-  { id: 'rent-002', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 33.6, sizeCode: 'S', status: 'active', paid: false, amount: 5500000, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
+  { id: 'rent-001', unit: 'HCM-Q1-F01-M-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 131.04, sizeCode: 'M', status: 'active', paid: true, amount: 9500000, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
+  { id: 'rent-002', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 80.0, sizeCode: 'S', status: 'active', paid: false, amount: 5500000, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
 ]
 
 export const PAYMENTS = [
@@ -1026,146 +1026,7 @@ export const FEES = [
   { type: 'Phí hỗ trợ mở khóa khẩn cấp', amount: '780.000 ₫', trigger: 'Mở khóa thủ công ngoài giờ hành chính tại cơ sở', applies: 'Mỗi lần yêu cầu' }
 ]
 
-export const USERS = [
-  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
-  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
-  { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'All facilities', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
-  { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'All facilities', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
-]
-
-export const LOGIN_HISTORY = [
-  { id: 'log-1', user: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', time: 'Today, 09:12 AM', ip: '192.168.1.20', location: 'District 1, HCMC', device: 'Chrome on macOS', status: 'success' },
-  { id: 'log-2', user: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', time: 'Today, 08:45 AM', ip: '192.168.1.21', location: 'District 1, HCMC', device: 'Firefox on Windows', status: 'success' },
-  { id: 'log-3', user: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', time: 'Today, 08:30 AM', ip: '192.168.1.10', location: 'District 1, HCMC', device: 'Safari on iPhone 15', status: 'success' },
-  { id: 'log-4', user: 'Unknown User', email: 'admin@storagehub.demo', role: 'admin', time: 'Yesterday, 11:42 PM', ip: '14.232.180.99', location: 'Da Nang, VN', device: 'Chrome on Windows', status: 'failed' }
-]
-
-export interface AuditActivityLog {
-  id: string
-  user: string
-  actor: string
-  role: string
-  action: string
-  target: string
-  time: string
-  timestamp: string
-  type: 'info' | 'success' | 'warning' | 'error'
-  severity: 'info' | 'warning' | 'error'
-  category: 'rental' | 'billing' | 'pricing' | 'admin' | 'security' | 'access'
-  ip: string
-  device: string
-  details: Record<string, any>
-}
-
-export const ACTIVITY_LOGS: AuditActivityLog[] = [
-  {
-    id: 'act-101',
-    user: 'Demo Administrator',
-    actor: 'Demo Administrator',
-    role: 'admin',
-    action: 'Updated facility operating security policy',
-    target: 'Kho Việt – Cơ sở Quận 1 · Quy định PIN cổng',
-    time: '8 minutes ago',
-    timestamp: '2026-09-18 11:58:14',
-    type: 'info',
-    severity: 'info',
-    category: 'security',
-    ip: '192.168.1.10',
-    device: 'Chrome 128 / macOS Sequoia',
-    details: {
-      actionType: 'POLICY_UPDATE',
-      changedFields: {
-        pinRotationDays: { old: 90, new: 60 },
-        failedLockoutThreshold: { old: 5, new: 3 }
-      }
-    }
-  },
-  {
-    id: 'act-102',
-    user: 'Demo Manager',
-    actor: 'Demo Manager',
-    role: 'manager',
-    action: 'Overlocked Unit B-108 due to 17 days delinquency',
-    target: 'Unit B-108 · Tenant Vuong Quoc Tuan',
-    time: '24 minutes ago',
-    timestamp: '2026-09-18 11:42:00',
-    type: 'warning',
-    severity: 'warning',
-    category: 'access',
-    ip: '192.168.1.15',
-    device: 'Safari / iPadOS 18',
-    details: {
-      actionType: 'DIGITAL_LOCKOUT',
-      tenantId: 'OD-12',
-      pastDueAmount: 170,
-      gatePinSuspended: true
-    }
-  },
-  {
-    id: 'act-104',
-    user: 'Demo Staff',
-    actor: 'Demo Staff',
-    role: 'staff',
-    action: 'Completed unit return inspection for RET-118',
-    target: 'Unit A-102 · Tenant Pham Thu Ha',
-    time: '2 hours ago',
-    timestamp: '2026-09-18 10:14:19',
-    type: 'success',
-    severity: 'info',
-    category: 'rental',
-    ip: '192.168.1.21',
-    device: 'Firefox 130 / Windows 11',
-    details: {
-      actionType: 'INSPECTION_FINALIZE',
-      conditionResult: 'PASS_CLEAN',
-      depositRefundApproved: 89
-    }
-  },
-  {
-    id: 'act-105',
-    user: 'Security System',
-    actor: 'Automated Access Daemon',
-    role: 'system',
-    action: 'Repeated unauthorized keypad entry attempts recorded',
-    target: 'North Vehicle Gate Keypad',
-    time: '3 hours ago',
-    timestamp: '2026-09-18 09:15:02',
-    type: 'error',
-    severity: 'error',
-    category: 'security',
-    ip: '10.0.4.12',
-    device: 'Hardware Controller v3.2',
-    details: {
-      actionType: 'SECURITY_ALERT',
-      event: 'EXCESSIVE_FAILED_PINS',
-      count: 4,
-      lockoutDurationSeconds: 300
-    }
-  },
-  {
-    id: 'act-106',
-    user: 'Demo Customer',
-    actor: 'Demo Customer',
-    role: 'customer',
-    action: 'Processed online credit card payment for September rent',
-    target: 'Invoice INV-2026-0081 · 3.874.000 ₫',
-    time: '5 hours ago',
-    timestamp: '2026-09-18 07:11:45',
-    type: 'success',
-    severity: 'info',
-    category: 'billing',
-    ip: '14.232.88.19',
-    device: 'Chrome Mobile / Android 14',
-    details: {
-      actionType: 'PAYMENT_CAPTURE',
-      amount: 149.00,
-      method: 'Visa •••• 4242',
-      status: 'SETTLED'
-    }
-  }
-]
-
+// Policy fixture retained for verification tests; the Admin settings screen reads the API.
 export interface SettingGroup {
   group: string
   description?: string
@@ -1181,54 +1042,23 @@ export interface SettingGroup {
 
 export const SETTINGS_GROUPS: SettingGroup[] = [
   {
-    group: 'Facility & Business Profile',
-    description: 'General organization parameters and primary contact channels.',
-    items: [
-      { id: 'businessName', label: 'Company / Facility Name', type: 'text', value: 'StorageHub Vietnam' },
-      { id: 'contactEmail', label: 'Primary Support Email', type: 'text', value: 'support@storagehub.demo' },
-      { id: 'hotline', label: 'Customer Hotline', type: 'text', value: '+84 28 3822 8888' },
-      { id: 'currency', label: 'Operating Currency', type: 'select', value: 'VND (₫)', options: ['VND (₫)'] },
-      { id: 'timezone', label: 'Facility Timezone', type: 'select', value: 'GMT+7 (Asia/Ho_Chi_Minh)', options: ['GMT+7 (Asia/Ho_Chi_Minh)', 'GMT+8 (Asia/Singapore)', 'GMT+0 (UTC)'] }
-    ]
-  },
-  {
     group: 'Billing & Invoicing Rules',
-    description: 'Automated invoice generation, grace periods, and late penalty triggers.',
-    items: [
-      { id: 'gracePeriod', label: 'Late Fee Grace Period (Days)', type: 'number', value: 3 },
-      { id: 'lateFeeAmount', label: 'Fixed Late Fee Amount (VND)', type: 'number', value: 650000 },
-      { id: 'autoInvoiceDays', label: 'Advance Invoice Generation (Days)', type: 'select', value: '7 days before due date', options: ['3 days before due date', '7 days before due date', '14 days before due date', '30 days before due date'] },
-      { id: 'autoProrate', label: 'Prorate First Month Rent on Move-in', type: 'toggle', value: true }
-    ]
-  },
-  {
-    group: 'Security & Access Controls',
-    description: 'Hardware controller security, access lockout, and authentication requirements.',
-    items: [
-      { id: 'require2FA', label: 'Enforce Two-Factor Authentication (2FA) for Staff', type: 'toggle', value: true },
-      { id: 'pinRotation', label: 'Gate PIN Auto-Rotation Interval', type: 'select', value: '90 days', options: ['30 days', '60 days', '90 days', 'Never (Manual)'] },
-      { id: 'lockoutAttempts', label: 'Failed PIN Lockout Threshold', type: 'select', value: '3 failed attempts', options: ['3 failed attempts', '5 failed attempts', '10 failed attempts'] },
-      { id: 'sessionTimeout', label: 'Admin Session Inactivity Timeout', type: 'select', value: '30 minutes', options: ['15 minutes', '30 minutes', '60 minutes', '4 hours'] }
-    ]
-  },
-  {
-    group: 'Automated Notifications & Webhooks',
-    description: 'Direct SMS and email dispatch configurations for operational alerts.',
-    items: [
-      { id: 'emailAlerts', label: 'Send Overdue Reminder Emails', type: 'toggle', value: true },
-      { id: 'smsGateAlerts', label: 'Send SMS on After-Hours Gate Access', type: 'toggle', value: false },
-      { id: 'slackWebhook', label: 'Operational Incident Slack Webhook', type: 'text', value: 'https://hooks.slack.com/services/T00/B00/XXXX' },
-      { id: 'dailyDigest', label: 'Daily Executive Performance Digest to Managers', type: 'toggle', value: true }
-    ]
-  },
-  {
-    group: 'Maintenance & Service Mode',
-    description: 'Emergency controls and maintenance banners.',
-    items: [
-      { id: 'maintenanceMode', label: 'Maintenance Mode (Block New Bookings)', type: 'toggle', value: false },
-      { id: 'bannerNotice', label: 'Public Facility Announcement Banner', type: 'text', value: 'Routine fire alarm testing scheduled this Sunday 9:00 AM - 11:00 AM.' }
-    ]
+    description: 'Policy verification fixture.',
+    items: [{ id: 'gracePeriod', label: 'Late Fee Grace Period (Days)', type: 'number', value: 3 }]
   }
 ]
 
-export const SETTINGS = SETTINGS_GROUPS
+export const USERS = [
+  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
+  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
+  { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'All facilities', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
+  { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'All facilities', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
+]
+
+export const LOGIN_HISTORY = [
+  { id: 'log-1', user: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', time: 'Today, 09:12 AM', ip: '192.168.1.20', location: 'District 1, HCMC', device: 'Chrome on macOS', status: 'success' },
+  { id: 'log-2', user: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', time: 'Today, 08:45 AM', ip: '192.168.1.21', location: 'District 1, HCMC', device: 'Firefox on Windows', status: 'success' },
+  { id: 'log-3', user: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', time: 'Today, 08:30 AM', ip: '192.168.1.10', location: 'District 1, HCMC', device: 'Safari on iPhone 15', status: 'success' },
+  { id: 'log-4', user: 'Unknown User', email: 'admin@storagehub.demo', role: 'admin', time: 'Yesterday, 11:42 PM', ip: '14.232.180.99', location: 'Da Nang, VN', device: 'Chrome on Windows', status: 'failed' }
+]

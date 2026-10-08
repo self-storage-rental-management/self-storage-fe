@@ -5,7 +5,8 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
 import HomePage from './views/home/HomePage'
 import RequiredPasswordChange from './views/RequiredPasswordChange'
-import { actorToUser, getAuthenticatedActor, logoutFromApi, type ApiActor } from './services/authApi'
+import { actorToUser, getAuthenticatedActor, logoutFromApi, refreshApiSession, type ApiActor } from './services/authApi'
+import { clearAuthTokens, getRefreshToken } from './services/apiClient'
 
 const CHUNK_RELOAD_KEY = 'storagehub:chunk-reload'
 
@@ -49,6 +50,7 @@ function resolveGuestView(): GuestView {
     || pathname === '/reset-password'
     || pathname === '/profile'
     || pathname === '/profile/security'
+    || pathname.startsWith('/admin')
     || url.searchParams.has('verifyEmail')
     || url.searchParams.has('resetPassword')
   ) return 'login'
@@ -68,7 +70,30 @@ function MainContent() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
+  const [restoringSession, setRestoringSession] = useState(() => Boolean(getRefreshToken()))
   const [guestView, setGuestView] = useState<GuestView>(resolveGuestView)
+
+  useEffect(() => {
+    if (!getRefreshToken()) {
+      setRestoringSession(false)
+      return
+    }
+    let cancelled = false
+    void refreshApiSession()
+      .then(actor => {
+        if (!cancelled) setApiActor(actor)
+      })
+      .catch(() => {
+        clearAuthTokens()
+        if (!cancelled) setApiActor(null)
+      })
+      .finally(() => {
+        if (!cancelled) setRestoringSession(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const canonicalRecord = sessionUserId ? users.find(item => item.id === sessionUserId) : null
   const accountStatus = canonicalRecord && 'status' in canonicalRecord ? String(canonicalRecord.status) : 'active'
@@ -160,6 +185,10 @@ function MainContent() {
     setSessionId(null)
     setGuestView('home')
     window.history.replaceState(null, '', '/')
+  }
+
+  if (restoringSession) {
+    return <div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm font-medium text-stone-600">Đang khôi phục phiên đăng nhập…</div>
   }
 
   if (!user) {
