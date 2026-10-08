@@ -1720,7 +1720,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const can = (actor: User | Role, permission: PermissionKey): boolean => {
     const role = (typeof actor === 'string'
       ? actor
-      : state.users.find(item => item.id === actor.id && item.status === 'active')?.role) as Role | undefined
+      : (actor?.role || state.users.find(item => item.id === actor.id && item.status === 'active')?.role)) as Role | undefined
     if (!role) return false
     return Boolean(state.rolePermissions[role]?.[permission])
   }

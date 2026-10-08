@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient'
+import { apiDownload, apiRequest } from './apiClient'
 
 export type FacilityStatus = 'active' | 'maintenance' | 'inactive' | 'coming_soon'
 export type UnitTypeStatus = 'active' | 'inactive'
@@ -111,6 +111,10 @@ export interface CompatibilityCheckResult {
   totalGoodsWeightKg: number
   unitVolumeM3: number
   unitMaxLoadKg: number
+  rackUtilizationRate: number
+  usableVolumePerRackM3: number
+  requiredRackCount: number
+  unitRackCount: number
   availableUnitCount: number
   staffReviewRequired: boolean
   issues: string[]
@@ -234,9 +238,50 @@ export interface PaymentComplaint {
   decisionReason: string | null
 }
 
+export interface BookingDocument {
+  id: string
+  reservationId: string
+  reservationCode: string
+  documentType: 'BOOKING_CONFIRMATION'
+  fileId: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  checksumSha256: string
+  issuedAt: string
+  downloadUrl: string
+}
+
+export async function generateBookingDocument(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<BookingDocument>>(
+    `/api/customer/reservations/${reservationId}/booking-document`, { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function getBookingDocument(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<BookingDocument>>(
+    `/api/customer/reservations/${reservationId}/booking-document`,
+  )
+  return response.data
+}
+
+export function downloadBookingDocument(reservationId: string) {
+  return apiDownload(`/api/customer/reservations/${reservationId}/booking-document/download`)
+}
+
 export async function uploadComplaintImage(file: File) {
   const body = new FormData()
   body.append('file', file)
+  const response = await apiRequest<ApiEnvelope<{ id: string }>>('/api/files', { method: 'POST', body })
+  return response.data
+}
+
+export async function uploadReservationGoodsImage(goodsItemId: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('entityType', 'RESERVATION_GOODS_ITEM')
+  body.append('entityId', goodsItemId)
   const response = await apiRequest<ApiEnvelope<{ id: string }>>('/api/files', { method: 'POST', body })
   return response.data
 }

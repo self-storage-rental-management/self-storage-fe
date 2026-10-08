@@ -47,6 +47,7 @@ describe('changePasswordWithApi', () => {
 describe('backend customer navigation and profile', () => {
   const actor: ApiActor = {
     id: 'real-customer', email: 'customer@example.com', fullName: 'Customer', phone: null,
+    permanentAddress: null, emergencyContactName: null, emergencyContactPhone: null,
     avatarUrl: 'https://example.com/avatar.png', status: 'ACTIVE', roles: ['CUSTOMER'],
     facilityScopes: {}, mustChangePassword: false, permissions: [],
   }
@@ -98,11 +99,21 @@ describe('backend customer navigation and profile', () => {
   })
 
   it('uses backend staff permissions without trusting a local role or demo identity', async () => {
-    const staff: ApiActor = { ...actor, roles: ['STAFF'], permissions: ['view_reservations', 'approve_reservations'] }
+    const staff: ApiActor = {
+      ...actor,
+      roles: ['STAFF'],
+      facilityScopes: { 'facility-q1': 'OPERATE' },
+      facilityNames: { 'facility-q1': 'Kho Việt – Cơ sở Quận 1' },
+      permissions: ['view_reservations', 'approve_reservations'],
+    }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { actor: staff, accessToken: 'access', refreshToken: 'refresh' } }), { headers: { 'Content-Type': 'application/json' } })))
     await loginWithApi(staff.email, 'password')
-    expect(canApiActor(actorToUser(staff), 'approve_reservations')).toBe(true)
-    expect(canApiActor(actorToUser(staff), 'manage_roles')).toBe(false)
-    expect(canApiActor({ ...actorToUser(staff), id: 'forged-id' }, 'approve_reservations')).toBe(false)
+    const user = actorToUser(staff)
+    expect(user.facility).toBe('Kho Việt – Cơ sở Quận 1')
+    expect(user.facilityId).toBe('facility-q1')
+    expect(user.facilityScopes).toEqual({ 'facility-q1': 'OPERATE' })
+    expect(canApiActor(user, 'approve_reservations')).toBe(true)
+    expect(canApiActor(user, 'manage_roles')).toBe(false)
+    expect(canApiActor({ ...user, id: 'forged-id' }, 'approve_reservations')).toBe(false)
   })
 })
