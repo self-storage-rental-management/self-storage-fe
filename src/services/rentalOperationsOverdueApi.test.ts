@@ -241,6 +241,12 @@ describe("D3 real API transport", () => {
       "refund-decisions",
     ],
   ]
+  it.each(commands)("rejects injected actor/amount fields for $action before transport", async command => {
+    const fetch = respond({ data: { state: { ...signingState, expectedVersion: 5 }, event: operationEvent } })
+    const injected = { ...command, body: { ...command.body, actorId: ids.customer, amount: 1 } } as unknown as RenewalOperationCommand
+    await expect(sendRenewalOperation(ids.renewal, injected, "injected-fields")).rejects.toThrow("Trường lệnh")
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it.each(commands)(
     "sends exact action $action role/payload/version/key",
     async (command, role, method, route) => {
