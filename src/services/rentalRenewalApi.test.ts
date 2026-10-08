@@ -34,6 +34,42 @@ afterEach(() => {
 })
 
 describe("D1/D2 wire contracts", () => {
+  it("reads additive financial fields without converting or calculating deposit", async () => {
+    const data={...rental,financialSummary:{...rental.financialSummary,completeness:"COMPLETE",outstandingAmount:0,overdueAmount:0,securityDepositAmount:1234567,billingMode:"PREPAID_FULL_PERIOD"}}
+    response({data})
+    expect((await getRental("manager","r1")).financialSummary).toEqual(data.financialSummary)
+  })
+  it.each([
+    {securityDepositAmount:-1},
+    {securityDepositAmount:"100"},
+    {billingMode:"FAKE_RECURRING"},
+    {billingMode:"PREPAID_FULL_PERIOD",nextDueDate:"2026-11-01"},
+  ])("rejects invalid additive D1 fields %j", async fields => {
+    response({data:{...rental,financialSummary:{...rental.financialSummary,...fields}}})
+    await expect(getRental("manager","r1")).rejects.toMatchObject({code:"INVALID_RESPONSE"})
+  })
+  it.each(["customer","manager"] as const)("reads nested accepted terms and cancellation reason for %s",async role=>{
+    const data={...renewal,amount:quote.totalAfterDiscount,acceptedTerms:quote,cancellationReason:"Đổi kế hoạch"}
+    response({data})
+    expect(await getRenewal(role,"n1")).toEqual(data)
+  })
+  it("accepts null additive fields from legacy Renewal",async()=>{
+    response({data:{...renewal,acceptedTerms:null,cancellationReason:null}})
+    expect((await getRenewal("manager","n1")).acceptedTerms).toBeNull()
+  })
+  it.each([
+    {monthlyPrice:"5500000"}, {renewalDepositAmount:-1}, {rentalMonths:0},
+    {facilityId:"another-facility"}, {storageUnitId:"another-unit"},
+    {newEndDate:"2027-02-01"}, {totalAfterDiscount:1},
+    {renewalPolicyVersion:null},
+  ])("rejects malformed or mismatched accepted snapshot %j",async fields=>{
+    response({data:{...renewal,amount:quote.totalAfterDiscount,acceptedTerms:{...quote,...fields}}})
+    await expect(getRenewal("manager","n1")).rejects.toMatchObject({code:"INVALID_RESPONSE"})
+  })
+  it("rejects invalid cancellation reason instead of crashing detail",async()=>{
+    response({data:{...renewal,cancellationReason:{text:"not a string"}}})
+    await expect(getRenewal("customer","n1")).rejects.toMatchObject({code:"INVALID_RESPONSE"})
+  })
   it.each(["customer", "manager"] as const)(
     "loads scoped %s Rental records without a demo source",
     async (role) => {

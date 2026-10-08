@@ -13,6 +13,7 @@ import type { RenewalApiQuery, RenewalApiRecord } from "../../types/renewalApi"
 import ApiReadState from "./ApiReadState"
 import RentalDetail from "./RentalDetail"
 import RenewalDetail from "./RenewalDetail"
+import RenewalOperationsPanel from "./RenewalOperationsPanel"
 import RenewalDecisionModal from "./RenewalDecisionModal"
 import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal"
 import {
@@ -256,7 +257,7 @@ function WorkspaceData({
       </h1>
       <p className="text-sm text-stone-500">
         Dữ liệu từ API. Duyệt gia hạn không tự kéo dài hồ sơ thuê; không có thao
-        tác thanh toán D3 trên màn hình này.
+        tác ký/thanh toán D3 nằm trong chi tiết yêu cầu gia hạn.
       </p>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -515,6 +516,7 @@ function WorkspaceData({
           detail={detail}
           onClose={() => setDetail(undefined)}
           onAction={setAction}
+          onChanged={refresh}
         />
       )}
       {action?.kind === "request" && (
@@ -550,13 +552,20 @@ function DetailModal({
   detail,
   onClose,
   onAction,
+  onChanged,
 }: {
   role: RentalApiRole
   identity: string
   detail: Detail
   onClose: () => void
   onAction: (a: Action) => void
+  onChanged: () => void
 }) {
+  const [operationLocked, setOperationLocked] = useState(false)
+  const [operationOwner, setOperationOwner] = useState<{
+    facilityId: string
+    customerId: string
+  }>()
   const read = useRentalApiResource(
     `${identity}:${detail.kind}:${detail.id}`,
     async () =>
@@ -567,6 +576,15 @@ function DetailModal({
             record: await getRenewal(role, detail.id),
           },
   )
+  useEffect(() => {
+    if (read.data?.kind === "renewal") {
+      const r = read.data.record as RenewalApiRecord
+      setOperationOwner({
+        facilityId: r.facility.id,
+        customerId: r.customer.id,
+      })
+    }
+  }, [read.data])
   return (
     <Modal
       open
@@ -576,7 +594,9 @@ function DetailModal({
           ? "Chi tiết hồ sơ thuê"
           : "Chi tiết yêu cầu gia hạn"
       }
-      onClose={onClose}
+      onClose={() => {
+        if (!operationLocked) onClose()
+      }}
     >
       <ApiReadState {...read} retry={read.refresh} />
       {read.data?.kind === "rental" ? (
@@ -592,22 +612,37 @@ function DetailModal({
           }
         />
       ) : read.data?.kind === "renewal" ? (
-        <RenewalDetail
-          renewal={read.data.record as RenewalApiRecord}
+        <div>
+          <RenewalDetail
+            renewal={read.data.record as RenewalApiRecord}
+            role={role}
+            onAction={(action) => {
+              if (operationLocked) return
+              const renewal = read.data!.record as RenewalApiRecord
+              onClose()
+              if (action === "ACCEPT_REVISED_QUOTE")
+                onAction({
+                  kind: "request",
+                  rentalId: renewal.rentalId,
+                  revision: renewal,
+                })
+              else onAction({ kind: "decision", renewal, action })
+            }}
+          />
+        </div>
+      ) : null}
+      {detail.kind === "renewal" && operationOwner && (
+        <RenewalOperationsPanel
+          id={detail.id}
           role={role}
-          onAction={(action) => {
-            const renewal = read.data!.record as RenewalApiRecord
-            onClose()
-            if (action === "ACCEPT_REVISED_QUOTE")
-              onAction({
-                kind: "request",
-                rentalId: renewal.rentalId,
-                revision: renewal,
-              })
-            else onAction({ kind: "decision", renewal, action })
+          {...operationOwner}
+          onLocked={setOperationLocked}
+          onChanged={() => {
+            read.refresh()
+            onChanged()
           }}
         />
-      ) : null}
+      )}
     </Modal>
   )
 }

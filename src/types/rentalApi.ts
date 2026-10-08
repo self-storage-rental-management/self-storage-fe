@@ -52,6 +52,8 @@ export interface RentalApiDetail extends RentalApiRecord {
     overdueAmount: number | null
     nextDueDate: string | null
     reason: string | null
+    securityDepositAmount?: number | null
+    billingMode?: "PREPAID_FULL_PERIOD" | "OTHER" | null
   }
   access: {
     completeness: string

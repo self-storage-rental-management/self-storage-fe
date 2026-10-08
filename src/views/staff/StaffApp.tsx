@@ -31,6 +31,7 @@ import StaffPaymentUpload from "./StaffPaymentUpload"
 import StaffSupportPanel from "./StaffSupportPanel"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
@@ -783,6 +784,7 @@ export default function StaffApp({
   const hub = useStorageHub()
 
   const nav: NavItem[] = [
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
     {
       id: "dashboard",
 
@@ -1937,6 +1939,7 @@ export default function StaffApp({
       roleLabel="Nhân viên"
       roleColor="bg-green-100 text-green-700"
     >
+      {page === "renewal-signing" && isApiAuthenticated() && <StaffRenewalOperationsApiPanel key={user.id} />}
       {page === "dashboard" && (
         <div className="fade-in space-y-6">
           <SectionHeader
