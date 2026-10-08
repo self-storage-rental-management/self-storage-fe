@@ -117,7 +117,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
   const permitted =
     actor?.status === "ACTIVE" &&
     actor.roles.includes(role === "manager" ? "MANAGER" : "CUSTOMER") &&
-    (role !== "manager" || actor.permissions.includes("view_rentals"))
+    (role !== "manager" || actor.permissions.includes("rentals:read"))
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (tab === "rental")

@@ -65,6 +65,7 @@ import { formatVnd } from "../../i18n/currency"
 import { useStorageHub } from "../../store/StorageHubContext"
 
 import { isFacilityVisible } from "../../domain/managerRules"
+import { DEMO_DATA_ENABLED } from "../../config/runtime"
 
 import StaffPagination, { paginateStaffItems } from "./StaffPagination"
 
@@ -516,7 +517,7 @@ const mapSharedReturn = (
   }
 }
 
-const reservationSeed: StaffReservation[] = RESERVATIONS.map((item, index) => ({
+const reservationSeed: StaffReservation[] = DEMO_DATA_ENABLED ? RESERVATIONS.map((item, index) => ({
   ...item,
 
   // Keep one realistic exception in the Staff queue so the REVIEW_REQUIRED
@@ -537,9 +538,9 @@ const reservationSeed: StaffReservation[] = RESERVATIONS.map((item, index) => ({
   appointmentTime: index === 0 ? "11:00 AM" : "09:00 AM",
 
   checkInDeadline: addDays(item.moveIn, 14),
-}))
+})) : []
 
-const checkinSeed: StaffCheckin[] = CHECKINS.map((item) => ({
+const checkinSeed: StaffCheckin[] = DEMO_DATA_ENABLED ? CHECKINS.map((item) => ({
   ...item,
 
   status: item.status as StaffCheckin["status"],
@@ -553,9 +554,9 @@ const checkinSeed: StaffCheckin[] = CHECKINS.map((item) => ({
   scheduleChanged: false,
 
   customerHandoverStatus: "pending",
-}))
+})) : []
 
-const returnSeed: StaffReturn[] = RETURNS.map((item) => ({
+const returnSeed: StaffReturn[] = DEMO_DATA_ENABLED ? RETURNS.map((item) => ({
   ...item,
 
   status: item.status === "refunded" ? "refunded" : "pending",
@@ -565,7 +566,7 @@ const returnSeed: StaffReturn[] = RETURNS.map((item) => ({
   contractEnd: item.returnDate,
 
   requestReason: "khách hàng chủ động kết thúc kỳ thuê đúng hạn",
-}))
+})) : []
 
 const unitOperationSpecs: Record<string, {
   doorWidth: number
@@ -1004,7 +1005,7 @@ export default function StaffApp({
     )
 
   const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() =>
-    hasFacilityScope
+    DEMO_DATA_ENABLED && hasFacilityScope
       ? SUPPORT_TICKETS.filter((item) =>
           isFacilityVisible(user, item.facilityId, item.facility),
         )
@@ -1017,7 +1018,7 @@ export default function StaffApp({
   const [assignedStaffByTicket, setAssignedStaffByTicket] =
     useState<Record<string, string>>(() =>
       Object.fromEntries(
-        SUPPORT_TICKETS.map((ticket) => {
+        (DEMO_DATA_ENABLED ? SUPPORT_TICKETS : []).map((ticket) => {
           const latestStaffMessage = [...ticket.messages]
 
             .reverse()
@@ -1456,7 +1457,7 @@ export default function StaffApp({
     ? hub.returns.find((item) => item.id === selectedReturn.id)
     : undefined
 
-  const expiringRentals = MY_RENTALS.filter((rental) =>
+  const expiringRentals = (DEMO_DATA_ENABLED ? MY_RENTALS : []).filter((rental) =>
     isFacilityVisible(user, undefined, rental.facility),
   ).filter((rental) => {
     const due = new Date(rental.nextDue)
@@ -2380,7 +2381,7 @@ export default function StaffApp({
       )}
 
       {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'approve_reservations')} facilityNames={user.facilityNames} />}
+      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'reservations:approve')} facilityNames={user.facilityNames} />}
       {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader

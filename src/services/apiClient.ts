@@ -91,7 +91,7 @@ async function refreshAccessToken(): Promise<boolean> {
         return false
       }
       accessToken = data.accessToken
-      refreshToken = data.refreshToken
+      setRefreshToken(data.refreshToken)
       return true
     } catch {
       return false

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import BrandLogo from '../../components/BrandLogo'
 import { useStorageHub } from '../../store/StorageHubContext'
-import { FACILITIES, UNIT_SPECS } from '../../data/demoDatabase'
+import { UNIT_SPECS } from '../../data/demoDatabase'
 
 interface HomePageProps {
   onOpenLogin: () => void
@@ -136,22 +136,20 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   }, [])
   const [selectedFacilityTab, setSelectedFacilityTab] = useState('all')
 
-  // Keep live availability from the shared store while sourcing all display
-  // metadata from the canonical demo catalog.
+  // Keep availability and display metadata from the shared store. Demo
+  // catalog data is intentionally not used as a silent fallback.
   const facilitiesList = contextFacilities.map(f => {
-    const seed = FACILITIES.find(item => item.id === f.id)
-    const facCode = f.code || seed?.code || f.id.toUpperCase()
+    const facCode = f.code || f.id.toUpperCase()
     const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
     const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
     return {
-      ...seed,
       ...f,
       code: facCode,
       name: f.name,
       address: f.address,
       city: f.city,
-      price: f.price ?? seed?.price ?? 150,
-      units: f.units ?? seed?.units ?? units.filter(u => u.facilityId === f.id || (f.code && u.facilityId === f.code)).length,
+      price: f.price ?? 0,
+      units: f.units ?? units.filter(u => u.facilityId === f.id || (f.code && u.facilityId === f.code)).length,
       available: Math.max(0, physicalAvailable - activeCapacityHolds),
     }
   })

@@ -56,7 +56,7 @@ export default function SupportStaffPicker({
           {read.data.data.length === 0 && (
             <p className="text-sm text-amber-800">
               Chưa có Staff đủ điều kiện. BE yêu cầu ACTIVE, đúng cơ sở,
-              view_support và manage_support; không tự cấp quyền hoặc so tên.
+              support:read và support:update; không tự cấp quyền hoặc so tên.
             </p>
           )}
         </>
