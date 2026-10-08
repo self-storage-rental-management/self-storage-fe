@@ -23,7 +23,6 @@ import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../
 import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
-import { isApiAuthenticated } from '../../services/authApi'
 import {
   getStoredPolicies,
   getPoliciesForFacility,

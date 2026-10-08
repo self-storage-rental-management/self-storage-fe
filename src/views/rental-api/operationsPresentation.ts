@@ -104,11 +104,11 @@ export function operationBlockedReason(
     return "Không phải yêu cầu gia hạn của bạn."
   if (
     role === "manager" &&
-    (!actor.permissions.includes("manage_rentals") ||
+    (!actor.permissions.includes("rentals:update") ||
       !facilityId ||
       actor.facilityScopes[facilityId] !== "MANAGE")
   )
-    return "Cần quyền manage_rentals và phạm vi MANAGE của cơ sở."
+    return "Cần quyền rentals:update và phạm vi MANAGE của cơ sở."
   if (s.expectedVersion === null)
     return "Thiếu phiên bản workflow xác thực; không tự tạo version."
   const missing = sources[action].filter((ref) =>

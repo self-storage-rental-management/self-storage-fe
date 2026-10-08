@@ -75,6 +75,14 @@ import {
   FacilityOperations,
   FacilityImageManager,
 } from "./facility/FacilityFormFields"
+import { DEMO_DATA_ENABLED } from "../../config/runtime"
+
+const RUNTIME_REVENUE_DATA = DEMO_DATA_ENABLED ? REVENUE_DATA : []
+const RUNTIME_REVENUE_BREAKDOWN = DEMO_DATA_ENABLED ? REVENUE_BREAKDOWN : []
+const RUNTIME_CONVERSION_DATA = DEMO_DATA_ENABLED ? CONVERSION_DATA : []
+const RUNTIME_PRICING_TIERS = DEMO_DATA_ENABLED ? PRICING_TIERS : []
+const RUNTIME_DISCOUNTS = DEMO_DATA_ENABLED ? DISCOUNTS : []
+const RUNTIME_FEES = DEMO_DATA_ENABLED ? FEES : []
 
 const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
   {
@@ -487,7 +495,7 @@ export default function BusinessApp({
           })
 
           return valid.map((item: PolicyItem) => {
-            const def = POLICIES.find(p => p.id === item.id)
+            const def = (DEMO_DATA_ENABLED ? POLICIES : []).find(p => p.id === item.id)
             if (def && (!item.description || item.value === '650.000 ₫ / month' || item.value === '5 days' || item.name === 'Grace Period' || item.name === 'Thời gian gia hạn nợ')) {
               return { ...item, name: def.name, value: def.value, description: item.description || def.description }
             }
@@ -499,7 +507,7 @@ export default function BusinessApp({
       // fallback
     }
 
-    return POLICIES.map((p) => ({ ...p, description: p.description || "" }))
+    return (DEMO_DATA_ENABLED ? POLICIES : []).map((p) => ({ ...p, description: p.description || "" }))
   })
 
   const [policyModal, setPolicyModal] = useState(false)
@@ -1221,7 +1229,7 @@ export default function BusinessApp({
         return !isSeedPayment
       })
 
-      return REVENUE_DATA.map((item) => {
+      return RUNTIME_REVENUE_DATA.map((item) => {
         const extraRevenue = newFacilityPaidPayments.reduce((sum, p) => {
           if (
             getPaymentReportingMonth(p.paidAt || p.receivedAt) === item.month
@@ -1322,7 +1330,7 @@ export default function BusinessApp({
 
     let previousMonthRevenue = 0
 
-    return REVENUE_DATA.map((item, idx) => {
+    return RUNTIME_REVENUE_DATA.map((item, idx) => {
       // Khoản thanh toán thực tế đã thu trong tháng
       const monthPayments = selectedFacilityPaidPayments.filter(
         (p) =>
@@ -1337,15 +1345,15 @@ export default function BusinessApp({
       // Các tháng quá khứ (Tháng 4 - 8): 0 (do cơ sở mới được tạo, quá khứ chưa thành lập)
       // Tháng 9 (tháng hiện tại): Hiển thị số hợp đồng thực tế đã ký / hồ sơ thuê (nếu có)
       const monthContracts =
-        idx === REVENUE_DATA.length - 1 ? activeContractsCount : 0
+        idx === RUNTIME_REVENUE_DATA.length - 1 ? activeContractsCount : 0
 
       // Tỷ lệ lấp đầy:
       const monthOccRate =
-        idx === REVENUE_DATA.length - 1 && facOccPct > 0
+        idx === RUNTIME_REVENUE_DATA.length - 1 && facOccPct > 0
           ? `${facOccPct}%`
           : "0%"
       const monthOccNumber =
-        idx === REVENUE_DATA.length - 1 && facOccPct > 0 ? facOccPct / 100 : 0
+        idx === RUNTIME_REVENUE_DATA.length - 1 && facOccPct > 0 ? facOccPct / 100 : 0
 
       // Tính tăng trưởng so với tháng trước
       let growthStr = "—"
@@ -1436,7 +1444,7 @@ export default function BusinessApp({
         if (Array.isArray(parsed) && parsed.length > 0) return parsed
       }
     } catch {}
-    return PRICING_TIERS
+    return RUNTIME_PRICING_TIERS
   })
 
   const [selectedTier, setSelectedTier] =
@@ -1790,7 +1798,7 @@ export default function BusinessApp({
   // Discounts & Promotions interactive state
 
   const [promotionsList, setPromotionsList] =
-    useState<PromotionItem[]>(DISCOUNTS)
+    useState<PromotionItem[]>(RUNTIME_DISCOUNTS)
 
   const [promoTab, setPromoTab] = useState("All")
 
@@ -4388,7 +4396,7 @@ export default function BusinessApp({
                 </tr>
               </Thead>
               <Tbody>
-                {FEES.map((f) => (
+                {RUNTIME_FEES.map((f) => (
                   <Tr key={f.type}>
                     <Td className="font-medium text-slate-900">
                       {getFeeType(f.type, lang)}
@@ -5245,7 +5253,7 @@ export default function BusinessApp({
                 </span>
               </div>
               <div className="space-y-3.5">
-                {REVENUE_BREAKDOWN.map((item) => (
+                {RUNTIME_REVENUE_BREAKDOWN.map((item) => (
                   <div key={item.category} className="space-y-1.5">
                     <div className="flex justify-between text-xs">
                       <span className="font-medium text-slate-700">
@@ -5322,7 +5330,7 @@ export default function BusinessApp({
               </h3>
               <ResponsiveContainer width="100%" height={180}>
                 <LineChart
-                  data={CONVERSION_DATA}
+                  data={RUNTIME_CONVERSION_DATA}
                   margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />

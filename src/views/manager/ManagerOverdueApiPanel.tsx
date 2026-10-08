@@ -152,7 +152,7 @@ export default function ManagerOverdueApiPanel() {
     !actor ||
     actor.status !== "ACTIVE" ||
     !actor.roles.includes("MANAGER") ||
-    !actor.permissions.includes("view_rentals")
+    !actor.permissions.includes("rentals:read")
   )
     return (
       <Card className="p-5">Cần quyền xem hồ sơ thuê của Manager API.</Card>
@@ -395,7 +395,7 @@ function OverdueDetail({
   const [last, setLast] = useState<OverdueFollowUp>()
   const canWrite =
     !!read.data &&
-    actor.permissions.includes("manage_rentals") &&
+    actor.permissions.includes("rentals:update") &&
     actor.facilityScopes[read.data.facilityId] === "MANAGE"
   return (
     <div className="space-y-4">
@@ -416,7 +416,7 @@ function OverdueDetail({
           >
             Ghi nhận xử lý
           </Button>
-          {!canWrite && <p>Thao tác cần manage_rentals và MANAGE của cơ sở.</p>}
+          {!canWrite && <p>Thao tác cần rentals:update và MANAGE của cơ sở.</p>}
           {form && (
             <OverdueForm
               key={tick}
