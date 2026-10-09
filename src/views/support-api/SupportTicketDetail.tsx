@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState } from "react"
 import { Badge, Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -30,6 +31,8 @@ import {
 } from "./presentation"
 
 export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
+  const { manager, copy, explain } = useManagerPresentation()
+
   return (
     <div className="space-y-4 text-sm">
       <div>
@@ -43,19 +46,19 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
             : "warning"
         }
       >
-        {supportStatusLabels[t.status]}
+        {copy(supportStatusLabels[t.status])}
       </Badge>
       <p className="whitespace-pre-wrap break-words rounded bg-stone-50 p-3">
         {t.description}
       </p>
       <dl className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         {([
-          ["Customer", t.customerId],
+          [copy("Customer"), t.customerId],
           ["Cơ sở", t.facilityId ?? "Chưa có nguồn xác thực"],
-          ["Staff phụ trách", t.assignedStaffId ?? "Chưa phân công"],
+          [copy("Staff phụ trách"), t.assignedStaffId ?? "Chưa phân công"],
           [
             "Hồ sơ liên kết",
-            t.linkedId ? `${t.linkedType}: ${t.linkedId}` : "Không liên kết",
+            t.linkedId ? `${copy(t.linkedType || 'Hồ sơ')}: ${t.linkedId}` : "Không liên kết",
           ],
           ["Yêu cầu gốc", t.parentTicketId ?? "Không có"],
           ["Người xử lý xong", t.resolvedBy ?? "Chưa có bản ghi"],
@@ -68,7 +71,7 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
         {([
           ["Tạo lúc", t.createdAt],
           ["Phân công lúc", t.assignedAt],
-          ["Staff nhận lúc", t.acceptedAt],
+          [copy("Staff nhận lúc"), t.acceptedAt],
           ["Xử lý xong lúc", t.resolvedAt],
           ["Đóng lúc", t.closedAt],
         ] as const).map(([label, date]) => (
@@ -80,16 +83,11 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
       </dl>
       {!t.workflowReady && (
         <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
-          Hồ sơ cũ chưa có workflow metadata được xác thực. Chỉ đọc; không tự
-          backfill hoặc gán version 0.
-        </p>
+          {copy("Hồ sơ cũ chưa có workflow metadata được xác thực. Chỉ đọc; không tự backfill hoặc gán version 0.")}</p>
       )}
       {t.status === "resolved" && (
         <p role="status" className="rounded bg-blue-50 p-3 text-blue-900">
-          Đã xử lý xong, chưa đóng. Customer có thể xác nhận kết quả hoặc yêu cầu mở lại;
-          backend vẫn kiểm tra policy và quyền. Không mặc định ticket sẽ tự đóng:
-          tự đóng còn cần policy chung và bằng chứng notification đúng lần xử lý này.
-        </p>
+          {copy("Đã xử lý xong, chưa đóng. Customer có thể xác nhận kết quả hoặc yêu cầu mở lại; backend vẫn kiểm tra policy và quyền. Không mặc định ticket sẽ tự đóng: tự đóng còn cần policy chung và bằng chứng notification đúng lần xử lý này.")}</p>
       )}
       <div
         role="status"
@@ -97,23 +95,23 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
       >
         {t.slaCompleteness === "UNKNOWN" || !t.sla ? (
           <>
-            <p>SLA / mức ưu tiên: Chưa có nguồn policy/lịch làm việc chung.</p>
+            <p>{copy("SLA / mức ưu tiên: Chưa có nguồn policy/lịch làm việc chung.")}</p>
             <p>Không kết luận yêu cầu đang đúng hạn hoặc quá hạn.</p>
             {t.missingSourceReason && (
-              <p className="break-words text-xs">{t.missingSourceReason}</p>
+              <p className="break-words text-xs">{explain(t.missingSourceReason)}</p>
             )}
           </>
         ) : (
           <>
             <p>
-              Policy: {t.sla.policyRef} · {t.sla.policyVersion} · Ưu tiên{" "}
-              {t.sla.priority}
+              {!manager && <>Policy: {t.sla.policyRef} · {t.sla.policyVersion} · </>}Ưu tiên{" "}
+              {copy(t.sla.priority)}
             </p>
             <p>Hạn phản hồi đầu: {rentalDate(t.sla.firstReplyDueAt)}</p>
             <p>Hạn cập nhật tiếp: {rentalDate(t.sla.nextUpdateDueAt)}</p>
             <p>
               {t.sla.activeWorkPaused
-                ? "Tạm dừng thời gian xử lý do đang chờ Customer."
+                ? copy("Tạm dừng thời gian xử lý do đang chờ Customer.")
                 : "Không tạm dừng thời gian xử lý."}
             </p>
           </>
@@ -133,6 +131,8 @@ export default function SupportTicketDetail({
   command: ReturnType<typeof useSupportCommand>
   onFollowUp: (parent: SupportTicket) => void
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${role}:${id}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
   const read = useRentalApiResource(identity, () => getSupportTicket(role, id))
@@ -145,13 +145,13 @@ export default function SupportTicketDetail({
     )
   return (
     <div className="min-w-0 space-y-5">
-      <Button
+      {!manager && (<Button
         variant="outline"
         disabled={command.locked}
         onClick={read.refresh}
       >
         Tải lại chi tiết
-      </Button>
+      </Button>)}
       <SupportReadState {...read} retry={read.refresh} />
       {t && (
         <>
@@ -262,10 +262,12 @@ function SupportTimeline({
   )
 }
 function MessageRow({ message: m }: { message: SupportMessage }) {
+  const { manager, copy } = useManagerPresentation()
+
   return (
     <>
       <p>
-        {m.authorRole === "STAFF" ? "Staff" : "Customer"} ·{" "}
+        {m.authorRole === "STAFF" ? copy("Staff") : copy("Customer")} ·{" "}
         {rentalDate(m.sentAt)}{" "}
         <Badge variant={m.visibility === "INTERNAL" ? "warning" : "muted"}>
           {m.visibility === "INTERNAL" ? "Nội bộ" : "Công khai"}
@@ -279,7 +281,7 @@ function MessageRow({ message: m }: { message: SupportMessage }) {
         {m.evidenceCompleteness === "UNKNOWN"
           ? "Minh chứng: chưa có nguồn xác thực quyền đọc, không hiển thị mã file."
           : m.evidenceFileIds?.length
-            ? "Mã minh chứng được BE cho phép đọc; tải file chờ tích hợp quyền chung."
+            ? copy("Mã minh chứng được BE cho phép đọc; tải file chờ tích hợp quyền chung.")
             : "Không đính kèm file."}
       </p>
       {m.evidenceCompleteness === "COMPLETE" &&
@@ -292,31 +294,35 @@ function MessageRow({ message: m }: { message: SupportMessage }) {
   )
 }
 function EventRow({ event: e }: { event: SupportEvent }) {
+  const { manager, copy } = useManagerPresentation()
+
   return (
     <>
       <p className="font-semibold">
-        {supportEventLabels[e.type] ?? e.type} · Lần phân công{" "}
+        {copy(supportEventLabels[e.type] ?? e.type)} · Lần phân công{" "}
         {e.assignmentRevision}
       </p>
       <p>{rentalDate(e.recordedAt)}</p>
       <p className="whitespace-pre-wrap break-words">{e.reason}</p>
       <p className="break-all text-xs text-stone-500">
-        Người thao tác: {e.actorId ?? "Tác vụ hệ thống"} · Staff:{" "}
+        Người thao tác: {e.actorId ?? "Tác vụ hệ thống"} {copy("· Staff:")}{" "}
         {e.assignedStaffId ?? "Chưa phân công"}
       </p>
     </>
   )
 }
 function EscalationRow({ escalation: e }: { escalation: SupportEscalation }) {
+  const { manager, copy } = useManagerPresentation()
+
   return (
     <>
       <p className="font-semibold">
-        {supportModuleLabels[e.targetModule]} ·{" "}
+        {copy(supportModuleLabels[e.targetModule])} ·{" "}
         {e.status === "REQUESTED"
-          ? "Chờ Manager điều phối"
+          ? copy("Chờ Manager điều phối")
           : e.status === "ROUTED"
-            ? "Đã chuyển module — chưa đồng nghĩa hoàn thành"
-            : "Manager từ chối điều phối"}
+            ? copy("Đã chuyển module — chưa đồng nghĩa hoàn thành")
+            : copy("Manager từ chối điều phối")}
       </p>
       <p className="break-all text-xs text-stone-500">{e.id}</p>
       <p className="whitespace-pre-wrap break-words">{e.reason}</p>
@@ -326,7 +332,7 @@ function EscalationRow({ escalation: e }: { escalation: SupportEscalation }) {
         </p>
       )}
       <p>Gửi lúc: {rentalDate(e.requestedAt)}</p>
-      <p>Kết quả module nhận: {e.receiverStatus ?? "Chưa có nguồn xác thực"}</p>
+      <p>{copy("Kết quả module nhận: ")}{copy(e.receiverStatus ?? "Chưa có nguồn xác thực")}</p>
       {e.resultRef && (
         <p className="break-all">Mã kết quả thật: {e.resultRef}</p>
       )}

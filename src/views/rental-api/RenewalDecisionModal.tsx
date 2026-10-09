@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState } from "react"
 import { Button, Modal } from "../../components/ui"
 import { cancelRenewal, decideRenewal } from "../../services/renewalApi"
@@ -23,6 +24,8 @@ export default function RenewalDecisionModal({
   onSuccess: () => void
   onRefresh: () => void
 }) {
+  const { manager, copy, errorText } = useManagerPresentation()
+
   const [reason, setReason] = useState("")
   const command = useRenewalCommand()
   const role = action === "CANCEL" ? "customer" : "manager"
@@ -50,9 +53,7 @@ export default function RenewalDecisionModal({
         <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>
         {action === "APPROVE" && (
           <p>
-            Duyệt không tự gia hạn hồ sơ thuê. BE sẽ kiểm tra lại policy,
-            nợ/khiếu nại, trả kho và giữ chỗ.
-          </p>
+            {copy("Duyệt không tự gia hạn hồ sơ thuê. BE sẽ kiểm tra lại policy, nợ/khiếu nại, trả kho và giữ chỗ.")}</p>
         )}
         <label className="block">
           Lý do {action !== "APPROVE" ? "(bắt buộc)" : "(nếu có)"}
@@ -65,13 +66,11 @@ export default function RenewalDecisionModal({
           />
         </label>
         {command.error ? (
-          <p role="alert">{rentalError(command.error)}</p>
+          <p role="alert">{errorText(command.error, rentalError)}</p>
         ) : null}
         {command.uncertain && (
           <p>
-            Kết quả chưa xác định. Giữ nguyên nội dung và thử lại cùng key;
-            không đóng hộp thoại hoặc gửi quyết định khác.
-          </p>
+            {copy("Kết quả chưa xác định. Giữ nguyên nội dung và thử lại cùng key; không đóng hộp thoại hoặc gửi quyết định khác.")}</p>
         )}
         <Button
           disabled={
@@ -105,7 +104,7 @@ export default function RenewalDecisionModal({
               onRefresh()
             }}
           >
-            Đóng và tải lại hồ sơ
+            {manager ? 'Đóng' : 'Đóng và tải lại hồ sơ'}
           </Button>
         ) : null}
       </div>

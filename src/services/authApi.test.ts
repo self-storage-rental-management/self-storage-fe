@@ -69,13 +69,13 @@ describe('backend customer navigation and profile', () => {
   it('shows customer navigation without a demo user or internal permissions', async () => {
     await authenticate()
     const user = actorToUser(actor)
-    for (const permission of ['view_dashboard', 'view_facilities', 'view_units', 'view_reservations', 'view_payments', 'view_support'] as const) {
+    for (const permission of ['dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'payments:read', 'support:read'] as const) {
       expect(canApiCustomerNavigate(user, permission)).toBe(true)
     }
-    expect(canApiCustomerNavigate(user, 'manage_roles')).toBe(false)
-    expect(canApiCustomerNavigate({ ...user, id: 'another-user' }, 'view_reservations')).toBe(false)
+    expect(canApiCustomerNavigate(user, 'roles:manage')).toBe(false)
+    expect(canApiCustomerNavigate({ ...user, id: 'another-user' }, 'reservations:read')).toBe(false)
     clearAuthTokens()
-    expect(canApiCustomerNavigate(user, 'view_reservations')).toBe(false)
+    expect(canApiCustomerNavigate(user, 'reservations:read')).toBe(false)
   })
 
   it('saves to auth/me, preserves avatar and replaces the authenticated actor', async () => {
@@ -112,8 +112,9 @@ describe('backend customer navigation and profile', () => {
     expect(user.facility).toBe('Kho Việt – Cơ sở Quận 1')
     expect(user.facilityId).toBe('facility-q1')
     expect(user.facilityScopes).toEqual({ 'facility-q1': 'OPERATE' })
-    expect(canApiActor(user, 'approve_reservations')).toBe(true)
-    expect(canApiActor(user, 'manage_roles')).toBe(false)
-    expect(canApiActor({ ...user, id: 'forged-id' }, 'approve_reservations')).toBe(false)
+    expect(canApiActor(user, 'reservations:approve')).toBe(true)
+    expect(user.permissions).toEqual(['reservations:read', 'reservations:approve'])
+    expect(canApiActor(user, 'roles:manage')).toBe(false)
+    expect(canApiActor({ ...user, id: 'forged-id' }, 'reservations:approve')).toBe(false)
   })
 })
