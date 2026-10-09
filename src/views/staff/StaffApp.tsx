@@ -309,7 +309,7 @@ const mapSharedReservation = (
       assignedUnit?.type ||
       matchingTypeUnit?.type ||
       reservation.unitTypeName ||
-      "Standard",
+      "Tiêu chuẩn",
 
     sizeUnit: "m²",
 
@@ -491,7 +491,7 @@ const mapSharedReturn = (
 
     goodsType: "Hàng hóa trong hồ sơ thuê",
 
-    material: "Theo biên bản Nhận kho",
+    material: "Theo biên bản nhận kho",
 
     packageCount: item.packageCount,
 
@@ -742,7 +742,7 @@ const statusLabelMap: Record<string, string> = {
 
   AWAITING_DEPOSIT: "Đã duyệt · Chờ thanh toán cọc",
 
-  DEPOSIT_PAID: "Đã cọc · Chờ Nhận kho",
+  DEPOSIT_PAID: "Đã cọc · Chờ nhận kho",
 
   UNIT_RESERVED: "Đã giữ gian kho",
 
@@ -1250,7 +1250,7 @@ export default function StaffApp({
         },
 
         handedOverItems: [
-          `PIN/thẻ/chìa khóa kho ${selectedCheckin.unit}`,
+          `Mã truy cập, thẻ hoặc chìa khóa kho ${selectedCheckin.unit}`,
 
           contractFileName,
 
@@ -1946,7 +1946,7 @@ export default function StaffApp({
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
-              title={"Đơn đã cọc · Chờ Nhận kho"}
+              title={"Đơn đã cọc · Chờ nhận kho"}
               value={
                 reservations.filter((r) => r.status === "DEPOSIT_PAID").length
               }
@@ -2689,7 +2689,7 @@ export default function StaffApp({
                             {formatTime(c.appointmentTime)}
                           </p>
                           <p className="text-[11px] text-slate-500">
-                            {"Hạn cuối Nhận kho"}:{" "}
+                            {"Hạn cuối nhận kho"}:{" "}
                             {formatDate(c.checkInDeadline)}
                           </p>
                           {c.previousAppointment && (
@@ -2738,7 +2738,7 @@ export default function StaffApp({
                           size="sm"
                           onClick={() => openCheckinRecord(c)}
                         >
-                          {"Xử lý Nhận kho"}
+                          {"Xử lý nhận kho"}
                         </Button>
                       )}
                       {c.status !== "completed" && (
@@ -2970,7 +2970,7 @@ export default function StaffApp({
                               r.packageCount > 0 ? String(r.packageCount) : "",
                             )
 
-                            setReturnKeys("Đã thu hồi đủ PIN/thẻ/chìa khóa")
+                            setReturnKeys("Đã thu hồi đủ mã truy cập, thẻ và chìa khóa")
 
                             setFeeDetails({})
 
@@ -3037,7 +3037,7 @@ export default function StaffApp({
 
                             setReturnActualPackages(String(r.packageCount))
 
-                            setReturnKeys("Đã thu hồi đủ PIN/thẻ/chìa khóa")
+                            setReturnKeys("Đã thu hồi đủ mã truy cập, thẻ và chìa khóa")
 
                             setInspectModal(true)
                           }}
@@ -3150,7 +3150,7 @@ export default function StaffApp({
                   {statusLabelMap[selectedReservation.status]}
                 </span>
                 <span>
-                  <b>{"Lịch Nhận kho"}:</b>{" "}
+                  <b>{"Lịch nhận kho"}:</b>{" "}
                   {formatDate(selectedReservation.appointmentDate)} ·{" "}
                   {formatTime(selectedReservation.appointmentTime)}
                 </span>
@@ -3850,7 +3850,7 @@ export default function StaffApp({
                   {formatTime(selectedCheckin.appointmentTime)}
                 </span>
                 <span>
-                  <b>{"Hạn Nhận kho"}:</b>{" "}
+                  <b>{"Hạn nhận kho"}:</b>{" "}
                   {formatDate(selectedCheckin.checkInDeadline)}
                 </span>
               </div>
@@ -4072,7 +4072,7 @@ export default function StaffApp({
                 [
                   "credential",
 
-                  `Đã cấp PIN/thẻ/chìa khóa cho kho ${selectedCheckin.unit}`,
+                  `Đã cấp mã truy cập, thẻ hoặc chìa khóa cho kho ${selectedCheckin.unit}`,
                 ],
               ] as Array<[string, string]>).map(([key, label]) => (
                 <label
@@ -4098,7 +4098,7 @@ export default function StaffApp({
               ))}
             </div>
             <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs">
-              <b>{"Thông tin quyền truy cập"}:</b> {`PIN-${selectedCheckin.id}`}{" "}
+              <b>{"Thông tin quyền truy cập"}:</b> {`Mã truy cập ${selectedCheckin.id}`}{" "}
               · {selectedCheckin.unit} · {selectedCheckin.customer} ·{" "}
               {user.name} · {"kích hoạt khi hoàn tất nhận kho"}
             </div>
@@ -4322,7 +4322,7 @@ export default function StaffApp({
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
               <b>{noShowTarget.customer}</b> · {noShowTarget.unit}
               <br />
-              {"Lịch Nhận kho"}: {formatDate(noShowTarget.appointmentDate)} ·{" "}
+              {"Lịch nhận kho"}: {formatDate(noShowTarget.appointmentDate)} ·{" "}
               {formatTime(noShowTarget.appointmentTime)}
               <br />
               {"Hạn cuối"}: {formatDate(noShowTarget.checkInDeadline)}
@@ -4531,7 +4531,7 @@ export default function StaffApp({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-stone-700 block mb-1">
-                  {"Cập Nhật Trạng Thái"}
+                  {"Cập nhật trạng thái"}
                 </label>
                 <select
                   value={ticketNewStatus}
@@ -4579,12 +4579,12 @@ export default function StaffApp({
             {/* Staff Reply */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-stone-700">
-                {"Nội Dung Phản Hồi Chính Thức Tới Khách"}
+                {"Nội dung phản hồi chính thức tới khách hàng"}
               </label>
               <textarea
                 rows={3}
                 placeholder={
-                  "Nhập hướng dẫn khắc phục sự cố, cấp lại mã PIN hoặc thông báo cho khách..."
+                  "Nhập hướng dẫn khắc phục sự cố, cấp lại mã truy cập hoặc thông báo cho khách hàng..."
                 }
                 value={staffReplyText}
                 onChange={(e) => setStaffReplyText(e.target.value)}
