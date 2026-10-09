@@ -58,7 +58,7 @@ export default function SupportStaffPicker({
           />
           {read.data.data.length === 0 && (
             <p className="text-sm text-amber-800">
-              Chưa có nhân viên đủ điều kiện xử lý yêu cầu tại cơ sở này.
+              Không có dữ liệu
             </p>
           )}
         </>

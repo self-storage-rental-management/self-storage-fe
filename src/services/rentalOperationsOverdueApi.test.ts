@@ -45,6 +45,19 @@ afterEach(() => {
   clearAuthTokens()
 })
 describe("D3 real API transport", () => {
+  it("accepts verified fault-review history without replacing API response", async () => {
+    const event = { ...operationEvent, kind: "FAULT_REVIEW", data: {
+      incidentId: ids.event, facilityFault: true, reason: "Đã kiểm tra tại cơ sở", evidenceFileIds: [],
+    } }
+    respond(apiPage([event]))
+    expect((await listRenewalOperationEvents("manager", ids.renewal, "facility-incidents")).data).toEqual([event])
+  })
+  it("rejects a fault review without a real verdict", async () => {
+    respond(apiPage([{ ...operationEvent, kind: "FAULT_REVIEW", data: {
+      incidentId: ids.event, reason: "Chưa xác minh", evidenceFileIds: [],
+    } }]))
+    await expect(listRenewalOperationEvents("manager", ids.renewal, "facility-incidents")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
   it.each(["customer", "manager", "staff"] as const)(
     "reads %s operational route without demo fallback",
     async (role) => {

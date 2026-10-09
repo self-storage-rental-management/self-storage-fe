@@ -1,7 +1,7 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
 import type { RentalApiDetail } from "../../types/rentalApi"
-import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning } from "./presentation"
+import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning, rentalPeriodText } from "./presentation"
 export default function RentalDetail({
   rental,
   onRequest,
@@ -40,10 +40,9 @@ export default function RentalDetail({
             <dd>{copy(rentalLabels[rental.status])}</dd>
           </div>
           <div>
-            <dt>Thời hạn</dt>
+            <dt>{rental.dateSemantics?.completeness === "COMPLETE" ? "Thời hạn sử dụng" : "Ngày thuê đang lưu"}</dt>
             <dd>
-              {rentalDate(rental.startDate)} →{" "}
-              {rentalDate(rental.contractEndDate)}
+              {rentalPeriodText(rental)}
             </dd>
           </div>
           <div>

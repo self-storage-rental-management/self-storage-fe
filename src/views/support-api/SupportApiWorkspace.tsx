@@ -340,7 +340,7 @@ function SupportSession({
             </div>
             {read.data.data.length === 0 && (
               <Card className="p-5 text-sm text-stone-500">
-                Không có yêu cầu hỗ trợ phù hợp với bộ lọc.</Card>
+                Không có dữ liệu</Card>
             )}
             <ApiPager
               pagination={read.data.pagination}
