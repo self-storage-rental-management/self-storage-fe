@@ -28,6 +28,7 @@ export function readRentalEnvelope<T>(
 export function readRentalPage<T>(
   value: unknown,
   validate: (data: unknown) => boolean,
+  expectedPage?: number,
 ): RentalApiPage<T> {
   if (
     !value ||
@@ -41,14 +42,19 @@ export function readRentalPage<T>(
   const p = value.pagination as RentalApiPage<T>["pagination"] | null
   if (
     !p ||
-    !Number.isInteger(p.page) ||
+    !Number.isSafeInteger(p.page) ||
     p.page < 0 ||
-    !Number.isInteger(p.pageSize) ||
+    !Number.isSafeInteger(p.pageSize) ||
     p.pageSize < 1 ||
-    !Number.isInteger(p.totalItems) ||
+    p.pageSize > 100 ||
+    !Number.isSafeInteger(p.totalItems) ||
     p.totalItems < 0 ||
-    !Number.isInteger(p.totalPages) ||
-    p.totalPages < 0
+    !Number.isSafeInteger(p.totalPages) ||
+    p.totalPages !== Math.ceil(p.totalItems / p.pageSize) ||
+    value.data.length > p.pageSize ||
+    value.data.length > Math.max(0, p.totalItems - p.page * p.pageSize) ||
+    typeof p.sort !== "string" ||
+    (expectedPage !== undefined && p.page !== expectedPage)
   )
     return invalidRentalResponse()
   return value as RentalApiPage<T>
@@ -103,7 +109,8 @@ export function isRentalRecord(value: unknown): boolean {
       "closing",
       "completed",
     ].includes(r.status) &&
-    (r.monthlyPrice === null || Number.isFinite(r.monthlyPrice)) &&
+    r.currency === "VND" &&
+    (r.monthlyPrice === null || (Number.isFinite(r.monthlyPrice) && r.monthlyPrice >= 0)) &&
     Array.isArray(r.dataWarnings) &&
     r.dataWarnings.every(
       (w) => w && typeof w.field === "string" && typeof w.reason === "string",
@@ -129,8 +136,9 @@ export async function listRentals(
     ["createdAt", "contractEndDate", "startDate", "monthlyPrice", "id"],
   )
   return readRentalPage<RentalApiRecord>(
-    await apiRequest(`/api/${role}/rentals${suffix}`),
+    await apiRequest(`${rentalReadPath(role)}${suffix}`),
     isRentalRecord,
+    query.page ?? 0,
   )
 }
 function isFinancialSummary(value: unknown): boolean {
@@ -158,7 +166,7 @@ function isFinancialSummary(value: unknown): boolean {
 }
 export async function getRental(role: RentalApiRole, id: string) {
   return readRentalEnvelope<RentalApiDetail>(
-    await apiRequest(`/api/${role}/rentals/${encodeURIComponent(id)}`),
+    await apiRequest(`${rentalReadPath(role)}/${encodeURIComponent(id)}`),
     (value) => {
       const r = value as RentalApiDetail | null
       if (!isRentalRecord(value) || !r || r.id !== id ||
@@ -170,4 +178,9 @@ export async function getRental(role: RentalApiRole, id: string) {
           ["ACTIVE", "INACTIVE", "SUSPENDED", "REVOKED", "EXPIRED"].includes(r.access.status ?? "")
     },
   )
+}
+
+// Keep D1's nested read contract separate from the shared Customer list DTO.
+function rentalReadPath(role: RentalApiRole) {
+  return role === "customer" ? "/api/customer/rental-records" : "/api/manager/rentals"
 }

@@ -14,31 +14,32 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
   }
 
   describe('RBAC & Permissions', () => {
-    it('grants manage_policies and commercial permissions to business role by default', () => {
+    it('grants canonical policy and commercial permissions to business role by default', () => {
       const perms = DEFAULT_ROLE_PERMISSIONS.business
-      expect(perms.view_facilities).toBe(true)
-      expect(perms.view_reports).toBe(true)
-      expect(perms.view_policies).toBe(true)
-      expect(perms.manage_policies).toBe(true)
-      expect(perms.view_dashboard).toBe(true)
-      expect(perms.view_payments).toBe(true)
+      expect(perms['facilities:read']).toBe(true)
+      expect(perms['reports:read']).toBe(true)
+      expect(perms['policies:read']).toBe(true)
+      expect(perms['policies:update']).toBe(true)
+      expect(perms['dashboard:read']).toBe(true)
+      expect(perms['payments:read']).toBe(true)
     })
 
-    it('preserves manage_policies permission for business role during normalization', () => {
+    it('preserves BO policy ownership during normalization', () => {
       const normalized = normalizeRolePermissions({
         business: {
-          manage_policies: false,
-          view_facilities: true
+          'policies:update': false,
+          'facilities:read': true
         }
       })
-      expect(normalized.business.manage_policies).toBe(true)
+      expect(normalized.business['policies:update']).toBe(true)
+      expect(normalized.business['policies:read']).toBe(true)
     })
 
     it('keeps staff-only operations disabled for business', () => {
       const perms = DEFAULT_ROLE_PERMISSIONS.business
-      expect(perms.perform_checkin).toBe(false)
-      expect(perms.approve_reservations).toBe(false)
-      expect(perms.manage_staff_tasks).toBe(false)
+      expect(perms['checkins:process']).toBe(false)
+      expect(perms['reservations:approve']).toBe(false)
+      expect(perms['staff_tasks:update']).toBe(false)
     })
   })
 

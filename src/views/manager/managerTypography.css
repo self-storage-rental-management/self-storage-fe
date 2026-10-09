@@ -1,0 +1,15 @@
+/* Match the shared portal font without changing other roles or identifier styling. */
+.manager-role-layout {
+  font-family: var(--font-sans);
+}
+
+.manager-role-layout :is(h1, h2, h3, h4, label, thead th, .eyebrow),
+.manager-role-layout aside nav p,
+.manager-role-layout header p,
+.manager-role-layout aside button > span.font-mono {
+  font-family: var(--font-sans) !important;
+}
+
+.manager-role-layout :is(h1, h2, h3, h4, label, thead th, .eyebrow) {
+  overflow-wrap: break-word;
+}

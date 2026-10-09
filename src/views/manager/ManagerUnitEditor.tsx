@@ -1,8 +1,10 @@
+import { managerDisplayError } from './managerPresentation'
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Modal, Select } from '../../components/ui'
 import type { User } from '../../types'
 import type { StorageUnit, UnitType } from '../../types/storageHub'
 import { formatManagerMoney } from './managerList'
+import { managerUnitTypeLabel } from './managerI18n'
 
 type Mode = 'create' | 'edit'
 
@@ -124,17 +126,14 @@ export default function ManagerUnitEditor({
 
   const save = () => {
     const code = form.code.trim().toUpperCase()
-    const numeric = {
-      floor: toNumber(form.floor),
-      doorWidthM: toNumber(form.doorWidthM),
-      doorHeightM: toNumber(form.doorHeightM)
-    }
-    if (!facilityId || !facilityName) return showToast('Không xác định được cơ sở của Manager.')
+    const numeric = { floor: toNumber(form.floor) }
+    const doorDimensions = mode === 'edit' ? unit?.doorDimensions : selectedTemplate?.doorDimensions
+    if (!facilityId || !facilityName) return showToast("Không xác định được cơ sở của quản lý cơ sở.")
     if (!code || !form.zone.trim()) return showToast('Vui lòng nhập mã gian kho và khu vực.')
     if (mode === 'create' && allUnitCodes.some(item => item.toUpperCase() === code)) return showToast('Mã gian kho đã tồn tại trong hệ thống.')
     if (!Number.isInteger(numeric.floor) || numeric.floor < 0) return showToast('Tầng phải là số nguyên không âm.')
-    if ([numeric.doorWidthM, numeric.doorHeightM].some(value => !Number.isFinite(value) || value <= 0)) {
-      return showToast('Kích thước cửa phải lớn hơn 0.')
+    if (!doorDimensions || [doorDimensions.widthM, doorDimensions.heightM].some(value => !Number.isFinite(value) || value <= 0)) {
+      return showToast('Thông số gian kho hiện có chưa hợp lệ. Vui lòng kiểm tra dữ liệu trước khi lưu.')
     }
     if (!selectedDefinition) return showToast('Không tìm thấy định nghĩa loại gian kho trong dữ liệu dùng chung.')
     if (!selectedTemplate) return showToast('Chưa có dữ liệu chính sách áp dụng cho loại gian kho đã chọn.')
@@ -146,7 +145,7 @@ export default function ManagerUnitEditor({
       floor: numeric.floor,
       zone: form.zone.trim(),
       type: form.type,
-      doorDimensions: { widthM: numeric.doorWidthM, heightM: numeric.doorHeightM },
+      doorDimensions: { ...doorDimensions },
       climate: form.climate,
       conditionNotes: form.conditionNotes.trim() || undefined
     }
@@ -162,7 +161,7 @@ export default function ManagerUnitEditor({
         onSaved(unit.id)
       }
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể lưu gian kho.')
+      showToast(managerDisplayError(error))
     }
   }
 
@@ -174,14 +173,14 @@ export default function ManagerUnitEditor({
       showToast(`Đã xóa gian kho ${unit.code} chưa phát sinh nghiệp vụ.`)
       onClose()
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể xóa gian kho.')
+      showToast(managerDisplayError(error))
     }
   }
 
   return <Modal open={open} onClose={onClose} title={mode === 'create' ? 'Thêm gian kho vật lý' : `Chỉnh sửa ${unit?.code || ''}`} size="xl">
     <div className="space-y-5">
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-        Cơ sở được cố định theo tài khoản Manager: <b>{facilityName || 'Chưa xác định'}</b>. Thông số loại gian, giá và chính sách bên dưới chỉ được đọc từ dữ liệu dùng chung.
+        Cơ sở được cố định theo tài khoản quản lý cơ sở: <b>{facilityName || 'Chưa xác định'}</b>. Thông số loại gian, giá và chính sách bên dưới chỉ được đọc từ dữ liệu dùng chung.
       </div>
 
       <section className="space-y-3">
@@ -192,7 +191,7 @@ export default function ManagerUnitEditor({
             const type = event.target.value as StorageUnit['type']
             setForm(current => applyTypeDefinition(type, current))
           }}>
-            {definitions.map(item => <option key={item.definition.id} value={item.type}>{item.definition.name}</option>)}
+            {definitions.map(item => <option key={item.definition.id} value={item.type}>{managerUnitTypeLabel(item.type, 'vi')}</option>)}
           </Select>
           <Input label="Khu vực *" value={form.zone} onChange={event => setField('zone', event.target.value)} />
           <Input label="Tầng *" type="number" min="0" step="1" value={form.floor} onChange={event => setField('floor', event.target.value)} />
@@ -200,35 +199,27 @@ export default function ManagerUnitEditor({
       </section>
 
       <section className="space-y-3">
-        <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Thông số loại gian</p><p className="mt-1 text-xs text-stone-500">Kế thừa từ UnitType đang chọn; Manager không nhập lại trên từng gian vật lý.</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Thông số loại gian</p><p className="mt-1 text-xs text-stone-500">Kế thừa từ loại gian kho đang chọn, quản lý cơ sở không nhập lại trên từng gian vật lý.</p></div>
         {selectedDefinition ? <div className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <p><span className="text-xs text-stone-500">Kích thước chuẩn</span><br /><b>{selectedDefinition.lengthM} × {selectedDefinition.widthM} × {selectedDefinition.heightM} m</b></p>
           <p><span className="text-xs text-stone-500">Diện tích</span><br /><b>{selectedDefinition.areaM2.toLocaleString('vi-VN')} m²</b></p>
           <p><span className="text-xs text-stone-500">Thể tích</span><br /><b>{selectedDefinition.volumeM3.toLocaleString('vi-VN')} m³</b></p>
           <p><span className="text-xs text-stone-500">Tải trọng tối đa</span><br /><b>{selectedDefinition.maxLoadKg.toLocaleString('vi-VN')} kg</b></p>
-        </div> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Chưa có dữ liệu UnitType tương ứng.</div>}
+        </div> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Chưa có dữ liệu loại gian kho tương ứng.</div>}
       </section>
 
       <section className="space-y-3">
-        <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Giá và chính sách đang áp dụng</p><p className="mt-1 text-xs text-stone-500">Chỉ đọc tại màn hình quản lý gian kho; không phải cấu hình giá hoặc chính sách toàn hệ thống.</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Giá và chính sách đang áp dụng</p><p className="mt-1 text-xs text-stone-500">Chỉ đọc tại màn hình quản lý gian kho, không phải cấu hình giá hoặc chính sách toàn hệ thống.</p></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Giá chuẩn hiện hành</span><b className="mt-1 block">{selectedDefinition ? `${formatManagerMoney(selectedDefinition.monthlyPrice)}/tháng` : 'Chưa có dữ liệu'}</b></div>
           <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Tiền đảm bảo theo chính sách hiện hành</span><b className="mt-1 block">{selectedTemplate ? formatManagerMoney(selectedTemplate.deposit) : 'Chưa có dữ liệu chính sách'}</b></div>
         </div>
-        {selectedTemplate ? <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3"><p className="text-sm font-semibold text-emerald-900">Hàng hóa được phép</p><ul className="mt-2 space-y-1 text-sm text-emerald-800">{selectedTemplate.allowedGoods.map(item => <li key={item}>✓ {item}</li>)}</ul></div>
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3"><p className="text-sm font-semibold text-red-900">Hàng hóa bị cấm</p><ul className="mt-2 space-y-1 text-sm text-red-800">{selectedTemplate.prohibitedGoods.map(item => <li key={item}>× {item}</li>)}</ul></div>
-        </div> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Chưa có dữ liệu chính sách lưu trữ cho loại gian này.</div>}
       </section>
 
       <section className="space-y-3">
-        <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Tình trạng gian vật lý</p><p className="mt-1 text-xs text-stone-500">Kích thước cửa và điều kiện nhiệt độ hiện là thuộc tính của từng StorageUnit trong data model hiện tại.</p></div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Input label="Chiều rộng cửa (m) *" type="number" min="0" step="0.01" value={form.doorWidthM} onChange={event => setField('doorWidthM', event.target.value)} />
-          <Input label="Chiều cao cửa (m) *" type="number" min="0" step="0.01" value={form.doorHeightM} onChange={event => setField('doorHeightM', event.target.value)} />
-        </div>
+        <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Tình trạng gian kho</p></div>
         <label className="flex items-center gap-2 text-sm font-medium text-stone-700"><input type="checkbox" checked={form.climate} onChange={event => setField('climate', event.target.checked)} /> Có kiểm soát nhiệt độ tại gian này</label>
-        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span className="text-stone-500">Trạng thái ban đầu</span><b className="ml-2 text-emerald-700">Còn trống</b><p className="mt-1 text-xs text-stone-500">Hệ thống luôn tạo gian mới ở trạng thái còn trống; trạng thái đang sử dụng chỉ phát sinh từ luồng thuê/bàn giao.</p></div>
+        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span className="text-stone-500">Trạng thái ban đầu</span><b className="ml-2 text-emerald-700">Còn trống</b><p className="mt-1 text-xs text-stone-500">Hệ thống luôn tạo gian mới ở trạng thái còn trống, trạng thái đang sử dụng chỉ phát sinh từ luồng thuê/bàn giao.</p></div>
         <label className="space-y-1 text-sm font-medium text-stone-700">Ghi chú tình trạng<textarea className="min-h-20 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-normal" value={form.conditionNotes} onChange={event => setField('conditionNotes', event.target.value)} /></label>
       </section>
 

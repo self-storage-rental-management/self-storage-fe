@@ -65,8 +65,8 @@ export function isRenewalRecord(value: unknown): boolean {
       typeof r.financialCheck.hasUnresolvedDispute === "boolean") &&
     (r.version === null ||
       (Number.isInteger(r.version) && Number(r.version) >= 0)) &&
-    Number.isFinite(r.amount) &&
-    typeof r.currency === "string" &&
+    Number.isFinite(r.amount) && r.amount >= 0 &&
+    r.currency === "VND" &&
     (r.cancellationReason == null || typeof r.cancellationReason === "string") &&
     (r.acceptedTerms == null ||
       (isAcceptedTerms(r.acceptedTerms) && r.acceptedTerms.facilityId === r.facility.id &&
@@ -94,12 +94,13 @@ export async function listRenewals(
   return readRentalPage<RenewalApiRecord>(
     await apiRequest(`/api/${role}/renewals${suffix}`),
     isRenewalRecord,
+    query.page ?? 0,
   )
 }
 export async function getRenewal(role: RentalApiRole, id: string) {
   return readRentalEnvelope<RenewalApiRecord>(
     await apiRequest(`/api/${role}/renewals/${encodeURIComponent(id)}`),
-    isRenewalRecord,
+    (value) => isRenewalRecord(value) && (value as RenewalApiRecord).id === id,
   )
 }
 export async function getRenewalOptions(rentalId: string) {
@@ -151,6 +152,7 @@ async function command(
   method: string,
   body: object,
   key: string,
+  matches: (record: RenewalApiRecord) => boolean,
 ) {
   if (!key || new TextEncoder().encode(key).length > 100)
     throw new Error("Idempotency-Key không hợp lệ.")
@@ -160,7 +162,7 @@ async function command(
       body: JSON.stringify(body),
       headers: { "Idempotency-Key": key },
     }),
-    isRenewalRecord,
+    (value) => isRenewalRecord(value) && matches(value as RenewalApiRecord),
   )
 }
 function version(value: number) {
@@ -183,6 +185,7 @@ export function submitRenewal(
     "POST",
     { renewalQuoteId, note },
     key,
+    record => record.rentalId === rentalId,
   )
 }
 export function reviseRenewal(
@@ -199,6 +202,7 @@ export function reviseRenewal(
     "PATCH",
     { renewalQuoteId, note, expectedVersion },
     key,
+    record => record.id === id,
   )
 }
 export function cancelRenewal(
@@ -214,6 +218,7 @@ export function cancelRenewal(
     "POST",
     { reason, expectedVersion },
     key,
+    record => record.id === id,
   )
 }
 export function decideRenewal(
@@ -230,5 +235,6 @@ export function decideRenewal(
     "POST",
     { decision, reason, expectedVersion },
     key,
+    record => record.id === id,
   )
 }

@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -31,14 +32,15 @@ export default function SupportApiWorkspace({
   role: SupportRole
   onLocked?: (locked: boolean) => void
 }) {
+  const { manager, copy, errorText } = useManagerPresentation()
+
   const actor = getAuthenticatedActor()
   if (!canReadSupport(actor, role))
     return (
-      <Card className="space-y-2 p-5">
-        <h2 className="font-semibold">Hỗ trợ (D5 API)</h2>
-        <p role="alert">
-          Cần tài khoản API đang hoạt động, đúng role, quyền và phạm vi cơ sở.
-        </p>
+      <Card className={manager ? "space-y-2 p-5 text-sm leading-relaxed" : "space-y-2 p-5"}>
+        <h2 className={manager ? "text-lg font-bold text-stone-900" : "font-semibold"}>{copy("Hỗ trợ (D5 API)")}</h2>
+        <p role="alert" className={manager ? "break-words text-sm text-stone-700" : undefined}>
+          {copy("Cần tài khoản API đang hoạt động, đúng role, quyền và phạm vi cơ sở.")}</p>
         {role === "staff" && (
           <p className="text-sm text-amber-800">
             Staff cần support:read + support:update và OPERATE/MANAGE tại cơ sở.
@@ -47,8 +49,7 @@ export default function SupportApiWorkspace({
           </p>
         )}
         <p className="text-sm text-stone-500">
-          Không lấy yêu cầu demo để thay thế dữ liệu API.
-        </p>
+          {copy("Không lấy yêu cầu demo để thay thế dữ liệu API.")}</p>
       </Card>
     )
   const identity = `${actor!.id}:${role}:${JSON.stringify(actor!.facilityScopes)}:${JSON.stringify(actor!.permissions)}`
@@ -73,6 +74,8 @@ function SupportSession({
   identity: string
   onLocked?: (locked: boolean) => void
 }) {
+  const { manager, copy, errorText } = useManagerPresentation()
+
   const [query, setQuery] = useState<SupportQuery>({
     page: 0,
     size: 20,
@@ -112,16 +115,15 @@ function SupportSession({
     <>
       {command.busy && (
         <p role="status" className="text-sm">
-          Đang gửi yêu cầu tới BE…
-        </p>
+          {copy("Đang gửi yêu cầu tới BE…")}</p>
       )}
       {command.error && (
         <div
           role="alert"
           className="space-y-2 rounded border border-red-200 bg-red-50 p-3 text-sm"
         >
-          <p>{supportError(command.error)}</p>
-          {!command.locked && (
+          <p>{errorText(command.error, supportError)}</p>
+          {!command.locked && !manager && (
             <Button variant="outline" onClick={reload}>
               Tải lại hồ sơ trước khi thao tác tiếp
             </Button>
@@ -134,9 +136,7 @@ function SupportSession({
           className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm"
         >
           <p>
-            Kết quả thao tác trước chưa xác định. Không gửi yêu cầu mới hoặc tải
-            lại browser; thử lại đúng nội dung bằng cùng Idempotency-Key.
-          </p>
+            {copy("Kết quả thao tác trước chưa xác định. Không gửi yêu cầu mới hoặc tải lại browser; thử lại đúng nội dung bằng cùng Idempotency-Key.")}</p>
           <Button disabled={command.busy} onClick={command.retry}>
             Kiểm tra lại bằng yêu cầu cũ
           </Button>
@@ -148,12 +148,12 @@ function SupportSession({
     <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Hỗ trợ vận hành (D5 API)</h1>
+          <h1 className="text-2xl font-bold">{copy("Hỗ trợ vận hành (D5 API)")}</h1>
           <p className="mt-1 text-sm text-stone-500">
             {role === "manager"
-              ? "Điều phối đúng cơ sở; Staff xử lý, module sở hữu cung cấp kết quả thật."
+              ? copy("Điều phối đúng cơ sở; Staff xử lý, module sở hữu cung cấp kết quả thật.")
               : role === "staff"
-                ? "Chỉ yêu cầu được giao cho bạn; nhận việc trước khi xử lý."
+                ? copy("Chỉ yêu cầu được giao cho bạn; nhận việc trước khi xử lý.")
                 : "Yêu cầu và trao đổi của tài khoản đang đăng nhập."}
           </p>
         </div>
@@ -213,7 +213,7 @@ function SupportSession({
               <option value="">Tất cả trạng thái</option>
               {supportStatuses.map((s) => (
                 <option key={s} value={s}>
-                  {supportStatusLabels[s]}
+                  {copy(supportStatusLabels[s])}
                 </option>
               ))}
             </select>
@@ -229,20 +229,20 @@ function SupportSession({
               <option value="createdAt,desc">Mới nhất</option>
               <option value="createdAt,asc">Cũ nhất</option>
               <option value="updatedAt,desc">Hồ sơ cập nhật gần nhất</option>
-              <option value="subject,asc">Tiêu đề A–Z</option>
+              <option value="subject,asc">{copy("Tiêu đề A–Z")}</option>
             </select>
           </label>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={command.locked}>
               Tìm kiếm
             </Button>
-            <Button
+            {!manager && (<Button
               variant="outline"
               disabled={command.locked}
               onClick={reload}
             >
               Tải lại
-            </Button>
+            </Button>)}
           </div>
           {role === "manager" && (
             <label className="block text-sm">
@@ -310,9 +310,7 @@ function SupportSession({
             </div>
           )}
         <p className="text-xs text-stone-500">
-          Phân trang/lọc do BE thực hiện. Không tính priority hoặc kết luận quá
-          hạn khi nguồn SLA chưa có.
-        </p>
+          {copy("Phân trang/lọc do BE thực hiện. Không tính priority hoặc kết luận quá hạn khi nguồn SLA chưa có.")}</p>
       </Card>
       <SupportReadState {...read} retry={read.refresh} />
       {read.data &&
@@ -321,9 +319,7 @@ function SupportSession({
             role="alert"
             className="rounded border border-red-200 bg-red-50 p-4"
           >
-            API trả về hồ sơ ngoài phạm vi tài khoản hiện tại. Không hiển thị dữ
-            liệu; cần kiểm tra lại nguồn BE.
-          </p>
+            {copy("API trả về hồ sơ ngoài phạm vi tài khoản hiện tại. Không hiển thị dữ liệu; cần kiểm tra lại nguồn BE.")}</p>
         )}
       {read.data &&
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
@@ -344,8 +340,8 @@ function SupportSession({
                     >
                       {t.status === "open"
                         ? t.assignedStaffId
-                          ? "Chờ Staff nhận"
-                          : "Chờ Manager phân công"
+                          ? copy("Chờ Staff nhận")
+                          : copy("Chờ Manager phân công")
                         : supportStatusLabels[t.status]}
                     </Badge>
                   </div>
@@ -357,7 +353,7 @@ function SupportSession({
                       "Chưa có nguồn xác thực"}
                   </p>
                   <p className="break-all text-sm">
-                    Staff: {t.assignedStaffId ?? "Chưa phân công"}
+                    {copy("Staff: ")}{t.assignedStaffId ?? "Chưa phân công"}
                   </p>
                   <p className="text-sm">Tạo lúc: {rentalDate(t.createdAt)}</p>
                   <Button
@@ -376,9 +372,7 @@ function SupportSession({
             </div>
             {read.data.data.length === 0 && (
               <Card className="p-5 text-sm text-stone-500">
-                Không có yêu cầu phù hợp theo bộ lọc và phạm vi truy cập. Đây
-                không phải kết luận SLA đang ổn định.
-              </Card>
+                {copy("Không có yêu cầu phù hợp theo bộ lọc và phạm vi truy cập. Đây không phải kết luận SLA đang ổn định.")}</Card>
             )}
             <ApiPager
               pagination={read.data.pagination}

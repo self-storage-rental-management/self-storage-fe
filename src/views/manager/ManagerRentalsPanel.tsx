@@ -1,3 +1,4 @@
+import { managerDisplayError } from './managerPresentation'
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -90,7 +91,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
     const reservation = facilityReservations.find(item => item.id === rental.holdId)
     return normalizeManagerMoney(reservation?.securityDepositAmount ?? rental.securityDeposit ?? rental.deposit)
   }
-  const unitTypeNameFor = (rental: RentalRecord) => unitTypeFor(rental)?.name || (physicalUnitFor(rental) ? managerUnitTypeLabel(physicalUnitFor(rental)!.type, 'vi') : 'Chưa xác định')
+  const unitTypeNameFor = (rental: RentalRecord) => unitTypeFor(rental) ? managerUnitTypeLabel(unitTypeFor(rental)!.name, 'vi') : (physicalUnitFor(rental) ? managerUnitTypeLabel(physicalUnitFor(rental)!.type, 'vi') : 'Chưa xác định')
   const waitingAssignmentReservations = facilityReservations
     .filter(reservation => !reservation.assignedUnitId && reservation.payment.status === 'paid' && ['DEPOSIT_PAID', 'UNIT_RESERVED'].includes(reservation.status))
     .filter(reservation => matchesManagerSearch(reservationQuery, [reservation.id, reservation.customerId, reservation.customerName, reservation.customerEmail, reservation.assignedUnitId, reservation.unitTypeName]))
@@ -108,11 +109,11 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
     if (!rental) return 'Không tìm thấy hồ sơ thuê tương ứng.'
     if (rental.status !== 'active') {
       return ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
-        ? 'Hồ sơ thuê đang có yêu cầu trả kho hoặc đang tất toán; không thể duyệt gia hạn.'
+        ? "Hồ sơ thuê đang có yêu cầu trả kho hoặc đang tất toán, không thể duyệt gia hạn."
         : 'Hồ sơ thuê không còn hiệu lực để gia hạn.'
     }
-    if (isManagerRentalOverdue(rental)) return 'Hồ sơ thuê đang có khoản quá hạn; cần xử lý công nợ trước khi duyệt gia hạn.'
-    if (renewal.oldEndDate !== rental.endDate) return 'Thời hạn hồ sơ thuê đã thay đổi; Customer cần cập nhật lại yêu cầu.'
+    if (isManagerRentalOverdue(rental)) return "Hồ sơ thuê đang có khoản quá hạn, cần xử lý công nợ trước khi duyệt gia hạn."
+    if (renewal.oldEndDate !== rental.endDate) return "Thời hạn hồ sơ thuê đã thay đổi, khách hàng cần cập nhật lại yêu cầu."
     if (managerDateValue(renewal.newEndDate) <= managerDateValue(renewal.oldEndDate)) return 'Ngày kết thúc mới không hợp lệ.'
     const conflicted = unitHasAllocationConflict(renewal.unitId, renewal.oldEndDate, renewal.newEndDate, renewal.id, reservations, rentals.filter(item => item.id !== rental.id))
     return conflicted ? 'Gian kho đã có lịch sử dụng khác trong khoảng thời gian gia hạn.' : ''
@@ -175,7 +176,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
       setAssignmentReservation(null)
       setAssignmentUnitId('')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể phân gian kho.')
+      showToast(managerDisplayError(error))
     }
   }
 
@@ -193,7 +194,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
       }
       showToast(approved ? ('Đã duyệt yêu cầu gia hạn.') : ('Đã từ chối yêu cầu gia hạn.'))
     } catch (error) {
-      showToast(error instanceof Error ? normalizeRentalMessage(error.message) : 'Không thể xử lý gia hạn.')
+      showToast(managerDisplayError(error))
     }
   }
 
@@ -201,14 +202,14 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
     <SectionHeader eyebrow="Vận hành thuê kho" title="Hồ sơ thuê & Gia hạn" subtitle="Theo dõi hồ sơ thuê, thời hạn, thanh toán và xử lý yêu cầu gia hạn tại cơ sở." />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><StatCard title={'Tổng hồ sơ'} value={facilityRentals.length} icon={Icon.policy} /><StatCard title={'Đang hiệu lực'} value={facilityRentals.filter(rental => rental.status === 'active').length} icon={Icon.check} /><StatCard title={'Sắp hết hạn 30 ngày'} value={facilityRentals.filter(rental => { const days = (managerDateValue(rental.endDate) - Date.now()) / 86_400_000; return rental.status === 'active' && days >= 0 && days <= 30 }).length} icon={Icon.clock} /><StatCard title={'Chờ duyệt gia hạn'} value={allPendingRenewals.length} icon={Icon.refresh} /></div>
 
-    <ManagerActionNotice tone={allPendingRenewals.length ? 'warning' : 'info'}>{allPendingRenewals.length ? `${allPendingRenewals.length} yêu cầu gia hạn đang chờ Manager duyệt hoặc từ chối.` : 'Chưa có yêu cầu gia hạn ở trạng thái chờ duyệt. Manager chỉ thao tác sau khi Customer gửi yêu cầu gia hạn.'}</ManagerActionNotice>
+    <ManagerActionNotice tone={allPendingRenewals.length ? 'warning' : 'info'}>{allPendingRenewals.length ? `${allPendingRenewals.length} yêu cầu gia hạn đang chờ quản lý cơ sở duyệt hoặc từ chối.` : "Chưa có yêu cầu gia hạn ở trạng thái chờ duyệt. quản lý cơ sở chỉ thao tác sau khi khách hàng gửi yêu cầu gia hạn."}</ManagerActionNotice>
 
-    {allPendingRenewals.length > 0 && <Card className="border-amber-200"><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Yêu cầu gia hạn chờ duyệt</h3><p className="text-xs text-stone-500">Yêu cầu chờ lâu nhất được đưa lên trước. Duyệt chỉ mở bước thanh toán; chưa kéo dài thời hạn thuê ngay.</p><div className="mt-3"><Input value={renewalQuery} onChange={event => setRenewalQuery(event.target.value)} placeholder="Tìm mã gia hạn, hồ sơ thuê, khách hàng hoặc gian kho…" /></div></div><div className="space-y-3 p-4">{renewalPagination.items.map(renewal => {
+    {allPendingRenewals.length > 0 && <Card className="border-amber-200"><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Yêu cầu gia hạn chờ duyệt</h3><p className="text-xs text-stone-500">Yêu cầu chờ lâu nhất được đưa lên trước. Duyệt chỉ mở bước thanh toán, chưa kéo dài thời hạn thuê ngay.</p><div className="mt-3"><Input value={renewalQuery} onChange={event => setRenewalQuery(event.target.value)} placeholder="Tìm mã gia hạn, hồ sơ thuê, khách hàng hoặc gian kho…" /></div></div><div className="space-y-3 p-4">{renewalPagination.items.map(renewal => {
       const blockedReason = renewalApprovalBlock(renewal)
       return <div key={renewal.id} className="flex flex-col gap-3 rounded-lg border border-stone-200 p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{renewal.customerName} · <span className="font-mono">{renewal.unitId}</span></p><p className="text-xs text-stone-500">{formatManagerDate(renewal.oldEndDate)} → {formatManagerDate(renewal.newEndDate)} · {renewal.renewalMonths} tháng · {formatKnownMoney(normalizeManagerMoney(renewal.renewalFee))}</p>{blockedReason && <p className="mt-1 text-xs font-medium text-red-700">{blockedReason}</p>}</div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => decideRenewal(renewal, false)}>Từ chối</Button><Button size="sm" disabled={Boolean(blockedReason)} onClick={() => decideRenewal(renewal, true)}>Duyệt</Button></div></div>
     })}{!pendingRenewals.length && <p className="py-6 text-center text-sm text-stone-500">Không có yêu cầu gia hạn phù hợp từ khóa.</p>}</div><ManagerPagination {...renewalPagination} pageSize={renewalPageSize} onPageChange={setRenewalPage} onPageSizeChange={setRenewalPageSize} /></Card>}
 
-    <Card><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Đặt chỗ chờ phân gian</h3><p className="text-xs text-stone-500">Các đặt chỗ đã xác nhận nhưng chưa được phân gian kho vật lý.</p><div className="mt-3"><Input value={reservationQuery} onChange={event => setReservationQuery(event.target.value)} placeholder="Tìm mã đặt chỗ, khách hàng hoặc loại gian…" /></div></div><Table><Thead><tr><Th>Mã đặt chỗ</Th><Th>Khách hàng</Th><Th>Loại gian</Th><Th>Thời gian</Th><Th>Thanh toán</Th><Th>Trạng thái</Th><Th /></tr></Thead><Tbody>{reservationPagination.items.map(reservation => <Tr key={reservation.id}><Td className="font-mono text-xs font-bold">{reservation.id}</Td><Td><p className="font-semibold">{reservation.customerName}</p><p className="text-xs text-stone-400">{reservation.customerEmail}</p></Td><Td><p>{reservation.unitTypeName}</p><p className="text-xs text-stone-500">Chưa phân gian vật lý</p></Td><Td><p>{formatManagerDate(reservation.startDate)}</p><p className="text-xs text-stone-400">→ {formatManagerDate(reservation.endDate)}</p></Td><Td><Badge variant="success">{managerStatusLabel(reservation.payment.status, 'vi')}</Badge></Td><Td><Badge variant="info">{managerStatusLabel(reservation.status, 'vi')}</Badge></Td><Td className="text-right"><Button size="sm" variant="outline" onClick={() => openAssignment(reservation)}>Phân gian</Button></Td></Tr>)}{!waitingAssignmentReservations.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Không có đặt chỗ đang chờ phân gian.</td></tr>}</Tbody></Table><ManagerPagination {...reservationPagination} pageSize={reservationPageSize} onPageChange={setReservationPage} onPageSizeChange={setReservationPageSize} /></Card>
+    <Card><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Đặt chỗ chờ phân gian</h3><p className="text-xs text-stone-500">Các đặt chỗ đã xác nhận nhưng chưa được phân gian kho vật lý.</p><div className="mt-3"><Input value={reservationQuery} onChange={event => setReservationQuery(event.target.value)} placeholder="Tìm mã đặt chỗ, khách hàng hoặc loại gian…" /></div></div><Table><Thead><tr><Th>Mã đặt chỗ</Th><Th>Khách hàng</Th><Th>Loại gian</Th><Th>Thời gian</Th><Th>Thanh toán</Th><Th>Trạng thái</Th><Th /></tr></Thead><Tbody>{reservationPagination.items.map(reservation => <Tr key={reservation.id}><Td className="font-mono text-xs font-bold">{reservation.id}</Td><Td><p className="font-semibold">{reservation.customerName}</p><p className="text-xs text-stone-400">{reservation.customerEmail}</p></Td><Td><p>{managerUnitTypeLabel(reservation.unitTypeName, 'vi')}</p><p className="text-xs text-stone-500">Chưa phân gian vật lý</p></Td><Td><p>{formatManagerDate(reservation.startDate)}</p><p className="text-xs text-stone-400">→ {formatManagerDate(reservation.endDate)}</p></Td><Td><Badge variant="success">{managerStatusLabel(reservation.payment.status, 'vi')}</Badge></Td><Td><Badge variant="info">{managerStatusLabel(reservation.status, 'vi')}</Badge></Td><Td className="text-right"><Button size="sm" variant="outline" onClick={() => openAssignment(reservation)}>Phân gian</Button></Td></Tr>)}{!waitingAssignmentReservations.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Không có đặt chỗ đang chờ phân gian.</td></tr>}</Tbody></Table><ManagerPagination {...reservationPagination} pageSize={reservationPageSize} onPageChange={setReservationPage} onPageSizeChange={setReservationPageSize} /></Card>
 
     <Card className="p-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6"><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm hồ sơ thuê, khách hàng, email hoặc gian…" /><Select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Tất cả trạng thái</option><option value="active">Đang hiệu lực</option><option value="return_requested">Đã yêu cầu trả kho</option><option value="return_inspection">Đang kiểm tra trả kho</option><option value="closing">Đang tất toán</option><option value="completed">Đã hoàn tất</option></Select><Select value={paymentFilter} onChange={event => setPaymentFilter(event.target.value)}><option value="all">Mọi trạng thái thanh toán</option><option value="overdue">Quá hạn</option><option value="paid">Kỳ hiện tại đã thanh toán</option><option value="pending">Kỳ hiện tại đang chờ</option></Select><Select value={expiryFilter} onChange={event => setExpiryFilter(event.target.value)}><option value="all">Mọi thời hạn</option><option value="30">Hết hạn trong 30 ngày</option><option value="later">Còn trên 30 ngày</option><option value="expired">Đã qua ngày kết thúc</option></Select><Select value={attentionFilter} onChange={event => setAttentionFilter(event.target.value)}><option value="all">Mọi mức độ xử lý</option><option value="attention">Cần xử lý</option></Select><Select value={rentalSort} onChange={event => setRentalSort(event.target.value)}><option value="priority">Cần xử lý trước</option><option value="end-asc">Hết hạn sớm nhất</option><option value="end-desc">Hết hạn xa nhất</option><option value="customer">Tên khách hàng</option></Select></div></Card>
     <Card><Table><Thead><tr><Th>Hồ sơ thuê</Th><Th>Khách hàng</Th><Th>Gian kho</Th><Th>Thời hạn</Th><Th>Giá áp dụng</Th><Th>Kỳ thanh toán</Th><Th>Trạng thái</Th><Th /></tr></Thead><Tbody>
@@ -220,7 +221,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
       {assignmentReservation && <div className="space-y-4">
         <div className="rounded-lg bg-stone-50 p-3 text-sm">
           <p><b>{assignmentReservation.id}</b> · {assignmentReservation.customerName}</p>
-          <p className="mt-1 text-stone-500">{assignmentReservation.unitTypeName} · {formatManagerDate(assignmentReservation.startDate)} → {formatManagerDate(assignmentReservation.endDate)}</p>
+          <p className="mt-1 text-stone-500">{managerUnitTypeLabel(assignmentReservation.unitTypeName, 'vi')} · {formatManagerDate(assignmentReservation.startDate)} → {formatManagerDate(assignmentReservation.endDate)}</p>
           {assignmentReservation.assignedUnitId && <p className="mt-1 text-stone-500">Gian hiện tại: <b className="font-mono">{assignmentReservation.assignedUnitId}</b></p>}
         </div>
         {assignmentCandidates.length ? <Select label="Gian kho phù hợp và không xung đột" value={assignmentUnitId} onChange={event => setAssignmentUnitId(event.target.value)}>
@@ -254,16 +255,16 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
               : 'Chưa xác định'
         const renewalBlock = latestRenewal?.status === 'pending' ? renewalApprovalBlock(latestRenewal) : ''
         const renewalActionReason = !latestRenewal
-          ? 'Customer chưa gửi yêu cầu gia hạn. Không có thao tác duyệt hoặc từ chối.'
+          ? "khách hàng chưa gửi yêu cầu gia hạn. Không có thao tác duyệt hoặc từ chối."
           : latestRenewal.status === 'pending' && renewalBlock
             ? renewalBlock
             : latestRenewal.status === 'pending'
-              ? 'Yêu cầu đang chờ Manager duyệt hoặc từ chối tại danh sách phía trên. Duyệt không tự động kéo dài thời hạn thuê.'
+              ? "Yêu cầu đang chờ quản lý cơ sở duyệt hoặc từ chối tại danh sách phía trên. Duyệt không tự động kéo dài thời hạn thuê."
               : ['approved', 'deposit_paid', 'payment_processing', 'appointment_scheduled'].includes(latestRenewal.status)
-                ? 'Manager đã duyệt; thời hạn chỉ được cập nhật sau khi Customer hoàn tất nghĩa vụ thanh toán của luồng gia hạn.'
+                ? "quản lý cơ sở đã duyệt, thời hạn chỉ được cập nhật sau khi khách hàng hoàn tất nghĩa vụ thanh toán của luồng gia hạn."
                 : latestRenewal.status === 'completed'
                   ? 'Gia hạn đã hoàn tất và thời hạn thuê đã được cập nhật.'
-                  : `Yêu cầu đang ở trạng thái ${managerStatusLabel(latestRenewal.status, 'vi')}; Manager không có thao tác tiếp theo ở trạng thái này.`
+                  : `Yêu cầu đang ở trạng thái ${managerStatusLabel(latestRenewal.status, 'vi')}, quản lý cơ sở không có thao tác tiếp theo ở trạng thái này.`
 
         return <div className="space-y-5 text-sm">
           <section>
@@ -295,13 +296,13 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
                 <p><span className="text-stone-400">Kỳ hiện tại</span><br /><Badge variant={billing.variant}>{billing.label}</Badge></p>
                 {overdueAmount !== undefined && <p><span className="text-stone-400">Khoản đang quá hạn</span><br /><b className="text-red-700">{formatKnownMoney(overdueAmount)}</b></p>}
               </div>
-              {rateDiffersFromReference && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Giá tham chiếu hiện tại của loại gian là {formatKnownMoney(referenceRate)}/tháng; hồ sơ đang hiển thị giá áp dụng đã được ghi nhận tại thời điểm thuê.</p>}
+              {rateDiffersFromReference && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Giá tham chiếu hiện tại của loại gian là {formatKnownMoney(referenceRate)}/tháng, hồ sơ đang hiển thị giá áp dụng đã được ghi nhận tại thời điểm thuê.</p>}
             </section>
 
             <section className="rounded-xl border border-stone-200 p-4">
               <p className="mb-3 text-xs font-bold uppercase tracking-wider text-stone-500">Truy cập</p>
               <p><span className="text-stone-400">Trạng thái truy cập</span><br /><Badge variant={accessStatus === 'Đang hoạt động' ? 'success' : accessStatus === 'Đã khóa' ? 'error' : 'muted'}>{accessStatus}</Badge></p>
-              <p className="mt-3 text-xs text-stone-500">Mã truy cập không được hiển thị trên giao diện Manager.</p>
+              <p className="mt-3 text-xs text-stone-500">Mã truy cập không được hiển thị trên giao diện quản lý cơ sở.</p>
             </section>
           </div>
 
