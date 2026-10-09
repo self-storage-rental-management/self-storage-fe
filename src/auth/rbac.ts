@@ -8,33 +8,33 @@ export interface PermissionDefinition {
 }
 
 export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
-  { key: 'view_dashboard', label: 'Xem tổng quan', group: 'Điều hướng' },
-  { key: 'view_facilities', label: 'Xem danh sách cơ sở', group: 'Điều hướng' },
-  { key: 'view_units', label: 'Xem gian kho', group: 'Điều hướng' },
-  { key: 'view_reservations', label: 'Xem yêu cầu đặt giữ kho', group: 'Điều hướng' },
-  { key: 'view_contracts', label: 'Xem hợp đồng', group: 'Điều hướng' },
-  { key: 'view_checkins', label: 'Xem lịch check-in', group: 'Điều hướng' },
-  { key: 'view_rentals', label: 'Xem hồ sơ thuê', group: 'Điều hướng' },
-  { key: 'view_returns', label: 'Xem hồ sơ trả kho', group: 'Điều hướng' },
-  { key: 'view_payments', label: 'Xem thanh toán', group: 'Điều hướng' },
-  { key: 'view_policies', label: 'Xem chính sách thuê', group: 'Điều hướng' },
-  { key: 'view_support', label: 'Xem hỗ trợ', group: 'Điều hướng' },
-  { key: 'view_reports', label: 'Xem báo cáo', group: 'Điều hướng' },
-  { key: 'view_audit_logs', label: 'Xem nhật ký kiểm toán', group: 'Điều hướng' },
-  { key: 'book_storage', label: 'Tạo yêu cầu đặt giữ kho', group: 'Nghiệp vụ' },
-  { key: 'approve_reservations', label: 'Phê duyệt yêu cầu', group: 'Nghiệp vụ' },
-  { key: 'assign_units', label: 'Phân kho vật lý', group: 'Nghiệp vụ' },
-  { key: 'perform_checkin', label: 'Thực hiện check-in và bàn giao', group: 'Nghiệp vụ' },
-  { key: 'process_returns', label: 'Nghiệm thu và xử lý trả kho', group: 'Nghiệp vụ' },
-  { key: 'manage_rentals', label: 'Quản lý hợp đồng và gia hạn', group: 'Nghiệp vụ' },
-  { key: 'manage_payments', label: 'Quản lý thu cước và công nợ', group: 'Nghiệp vụ' },
-  { key: 'manage_support', label: 'Phản hồi yêu cầu hỗ trợ', group: 'Nghiệp vụ' },
-  { key: 'manage_inventory', label: 'Quản lý tồn kho và bảo trì', group: 'Nghiệp vụ' },
-  { key: 'manage_policies', label: 'Cập nhật chính sách và biểu phí', group: 'Nghiệp vụ' },
-  { key: 'manage_staff_tasks', label: 'Điều phối nhiệm vụ nhân viên', group: 'Nghiệp vụ' },
-  { key: 'manage_users', label: 'Quản lý tài khoản', group: 'Quản trị' },
-  { key: 'manage_roles', label: 'Quản lý bảng quyền', group: 'Quản trị' },
-  { key: 'manage_settings', label: 'Cập nhật cài đặt hệ thống', group: 'Quản trị' },
+  { key: 'dashboard:read', label: 'Xem tổng quan', group: 'Điều hướng' },
+  { key: 'facilities:read', label: 'Xem danh sách cơ sở', group: 'Điều hướng' },
+  { key: 'storage_units:read', label: 'Xem gian kho', group: 'Điều hướng' },
+  { key: 'reservations:read', label: 'Xem yêu cầu đặt giữ kho', group: 'Điều hướng' },
+  { key: 'contracts:read', label: 'Xem hợp đồng', group: 'Điều hướng' },
+  { key: 'checkins:read', label: 'Xem lịch check-in', group: 'Điều hướng' },
+  { key: 'rentals:read', label: 'Xem hồ sơ thuê', group: 'Điều hướng' },
+  { key: 'returns:read', label: 'Xem hồ sơ trả kho', group: 'Điều hướng' },
+  { key: 'payments:read', label: 'Xem thanh toán', group: 'Điều hướng' },
+  { key: 'policies:read', label: 'Xem chính sách thuê', group: 'Điều hướng' },
+  { key: 'support:read', label: 'Xem hỗ trợ', group: 'Điều hướng' },
+  { key: 'reports:read', label: 'Xem báo cáo', group: 'Điều hướng' },
+  { key: 'audit_logs:read', label: 'Xem nhật ký kiểm toán', group: 'Điều hướng' },
+  { key: 'reservations:create', label: 'Tạo yêu cầu đặt giữ kho', group: 'Nghiệp vụ' },
+  { key: 'reservations:approve', label: 'Phê duyệt yêu cầu', group: 'Nghiệp vụ' },
+  { key: 'storage_units:assign', label: 'Phân kho vật lý', group: 'Nghiệp vụ' },
+  { key: 'checkins:process', label: 'Thực hiện check-in và bàn giao', group: 'Nghiệp vụ' },
+  { key: 'returns:process', label: 'Nghiệm thu và xử lý trả kho', group: 'Nghiệp vụ' },
+  { key: 'rentals:update', label: 'Quản lý hợp đồng và gia hạn', group: 'Nghiệp vụ' },
+  { key: 'payments:collect', label: 'Quản lý thu cước và công nợ', group: 'Nghiệp vụ' },
+  { key: 'support:update', label: 'Phản hồi yêu cầu hỗ trợ', group: 'Nghiệp vụ' },
+  { key: 'inventory:update', label: 'Quản lý tồn kho và bảo trì', group: 'Nghiệp vụ' },
+  { key: 'policies:update', label: 'Cập nhật chính sách và biểu phí', group: 'Nghiệp vụ' },
+  { key: 'staff_tasks:update', label: 'Điều phối nhiệm vụ nhân viên', group: 'Nghiệp vụ' },
+  { key: 'users:manage', label: 'Quản lý tài khoản', group: 'Quản trị' },
+  { key: 'roles:manage', label: 'Quản lý bảng quyền', group: 'Quản trị' },
+  { key: 'settings:manage', label: 'Cập nhật cài đặt hệ thống', group: 'Quản trị' },
 ]
 
 const makePermissions = (...enabled: PermissionKey[]): RolePermissions => {
@@ -44,23 +44,25 @@ const makePermissions = (...enabled: PermissionKey[]): RolePermissions => {
 
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   customer: makePermissions(
-    'view_dashboard', 'view_facilities', 'view_units', 'book_storage', 'view_reservations',
-    'view_contracts', 'view_rentals', 'manage_rentals', 'view_returns', 'process_returns', 'view_payments', 'view_support'
+    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:create', 'reservations:read',
+    'contracts:read', 'rentals:read', 'payments:read', 'support:read'
   ),
   staff: makePermissions(
-    'view_dashboard', 'view_facilities', 'view_units', 'view_reservations', 'approve_reservations',
-    'view_checkins', 'perform_checkin', 'view_returns', 'process_returns', 'manage_payments', 'view_support', 'manage_support'
+    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
+    'checkins:read', 'checkins:process', 'rentals:read', 'returns:read', 'returns:process',
+    'support:read', 'support:update'
   ),
   manager: makePermissions(
-    'view_dashboard', 'view_facilities', 'view_units', 'view_reservations',
-    'view_contracts', 'view_checkins', 'view_rentals', 'manage_rentals',
-    'view_returns', 'process_returns', 'view_payments', 'manage_payments', 'view_support',
-    'assign_units', 'manage_inventory', 'manage_staff_tasks', 'view_reports'
+    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read',
+    'reservations:approve', 'storage_units:assign', 'contracts:read', 'checkins:read', 'rentals:read',
+    'returns:read', 'payments:read', 'payments:collect', 'support:read', 'support:update',
+    'inventory:update', 'policies:update', 'staff_tasks:update', 'reports:read'
   ),
   business: makePermissions(
-    'view_dashboard', 'view_facilities', 'view_units', 'view_payments', 'view_reports', 'view_support', 'view_policies', 'manage_policies'
+    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
+    'rentals:read', 'payments:read', 'reports:read', 'support:read', 'policies:read'
   ),
-  admin: makePermissions(...PERMISSION_KEYS),
+  admin: makePermissions('users:manage', 'roles:manage', 'settings:manage', 'audit_logs:read'),
 }
 
 export const normalizeRolePermissions = (value: unknown): RolePermissionsState => {
@@ -74,12 +76,18 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
       if (typeof candidate[key] === 'boolean') normalized[role][key] = candidate[key] as boolean
     }
   }
-  // Staff/Business workflows stay disabled even when persisted permissions are stale.
-  normalized.manager.approve_reservations = false
-  normalized.manager.perform_checkin = false
-  normalized.manager.manage_support = false
-  normalized.manager.manage_policies = false
-  // Business role always retains policy management permission
-  normalized.business.manage_policies = true
+  // Keep customer access portal-only and protect the internal SoD defaults
+  // when reading legacy localStorage data.
+  normalized.customer['returns:process'] = false
+  normalized.customer['rentals:update'] = false
+  normalized.staff['reservations:approve'] = false
+  normalized.staff['payments:collect'] = false
+  normalized.staff['policies:update'] = false
+  normalized.staff['staff_tasks:update'] = false
+  normalized.business['policies:update'] = false
+  normalized.business['settings:manage'] = false
+  normalized.business['payments:collect'] = false
+  normalized.business['reservations:approve'] = false
+  normalized.admin = { ...DEFAULT_ROLE_PERMISSIONS.admin }
   return normalized
 }

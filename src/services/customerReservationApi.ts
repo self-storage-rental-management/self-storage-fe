@@ -111,6 +111,10 @@ export interface CompatibilityCheckResult {
   totalGoodsWeightKg: number
   unitVolumeM3: number
   unitMaxLoadKg: number
+  rackUtilizationRate: number
+  usableVolumePerRackM3: number
+  requiredRackCount: number
+  unitRackCount: number
   availableUnitCount: number
   staffReviewRequired: boolean
   issues: string[]
@@ -273,6 +277,15 @@ export async function uploadComplaintImage(file: File) {
   return response.data
 }
 
+export async function uploadReservationGoodsImage(goodsItemId: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('entityType', 'RESERVATION_GOODS_ITEM')
+  body.append('entityId', goodsItemId)
+  const response = await apiRequest<ApiEnvelope<{ id: string }>>('/api/files', { method: 'POST', body })
+  return response.data
+}
+
 export async function submitPaymentComplaint(reservationId: string, reason: string, imageIds: string[]) {
   const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(
     `/api/customer/reservations/${reservationId}/payment-complaints`,
@@ -317,6 +330,10 @@ function query(params: Record<string, string | number | undefined>) {
 
 export async function listCustomerFacilities(page = 0, size = 50) {
   return apiRequest<PageResponse<CustomerFacility>>(`/api/facilities${query({ status: 'active', page, size })}`)
+}
+
+export async function listAccessibleFacilities(page = 0, size = 100) {
+  return apiRequest<PageResponse<CustomerFacility>>(`/api/facilities${query({ page, size })}`)
 }
 
 export async function listCustomerUnitTypes(facilityId: string, options: {

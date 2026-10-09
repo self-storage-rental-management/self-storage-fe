@@ -310,7 +310,7 @@ export interface StorageReservation {
   moveInDate: string
   status: ReservationStatus | HoldStatus
   expireReason?: 'NO_SHOW' | 'CUSTOMER_CANCELLED' | 'PAYMENT_EXPIRED'
-  reservationDepositAmount: number // 20% paid online to hold booking
+  reservationDepositAmount: number // 40% paid online to hold booking
   securityDepositAmount: number    // 1-month rent deposit recorded in contract
   depositConvertedAt?: string     // Timestamp when reservation deposit was converted to contract security deposit
   remainingAmount: number          // FirstMonthRent + SecurityDeposit - ReservationDeposit
