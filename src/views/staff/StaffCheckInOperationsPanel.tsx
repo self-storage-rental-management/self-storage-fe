@@ -10,6 +10,7 @@ import {
   uploadCheckInEvidence,
   type CheckInCase,
   type CheckInChecklist,
+  type CheckInListStatus,
 } from "../../services/checkInApi"
 
 import {
@@ -82,6 +83,16 @@ function hasMaterialVariance(
   )
 }
 
+function localDateBoundary(date: string, nextDay = false) {
+  if (!date) return undefined
+
+  const boundary = new Date(`${date}T00:00:00`)
+
+  if (nextDay) boundary.setDate(boundary.getDate() + 1)
+
+  return boundary.toISOString()
+}
+
 export default function StaffCheckInOperationsPanel({
   showToast,
 }: {
@@ -98,6 +109,18 @@ export default function StaffCheckInOperationsPanel({
   const [queryInput, setQueryInput] = useState("")
 
   const [query, setQuery] = useState("")
+
+  const [statusInput, setStatusInput] = useState<CheckInListStatus | "">("")
+
+  const [status, setStatus] = useState<CheckInListStatus | "">("")
+
+  const [scheduledFromInput, setScheduledFromInput] = useState("")
+
+  const [scheduledFrom, setScheduledFrom] = useState("")
+
+  const [scheduledToInput, setScheduledToInput] = useState("")
+
+  const [scheduledTo, setScheduledTo] = useState("")
 
   const [loading, setLoading] = useState(true)
 
@@ -188,7 +211,14 @@ export default function StaffCheckInOperationsPanel({
 
     setError(null)
 
-    void listCheckIns({ page, pageSize: 20, q: query })
+    void listCheckIns({
+      page,
+      pageSize: 20,
+      q: query,
+      status: status || undefined,
+      scheduledFrom: localDateBoundary(scheduledFrom),
+      scheduledTo: localDateBoundary(scheduledTo, true),
+    })
 
       .then((response) => {
         if (!active) return
@@ -214,7 +244,7 @@ export default function StaffCheckInOperationsPanel({
     return () => {
       active = false
     }
-  }, [page, query, refreshKey])
+  }, [page, query, refreshKey, scheduledFrom, scheduledTo, status])
 
   const allChecksComplete = useMemo(
     () => checklistLabels.every(([key]) => checklist[key]),
@@ -240,6 +270,54 @@ export default function StaffCheckInOperationsPanel({
   }, [handoverTarget, volumeM3, weightKg])
 
   const refresh = () => setRefreshKey((value) => value + 1)
+
+  const applyFilters = () => {
+    if (
+      scheduledFromInput &&
+      scheduledToInput &&
+      scheduledFromInput > scheduledToInput
+    ) {
+      setError("Ngày bắt đầu không được sau ngày kết thúc.")
+
+      return
+    }
+
+    setError(null)
+
+    setPage(0)
+
+    setQuery(queryInput.trim())
+
+    setStatus(statusInput)
+
+    setScheduledFrom(scheduledFromInput)
+
+    setScheduledTo(scheduledToInput)
+  }
+
+  const resetFilters = () => {
+    setQueryInput("")
+
+    setStatusInput("")
+
+    setScheduledFromInput("")
+
+    setScheduledToInput("")
+
+    setQuery("")
+
+    setStatus("")
+
+    setScheduledFrom("")
+
+    setScheduledTo("")
+
+    setPage(0)
+
+    setError(null)
+
+    refresh()
+  }
 
   const fail = (reason: unknown, fallback: string) =>
     setError(staffErrorMessage(reason, fallback))
@@ -496,29 +574,56 @@ export default function StaffCheckInOperationsPanel({
         subtitle="Lên lịch, đối chiếu hàng hóa và hoàn tất bàn giao vật lý cho khách hàng."
       />
       <Card className="p-4">
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.7fr)_minmax(180px,1fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
           <Input
+            label="Tìm kiếm"
             value={queryInput}
             placeholder="Mã đơn, khách hàng, thư điện tử hoặc mã kho"
             onChange={(event) => setQueryInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
-                setPage(0)
-                setQuery(queryInput.trim())
+                applyFilters()
               }
             }}
           />
-          <Button
-            onClick={() => {
-              setPage(0)
-              setQuery(queryInput.trim())
-            }}
+          <Select
+            label="Trạng thái"
+            value={statusInput}
+            onChange={(event) =>
+              setStatusInput(event.target.value as CheckInListStatus | "")
+            }
           >
-            Tìm kiếm
-          </Button>
-          <Button variant="outline" onClick={refresh}>
-            Tải lại
-          </Button>
+            <option value="">Tất cả trạng thái</option>
+            <option value="UNSCHEDULED">Chưa lên lịch</option>
+            <option value="scheduled">Đã lên lịch</option>
+            <option value="no_show">Khách không đến</option>
+            <option value="completed">Đã bàn giao</option>
+          </Select>
+          <Input
+            label="Lịch nhận từ ngày"
+            type="date"
+            value={scheduledFromInput}
+            onChange={(event) => setScheduledFromInput(event.target.value)}
+          />
+          <Input
+            label="Đến ngày"
+            type="date"
+            value={scheduledToInput}
+            min={scheduledFromInput || undefined}
+            onChange={(event) => setScheduledToInput(event.target.value)}
+          />
+          <div className="flex gap-2 md:col-span-2 xl:col-span-1">
+            <Button className="flex-1 xl:flex-none" onClick={applyFilters}>
+              Lọc
+            </Button>
+            <Button
+              className="flex-1 xl:flex-none"
+              variant="outline"
+              onClick={resetFilters}
+            >
+              Đặt lại
+            </Button>
+          </div>
         </div>
       </Card>
       {error && (

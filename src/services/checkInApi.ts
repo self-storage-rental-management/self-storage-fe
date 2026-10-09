@@ -1,6 +1,7 @@
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
 
 export type CheckInStatus = 'scheduled' | 'completed' | 'rejected' | 'no_show' | 'cancelled' | null
+export type CheckInListStatus = 'UNSCHEDULED' | 'scheduled' | 'completed' | 'no_show'
 export type CheckInReservationStatus = 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'REJECTED'
 
 export interface CheckInChecklist {
@@ -109,12 +110,22 @@ function assertEnvelope(payload: unknown): CheckInCase {
   return (payload as ApiEnvelope<CheckInCase>).data
 }
 
-export async function listCheckIns(params: { page?: number; pageSize?: number; q?: string } = {}) {
+export async function listCheckIns(params: {
+  page?: number
+  pageSize?: number
+  q?: string
+  status?: CheckInListStatus
+  scheduledFrom?: string
+  scheduledTo?: string
+} = {}) {
   const query = new URLSearchParams({
     page: String(params.page ?? 0),
     pageSize: String(params.pageSize ?? 20),
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.status) query.set('status', params.status)
+  if (params.scheduledFrom) query.set('scheduledFrom', params.scheduledFrom)
+  if (params.scheduledTo) query.set('scheduledTo', params.scheduledTo)
   return assertPage(await apiRequest<unknown>(`/api/staff/check-ins?${query}`))
 }
 
