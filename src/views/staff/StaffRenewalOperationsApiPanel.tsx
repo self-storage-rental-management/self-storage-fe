@@ -160,7 +160,7 @@ function StaffSession({ identity }: { identity: string }) {
             </div>
           ))}
           {read.data.data.length === 0 && (
-            <p>Không có lịch phù hợp với phân công hiện tại.</p>
+            <p>Không có dữ liệu</p>
           )}
           <ApiPager
             pagination={read.data.pagination}

@@ -62,12 +62,12 @@ describe("Dương delete-first UI copy regression", () => {
     state.data = { ...overduePage, ...apiPage([]), completeness: "PARTIAL", missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS"] }
     let html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
     expect(html).toContain("dữ liệu quá hạn còn thiếu")
-    expect(html).not.toContain("Không có hồ sơ quá hạn phù hợp")
+    expect(html).not.toContain("Không có dữ liệu")
     expect(html).not.toContain("AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS")
     expect(html).not.toContain("0 đ")
     state.data = { ...overduePage, ...apiPage([]), completeness: "COMPLETE", missingSources: [] }
     html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toContain("Không có hồ sơ quá hạn phù hợp")
+    expect(html).toContain("Không có dữ liệu")
     expect(html).not.toContain("dữ liệu quá hạn còn thiếu")
   })
   it("D4 denied actor still gets an alert, no filters or actions", () => {

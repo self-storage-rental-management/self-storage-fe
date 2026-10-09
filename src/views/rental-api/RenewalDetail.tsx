@@ -51,7 +51,7 @@ export default function RenewalDetail({
         Trạng thái: {copy(renewalLabels[r.status] || unknown)}
       </p>
       <p>
-        Ngày kết thúc cũ: {rentalDate(r.oldEndDate)} · Ngày kết thúc đề nghị:{" "}
+        Mốc kết thúc kỳ thuê cũ: {rentalDate(r.oldEndDate)} · Ngày cuối kỳ gia hạn:{" "}
         {rentalDate(r.newEndDate)}
       </p>
       <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>

@@ -221,7 +221,7 @@ export default function SupportCreateForm({
           />
           {unique.length === 0 && (
             <p className="text-sm text-stone-500">
-              Trang này không có hồ sơ phù hợp.
+              Không có dữ liệu
             </p>
           )}
         </div>
