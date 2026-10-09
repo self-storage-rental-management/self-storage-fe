@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState } from "react"
 import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -40,6 +41,8 @@ export default function SupportActionForm({
   ticket: SupportTicket
   command: ReturnType<typeof useSupportCommand>
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   const actor = getAuthenticatedActor()
   const actions = supportActions(actor, role, t).filter(
     (a) => a !== "follow-up",
@@ -168,15 +171,14 @@ export default function SupportActionForm({
               setVisibility(e.target.value as "PUBLIC" | "INTERNAL")
             }
           >
-            <option value="PUBLIC">Công khai với Customer</option>
-            <option value="INTERNAL">Nội bộ — Customer không thấy</option>
+            <option value="PUBLIC">{copy("Công khai với Customer")}</option>
+            <option value="INTERNAL">{copy("Nội bộ — Customer không thấy")}</option>
           </select>
         </label>
       )}
       {action === "escalate" && (
         <label className="block text-sm">
-          Module nhận điều phối
-          <select
+          {copy("Module nhận điều phối")}<select
             className={supportInputClass}
             value={module}
             disabled={command.locked}
@@ -184,7 +186,7 @@ export default function SupportActionForm({
           >
             {supportModules.map((m) => (
               <option key={m} value={m}>
-                {supportModuleLabels[m]}
+                {copy(supportModuleLabels[m])}
               </option>
             ))}
           </select>
@@ -208,8 +210,8 @@ export default function SupportActionForm({
                 setDecision(e.target.value as "ROUTE" | "REJECT")
               }
             >
-              <option value="ROUTE">Chuyển tới module được phép</option>
-              <option value="REJECT">Từ chối điều phối, trả về Staff</option>
+              <option value="ROUTE">{copy("Chuyển tới module được phép")}</option>
+              <option value="REJECT">{copy("Từ chối điều phối, trả về Staff")}</option>
             </select>
           </label>
         </>
@@ -237,21 +239,15 @@ export default function SupportActionForm({
       )}
       {["close", "resolve", "escalate", "decision"].includes(action) && (
         <p className="text-sm text-amber-800">
-          BE kiểm tra policy và kết quả từ nguồn chung. Chuyển module không đồng
-          nghĩa đã xử lý xong; ghi chú không thay thế kết quả thanh
-          toán/refund/bảo trì. Thiếu nguồn sẽ bị chặn, không tự giả lập thành
-          công.
-        </p>
+          {copy("BE kiểm tra policy và kết quả từ nguồn chung. Chuyển module không đồng nghĩa đã xử lý xong; ghi chú không thay thế kết quả thanh toán/refund/bảo trì. Thiếu nguồn sẽ bị chặn, không tự giả lập thành công.")}</p>
       )}
-      <p className="text-xs text-stone-500">
-        Phiên bản {t.version} · Lần phân công {t.assignmentRevision}. Manager
-        không có thao tác hoàn thành thay Staff.
-      </p>
+      {!manager && <p className="text-xs text-stone-500">
+        Phiên bản {t.version} · Lần phân công {t.assignmentRevision}. Manager không có thao tác hoàn thành thay Staff.</p>}
       <Button
         type="submit"
         disabled={command.locked || command.conflict || !valid}
       >
-        {labels[action]}
+        {copy(labels[action])}
       </Button>
     </form>
   )
@@ -267,6 +263,8 @@ function EscalationPicker({
   onChange: (value: string) => void
   disabled: boolean
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   const [page, setPage] = useState(0)
   const read = useRentalApiResource(
     `${getAuthenticatedActor()?.id}:support-escalation-picker:${id}:${page}`,
@@ -290,7 +288,7 @@ function EscalationPicker({
             .filter((e) => e.status === "REQUESTED")
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {supportModuleLabels[e.targetModule]} · {e.id}
+                {copy(supportModuleLabels[e.targetModule])} · {e.id}
               </option>
             ))}
         </select>

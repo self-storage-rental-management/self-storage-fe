@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -63,6 +64,8 @@ export function OperationEventCard({
 }: {
   event: RenewalOperationEvent
 }) {
+  const { manager, copy, errorText } = useManagerPresentation()
+
   const d =
     e.data && typeof e.data === "object"
       ? e.data as Record<string, unknown>
@@ -78,7 +81,7 @@ export function OperationEventCard({
   return (
     <article className="rounded border border-stone-200 p-3 space-y-1 text-sm break-words">
       <p className="font-semibold">
-        {eventLabels[e.kind]} · {rentalDate(e.occurredAt)}
+        {copy(eventLabels[e.kind])} · {rentalDate(e.occurredAt)}
       </p>
       <p className="break-all">
         Mã sự kiện: {e.id}
@@ -86,7 +89,7 @@ export function OperationEventCard({
       </p>
       {["outcome", "status", "action"].map((key) =>
         field(key) ? (
-          <p key={key}>{statusLabels[field(key)!] || field(key)}</p>
+          <p key={key}>{copy(statusLabels[field(key)!] || field(key)!)}</p>
         ) : null,
       )}
       {amount !== null && field("currency") && (
@@ -134,7 +137,7 @@ export function OperationEventCard({
       )}
       {Array.isArray(d.evidenceFileIds) && (
         <p className="break-all">
-          Minh chứng (FileAsset):{" "}
+          {copy("Minh chứng (FileAsset):")}{" "}
           {d.evidenceFileIds.filter(isUuid).join(", ") ||
             "Không có tệp đính kèm"}
         </p>
@@ -182,19 +185,21 @@ export function RenewalOperationsSummary({
 }: {
   state: RenewalOperationState
 }) {
+  const { manager, copy, errorText } = useManagerPresentation()
+
   return (
     <Card className="p-4 space-y-2 text-sm">
-      <h3 className="font-semibold text-lg">Ký & thanh toán gia hạn (D3)</h3>
+      <h3 className="font-semibold text-lg">{copy("Ký & thanh toán gia hạn (D3)")}</h3>
       <p>
-        Trạng thái: {phaseLabels[s.phase]} · Phiên bản workflow:{" "}
-        {s.expectedVersion ?? unknown}
+        Trạng thái: {copy(phaseLabels[s.phase])}
+        {!manager && <> · Phiên bản workflow: {s.expectedVersion ?? unknown}</>}
       </p>
       <p>Cọc được ghi nhận lúc: {rentalDate(s.depositPaidAt)}</p>
       <p>
         Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)} · Hạn ký hiệu
         lực: {rentalDate(s.effectiveSigningDeadline)}
       </p>
-      <p>Cutoff thu hồi: {rentalDate(s.recoveryCutoff)}</p>
+      <p>{copy("Cutoff thu hồi: ")}{rentalDate(s.recoveryCutoff)}</p>
       <p>
         Lịch ký đã lưu:{" "}
         {s.appointmentRef
@@ -212,28 +217,24 @@ export function RenewalOperationsSummary({
       )}
       {s.pendingExceptionRef && (
         <p className="text-amber-800 break-all">
-          Đề xuất ngoại lệ mới: {s.pendingExceptionRef}. BE chưa cung cấp nội
-          dung lịch/hạn đề xuất cho Customer; chưa thể xác nhận trên FE.
-        </p>
+          Đề xuất ngoại lệ mới: {s.pendingExceptionRef}{copy(". BE chưa cung cấp nội dung lịch/hạn đề xuất cho Customer; chưa thể xác nhận trên FE.")}</p>
       )}
       {s.missingSources.length > 0 && (
         <section role="status" className="rounded bg-amber-50 p-3">
           <p className="font-semibold">
-            Chưa đủ nguồn dùng chung; không dùng dữ liệu demo để thay thế:
-          </p>
+            {copy("Chưa đủ nguồn dùng chung; không dùng dữ liệu demo để thay thế:")}</p>
           <ul className="list-disc pl-5">
             {s.missingSources.map((ref) => (
               <li key={ref}>
-                {sourceLabels[ref] || ref} ({ref})
+                {copy(sourceLabels[ref] || (manager ? 'Thông tin bổ sung' : ref))}
+                {!manager && <> ({ref})</>}
               </li>
             ))}
           </ul>
         </section>
       )}
       <p className="text-stone-500">
-        Chỉ bước Staff hoàn tất hợp lệ mới kéo dài ngày kết thúc thuê. Duyệt,
-        trả cọc, đặt lịch và thu CASH không tự gia hạn.
-      </p>
+        {copy("Chỉ bước Staff hoàn tất hợp lệ mới kéo dài ngày kết thúc thuê. Duyệt, trả cọc, đặt lịch và thu CASH không tự gia hạn.")}</p>
     </Card>
   )
 }
@@ -249,6 +250,8 @@ function EventTimeline({
   category: "payments" | "refunds" | "facility-incidents"
   identity: string
 }) {
+  const { manager, copy, errorText } = useManagerPresentation()
+
   const [page, setPage] = useState(0)
   const read = useRentalApiResource(`${identity}:${category}:${page}`, () =>
     listRenewalOperationEvents(role, id, category, page),
@@ -259,15 +262,15 @@ function EventTimeline({
         <h4 className="font-semibold">
           {
             {
-              payments: "Lịch sử cọc & CASH D3",
+              payments: copy("Lịch sử cọc & CASH D3"),
               refunds: "Lịch sử quyết định hoàn tiền (không phải payout)",
               "facility-incidents": "Sự cố & xem xét ngoại lệ",
             }[category]
           }
         </h4>
-        <Button variant="outline" onClick={read.refresh}>
+        {!manager && (<Button variant="outline" onClick={read.refresh}>
           Tải lại
-        </Button>
+        </Button>)}
       </div>
       <ApiReadState {...read} retry={read.refresh} />
       {read.data && (
@@ -303,6 +306,8 @@ export default function RenewalOperationsPanel({
   onChanged?: () => void
   onLocked?: (locked: boolean) => void
 }) {
+  const { manager, copy, errorText } = useManagerPresentation()
+
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}:${id}`
   const [revision, setRevision] = useState(0)
@@ -325,7 +330,7 @@ export default function RenewalOperationsPanel({
   return (
     <div className="space-y-4 mt-4">
       <div className="flex gap-2">
-        <Button
+        {!manager && (<Button
           variant="outline"
           disabled={locked}
           onClick={() => {
@@ -335,7 +340,7 @@ export default function RenewalOperationsPanel({
           }}
         >
           Tải lại tiến độ D3
-        </Button>
+        </Button>)}
       </div>
       <ApiReadState {...read} retry={read.refresh} />
       {read.data && (
@@ -343,15 +348,13 @@ export default function RenewalOperationsPanel({
           <RenewalOperationsSummary state={read.data} />
           {lastEvent && (
             <div role="status">
-              <p>Kết quả BE của thao tác vừa gửi:</p>
+              <p>{copy("Kết quả BE của thao tác vừa gửi:")}</p>
               <OperationEventCard event={lastEvent} />
             </div>
           )}
           <Card className="p-4 space-y-3">
             <p className="text-sm text-stone-500">
-              BE kiểm tra lại quyền chuyên biệt, phân công, policy, hạn và số
-              tiền ở mỗi thao tác; FE không cấp quyền chỉ vì có role.
-            </p>
+              {copy("BE kiểm tra lại quyền chuyên biệt, phân công, policy, hạn và số tiền ở mỗi thao tác; FE không cấp quyền chỉ vì có role.")}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               {actions.map((action) => {
                 const reason = operationBlockedReason(
@@ -369,10 +372,10 @@ export default function RenewalOperationsPanel({
                       disabled={!!reason || locked}
                       onClick={() => setSelected(action)}
                     >
-                      {operationLabels[action]}
+                      {copy(operationLabels[action])}
                     </Button>
                     {reason && (
-                      <p className="mt-1 text-xs text-stone-500">{reason}</p>
+                      <p className="mt-1 text-xs text-stone-500">{copy(reason)}</p>
                     )}
                   </div>
                 )
@@ -442,6 +445,8 @@ function OperationForm({
   onCancel: () => void
   onSuccess: (event: RenewalOperationEvent) => void
 }) {
+  const { copy, errorText } = useManagerPresentation()
+
   const command = useRenewalCommand()
   const pendingPayload = useRef<RenewalOperationCommand | undefined>(undefined)
   const locked = command.busy || command.uncertain
@@ -616,7 +621,7 @@ function OperationForm({
   }
   return (
     <Card className="p-4 space-y-3">
-      <h4 className="font-semibold">{operationLabels[action]}</h4>
+      <h4 className="font-semibold">{copy(operationLabels[action])}</h4>
       <fieldset disabled={locked} className="space-y-3">
         {manager && (
           <>
@@ -670,11 +675,9 @@ function OperationForm({
             >
               <option value="REJECT">Từ chối ngoại lệ</option>
               <option value="APPROVE_RESCHEDULE_BEFORE_CUTOFF">
-                Đề xuất đổi lịch trước cutoff (cần Customer xác nhận)
-              </option>
+                {copy("Đề xuất đổi lịch trước cutoff (cần Customer xác nhận)")}</option>
               <option value="REQUEST_POST_CUTOFF_REVIEW">
-                Yêu cầu xem xét sau cutoff (không gia hạn tự động)
-              </option>
+                {copy("Yêu cầu xem xét sau cutoff (không gia hạn tự động)")}</option>
             </select>
           </label>
         )}
@@ -690,13 +693,11 @@ function OperationForm({
                 }
               >
                 <option value="REJECT">Từ chối</option>
-                <option value="APPROVE">Duyệt khoản hoàn — chờ thực thi</option>
+                <option value="APPROVE">{copy("Duyệt khoản hoàn — chờ thực thi")}</option>
               </select>
             </label>
             <p>
-              Không nhập số tiền tự tính. BE xác minh tiền thực thu, policy và
-              khoản hoàn đang chờ; duyệt không có nghĩa đã chuyển tiền.
-            </p>
+              {copy("Không nhập số tiền tự tính. BE xác minh tiền thực thu, policy và khoản hoàn đang chờ; duyệt không có nghĩa đã chuyển tiền.")}</p>
           </>
         )}
         {(["appointment", "reschedule"].includes(action) ||
@@ -710,9 +711,7 @@ function OperationForm({
               onChange={(e) => setAppointment(e.target.value)}
             />
             <span className="text-xs text-stone-500">
-              Đây là đề nghị, không phải slot đã giữ. BE kiểm tra lịch phục vụ
-              và toàn bộ thời lượng slot.
-            </span>
+              {copy("Đây là đề nghị, không phải slot đã giữ. BE kiểm tra lịch phục vụ và toàn bộ thời lượng slot.")}</span>
           </label>
         )}
         {rescheduleProposal && (
@@ -739,17 +738,13 @@ function OperationForm({
         )}
         {needFiles && (
           <label className="block">
-            Minh chứng đã lưu (FileAsset UUID, nếu có)
-            <textarea
+            {copy("Minh chứng đã lưu (FileAsset UUID, nếu có)")}<textarea
               className={operationsInputClass}
               value={evidence}
               onChange={(e) => setEvidence(e.target.value)}
             />
             <span className="text-xs text-stone-500">
-              Tối đa 10 UUID, cách nhau bằng dấu phẩy. Chỉ dùng tệp thật đã liên
-              kết với hồ sơ. Chưa có contract upload Renewal; không dùng upload
-              Check-in hoặc URL tùy ý.
-            </span>
+              {copy("Tối đa 10 UUID, cách nhau bằng dấu phẩy. Chỉ dùng tệp thật đã liên kết với hồ sơ. Chưa có contract upload Renewal; không dùng upload Check-in hoặc URL tùy ý.")}</span>
           </label>
         )}
         {action === "cash" && (
@@ -758,7 +753,7 @@ function OperationForm({
             {cash.data && (
               <div className="space-y-2">
                 <p>
-                  Số tiền theo statement BE:{" "}
+                  {copy("Số tiền theo statement BE:")}{" "}
                   {rentalMoney(cash.data.amount, cash.data.currency)}
                 </p>
                 <p>Hết hiệu lực: {rentalDate(cash.data.expiresAt)}</p>
@@ -785,15 +780,13 @@ function OperationForm({
                 checked={attested}
                 onChange={(e) => setAttested(e.target.checked)}
               />{" "}
-              Tôi đã nhận đủ số CASH theo statement
-            </label>
+              {copy("Tôi đã nhận đủ số CASH theo statement")}</label>
           </>
         )}
         {action === "completion" && (
           <>
             <label className="block">
-              FileAsset UUID của văn bản gia hạn đã ký
-              <input
+              {copy("FileAsset UUID của văn bản gia hạn đã ký")}<input
                 className={operationsInputClass}
                 value={signedFile}
                 onChange={(e) => setSignedFile(e.target.value.trim())}
@@ -808,32 +801,25 @@ function OperationForm({
               Đã xác minh danh tính khách
             </label>
             <p>
-              BE kiểm tra đã thanh toán đầy đủ, minh chứng, trả kho, giữ chỗ và
-              hạn. Không hoàn tất thay khi một gate chưa đủ.
-            </p>
+              {copy("BE kiểm tra đã thanh toán đầy đủ, minh chứng, trả kho, giữ chỗ và hạn. Không hoàn tất thay khi một gate chưa đủ.")}</p>
           </>
         )}
         {action === "deposit" && (
           <p>
-            API simulated-payment của BE chỉ xử lý cọc theo điều khoản đã chấp
-            nhận, không cho nhập số tiền/kết quả tùy ý. Hãy xem kết quả sự kiện;
-            gửi thành công không đồng nghĩa thanh toán thành công.
-          </p>
+            {copy("API simulated-payment của BE chỉ xử lý cọc theo điều khoản đã chấp nhận, không cho nhập số tiền/kết quả tùy ý. Hãy xem kết quả sự kiện; gửi thành công không đồng nghĩa thanh toán thành công.")}</p>
         )}
       </fieldset>
       {decisionMissing.length > 0 && (
         <p role="status" className="text-amber-700">
           Chưa kết nối:{" "}
-          {decisionMissing.map((ref) => sourceLabels[ref] || ref).join("; ")}
+          {decisionMissing.map((ref) => copy(sourceLabels[ref] || (manager ? 'Thông tin bổ sung' : ref))).join(copy("; "))}
         </p>
       )}
       {validation && <p role="alert">{validation}</p>}
-      {command.error ? <p role="alert">{rentalError(command.error)}</p> : null}
+      {command.error ? <p role="alert">{errorText(command.error, rentalError)}</p> : null}
       {command.uncertain && (
         <p role="alert">
-          Kết quả chưa xác định. Giữ nguyên nội dung, thử lại cùng key; không
-          đổi yêu cầu hoặc đóng/tải lại.
-        </p>
+          {copy("Kết quả chưa xác định. Giữ nguyên nội dung, thử lại cùng key; không đổi yêu cầu hoặc đóng/tải lại.")}</p>
       )}
       <div className="flex gap-2">
         <Button
@@ -849,7 +835,7 @@ function OperationForm({
                   : build()
               setValidation(undefined)
             } catch (e) {
-              setValidation(rentalError(e))
+              setValidation(errorText(e, rentalError))
               return
             }
             pendingPayload.current = payload

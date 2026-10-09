@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import type { RentalApiRole } from "../../types/rentalApi"
@@ -18,6 +19,8 @@ export default function RenewalDetail({
   role: RentalApiRole
   onAction: (action: RenewalApiAction) => void
 }) {
+  const { manager, copy, explain } = useManagerPresentation()
+
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
   const actions: {
@@ -44,8 +47,8 @@ export default function RenewalDetail({
         {r.customer.fullName} · {r.facility.name} · {r.storageUnit.code}
       </p>
       <p>
-        Trạng thái: {renewalLabels[r.status] || r.status} · Review:{" "}
-        {r.reviewState}
+        Trạng thái: {copy(renewalLabels[r.status] || r.status)}
+        {!manager && <> · Review: {r.reviewState}</>}
       </p>
       <p>
         Ngày kết thúc cũ: {rentalDate(r.oldEndDate)} · Ngày kết thúc đề nghị:{" "}
@@ -53,8 +56,8 @@ export default function RenewalDetail({
       </p>
       <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>
       <p>
-        Thời điểm gửi: {rentalDate(r.createdAt)} · Phiên bản:{" "}
-        {r.version ?? unknown}
+        Thời điểm gửi: {rentalDate(r.createdAt)}
+        {!manager && <> · Phiên bản: {r.version ?? unknown}</>}
       </p>
       <p>
         Người duyệt: {r.reviewerId || "Chưa duyệt"} · Thời điểm duyệt:{" "}
@@ -63,15 +66,15 @@ export default function RenewalDetail({
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason}</p>}
       <p>
-        Nguồn kiểm tra tài chính: {r.financialCheck.completeness} ·{" "}
+        {manager ? 'Kiểm tra thanh toán: ' : 'Nguồn kiểm tra tài chính: '}{copy(r.financialCheck.completeness)} ·{" "}
         {rentalDate(r.financialCheck.checkedAt)}
       </p>
       <p>
-        Khoản nghĩa vụ đang chặn:{" "}
+        {manager ? 'Khoản thanh toán cần xử lý: ' : 'Khoản nghĩa vụ đang chặn: '}{" "}
         {r.financialCheck.blockingObligationRefs?.join(", ") ||
           (r.financialCheck.blockingObligationRefs === null
             ? unknown
-            : "Không có khoản chặn theo kiểm tra của BE")}
+            : copy("Không có khoản chặn theo kiểm tra của BE"))}
       </p>
       <p>
         Khiếu nại chưa giải quyết:{" "}
@@ -86,7 +89,7 @@ export default function RenewalDetail({
       )}
       {terms ? (
         <section className="rounded border border-stone-200 p-3 space-y-2">
-          <h4 className="font-semibold">Điều khoản đã được Customer chấp nhận</h4>
+          <h4 className="font-semibold">{copy("Điều khoản đã được Customer chấp nhận")}</h4>
           <p>Gói: {terms.pricingPackageCode} · {terms.rentalMonths} tháng</p>
           <p>Kỳ gia hạn: {rentalDate(terms.extensionStartDate)} → {rentalDate(terms.newEndDate)}</p>
           <dl className="grid gap-2 sm:grid-cols-2">
@@ -97,27 +100,23 @@ export default function RenewalDetail({
             <div><dt>Cọc gia hạn</dt><dd>{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
             <div><dt>Tiền thuê còn lại</dt><dd>{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
           </dl>
-          <p className="text-sm text-stone-500 break-all">Policy áp dụng: {terms.renewalPolicyRef} · phiên bản {terms.renewalPolicyVersion}. Gói: {terms.packagePolicyRef} · phiên bản {terms.packagePolicyVersion}.</p>
-          <p className="text-sm text-stone-500">Giá theo điều khoản đã lưu; không phải xác nhận đã thanh toán.</p>
+          {!manager && <p className="text-sm text-stone-500 break-all">Policy áp dụng: {terms.renewalPolicyRef} · phiên bản {terms.renewalPolicyVersion}. Gói: {terms.packagePolicyRef} · phiên bản {terms.packagePolicyVersion}.</p>}
+          <p className="text-sm text-stone-500">{copy("Giá theo điều khoản đã lưu; không phải xác nhận đã thanh toán.")}</p>
         </section>
       ) : (
-        <p className="text-sm text-stone-500">Chưa có snapshot điều khoản đã chấp nhận; không tính lại giá/cọc từ catalog hiện tại.</p>
+        <p className="text-sm text-stone-500">{copy("Chưa có snapshot điều khoản đã chấp nhận; không tính lại giá/cọc từ catalog hiện tại.")}</p>
       )}
       {r.status === "approved" && (
         <p className="rounded bg-amber-50 p-3">
-          Đã duyệt; chờ bước thanh toán và hoàn tất D3. Duyệt không tự thay đổi
-          ngày kết thúc hồ sơ thuê. Xem tiến độ ký/thanh toán D3 ở bên dưới;
-          các thao tác chỉ khả dụng khi BE đã kết nối đủ nguồn dùng chung.
-        </p>
+          {copy("Đã duyệt; chờ bước thanh toán và hoàn tất D3. Duyệt không tự thay đổi ngày kết thúc hồ sơ thuê. Xem tiến độ ký/thanh toán D3 ở bên dưới; các thao tác chỉ khả dụng khi BE đã kết nối đủ nguồn dùng chung.")}</p>
       )}
       {r.version === null && (
         <p className="text-amber-700">
-          Hồ sơ cũ thiếu workflow/version xác thực; không thể thao tác.
-        </p>
+          {copy("Hồ sơ cũ thiếu workflow/version xác thực; không thể thao tác.")}</p>
       )}
       {r.disabledReasons.map((reason, i) => (
         <p key={i} className="text-amber-700">
-          {reason}
+          {explain(reason)}
         </p>
       ))}
       <div className="flex flex-wrap gap-2">

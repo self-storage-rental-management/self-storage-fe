@@ -69,6 +69,13 @@ export function hasRenewalAction(
     !record.allowedActions.includes(action)
   )
     return false
+  // An advertised action cannot turn missing/contradictory financial data into approval.
+  if (action === "APPROVE" && (
+    record.status !== "pending" || record.reviewState !== "READY" || !record.acceptedTerms ||
+    record.financialCheck.completeness !== "COMPLETE" || !record.financialCheck.checkedAt ||
+    record.financialCheck.hasUnresolvedDispute !== false ||
+    record.financialCheck.blockingObligationRefs?.length !== 0
+  )) return false
   if (role === "manager")
     return (
       actor.roles.includes("MANAGER") &&

@@ -94,7 +94,8 @@ describe("Rental/Renewal business presentation", () => {
     ).toContain("disabled")
   })
   it("Manager action needs server action + real version + MANAGE + permission", () => {
-    const ready = { ...renewal, allowedActions: ["APPROVE" as const] }
+    const ready = { ...renewal, acceptedTerms: quote, allowedActions: ["APPROVE" as const],
+      financialCheck: { completeness: "COMPLETE", checkedAt: "2026-10-06T00:00:00Z", blockingObligationRefs: [], hasUnresolvedDispute: false } }
     expect(hasRenewalAction(ready, "APPROVE", manager, "manager")).toBe(true)
     expect(
       hasRenewalAction(
@@ -108,7 +109,7 @@ describe("Rental/Renewal business presentation", () => {
       hasRenewalAction(
         ready,
         "APPROVE",
-        { ...manager, permissions: ["view_rentals"] },
+        { ...manager, permissions: ["rentals:read"] },
         "manager",
       ),
     ).toBe(false)
@@ -121,6 +122,17 @@ describe("Rental/Renewal business presentation", () => {
       ),
     ).toBe(false)
     expect(hasRenewalAction(renewal, "APPROVE", manager, "manager")).toBe(false)
+  })
+  it("does not approve from UNKNOWN money, missing accepted terms, debt or a dispute even if an action is advertised", () => {
+    const ready = { ...renewal, acceptedTerms: quote, allowedActions: ["APPROVE" as const],
+      financialCheck: { completeness: "COMPLETE", checkedAt: "2026-10-06T00:00:00Z", blockingObligationRefs: [] as string[], hasUnresolvedDispute: false } }
+    for (const record of [
+      { ...ready, financialCheck: renewal.financialCheck },
+      { ...ready, acceptedTerms: null },
+      { ...ready, financialCheck: { ...ready.financialCheck, blockingObligationRefs: ["real-obligation"] } },
+      { ...ready, financialCheck: { ...ready.financialCheck, hasUnresolvedDispute: true } },
+      { ...ready, reviewState: "UNKNOWN" as const },
+    ]) expect(hasRenewalAction(record, "APPROVE", manager, "manager")).toBe(false)
   })
   it("Customer action is owned by UUID, never by display name", () => {
     const customer = { ...manager, id: "c1", roles: ["CUSTOMER" as const] }

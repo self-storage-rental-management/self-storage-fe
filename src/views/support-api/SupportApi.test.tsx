@@ -77,7 +77,7 @@ describe("D5 role and lifecycle boundaries", () => {
     },
   )
   it("Staff must receive real manage_support permission from BE", () => {
-    const actor = { ...supportActor("staff"), permissions: ["view_support"] }
+    const actor = { ...supportActor("staff"), permissions: ["support:read"] }
     expect(canReadSupport(actor, "staff")).toBe(false)
     expect(supportActions(actor, "staff", supportActive)).toEqual([])
   })
@@ -211,9 +211,10 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
     expect(html).not.toContain("Nhận xử lý")
   })
   it("shows a Staff permission gate without impersonation or demo fallback", () => {
-    session.actor = { ...supportActor("staff"), permissions: ["view_support"] }
+    session.actor = { ...supportActor("staff"), permissions: ["support:read"] }
     const html = renderToStaticMarkup(<SupportApiWorkspace role="staff" />)
-    expect(html).toContain("manage_support hiện phải được owner cấp trên BE")
+    expect(html).toContain("support:update hiện phải được owner cấp trên BE")
+    expect(html).not.toContain("manage_support")
     expect(html).toContain("Không lấy yêu cầu demo để thay thế dữ liệu API")
     expect(html).not.toContain("Tạo yêu cầu</button>")
   })
