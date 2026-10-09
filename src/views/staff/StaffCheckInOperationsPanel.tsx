@@ -31,6 +31,7 @@ import {
 import {
   formatStaffDateTime,
   staffCheckInStatusLabel,
+  staffErrorMessage,
   staffStorageUnitStatusLabel,
 } from "./staffPresentation"
 
@@ -202,9 +203,7 @@ export default function StaffCheckInOperationsPanel({
       .catch((reason) => {
         if (active)
           setError(
-            reason instanceof Error
-              ? reason.message
-              : "Không thể tải danh sách nhận kho.",
+            staffErrorMessage(reason, "Không thể tải danh sách nhận kho."),
           )
       })
 
@@ -243,7 +242,7 @@ export default function StaffCheckInOperationsPanel({
   const refresh = () => setRefreshKey((value) => value + 1)
 
   const fail = (reason: unknown, fallback: string) =>
-    setError(reason instanceof Error ? reason.message : fallback)
+    setError(staffErrorMessage(reason, fallback))
 
   const submitSchedule = async () => {
     if (!scheduleTarget || !scheduleAt || !contractVerified || !paymentVerified)

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Badge,
   Button,
@@ -16,6 +16,7 @@ import {
 import type { User } from "../../types"
 import type { TicketItem } from "../../data/demoDatabase"
 import StaffPagination, { paginateStaffItems } from "./StaffPagination"
+import { staffErrorMessage } from "./staffPresentation"
 
 interface Props {
   user: User
@@ -45,6 +46,19 @@ const formatTicketTime = (value: string) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN")
 }
+const ticketDateInput = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+const supportPriorityRank: Record<TicketItem["priority"], number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+}
 
 export default function StaffSupportPanel({
   user,
@@ -58,12 +72,25 @@ export default function StaffSupportPanel({
   const [nextStatus, setNextStatus] =
     useState<TicketItem["status"]>("in-progress")
   const [page, setPage] = useState(1)
-  const sortedTickets = [...tickets].sort(
-    (left, right) =>
-      new Date(right.updatedAt || right.created).getTime() -
-      new Date(left.updatedAt || left.created).getTime(),
-  )
+  const [dateFilter, setDateFilter] = useState("")
+  const [priorityFilter, setPriorityFilter] = useState("all")
+  const sortedTickets = tickets
+    .filter(
+      (ticket) =>
+        (!dateFilter ||
+          ticketDateInput(ticket.updatedAt || ticket.created) === dateFilter) &&
+        (priorityFilter === "all" || ticket.priority === priorityFilter),
+    )
+    .sort(
+      (left, right) =>
+        supportPriorityRank[left.priority] -
+          supportPriorityRank[right.priority] ||
+        new Date(right.updatedAt || right.created).getTime() -
+          new Date(left.updatedAt || left.created).getTime(),
+    )
   const pagination = paginateStaffItems(sortedTickets, page)
+
+  useEffect(() => setPage(1), [dateFilter, priorityFilter])
 
   const openTicket = (ticket: TicketItem) => {
     setSelected(ticket)
@@ -79,9 +106,7 @@ export default function StaffSupportPanel({
       setReply("")
       showToast("Đã gửi phản hồi và đồng bộ trạng thái với cổng khách hàng.")
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Không thể gửi phản hồi.",
-      )
+      showToast(staffErrorMessage(error, "Không thể gửi phản hồi."))
     }
   }
 
@@ -92,6 +117,27 @@ export default function StaffSupportPanel({
         subtitle="Nội dung khách hàng gửi và phản hồi của nhân viên được đồng bộ trực tiếp giữa hai cổng."
       />
       <Card>
+        <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-slate-700">
+            Ngày cập nhật
+            <input
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+              type="date"
+              value={dateFilter}
+              onChange={(event) => setDateFilter(event.target.value)}
+            />
+          </label>
+          <Select
+            label="Mức ưu tiên"
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value)}
+          >
+            <option value="all">Tất cả mức ưu tiên</option>
+            <option value="high">Khẩn cấp</option>
+            <option value="medium">Trung bình</option>
+            <option value="low">Thông thường</option>
+          </Select>
+        </div>
         <Table>
           <Thead>
             <tr>
@@ -149,14 +195,16 @@ export default function StaffSupportPanel({
             ))}
           </Tbody>
         </Table>
-        {!tickets.length && (
+        {!sortedTickets.length && (
           <div className="p-10 text-center text-sm text-stone-500">
-            Không có phiếu hỗ trợ tại cơ sở được phân quyền.
+            {tickets.length
+              ? "Không có phiếu hỗ trợ phù hợp bộ lọc."
+              : "Không có phiếu hỗ trợ tại cơ sở được phân quyền."}
           </div>
         )}
         <StaffPagination
           {...pagination}
-          total={tickets.length}
+          total={sortedTickets.length}
           onPageChange={setPage}
         />
       </Card>
