@@ -618,10 +618,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
           <div className="text-center max-w-3xl mx-auto mb-10">
             <span className="text-xs font-bold uppercase tracking-wider text-[#E89520]">ƯU ĐIỂM VƯỢT TRỘI</span>
             <h2 className="mt-1 text-2xl sm:text-3xl font-bold text-stone-900">
-              Tiêu Chuẩn Lưu Trữ Hiện Đại & An Ninh Tuyệt Đối
+              Tra Cứu Kho & Quản Lý Thuê Tập Trung
             </h2>
             <p className="mt-2 text-sm text-stone-600">
-              Thiết kế chuyên biệt cho thị trường Việt Nam, đáp ứng tiêu chuẩn khắt khe về an toàn phòng cháy, kiểm soát nhiệt ẩm và quyền riêng tư cá nhân.
+              Lựa chọn cơ sở phù hợp, theo dõi yêu cầu thuê và liên hệ đội ngũ hỗ trợ trên cùng một nền tảng.
             </p>
           </div>
 
@@ -632,7 +632,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
               <h3 className="text-base font-bold text-stone-900 mb-2">An Ninh Giám Sát 24/7</h3>
               <p className="text-xs text-stone-600 leading-relaxed">
-                Hệ thống camera AI bao quát toàn diện, kiểm soát ra vào bằng mã PIN cá nhân hoặc thẻ từ RFID, bảo vệ trực ban 24/7.
+                Kiểm tra thông tin an ninh và điều kiện ra vào của từng cơ sở trước khi đặt thuê.
               </p>
             </div>
 
@@ -642,7 +642,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
               <h3 className="text-base font-bold text-stone-900 mb-2">Kiểm Soát Vi Khí Hậu</h3>
               <p className="text-xs text-stone-600 leading-relaxed">
-                Không gian khô ráo, nhiệt độ và độ ẩm luôn được duy trì ổn định, ngăn ngừa nấm mốc, bảo vệ hàng hóa giá trị cao.
+                Kiểm tra điều kiện bảo quản tại cơ sở để lựa chọn kho phù hợp với hàng hóa.
               </p>
             </div>
 
@@ -652,7 +652,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
               <h3 className="text-base font-bold text-stone-900 mb-2">Đặt Chỗ & Thanh Toán Tự Động</h3>
               <p className="text-xs text-stone-600 leading-relaxed">
-                Xem phòng trống theo thời gian thực, đặt giữ chỗ trực tuyến, xuất hóa đơn VAT điện tử và thanh toán chuyển khoản linh hoạt.
+                Tra cứu tình trạng kho, gửi yêu cầu thuê và theo dõi các khoản thanh toán trong tài khoản.
               </p>
             </div>
 
@@ -857,7 +857,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div className="space-y-3">
               <BrandLogo light subtitle="Nền Tảng Quản Lý Kho Bãi" />
               <p className="text-xs text-stone-400 leading-relaxed">
-                Hệ thống tự lưu trữ thông minh chuẩn quốc tế. Cung cấp giải pháp lưu trữ an toàn, linh hoạt và công nghệ cao cho cá nhân và tổ chức.
+                Nền tảng tra cứu kho, quản lý yêu cầu thuê và hỗ trợ khách hàng cho cá nhân và tổ chức.
               </p>
               <div className="text-xs text-stone-400">
                 Gửi yêu cầu hỗ trợ từ tài khoản StorageHub của bạn.
@@ -888,10 +888,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">TIÊU CHUẨN AN TOÀN</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li className="flex items-center gap-1.5"><CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400" /> <span>PCCC tiêu chuẩn Bộ Công An</span></li>
-                <li className="flex items-center gap-1.5"><CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400" /> <span>Bảo hiểm rủi ro tài sản</span></li>
-                <li className="flex items-center gap-1.5"><CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400" /> <span>Hợp đồng điện tử xác thực</span></li>
-                <li className="flex items-center gap-1.5"><CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400" /> <span>Hóa đơn VAT điện tử minh bạch</span></li>
+                <li>Kiểm tra điều kiện lưu trữ tại cơ sở trước khi thuê.</li>
+                <li>Theo dõi hợp đồng và các khoản thanh toán trong tài khoản.</li>
               </ul>
             </div>
 
