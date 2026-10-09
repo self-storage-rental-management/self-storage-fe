@@ -124,6 +124,14 @@ export interface ReservationQuoteInput extends ReservationSelectionInput {
   pricingPackageCode: string
 }
 
+export interface ReservationRentalPackage {
+  code: string
+  name: string
+  rentalMonths: number
+  discountRate: number
+  policyVersion: string
+}
+
 export interface ReservationQuote {
   quoteId: string
   facilityId: string
@@ -371,6 +379,13 @@ export async function createReservationQuote(input: ReservationQuoteInput) {
     method: 'POST',
     body: JSON.stringify(input),
   })
+  return response.data
+}
+
+export async function listReservationRentalPackages(facilityId: string, startDate?: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationRentalPackage[]>>(
+    `/api/customer/reservations/rental-packages${query({ facilityId, startDate })}`,
+  )
   return response.data
 }
 
