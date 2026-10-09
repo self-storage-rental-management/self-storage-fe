@@ -27,10 +27,13 @@ import {
   supportEventLabels,
   supportModuleLabels,
   supportStatusLabels,
+  supportPriorityLabels,
+  supportLinkLabels,
+  supportReceiverLabels,
   supportTicketVisible,
 } from "./presentation"
 
-export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
+export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket: SupportTicket; role?: SupportRole }) {
   const { manager, copy, explain } = useManagerPresentation()
 
   return (
@@ -53,15 +56,15 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
       </p>
       <dl className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         {([
-          [copy("Customer"), t.customerId],
-          ["Cơ sở", t.facilityId ?? "Chưa có nguồn xác thực"],
-          [copy("Staff phụ trách"), t.assignedStaffId ?? "Chưa phân công"],
+          ...(role === "customer" ? [] : [["Mã khách hàng", t.customerId]]),
+          ["Cơ sở", t.facilityId ?? "Chưa có thông tin"],
+          ["Nhân viên phụ trách", role === "customer" ? (t.assignedStaffId ? "Đã phân công" : "Chưa phân công") : (t.assignedStaffId ?? "Chưa phân công")],
           [
             "Hồ sơ liên kết",
-            t.linkedId ? `${copy(t.linkedType || 'Hồ sơ')}: ${t.linkedId}` : "Không liên kết",
+            t.linkedId ? `${supportLinkLabels[t.linkedType || ""] || "Hồ sơ"}: ${t.linkedId}` : "Không liên kết",
           ],
           ["Yêu cầu gốc", t.parentTicketId ?? "Không có"],
-          ["Người xử lý xong", t.resolvedBy ?? "Chưa có bản ghi"],
+          ["Người xử lý xong", role === "customer" ? (t.resolvedBy ? "Đã ghi nhận" : "Chưa ghi nhận") : (t.resolvedBy ?? "Chưa ghi nhận")],
         ] as const).map(([label, value]) => (
           <div key={label} className="min-w-0">
             <dt className="text-stone-500">{label}</dt>
@@ -71,7 +74,7 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
         {([
           ["Tạo lúc", t.createdAt],
           ["Phân công lúc", t.assignedAt],
-          [copy("Staff nhận lúc"), t.acceptedAt],
+          ["Nhân viên nhận lúc", t.acceptedAt],
           ["Xử lý xong lúc", t.resolvedAt],
           ["Đóng lúc", t.closedAt],
         ] as const).map(([label, date]) => (
@@ -83,11 +86,11 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
       </dl>
       {!t.workflowReady && (
         <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
-          {copy("Hồ sơ cũ chưa có workflow metadata được xác thực. Chỉ đọc; không tự backfill hoặc gán version 0.")}</p>
+          Hồ sơ chưa đủ thông tin để tiếp tục xử lý, hiện chỉ có thể xem.</p>
       )}
       {t.status === "resolved" && (
         <p role="status" className="rounded bg-blue-50 p-3 text-blue-900">
-          {copy("Đã xử lý xong, chưa đóng. Customer có thể xác nhận kết quả hoặc yêu cầu mở lại; backend vẫn kiểm tra policy và quyền. Không mặc định ticket sẽ tự đóng: tự đóng còn cần policy chung và bằng chứng notification đúng lần xử lý này.")}</p>
+          Đã xử lý xong, chờ khách hàng xác nhận. Nếu chưa hài lòng, khách hàng có thể yêu cầu mở lại.</p>
       )}
       <div
         role="status"
@@ -95,23 +98,18 @@ export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
       >
         {t.slaCompleteness === "UNKNOWN" || !t.sla ? (
           <>
-            <p>{copy("SLA / mức ưu tiên: Chưa có nguồn policy/lịch làm việc chung.")}</p>
-            <p>Không kết luận yêu cầu đang đúng hạn hoặc quá hạn.</p>
-            {t.missingSourceReason && (
-              <p className="break-words text-xs">{explain(t.missingSourceReason)}</p>
-            )}
+            <p>Chưa đủ thông tin để xác định hạn xử lý và mức ưu tiên.</p>
           </>
         ) : (
           <>
             <p>
-              {!manager && <>Policy: {t.sla.policyRef} · {t.sla.policyVersion} · </>}Ưu tiên{" "}
-              {copy(t.sla.priority)}
+              Mức ưu tiên: {supportPriorityLabels[t.sla.priority] ?? "Chưa xác định"}
             </p>
             <p>Hạn phản hồi đầu: {rentalDate(t.sla.firstReplyDueAt)}</p>
             <p>Hạn cập nhật tiếp: {rentalDate(t.sla.nextUpdateDueAt)}</p>
             <p>
               {t.sla.activeWorkPaused
-                ? copy("Tạm dừng thời gian xử lý do đang chờ Customer.")
+                ? "Tạm dừng thời gian xử lý do đang chờ khách hàng."
                 : "Không tạm dừng thời gian xử lý."}
             </p>
           </>
@@ -155,7 +153,7 @@ export default function SupportTicketDetail({
       <SupportReadState {...read} retry={read.refresh} />
       {t && (
         <>
-          <SupportTicketSummary ticket={t} />
+          <SupportTicketSummary ticket={t} role={role} />
           <SupportTimeline
             key={`${identity}:${t.version}`}
             role={role}
@@ -267,29 +265,20 @@ function MessageRow({ message: m }: { message: SupportMessage }) {
   return (
     <>
       <p>
-        {m.authorRole === "STAFF" ? copy("Staff") : copy("Customer")} ·{" "}
+        {m.authorRole === "STAFF" ? "Nhân viên" : "Khách hàng"} ·{" "}
         {rentalDate(m.sentAt)}{" "}
         <Badge variant={m.visibility === "INTERNAL" ? "warning" : "muted"}>
           {m.visibility === "INTERNAL" ? "Nội bộ" : "Công khai"}
         </Badge>
       </p>
-      <p className="break-all text-xs text-stone-500">
-        Người gửi: {m.authorId}
-      </p>
       <p className="whitespace-pre-wrap break-words">{m.body}</p>
       <p className="text-xs text-stone-500">
         {m.evidenceCompleteness === "UNKNOWN"
-          ? "Minh chứng: chưa có nguồn xác thực quyền đọc, không hiển thị mã file."
+          ? "Chưa thể xem tệp đính kèm."
           : m.evidenceFileIds?.length
-            ? copy("Mã minh chứng được BE cho phép đọc; tải file chờ tích hợp quyền chung.")
-            : "Không đính kèm file."}
+            ? "Có tệp đính kèm, hiện chưa thể tải xuống."
+            : "Không có tệp đính kèm."}
       </p>
-      {m.evidenceCompleteness === "COMPLETE" &&
-        m.evidenceFileIds?.map((id) => (
-          <p key={id} className="break-all text-xs">
-            {id}
-          </p>
-        ))}
     </>
   )
 }
@@ -299,13 +288,13 @@ function EventRow({ event: e }: { event: SupportEvent }) {
   return (
     <>
       <p className="font-semibold">
-        {copy(supportEventLabels[e.type] ?? e.type)} · Lần phân công{" "}
+        {copy(supportEventLabels[e.type] ?? "Hoạt động chưa có mô tả")} · Lần phân công{" "}
         {e.assignmentRevision}
       </p>
       <p>{rentalDate(e.recordedAt)}</p>
       <p className="whitespace-pre-wrap break-words">{e.reason}</p>
       <p className="break-all text-xs text-stone-500">
-        Người thao tác: {e.actorId ?? "Tác vụ hệ thống"} {copy("· Staff:")}{" "}
+        Mã người thực hiện: {e.actorId ?? "Tác vụ hệ thống"} · Nhân viên:{" "}
         {e.assignedStaffId ?? "Chưa phân công"}
       </p>
     </>
@@ -319,10 +308,10 @@ function EscalationRow({ escalation: e }: { escalation: SupportEscalation }) {
       <p className="font-semibold">
         {copy(supportModuleLabels[e.targetModule])} ·{" "}
         {e.status === "REQUESTED"
-          ? copy("Chờ Manager điều phối")
+          ? "Chờ quản lý chuyển bộ phận"
           : e.status === "ROUTED"
-            ? copy("Đã chuyển module — chưa đồng nghĩa hoàn thành")
-            : copy("Manager từ chối điều phối")}
+            ? "Đã chuyển xử lý - chưa hoàn tất"
+            : "Quản lý từ chối chuyển bộ phận"}
       </p>
       <p className="break-all text-xs text-stone-500">{e.id}</p>
       <p className="whitespace-pre-wrap break-words">{e.reason}</p>
@@ -332,9 +321,9 @@ function EscalationRow({ escalation: e }: { escalation: SupportEscalation }) {
         </p>
       )}
       <p>Gửi lúc: {rentalDate(e.requestedAt)}</p>
-      <p>{copy("Kết quả module nhận: ")}{copy(e.receiverStatus ?? "Chưa có nguồn xác thực")}</p>
+      <p>Kết quả bộ phận tiếp nhận: {supportReceiverLabels[e.receiverStatus ?? ""] ?? "Chưa có thông tin kết quả"}</p>
       {e.resultRef && (
-        <p className="break-all">Mã kết quả thật: {e.resultRef}</p>
+        <p className="break-all">Mã kết quả: {e.resultRef}</p>
       )}
     </>
   )

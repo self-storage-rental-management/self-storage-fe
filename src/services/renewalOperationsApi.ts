@@ -13,6 +13,7 @@ import type {
   RenewalOperationsRole,
   RenewalOperationState,
   RenewalPayableStatement,
+  RenewalExceptionProposal,
 } from "../types/renewalOperationsApi"
 
 export const isUuid = (v: unknown): v is string =>
@@ -26,6 +27,32 @@ export const isVersion = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0
 const nullable = (v: unknown, check: (v: unknown) => boolean) =>
   v === null || check(v)
+export function isExceptionProposal(value: unknown): value is RenewalExceptionProposal {
+  const p = value as RenewalExceptionProposal | null
+  if (!p || !isUuid(p.renewalId) || !nullable(p.expectedVersion, isVersion) ||
+    !nullable(p.decisionRef, isUuid) || !["NONE", "AVAILABLE", "UNAVAILABLE"].includes(p.status) ||
+    !isInstant(p.checkedAt) || typeof p.confirmationAllowed !== "boolean" ||
+    !Array.isArray(p.disabledReasons) || !p.disabledReasons.every(r => typeof r === "string" && !!r) ||
+    ![p.currentAppointmentStart, p.currentAppointmentEnd, p.currentSigningDeadline,
+      p.proposedAppointmentStart, p.proposedAppointmentEnd, p.proposedSigningDeadline,
+      p.validUntil].every(v => nullable(v, isInstant))) return false
+  if (p.status === "NONE") return p.decisionRef === null && !p.confirmationAllowed
+  if (!isUuid(p.decisionRef)) return false
+  if (p.status === "UNAVAILABLE") return !p.confirmationAllowed && p.disabledReasons.length > 0
+  return p.confirmationAllowed && p.disabledReasons.length === 0 && isVersion(p.expectedVersion) &&
+    isInstant(p.proposedAppointmentStart) && isInstant(p.proposedAppointmentEnd) &&
+    isInstant(p.proposedSigningDeadline) && isInstant(p.validUntil) &&
+    Date.parse(p.checkedAt) < Date.parse(p.validUntil) &&
+    Date.parse(p.validUntil) <= Date.parse(p.proposedAppointmentStart) &&
+    Date.parse(p.proposedAppointmentStart) < Date.parse(p.proposedAppointmentEnd) &&
+    Date.parse(p.proposedAppointmentEnd) <= Date.parse(p.proposedSigningDeadline)
+}
+export async function getRenewalExceptionProposal(id: string) {
+  return readRentalEnvelope<RenewalExceptionProposal>(
+    await apiRequest(`${path("customer", id)}/exception-proposal`),
+    v => isExceptionProposal(v) && v.renewalId === id,
+  )
+}
 export function isOperationState(
   value: unknown,
 ): value is RenewalOperationState {

@@ -9,8 +9,7 @@ import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
-import { rentalDate } from "../rental-api/presentation"
-import { staffErrorMessage } from "./staffPresentation"
+import { rentalDate, rentalError } from "../rental-api/presentation"
 
 export default function StaffRenewalOperationsApiPanel() {
   return <StaffRenewalWorkspace />
@@ -52,11 +51,7 @@ function StaffSession({ identity }: { identity: string }) {
   }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở (D3)</h1>
-      <p className="text-sm text-stone-500">
-        Chỉ hiển thị hồ sơ được phân công và thuộc cơ sở bạn được
-        phép vận hành.
-      </p>
+      <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
       <Card className="p-4 flex flex-wrap gap-3 items-end">
         <label>
           Cơ sở
@@ -134,7 +129,7 @@ function StaffSession({ identity }: { identity: string }) {
           role="alert"
           className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4"
         >
-          <p>{staffErrorMessage(read.error, "Không thể tải lịch gia hạn.")}</p>
+          <p>{rentalError(read.error)}</p>
           <Button variant="outline" onClick={read.refresh}>
             Tải lại
           </Button>

@@ -51,10 +51,6 @@ export default function RenewalDecisionModal({
         </p>
         <p>Ngày kết thúc đề nghị: {rentalDate(r.newEndDate)}</p>
         <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>
-        {action === "APPROVE" && (
-          <p>
-            {copy("Duyệt không tự gia hạn hồ sơ thuê. BE sẽ kiểm tra lại policy, nợ/khiếu nại, trả kho và giữ chỗ.")}</p>
-        )}
         <label className="block">
           Lý do {action !== "APPROVE" ? "(bắt buộc)" : "(nếu có)"}
           <textarea
@@ -70,7 +66,7 @@ export default function RenewalDecisionModal({
         ) : null}
         {command.uncertain && (
           <p>
-            {copy("Kết quả chưa xác định. Giữ nguyên nội dung và thử lại cùng key; không đóng hộp thoại hoặc gửi quyết định khác.")}</p>
+            Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại, không đóng hộp thoại hoặc gửi quyết định khác.</p>
         )}
         <Button
           disabled={

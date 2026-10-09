@@ -38,18 +38,9 @@ export default function SupportApiWorkspace({
   if (!canReadSupport(actor, role))
     return (
       <Card className={manager ? "space-y-2 p-5 text-sm leading-relaxed" : "space-y-2 p-5"}>
-        <h2 className={manager ? "text-lg font-bold text-stone-900" : "font-semibold"}>{copy("Hỗ trợ (D5 API)")}</h2>
+        <h2 className={manager ? "text-lg font-bold text-stone-900" : "font-semibold"}>Hỗ trợ khách hàng</h2>
         <p role="alert" className={manager ? "break-words text-sm text-stone-700" : undefined}>
-          {copy("Cần tài khoản API đang hoạt động, đúng role, quyền và phạm vi cơ sở.")}</p>
-        {role === "staff" && (
-          <p className="text-sm text-amber-800">
-            Staff cần support:read + support:update và OPERATE/MANAGE tại cơ sở.
-            Quyền support:update hiện phải được owner cấp trên BE; FE không tự
-            mở quyền.
-          </p>
-        )}
-        <p className="text-sm text-stone-500">
-          {copy("Không lấy yêu cầu demo để thay thế dữ liệu API.")}</p>
+          Bạn chưa có quyền truy cập hỗ trợ tại cơ sở này. Vui lòng đăng nhập đúng tài khoản hoặc liên hệ quản lý.</p>
       </Card>
     )
   const identity = `${actor!.id}:${role}:${JSON.stringify(actor!.facilityScopes)}:${JSON.stringify(actor!.permissions)}`
@@ -84,8 +75,7 @@ function SupportSession({
   const [search, setSearch] = useState(""),
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
-  const [revision, setRevision] = useState(0),
-    [notice, setNotice] = useState("")
+  const [revision, setRevision] = useState(0)
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
     () => listSupportTickets(role, query),
@@ -94,7 +84,6 @@ function SupportSession({
     read.refresh()
     setRevision((n) => n + 1)
     setCreation(undefined)
-    setNotice("BE đã ghi nhận thao tác. Đang tải lại dữ liệu thật.")
   })
   useEffect(() => {
     onLocked?.(command.locked)
@@ -104,18 +93,16 @@ function SupportSession({
     command.clearError()
     read.refresh()
     setRevision((n) => n + 1)
-    setNotice("")
   }
   const change = (patch: SupportQuery) => {
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
     setSelected(undefined)
-    setNotice("")
   }
   const commandNotice = (
     <>
       {command.busy && (
         <p role="status" className="text-sm">
-          {copy("Đang gửi yêu cầu tới BE…")}</p>
+          Đang gửi yêu cầu…</p>
       )}
       {command.error && (
         <div
@@ -136,7 +123,7 @@ function SupportSession({
           className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm"
         >
           <p>
-            {copy("Kết quả thao tác trước chưa xác định. Không gửi yêu cầu mới hoặc tải lại browser; thử lại đúng nội dung bằng cùng Idempotency-Key.")}</p>
+            Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại, không tải lại trang hoặc gửi yêu cầu mới.</p>
           <Button disabled={command.busy} onClick={command.retry}>
             Kiểm tra lại bằng yêu cầu cũ
           </Button>
@@ -148,14 +135,7 @@ function SupportSession({
     <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">{copy("Hỗ trợ vận hành (D5 API)")}</h1>
-          <p className="mt-1 text-sm text-stone-500">
-            {role === "manager"
-              ? copy("Điều phối đúng cơ sở; Staff xử lý, module sở hữu cung cấp kết quả thật.")
-              : role === "staff"
-                ? copy("Chỉ yêu cầu được giao cho bạn; nhận việc trước khi xử lý.")
-                : "Yêu cầu và trao đổi của tài khoản đang đăng nhập."}
-          </p>
+          <h1 className="text-2xl font-bold">Hỗ trợ khách hàng</h1>
         </div>
         {role === "customer" && (
           <Button
@@ -163,7 +143,6 @@ function SupportSession({
             onClick={() => {
               setSelected(undefined)
               setCreation({})
-              setNotice("")
             }}
           >
             Tạo yêu cầu
@@ -171,14 +150,6 @@ function SupportSession({
         )}
       </div>
       {!selected && !creation && commandNotice}
-      {notice && (
-        <p
-          role="status"
-          className="rounded bg-emerald-50 p-3 text-sm text-emerald-800"
-        >
-          {notice}
-        </p>
-      )}
       <Card className="space-y-3 p-4">
         <form
           className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4"
@@ -229,7 +200,7 @@ function SupportSession({
               <option value="createdAt,desc">Mới nhất</option>
               <option value="createdAt,asc">Cũ nhất</option>
               <option value="updatedAt,desc">Hồ sơ cập nhật gần nhất</option>
-              <option value="subject,asc">{copy("Tiêu đề A–Z")}</option>
+              <option value="subject,asc">Tiêu đề A-Z</option>
             </select>
           </label>
           <div className="flex flex-wrap gap-2">
@@ -309,8 +280,6 @@ function SupportSession({
               />
             </div>
           )}
-        <p className="text-xs text-stone-500">
-          {copy("Phân trang/lọc do BE thực hiện. Không tính priority hoặc kết luận quá hạn khi nguồn SLA chưa có.")}</p>
       </Card>
       <SupportReadState {...read} retry={read.refresh} />
       {read.data &&
@@ -319,7 +288,7 @@ function SupportSession({
             role="alert"
             className="rounded border border-red-200 bg-red-50 p-4"
           >
-            {copy("API trả về hồ sơ ngoài phạm vi tài khoản hiện tại. Không hiển thị dữ liệu; cần kiểm tra lại nguồn BE.")}</p>
+            Không thể hiển thị hồ sơ ngoài phạm vi truy cập của bạn.</p>
         )}
       {read.data &&
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
@@ -340,20 +309,20 @@ function SupportSession({
                     >
                       {t.status === "open"
                         ? t.assignedStaffId
-                          ? copy("Chờ Staff nhận")
-                          : copy("Chờ Manager phân công")
+                          ? "Chờ nhân viên nhận"
+                          : "Chờ quản lý phân công"
                         : supportStatusLabels[t.status]}
                     </Badge>
                   </div>
-                  <p className="break-all text-xs text-stone-500">{t.id}</p>
+                  <p className="break-all text-xs text-stone-500">Mã yêu cầu: {t.id}</p>
                   <p className="break-all text-sm">
                     Cơ sở:{" "}
                     {actor.facilityNames?.[t.facilityId ?? ""] ??
                       t.facilityId ??
-                      "Chưa có nguồn xác thực"}
+                      "Chưa có thông tin"}
                   </p>
                   <p className="break-all text-sm">
-                    {copy("Staff: ")}{t.assignedStaffId ?? "Chưa phân công"}
+                    Nhân viên phụ trách: {role === "customer" ? (t.assignedStaffId ? "Đã phân công" : "Chưa phân công") : (t.assignedStaffId ?? "Chưa phân công")}
                   </p>
                   <p className="text-sm">Tạo lúc: {rentalDate(t.createdAt)}</p>
                   <Button
@@ -362,7 +331,6 @@ function SupportSession({
                     onClick={() => {
                       setSelected(t.id)
                       command.clearError()
-                      setNotice("")
                     }}
                   >
                     Chi tiết
@@ -372,7 +340,7 @@ function SupportSession({
             </div>
             {read.data.data.length === 0 && (
               <Card className="p-5 text-sm text-stone-500">
-                {copy("Không có yêu cầu phù hợp theo bộ lọc và phạm vi truy cập. Đây không phải kết luận SLA đang ổn định.")}</Card>
+                Không có yêu cầu hỗ trợ phù hợp với bộ lọc.</Card>
             )}
             <ApiPager
               pagination={read.data.pagination}

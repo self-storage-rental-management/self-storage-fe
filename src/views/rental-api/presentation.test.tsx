@@ -14,6 +14,13 @@ import { ApiClientError } from "../../services/apiClient"
 import { manager, rental, renewal, quote } from "../../../tests/rentalApiFixtures"
 
 describe("Rental/Renewal business presentation", () => {
+  it.each(["active", "ACTIVE"])("translates access status %s without changing its value or exposing credentials", status => {
+    const detail = { ...rental, access: { completeness: "COMPLETE", status, reason: "PRIVATE_SOURCE_REASON" } }
+    const html = renderToStaticMarkup(<RentalDetail rental={detail} />)
+    expect(html).toContain("Đang hoạt động")
+    expect(html).not.toContain("PRIVATE_SOURCE_REASON")
+    expect(detail.access.status).toBe(status)
+  })
   it("labels PARTIAL finance and preserves known balances while deposit remains unknown", () => {
     const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, financialSummary: {
       ...rental.financialSummary, completeness: "PARTIAL", outstandingAmount: 1234,
@@ -23,13 +30,14 @@ describe("Rental/Renewal business presentation", () => {
     expect(html).toContain("Đã xác minh một phần")
     expect(html).toContain("1.234 đ")
     expect(html).toContain("234 đ")
-    expect(html).toContain("Chưa xác minh cọc bảo đảm")
+    expect(html).not.toContain("Chưa xác minh cọc bảo đảm")
+    expect(html).toMatch(/Cọc hồ sơ thuê<\/dt><dd>Chưa có dữ liệu xác thực/)
     expect(html).toContain(unknown)
   })
   it("renders authoritative prepaid financial details without inventing a recurring due date", () => {
     const html=renderToStaticMarkup(<RentalDetail rental={{...rental, financialSummary:{...rental.financialSummary, completeness:"COMPLETE", outstandingAmount:0, overdueAmount:0, securityDepositAmount:1234567, billingMode:"PREPAID_FULL_PERIOD"}}} />)
     expect(html).toContain("1.234.567 đ")
-    expect(html).toContain("Trả trước toàn kỳ; không có kỳ thu tiền định kỳ")
+    expect(html).toContain("Trả trước toàn kỳ, không có kỳ thu tiền định kỳ")
     expect(html).not.toContain("API D1 chưa cung cấp")
   })
   it("UNKNOWN financial source does not expose an unverified deposit value", () => {
@@ -41,12 +49,14 @@ describe("Rental/Renewal business presentation", () => {
     expect(html).toContain("3.201.000 đ")
     expect(html).toContain("12.804.000 đ")
     expect(html).toContain("Khách đổi kế hoạch")
-    expect(html).toContain("không phải xác nhận đã thanh toán")
-    expect(html).toContain("policy1")
+    expect(html).not.toContain("không phải xác nhận đã thanh toán")
+    expect(html).not.toContain("policy1")
+    expect(html).toContain("Điều khoản khách hàng đã chấp nhận")
   })
   it("legacy renewal has honest missing snapshot state", () => {
     const html=renderToStaticMarkup(<RenewalDetail role="customer" renewal={renewal} onAction={()=>{}} />)
-    expect(html).toContain("không tính lại giá/cọc từ catalog hiện tại")
+    expect(html).toContain("chưa thể xác định giá và tiền cọc")
+    expect(html).not.toContain("catalog")
     expect(html).not.toContain("3.201.000 đ")
   })
   it("generates secure retry keys on LAN HTTP without randomUUID", () => {
@@ -157,9 +167,9 @@ describe("Rental/Renewal business presentation", () => {
         onAction={() => {}}
       />,
     )
-    expect(html).toContain("không tự thay đổi")
-    expect(html).toContain("Xem tiến độ ký/thanh toán D3")
-    expect(html).toContain("chỉ khả dụng khi BE đã kết nối đủ nguồn dùng chung")
+    expect(html).toContain("Ngày kết thúc thuê chưa thay đổi")
+    expect(html).toContain("chờ thanh toán và hoàn tất ký gia hạn")
+    expect(html).not.toContain("D3")
     expect(html).not.toContain("Thanh toán ngay")
   })
   it("source missing error is distinct from empty authorized result", () => {
@@ -167,7 +177,7 @@ describe("Rental/Renewal business presentation", () => {
       rentalError(
         new ApiClientError("DEFERRED_SOURCE: policy", { status: 409 }),
       ),
-    ).toContain("Chưa có nguồn dữ liệu")
+    ).toContain("Chưa đủ dữ liệu hoặc chính sách")
   })
   it("retry uses same key, refuses changed payload until outcome is resolved", () => {
     const attempt = new RenewalAttempt()
