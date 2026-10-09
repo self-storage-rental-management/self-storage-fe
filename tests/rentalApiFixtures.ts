@@ -112,5 +112,5 @@ export const manager: ApiActor = {
   roles: ["MANAGER"],
   facilityScopes: { f1: "MANAGE" },
   mustChangePassword: false,
-  permissions: ["view_rentals", "manage_rentals"],
+  permissions: ["rentals:read", "rentals:update"],
 }

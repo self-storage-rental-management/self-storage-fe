@@ -124,6 +124,14 @@ export interface ReservationQuoteInput extends ReservationSelectionInput {
   pricingPackageCode: string
 }
 
+export interface ReservationRentalPackage {
+  code: string
+  name: string
+  rentalMonths: number
+  discountRate: number
+  policyVersion: string
+}
+
 export interface ReservationQuote {
   quoteId: string
   facilityId: string
@@ -374,6 +382,13 @@ export async function createReservationQuote(input: ReservationQuoteInput) {
   return response.data
 }
 
+export async function listReservationRentalPackages(facilityId: string, startDate?: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationRentalPackage[]>>(
+    `/api/customer/reservations/rental-packages${query({ facilityId, startDate })}`,
+  )
+  return response.data
+}
+
 export async function createCustomerReservation(input: CreateReservationInput, idempotencyKey: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservation>>('/api/customer/reservations', {
     method: 'POST',
@@ -392,6 +407,14 @@ export async function listCustomerReservations(status?: ReservationStatus, page 
 export async function getCustomerReservation(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${reservationId}`,
+  )
+  return response.data
+}
+
+export async function confirmCustomerReceipt(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${reservationId}/receipt-confirmation`,
+    { method: 'POST' },
   )
   return response.data
 }

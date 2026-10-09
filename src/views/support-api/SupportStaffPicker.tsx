@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { listSupportStaff } from "../../services/supportApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -17,6 +18,8 @@ export default function SupportStaffPicker({
   onChange: (value: string) => void
   disabled?: boolean
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   const [page, setPage] = useState(0)
   const actor = getAuthenticatedActor()
   const read = useRentalApiResource(
@@ -34,7 +37,7 @@ export default function SupportStaffPicker({
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="">Chọn Staff theo mã</option>
+          <option value="">Chọn nhân viên</option>
           {value && !read.data?.data.some((s) => s.id === value) && (
             <option value={value}>{value}</option>
           )}
@@ -55,8 +58,7 @@ export default function SupportStaffPicker({
           />
           {read.data.data.length === 0 && (
             <p className="text-sm text-amber-800">
-              Chưa có Staff đủ điều kiện. BE yêu cầu ACTIVE, đúng cơ sở,
-              support:read và support:update; không tự cấp quyền hoặc so tên.
+              Chưa có nhân viên đủ điều kiện xử lý yêu cầu tại cơ sở này.
             </p>
           )}
         </>

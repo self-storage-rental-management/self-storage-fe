@@ -159,6 +159,6 @@ export function operationsActor(
       [ids.facility]: role === "manager" ? "MANAGE" : "OPERATE",
     },
     mustChangePassword: false,
-    permissions: ["view_rentals", "manage_rentals"],
+    permissions: ["rentals:read", "rentals:update"],
   }
 }

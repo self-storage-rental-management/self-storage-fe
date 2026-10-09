@@ -101,10 +101,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   }
 
   const getReturnActionReason = (returnCase: ReturnCase) => {
-    if (returnCase.status === 'requested' || returnCase.status === 'scheduled' || returnCase.status === 'inspected') return 'Chờ Staff hoàn tất nghiệm thu và lập quyết toán.'
-    if (returnCase.status === 'awaiting_customer_confirmation') return 'Chờ Customer xác nhận kết quả quyết toán.'
-    if (returnCase.status === 'payment_due') return 'Chờ Customer thanh toán phần còn thiếu trước khi đóng hồ sơ.'
-    if (returnCase.status === 'completed') return 'Hồ sơ đã hoàn tất, không còn thao tác Manager.'
+    if (returnCase.status === 'requested' || returnCase.status === 'scheduled' || returnCase.status === 'inspected') return "Chờ nhân viên hoàn tất nghiệm thu và lập quyết toán."
+    if (returnCase.status === 'awaiting_customer_confirmation') return "Chờ khách hàng xác nhận kết quả quyết toán."
+    if (returnCase.status === 'payment_due') return "Chờ khách hàng thanh toán phần còn thiếu trước khi đóng hồ sơ."
+    if (returnCase.status === 'completed') return "Hồ sơ đã hoàn tất, không còn thao tác quản lý cơ sở."
     return null
   }
 
@@ -230,9 +230,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     <div className="fade-in space-y-6">
       <SectionHeader
         title={'Quyết Toán Trả Kho & Xử Lý Khiếu Nại'}
-        subtitle={
-          'Theo dõi biên bản nghiệm thu, phê duyệt quyết toán hoàn cọc và phân xử khiếu nại từ khách hàng'
-        }
       />
 
       {/* Bento Grid Stats */}
@@ -246,7 +243,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
         <StatCard
           title={'Khiếu nại chờ xử lý'}
           value={disputedCount}
-          delta={disputedCount > 0 ? ('Cần Manager giải quyết') : undefined}
+          delta={disputedCount > 0 ? ("Cần quản lý cơ sở giải quyết") : undefined}
           deltaPositive={disputedCount === 0}
           icon={Icon.alert}
           iconBg={disputedCount > 0 ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-200' : 'bg-stone-50 text-stone-600'}
@@ -268,7 +265,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       </div>
 
       <ManagerActionNotice tone={disputedCount || refundPendingCount ? 'warning' : 'info'}>
-        Manager trực tiếp xử lý hồ sơ bị khiếu nại và hồ sơ đã đủ điều kiện hoàn cọc. Các trạng thái còn lại đang chờ Staff nghiệm thu, Customer xác nhận hoặc Customer thanh toán.
+        quản lý cơ sở trực tiếp xử lý hồ sơ bị khiếu nại và hồ sơ đã đủ điều kiện hoàn cọc. Các trạng thái còn lại đang chờ nhân viên nghiệm thu, khách hàng xác nhận hoặc khách hàng thanh toán.
       </ManagerActionNotice>
 
       {/* Filter Tabs & Search Bar */}
@@ -318,7 +315,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
       {hiddenFacilityCount > 0 && (
         <ManagerActionNotice tone="info">
           <div className="flex items-center justify-between gap-3">
-            <span>{hiddenFacilityCount} hồ sơ trả kho đã được soft-delete khỏi danh sách Manager. Dữ liệu nguồn và báo cáo vẫn được giữ nguyên.</span>
+            <span>{hiddenFacilityCount} hồ sơ trả kho đã được ẩn khỏi danh sách quản lý cơ sở. Dữ liệu nguồn và báo cáo vẫn được giữ nguyên.</span>
             <Button size="sm" variant="outline" onClick={() => returnHistory.restoreAll()}>Khôi phục tất cả</Button>
           </div>
         </ManagerActionNotice>
@@ -846,7 +843,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                 value={disputeResolutionNote}
                 onChange={e => setDisputeResolutionNote(e.target.value)}
                 placeholder={
-                  'Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh hiện trạng camera ngày vào và ra; chấp thuận giảm 50% phí vệ sinh...)'
+                  "Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh hiện trạng camera ngày vào và ra, chấp thuận giảm 50% phí vệ sinh...)"
                 }
                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
@@ -914,8 +911,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
         )}
       </Modal>
 
-      <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title="Soft-delete hồ sơ trả kho">
-        {deleteTarget && <div className="space-y-4"><ManagerActionNotice tone="warning">Hồ sơ {deleteTarget.id} chỉ bị ẩn khỏi lịch sử của Manager. Dữ liệu dùng chung, quyết toán và báo cáo không bị xóa.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Hủy</Button><Button variant="danger" onClick={() => { returnHistory.hide(deleteTarget.id); setDeleteTarget(null); showToast(`Đã ẩn hồ sơ ${deleteTarget.id} khỏi lịch sử Manager.`) }}>Xóa khỏi lịch sử</Button></div></div>}
+      <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title="Ẩn khỏi danh sách hồ sơ trả kho">
+        {deleteTarget && <div className="space-y-4"><ManagerActionNotice tone="warning">Hồ sơ {deleteTarget.id} chỉ bị ẩn khỏi lịch sử của quản lý cơ sở. Dữ liệu dùng chung, quyết toán và báo cáo không bị xóa.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Hủy</Button><Button variant="danger" onClick={() => { returnHistory.hide(deleteTarget.id); setDeleteTarget(null); showToast(`Đã ẩn hồ sơ ${deleteTarget.id} khỏi lịch sử quản lý cơ sở.`) }}>Xóa khỏi lịch sử</Button></div></div>}
       </Modal>
     </div>
   )

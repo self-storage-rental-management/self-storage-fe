@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { clearAuthTokens, setAccessToken } from "./apiClient"
+import { listCustomerSupportTickets } from "./customerSupportApi"
 import {
   createSupportTicket,
   getSupportTicket,
@@ -42,6 +43,13 @@ afterEach(() => {
   clearAuthTokens()
 })
 describe("D5 transport and response boundaries", () => {
+  it("keeps the shared Customer ticket client on its original endpoint", async () => {
+    const fetch = respond(supportPage([]))
+    await listCustomerSupportTickets("open", 0, 20)
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(
+      "/api/customer/support-tickets",
+    )
+  })
   it.each(["customer", "manager", "staff"] as const)(
     "uses real %s endpoint and existing Bearer transport",
     async (role) => {
@@ -55,7 +63,11 @@ describe("D5 transport and response boundaries", () => {
       expect(result.data[0].sla).toBeNull()
       expect(result.data[0].slaCompleteness).toBe("UNKNOWN")
       const [url, init] = fetch.mock.calls[0]
-      expect(url).toContain(`/api/${role}/support-tickets`)
+      expect(new URL(url).pathname).toBe(
+        role === "manager"
+          ? "/api/manager/support-tickets"
+          : `/api/${role}/support-workflows`,
+      )
       expect(new URL(url).searchParams.get("search")).toBe("literal %")
       expect(new Headers(init.headers).get("Authorization")).toBe(
         "Bearer test-token",
@@ -343,7 +355,7 @@ describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
       await sendSupportCommand(role, ids.ticket, command, "stable-test-key")
       const [url, init] = fetch.mock.calls[0]
       expect(new URL(url).pathname).toBe(
-        `/api/${role}/support-tickets/${ids.ticket}/${route}`,
+        `/api/${role}/${role === "manager" ? "support-tickets" : "support-workflows"}/${ids.ticket}/${route}`,
       )
       expect(new Headers(init.headers).get("Idempotency-Key")).toBe(
         "stable-test-key",
@@ -436,6 +448,9 @@ describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
       "create-key",
     )
     const body = JSON.parse(fetch.mock.calls[0][1].body)
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(
+      "/api/customer/support-workflows",
+    )
     expect(body.linkedRecord.id).toBe(ids.foreign)
     expect(body).not.toHaveProperty("facilityId")
     expect(body).not.toHaveProperty("priority")
@@ -456,7 +471,9 @@ describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
       "follow-key",
       ids.ticket,
     )
-    expect(fetch.mock.calls[0][0]).toContain(`/${ids.ticket}/follow-ups`)
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(
+      `/api/customer/support-workflows/${ids.ticket}/follow-ups`,
+    )
     expect(JSON.parse(fetch.mock.calls[0][1].body)).not.toHaveProperty(
       "facilityId",
     )
@@ -464,7 +481,7 @@ describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
   it.each([400, 401, 403, 404, 409, 503])(
     "propagates HTTP %i, no demo fallback or false success",
     async (status) => {
-      respond(
+      const fetch = respond(
         {
           error: {
             code: "CONFLICT",
@@ -484,6 +501,10 @@ describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
         status,
         message: "DEFERRED_SOURCE: test-only shared policy",
       })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(
+        `/api/customer/support-workflows/${ids.ticket}/close`,
+      )
     },
   )
 })

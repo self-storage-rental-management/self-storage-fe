@@ -13,6 +13,8 @@ import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
 import CustomerPaymentHistory from './CustomerPaymentHistory'
 import CustomerRentalsApiPanel from './CustomerRentalsApiPanel'
+import { SupportApiRoute } from '../support-api/SupportApiEntry'
+import { CustomerApiMetric, CustomerRentalApiLink } from '../rental-api/CustomerApiOverview'
 import { customerRentalApiNav, CUSTOMER_RENTAL_API_PAGE } from './customerRentalApiIntegration'
 import CustomerReservationOtpModal from './CustomerReservationOtpModal'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
@@ -35,6 +37,7 @@ import { customerFacilityImage, customerUnitAmenities } from './customerPresenta
 import {
   listCustomerFacilities,
   listCustomerUnitTypes,
+  listReservationRentalPackages,
   getAvailability,
   checkCompatibility,
   cancelCustomerReservation,
@@ -51,6 +54,7 @@ import {
   type GoodsCategory,
   type GoodsItemInput,
   type ReservationQuote,
+  type ReservationRentalPackage,
 } from '../../services/customerReservationApi'
 
 
@@ -417,6 +421,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return { startDate, endDate: addMonthsForPreview(startDate, 3) }
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
+  const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
+  const [rentalPackagesLoading, setRentalPackagesLoading] = useState(false)
   const [backendReservations, setBackendReservations] = useState<CustomerReservation[]>([])
   const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
   const [reservationSubmitting, setReservationSubmitting] = useState(false)
@@ -595,7 +601,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'facilities:read' },
     { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'storage_units:read' },
     { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'reservations:read' },
-    { id: 'rental-records', label: 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'rentals:read' },
+    { id: 'rental-records', label: isApiAuthenticated() ? 'Trả kho & Biên nhận' : 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'rentals:read' },
+    ...customerRentalApiNav(isApiAuthenticated()),
     { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'payments:read' },
     { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'policies:read' },
     { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'support:read' }
@@ -759,6 +766,38 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (endDate === '—') return
     setAvailabilityPeriod({ startDate: moveInDate, endDate })
   }, [bookOpen, moveInDate, rentalMonths])
+
+  useEffect(() => {
+    if (!isApiAuthenticated() || !bookOpen || !selectedTarget || !moveInDate) return
+    let cancelled = false
+    setRentalPackagesLoading(true)
+    setReservationSubmitError(null)
+    void listReservationRentalPackages(selectedTarget.facility.id, moveInDate)
+      .then(packages => {
+        if (cancelled) return
+        setBackendRentalPackages(packages)
+        const selected = packages.find(item => item.code === selectedPackageId)
+          || packages.find(item => item.rentalMonths === 3)
+          || packages[0]
+        if (selected) {
+          setSelectedPackageId(selected.code)
+          setRentalMonths(selected.rentalMonths)
+        } else {
+          setSelectedPackageId('')
+          setReservationSubmitError('Cơ sở chưa có gói thuê đang hiệu lực cho ngày nhận kho đã chọn.')
+        }
+      })
+      .catch(error => {
+        if (cancelled) return
+        setBackendRentalPackages([])
+        setSelectedPackageId('')
+        setReservationSubmitError(error instanceof Error
+          ? error.message
+          : 'Không thể tải gói thuê từ hệ thống.')
+      })
+      .finally(() => { if (!cancelled) setRentalPackagesLoading(false) })
+    return () => { cancelled = true }
+  }, [bookOpen, moveInDate, selectedTarget?.facility.id])
 
   useEffect(() => {
     if (!backendUnitTypes.length) return
@@ -987,7 +1026,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     ...myHolds.filter(hold => hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING').map(hold => ({ id: `goods-review-submitted-${hold.id}`, date: hold.goodsReviewSubmittedAt || hold.createdAt, title: 'Yêu cầu hàng hóa đã được gửi', message: `${hold.id} · Kho đang được giữ · Chưa yêu cầu tiền cọc`, page: 'reservations', targetId: hold.id })),
     ...myHolds.filter(hold => hold.goodsReviewStatus === 'APPROVED').map(hold => ({ id: `goods-review-approved-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa đã được chấp thuận', message: `${hold.id} · Vui lòng thanh toán tiền cọc để hoàn tất đặt kho`, page: 'reservations', targetId: hold.id })),
     ...myHolds.filter(hold => hold.goodsReviewStatus === 'REJECTED').map(hold => ({ id: `goods-review-rejected-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa chưa được chấp thuận', message: `${hold.id} · Lý do: ${hold.staffReviewNotes || 'Hàng hóa chưa phù hợp điều kiện lưu trữ'}`, page: 'reservations', targetId: hold.id })),
-    ...contractExpiryNotifications,
+    ...(isApiAuthenticated() ? [] : contractExpiryNotifications),
     ...visibleMyHolds.filter(h => h.assignedUnitId).map(h => {
       const assignmentActivity = activities.find(activity => activity.action === 'UNIT_ASSIGNED' && activity.entityId === h.id)
       return { id: `unit-${h.id}-${h.assignedUnitId}`, date: h.unitAssignedAt || assignmentActivity?.timestamp || h.reviewedAt || h.createdAt, title: 'Gian kho đã được xác định', message: `${h.assignedUnitId} · ${h.facilityName}`, page: 'reservations', targetId: h.id }
@@ -998,7 +1037,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const confirmed = Boolean(rental.receiptConfirmedAt)
       return { id: `receipt-${rental.id}-${confirmed ? rental.receiptConfirmedAt : 'pending'}`, date: rental.receiptConfirmedAt || hold?.checkedInAt || checkin?.completedAt || rental.startDate, title: confirmed ? ('Đã xác nhận nhận kho') : ('Vui lòng xác nhận đã nhận kho'), message: `${rental.unitId} · ${rental.facilityName}`, page: 'rental-records', targetId: rental.id }
     }),
-    ...renewals.filter(r => r.customerId === user.id && r.status !== 'pending').map(r => {
+    ...(isApiAuthenticated() ? [] : renewals).filter(r => r.customerId === user.id && r.status !== 'pending').map(r => {
       const title = r.status === 'rejected'
         ? ('Gia hạn bị từ chối')
         : r.status === 'approved'
@@ -1011,7 +1050,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       return { id: `renewal-${r.id}-${r.status}-${r.paidAt || r.approvedAt || r.requestedAt}`, date: r.paidAt || r.approvedAt || r.requestedAt, title, message: r.status === 'rejected' && r.notes ? `${r.unitId} · ${'Lý do'}: ${r.notes}` : `${r.unitId} · ${r.newEndDate}`, page: 'rental-records', targetId: r.rentalId }
     }),
     ...myReturns.filter(r => visibleMyRentalIds.has(r.rentalId) && ['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(r.status)).map(r => ({ id: `return-${r.id}-${r.status}-${r.completedAt || r.customerConfirmedAt || r.inspectedAt || r.requestedAt}`, date: r.completedAt || r.customerConfirmedAt || r.inspectedAt || r.requestedAt, title: r.status === 'awaiting_customer_confirmation' ? ('Cần xác nhận quyết toán') : r.status === 'payment_due' ? ('Cần thanh toán phần quyết toán còn thiếu') : r.status === 'refund_pending' ? ('Hồ sơ thuê hết hiệu lực · Chờ hoàn cọc') : r.status === 'completed' ? ('Hồ sơ thuê đã hết hiệu lực') : ('Đang xem xét khiếu nại'), message: `${r.unitId} · ${r.status === 'payment_due' ? ('Cần đóng thêm') : ('Hoàn cọc dự kiến')} ${formatVnd(r.status === 'payment_due' ? (r.amountDueFromCustomer ?? 0) : r.netRefundAmount)}`, page: 'rental-records', targetId: r.rentalId })),
-    ...myTickets.flatMap(ticket => {
+    ...(isApiAuthenticated() ? [] : myTickets).flatMap(ticket => {
       const latestStaffMessage = [...ticket.messages].reverse().find(message => message.role === 'staff')
       const notificationTitle = ticket.status === 'resolved'
         ? ('Yêu cầu đã được xử lý thành công')
@@ -1282,6 +1321,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return selectedUnitActivePackages.find(p => p.months === rentalMonths)
   }, [selectedPackageId, selectedUnitActivePackages, rentalMonths])
 
+  const selectedBackendRentalPackage = useMemo(
+    () => backendRentalPackages.find(item => item.code === selectedPackageId),
+    [backendRentalPackages, selectedPackageId],
+  )
+
   const discountRate = selectedActivePackage
     ? (selectedActivePackage.discountPercent ?? 0) / 100
     : rentalDiscountRate(rentalMonths, selectedUnitActivePackages)
@@ -1402,6 +1446,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const confirmReservation = async () => {
     if (!selectedUnit || !selectedTarget || reservationSubmitting) return
     setReservationSubmitError(null)
+    if (isApiAuthenticated() && !selectedBackendRentalPackage) {
+      setReservationSubmitError('Vui lòng chọn một gói thuê đang hiệu lực trước khi lấy báo giá.')
+      return
+    }
     if (!validateBookingForm()) return
 
     const endDate = addMonthsForPreview(moveInDate, rentalMonths)
@@ -1441,11 +1489,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           showToast(compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.')
           return
         }
-        const packageCode = rentalMonths === 1 ? 'ONE_MONTH'
-          : rentalMonths === 3 ? 'THREE_MONTHS'
-          : rentalMonths === 6 ? 'SIX_MONTHS'
-          : rentalMonths === 12 ? 'TWELVE_MONTHS'
-          : selectedActivePackage?.id || `${rentalMonths}_MONTHS`
+        const packageCode = selectedBackendRentalPackage?.code
+          || selectedActivePackage?.id
+          || `${rentalMonths}_MONTHS`
         const quote = await createReservationQuote({ ...selection, pricingPackageCode: packageCode })
         setServerQuote(quote)
         setValidationViolation(null)
@@ -1496,11 +1542,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
     } catch (error) {
-      const message = error instanceof ApiClientError && error.status === 409
-        ? error.message.includes('No storage unit is available')
+      const backendMessage = error instanceof Error ? error.message : ''
+      const message = backendMessage.includes('Rental package was not found')
+        ? 'Gói thuê đã chọn không còn khả dụng. Vui lòng chọn lại gói thuê và lấy báo giá mới.'
+        : backendMessage.includes('Rental package is not effective')
+          ? 'Gói thuê không còn hiệu lực vào ngày nhận kho đã chọn. Vui lòng chọn gói hoặc ngày nhận kho khác.'
+          : error instanceof ApiClientError && error.status === 409
+        ? backendMessage.includes('No storage unit is available')
           ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
-          : error.message
-        : error instanceof Error ? error.message : 'Không thể tạo đơn đặt kho.'
+          : backendMessage
+        : backendMessage || 'Không thể tạo đơn đặt kho.'
       setReservationSubmitError(message)
       showToast(message)
     } finally {
@@ -1642,13 +1693,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           </div>
 
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Account summary">
-            <StatCard title={'Hồ sơ thuê đang hoạt động'} value={activeRentals.length} icon={Icon.key} iconBg="bg-blue-50 text-blue-700" />
+            {isApiAuthenticated() ? <CustomerApiMetric metric="active-rentals" /> : <StatCard title={'Hồ sơ thuê đang hoạt động'} value={activeRentals.length} icon={Icon.key} iconBg="bg-blue-50 text-blue-700" />}
             <StatCard title={'Đơn đặt giữ kho'} value={visibleMyHolds.length} icon={Icon.calendar} iconBg="bg-amber-50 text-amber-700" />
             <StatCard title={'Kho đang giữ chờ hoàn tất'} value={visibleMyHolds.filter(h => !['CANCELLED', 'EXPIRED', 'COMPLETED', 'checked_in', 'rejected'].includes(h.status)).length} icon={Icon.clock} iconBg="bg-stone-100 text-black" />
-            <StatCard title={'Yêu cầu hỗ trợ đang mở'} value={tickets.filter(t => t.status === 'open').length} icon={Icon.support} />
+            {isApiAuthenticated() ? <CustomerApiMetric metric="open-support" /> : <StatCard title={'Yêu cầu hỗ trợ đang mở'} value={tickets.filter(t => t.status === 'open').length} icon={Icon.support} />}
           </section>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
+            {isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo(CUSTOMER_RENTAL_API_PAGE)} /> : (
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
                 <div>
@@ -1700,6 +1752,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </div>
               )}
             </Card>
+            )}
 
             <Card className="p-5">
               <p className="eyebrow">{'Thao tác nhanh'}</p>
@@ -2363,15 +2416,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status))}
+                              disabled={!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status))}
                               onClick={() => {
+                                if (isApiAuthenticated()) { navigateTo(CUSTOMER_RENTAL_API_PAGE); return }
                                 setActiveRentalForRenewal(rental)
                                 setRenewalMonths(1)
                                 setEditingRenewalId(null)
                                 setRenewalModalOpen(true)
                               }}
                             >
-                               {renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status)) ? ('Đang xử lý gia hạn') : ('Yêu cầu gia hạn')}
+                               {!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status)) ? ('Đang xử lý gia hạn') : ('Yêu cầu gia hạn')}
                             </Button>
                             <Button
                               variant="outline"
@@ -2399,6 +2453,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                   {(() => {
                     const start = parseCustomerDate(rental.startDate)
+                    if (isApiAuthenticated()) return null
                     const end = parseCustomerDate(rental.endDate)
                     if (!start || !end || rental.status !== 'active') return null
                     const today = new Date(now); today.setHours(0, 0, 0, 0)
@@ -2419,6 +2474,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {rental.receiptConfirmedAt && <div className="border-t border-emerald-100 bg-emerald-50 px-5 py-3 text-xs font-semibold text-emerald-800">✓ {`Đã xác nhận nhận kho lúc ${new Date(rental.receiptConfirmedAt).toLocaleString('vi-VN')}`}</div>}
                   {(() => {
                     const rentalRenewals = renewals.filter(r => r.rentalId === rental.id)
+                    if (isApiAuthenticated()) return null
                     if (!rentalRenewals.length) return null
                     return <div className="space-y-2 border-t border-stone-200 px-5 py-4">
                       <p className="text-xs font-bold text-stone-900">{'Yêu cầu gia hạn'}</p>
@@ -2587,6 +2643,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       {/* ── SUPPORT ─────────────────────────────────────────── */}
       {page === 'support' && (
+        <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="customer">
         <CustomerSupportSection
           user={user}
           tickets={tickets}
@@ -2617,6 +2674,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             })
           }
         />
+        </SupportApiRoute>
       )}
 
       {/* ── POLICIES PAGE ─────────────────────────────────────── */}
@@ -3003,10 +3061,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div><Input label={'Giờ nhận kho (đang mở 24/7 để kiểm thử)'} type="time" min="00:00" max="23:59" step="1800" value={bookingAppointmentTime} onChange={e => setBookingAppointmentTime(e.target.value)} /><p className="mt-1 text-[11px] text-blue-700">{'Bạn có thể chọn bất kỳ giờ nào trong ngày; giới hạn 14 ngày nhận kho vẫn được áp dụng.'}</p></div>
               <Select
                 label={'Gói thuê & Kỳ hạn'}
-                value={isApiAuthenticated() ? rentalMonths.toString() : selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
+                value={isApiAuthenticated() ? selectedPackageId : selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
+                disabled={isApiAuthenticated() && rentalPackagesLoading}
                 onChange={e => {
                   const val = e.target.value
-                  if (isApiAuthenticated()) { setRentalMonths(Number(val)); setServerQuote(null); return }
+                  if (isApiAuthenticated()) {
+                    const pkg = backendRentalPackages.find(item => item.code === val)
+                    if (pkg) {
+                      setSelectedPackageId(pkg.code)
+                      setRentalMonths(pkg.rentalMonths)
+                      setServerQuote(null)
+                      setReservationSubmitError(null)
+                    }
+                    return
+                  }
                   const pkg = selectedUnitActivePackages.find(p => p.id === val || p.months.toString() === val)
                   if (pkg) {
                     setSelectedPackageId(pkg.id)
@@ -3019,7 +3087,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   }
                 }}
               >
-                {isApiAuthenticated() ? <>{[1, 3, 6, 12].map(months => <option key={months} value={months}>{months} tháng — lấy báo giá khi xác nhận</option>)}</> : selectedUnitActivePackages.length > 0 ? (
+                {isApiAuthenticated() ? <>
+                  {rentalPackagesLoading && <option value="">Đang tải gói thuê…</option>}
+                  {!rentalPackagesLoading && backendRentalPackages.length === 0 && <option value="">Không có gói thuê khả dụng</option>}
+                  {backendRentalPackages.map(pkg => <option key={pkg.code} value={pkg.code}>
+                    {pkg.name} — {pkg.rentalMonths} tháng{pkg.discountRate > 0 ? ` · giảm ${Math.round(pkg.discountRate * 100)}%` : ''}
+                  </option>)}
+                </> : selectedUnitActivePackages.length > 0 ? (
                   selectedUnitActivePackages.map(pkg => (
                     <option key={pkg.id} value={pkg.id}>
                       {pkg.name} — {formatVnd(pkg.packagePrice)} {pkg.discountPercent ? `(Giảm ${pkg.discountPercent}%)` : ''}
@@ -3227,7 +3301,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               ) : (
                 <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>{'Hủy đặt kho'}</Button>
               )}
-              <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>
+              <Button disabled={reservationSubmitting || (isApiAuthenticated() && (rentalPackagesLoading || !selectedBackendRentalPackage))} onClick={() => void confirmReservation()}>
                 {reservationSubmitting ? 'Đang xử lý...'
                   : bookingReview ? (hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho')
                   : 'Kiểm tra và lấy báo giá'}
@@ -3665,7 +3739,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       {/* ── MODAL: REQUEST RENEWAL ────────────────────────────── */}
       <Modal
-        open={renewalModalOpen}
+        open={renewalModalOpen && !isApiAuthenticated()}
         onClose={() => { setRenewalModalOpen(false); setEditingRenewalId(null) }}
         title={editingRenewalId ? ('Chỉnh Sửa Yêu Cầu Gia Hạn') : ('Yêu Cầu Gia Hạn Hợp Đồng Thuê')}
       >
@@ -3717,7 +3791,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       </Modal>
 
       <Modal
-        open={renewalPaymentOpen}
+        open={renewalPaymentOpen && !isApiAuthenticated()}
         onClose={() => setRenewalPaymentOpen(false)}
         title={'Xác nhận thanh toán gia hạn'}
         size="xl"
