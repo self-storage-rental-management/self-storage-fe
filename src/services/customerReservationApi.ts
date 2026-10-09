@@ -411,6 +411,14 @@ export async function getCustomerReservation(reservationId: string) {
   return response.data
 }
 
+export async function confirmCustomerReceipt(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${reservationId}/receipt-confirmation`,
+    { method: 'POST' },
+  )
+  return response.data
+}
+
 export async function cancelCustomerReservation(reservationId: string, reason: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${reservationId}/cancel`,
