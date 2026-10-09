@@ -59,7 +59,7 @@ import { formatVnd } from "../../i18n/currency"
 
 import { exportRevenueExcel } from "../../utils/excelExport"
 
-import { useStorageHub } from "../../store/StorageHubContext"
+import { useStorageHub, sanitizeFacilityStrings } from "../../store/StorageHubContext"
 import type { FacilityCustomUnitSpec } from "../../types/storageHub"
 
 import ProfileView from "../ProfileView"
@@ -383,24 +383,35 @@ export default function BusinessApp({
       .then((backendFacs) => {
         if (!isMounted || !Array.isArray(backendFacs)) return
         backendFacs.forEach((bf) => {
-          const exists = facilitiesList.some(
-            (f) => f.id === bf.id || (f.code && f.code.toUpperCase() === bf.code.toUpperCase()),
+          const cleanBf = sanitizeFacilityStrings(bf)
+          const matching = facilitiesList.find(
+            (f) => f.id === cleanBf.id || (f.code && f.code.toUpperCase() === (cleanBf.code || '').toUpperCase()),
           )
-          if (!exists) {
+          if (!matching) {
             createFacility(
               {
-                id: bf.id,
-                code: bf.code,
-                name: bf.name,
-                address: bf.address,
-                city: bf.city,
-                status: bf.status === "maintenance" ? "maintenance" : "active",
+                id: cleanBf.id,
+                code: cleanBf.code,
+                name: cleanBf.name,
+                address: cleanBf.address,
+                city: cleanBf.city,
+                status: cleanBf.status === "maintenance" ? "maintenance" : "active",
                 units: 20,
                 available: 20,
                 occupied: 0,
               },
               user,
             )
+          } else if (
+            matching.name !== cleanBf.name ||
+            matching.address !== cleanBf.address ||
+            matching.city !== cleanBf.city
+          ) {
+            updateFacility(matching.id, {
+              name: cleanBf.name,
+              address: cleanBf.address,
+              city: cleanBf.city,
+            })
           }
         })
       })
@@ -3356,53 +3367,36 @@ export default function BusinessApp({
           ) : (
             <div className="space-y-4">
               {filteredFacilities.map((f) => {
-                const facCode = f.code || f.id
+                const cleanF = sanitizeFacilityStrings(f)
+                const facCode = cleanF.code || cleanF.id
 
-                const totalUnitsInFac = getFacilityTotalUnits(f)
-                const occupiedInFac = getFacilityOccupiedCount(f)
+                const totalUnitsInFac = getFacilityTotalUnits(cleanF)
+                const occupiedInFac = getFacilityOccupiedCount(cleanF)
                 const occupancyRate = totalUnitsInFac
                   ? Math.round((occupiedInFac / totalUnitsInFac) * 100)
                   : 0
 
                 return (
                   <Card
-                    key={f.id}
+                    key={cleanF.id}
                     className="p-5 hover:border-amber-400/70 transition-all border border-stone-200/90 shadow-sm bg-white"
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                      <div className="flex items-start gap-4 flex-1 min-w-0">
-                        {/* Facility photo */}
-                        <div className="w-24 h-24 rounded-xl overflow-hidden bg-stone-100 border border-stone-200 shrink-0 hidden sm:block">
-                          <img
-                            src={
-                              f.image?.startsWith("http") || f.image?.startsWith("data:")
-                                ? f.image
-                                : `https://images.unsplash.com/${f.image || "photo-1586528116311-ad8dd3c8310d"}?w=240&auto=format&fit=crop`
-                            }
-                            alt={f.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src =
-                                WAREHOUSE_PHOTO_PRESETS[0].url
-                            }}
-                          />
-                        </div>
-
-                        <div className="flex-1 min-w-0 space-y-3">
-                          {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
+                      <div className="flex-1 min-w-0 space-y-3">
+                        {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
                           <div className="flex flex-wrap items-center gap-3">
                             <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
                               {facCode}
                             </span>
                             <h3 className="font-bold text-slate-900 text-lg leading-snug">
-                              {f.name}
+                              {cleanF.name}
                             </h3>
                             <Badge
                               variant={
-                                f.status === "active" ? "success" : "warning"
+                                cleanF.status === "active" ? "success" : "warning"
                               }
                             >
-                              {f.status === "active"
+                              {cleanF.status === "active"
                                 ? lang === "vi"
                                   ? "Đang hoạt động"
                                   : "Active"
@@ -3415,24 +3409,24 @@ export default function BusinessApp({
                           {/* Hàng 2: Địa chỉ + Quản lý + Hotline + Giờ mở cửa */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600">
                             <div className="flex items-start gap-1.5">
-                              <span className="truncate" title={f.address}>
-                                {f.address} ·{" "}
-                                <b className="text-slate-800">{f.city}</b>
+                              <span className="truncate" title={cleanF.address}>
+                                {cleanF.address} ·{" "}
+                                <b className="text-slate-800">{cleanF.city}</b>
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span>
                                 Quản lý:{" "}
-                                <b className="text-slate-800">{f.manager}</b>{" "}
-                                {f.phone ? `(${f.phone})` : ""}
+                                <b className="text-slate-800">{cleanF.manager}</b>{" "}
+                                {cleanF.phone ? `(${cleanF.phone})` : ""}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span
                                 className="truncate"
-                                title={f.accessHours || "06:00 - 22:00"}
+                                title={cleanF.accessHours || "06:00 - 22:00"}
                               >
-                                {f.accessHours || "06:00 - 22:00 hàng ngày"}
+                                {cleanF.accessHours || "06:00 - 22:00 hàng ngày"}
                               </span>
                             </div>
                           </div>
@@ -3605,7 +3599,7 @@ export default function BusinessApp({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setPolicyFacilityFilter(f.id)
+                                    setPolicyFacilityFilter(cleanF.id)
                                     setPage("policies")
                                   }}
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition cursor-pointer"
@@ -3628,7 +3622,6 @@ export default function BusinessApp({
                             )
                           })()}
                         </div>
-                      </div>
 
                       {/* Các nút hành động */}
                       <div className="flex lg:flex-col items-center justify-end gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
@@ -3637,7 +3630,7 @@ export default function BusinessApp({
                           size="sm"
                           className="w-full justify-center text-xs font-semibold"
                           onClick={() => {
-                            setSelectedFacility(f)
+                            setSelectedFacility(cleanF)
 
                             setViewFacilityModal(true)
                           }}
@@ -3648,7 +3641,7 @@ export default function BusinessApp({
                           variant="outline"
                           size="sm"
                           className="w-full justify-center text-xs font-semibold border-amber-300 text-amber-800 hover:bg-amber-50"
-                          onClick={() => handleOpenEditFacility(f)}
+                          onClick={() => handleOpenEditFacility(cleanF)}
                         >
                           {lang === "vi" ? "Chỉnh sửa" : "Edit"}
                         </Button>
@@ -3657,7 +3650,7 @@ export default function BusinessApp({
                           size="sm"
                           className="w-full justify-center text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
                           onClick={() => {
-                            setSelectedFacility(f)
+                            setSelectedFacility(cleanF)
 
                             setDeleteFacilityModal(true)
                           }}
