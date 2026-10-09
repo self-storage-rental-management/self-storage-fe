@@ -74,13 +74,40 @@ function isStorageUnit(value: unknown): value is MaintenanceStorageUnit {
     ['available', 'reserved', 'occupied', 'maintenance', 'held', 'assigned'].includes(String(value.status))
 }
 
-export async function listManagerMaintenanceTasks(facilityId: string) {
-  const encoded = encodeURIComponent(facilityId)
+export type MaintenanceTask = MaintenanceTaskApi
+
+interface MaintenanceTaskFilters {
+  facilityId?: string
+  assignedStaffId?: string
+  page?: number
+  pageSize?: number
+}
+
+async function listMaintenanceTasks(filters: MaintenanceTaskFilters = {}) {
+  const params = new URLSearchParams({
+    page: String(filters.page ?? 0),
+    pageSize: String(filters.pageSize ?? 100),
+  })
+  if (filters.facilityId) params.set('facilityId', filters.facilityId)
+  if (filters.assignedStaffId) params.set('assignedStaffId', filters.assignedStaffId)
+
   return readRentalPage<MaintenanceTaskApi>(
-    await apiRequest(`/api/staff/maintenance-tasks?facilityId=${encoded}&page=0&pageSize=100`),
+    await apiRequest(`/api/staff/maintenance-tasks?${params.toString()}`),
     isMaintenanceTask,
-    0,
+    filters.page ?? 0,
   )
+}
+
+export function listManagerMaintenanceTasks(facilityId: string): ReturnType<typeof listMaintenanceTasks>
+export function listManagerMaintenanceTasks(filters: MaintenanceTaskFilters): ReturnType<typeof listMaintenanceTasks>
+export function listManagerMaintenanceTasks(facilityIdOrFilters: string | MaintenanceTaskFilters) {
+  return listMaintenanceTasks(typeof facilityIdOrFilters === 'string'
+    ? { facilityId: facilityIdOrFilters }
+    : facilityIdOrFilters)
+}
+
+export function listStaffMaintenanceTasks(filters: MaintenanceTaskFilters = {}) {
+  return listMaintenanceTasks(filters)
 }
 
 export async function listFacilityStorageUnits(facilityId: string) {
