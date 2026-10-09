@@ -1,6 +1,26 @@
 import { useEffect, useState } from "react"
 
-export default function StaffReservationReviews({ canApprove, facilityNames = {} }: { canApprove: boolean; facilityNames?: Record<string, string> }) {
+import { Button, Card, Input, SectionHeader } from "../../components/ui"
+
+import {
+  decideStaffReservationReview,
+  listStaffReservationReviews,
+  type ReservationReview,
+} from "../../services/staffReservationApi"
+
+import {
+  formatStaffDate,
+  staffErrorMessage,
+  staffGoodsCategoryLabel,
+} from "./staffPresentation"
+
+export default function StaffReservationReviews({
+  canApprove,
+  facilityNames = {},
+}: {
+  canApprove: boolean
+  facilityNames?: Record<string, string>
+}) {
   const [rows, setRows] = useState<ReservationReview[]>([])
 
   const [page, setPage] = useState(0)
@@ -33,9 +53,7 @@ export default function StaffReservationReviews({ canApprove, facilityNames = {}
       } catch (error) {
         if (!disposed)
           setMessage(
-            error instanceof Error
-              ? error.message
-              : "Không thể tải hồ sơ chờ duyệt.",
+            staffErrorMessage(error, "Không thể tải hồ sơ chờ duyệt."),
           )
       } finally {
         if (!disposed) setLoading(false)
@@ -81,9 +99,7 @@ export default function StaffReservationReviews({ canApprove, facilityNames = {}
 
       setRevision((value) => value + 1)
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Không thể duyệt hồ sơ.",
-      )
+      setMessage(staffErrorMessage(error, "Không thể duyệt hồ sơ."))
     } finally {
       setBusyId(null)
     }
@@ -93,7 +109,7 @@ export default function StaffReservationReviews({ canApprove, facilityNames = {}
     <div className="fade-in space-y-4">
       <SectionHeader
         title="Duyệt yêu cầu đặt kho"
-        subtitle="Hồ sơ hàng hóa thuộc nhóm Khác đã xác minh thư điện tử và thuộc cơ sở được phân quyền."
+        subtitle={`Hồ sơ hàng hóa đã xác minh thư điện tử tại: ${Object.values(facilityNames).join(", ") || "cơ sở được phân quyền"}.`}
         action={
           <Button
             variant="outline"
@@ -129,6 +145,9 @@ export default function StaffReservationReviews({ canApprove, facilityNames = {}
               {row.reservationCode}
             </p>
             <h3 className="mt-1 font-bold">{row.customerEmail}</h3>
+            <p className="text-xs font-semibold text-stone-700">
+              Cơ sở: {facilityNames[row.facilityId] || row.facilityId}
+            </p>
             <p className="text-xs text-stone-500">
               Kỳ thuê: {formatStaffDate(row.startDate)} →{" "}
               {formatStaffDate(row.endDate)}
