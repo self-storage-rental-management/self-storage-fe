@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 
 import {
   XAxis,
@@ -76,6 +76,7 @@ import {
   FacilityImageManager,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
+import { createFacilityApi, listAllFacilitiesApi } from "../../services/facilityApi"
 
 const RUNTIME_REVENUE_DATA = DEMO_DATA_ENABLED ? REVENUE_DATA : []
 const RUNTIME_REVENUE_BREAKDOWN = DEMO_DATA_ENABLED ? REVENUE_BREAKDOWN : []
@@ -375,6 +376,39 @@ export default function BusinessApp({
     updateUnit,
     updateBusinessConfig,
   } = hub
+
+  useEffect(() => {
+    let isMounted = true
+    listAllFacilitiesApi()
+      .then((backendFacs) => {
+        if (!isMounted || !Array.isArray(backendFacs)) return
+        backendFacs.forEach((bf) => {
+          const exists = facilitiesList.some(
+            (f) => f.id === bf.id || (f.code && f.code.toUpperCase() === bf.code.toUpperCase()),
+          )
+          if (!exists) {
+            createFacility(
+              {
+                id: bf.id,
+                code: bf.code,
+                name: bf.name,
+                address: bf.address,
+                city: bf.city,
+                status: bf.status === "maintenance" ? "maintenance" : "active",
+                units: 20,
+                available: 20,
+                occupied: 0,
+              },
+              user,
+            )
+          }
+        })
+      })
+      .catch(() => {})
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const getFacilityOccupiedCount = useCallback(
     (fac: any) => {
@@ -1576,9 +1610,19 @@ export default function BusinessApp({
   }
 
   const getEffectiveTier = (tier: PricingTierItem) => {
+    if (!tier) {
+      return {
+        id: "tier-1",
+        name: "Kho Nhỏ (S)",
+        basePrice: 5500000,
+        highDemandMultiplier: 1.15,
+        facility: "Toàn bộ cơ sở",
+        sizeCode: "S",
+      } as PricingTierItem
+    }
     if (
-      selectedPricingFacility &&
-      facilityPricingOverrides[selectedPricingFacility.id]?.[tier.id]
+      selectedPricingFacility?.id &&
+      facilityPricingOverrides?.[selectedPricingFacility.id]?.[tier.id]
     ) {
       const override =
         facilityPricingOverrides[selectedPricingFacility.id][tier.id]
@@ -2242,7 +2286,7 @@ export default function BusinessApp({
     setCreateFacilityModal(true)
   }
 
-  const handleCreateFacility = () => {
+  const handleCreateFacility = async () => {
     const code = formFacCode.trim().toUpperCase()
 
     if (!code) {
@@ -2351,8 +2395,37 @@ export default function BusinessApp({
     const pL = newUnitPrices.L || 15000000
     const pXL = newUnitPrices.XL || 22500000
 
+    let backendFacilityId: string | undefined
+    try {
+      const unitSpecsPayload = formFacUnitSpecs.map((s) => ({
+        sizeCode: s.sizeCode,
+        name: s.name,
+        count: s.count,
+        monthlyPrice: s.monthlyPrice,
+        lengthM: s.lengthM,
+        widthM: s.widthM,
+        heightM: s.heightM,
+        maxLoadKg: s.maxLoadKg,
+      }))
+
+      const apiRes = await createFacilityApi({
+        code,
+        name: formFacName.trim(),
+        address: formFacAddress.trim(),
+        city: formFacCity.trim(),
+        status: formFacStatus,
+        unitSpecs: unitSpecsPayload,
+      })
+      if (apiRes?.id) {
+        backendFacilityId = apiRes.id
+      }
+    } catch (err) {
+      console.warn("Backend create facility API failed/offline:", err)
+    }
+
     const created = createFacility(
       {
+        id: backendFacilityId,
         code,
 
         name: formFacName.trim(),
