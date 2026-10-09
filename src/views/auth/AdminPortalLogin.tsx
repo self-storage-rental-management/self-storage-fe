@@ -247,16 +247,18 @@ export default function AdminPortalLogin({ onLogin, onBackToHome, onSwitchToCust
       return
     }
 
+    const authenticatedUser = pendingActor
+      ? actorToUser(pendingActor)
+      : pendingUser
+    if (!authenticatedUser) {
+      setOtpError('Phiên đăng nhập đã hết. Vui lòng quay lại và đăng nhập lại.')
+      return
+    }
+
     // Success! Log the user in
     setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
-      if (pendingUser) {
-        onLogin(pendingUser)
-      } else if (pendingActor) {
-        onLogin(actorToUser(pendingActor))
-      }
-    }, 400)
+    onLogin(authenticatedUser)
+    setIsLoading(false)
   }
 
   // Resend 2FA OTP
@@ -652,6 +654,8 @@ export default function AdminPortalLogin({ onLogin, onBackToHome, onSwitchToCust
                       setStep('credentials')
                       setError('')
                       setOtpError('')
+                      setPendingActor(null)
+                      setPendingUser(null)
                     }}
                     className="w-1/3 py-2.5 sm:py-3 px-3 rounded-xl border border-stone-700 bg-stone-900 text-stone-300 hover:bg-stone-800 text-xs font-semibold transition-colors cursor-pointer"
                   >
