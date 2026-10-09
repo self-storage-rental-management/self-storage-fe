@@ -47,7 +47,8 @@ describe('Manager-only readable presentation', () => {
     expect(manager).toContain('text-lg font-bold text-stone-900')
     expect(manager).toContain('text-sm leading-relaxed')
     const other = renderToStaticMarkup(<SupportApiWorkspace role="customer" />)
-    expect(other).toContain('Hỗ trợ (D5 API)')
+    expect(other).toContain('Hỗ trợ khách hàng')
+    expect(other).not.toContain('D5 API')
     expect(other).not.toContain('text-sm leading-relaxed')
   })
   it('translates labels and punctuation without changing their source values', () => {
@@ -71,7 +72,8 @@ describe('Manager-only readable presentation', () => {
     expect(manager).not.toContain('internal_port')
     expect(manager).toContain('Chưa đủ dữ liệu hoặc chính sách')
     expect(other).toContain('Tải lại')
-    expect(other).toContain('internal_port')
+    expect(other).not.toContain('internal_port')
+    expect(other).toContain('Chưa đủ dữ liệu hoặc chính sách')
   })
   it('hides workflow/source codes in renewal progress without mutating shared state', () => {
     const state = { ...operationState, missingSources: ['BO_SIGNING_POLICY', 'UNKNOWN_INTERNAL_PORT'] }
@@ -82,7 +84,12 @@ describe('Manager-only readable presentation', () => {
     expect(html).not.toContain('UNKNOWN_INTERNAL_PORT')
     expect(html).toContain('Thông tin bổ sung')
     expect(JSON.stringify(state)).toBe(before)
-    expect(renderToStaticMarkup(<RenewalOperationsSummary state={state} />)).toContain('Phiên bản workflow')
+    // D3 now uses user-facing copy for every audience; version remains command metadata,
+    // not a UI requirement. Preserve the stronger Manager redaction checks above.
+    const customer = renderToStaticMarkup(<RenewalOperationsSummary state={state} />)
+    expect(customer).not.toContain('Phiên bản workflow')
+    expect(customer).toContain('Chờ thanh toán cọc')
+    expect(JSON.stringify(state)).toBe(before)
   })
   it('keeps financial completeness comparisons and actual deposit amount intact', () => {
     const record = { ...rental, financialSummary: { ...rental.financialSummary, completeness: 'COMPLETE' as const, securityDepositAmount: 1234567 } }
@@ -100,7 +107,9 @@ describe('Manager-only readable presentation', () => {
     expect(html).not.toContain('Phiên bản:')
     expect(html).not.toContain('policy1')
     expect(html).toContain('Đã kiểm tra đầy đủ')
-    expect(renderToStaticMarkup(<RenewalDetail role="customer" renewal={record} onAction={() => {}} />)).toContain('policy1')
+    const customer = renderToStaticMarkup(<RenewalDetail role="customer" renewal={record} onAction={() => {}} />)
+    expect(customer).not.toContain('policy1')
+    expect(customer).toContain('Đã kiểm tra đầy đủ')
   })
   it('keeps support read-only warnings but removes workflow/backfill jargon', () => {
     const html = renderToStaticMarkup(<ManagerPresentationProvider><SupportTicketSummary ticket={{ ...supportActive, workflowReady: false }} /></ManagerPresentationProvider>)

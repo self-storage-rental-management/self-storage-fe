@@ -38,7 +38,7 @@ describe("primary D5 Support data boundary", () => {
     state.actor = supportActor("customer")
     state.read = { data: page([]) }
     const html = renderToStaticMarkup(<SupportApiRoute apiAuthenticated role="customer"><p>Demo-only ticket</p></SupportApiRoute>)
-    expect(html).toContain("Không có yêu cầu phù hợp")
+    expect(html).toContain("Không có yêu cầu hỗ trợ phù hợp")
     expect(html).not.toContain("Demo-only ticket")
   })
   it("does not display a previous customer's ticket or grant Staff missing permissions", () => {
@@ -49,7 +49,7 @@ describe("primary D5 Support data boundary", () => {
     expect(html).toContain("ngoài phạm vi")
     state.actor = { ...supportActor("staff"), permissions: ["support:read"] }
     html = renderToStaticMarkup(<SupportApiRoute apiAuthenticated role="staff"><p>Demo-only ticket</p></SupportApiRoute>)
-    expect(html).toContain("support:update")
+    expect(html).toContain("Bạn chưa có quyền truy cập hỗ trợ")
     expect(html).not.toContain("manage_support")
     expect(html).not.toContain("Private foreign ticket")
     expect(html).not.toContain("Demo-only ticket")
