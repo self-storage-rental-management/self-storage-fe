@@ -7,8 +7,8 @@ export const supportInputClass =
 export const supportStatusLabels = {
   open: "Chờ phân công / Chờ nhận",
   in_progress: "Đang xử lý",
-  waiting_customer: "Chờ Customer bổ sung",
-  resolved: "Đã xử lý — chờ xác nhận",
+  waiting_customer: "Chờ khách hàng bổ sung",
+  resolved: "Đã xử lý - chờ xác nhận",
   closed: "Đã đóng",
 }
 export const supportModuleLabels = {
@@ -23,33 +23,44 @@ export const supportModuleLabels = {
 export const supportEventLabels: Record<string, string> = {
   CREATED: "Tạo yêu cầu",
   ASSIGNED: "Phân công / Giao lại",
-  ACCEPTED: "Staff nhận việc",
-  REQUEST_INFORMATION: "Yêu cầu Customer bổ sung",
-  RESOLVED: "Staff xử lý xong",
-  CLOSED: "Customer xác nhận đóng",
-  REOPENED: "Customer mở lại",
+  ACCEPTED: "Nhân viên nhận việc",
+  REQUEST_INFORMATION: "Yêu cầu khách hàng bổ sung",
+  RESOLVED: "Nhân viên xử lý xong",
+  CLOSED: "Khách hàng xác nhận đóng",
+  REOPENED: "Khách hàng mở lại",
   ESCALATED: "Đề nghị điều phối",
-  ESCALATION_ROUTED: "Manager chuyển module",
-  ESCALATION_REJECTED: "Manager từ chối điều phối",
-  AUTO_CLOSED: "Tự đóng theo policy",
+  ESCALATION_ROUTED: "Quản lý chuyển bộ phận",
+  ESCALATION_REJECTED: "Quản lý từ chối chuyển",
+  AUTO_CLOSED: "Tự động đóng theo chính sách",
 }
 export function supportError(error: unknown) {
   if (error instanceof ApiClientError) {
-    if (error.status === null || error.status >= 500) return error.message
-    if (error.message.includes("DEFERRED_SOURCE"))
-      return `Chưa có nguồn dữ liệu/policy chung; thao tác chưa được thực hiện. ${error.message}`
+    if (error.code === "INVALID_RESPONSE") return "Thông tin nhận được không hợp lệ. Vui lòng thử lại."
     if (error.status === 401)
-      return "Phiên đăng nhập API đã hết hạn. Vui lòng đăng nhập lại."
+      return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
     if (error.status === 403)
-      return "Không có quyền Hỗ trợ hoặc phạm vi cơ sở phù hợp. Staff cần quyền support:update thật từ BE."
+      return "Bạn không có quyền xử lý yêu cầu hỗ trợ tại cơ sở này."
     if (error.status === 404)
-      return "Không tìm thấy yêu cầu trong phạm vi hiện tại hoặc bạn không còn là Staff phụ trách."
+      return "Không tìm thấy yêu cầu trong phạm vi truy cập hoặc bạn không còn được phân công."
+    if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))
+      return "Chưa đủ dữ liệu hoặc chính sách để tiếp tục xử lý."
     if (error.status === 409)
-      return `Trạng thái/phiên bản đã thay đổi hoặc nghiệp vụ chưa cho phép. Hãy tải lại hồ sơ. ${error.message}`
+      return "Yêu cầu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng mở lại yêu cầu."
+    if (error.status === null || error.status >= 500)
+      return "Chưa nhận được kết quả. Vui lòng kiểm tra kết nối và thử lại."
+    return "Không thể xử lý yêu cầu. Vui lòng kiểm tra thông tin đã nhập."
   }
-  return error instanceof Error
-    ? error.message
-    : "Không thể xử lý Hỗ trợ. Vui lòng thử lại."
+  return "Không thể xử lý yêu cầu hỗ trợ. Vui lòng thử lại."
+}
+export const supportPriorityLabels: Record<string,string> = {
+  LOW: "Thấp", NORMAL: "Bình thường", MEDIUM: "Trung bình", HIGH: "Cao", URGENT: "Khẩn cấp", CRITICAL: "Nghiêm trọng",
+}
+export const supportLinkLabels: Record<string,string> = {
+  RENTAL: "Hồ sơ thuê", RESERVATION: "Đặt chỗ", PAYMENT: "Giao dịch", STORAGE_UNIT: "Gian kho", UNIT: "Gian kho",
+}
+export const supportReceiverLabels: Record<string,string> = {
+  REQUESTED: "Đang chờ tiếp nhận", QUEUED: "Đang chờ tiếp nhận", RECEIVED: "Đã tiếp nhận", ROUTED: "Đã chuyển xử lý",
+  IN_PROGRESS: "Đang xử lý", COMPLETED: "Đã hoàn tất", SUCCEEDED: "Đã hoàn tất", FAILED: "Xử lý thất bại", REJECTED: "Bị từ chối",
 }
 export function canReadSupport(actor: ApiActor | null, role: SupportRole) {
   if (

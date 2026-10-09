@@ -29,6 +29,7 @@ import StaffFeeField from "./StaffFeeField"
 import StaffPaymentUpload from "./StaffPaymentUpload"
 
 import StaffSupportPanel from "./StaffSupportPanel"
+import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
@@ -68,6 +69,11 @@ import { isFacilityVisible } from "../../domain/managerRules"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
 
 import StaffPagination, { paginateStaffItems } from "./StaffPagination"
+import {
+  compareStaffTaskSchedule,
+  staffErrorMessage,
+  type StaffTaskSort,
+} from "./staffPresentation"
 
 type ReservationStatus = "CREATED" | "REVIEW_REQUIRED" | "AWAITING_DEPOSIT" | "DEPOSIT_PAID" | "UNIT_RESERVED" | "READY_FOR_CHECKIN" | "COMPLETED" | "CANCELLED" | "EXPIRED"
 
@@ -311,7 +317,7 @@ const mapSharedReservation = (
       assignedUnit?.type ||
       matchingTypeUnit?.type ||
       reservation.unitTypeName ||
-      "Standard",
+      "Tiêu chuẩn",
 
     sizeUnit: "m²",
 
@@ -493,7 +499,7 @@ const mapSharedReturn = (
 
     goodsType: "Hàng hóa trong hồ sơ thuê",
 
-    material: "Theo biên bản Nhận kho",
+    material: "Theo biên bản nhận kho",
 
     packageCount: item.packageCount,
 
@@ -744,7 +750,7 @@ const statusLabelMap: Record<string, string> = {
 
   AWAITING_DEPOSIT: "Đã duyệt · Chờ thanh toán cọc",
 
-  DEPOSIT_PAID: "Đã cọc · Chờ Nhận kho",
+  DEPOSIT_PAID: "Đã cọc · Chờ nhận kho",
 
   UNIT_RESERVED: "Đã giữ gian kho",
 
@@ -908,6 +914,30 @@ export default function StaffApp({
   const [assignedTasksPage, setAssignedTasksPage] = useState(1)
 
   const [operationalTasksPage, setOperationalTasksPage] = useState(1)
+
+  const [assignedTaskDateFilter, setAssignedTaskDateFilter] = useState("")
+
+  const [assignedTaskPriorityFilter, setAssignedTaskPriorityFilter] =
+    useState("all")
+
+  const [assignedTaskSort, setAssignedTaskSort] =
+    useState<StaffTaskSort>("due-asc")
+
+  const [operationalTaskDateFilter, setOperationalTaskDateFilter] =
+    useState("")
+
+  const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
+    useState("all")
+
+  const [operationalTaskSort, setOperationalTaskSort] =
+    useState<StaffTaskSort>("due-asc")
+
+  const [taskCompletionTarget, setTaskCompletionTarget] =
+    useState<FacilityTask | null>(null)
+
+  const [taskResultReport, setTaskResultReport] = useState("")
+
+  const [taskEvidenceText, setTaskEvidenceText] = useState("")
 
   const [reservationsPage, setReservationsPage] = useState(1)
 
@@ -1261,7 +1291,7 @@ export default function StaffApp({
         },
 
         handedOverItems: [
-          `PIN/thẻ/chìa khóa kho ${selectedCheckin.unit}`,
+          `Mã truy cập, thẻ hoặc chìa khóa kho ${selectedCheckin.unit}`,
 
           contractFileName,
 
@@ -1311,9 +1341,7 @@ export default function StaffApp({
     } catch (error) {
       setPendingCheckinCompletionId(null)
 
-      showToast(
-        error instanceof Error ? error.message : "Không thể hoàn tất Nhận kho.",
-      )
+      showToast(staffErrorMessage(error, "Không thể hoàn tất nhận kho."))
     }
   }, [pendingCheckinCompletionId, hub.holds])
 
@@ -1326,8 +1354,6 @@ export default function StaffApp({
   }
 
   const normalizedSearch = reservationSearch.trim().toLowerCase()
-
-  const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 }
 
   const filteredReservations = sortStaffList(
     reservations.filter((r) => {
@@ -1528,26 +1554,37 @@ export default function StaffApp({
     .filter(
       (task) =>
         isFacilityVisible(user, task.facilityId, task.facilityName) &&
-        (task.assignedStaffId === user.id ||
-          task.assignedStaffName === user.name),
+        (task.assignedStaffId
+          ? task.assignedStaffId === user.id
+          : task.assignedStaffName === user.name),
     )
 
     .sort((left, right) => {
-      if (left.status === "completed" && right.status !== "completed") return 1
+      const leftFinished = ["completed", "cancelled"].includes(left.status)
+      const rightFinished = ["completed", "cancelled"].includes(right.status)
 
-      if (left.status !== "completed" && right.status === "completed") return -1
+      if (leftFinished !== rightFinished) return leftFinished ? 1 : -1
 
-      const priorityDifference =
-        priorityRank[left.priority] - priorityRank[right.priority]
+      return compareStaffTaskSchedule(left, right, "due-asc")
+    })
 
-      return (
-        priorityDifference ||
-        new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime()
-      )
+  const filteredAssignedFacilityTasks = assignedFacilityTasks
+    .filter(
+      (task) =>
+        (!assignedTaskDateFilter ||
+          toDateInputValue(task.dueAt) === assignedTaskDateFilter) &&
+        (assignedTaskPriorityFilter === "all" ||
+          task.priority === assignedTaskPriorityFilter),
+    )
+    .sort((left, right) => {
+      const leftFinished = ["completed", "cancelled"].includes(left.status)
+      const rightFinished = ["completed", "cancelled"].includes(right.status)
+      if (leftFinished !== rightFinished) return leftFinished ? 1 : -1
+      return compareStaffTaskSchedule(left, right, assignedTaskSort)
     })
 
   const openAssignedFacilityTasks = assignedFacilityTasks.filter(
-    (task) => task.status !== "completed",
+    (task) => task.status !== "completed" && task.status !== "cancelled",
   )
 
   const updateAssignedTaskStatus = (
@@ -1565,9 +1602,38 @@ export default function StaffApp({
       )
     } catch (error) {
       showToast(
-        error instanceof Error
-          ? error.message
-          : "Không thể cập nhật nhiệm vụ được giao.",
+        staffErrorMessage(error, "Không thể cập nhật nhiệm vụ được giao."),
+      )
+    }
+  }
+
+  const completeAssignedTask = () => {
+    if (!taskCompletionTarget || !taskResultReport.trim()) return
+
+    const evidence = taskEvidenceText
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    try {
+      hub.updateFacilityTask(
+        taskCompletionTarget.id,
+        {
+          status: "completed",
+          resultReport: taskResultReport.trim(),
+          evidence,
+        },
+        user,
+      )
+      showToast(
+        `Đã hoàn thành nhiệm vụ “${taskCompletionTarget.title}” và gửi báo cáo cho quản lý.`,
+      )
+      setTaskCompletionTarget(null)
+      setTaskResultReport("")
+      setTaskEvidenceText("")
+    } catch (error) {
+      showToast(
+        staffErrorMessage(error, "Không thể hoàn thành nhiệm vụ được giao."),
       )
     }
   }
@@ -1649,6 +1715,8 @@ export default function StaffApp({
 
         time: `${formatDate(r.appointmentDate)} ${formatTime(r.appointmentTime)}`,
 
+        dueAt: r.reviewDueAt || r.checkInDeadline || r.appointmentDate,
+
         sla: "Cần nhân viên duyệt hàng hóa",
 
         priority: "high",
@@ -1669,6 +1737,8 @@ export default function StaffApp({
 
         time: `${formatDate(r.appointmentDate)} ${formatTime(r.appointmentTime)}`,
 
+        dueAt: r.checkInDeadline || r.appointmentDate,
+
         sla: "Chuẩn bị nhận kho",
 
         priority: "medium",
@@ -1688,6 +1758,8 @@ export default function StaffApp({
         customer: c.customer,
 
         time: `${formatDate(c.appointmentDate)} ${formatTime(c.appointmentTime)}`,
+
+        dueAt: c.checkInDeadline || c.appointmentDate,
 
         sla: c.scheduleChanged
           ? "Lịch đã thay đổi"
@@ -1710,6 +1782,8 @@ export default function StaffApp({
         customer: r.customer,
 
         time: formatDate(r.returnDate),
+
+        dueAt: r.returnDate,
 
         sla:
           r.status === "disputed"
@@ -1743,6 +1817,8 @@ export default function StaffApp({
 
         time: formatDateTime(ticket.created),
 
+        dueAt: ticket.updatedAt || ticket.created,
+
         sla: ticket.priority === "high" ? "Xử lý ngay" : "Trong ca",
 
         priority: ticket.priority,
@@ -1759,35 +1835,36 @@ export default function StaffApp({
 
       time: formatDate(rental.nextDue),
 
+      dueAt: rental.nextDue,
+
       sla: "Theo dõi nhắc gia hạn",
 
       priority: "low",
 
       page: "tasks",
     })),
-  ].sort((a, b) => {
-    const leftTime = new Date(a.time || "").getTime()
+  ].sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
 
-    const rightTime = new Date(b.time || "").getTime()
-
-    if (
-      !Number.isNaN(leftTime) &&
-      !Number.isNaN(rightTime) &&
-      leftTime !== rightTime
+  const filteredOperationalTasks = operationalTasks
+    .filter(
+      (task) =>
+        (!operationalTaskDateFilter ||
+          toDateInputValue(task.dueAt) === operationalTaskDateFilter) &&
+        (operationalTaskPriorityFilter === "all" ||
+          task.priority === operationalTaskPriorityFilter),
     )
-      return leftTime - rightTime
-
-    return priorityRank[a.priority] - priorityRank[b.priority]
-  })
+    .sort((left, right) =>
+      compareStaffTaskSchedule(left, right, operationalTaskSort),
+    )
 
   const assignedTasksPagination = paginateStaffItems(
-    assignedFacilityTasks,
+    filteredAssignedFacilityTasks,
 
     assignedTasksPage,
   )
 
   const operationalTasksPagination = paginateStaffItems(
-    operationalTasks,
+    filteredOperationalTasks,
 
     operationalTasksPage,
   )
@@ -1811,6 +1888,18 @@ export default function StaffApp({
   )
 
   const returnsPagination = paginateStaffItems(displayedReturns, returnsPage)
+
+  useEffect(() => {
+    setAssignedTasksPage(1)
+  }, [assignedTaskDateFilter, assignedTaskPriorityFilter, assignedTaskSort])
+
+  useEffect(() => {
+    setOperationalTasksPage(1)
+  }, [
+    operationalTaskDateFilter,
+    operationalTaskPriorityFilter,
+    operationalTaskSort,
+  ])
 
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
     if (task.id.startsWith("allocation-")) {
@@ -1958,7 +2047,7 @@ export default function StaffApp({
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
-              title={"Đơn đã cọc · Chờ Nhận kho"}
+              title={"Đơn đã cọc · Chờ nhận kho"}
               value={
                 reservations.filter((r) => r.status === "DEPOSIT_PAID").length
               }
@@ -2203,6 +2292,38 @@ export default function StaffApp({
                 {"Nhiệm vụ được đồng bộ theo đúng tài khoản và cơ sở của bạn."}
               </p>
             </div>
+            <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
+              <Input
+                label="Ngày đến hạn"
+                type="date"
+                value={assignedTaskDateFilter}
+                onChange={(event) =>
+                  setAssignedTaskDateFilter(event.target.value)
+                }
+              />
+              <Select
+                label="Mức ưu tiên"
+                value={assignedTaskPriorityFilter}
+                onChange={(event) =>
+                  setAssignedTaskPriorityFilter(event.target.value)
+                }
+              >
+                <option value="all">Tất cả mức ưu tiên</option>
+                <option value="high">Khẩn cấp</option>
+                <option value="medium">Trung bình</option>
+                <option value="low">Thông thường</option>
+              </Select>
+              <Select
+                label="Sắp xếp"
+                value={assignedTaskSort}
+                onChange={(event) =>
+                  setAssignedTaskSort(event.target.value as StaffTaskSort)
+                }
+              >
+                <option value="due-asc">Đến hạn trước</option>
+                <option value="priority">Ưu tiên cao trước</option>
+              </Select>
+            </div>
             <Table>
               <Thead>
                 <tr>
@@ -2228,7 +2349,14 @@ export default function StaffApp({
                       </p>
                     </Td>
                     <Td>{staffTaskTypeLabel[task.type]}</Td>
-                    <Td className="max-w-xs text-xs">{task.notes || "—"}</Td>
+                    <Td className="max-w-xs text-xs">
+                      {task.notes || "—"}
+                      {task.cancellationReason && (
+                        <p className="mt-1 font-semibold text-red-700">
+                          Lý do hủy: {task.cancellationReason}
+                        </p>
+                      )}
+                    </Td>
                     <Td className="text-xs">
                       <span
                         className={
@@ -2259,6 +2387,8 @@ export default function StaffApp({
                         variant={
                           task.status === "completed"
                             ? "success"
+                            : task.status === "cancelled"
+                              ? "error"
                             : task.status === "in_progress"
                               ? "info"
                               : "warning"
@@ -2266,6 +2396,8 @@ export default function StaffApp({
                       >
                         {task.status === "completed"
                           ? "Đã hoàn thành"
+                          : task.status === "cancelled"
+                            ? "Đã hủy"
                           : task.status === "in_progress"
                             ? "Đang thực hiện"
                             : "Chờ nhận việc"}
@@ -2290,9 +2422,11 @@ export default function StaffApp({
                       {task.status === "in_progress" && (
                         <Button
                           size="sm"
-                          onClick={() =>
-                            updateAssignedTaskStatus(task, "completed")
-                          }
+                          onClick={() => {
+                            setTaskCompletionTarget(task)
+                            setTaskResultReport(task.resultReport || "")
+                            setTaskEvidenceText((task.evidence || []).join("\n"))
+                          }}
                         >
                           {"Đánh dấu hoàn thành"}
                         </Button>
@@ -2302,16 +2436,23 @@ export default function StaffApp({
                           {"Đã gửi quản lý"}
                         </span>
                       )}
+                      {task.status === "cancelled" && (
+                        <span className="text-xs font-semibold text-red-700">
+                          {"Quản lý đã hủy"}
+                        </span>
+                      )}
                     </Td>
                   </Tr>
                 ))}
-                {!assignedFacilityTasks.length && (
+                {!filteredAssignedFacilityTasks.length && (
                   <tr>
                     <td
                       colSpan={7}
                       className="px-4 py-10 text-center text-sm text-stone-500"
                     >
-                      {"Quản lý chưa giao nhiệm vụ nào cho bạn."}
+                      {assignedFacilityTasks.length
+                        ? "Không có nhiệm vụ phù hợp bộ lọc."
+                        : "Quản lý chưa giao nhiệm vụ nào cho bạn."}
                     </td>
                   </tr>
                 )}
@@ -2319,7 +2460,7 @@ export default function StaffApp({
             </Table>
             <StaffPagination
               {...assignedTasksPagination}
-              total={assignedFacilityTasks.length}
+              total={filteredAssignedFacilityTasks.length}
               onPageChange={setAssignedTasksPage}
             />
           </Card>
@@ -2334,6 +2475,38 @@ export default function StaffApp({
                   "Các hồ sơ nhận kho, trả kho, hỗ trợ và công việc phát sinh trong ca."
                 }
               </p>
+            </div>
+            <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
+              <Input
+                label="Ngày đến hạn"
+                type="date"
+                value={operationalTaskDateFilter}
+                onChange={(event) =>
+                  setOperationalTaskDateFilter(event.target.value)
+                }
+              />
+              <Select
+                label="Mức ưu tiên"
+                value={operationalTaskPriorityFilter}
+                onChange={(event) =>
+                  setOperationalTaskPriorityFilter(event.target.value)
+                }
+              >
+                <option value="all">Tất cả mức ưu tiên</option>
+                <option value="high">Khẩn cấp</option>
+                <option value="medium">Trung bình</option>
+                <option value="low">Thông thường</option>
+              </Select>
+              <Select
+                label="Sắp xếp"
+                value={operationalTaskSort}
+                onChange={(event) =>
+                  setOperationalTaskSort(event.target.value as StaffTaskSort)
+                }
+              >
+                <option value="due-asc">Đến hạn trước</option>
+                <option value="priority">Ưu tiên cao trước</option>
+              </Select>
             </div>
             <Table>
               <Thead>
@@ -2377,14 +2550,78 @@ export default function StaffApp({
                     </Td>
                   </Tr>
                 ))}
+                {!filteredOperationalTasks.length && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-10 text-center text-sm text-stone-500"
+                    >
+                      Không có nhiệm vụ vận hành phù hợp bộ lọc.
+                    </td>
+                  </tr>
+                )}
               </Tbody>
             </Table>
             <StaffPagination
               {...operationalTasksPagination}
-              total={operationalTasks.length}
+              total={filteredOperationalTasks.length}
               onPageChange={setOperationalTasksPage}
             />
           </Card>
+
+          <Modal
+            open={Boolean(taskCompletionTarget)}
+            onClose={() => setTaskCompletionTarget(null)}
+            title="Hoàn thành nhiệm vụ được giao"
+          >
+            {taskCompletionTarget && (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-stone-50 p-3 text-sm">
+                  <b>{taskCompletionTarget.title}</b>
+                  <p className="mt-1 text-stone-600">
+                    {taskCompletionTarget.id}
+                    {taskCompletionTarget.referenceId
+                      ? ` · ${taskCompletionTarget.referenceId}`
+                      : ""}
+                  </p>
+                </div>
+                <label className="block text-sm font-medium text-stone-700">
+                  Báo cáo kết quả
+                  <textarea
+                    className="mt-1 min-h-28 w-full rounded-lg border border-stone-300 p-3"
+                    value={taskResultReport}
+                    maxLength={2000}
+                    onChange={(event) => setTaskResultReport(event.target.value)}
+                    placeholder="Mô tả kết quả đã thực hiện để quản lý theo dõi…"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-stone-700">
+                  Minh chứng hoặc mã tệp (mỗi dòng một mục)
+                  <textarea
+                    className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 p-3"
+                    value={taskEvidenceText}
+                    maxLength={2000}
+                    onChange={(event) => setTaskEvidenceText(event.target.value)}
+                    placeholder="Ví dụ: anh-nghiem-thu-01.jpg"
+                  />
+                </label>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setTaskCompletionTarget(null)}
+                  >
+                    Đóng
+                  </Button>
+                  <Button
+                    disabled={!taskResultReport.trim()}
+                    onClick={completeAssignedTask}
+                  >
+                    Gửi báo cáo và hoàn thành
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Modal>
         </div>
       )}
 
@@ -2701,7 +2938,7 @@ export default function StaffApp({
                             {formatTime(c.appointmentTime)}
                           </p>
                           <p className="text-[11px] text-slate-500">
-                            {"Hạn cuối Nhận kho"}:{" "}
+                            {"Hạn cuối nhận kho"}:{" "}
                             {formatDate(c.checkInDeadline)}
                           </p>
                           {c.previousAppointment && (
@@ -2750,7 +2987,7 @@ export default function StaffApp({
                           size="sm"
                           onClick={() => openCheckinRecord(c)}
                         >
-                          {"Xử lý Nhận kho"}
+                          {"Xử lý nhận kho"}
                         </Button>
                       )}
                       {c.status !== "completed" && (
@@ -2791,7 +3028,8 @@ export default function StaffApp({
             total={displayedCheckins.length}
             onPageChange={setCheckinsPage}
           />
-          {scheduledRenewals.length > 0 && (
+          {isApiAuthenticated() && <Button variant="outline" onClick={() => setPage("renewal-signing")}>Xem lịch ký gia hạn</Button>}
+          {!isApiAuthenticated() && scheduledRenewals.length > 0 && (
             <div className="mt-8 space-y-3">
               <SectionHeader
                 title="Lịch ký phụ lục gia hạn"
@@ -2994,7 +3232,7 @@ export default function StaffApp({
                               r.packageCount > 0 ? String(r.packageCount) : "",
                             )
 
-                            setReturnKeys("Đã thu hồi đủ PIN/thẻ/chìa khóa")
+                            setReturnKeys("Đã thu hồi đủ mã truy cập, thẻ và chìa khóa")
 
                             setFeeDetails({})
 
@@ -3073,7 +3311,7 @@ export default function StaffApp({
 
                             setReturnActualPackages(String(r.packageCount))
 
-                            setReturnKeys("Đã thu hồi đủ PIN/thẻ/chìa khóa")
+                            setReturnKeys("Đã thu hồi đủ mã truy cập, thẻ và chìa khóa")
 
                             setInspectModal(true)
                           }}
@@ -3097,6 +3335,7 @@ export default function StaffApp({
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
       {page === 'support' && (
+        <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
         <StaffSupportPanel
           user={user}
           tickets={hub.tickets}
@@ -3104,6 +3343,7 @@ export default function StaffApp({
           canManageSupport={true}
           showToast={showToast}
         />
+        </SupportApiRoute>
       )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
@@ -3186,7 +3426,7 @@ export default function StaffApp({
                   {statusLabelMap[selectedReservation.status]}
                 </span>
                 <span>
-                  <b>{"Lịch Nhận kho"}:</b>{" "}
+                  <b>{"Lịch nhận kho"}:</b>{" "}
                   {formatDate(selectedReservation.appointmentDate)} ·{" "}
                   {formatTime(selectedReservation.appointmentTime)}
                 </span>
@@ -3253,11 +3493,7 @@ export default function StaffApp({
                           "Đã duyệt hồ sơ; khách hàng được mở bước thanh toán cọc.",
                         )
                       } catch (error) {
-                        showToast(
-                          error instanceof Error
-                            ? error.message
-                            : "Không thể duyệt hồ sơ.",
-                        )
+                        showToast(staffErrorMessage(error, "Không thể duyệt hồ sơ."))
                       }
                     }}
                   >
@@ -3289,11 +3525,7 @@ export default function StaffApp({
                             "Đã từ chối ngoại lệ và giải phóng yêu cầu giữ kho.",
                           )
                         } catch (error) {
-                          showToast(
-                            error instanceof Error
-                              ? error.message
-                              : "Không thể từ chối hồ sơ.",
-                          )
+                          showToast(staffErrorMessage(error, "Không thể từ chối hồ sơ."))
                         }
                       }}
                     >
@@ -3861,11 +4093,7 @@ export default function StaffApp({
                           "Đã xác nhận chuyển hoàn cọc. Khách hàng đã nhận được biên nhận hoàn tiền.",
                         )
                       } catch (error) {
-                        showToast(
-                          error instanceof Error
-                            ? error.message
-                            : "Không thể xác nhận hoàn cọc.",
-                        )
+                        showToast(staffErrorMessage(error, "Không thể xác nhận hoàn cọc."))
                       }
                     }}
                   >
@@ -3971,11 +4199,7 @@ export default function StaffApp({
                         "Đã gửi biên bản; khách hàng đã nhận được yêu cầu xác nhận quyết toán.",
                       )
                     } catch (error) {
-                      showToast(
-                        error instanceof Error
-                          ? error.message
-                          : "Không thể hoàn tất nghiệm thu trả kho.",
-                      )
+                      showToast(staffErrorMessage(error, "Không thể hoàn tất nghiệm thu trả kho."))
                     }
                   }}
                 >
@@ -4037,7 +4261,7 @@ export default function StaffApp({
                   {formatTime(selectedCheckin.appointmentTime)}
                 </span>
                 <span>
-                  <b>{"Hạn Nhận kho"}:</b>{" "}
+                  <b>{"Hạn nhận kho"}:</b>{" "}
                   {formatDate(selectedCheckin.checkInDeadline)}
                 </span>
               </div>
@@ -4259,7 +4483,7 @@ export default function StaffApp({
                 [
                   "credential",
 
-                  `Đã cấp PIN/thẻ/chìa khóa cho kho ${selectedCheckin.unit}`,
+                  `Đã cấp mã truy cập, thẻ hoặc chìa khóa cho kho ${selectedCheckin.unit}`,
                 ],
               ] as Array<[string, string]>).map(([key, label]) => (
                 <label
@@ -4285,7 +4509,7 @@ export default function StaffApp({
               ))}
             </div>
             <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs">
-              <b>{"Thông tin quyền truy cập"}:</b> {`PIN-${selectedCheckin.id}`}{" "}
+              <b>{"Thông tin quyền truy cập"}:</b> {`Mã truy cập ${selectedCheckin.id}`}{" "}
               · {selectedCheckin.unit} · {selectedCheckin.customer} ·{" "}
               {user.name} · {"kích hoạt khi hoàn tất nhận kho"}
             </div>
@@ -4371,11 +4595,7 @@ export default function StaffApp({
                       "Đã ghi nhận hợp đồng và thanh toán. Hệ thống đang hoàn tất Nhận kho…",
                     )
                   } catch (error) {
-                    showToast(
-                      error instanceof Error
-                        ? error.message
-                        : "Không thể chuẩn bị hồ sơ Nhận kho.",
-                    )
+                    showToast(staffErrorMessage(error, "Không thể chuẩn bị hồ sơ nhận kho."))
                   }
                 }}
               >
@@ -4390,7 +4610,7 @@ export default function StaffApp({
 
       <Modal
         closeLabel="Đóng hộp thoại"
-        open={Boolean(selectedRenewal)}
+        open={Boolean(selectedRenewal) && !isApiAuthenticated()}
         onClose={() => setSelectedRenewal(null)}
         title="Hoàn tất gia hạn tại cơ sở"
       >
@@ -4483,11 +4703,7 @@ export default function StaffApp({
                       "Đã hoàn tất gia hạn. Khách hàng đã nhận thời hạn hợp đồng và biên nhận mới.",
                     )
                   } catch (error) {
-                    showToast(
-                      error instanceof Error
-                        ? error.message
-                        : "Không thể hoàn tất gia hạn.",
-                    )
+                    showToast(staffErrorMessage(error, "Không thể hoàn tất gia hạn."))
                   }
                 }}
               >
@@ -4509,7 +4725,7 @@ export default function StaffApp({
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
               <b>{noShowTarget.customer}</b> · {noShowTarget.unit}
               <br />
-              {"Lịch Nhận kho"}: {formatDate(noShowTarget.appointmentDate)} ·{" "}
+              {"Lịch nhận kho"}: {formatDate(noShowTarget.appointmentDate)} ·{" "}
               {formatTime(noShowTarget.appointmentTime)}
               <br />
               {"Hạn cuối"}: {formatDate(noShowTarget.checkInDeadline)}
@@ -4559,11 +4775,7 @@ export default function StaffApp({
                       "Đã ghi nhận khách không đến; khách hàng và kho đã được cập nhật.",
                     )
                   } catch (error) {
-                    showToast(
-                      error instanceof Error
-                        ? error.message
-                        : "Không thể ghi nhận khách không đến.",
-                    )
+                    showToast(staffErrorMessage(error, "Không thể ghi nhận khách không đến."))
                   }
                 }}
               >
@@ -4718,7 +4930,7 @@ export default function StaffApp({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-stone-700 block mb-1">
-                  {"Cập Nhật Trạng Thái"}
+                  {"Cập nhật trạng thái"}
                 </label>
                 <select
                   value={ticketNewStatus}
@@ -4766,12 +4978,12 @@ export default function StaffApp({
             {/* Staff Reply */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-stone-700">
-                {"Nội Dung Phản Hồi Chính Thức Tới Khách"}
+                {"Nội dung phản hồi chính thức tới khách hàng"}
               </label>
               <textarea
                 rows={3}
                 placeholder={
-                  "Nhập hướng dẫn khắc phục sự cố, cấp lại mã PIN hoặc thông báo cho khách..."
+                  "Nhập hướng dẫn khắc phục sự cố, cấp lại mã truy cập hoặc thông báo cho khách hàng..."
                 }
                 value={staffReplyText}
                 onChange={(e) => setStaffReplyText(e.target.value)}

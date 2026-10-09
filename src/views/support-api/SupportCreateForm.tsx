@@ -139,8 +139,7 @@ export default function SupportCreateForm({
     >
       {parent && (
         <p className="break-all rounded bg-stone-50 p-3 text-sm">
-          Yêu cầu tiếp nối: {parent.id} · Cơ sở {parent.facilityId}. Không sao
-          chép trao đổi hoặc file nội bộ.
+          Yêu cầu gốc: {parent.id}
         </p>
       )}
       <label className="block text-sm">
@@ -167,7 +166,7 @@ export default function SupportCreateForm({
         />
       </label>
       <label className="block text-sm">
-        Liên kết dữ liệu thật
+        Hồ sơ liên quan
         <select
           className={supportInputClass}
           disabled={command.locked}
@@ -179,7 +178,7 @@ export default function SupportCreateForm({
             setPaymentId(undefined)
           }}
         >
-          <option value="facility">Không liên kết — chọn cơ sở</option>
+          <option value="facility">Không liên kết - chọn cơ sở</option>
           <option value="rental">Hồ sơ thuê của tôi</option>
           <option value="reservation">Đặt chỗ của tôi</option>
           <option value="unit">Gian kho theo hồ sơ thuê của tôi</option>
@@ -222,8 +221,7 @@ export default function SupportCreateForm({
           />
           {unique.length === 0 && (
             <p className="text-sm text-stone-500">
-              Trang này không có dữ liệu phù hợp. Có thể chuyển trang; không tự
-              nhập mã hoặc tạo dữ liệu thay thế.
+              Trang này không có hồ sơ phù hợp.
             </p>
           )}
         </div>
@@ -235,17 +233,6 @@ export default function SupportCreateForm({
           onChange={setPaymentId}
         />
       )}
-      {parent && (
-        <p className="text-xs text-stone-500">
-          Tổng số/trang là danh mục của tài khoản từ BE; chỉ hiển thị lựa chọn
-          cùng cơ sở yêu cầu gốc trên từng trang.
-        </p>
-      )}
-      <p className="text-sm text-stone-500">
-        Không tự chọn priority/SLA. Chỉ liên kết Payment thật theo đặt chỗ đã
-        chọn. Upload minh chứng chờ quyền file chung; không nhập mã hoặc URL tùy
-        ý. BE kiểm tra lại ownership và suy ra cơ sở.
-      </p>
       <Button
         type="submit"
         disabled={
@@ -292,7 +279,7 @@ function PaymentChoice({
         <>
           <p>Giao dịch được ghi nhận cho đặt chỗ này:</p>
           <p className="break-all">{read.data.paymentId}</p>
-          <p>Trạng thái: {read.data.paymentStatus}</p>
+          <p>Trạng thái: {({ PENDING: "Chờ thanh toán", PROCESSING: "Đang xử lý thanh toán", PAID: "Đã thanh toán", NOT_RECEIVED: "Chưa nhận được tiền", FAILED: "Thanh toán thất bại", CANCELLED: "Đã hủy" } as Record<string, string>)[read.data.paymentStatus] ?? "Chưa rõ trạng thái"}</p>
         </>
       )}
     </div>

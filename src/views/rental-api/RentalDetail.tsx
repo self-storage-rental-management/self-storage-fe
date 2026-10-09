@@ -1,6 +1,7 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
 import type { RentalApiDetail } from "../../types/rentalApi"
-import { rentalDate, rentalLabels, rentalMoney, unknown } from "./presentation"
+import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning } from "./presentation"
 export default function RentalDetail({
   rental,
   onRequest,
@@ -8,6 +9,8 @@ export default function RentalDetail({
   rental: RentalApiDetail
   onRequest?: () => void
 }) {
+  const { manager, copy, explain } = useManagerPresentation()
+
   const f = rental.financialSummary
   return (
     <div className="space-y-4">
@@ -19,7 +22,7 @@ export default function RentalDetail({
             <dd className="break-all font-semibold">{rental.id}</dd>
           </div>
           <div>
-            <dt>Customer</dt>
+            <dt>Khách hàng</dt>
             <dd>{rental.customer.fullName}</dd>
           </div>
           <div>
@@ -30,11 +33,11 @@ export default function RentalDetail({
           </div>
           <div>
             <dt>Loại gian kho</dt>
-            <dd>{rental.unitType.name}</dd>
+            <dd>{copy(rental.unitType.name)}</dd>
           </div>
           <div>
             <dt>Trạng thái</dt>
-            <dd>{rentalLabels[rental.status]}</dd>
+            <dd>{copy(rentalLabels[rental.status])}</dd>
           </div>
           <div>
             <dt>Thời hạn</dt>
@@ -62,7 +65,7 @@ export default function RentalDetail({
               {f.completeness === "UNKNOWN"
                 ? unknown
                 : f.billingMode === "PREPAID_FULL_PERIOD"
-                  ? "Trả trước toàn kỳ; không có kỳ thu tiền định kỳ"
+                  ? copy("Trả trước toàn kỳ, không có kỳ thu tiền định kỳ")
                   : rentalDate(f.nextDueDate)}
             </dd>
           </div>
@@ -84,20 +87,17 @@ export default function RentalDetail({
             <dd>
               {rental.access.completeness === "UNKNOWN"
                 ? unknown
-                : rental.access.status || unknown}
+                : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || unknown}
             </dd>
           </div>
         </dl>
-        <p className="mt-3 text-sm text-stone-500">
-          {f.reason} {rental.access.reason}
-        </p>
       </Card>
       {rental.dataWarnings.length > 0 && (
         <div role="status" className="rounded-lg bg-amber-50 p-4">
           <h4 className="font-semibold">Cần kiểm tra dữ liệu</h4>
           {rental.dataWarnings.map((w, i) => (
             <p key={i}>
-              {w.field}: {w.reason}
+              {rentalDataWarning(w.field)}
             </p>
           ))}
         </div>
@@ -109,9 +109,7 @@ export default function RentalDetail({
           </Button>
           {rental.status !== "active" && (
             <p>
-              Hồ sơ không đang hiệu lực hoặc đang trả kho; không thể yêu cầu gia
-              hạn theo luồng này.
-            </p>
+              Chỉ có thể yêu cầu gia hạn khi hồ sơ đang hiệu lực và chưa yêu cầu trả kho.</p>
           )}
         </>
       )}

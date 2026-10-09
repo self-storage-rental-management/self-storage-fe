@@ -45,8 +45,8 @@ describe("D5 role and lifecycle boundaries", () => {
       ...supportActive, status: "resolved", resolvedAt: "2026-10-08T03:00:00Z",
       resolvedBy: supportIds.staff,
     }} />)
-    expect(html).toContain("Đã xử lý xong, chưa đóng")
-    expect(html).toContain("bằng chứng notification đúng lần xử lý này")
+    expect(html).toContain("Đã xử lý xong, chờ khách hàng xác nhận")
+    expect(html).not.toContain("notification")
     expect(html).not.toContain("Tự đóng sau 7 ngày")
   })
   it("Manager coordinates only; cannot resolve, reply or accept as Staff", () => {
@@ -77,7 +77,7 @@ describe("D5 role and lifecycle boundaries", () => {
     },
   )
   it("Staff must receive real manage_support permission from BE", () => {
-    const actor = { ...supportActor("staff"), permissions: ["view_support"] }
+    const actor = { ...supportActor("staff"), permissions: ["support:read"] }
     expect(canReadSupport(actor, "staff")).toBe(false)
     expect(supportActions(actor, "staff", supportActive)).toEqual([])
   })
@@ -190,7 +190,7 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
         ticket={{ ...supportTicket, subject: "<script>alert(1)</script>" }}
       />,
     )
-    expect(html).toContain("Không kết luận yêu cầu đang đúng hạn hoặc quá hạn")
+    expect(html).toContain("Chưa đủ thông tin để xác định hạn xử lý và mức ưu tiên")
     expect(html).toContain("8/10/2026")
     expect(html).toContain("&lt;script&gt;")
     expect(html).not.toContain("<script>")
@@ -205,16 +205,17 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
         command={command}
       />,
     )
-    expect(html).toContain("Chọn Staff theo mã")
+    expect(html).toContain("Chọn nhân viên")
     expect(html).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>/)
     expect(html).not.toContain("Báo kết quả xử lý")
     expect(html).not.toContain("Nhận xử lý")
   })
   it("shows a Staff permission gate without impersonation or demo fallback", () => {
-    session.actor = { ...supportActor("staff"), permissions: ["view_support"] }
+    session.actor = { ...supportActor("staff"), permissions: ["support:read"] }
     const html = renderToStaticMarkup(<SupportApiWorkspace role="staff" />)
-    expect(html).toContain("manage_support hiện phải được owner cấp trên BE")
-    expect(html).toContain("Không lấy yêu cầu demo để thay thế dữ liệu API")
+    expect(html).toContain("Bạn chưa có quyền truy cập hỗ trợ")
+    expect(html).not.toContain("manage_support")
+    expect(html).not.toContain("Không lấy yêu cầu demo")
     expect(html).not.toContain("Tạo yêu cầu</button>")
   })
   it.each(["customer", "staff"] as const)(
@@ -227,7 +228,8 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
       )
       expect(html).toContain('data-owner="unchanged"')
       expect(html).toContain("Original workspace")
-      expect(html).toContain("Hỗ trợ (D5 API)")
+      expect(html).toContain("Hỗ trợ khách hàng")
+      expect(html).not.toContain("D5 API")
       expect(html).not.toContain("Hỗ trợ vận hành (D5 API)")
     },
   )
