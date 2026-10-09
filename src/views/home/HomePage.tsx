@@ -3,10 +3,93 @@ import BrandLogo from '../../components/BrandLogo'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { UNIT_SPECS } from '../../data/demoDatabase'
 import { DEMO_DATA_ENABLED } from '../../config/runtime'
+import { listPublicFacilities, listPublicUnitTypes, type PublicFacilitySummary, type PublicUnitTypeSummary } from '../../services/publicCatalogApi'
 
 interface HomePageProps {
   onOpenLogin: () => void
   onOpenRegister: () => void
+  onOpenAdminLogin?: () => void
+}
+
+interface UnitCategoryCard {
+  id: string
+  name: string
+  size: string
+  areaLabel?: string
+  volumeLabel?: string
+  desc: string
+  estRate: string
+  badge: string
+  highlight: string
+}
+
+function CatalogTierCard({ category, index, onOpen }: { category: UnitCategoryCard; index: number; onOpen: () => void }) {
+  const accents = [
+    {
+      border: 'hover:border-amber-500/50',
+      iconBox: 'bg-amber-500/15 border-amber-500/30 text-amber-400',
+      title: 'group-hover:text-amber-300',
+      Icon: BoxIcon,
+    },
+    {
+      border: 'hover:border-sky-500/50',
+      iconBox: 'bg-sky-500/15 border-sky-500/30 text-sky-400',
+      title: 'group-hover:text-sky-300',
+      Icon: WarehouseIcon,
+    },
+    {
+      border: 'hover:border-indigo-500/50',
+      iconBox: 'bg-indigo-500/15 border-indigo-500/30 text-indigo-400',
+      title: 'group-hover:text-indigo-300',
+      Icon: TruckIcon,
+    },
+    {
+      border: 'hover:border-purple-500/50',
+      iconBox: 'bg-purple-500/15 border-purple-500/30 text-purple-400',
+      title: 'group-hover:text-purple-300',
+      Icon: LayersIcon,
+    },
+  ]
+  const accent = accents[index % accents.length]
+  const Icon = accent.Icon
+
+  return (
+    <div
+      onClick={onOpen}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') onOpen()
+      }}
+      role="button"
+      tabIndex={0}
+      className={`group bg-[#222428]/90 hover:bg-[#2A2D33] p-3 sm:p-3.5 rounded-xl border border-stone-700/60 ${accent.border} flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md`}
+      title="Nhấn để xem thông số chi tiết"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${accent.iconBox}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className={`text-xs sm:text-sm font-bold text-white transition-colors ${accent.title}`}>
+              {category.name}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
+              {category.areaLabel ?? category.badge}
+            </span>
+          </div>
+          <div className="text-[11px] text-stone-400 truncate mt-0.5">
+            {category.volumeLabel ?? category.size} · {category.highlight}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t border-stone-800/80 sm:border-t-0 shrink-0">
+        <span className="text-[11px] text-stone-400 font-medium sm:hidden">Giá khởi điểm:</span>
+        <span className="inline-block text-xs font-bold text-[#E89520] bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm group-hover:bg-amber-500/20 transition-colors">
+          {category.estRate.replace(' / tháng', '')}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 // Inline SVG Icons with explicit inline styles to guarantee visibility
@@ -116,10 +199,14 @@ function MenuIcon({ className = "w-5 h-5" }: { className?: string }) {
   )
 }
 
-export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps) {
+export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin }: HomePageProps) {
   const { facilities: contextFacilities, units, rentals, holds } = useStorageHub()
   const [activeModal, setActiveModal] = useState<'facilities' | 'unit_types' | 'how_it_works' | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [publicFacilities, setPublicFacilities] = useState<PublicFacilitySummary[]>([])
+  const [publicUnitTypes, setPublicUnitTypes] = useState<PublicUnitTypeSummary[]>([])
+  const [publicCatalogLoading, setPublicCatalogLoading] = useState(!DEMO_DATA_ENABLED)
+  const [publicCatalogError, setPublicCatalogError] = useState(false)
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId)
@@ -135,33 +222,71 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (DEMO_DATA_ENABLED) return
+    let cancelled = false
+    void Promise.all([listPublicFacilities(), listPublicUnitTypes()])
+      .then(([facilities, unitTypes]) => {
+        if (cancelled) return
+        setPublicFacilities(facilities)
+        setPublicUnitTypes(unitTypes)
+        setPublicCatalogError(false)
+      })
+      .catch(error => {
+        if (cancelled) return
+        console.error('Failed to load public facility catalog', error)
+        setPublicCatalogError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setPublicCatalogLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const [selectedFacilityTab, setSelectedFacilityTab] = useState('all')
 
-  // Keep availability and display metadata from the shared store. Demo
-  // catalog data is intentionally not used as a silent fallback.
-  const facilitiesList = contextFacilities.map(f => {
-    const facCode = f.code || f.id.toUpperCase()
-    const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
-    const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
-    return {
-      ...f,
-      code: facCode,
-      name: f.name,
-      address: f.address,
-      city: f.city,
-      price: f.price ?? 0,
-      units: f.units ?? units.filter(u => u.facilityId === f.id || (f.code && u.facilityId === f.code)).length,
-      available: Math.max(0, physicalAvailable - activeCapacityHolds),
-    }
-  })
+  // Demo mode uses the shared local fixtures. API mode uses the public
+  // backend catalog so the landing page reflects the real database.
+  const facilitiesList = DEMO_DATA_ENABLED
+    ? contextFacilities.map(f => {
+      const facCode = f.code || f.id.toUpperCase()
+      const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
+      const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
+      return {
+        ...f,
+        code: facCode,
+        name: f.name,
+        address: f.address,
+        city: f.city,
+        price: f.price ?? 0,
+        units: f.units ?? units.filter(u => u.facilityId === f.id || (f.code && u.facilityId === f.code)).length,
+        available: Math.max(0, physicalAvailable - activeCapacityHolds),
+      }
+    })
+    : publicFacilities.map(facility => ({
+      id: facility.id,
+      code: facility.code,
+      name: facility.name,
+      address: facility.address,
+      city: facility.city,
+      price: facility.startingMonthlyPrice == null ? '—' : facility.startingMonthlyPrice.toLocaleString('vi-VN'),
+      units: facility.totalUnits,
+      available: facility.availableUnits,
+    }))
   const availableUnitCount = facilitiesList.reduce((total, facility) => total + (facility.available ?? 0), 0)
   const totalUnitCount = facilitiesList.reduce((total, facility) => total + (facility.units ?? 0), 0)
+  const facilityCodes = facilitiesList.map(facility => facility.code).filter(Boolean).join(' · ')
 
-  const unitCategories = [
+  const unitCategories: UnitCategoryCard[] = [
     {
       id: 'small',
       name: 'Gian Kho Nhỏ (Small Storage)',
       size: '8,0 × 10,0 × 5,0 m · 80 m² · 400 m³',
+      areaLabel: '80 m²',
+      volumeLabel: '400 m³',
       desc: 'Phù hợp lưu trữ gia đình, văn phòng. 4 khung kệ (2×4×4,5m), sức chứa ~336 thùng nhỏ / 200 thùng to.',
       estRate: 'Từ 5.500.000 ₫ / tháng',
       badge: 'Cá nhân & Gia đình',
@@ -171,6 +296,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
       id: 'medium',
       name: 'Gian Kho Vừa (Medium Storage)',
       size: '12,6 × 10,4 × 5,0 m · 131,04 m² · 655,2 m³',
+      areaLabel: '131,04 m²',
+      volumeLabel: '655,2 m³',
       desc: 'Phù hợp tồn kho kinh doanh, nội thất. 6 khung kệ, lối xe 2,2m, sức chứa ~504 thùng nhỏ / 300 thùng to.',
       estRate: 'Từ 9.500.000 ₫ / tháng',
       badge: 'Phổ biến nhất',
@@ -180,6 +307,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
       id: 'large',
       name: 'Gian Kho Lớn (Large Storage)',
       size: '18,3 × 10,8 × 5,0 m · 197,64 m² · 988,2 m³',
+      areaLabel: '197,64 m²',
+      volumeLabel: '988,2 m³',
       desc: 'Phù hợp pallet, chuyển nhà quy mô lớn. 8 khung kệ, lối xe 2,6m, xe nâng pallet tay, chứa ~672 thùng nhỏ / 400 thùng to.',
       estRate: 'Từ 15.000.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
@@ -189,12 +318,39 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
       id: 'xlarge',
       name: 'Gian Kho Rất Lớn (Extra Large)',
       size: '25,0 × 11,2 × 5,0 m · 280 m² · 1400 m³',
+      areaLabel: '280 m²',
+      volumeLabel: '1400 m³',
       desc: 'Kho thương mại, máy móc nặng & pallet công nghiệp. 10 khung kệ, lối xe 3,0m, xe nâng điện, chứa ~840 thùng nhỏ / 500 thùng to.',
       estRate: 'Từ 22.500.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
       highlight: 'Xe nâng pallet điện 24/7'
     }
   ]
+
+  const formatMetric = (value: number) => value.toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+  const publicUnitCategories: UnitCategoryCard[] = Array.from(
+    publicUnitTypes.reduce((groups, unitType) => {
+      const group = groups.get(unitType.code) ?? []
+      group.push(unitType)
+      groups.set(unitType.code, group)
+      return groups
+    }, new Map<string, PublicUnitTypeSummary[]>())
+  ).map(([code, types]) => {
+    const cheapest = types.reduce((current, type) => type.monthlyPrice < current.monthlyPrice ? type : current)
+    const availableCount = types.reduce((total, type) => total + type.availableCount, 0)
+    return {
+      id: code,
+      name: cheapest.name,
+      size: `${formatMetric(cheapest.lengthM)} × ${formatMetric(cheapest.widthM)} × ${formatMetric(cheapest.heightM)} m · ${formatMetric(cheapest.areaM2)} m² · ${formatMetric(cheapest.volumeM3)} m³`,
+      areaLabel: `${formatMetric(cheapest.areaM2)} m²`,
+      volumeLabel: `${formatMetric(cheapest.volumeM3)} m³`,
+      desc: `Tải trọng tối đa ${formatMetric(cheapest.maxLoadKg)} kg, ${cheapest.rackCount} khung kệ.`,
+      estRate: `Từ ${cheapest.monthlyPrice.toLocaleString('vi-VN')} ₫ / tháng`,
+      badge: `Size ${code}`,
+      highlight: `${availableCount} gian còn trống`,
+    }
+  })
+  const catalogUnitCategories = DEMO_DATA_ENABLED ? unitCategories : publicUnitCategories
 
   const workflowSteps = [
     {
@@ -371,9 +527,21 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 }}
                 className="w-full py-2.5 rounded-lg text-xs font-bold text-center bg-[#E89520] text-white flex items-center justify-center gap-1.5"
               >
-                <span>Đăng Nhập Ngay</span>
+                <span>Đăng Nhập Khách Hàng</span>
                 <ArrowRightIcon className="w-3.5 h-3.5" />
               </button>
+              {onOpenAdminLogin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenAdminLogin()
+                    setMobileMenuOpen(false)
+                  }}
+                  className="w-full py-2 rounded-lg text-xs font-semibold text-center text-amber-400 bg-stone-900 border border-stone-800 hover:bg-stone-800 flex items-center justify-center gap-1.5 mt-1"
+                >
+                  <span>🔒 Cổng Nội Bộ (Staff / Admin)</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -464,7 +632,16 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
 
               {/* Graphic Unit Tiers */}
-              {!DEMO_DATA_ENABLED && <div className="relative my-8 space-y-3"><p>Đăng nhập để tra cứu loại gian kho, giá thuê và tình trạng còn trống.</p><button type="button" onClick={onOpenLogin} className="rounded-lg bg-[#E89520] px-4 py-2 font-semibold text-stone-900">Tra cứu kho</button></div>}
+              {publicCatalogLoading && <div className="relative my-8 text-sm text-stone-300">Đang cập nhật loại kho và giá thuê...</div>}
+              {!publicCatalogLoading && publicCatalogError && <div className="relative my-8 text-sm text-rose-300">Chưa tải được danh mục loại kho. Vui lòng thử lại sau.</div>}
+              {!publicCatalogLoading && !publicCatalogError && !DEMO_DATA_ENABLED && (
+                <div className="relative my-4 space-y-2.5">
+                  {catalogUnitCategories.length === 0 && <p className="py-6 text-sm text-stone-300">Chưa có loại kho đang mở bán.</p>}
+                  {catalogUnitCategories.map((category, index) => (
+                    <CatalogTierCard key={category.id} category={category} index={index} onOpen={() => setActiveModal('unit_types')} />
+                  ))}
+                </div>
+              )}
               {DEMO_DATA_ENABLED && <div className="relative my-4 space-y-2.5">
                 {/* Small */}
                 <div
@@ -600,10 +777,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               <div className="relative pt-3.5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-400">
                 <span className="flex items-center gap-1.5 text-stone-300 font-medium">
                   <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Tra cứu thông tin cơ sở</span>
+                  <span>Bảo vệ &amp; Giám sát CCTV 24/7</span>
                 </span>
                 <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60 text-[10px] sm:text-[11px]">
-                  {facilitiesList.length} cơ sở
+                  {publicCatalogLoading ? '…' : facilityCodes || `${facilitiesList.length} cơ sở`}
                 </span>
               </div>
             </div>
@@ -693,8 +870,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {!DEMO_DATA_ENABLED && <p className="text-sm text-stone-600">Thông số và giá thuê được hiển thị trong danh mục kho sau khi đăng nhập.</p>}
-            {(DEMO_DATA_ENABLED ? unitCategories : []).map(cat => (
+            {publicCatalogLoading && <p className="col-span-full text-sm text-stone-600">Đang cập nhật thông số và giá thuê...</p>}
+            {!publicCatalogLoading && publicCatalogError && <p className="col-span-full text-sm text-rose-700">Chưa tải được danh mục loại kho. Vui lòng thử lại sau.</p>}
+            {!publicCatalogLoading && !publicCatalogError && catalogUnitCategories.length === 0 && <p className="col-span-full text-sm text-stone-600">Chưa có loại kho đang mở bán.</p>}
+            {!publicCatalogLoading && !publicCatalogError && catalogUnitCategories.map(cat => (
               <div key={cat.id} className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition">
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-1.5 mb-3">
@@ -749,13 +928,16 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 onClick={() => setActiveModal('facilities')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition ${selectedFacilityTab === 'all' ? 'bg-[#E89520] text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}
               >
-                Xem danh sách cơ sở ({facilitiesList.length})
+                Xem danh sách cơ sở ({publicCatalogLoading ? '…' : facilitiesList.length})
               </button>
             </div>
           </div>
 
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
-            {facilitiesList.map(fac => (
+            {publicCatalogLoading && <p role="status" className="text-sm text-stone-600">Đang tải danh sách cơ sở…</p>}
+            {!publicCatalogLoading && publicCatalogError && <p role="status" className="text-sm text-red-700">Không thể tải danh sách cơ sở. Vui lòng thử lại sau.</p>}
+            {!publicCatalogLoading && !publicCatalogError && facilitiesList.length === 0 && <p role="status" className="text-sm text-stone-600">Chưa có cơ sở đang hoạt động để hiển thị.</p>}
+            {!publicCatalogLoading && !publicCatalogError && facilitiesList.map(fac => (
               <div key={fac.id} className="rounded-xl border border-stone-200 bg-stone-50 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between">
                 <div className="p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -890,6 +1072,18 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               <ul className="space-y-2 text-xs text-stone-400">
                 <li>Kiểm tra điều kiện lưu trữ tại cơ sở trước khi thuê.</li>
                 <li>Theo dõi hợp đồng và các khoản thanh toán trong tài khoản.</li>
+                {onOpenAdminLogin && (
+                  <li className="pt-2 border-t border-[#353630]">
+                    <button
+                      type="button"
+                      onClick={onOpenAdminLogin}
+                      className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-semibold transition cursor-pointer"
+                    >
+                      <span>🔒 Cổng Nội bộ (Back-office / Admin)</span>
+                      <span>→</span>
+                    </button>
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -980,10 +1174,26 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'unit_types' && (
               <div className="mt-4 space-y-5 text-xs">
                 <p className="text-stone-600 text-sm">
-                  Đăng nhập để xem thông số và giá thuê của các loại gian kho tại từng cơ sở.
+                  {DEMO_DATA_ENABLED ? 'Thông số và giá thuê tham khảo của các loại gian kho.' : 'Thông số và giá thuê hiện tại từ các cơ sở đang hoạt động.'}
                 </p>
 
-                {(DEMO_DATA_ENABLED ? Object.values(UNIT_SPECS) : []).map((spec, idx) => {
+                {!DEMO_DATA_ENABLED && publicCatalogLoading && <p className="text-stone-600">Đang cập nhật danh mục loại kho...</p>}
+                {!DEMO_DATA_ENABLED && publicCatalogError && <p className="text-rose-700">Chưa tải được danh mục loại kho. Vui lòng thử lại sau.</p>}
+                {!DEMO_DATA_ENABLED && !publicCatalogLoading && !publicCatalogError && catalogUnitCategories.map(category => (
+                  <div key={category.id} className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-bold text-stone-900 text-sm">{category.name}</h4>
+                        <p className="mt-1 text-[11px] font-mono text-stone-500">{category.size}</p>
+                      </div>
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">{category.highlight}</span>
+                    </div>
+                    <p className="mt-3 text-xs text-stone-600">{category.desc}</p>
+                    <p className="mt-3 border-t border-stone-200 pt-3 text-sm font-bold text-stone-900">{category.estRate}</p>
+                  </div>
+                ))}
+
+                {DEMO_DATA_ENABLED && Object.values(UNIT_SPECS).map((spec, idx) => {
                   const accentColors = [
                     { border: 'border-amber-200', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-800', icon: 'bg-amber-100 text-amber-700', tag: 'S' },
                     { border: 'border-sky-200', bg: 'bg-sky-50', badge: 'bg-sky-100 text-sky-800', icon: 'bg-sky-100 text-sky-700', tag: 'M' },
