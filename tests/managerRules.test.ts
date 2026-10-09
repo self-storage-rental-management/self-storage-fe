@@ -60,7 +60,7 @@ describe('Facility Manager business rules', () => {
     expect(isManagerOperationAllowed('approve_reservation')).toBe(false)
     expect(isManagerOperationAllowed('perform_handover')).toBe(false)
     expect(isManagerOperationAllowed('handle_support')).toBe(false)
-    expect(isManagerOperationAllowed('manage_policies')).toBe(false)
+    expect(isManagerOperationAllowed('policies:update')).toBe(false)
   })
 
   it('applies a late fee at most once for the current due date', () => {
@@ -82,20 +82,18 @@ describe('Facility Manager business rules', () => {
     expect(Number.isNaN(parseManagerActivityTimestamp('31/02/2026, 09:30:00'))).toBe(true)
   })
 
-  it('removes Staff and Business actions from persisted Manager permissions', () => {
+  it('keeps policy writes BO-only while respecting canonical Manager grants', () => {
     const permissions = normalizeRolePermissions({ manager: {
-      approve_reservations: true,
-      assign_units: false,
-      perform_checkin: true,
-      manage_support: true,
-      manage_policies: true
+      'storage_units:assign': false,
+      'policies:update': true,
+      'policies:read': false
     } })
-    expect(permissions.manager.approve_reservations).toBe(false)
-    expect(permissions.manager.assign_units).toBe(false)
-    expect(normalizeRolePermissions(undefined).manager.assign_units).toBe(true)
-    expect(permissions.manager.perform_checkin).toBe(false)
-    expect(permissions.manager.manage_support).toBe(false)
-    expect(permissions.manager.manage_policies).toBe(false)
+    expect(permissions.manager['storage_units:assign']).toBe(false)
+    expect(normalizeRolePermissions(undefined).manager['storage_units:assign']).toBe(true)
+    expect(permissions.manager['policies:update']).toBe(false)
+    expect(permissions.manager['policies:read']).toBe(true)
+    expect(permissions.manager['reservations:approve']).toBe(true)
+    expect(permissions.manager['support:update']).toBe(true)
   })
 
   it('keeps a unit locked throughout the return workflow', () => {

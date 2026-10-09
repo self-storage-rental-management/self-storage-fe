@@ -21,6 +21,7 @@ import ApiReadState from "../rental-api/ApiReadState"
 import ApiPager from "../rental-api/ApiPager"
 import { operationsInputClass } from "../rental-api/RenewalOperationsPanel"
 import { sourceLabels } from "../rental-api/operationsPresentation"
+import { managerDisplayText, managerDisplayError } from './managerPresentation'
 import {
   rentalDate,
   rentalError,
@@ -47,7 +48,7 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
       <p>
         Dữ liệu lúc {rentalDate(p.asOf)} ·{" "}
         {p.completeness === "COMPLETE"
-          ? "Đầy đủ theo bộ lọc/nguồn BE"
+          ? "Đầy đủ theo bộ lọc/nguồn hệ thống"
           : "Chỉ có dữ liệu một phần"}
       </p>
       {p.completeness === "PARTIAL" && (
@@ -58,7 +59,7 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
           </p>
           <ul className="list-disc pl-5">
             {p.missingSources.map((ref) => (
-              <li key={ref}>{sourceLabels[ref] || ref}</li>
+              <li key={ref}>{managerDisplayText(sourceLabels[ref] || 'Thông tin bổ sung')}</li>
             ))}
           </ul>
         </>
@@ -82,29 +83,23 @@ export function OverdueCaseSummary({ record: r }: { record: OverdueCase }) {
       </p>
       {r.kind === "PAYMENT_DUE" ? (
         <>
-          <p>Số còn nợ theo BE: {rentalMoney(r.outstanding, r.currency!)}</p>
+          <p>Số còn nợ theo hệ thống: {rentalMoney(r.outstanding, r.currency!)}</p>
           <p>Hạn thanh toán: {rentalDate(r.dueAt)}</p>
           <p className="break-all">Nghĩa vụ: {r.obligationRef}</p>
         </>
       ) : (
         <>
           <p>
-            Hồ sơ quá thời hạn thuê không tự có một khoản nợ tiền; không tính từ
+            Hồ sơ quá thời hạn thuê không tự có một khoản nợ tiền, không tính từ
             đơn giá tháng.
           </p>
-          <p>Cutoff: {rentalDate(r.recoveryCutoff)}</p>
-          <p className="break-all">
-            Policy: {r.policyRef} · version {r.policyVersion}
-          </p>
+          <p>mốc thu hồi: {rentalDate(r.recoveryCutoff)}</p>
           <p>
-            Đủ điều kiện gửi Recovery theo BE:{" "}
-            {r.recoveryEligible ? "Có (cần receiver xác nhận)" : "Chưa"}
+            Đủ điều kiện gửi thu hồi kho theo hệ thống:{" "}
+            {r.recoveryEligible ? "Có (cần bộ phận tiếp nhận xác nhận)" : "Chưa"}
           </p>
         </>
       )}
-      <p>
-        Phiên bản theo dõi: {r.followUpVersion} (không phải phiên bản số dư)
-      </p>
     </div>
   )
 }
@@ -116,7 +111,7 @@ export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
           {
             NOTE: "Ghi chú",
             REMINDER: "Yêu cầu nhắc nợ",
-            RECOVERY_HANDOFF: "Bàn giao tới Recovery",
+            RECOVERY_HANDOFF: "Bàn giao tới thu hồi kho",
           }[e.type]
         }{" "}
         · {rentalDate(e.recordedAt)}
@@ -130,17 +125,12 @@ export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
       )}
       {e.type === "REMINDER" && (
         <p>
-          Đã được đưa vào hàng đợi thông báo; không xác nhận đã gửi đến khách.
+          Đã được đưa vào hàng đợi thông báo, không xác nhận đã gửi đến khách.
         </p>
       )}
       {e.type === "RECOVERY_HANDOFF" && (
         <p>
-          Receiver đã nhận hồ sơ; không có nghĩa đã thu hồi/giải phóng gian kho.
-        </p>
-      )}
-      {e.policyRef && (
-        <p>
-          Policy: {e.policyRef} · {e.policyVersion}
+          Bộ phận thu hồi đã nhận hồ sơ, chưa có nghĩa gian kho đã được thu hồi hoặc giải phóng.
         </p>
       )}
     </article>
@@ -155,7 +145,7 @@ export default function ManagerOverdueApiPanel() {
     !actor.permissions.includes("rentals:read")
   )
     return (
-      <Card className="p-5">Cần quyền xem hồ sơ thuê của Manager API.</Card>
+      <Card className="p-5">Cần quyền xem hồ sơ thuê của quản lý cơ sở .</Card>
     )
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
   return <OverdueSession key={identity} identity={identity} />
@@ -181,10 +171,10 @@ function OverdueSession({ identity }: { identity: string }) {
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Theo dõi quá hạn (D4)</h1>
+      <h1 className="text-2xl font-bold">Theo dõi quá hạn</h1>
       <p className="text-sm text-stone-500">
-        Tách quá hạn thuê và quá hạn thanh toán. Chỉ đọc số dư/policy xác thực
-        từ BE; không phát sinh phí, khóa truy cập hoặc giải phóng gian kho trên
+        Tách quá hạn thuê và quá hạn thanh toán. Chỉ đọc số dư/chính sách xác thực
+        từ hệ thống, không phát sinh phí, khóa truy cập hoặc giải phóng gian kho trên
         màn hình này.
       </p>
       <Card className="p-4">
@@ -265,9 +255,7 @@ function OverdueSession({ identity }: { identity: string }) {
               ))}
             </select>
           </label>
-          <Button variant="outline" onClick={read.refresh}>
-            Tải lại
-          </Button>
+
         </div>
       </Card>
       <ApiReadState {...read} retry={read.refresh} />
@@ -310,7 +298,7 @@ function OverdueSession({ identity }: { identity: string }) {
               <p>
                 {read.data.completeness === "PARTIAL"
                   ? "Chưa có hồ sơ từ các nguồn đã kết nối. Vẫn còn nguồn thiếu cần kiểm tra."
-                  : "Không có hồ sơ quá hạn phù hợp tại thời điểm BE kiểm tra."}
+                  : "Không có hồ sơ quá hạn phù hợp tại thời điểm hệ thống kiểm tra."}
               </p>
             )}
             <ApiPager
@@ -331,7 +319,7 @@ function OverdueSession({ identity }: { identity: string }) {
             className={operationsInputClass}
             value={historyRef}
             onChange={(e) => setHistoryRef(e.target.value)}
-            placeholder="RENTAL_TERM:UUID hoặc PAYMENT_DUE:UUID:UUID"
+            placeholder="Nhập mã hồ sơ quá hạn cần tra cứu"
           />
         </label>
         <Button
@@ -345,7 +333,7 @@ function OverdueSession({ identity }: { identity: string }) {
           Mở lịch sử
         </Button>
         {refError && (
-          <p role="alert">Mã không đúng contract; dùng mã đã lấy từ API.</p>
+          <p role="alert">Mã hồ sơ không hợp lệ. Vui lòng chọn hồ sơ trong danh sách phía trên.</p>
         )}
       </Card>
       {selected && (
@@ -442,7 +430,7 @@ function OverdueDetail({
       )}
       {last && (
         <div role="status">
-          <p>Kết quả thao tác từ BE:</p>
+          <p>Kết quả thao tác từ hệ thống:</p>
           <OverdueFollowUpCard event={last} />
         </div>
       )}
@@ -503,7 +491,7 @@ function OverdueForm({
             </option>
             {r.kind === "RENTAL_TERM" && r.recoveryEligible && (
               <option value="RECOVERY_HANDOFF">
-                Đề nghị bàn giao tới Recovery
+                Đề nghị bàn giao tới thu hồi kho
               </option>
             )}
           </select>
@@ -518,15 +506,15 @@ function OverdueForm({
           />
         </label>
         <p className="text-sm text-stone-500">
-          BE kiểm tra số dư/quá hạn hiện tại, policy, cooldown, quyền và
-          receiver. Thiếu nguồn sẽ chặn, không ghi thành công giả.
+          hệ thống kiểm tra số dư/quá hạn hiện tại, chính sách, thời gian chờ, quyền và
+          bộ phận tiếp nhận. Thiếu nguồn sẽ chặn, không ghi thành công giả.
         </p>
       </fieldset>
       {validation && <p role="alert">{validation}</p>}
-      {command.error ? <p role="alert">{rentalError(command.error)}</p> : null}
+      {command.error ? <p role="alert">{managerDisplayError(command.error)}</p> : null}
       {command.uncertain && (
         <p role="alert">
-          Chưa xác định kết quả. Không đóng/đổi nội dung; thử lại cùng key.
+          Chưa xác định kết quả. Không đóng/đổi nội dung, thử lại cùng key.
         </p>
       )}
       <div className="flex gap-2">
@@ -537,7 +525,7 @@ function OverdueForm({
               validateText(content)
               setValidation(undefined)
             } catch (e) {
-              setValidation(rentalError(e))
+              setValidation(managerDisplayError(e))
               return
             }
             onLocked(true)

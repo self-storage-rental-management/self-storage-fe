@@ -29,6 +29,7 @@ import StaffFeeField from "./StaffFeeField"
 import StaffPaymentUpload from "./StaffPaymentUpload"
 
 import StaffSupportPanel from "./StaffSupportPanel"
+import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
@@ -3019,7 +3020,8 @@ export default function StaffApp({
             total={displayedCheckins.length}
             onPageChange={setCheckinsPage}
           />
-          {scheduledRenewals.length > 0 && (
+          {isApiAuthenticated() && <Button variant="outline" onClick={() => setPage("renewal-signing")}>Xem lịch ký gia hạn</Button>}
+          {!isApiAuthenticated() && scheduledRenewals.length > 0 && (
             <div className="mt-8 space-y-3">
               <SectionHeader
                 title="Lịch ký phụ lục gia hạn"
@@ -3301,6 +3303,7 @@ export default function StaffApp({
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
       {page === 'support' && (
+        <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
         <StaffSupportPanel
           user={user}
           tickets={hub.tickets}
@@ -3308,6 +3311,7 @@ export default function StaffApp({
           canManageSupport={true}
           showToast={showToast}
         />
+        </SupportApiRoute>
       )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
@@ -4423,7 +4427,7 @@ export default function StaffApp({
 
       <Modal
         closeLabel="Đóng hộp thoại"
-        open={Boolean(selectedRenewal)}
+        open={Boolean(selectedRenewal) && !isApiAuthenticated()}
         onClose={() => setSelectedRenewal(null)}
         title="Hoàn tất gia hạn tại cơ sở"
       >

@@ -2,6 +2,19 @@ import { useState, type ReactNode } from "react"
 import { Button } from "../../components/ui"
 import SupportApiWorkspace from "./SupportApiWorkspace"
 
+/** The primary Support route must never fall back to demo records after an API error. */
+export function SupportApiRoute({
+  apiAuthenticated,
+  role,
+  children,
+}: {
+  apiAuthenticated: boolean
+  role: "customer" | "staff"
+  children: ReactNode
+}) {
+  return apiAuthenticated ? <SupportApiWorkspace role={role} /> : children
+}
+
 /** Additive composition point owned by Dương; never replaces the team Support/Return screens. */
 export default function SupportApiEntry({
   role,
