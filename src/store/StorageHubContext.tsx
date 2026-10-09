@@ -254,6 +254,67 @@ const LEGACY_FACILITY_NAMES: Record<string, string> = {
   'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
 }
 
+export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address?: string; city?: string }> = {
+  'FAC-Q1': {
+    name: 'StorageHub Chi nhánh Quận 1',
+    address: '123 Nguyễn Huệ, Phường Bến Nghé, Quận 1',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q1-F01': {
+    name: 'Kho Việt – Cơ sở Quận 1',
+    address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q7-F01': {
+    name: 'Kho Việt – Cơ sở Quận 7 (Phú Mỹ Hưng)',
+    address: '105 Nguyễn Lương Bằng, Phường Tân Phú, Quận 7, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'BD-F01': {
+    name: 'Kho Việt – Cơ sở Bình Dương',
+    address: '468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
+    city: 'Bình Dương'
+  },
+  'HCM-TD-F01': {
+    name: 'Kho Việt – Cơ sở Thủ Đức',
+    address: 'Số 1 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức',
+    city: 'TP. Hồ Chí Minh'
+  }
+}
+
+export function sanitizeFacilityStrings<T extends { code?: string; id?: string; name?: string; address?: string; city?: string }>(f: T): T {
+  if (!f) return f
+  const code = (f.code || f.id || '').toUpperCase()
+  let fix = KNOWN_FACILITY_CORRECTIONS[code]
+  if (!fix && f.id) {
+    fix = KNOWN_FACILITY_CORRECTIONS[f.id.toUpperCase()]
+  }
+  if (!fix) {
+    const addr = f.address || ''
+    const nm = f.name || ''
+    if (addr.includes('123 Nguy') || addr.includes('Huß') || addr.includes('Nguyß') || addr.includes('Phã') || (nm.includes('Quận 1') && nm.includes('StorageHub'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['FAC-Q1']
+    } else if (addr.includes('Võ Văn Ngân') || nm.includes('Thủ Đức')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-TD-F01']
+    } else if (addr.includes('Bình Dương') || nm.includes('Bình Dương')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['BD-F01']
+    } else if (addr.includes('Lương Bằng') || nm.includes('Quận 7')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q7-F01']
+    } else if (addr.includes('Bỉnh Khiêm') || (nm.includes('Quận 1') && nm.includes('Kho Việt'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q1-F01']
+    }
+  }
+  if (fix) {
+    return {
+      ...f,
+      name: fix.name || f.name,
+      address: fix.address || f.address,
+      city: fix.city || f.city
+    }
+  }
+  return f
+}
+
 export const isExcludedFacility = (_f: { code?: string; id?: string; city?: string; name?: string }) => false
 
 export const isExcludedUnit = (_u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => false
@@ -266,9 +327,10 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 }
 
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
-  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES
-  const cleaned = facilities.filter(f => !isExcludedFacility(f))
+  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES.map(sanitizeFacilityStrings)
+  const cleaned = facilities.filter(f => !isExcludedFacility(f)).map(sanitizeFacilityStrings)
   const mapped = cleaned.map(stored => {
+    stored = sanitizeFacilityStrings(stored)
     const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
     if (!canonical) return stored
     if (canonical.id === 'fac-001') {
@@ -1350,7 +1412,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             if (Array.isArray(directFacs)) {
               const knownIds = new Set(rawFacilities.map((f: any) => f.id))
               const knownCodes = new Set(rawFacilities.map((f: any) => (f.code || '').toUpperCase()))
-              for (const df of directFacs) {
+              for (let df of directFacs) {
+                df = sanitizeFacilityStrings(df)
                 if (df && df.id && !knownIds.has(df.id) && (!df.code || !knownCodes.has(df.code.toUpperCase()))) {
                   rawFacilities.push(df)
                   knownIds.add(df.id)
@@ -5255,6 +5318,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const contextValue: StorageHubContextValue = {
     ...state,
+    facilities: state.facilities.map(sanitizeFacilityStrings),
     unitTypes: UNIT_TYPES,
     can,
     updateRolePermissions,
