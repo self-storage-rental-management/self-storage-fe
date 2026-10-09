@@ -38,6 +38,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const [disputeModalOpen, setDisputeModalOpen] = useState(false)
   const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('')
+  const [disputePreset, setDisputePreset] = useState<'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement' | undefined>(undefined)
+  const [facilityCompensation, setFacilityCompensation] = useState<number>(0)
   const [disputeSettlement, setDisputeSettlement] = useState<ManagerReturnSettlementFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
   const [refundTxnRef, setRefundTxnRef] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<ReturnCase | null>(null)
@@ -106,9 +108,56 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     return null
   }
 
+  const applyDisputePreset = (preset: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement') => {
+    setDisputePreset(preset)
+    if (!selectedReturn) return
+
+    if (preset === 'facility_fault_full_refund') {
+      setDisputeSettlement({
+        damageFee: 0,
+        cleaningFee: 0,
+        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee) * USD_TO_VND_RATE),
+        overdueFee: 0,
+        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee) * USD_TO_VND_RATE)
+      })
+      setFacilityCompensation(500000)
+      setDisputeResolutionNote(
+        'Thẩm định hiện trường: Phát hiện lỗi kết cấu cơ sở (nóc dột / vách ngấm nước ngoài vào). Cơ sở kho xin lỗi và chịu 100% trách nhiệm: Miễn toàn bộ phí vệ sinh & hư hại, hoàn 100% tiền cọc cho khách hàng và hỗ trợ bồi thường thiệt hại 500.000₫. Hệ thống sẽ kích hoạt lệnh bảo trì sửa chữa trần/vách kho khẩn cấp.'
+      )
+    } else if (preset === 'customer_fault_deduct') {
+      const standardSanitization = 1500000 // 1.500.000 VND
+      setDisputeSettlement({
+        damageFee: Math.round(moneyValue(selectedReturn.damageFee) * USD_TO_VND_RATE),
+        cleaningFee: standardSanitization,
+        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee) * USD_TO_VND_RATE),
+        overdueFee: Math.round(moneyValue(selectedReturn.overdueFee) * USD_TO_VND_RATE),
+        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee) * USD_TO_VND_RATE)
+      })
+      setFacilityCompensation(0)
+      setDisputeResolutionNote(
+        'Thẩm định hiện trường: Kết cấu trần, vách, sàn kho khô ráo 100%. Nấm mốc phát sinh do khách đóng gói hàng còn ẩm hoặc vi phạm quy định bảo quản đồ nhạy cảm. Giữ nguyên khấu trừ Phí khử trùng & xử lý ẩm mốc 1.500.000₫ theo đúng Hợp đồng.'
+      )
+    } else if (preset === 'mutual_settlement') {
+      const reducedFee = 750000 // 50% của 1.500.000 VND
+      setDisputeSettlement({
+        damageFee: Math.round(moneyValue(selectedReturn.damageFee) * USD_TO_VND_RATE),
+        cleaningFee: reducedFee,
+        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee) * USD_TO_VND_RATE),
+        overdueFee: Math.round(moneyValue(selectedReturn.overdueFee) * USD_TO_VND_RATE),
+        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee) * USD_TO_VND_RATE)
+      })
+      setFacilityCompensation(0)
+      setDisputeResolutionNote(
+        'Thỏa thuận hỗ trợ thiện chí: Khách thuê kho tiêu chuẩn không điều hòa, vào mùa nồm ẩm. Cơ sở hỗ trợ giảm 50% phí khử trùng nấm mốc (còn 750.000₫) để hai bên hoàn tất quyết toán nhanh chóng.'
+      )
+    }
+  }
+
   const openDisputeReview = (returnCase: ReturnCase) => {
     setSelectedReturn(returnCase)
     setDisputeResolutionNote(returnCase.staffNotes || '')
+    setDisputePreset(returnCase.disputeResolutionPreset || (returnCase.moistureOrigin === 'facility_fault' ? 'facility_fault_full_refund' : returnCase.moistureOrigin === 'customer_fault' ? 'customer_fault_deduct' : undefined))
+    setFacilityCompensation(Math.round(moneyValue(returnCase.facilityCompensationAmount || 0) * USD_TO_VND_RATE))
     setDisputeSettlement({
       damageFee: Math.round(moneyValue(returnCase.damageFee) * USD_TO_VND_RATE),
       cleaningFee: Math.round(moneyValue(returnCase.cleaningFee) * USD_TO_VND_RATE),
@@ -127,7 +176,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const handleReviewDispute = () => {
     if (!selectedReturn) return
     try {
-      reviewReturnDispute(selectedReturn.id, user, disputeResolutionNote, settlementInBaseCurrency)
+      reviewReturnDispute(
+        selectedReturn.id,
+        user,
+        disputeResolutionNote,
+        settlementInBaseCurrency,
+        disputePreset,
+        facilityCompensation > 0 ? facilityCompensation / USD_TO_VND_RATE : undefined
+      )
       showToast(
         `Đã rà soát khiếu nại cho đơn ${selectedReturn.id} thành công!`
       )
@@ -349,6 +405,19 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                         }`}>
                           {getDamageLabel(ret.damageClassification)}
                         </span>
+                        {ret.moistureOrigin && ret.moistureOrigin !== 'none' && (
+                          <div>
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              ret.moistureOrigin === 'facility_fault'
+                                ? 'bg-red-50 text-red-700 border border-red-200'
+                                : ret.moistureOrigin === 'customer_fault'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}>
+                              {ret.moistureOrigin === 'facility_fault' ? '🌧️ Lỗi cơ sở dột' : ret.moistureOrigin === 'customer_fault' ? '⚠️ Đồ ẩm mốc' : 'ℹ️ Độ ẩm tự nhiên'}
+                            </span>
+                          </div>
+                        )}
                         {totalDeductions > 0 && (
                           <p className="text-[11px] text-red-600 font-medium">
                             {`Khấu trừ: -${formatVnd(totalDeductions)}`}
@@ -490,6 +559,79 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </div>
             </div>
 
+            {/* Giám định kết cấu hạ tầng (Trần - Vách - Sàn) & Ẩm mốc */}
+            {selectedReturn.structuralInspection && (
+              <div className="rounded-lg border border-cyan-200 bg-cyan-50/50 p-3.5 text-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-cyan-200 pb-1.5">
+                  <span className="font-bold text-cyan-950 text-sm flex items-center gap-1.5">
+                    <span className="text-cyan-600">🛡️</span>
+                    Biên Bản Giám Định Kết Cấu & Ẩm Mốc Lúc Trả Kho
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                    selectedReturn.moistureOrigin === 'facility_fault'
+                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                      : selectedReturn.moistureOrigin === 'customer_fault'
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : selectedReturn.moistureOrigin === 'climate_standard_uncontrolled'
+                      ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}>
+                    {selectedReturn.moistureOrigin === 'facility_fault'
+                      ? 'Lỗi do Cơ sở kho (Thấm dột)'
+                      : selectedReturn.moistureOrigin === 'customer_fault'
+                      ? 'Lỗi do Khách hàng (Đóng gói ẩm)'
+                      : selectedReturn.moistureOrigin === 'climate_standard_uncontrolled'
+                      ? 'Kho thường - Miễn trừ SLA độ ẩm'
+                      : 'Kho hoàn toàn khô ráo'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div className="bg-white p-2 rounded border border-cyan-100">
+                    <span className="text-stone-400 block text-[10px]">Trần kho</span>
+                    <span className="font-semibold text-stone-800">
+                      {selectedReturn.structuralInspection.ceiling === 'leaking'
+                        ? '⚠️ Thấm dột giọt nước'
+                        : selectedReturn.structuralInspection.ceiling === 'stained'
+                        ? '⚠️ Loang ố trần'
+                        : '✓ Khô ráo, nguyên vẹn'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-cyan-100">
+                    <span className="text-stone-400 block text-[10px]">Vách tường</span>
+                    <span className="font-semibold text-stone-800">
+                      {selectedReturn.structuralInspection.wall === 'damp_seepage'
+                        ? '⚠️ Ngấm ẩm từ ngoài vào'
+                        : selectedReturn.structuralInspection.wall === 'cracked'
+                        ? '⚠️ Nứt nẻ vách'
+                        : '✓ Khô ráo, sạch sẽ'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-cyan-100">
+                    <span className="text-stone-400 block text-[10px]">Sàn kho</span>
+                    <span className="font-semibold text-stone-800">
+                      {selectedReturn.structuralInspection.floor === 'cracked'
+                        ? '⚠️ Nứt vỡ sàn'
+                        : selectedReturn.structuralInspection.floor === 'water_pooling'
+                        ? '⚠️ Đọng nước ẩm'
+                        : '✓ Khô ráo, nguyên vẹn'}
+                    </span>
+                  </div>
+                </div>
+                {selectedReturn.sanitizationFee && selectedReturn.sanitizationFee > 0 && (
+                  <div className="flex justify-between items-center bg-amber-50 p-2 rounded border border-amber-200 text-amber-900 mt-1">
+                    <span>Phí khử trùng nấm mốc áp dụng:</span>
+                    <span className="font-mono font-bold">{formatManagerMoney(selectedReturn.sanitizationFee)}</span>
+                  </div>
+                )}
+                {selectedReturn.facilityCompensationAmount && selectedReturn.facilityCompensationAmount > 0 && (
+                  <div className="flex justify-between items-center bg-rose-50 p-2 rounded border border-rose-200 text-rose-900 mt-1">
+                    <span>Cơ sở đồng ý bồi thường thiệt hại:</span>
+                    <span className="font-mono font-bold text-rose-700">+{formatManagerMoney(selectedReturn.facilityCompensationAmount)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Financial Calculation Matrix */}
             <div className="rounded-lg border border-stone-200 p-3.5 bg-white space-y-2 text-xs">
               <p className="font-semibold text-stone-900 border-b pb-1.5 text-sm">
@@ -613,14 +755,84 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               </div>
             </div>
 
+            {/* 3 Kịch Bản Phân Xử Nhanh Theo Quy Định */}
+            <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 text-xs">
+              <p className="font-bold text-indigo-950 flex items-center gap-1.5">
+                <span className="text-indigo-600">⚖️</span>
+                Chọn Kịch Bản Phân Xử Theo Căn Cứ Hiện Trường & Quy Định:
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => applyDisputePreset('facility_fault_full_refund')}
+                  className={`p-2.5 rounded-lg border text-left transition-all ${
+                    disputePreset === 'facility_fault_full_refund'
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-sm ring-2 ring-emerald-500'
+                      : 'border-stone-200 bg-white hover:bg-stone-50 text-stone-800'
+                  }`}
+                >
+                  <p className="font-bold text-xs text-emerald-800 flex items-center gap-1">
+                    🏢 1. Lỗi Cơ Sở Kho
+                  </p>
+                  <p className="text-[11px] text-stone-600 mt-1">
+                    Nóc dột / vách ngấm nước. Miễn 100% phí, hoàn cọc + bồi thường, tạo task sửa P1.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => applyDisputePreset('customer_fault_deduct')}
+                  className={`p-2.5 rounded-lg border text-left transition-all ${
+                    disputePreset === 'customer_fault_deduct'
+                      ? 'border-amber-600 bg-amber-50 text-amber-950 shadow-sm ring-2 ring-amber-500'
+                      : 'border-stone-200 bg-white hover:bg-stone-50 text-stone-800'
+                  }`}
+                >
+                  <p className="font-bold text-xs text-amber-800 flex items-center gap-1">
+                    👤 2. Lỗi Khách Hàng
+                  </p>
+                  <p className="text-[11px] text-stone-600 mt-1">
+                    Kho khô 100%, đồ ẩm phát mốc. Giữ nguyên trừ phí khử trùng 1.500.000₫.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => applyDisputePreset('mutual_settlement')}
+                  className={`p-2.5 rounded-lg border text-left transition-all ${
+                    disputePreset === 'mutual_settlement'
+                      ? 'border-blue-600 bg-blue-50 text-blue-950 shadow-sm ring-2 ring-blue-500'
+                      : 'border-stone-200 bg-white hover:bg-stone-50 text-stone-800'
+                  }`}
+                >
+                  <p className="font-bold text-xs text-blue-800 flex items-center gap-1">
+                    🤝 3. Hòa Giải Thiện Chí
+                  </p>
+                  <p className="text-[11px] text-stone-600 mt-1">
+                    Kho thường nồm ẩm. Giảm 50% phí khử trùng (750.000₫), chia sẻ trách nhiệm.
+                  </p>
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
               <p className="text-sm font-bold text-stone-900">Xác nhận lại các khoản quyết toán</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input label="Phí hư hỏng (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.damageFee)} onChange={event => setSettlementFee('damageFee', event.target.value)} />
-                <Input label="Phí vệ sinh (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.cleaningFee)} onChange={event => setSettlementFee('cleaningFee', event.target.value)} />
+                <Input label="Phí vệ sinh & khử trùng (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.cleaningFee)} onChange={event => setSettlementFee('cleaningFee', event.target.value)} />
                 <Input label="Phí mất vật dụng (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.lostItemFee)} onChange={event => setSettlementFee('lostItemFee', event.target.value)} />
                 <Input label="Phí quá hạn (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.overdueFee)} onChange={event => setSettlementFee('overdueFee', event.target.value)} />
                 <Input label="Công nợ còn lại (VND)" type="number" min="0" step="1000" value={String(disputeSettlement.outstandingFee)} onChange={event => setSettlementFee('outstandingFee', event.target.value)} />
+                {disputePreset === 'facility_fault_full_refund' && (
+                  <Input
+                    label="Khoản bồi thường từ cơ sở (VND)"
+                    type="number"
+                    min="0"
+                    step="100000"
+                    value={String(facilityCompensation)}
+                    onChange={e => setFacilityCompensation(Math.max(0, Number(e.target.value) || 0))}
+                  />
+                )}
               </div>
               {disputePreview && <div className="grid gap-2 border-t border-stone-200 pt-3 text-sm sm:grid-cols-3"><p>Khấu trừ: <b>{formatVnd(disputePreview.totalDeductions)}</b></p><p>Hoàn khách: <b className="text-emerald-700">{formatVnd(disputePreview.netRefundAmount)}</b></p><p>Khách nộp thêm: <b className="text-rose-700">{formatVnd(disputePreview.amountDueFromCustomer)}</b></p></div>}
             </div>
