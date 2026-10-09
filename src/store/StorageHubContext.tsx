@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react'
 import type {
   Facility,
   StorageUnit,
@@ -5316,9 +5316,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, contracts: prev.contracts.map(item => item.id === contractId ? { ...item, customerArchivedAt: new Date().toISOString() } : item) }))
   }
 
+  const sanitizedFacilities = useMemo(
+    () => state.facilities.map(sanitizeFacilityStrings),
+    [state.facilities]
+  )
+
   const contextValue: StorageHubContextValue = {
     ...state,
-    facilities: state.facilities.map(sanitizeFacilityStrings),
+    facilities: sanitizedFacilities,
     unitTypes: UNIT_TYPES,
     can,
     updateRolePermissions,
