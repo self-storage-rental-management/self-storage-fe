@@ -1,3 +1,4 @@
+import { managerDisplayError } from './managerPresentation'
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar, Badge, Button, Card, Input, Modal, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -193,7 +194,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       showToast(success)
       return true
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể cập nhật nhiệm vụ.')
+      showToast(managerDisplayError(error))
       return false
     }
   }
@@ -226,7 +227,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     }
     const created = run(
       () => createFacilityTask({ facilityId, facilityName, type, title, referenceId: referenceId.trim() || undefined, dueAt, priority, assignedStaffId: selectedStaff.id, notes }, user),
-      `Đã giao nhiệm vụ cho ${selectedStaff.name}; đang chờ Staff nhận việc.`
+      `Đã giao nhiệm vụ cho ${selectedStaff.name}, đang chờ nhân viên nhận việc.`
     )
     if (!created) return
     setModalOpen(false)
@@ -239,7 +240,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       showToast('Nhân viên không hợp lệ hoặc không thuộc cơ sở của bạn.')
       return
     }
-    run(() => updateFacilityTask(task.id, { assignedStaffId: selectedStaff.id }, user), `Đã giao lại nhiệm vụ cho ${selectedStaff.name}; trạng thái trở về chờ nhận.`)
+    run(() => updateFacilityTask(task.id, { assignedStaffId: selectedStaff.id }, user), `Đã giao lại nhiệm vụ cho ${selectedStaff.name}, trạng thái trở về chờ nhận.`)
   }
 
   const cancelTaskWithReason = () => {
@@ -251,7 +252,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
   }
 
   return <div className="fade-in space-y-5">
-    <SectionHeader eyebrow="Điều phối ca làm việc" title="Nhân viên & Nhiệm vụ" subtitle="Giao việc theo đúng cơ sở, theo dõi tiến độ và kết quả do Staff cập nhật." action={<Button disabled={!staff.length} onClick={() => setModalOpen(true)}>Tạo nhiệm vụ</Button>} />
+    <SectionHeader eyebrow="Điều phối ca làm việc" title="Nhân viên & Nhiệm vụ" subtitle="Giao việc theo đúng cơ sở, theo dõi tiến độ và kết quả do nhân viên cập nhật." action={<Button disabled={!staff.length} onClick={() => setModalOpen(true)}>Tạo nhiệm vụ</Button>} />
 
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       <StatCard title="Chưa phân công" value={facilityTasks.filter(task => !task.assignedStaffId && task.status !== 'cancelled').length} icon={Icon.alert} />
@@ -262,9 +263,9 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     </div>
 
     {overdueTasks.length > 0 && <ManagerActionNotice tone="warning">Có {overdueTasks.length} nhiệm vụ quá hạn cần theo dõi hoặc giao lại.</ManagerActionNotice>}
-    {hiddenTaskCount > 0 && <ManagerActionNotice tone="info"><div className="flex items-center justify-between gap-3"><span>{hiddenTaskCount} nhiệm vụ lịch sử đã được soft-delete khỏi danh sách Manager. Dữ liệu nhiệm vụ và nhật ký vẫn giữ nguyên.</span><Button size="sm" variant="outline" onClick={() => taskHistory.restoreAll()}>Khôi phục tất cả</Button></div></ManagerActionNotice>}
+    {hiddenTaskCount > 0 && <ManagerActionNotice tone="info"><div className="flex items-center justify-between gap-3"><span>{hiddenTaskCount} nhiệm vụ lịch sử đã được ẩn khỏi danh sách quản lý cơ sở. Dữ liệu nhiệm vụ và nhật ký vẫn giữ nguyên.</span><Button size="sm" variant="outline" onClick={() => taskHistory.restoreAll()}>Khôi phục tất cả</Button></div></ManagerActionNotice>}
 
-    <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">Staff · {'shift' in member && typeof member.shift === 'string' ? member.shift : '—'}</p><p className="mt-2 text-xs text-stone-600">{member.email} · {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
+    <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">nhân viên · {'shift' in member && typeof member.shift === 'string' ? member.shift : "-"}</p><p className="mt-2 text-xs text-stone-600">{member.email} · {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
 
     <Card className="p-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
       <Input label="Tìm kiếm" value={query} onChange={event => setQuery(event.target.value)} placeholder="Nhiệm vụ, mã hồ sơ, nhân viên…" />
@@ -282,7 +283,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
         const progress = deriveTaskProgress(task, activities)
         return <Tr key={task.id}>
           <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="text-xs text-stone-400">{task.id}{task.referenceId ? ` · ${task.referenceId}` : ''}</p><p className="mt-1 text-xs text-stone-500">{managerTaskTypeLabel(task.type, 'vi')}</p></Td>
-          <Td>{task.status === 'cancelled' ? <div><p className="font-medium">{displayedAssignee || '—'}</p><p className="text-xs text-red-600">Đã ngừng phân công</p></div> : <Select disabled={!canReassign} value={task.assignedStaffId || ''} onChange={event => reassignTask(task, event.target.value)}><option value="" disabled>Chọn Staff để giao</option>{task.assignedStaffId && !staff.some(member => member.id === task.assignedStaffId) && <option value={task.assignedStaffId}>{task.assignedStaffName || task.assignedStaffId}</option>}{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>}</Td>
+          <Td>{task.status === 'cancelled' ? <div><p className="font-medium">{displayedAssignee || "-"}</p><p className="text-xs text-red-600">Đã ngừng phân công</p></div> : <Select disabled={!canReassign} value={task.assignedStaffId || ''} onChange={event => reassignTask(task, event.target.value)}><option value="" disabled>Chọn nhân viên để giao</option>{task.assignedStaffId && !staff.some(member => member.id === task.assignedStaffId) && <option value={task.assignedStaffId}>{task.assignedStaffName || task.assignedStaffId}</option>}{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>}</Td>
           <Td className="min-w-44 text-xs"><p>Giao: <b>{managerDateLabel(progress.assignedAt, 'vi', true)}</b></p><p className="mt-1">Nhận: <b>{managerDateLabel(progress.startedAt, 'vi', true)}</b></p><p className="mt-1">Hoàn thành: <b>{managerDateLabel(progress.completedAt, 'vi', true)}</b></p></Td>
           <Td><p className={isFacilityTaskOverdue(task, today) ? 'font-semibold text-red-700' : 'text-stone-700'}>{managerDateLabel(task.dueAt, 'vi')}</p><div className="mt-2"><Badge variant={task.priority === 'high' ? 'error' : task.priority === 'medium' ? 'warning' : 'info'}>{managerPriorityLabel(task.priority, 'vi')}</Badge></div></Td>
           <Td className="max-w-52 text-xs"><p className="line-clamp-2">{progress.resultReport || 'Chưa có báo cáo kết quả'}</p><p className="mt-1 text-stone-500">{progress.evidence.length ? `${progress.evidence.length} minh chứng` : 'Chưa có minh chứng'}</p>{progress.unableReason && <p className="mt-1 font-semibold text-red-700">Không thể thực hiện: {progress.unableReason}</p>}</Td>
@@ -302,7 +303,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       <Input label="Hạn xử lý" type="date" value={dueAt} onChange={event => setDueAt(event.target.value)} />
       <Select label="Người phụ trách (bắt buộc)" value={staffId} onChange={event => setStaffId(event.target.value)}><option value="">Chọn nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>
       <Input label="Ghi chú" value={notes} onChange={event => setNotes(event.target.value)} />
-      <ManagerActionNotice compact tone="info">Nhiệm vụ mới ở trạng thái “Chờ nhận”. Chỉ Staff được giao mới có thể nhận và hoàn thành.</ManagerActionNotice>
+      <ManagerActionNotice compact tone="info">Nhiệm vụ mới ở trạng thái “Chờ nhận”. Chỉ nhân viên được giao mới có thể nhận và hoàn thành.</ManagerActionNotice>
       <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setModalOpen(false)}>Đóng</Button><Button disabled={!title.trim() || !dueAt || !staff.some(member => member.id === staffId)} onClick={createTask}>Tạo & giao nhiệm vụ</Button></div>
     </div></Modal>
 
@@ -310,14 +311,14 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
 
     <Modal open={Boolean(detailTask)} onClose={() => setDetailTaskId(null)} title="Chi tiết tiến độ nhiệm vụ" size="lg">{detailTask && detailProgress && <div className="space-y-5 text-sm">
       <div><h3 className="text-lg font-bold text-stone-900">{detailTask.title}</h3><p className="text-stone-500">{detailTask.id} · {managerTaskTypeLabel(detailTask.type, 'vi')}</p></div>
-      <div className="grid gap-3 rounded-lg bg-stone-50 p-4 sm:grid-cols-2"><p>Người phụ trách: <b>{detailTask.assignedStaffName || detailTask.lastAssignedStaffName || 'Chưa ghi nhận'}</b></p><p>Ưu tiên: <b>{managerPriorityLabel(detailTask.priority, 'vi')}</b></p><p>Giao việc: <b>{managerDateLabel(detailProgress.assignedAt, 'vi', true)}</b></p><p>Staff nhận: <b>{managerDateLabel(detailProgress.startedAt, 'vi', true)}</b></p><p>Hoàn thành: <b>{managerDateLabel(detailProgress.completedAt, 'vi', true)}</b></p><p>Người hoàn thành: <b>{detailProgress.completedByName || 'Chưa ghi nhận'}</b></p></div>
+      <div className="grid gap-3 rounded-lg bg-stone-50 p-4 sm:grid-cols-2"><p>Người phụ trách: <b>{detailTask.assignedStaffName || detailTask.lastAssignedStaffName || 'Chưa ghi nhận'}</b></p><p>Ưu tiên: <b>{managerPriorityLabel(detailTask.priority, 'vi')}</b></p><p>Giao việc: <b>{managerDateLabel(detailProgress.assignedAt, 'vi', true)}</b></p><p>nhân viên nhận: <b>{managerDateLabel(detailProgress.startedAt, 'vi', true)}</b></p><p>Hoàn thành: <b>{managerDateLabel(detailProgress.completedAt, 'vi', true)}</b></p><p>Người hoàn thành: <b>{detailProgress.completedByName || 'Chưa ghi nhận'}</b></p></div>
       <div><h4 className="font-bold text-stone-900">Ghi chú giao việc</h4><p className="mt-1 whitespace-pre-wrap text-stone-600">{detailTask.notes || 'Không có ghi chú.'}</p></div>
-      <div><h4 className="font-bold text-stone-900">Báo cáo kết quả</h4><p className="mt-1 whitespace-pre-wrap text-stone-600">{detailProgress.resultReport || 'Staff chưa gửi báo cáo kết quả.'}</p></div>
+      <div><h4 className="font-bold text-stone-900">Báo cáo kết quả</h4><p className="mt-1 whitespace-pre-wrap text-stone-600">{detailProgress.resultReport || "nhân viên chưa gửi báo cáo kết quả."}</p></div>
       <div><h4 className="font-bold text-stone-900">Minh chứng / tệp đính kèm</h4>{detailProgress.evidence.length ? <ul className="mt-2 space-y-1">{detailProgress.evidence.map((item, index) => <li key={`${item}-${index}`} className="rounded bg-stone-50 px-3 py-2 text-stone-700">{item}</li>)}</ul> : <p className="mt-1 text-stone-500">Chưa có minh chứng.</p>}</div>
-      {detailProgress.unableReason && <ManagerActionNotice tone="warning">Staff báo không thể thực hiện lúc {managerDateLabel(detailProgress.reportedUnableAt, 'vi', true)}: {detailProgress.unableReason}</ManagerActionNotice>}
-      {detailTask.cancellationReason && <ManagerActionNotice tone="warning">Đã hủy lúc {managerDateLabel(detailTask.cancelledAt, 'vi', true)} bởi {detailTask.cancelledByName || 'Manager'}. Lý do: {detailTask.cancellationReason}</ManagerActionNotice>}
+      {detailProgress.unableReason && <ManagerActionNotice tone="warning">nhân viên báo không thể thực hiện lúc {managerDateLabel(detailProgress.reportedUnableAt, 'vi', true)}: {detailProgress.unableReason}</ManagerActionNotice>}
+      {detailTask.cancellationReason && <ManagerActionNotice tone="warning">Đã hủy lúc {managerDateLabel(detailTask.cancelledAt, 'vi', true)} bởi {detailTask.cancelledByName || "quản lý cơ sở"}. Lý do: {detailTask.cancellationReason}</ManagerActionNotice>}
       <div className="flex justify-end"><Button variant="outline" onClick={() => setDetailTaskId(null)}>Đóng</Button></div>
     </div>}</Modal>
-    <Modal open={Boolean(deleteTaskId)} onClose={() => setDeleteTaskId(null)} title="Soft-delete nhiệm vụ lịch sử"><div className="space-y-4"><ManagerActionNotice tone="warning">Nhiệm vụ đã hoàn thành hoặc đã hủy chỉ bị ẩn khỏi danh sách Manager. Dữ liệu và nhật ký của Staff vẫn được giữ nguyên.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTaskId(null)}>Hủy</Button><Button variant="danger" onClick={() => { if (deleteTaskId) taskHistory.hide(deleteTaskId); if (detailTaskId === deleteTaskId) setDetailTaskId(null); setDeleteTaskId(null); showToast('Đã ẩn nhiệm vụ khỏi lịch sử Manager.') }}>Xóa khỏi lịch sử</Button></div></div></Modal>
+    <Modal open={Boolean(deleteTaskId)} onClose={() => setDeleteTaskId(null)} title="Ẩn khỏi danh sách nhiệm vụ lịch sử"><div className="space-y-4"><ManagerActionNotice tone="warning">Nhiệm vụ đã hoàn thành hoặc đã hủy chỉ bị ẩn khỏi danh sách quản lý cơ sở. Dữ liệu và nhật ký của nhân viên vẫn được giữ nguyên.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTaskId(null)}>Hủy</Button><Button variant="danger" onClick={() => { if (deleteTaskId) taskHistory.hide(deleteTaskId); if (detailTaskId === deleteTaskId) setDetailTaskId(null); setDeleteTaskId(null); showToast("Đã ẩn nhiệm vụ khỏi lịch sử quản lý cơ sở.") }}>Xóa khỏi lịch sử</Button></div></div></Modal>
   </div>
 }

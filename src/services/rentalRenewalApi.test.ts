@@ -6,6 +6,7 @@ import {
   setRefreshToken,
 } from "./apiClient"
 import { getRental, listRentals } from "./rentalApi"
+import { listCustomerRentals } from "./customerRentalApi"
 import {
   cancelRenewal,
   decideRenewal,
@@ -34,6 +35,30 @@ afterEach(() => {
 })
 
 describe("D1/D2 wire contracts", () => {
+  it.each([
+    { totalItems: 0 }, { totalPages: 0 }, { pageSize: 101 },
+    { page: 1 }, { totalItems: Number.MAX_SAFE_INTEGER + 1 }, { sort: null },
+  ])("rejects inconsistent D1/D2 pagination instead of official fake totals %j", async fields => {
+    const p = page([rental])
+    response({ ...p, pagination: { ...p.pagination, ...fields } })
+    await expect(listRentals("customer")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+    response({ ...page([renewal]), pagination: { ...p.pagination, ...fields } })
+    await expect(listRenewals("manager")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
+  it("rejects a different renewal from a detail response", async () => {
+    response({ data: { ...renewal, id: "another-renewal" } })
+    await expect(getRenewal("customer", "n1")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
+  it("does not confirm a mutation returning another rental/renewal", async () => {
+    response({ data: { ...renewal, rentalId: "another-rental" } })
+    await expect(submitRenewal("r1", "q1", "", "key")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+    response({ data: { ...renewal, id: "another-renewal" } })
+    await expect(decideRenewal("n1", "REJECT", "Reason", 2, "key")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
+  it.each([{ monthlyPrice: -1 }, { currency: "USD" }])("rejects invalid Rental price semantics %j", async fields => {
+    response(page([{ ...rental, ...fields }]))
+    await expect(listRentals("customer")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
   it("accepts PARTIAL verified balances without inventing a missing security deposit", async () => {
     const data = { ...rental, financialSummary: {
       ...rental.financialSummary, completeness: "PARTIAL", outstandingAmount: 1000,
@@ -102,7 +127,7 @@ describe("D1/D2 wire contracts", () => {
         }),
       ).toEqual(page([rental]))
       const url = new URL(fetch.mock.calls[0][0])
-      expect(url.pathname).toBe(`/api/${role}/rentals`)
+      expect(url.pathname).toBe(role === "customer" ? "/api/customer/rental-records" : "/api/manager/rentals")
       expect(url.searchParams.get("search")).toBe("A-01")
       expect(url.searchParams.get("page")).toBe("0")
     },
@@ -119,7 +144,20 @@ describe("D1/D2 wire contracts", () => {
   it("preserves UNKNOWN/null on detail and sends no query", async () => {
     const fetch = response({ data: rental })
     expect(await getRental("customer", "r1")).toEqual(rental)
-    expect(fetch.mock.calls[0][0]).toMatch(/\/api\/customer\/rentals\/r1$/)
+    expect(fetch.mock.calls[0][0]).toMatch(/\/api\/customer\/rental-records\/r1$/)
+  })
+  it("keeps the shared Customer rental client and flat DTO unchanged", async () => {
+    const shared = { data: [{ id: "r1", storageUnitCode: "A-01", facilityName: "Facility" }], pagination: page([]).pagination }
+    const fetch = response(shared)
+    expect(await listCustomerRentals("active", 0, 20)).toEqual(shared)
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/api/customer/rentals")
+  })
+  it("does not fallback to the shared Customer list when D1 is unavailable", async () => {
+    const fetch = vi.fn().mockResolvedValue(json({ error: { code: "NOT_FOUND", message: "Unavailable" } }, 404))
+    vi.stubGlobal("fetch", fetch)
+    await expect(listRentals("customer")).rejects.toMatchObject({ status: 404 })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/api/customer/rental-records")
   })
   it("whitelists queries, including Customer Renewal without search/facility", async () => {
     const fetch = response(page([]))

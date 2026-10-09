@@ -202,7 +202,7 @@ export const managerActivityLabel = (value: string, lang: Language) => labelFrom
 export const managerEntityLabel = (value: string, lang: Language) => labelFrom(entities, value, lang)
 
 export const managerDateLabel = (value: string | undefined, lang: Language, includeTime = false) => {
-  if (!value) return '—'
+  if (!value) return '-'
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return includeTime
@@ -211,7 +211,7 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
 }
 
 export const managerTimeLabel = (value: string | undefined, lang: Language) => {
-  if (!value) return '—'
+  if (!value) return '-'
   const parsed = new Date(`1970-01-01 ${value}`)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleTimeString(lang === 'vi' ? 'vi-VN' : 'en-US', {

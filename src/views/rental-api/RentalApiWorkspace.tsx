@@ -1,3 +1,4 @@
+import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
@@ -54,6 +55,8 @@ function Pager({
   setPage: (p: number) => void
   setSize: (s: number) => void
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 p-4">
       <span>
@@ -191,6 +194,8 @@ function WorkspaceData({
   action?: Action
   setAction: (a?: Action) => void
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   const actor = getAuthenticatedActor()!
   const [rentalFilterDraft, setRentalFilterDraft] = useState(nq.rentalId || "")
   const query = tab === "rental" ? rq : nq
@@ -255,10 +260,6 @@ function WorkspaceData({
       <h1 className="text-2xl font-bold">
         {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê của tôi"}
       </h1>
-      <p className="text-sm text-stone-500">
-        Dữ liệu từ API. Duyệt gia hạn không tự kéo dài hồ sơ thuê; không có thao
-        tác ký/thanh toán D3 nằm trong chi tiết yêu cầu gia hạn.
-      </p>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           "Tổng hồ sơ",
@@ -269,7 +270,7 @@ function WorkspaceData({
           <Card className="p-4" key={label}>
             <p className="text-sm text-stone-500">{label}</p>
             <p className="text-2xl font-bold">
-              {counts.loading ? "…" : (counts.data?.[i] ?? "—")}
+              {counts.loading ? "…" : (counts.data?.[i] ?? copy("—"))}
             </p>
           </Card>
         ))}
@@ -278,9 +279,7 @@ function WorkspaceData({
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
       <p className="text-xs text-stone-500">
-        KPI ngày hết hạn theo giá trị BE; các hồ sơ có cảnh báo ngày chưa xác
-        thực cần được kiểm tra riêng.
-      </p>
+        {copy("KPI ngày hết hạn theo giá trị BE; các hồ sơ có cảnh báo ngày chưa xác thực cần được kiểm tra riêng.")}</p>
       <div className="flex gap-2">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
@@ -294,9 +293,9 @@ function WorkspaceData({
         >
           Yêu cầu gia hạn
         </Button>
-        <Button variant="outline" onClick={refresh}>
+        {!manager && (<Button variant="outline" onClick={refresh}>
           Tải lại
-        </Button>
+        </Button>)}
       </div>
       <Card className="p-4 flex flex-wrap items-end gap-3">
         {(tab === "rental" || role === "manager") && (
@@ -425,7 +424,7 @@ function WorkspaceData({
                 <tr>
                   {[
                     "Mã hồ sơ",
-                    "Customer / Cơ sở",
+                    copy("Customer / Cơ sở"),
                     "Gian kho / Loại",
                     "Thời hạn",
                     "Đơn giá / Tiền gia hạn",
@@ -450,7 +449,7 @@ function WorkspaceData({
                     <td className="p-3">
                       {row.storageUnit.code}
                       <br />
-                      {"unitType" in row ? row.unitType.name : ""}
+                      {"unitType" in row ? copy(row.unitType.name) : ""}
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {"contractEndDate" in row
@@ -561,6 +560,8 @@ function DetailModal({
   onAction: (a: Action) => void
   onChanged: () => void
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   const [operationLocked, setOperationLocked] = useState(false)
   const [operationOwner, setOperationOwner] = useState<{
     facilityId: string

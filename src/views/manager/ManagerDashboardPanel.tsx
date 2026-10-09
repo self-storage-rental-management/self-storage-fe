@@ -215,7 +215,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
       rank: 2,
       label: "Nhận kho hôm nay",
       count: todayMoveIns.length,
-      detail: "Lịch nhận kho đang chờ Staff thực hiện",
+      detail: "Lịch nhận kho đang chờ nhân viên thực hiện",
       page: "moves",
       variant: "info",
     },
@@ -255,7 +255,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
       rank: 7,
       label: "Yêu cầu hỗ trợ chưa giao việc",
       count: supportRequestsWaitingDispatch.length,
-      detail: "Cần tạo nhiệm vụ hỗ trợ và giao Staff phù hợp",
+      detail: "Cần tạo nhiệm vụ hỗ trợ và giao nhân viên phù hợp",
       page: "staff-tasks",
       variant: "warning",
     },
@@ -318,7 +318,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         id: `tra-kho-${item.id}`,
         date: item.scheduledDate,
         title: "Trả kho",
-        detail: `${item.customerName} · Gian ${item.unitId}${item.staffId ? ` · Staff ${item.staffId}` : ""}`,
+        detail: `${item.customerName} · Gian ${item.unitId}${item.staffId ? ` · nhân viên ${item.staffId}` : ""}`,
         status: item.status,
         page: "moves",
         variant: item.status === "disputed" ? "error" : "warning",
@@ -411,17 +411,11 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     )
     .slice(0, 6)
 
-  const displayFacility =
-    user.facility === "All facilities"
-      ? "Tất cả cơ sở"
-      : user.facility || facilityUnits[0]?.facilityName || "Chưa gán cơ sở"
-
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
         eyebrow="Tổng quan cơ sở"
         title="Tình hình vận hành"
-        subtitle={`${displayFacility} · Số liệu được tổng hợp từ dữ liệu hiện có`}
         action={
           <Button variant="outline" onClick={() => setPage("reports")}>
             Mở báo cáo chi tiết
@@ -470,7 +464,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
           </div>
         ) : (
           <Card className="p-6 text-center text-sm text-stone-500">
-            Không có hồ sơ vận hành nào cần Manager xử lý tại thời điểm này.
+            Không có hồ sơ vận hành nào cần quản lý cơ sở xử lý tại thời điểm này.
           </Card>
         )}
       </section>
@@ -799,12 +793,12 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
       <Modal
         open={Boolean(deleteActivity)}
         onClose={() => setDeleteActivity(null)}
-        title="Soft-delete hoạt động gần đây"
+        title="Ẩn khỏi danh sách hoạt động gần đây"
       >
         {deleteActivity && (
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              Bản ghi chỉ bị ẩn khỏi giao diện Manager. Nhật ký nguồn và số liệu báo cáo vẫn được giữ nguyên.
+              Bản ghi chỉ bị ẩn khỏi giao diện quản lý cơ sở. Nhật ký nguồn và số liệu báo cáo vẫn được giữ nguyên.
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeleteActivity(null)}>Hủy</Button>
