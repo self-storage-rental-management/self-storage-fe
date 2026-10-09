@@ -5,6 +5,7 @@ import {
   getAvailability,
   listCustomerFacilities,
   listCustomerUnitTypes,
+  listReservationRentalPackages,
   resendReservationOtp,
   verifyReservationOtp,
   payReservationDeposit,
@@ -84,6 +85,21 @@ describe('customerReservationApi', () => {
       facilityId: 'facility-1', unitTypeId: 'type-1',
       startDate: '2026-11-01', endDate: '2027-02-01',
     })).resolves.toEqual(availability)
+  })
+
+  it('loads persisted rental package codes for the selected facility and start date', async () => {
+    const packages = [{
+      code: 'PKG-3M', name: 'Gói 3 tháng', rentalMonths: 3,
+      discountRate: 0.05, policyVersion: 'v1.0',
+    }]
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: packages }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(listReservationRentalPackages('facility-1', '2026-10-10'))
+      .resolves.toEqual(packages)
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://localhost:8080/api/customer/reservations/rental-packages?facilityId=facility-1&startDate=2026-10-10',
+    )
   })
 
   it('sends an idempotency key when creating a reservation', async () => {

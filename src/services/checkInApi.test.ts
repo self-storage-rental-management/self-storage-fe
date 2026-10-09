@@ -31,10 +31,15 @@ describe('checkInApi', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await listCheckIns({ q: 'RSV-001' })
+    await listCheckIns({
+      q: 'RSV-001',
+      status: 'scheduled',
+      scheduledFrom: '2026-10-08T17:00:00.000Z',
+      scheduledTo: '2026-10-09T17:00:00.000Z',
+    })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/staff/check-ins?page=0&pageSize=20&q=RSV-001',
+      'http://localhost:8080/api/staff/check-ins?page=0&pageSize=20&q=RSV-001&status=scheduled&scheduledFrom=2026-10-08T17%3A00%3A00.000Z&scheduledTo=2026-10-09T17%3A00%3A00.000Z',
       expect.objectContaining({ headers: expect.any(Headers) }),
     )
   })
