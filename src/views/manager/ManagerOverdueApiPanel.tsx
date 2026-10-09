@@ -48,14 +48,13 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
       <p>
         Dữ liệu lúc {rentalDate(p.asOf)} ·{" "}
         {p.completeness === "COMPLETE"
-          ? "Đầy đủ theo bộ lọc/nguồn hệ thống"
+          ? "Đầy đủ"
           : "Chỉ có dữ liệu một phần"}
       </p>
       {p.completeness === "PARTIAL" && (
         <>
           <p>
-            Không kết luận không có nợ/quá hạn từ danh sách này, kể cả khi
-            trống.
+            Chưa đủ dữ liệu để xác định tất cả khoản nợ và hồ sơ quá hạn.
           </p>
           <ul className="list-disc pl-5">
             {p.missingSources.map((ref) => (
@@ -89,11 +88,7 @@ export function OverdueCaseSummary({ record: r }: { record: OverdueCase }) {
         </>
       ) : (
         <>
-          <p>
-            Hồ sơ quá thời hạn thuê không tự có một khoản nợ tiền, không tính từ
-            đơn giá tháng.
-          </p>
-          <p>mốc thu hồi: {rentalDate(r.recoveryCutoff)}</p>
+          <p>Mốc thu hồi: {rentalDate(r.recoveryCutoff)}</p>
           <p>
             Đủ điều kiện gửi thu hồi kho theo hệ thống:{" "}
             {r.recoveryEligible ? "Có (cần bộ phận tiếp nhận xác nhận)" : "Chưa"}
@@ -145,7 +140,7 @@ export default function ManagerOverdueApiPanel() {
     !actor.permissions.includes("rentals:read")
   )
     return (
-      <Card className="p-5">Cần quyền xem hồ sơ thuê của quản lý cơ sở .</Card>
+      <Card className="p-5" role="alert">Bạn chưa có quyền xem hồ sơ thuê tại cơ sở này.</Card>
     )
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
   return <OverdueSession key={identity} identity={identity} />
@@ -172,11 +167,6 @@ function OverdueSession({ identity }: { identity: string }) {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Theo dõi quá hạn</h1>
-      <p className="text-sm text-stone-500">
-        Tách quá hạn thuê và quá hạn thanh toán. Chỉ đọc số dư/chính sách xác thực
-        từ hệ thống, không phát sinh phí, khóa truy cập hoặc giải phóng gian kho trên
-        màn hình này.
-      </p>
       <Card className="p-4">
         <div className="flex flex-wrap gap-3 items-end">
           <label>
@@ -279,11 +269,9 @@ function OverdueSession({ identity }: { identity: string }) {
                       : "Quá thời hạn thuê"}{" "}
                     · {r.overdueDays} ngày
                   </p>
-                  <p>
-                    {r.kind === "PAYMENT_DUE"
-                      ? rentalMoney(r.outstanding, r.currency!)
-                      : "Không suy ra khoản nợ từ quá hạn thuê"}
-                  </p>
+                  {r.kind === "PAYMENT_DUE" && (
+                    <p>{rentalMoney(r.outstanding, r.currency!)}</p>
+                  )}
                   <p className="break-all">{r.caseRef}</p>
                 </div>
                 <Button
@@ -297,7 +285,7 @@ function OverdueSession({ identity }: { identity: string }) {
             {read.data.data.length === 0 && (
               <p>
                 {read.data.completeness === "PARTIAL"
-                  ? "Chưa có hồ sơ từ các nguồn đã kết nối. Vẫn còn nguồn thiếu cần kiểm tra."
+                  ? "Chưa tìm thấy hồ sơ, nhưng dữ liệu quá hạn còn thiếu."
                   : "Không có hồ sơ quá hạn phù hợp tại thời điểm hệ thống kiểm tra."}
               </p>
             )}
@@ -404,7 +392,7 @@ function OverdueDetail({
           >
             Ghi nhận xử lý
           </Button>
-          {!canWrite && <p>Thao tác cần rentals:update và MANAGE của cơ sở.</p>}
+          {!canWrite && <p>Bạn chưa có quyền xử lý hồ sơ tại cơ sở này.</p>}
           {form && (
             <OverdueForm
               key={tick}
@@ -430,11 +418,10 @@ function OverdueDetail({
       )}
       {last && (
         <div role="status">
-          <p>Kết quả thao tác từ hệ thống:</p>
           <OverdueFollowUpCard event={last} />
         </div>
       )}
-      <h4 className="font-semibold">Lịch sử theo dõi (chỉ đọc, không xóa)</h4>
+      <h4 className="font-semibold">Lịch sử theo dõi</h4>
       <ApiReadState {...history} retry={history.refresh} />
       {history.data && (
         <>
@@ -487,7 +474,7 @@ function OverdueForm({
           >
             <option value="NOTE">Ghi chú xử lý (không thay đổi nợ)</option>
             <option value="REMINDER">
-              Yêu cầu nhắc nợ qua nguồn thông báo thật
+              Yêu cầu gửi nhắc nợ
             </option>
             {r.kind === "RENTAL_TERM" && r.recoveryEligible && (
               <option value="RECOVERY_HANDOFF">
@@ -505,16 +492,12 @@ function OverdueForm({
             onChange={(e) => setContent(e.target.value)}
           />
         </label>
-        <p className="text-sm text-stone-500">
-          hệ thống kiểm tra số dư/quá hạn hiện tại, chính sách, thời gian chờ, quyền và
-          bộ phận tiếp nhận. Thiếu nguồn sẽ chặn, không ghi thành công giả.
-        </p>
       </fieldset>
       {validation && <p role="alert">{validation}</p>}
       {command.error ? <p role="alert">{managerDisplayError(command.error)}</p> : null}
       {command.uncertain && (
         <p role="alert">
-          Chưa xác định kết quả. Không đóng/đổi nội dung, thử lại cùng key.
+          Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại, không đóng hoặc tải lại trang.
         </p>
       )}
       <div className="flex gap-2">

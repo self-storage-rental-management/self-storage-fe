@@ -47,7 +47,6 @@ function MetricValue({ metric, value }: { metric: Metric; value?: number | strin
 export function CustomerRentalApiLink({ onOpen }: { onOpen: () => void }) {
   return <Card className="space-y-3 p-5">
     <h2 className="font-bold text-stone-900">Hồ sơ thuê & Gia hạn</h2>
-    <p className="text-sm text-stone-500">Xem hồ sơ thuê, yêu cầu gia hạn và tiến độ xử lý của tài khoản đang đăng nhập.</p>
     <Button variant="outline" onClick={onOpen}>Xem hồ sơ thuê & Gia hạn</Button>
   </Card>
 }

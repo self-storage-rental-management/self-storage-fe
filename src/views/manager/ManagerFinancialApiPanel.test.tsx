@@ -54,7 +54,8 @@ describe('Manager financial API screen', () => {
     const html = detail()
     expect(html).toContain('700.000')
     expect(html).toContain('100.000')
-    expect(html).toContain('Chưa có dữ liệu cọc bảo đảm.')
+    expect(html).not.toContain('Chưa có dữ liệu cọc bảo đảm.')
+    expect(html).toContain('Đã xác minh một phần')
     expect(html).toContain('Chưa có dữ liệu xác thực')
   })
   it('discards stale detail on error or loading', () => {

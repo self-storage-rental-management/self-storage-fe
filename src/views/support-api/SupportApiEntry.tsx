@@ -29,7 +29,7 @@ export default function SupportApiEntry({
     <div className="min-w-0 space-y-4">
       <div
         role="tablist"
-        aria-label="Nghiệp vụ API của Dương"
+        aria-label="Thuê kho và hỗ trợ"
         className="flex flex-wrap gap-2"
       >
         <Button
@@ -48,7 +48,7 @@ export default function SupportApiEntry({
           variant={tab === "support" ? "primary" : "outline"}
           onClick={() => setTab("support")}
         >
-          Hỗ trợ (D5 API)
+          Hỗ trợ khách hàng
         </Button>
       </div>
       {tab === "existing" ? (

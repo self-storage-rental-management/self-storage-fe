@@ -104,7 +104,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         ids.facility,
         ids.customer,
       ),
-    ).toContain("Chưa kết nối")
+    ).toContain("Chưa đủ thông tin")
   })
   it("does not invent legacy version or allow Manager completion", () => {
     expect(
@@ -114,7 +114,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         "arrival",
         operationsActor("staff"),
       ),
-    ).toContain("phiên bản")
+    ).toContain("chưa đủ thông tin")
     expect(
       operationBlockedReason(
         { ...signingState, arrivalRef: ids.event },
@@ -232,8 +232,10 @@ describe("D3 operation prerequisites and truthful UI", () => {
       />,
     )
     expect(html).toContain("Chờ thanh toán cọc")
-    expect(html).toContain("Thanh toán, nghĩa vụ")
-    expect(html).toContain("không dùng dữ liệu demo")
+    expect(html).toContain("Thanh toán và phân bổ tiền gia hạn")
+    expect(html).toContain("Chưa đủ thông tin để xử lý")
+    expect(html).not.toContain("không dùng dữ liệu demo")
+    expect(html).not.toContain("RENEWAL_ACCOUNTING")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("Đã hoàn tất gia hạn")
   })
@@ -285,11 +287,13 @@ describe("D4 truthful overdue presentation", () => {
       />,
     )
     expect(html).toContain("một phần")
-    expect(html).toContain("Không kết luận không có nợ")
+    expect(html).toContain("Chưa đủ dữ liệu để xác định tất cả khoản nợ")
+    expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={termCase} />)
-    expect(html).toContain("không tự có một khoản nợ tiền")
+    expect(html).toContain("Quá thời hạn thuê")
+    expect(html).not.toContain("không tự có một khoản nợ tiền")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("term-policy")
   })
@@ -324,6 +328,6 @@ describe("D4 truthful overdue presentation", () => {
           status: 409,
         }),
       ),
-    ).toContain("Chưa có nguồn dữ liệu/policy chung")
+    ).toContain("Chưa đủ dữ liệu hoặc chính sách")
   })
 })

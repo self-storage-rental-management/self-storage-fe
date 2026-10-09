@@ -70,10 +70,10 @@ export default function CustomerRenewalRequestModal({
                 setConfirmed(false)
               }}
             >
-              <option value="">Chọn gói từ chính sách chung</option>
+              <option value="">Chọn gói gia hạn</option>
               {options.data.map((o) => (
                 <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
-                  {o.rentalMonths} tháng — {o.pricingPackageCode}
+                  {o.rentalMonths} tháng - {o.pricingPackageCode}
                 </option>
               ))}
             </select>
@@ -128,10 +128,6 @@ export default function CustomerRenewalRequestModal({
               Còn lại:{" "}
               {rentalMoney(quote.remainingRentalAmount, quote.currency)}
             </p>
-            <p className="break-all text-xs">
-              Policy: {quote.renewalPolicyRef} / {quote.renewalPolicyVersion};
-              gói: {quote.packagePolicyRef} / {quote.packagePolicyVersion}
-            </p>
             <p>Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}</p>
             {expired && !command.uncertain && (
               <p role="alert" className="text-red-700">
@@ -164,9 +160,7 @@ export default function CustomerRenewalRequestModal({
         ) : null}
         {command.uncertain && (
           <p>
-            Kết quả chưa xác định. Không đổi nội dung/đóng hộp thoại; thử lại
-            cùng yêu cầu để BE trả kết quả idempotent. Báo giá hết hạn không
-            ngăn replay thao tác đã gửi.
+            Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại cùng yêu cầu, không đóng hộp thoại hoặc gửi yêu cầu mới.
           </p>
         )}
         <Button

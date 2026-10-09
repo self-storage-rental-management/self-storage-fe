@@ -22,15 +22,15 @@ import {
 } from "./presentation"
 
 const labels: Record<string, string> = {
-  assign: "Giao / Giao lại Staff",
+  assign: "Phân công nhân viên",
   accept: "Nhận xử lý",
   message: "Gửi trao đổi",
-  information: "Yêu cầu Customer bổ sung",
+  information: "Yêu cầu khách hàng bổ sung",
   resolve: "Báo kết quả xử lý",
   close: "Xác nhận kết quả và đóng",
   reopen: "Mở lại yêu cầu",
-  escalate: "Đề nghị điều phối module",
-  decision: "Điều phối escalation",
+  escalate: "Đề nghị chuyển bộ phận",
+  decision: "Xử lý yêu cầu chuyển bộ phận",
 }
 export default function SupportActionForm({
   role,
@@ -57,7 +57,7 @@ export default function SupportActionForm({
   if (!actions.includes(action) || t.version === null)
     return (
       <p className="text-sm text-stone-500">
-        Không có thao tác phù hợp theo role/trạng thái hiện tại.
+        Không có thao tác phù hợp với quyền và trạng thái hiện tại.
       </p>
     )
   const limit = ["assign", "reopen", "escalate", "decision", "close"].includes(
@@ -130,7 +130,7 @@ export default function SupportActionForm({
         submit()
       }}
     >
-      <h3 className="font-semibold">Thao tác theo role</h3>
+      <h3 className="font-semibold">Xử lý yêu cầu</h3>
       <label className="block text-sm">
         Thao tác
         <select
@@ -171,14 +171,14 @@ export default function SupportActionForm({
               setVisibility(e.target.value as "PUBLIC" | "INTERNAL")
             }
           >
-            <option value="PUBLIC">{copy("Công khai với Customer")}</option>
-            <option value="INTERNAL">{copy("Nội bộ — Customer không thấy")}</option>
+            <option value="PUBLIC">Khách hàng có thể xem</option>
+            <option value="INTERNAL">Nội bộ - khách hàng không thể xem</option>
           </select>
         </label>
       )}
       {action === "escalate" && (
         <label className="block text-sm">
-          {copy("Module nhận điều phối")}<select
+          Bộ phận tiếp nhận<select
             className={supportInputClass}
             value={module}
             disabled={command.locked}
@@ -210,8 +210,8 @@ export default function SupportActionForm({
                 setDecision(e.target.value as "ROUTE" | "REJECT")
               }
             >
-              <option value="ROUTE">{copy("Chuyển tới module được phép")}</option>
-              <option value="REJECT">{copy("Từ chối điều phối, trả về Staff")}</option>
+              <option value="ROUTE">Chuyển tới bộ phận phụ trách</option>
+              <option value="REJECT">Từ chối chuyển, trả về nhân viên</option>
             </select>
           </label>
         </>
@@ -237,12 +237,6 @@ export default function SupportActionForm({
           />
         </label>
       )}
-      {["close", "resolve", "escalate", "decision"].includes(action) && (
-        <p className="text-sm text-amber-800">
-          {copy("BE kiểm tra policy và kết quả từ nguồn chung. Chuyển module không đồng nghĩa đã xử lý xong; ghi chú không thay thế kết quả thanh toán/refund/bảo trì. Thiếu nguồn sẽ bị chặn, không tự giả lập thành công.")}</p>
-      )}
-      {!manager && <p className="text-xs text-stone-500">
-        Phiên bản {t.version} · Lần phân công {t.assignmentRevision}. Manager không có thao tác hoàn thành thay Staff.</p>}
       <Button
         type="submit"
         disabled={command.locked || command.conflict || !valid}
@@ -273,14 +267,14 @@ function EscalationPicker({
   return (
     <div className="space-y-2">
       <label className="block text-sm">
-        Escalation chờ điều phối
+        Yêu cầu chờ chuyển bộ phận
         <select
           className={supportInputClass}
           value={value}
           disabled={disabled || read.loading || !read.data}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="">Chọn yêu cầu đang REQUESTED</option>
+          <option value="">Chọn yêu cầu đang chờ xử lý</option>
           {value && !read.data?.data.some((e) => e.id === value) && (
             <option value={value}>{value}</option>
           )}
