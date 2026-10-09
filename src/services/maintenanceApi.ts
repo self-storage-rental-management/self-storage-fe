@@ -1,17 +1,20 @@
 import { apiRequest } from './apiClient'
+import { readRentalEnvelope, readRentalPage } from './rentalApi'
 
+export type MaintenanceTaskPriority = 'low' | 'medium' | 'high'
 export type MaintenanceTaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled'
+export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
 
-export interface MaintenanceTask {
+export interface MaintenanceTaskApi {
   id: string
   facilityId: string
   facilityName: string
-  storageUnitId: string | null
-  unitCode: string | null
+  storageUnitId: string
+  unitCode: string
   returnCaseId: string | null
   title: string
   reason: string
-  priority: string
+  priority: MaintenanceTaskPriority
   damageClassification: string | null
   reportedById: string
   reportedByName: string
@@ -27,39 +30,99 @@ export interface MaintenanceTask {
   updatedAt: string
 }
 
-export interface MaintenanceTaskPage {
-  data: MaintenanceTask[]
-  pagination: {
-    page: number
-    pageSize: number
-    totalItems: number
-    totalPages: number
-    sort: string
-  }
-  correlationId: string
+export interface MaintenanceStaffOption {
+  id: string
+  fullName: string
 }
 
-interface TaskFilters {
-  facilityId?: string
-  assignedStaffId?: string
-  page?: number
-  pageSize?: number
+export interface MaintenanceStorageUnit {
+  id: string
+  facilityId: string
+  unitTypeId: string
+  code: string
+  floor: string | null
+  zone: string | null
+  status: StorageUnitStatus
 }
 
-function toQuery(filters: TaskFilters) {
-  const params = new URLSearchParams({
-    page: String(filters.page ?? 0),
-    pageSize: String(filters.pageSize ?? 100),
-  })
-  if (filters.facilityId) params.set('facilityId', filters.facilityId)
-  if (filters.assignedStaffId) params.set('assignedStaffId', filters.assignedStaffId)
-  return params.toString()
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object')
+const isText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+const isNullableText = (value: unknown): value is string | null => value === null || typeof value === 'string'
+const isInstant = (value: unknown): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value))
+const isUuidLike = (value: unknown): value is string => isText(value)
+
+function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
+  if (!isRecord(value)) return false
+  return isUuidLike(value.id) && isUuidLike(value.facilityId) && isText(value.facilityName) &&
+    isUuidLike(value.storageUnitId) && isText(value.unitCode) && isText(value.title) && isText(value.reason) &&
+    ['low', 'medium', 'high'].includes(String(value.priority)) &&
+    ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&
+    isNullableText(value.returnCaseId) && isNullableText(value.damageClassification) &&
+    isUuidLike(value.reportedById) && isText(value.reportedByName) &&
+    isNullableText(value.assignedStaffId) && isNullableText(value.assignedStaffName) &&
+    (value.dueAt === null || typeof value.dueAt === 'string') &&
+    (value.startedAt === null || isInstant(value.startedAt)) &&
+    (value.completedAt === null || isInstant(value.completedAt)) &&
+    isNullableText(value.resultReport) && Array.isArray(value.evidencePhotos) && value.evidencePhotos.every(isText) &&
+    isInstant(value.createdAt) && isInstant(value.updatedAt)
 }
 
-export function listStaffMaintenanceTasks(filters: TaskFilters = {}) {
-  return apiRequest<MaintenanceTaskPage>(`/api/staff/maintenance-tasks?${toQuery(filters)}`)
+function isStorageUnit(value: unknown): value is MaintenanceStorageUnit {
+  if (!isRecord(value)) return false
+  return isUuidLike(value.id) && isUuidLike(value.facilityId) && isUuidLike(value.unitTypeId) && isText(value.code) &&
+    isNullableText(value.floor) && isNullableText(value.zone) &&
+    ['available', 'reserved', 'occupied', 'maintenance', 'held', 'assigned'].includes(String(value.status))
 }
 
-export function listManagerMaintenanceTasks(filters: TaskFilters = {}) {
-  return apiRequest<MaintenanceTaskPage>(`/api/manager/maintenance-tasks?${toQuery(filters)}`)
+export async function listManagerMaintenanceTasks(facilityId: string) {
+  const encoded = encodeURIComponent(facilityId)
+  return readRentalPage<MaintenanceTaskApi>(
+    await apiRequest(`/api/staff/maintenance-tasks?facilityId=${encoded}&page=0&pageSize=100`),
+    isMaintenanceTask,
+    0,
+  )
+}
+
+export async function listFacilityStorageUnits(facilityId: string) {
+  const encoded = encodeURIComponent(facilityId)
+  return readRentalPage<MaintenanceStorageUnit>(
+    await apiRequest(`/api/storage-units?facilityId=${encoded}&page=0&size=100&sort=code,asc`),
+    isStorageUnit,
+    0,
+  )
+}
+
+export async function listMaintenanceStaff(facilityId: string) {
+  const encoded = encodeURIComponent(facilityId)
+  return readRentalEnvelope<MaintenanceStaffOption[]>(
+    await apiRequest(`/api/staff/maintenance-tasks/staff-options?facilityId=${encoded}`),
+    value => Array.isArray(value) && value.every(item => isRecord(item) && isUuidLike(item.id) && isText(item.fullName)),
+  )
+}
+
+export async function createMaintenanceTask(body: {
+  storageUnitId: string
+  title: string
+  reason: string
+  priority: MaintenanceTaskPriority
+  assignedStaffId: string
+  dueAt: string
+}) {
+  return readRentalEnvelope<MaintenanceTaskApi>(
+    await apiRequest('/api/staff/maintenance-tasks', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+    isMaintenanceTask,
+  )
+}
+
+export async function assignMaintenanceTask(taskId: string, assignedStaffId: string) {
+  return readRentalEnvelope<MaintenanceTaskApi>(
+    await apiRequest(`/api/staff/maintenance-tasks/${encodeURIComponent(taskId)}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ assignedStaffId }),
+    }),
+    isMaintenanceTask,
+  )
 }
