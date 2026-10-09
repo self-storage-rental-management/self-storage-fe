@@ -3605,7 +3605,6 @@ export default function BusinessApp({
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition cursor-pointer"
                                   title={lang === "vi" ? "Xem và quản lý các chính sách của cơ sở này" : "View and manage policies for this facility"}
                                 >
-                                  <span>📜</span>
                                   <span>
                                     {lang === "vi"
                                       ? `${activePoliciesForFac.length} chính sách áp dụng`
@@ -7715,7 +7714,6 @@ export default function BusinessApp({
                     <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-base">📜</span>
                           <h4 className="font-bold text-slate-900 text-sm">
                             {lang === "vi" ? "Chính Sách & Quy Định Đang Áp Dụng" : "Active Policies & Rules"}
                           </h4>
