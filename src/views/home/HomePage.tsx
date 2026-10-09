@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import BrandLogo from '../../components/BrandLogo'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { UNIT_SPECS } from '../../data/demoDatabase'
+import { DEMO_DATA_ENABLED } from '../../config/runtime'
 
 interface HomePageProps {
   onOpenLogin: () => void
@@ -427,16 +428,16 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               {/* Quick Trust Badges */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-stone-100 text-center sm:text-left">
                 <div>
-                   <div className="text-lg sm:text-2xl font-black text-stone-900">{availableUnitCount}</div>
+                   <div className="text-lg sm:text-2xl font-black text-stone-900">{facilitiesList.length ? availableUnitCount : '—'}</div>
                    <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Gian kho còn trống</div>
                 </div>
                 <div>
-                   <div className="text-lg sm:text-2xl font-black text-stone-900">{totalUnitCount}</div>
+                   <div className="text-lg sm:text-2xl font-black text-stone-900">{facilitiesList.length ? totalUnitCount : '—'}</div>
                    <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Tổng gian kho</div>
                 </div>
                 <div>
-                  <div className="text-lg sm:text-2xl font-black text-emerald-600">99.8%</div>
-                  <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Độ an tâm khách hàng</div>
+                  <div className="text-lg sm:text-2xl font-black text-emerald-600">{facilitiesList.length}</div>
+                  <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Cơ sở trong danh sách</div>
                 </div>
               </div>
             </div>
@@ -463,7 +464,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
 
               {/* Graphic Unit Tiers */}
-              <div className="relative my-4 space-y-2.5">
+              {!DEMO_DATA_ENABLED && <div className="relative my-8 space-y-3"><p>Đăng nhập để tra cứu loại gian kho, giá thuê và tình trạng còn trống.</p><button type="button" onClick={onOpenLogin} className="rounded-lg bg-[#E89520] px-4 py-2 font-semibold text-stone-900">Tra cứu kho</button></div>}
+              {DEMO_DATA_ENABLED && <div className="relative my-4 space-y-2.5">
                 {/* Small */}
                 <div
                   onClick={() => setActiveModal('unit_types')}
@@ -593,14 +595,15 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 </div>
               </div>
 
+              }
               {/* Graphic Bottom Status */}
               <div className="relative pt-3.5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-400">
                 <span className="flex items-center gap-1.5 text-stone-300 font-medium">
                   <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Bảo vệ & Giám sát CCTV 24/7</span>
+                  <span>Tra cứu thông tin cơ sở</span>
                 </span>
                 <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60 text-[10px] sm:text-[11px]">
-                  HCM-Q1 · BD-F01
+                  {facilitiesList.length} cơ sở
                 </span>
               </div>
             </div>
@@ -690,7 +693,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {unitCategories.map(cat => (
+            {!DEMO_DATA_ENABLED && <p className="text-sm text-stone-600">Thông số và giá thuê được hiển thị trong danh mục kho sau khi đăng nhập.</p>}
+            {(DEMO_DATA_ENABLED ? unitCategories : []).map(cat => (
               <div key={cat.id} className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition">
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-1.5 mb-3">
@@ -736,7 +740,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 Hệ Thống Cơ Sở StorageHub
               </h2>
               <p className="mt-1 text-sm text-stone-600">
-                 Hai cơ sở tại Quận 1 và Bình Dương, thuận tiện di chuyển và vận chuyển hàng hóa.
+                 Tra cứu địa chỉ và tình trạng gian kho tại các cơ sở trong hệ thống.
               </p>
             </div>
             <div className="flex gap-2">
@@ -856,7 +860,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 Hệ thống tự lưu trữ thông minh chuẩn quốc tế. Cung cấp giải pháp lưu trữ an toàn, linh hoạt và công nghệ cao cho cá nhân và tổ chức.
               </p>
               <div className="text-xs text-stone-400">
-                <strong>Hotline hỗ trợ:</strong> <span className="text-[#E89520] font-bold">1900 8888 (24/7)</span>
+                Gửi yêu cầu hỗ trợ từ tài khoản StorageHub của bạn.
               </div>
             </div>
 
@@ -875,9 +879,8 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">CƠ SỞ TRỌNG ĐIỂM</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li>Kho Việt – Cơ sở Quận 1 · 125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1</li>
-                <li>Kho Việt – Cơ sở Bình Dương · 468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An</li>
-                <li>2 cơ sở đang hoạt động · hỗ trợ đặt giữ kho trực tuyến</li>
+                {facilitiesList.map(facility => <li key={facility.id}>{facility.name} · {facility.address}</li>)}
+                {facilitiesList.length === 0 && <li>Chưa có cơ sở để hiển thị.</li>}
               </ul>
             </div>
 
@@ -979,10 +982,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'unit_types' && (
               <div className="mt-4 space-y-5 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub cung cấp 4 quy cách kho đa dạng, đáp ứng mọi nhu cầu từ cá nhân đến doanh nghiệp. Không gian, lối đi và thiết bị hỗ trợ thay đổi theo từng cỡ kho.
+                  Đăng nhập để xem thông số và giá thuê của các loại gian kho tại từng cơ sở.
                 </p>
 
-                {(Object.values(UNIT_SPECS) as (typeof UNIT_SPECS)[keyof typeof UNIT_SPECS][]).map((spec, idx) => {
+                {(DEMO_DATA_ENABLED ? Object.values(UNIT_SPECS) : []).map((spec, idx) => {
                   const accentColors = [
                     { border: 'border-amber-200', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-800', icon: 'bg-amber-100 text-amber-700', tag: 'S' },
                     { border: 'border-sky-200', bg: 'bg-sky-50', badge: 'bg-sky-100 text-sky-800', icon: 'bg-sky-100 text-sky-700', tag: 'M' },

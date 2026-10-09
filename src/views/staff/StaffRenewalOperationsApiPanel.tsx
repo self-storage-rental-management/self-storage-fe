@@ -4,17 +4,16 @@ import { getAuthenticatedActor } from "../../services/authApi"
 import { listRenewalAppointments } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { RenewalAppointmentQuery } from "../../types/renewalOperationsApi"
-import ApiReadState from "../rental-api/ApiReadState"
 import ApiPager from "../rental-api/ApiPager"
 import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
 import { rentalDate } from "../rental-api/presentation"
-import SupportApiEntry from "../support-api/SupportApiEntry"
+import { staffErrorMessage } from "./staffPresentation"
 
 export default function StaffRenewalOperationsApiPanel() {
-  return <SupportApiEntry role="staff"><StaffRenewalWorkspace /></SupportApiEntry>
+  return <StaffRenewalWorkspace />
 }
 function StaffRenewalWorkspace() {
   const actor = getAuthenticatedActor()
@@ -28,8 +27,8 @@ function StaffRenewalWorkspace() {
   )
     return (
       <Card className="p-5">
-        Cần tài khoản Staff API đang hoạt động và cơ sở có phạm vi OPERATE. BE
-        kiểm tra quyền ký và phân công thật, không tái sử dụng quyền Check-in.
+        Tài khoản nhân viên chưa được cấp quyền vận hành tại cơ sở.
+        Vui lòng liên hệ quản lý để kiểm tra phân công.
       </Card>
     )
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
@@ -55,8 +54,8 @@ function StaffSession({ identity }: { identity: string }) {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở (D3)</h1>
       <p className="text-sm text-stone-500">
-        Chỉ hiển thị hồ sơ được phân công và được phép ký theo BE. Thiếu nguồn
-        quyền/phân công không được coi là không có lịch.
+        Chỉ hiển thị hồ sơ được phân công và thuộc cơ sở bạn được
+        phép vận hành.
       </p>
       <Card className="p-4 flex flex-wrap gap-3 items-end">
         <label>
@@ -125,7 +124,22 @@ function StaffSession({ identity }: { identity: string }) {
           Tải lại
         </Button>
       </Card>
-      <ApiReadState {...read} retry={read.refresh} />
+      {read.loading && (
+        <p role="status" className="p-4 text-stone-500">
+          Đang tải dữ liệu…
+        </p>
+      )}
+      {Boolean(read.error) && (
+        <div
+          role="alert"
+          className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4"
+        >
+          <p>{staffErrorMessage(read.error, "Không thể tải lịch gia hạn.")}</p>
+          <Button variant="outline" onClick={read.refresh}>
+            Tải lại
+          </Button>
+        </div>
+      )}
       {read.data && (
         <Card className="p-4 space-y-3">
           {read.data.data.map((s) => (
@@ -151,7 +165,7 @@ function StaffSession({ identity }: { identity: string }) {
             </div>
           ))}
           {read.data.data.length === 0 && (
-            <p>Không có lịch phù hợp theo nguồn phân công của BE.</p>
+            <p>Không có lịch phù hợp với phân công hiện tại.</p>
           )}
           <ApiPager
             pagination={read.data.pagination}
@@ -163,7 +177,7 @@ function StaffSession({ identity }: { identity: string }) {
         <Modal
           open
           size="xl"
-          title="Xử lý ký gia hạn — Staff"
+          title="Xử lý ký gia hạn — Nhân viên"
           onClose={() => {
             if (!locked) setSelected(undefined)
           }}

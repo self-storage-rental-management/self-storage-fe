@@ -64,7 +64,11 @@ function rolePath(role: SupportRole) {
     inList(role, ["customer", "manager", "staff"]),
     "Role Hỗ trợ không hợp lệ.",
   )
-  return `/api/${role}/support-tickets`
+  // The shared Customer/Staff ticket APIs have different DTOs and command rules.
+  // Keep D5 transport separate; never fall back to those endpoints on an error.
+  return role === "manager"
+    ? "/api/manager/support-tickets"
+    : `/api/${role}/support-workflows`
 }
 function path(role: SupportRole, id: string) {
   check(isUuid(id), "Mã yêu cầu Hỗ trợ không hợp lệ.")

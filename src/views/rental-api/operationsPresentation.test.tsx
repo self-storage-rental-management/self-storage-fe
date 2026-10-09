@@ -202,7 +202,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
   it("Staff still needs backend specialized assignment source; no Check-in permission fallback", () => {
     const actor = {
       ...operationsActor("staff"),
-      permissions: ["perform_checkin"],
+      permissions: ["checkins:process"],
     }
     expect(
       operationBlockedReason(
@@ -291,7 +291,7 @@ describe("D4 truthful overdue presentation", () => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={termCase} />)
     expect(html).toContain("không tự có một khoản nợ tiền")
     expect(html).not.toContain("0 đ")
-    expect(html).toContain("term-policy")
+    expect(html).not.toContain("term-policy")
   })
   it("debt uses real outstanding only, not USD conversion or rental-month calculation", () => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={debtCase} />)
@@ -314,7 +314,7 @@ describe("D4 truthful overdue presentation", () => {
         }}
       />,
     )
-    expect(recovery).toContain("không có nghĩa đã thu hồi/giải phóng")
+    expect(recovery).toContain("chưa có nghĩa gian kho đã được thu hồi hoặc giải phóng")
   })
   it("reports deferred code even when backend message lacks the marker", () => {
     expect(
