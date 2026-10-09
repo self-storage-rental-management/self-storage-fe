@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 
 import {
   XAxis,
@@ -59,7 +59,7 @@ import { formatVnd } from "../../i18n/currency"
 
 import { exportRevenueExcel } from "../../utils/excelExport"
 
-import { useStorageHub } from "../../store/StorageHubContext"
+import { useStorageHub, sanitizeFacilityStrings } from "../../store/StorageHubContext"
 import type { FacilityCustomUnitSpec } from "../../types/storageHub"
 
 import ProfileView from "../ProfileView"
@@ -76,6 +76,7 @@ import {
   FacilityImageManager,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
+import { createFacilityApi, listAllFacilitiesApi } from "../../services/facilityApi"
 
 const RUNTIME_REVENUE_DATA = DEMO_DATA_ENABLED ? REVENUE_DATA : []
 const RUNTIME_REVENUE_BREAKDOWN = DEMO_DATA_ENABLED ? REVENUE_BREAKDOWN : []
@@ -375,6 +376,50 @@ export default function BusinessApp({
     updateUnit,
     updateBusinessConfig,
   } = hub
+
+  useEffect(() => {
+    let isMounted = true
+    listAllFacilitiesApi()
+      .then((backendFacs) => {
+        if (!isMounted || !Array.isArray(backendFacs)) return
+        backendFacs.forEach((bf) => {
+          const cleanBf = sanitizeFacilityStrings(bf)
+          const matching = facilitiesList.find(
+            (f) => f.id === cleanBf.id || (f.code && f.code.toUpperCase() === (cleanBf.code || '').toUpperCase()),
+          )
+          if (!matching) {
+            createFacility(
+              {
+                id: cleanBf.id,
+                code: cleanBf.code,
+                name: cleanBf.name,
+                address: cleanBf.address,
+                city: cleanBf.city,
+                status: cleanBf.status === "maintenance" ? "maintenance" : "active",
+                units: 20,
+                available: 20,
+                occupied: 0,
+              },
+              user,
+            )
+          } else if (
+            matching.name !== cleanBf.name ||
+            matching.address !== cleanBf.address ||
+            matching.city !== cleanBf.city
+          ) {
+            updateFacility(matching.id, {
+              name: cleanBf.name,
+              address: cleanBf.address,
+              city: cleanBf.city,
+            })
+          }
+        })
+      })
+      .catch(() => {})
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const getFacilityOccupiedCount = useCallback(
     (fac: any) => {
@@ -1576,9 +1621,19 @@ export default function BusinessApp({
   }
 
   const getEffectiveTier = (tier: PricingTierItem) => {
+    if (!tier) {
+      return {
+        id: "tier-1",
+        name: "Kho Nhỏ (S)",
+        basePrice: 5500000,
+        highDemandMultiplier: 1.15,
+        facility: "Toàn bộ cơ sở",
+        sizeCode: "S",
+      } as PricingTierItem
+    }
     if (
-      selectedPricingFacility &&
-      facilityPricingOverrides[selectedPricingFacility.id]?.[tier.id]
+      selectedPricingFacility?.id &&
+      facilityPricingOverrides?.[selectedPricingFacility.id]?.[tier.id]
     ) {
       const override =
         facilityPricingOverrides[selectedPricingFacility.id][tier.id]
@@ -2242,7 +2297,7 @@ export default function BusinessApp({
     setCreateFacilityModal(true)
   }
 
-  const handleCreateFacility = () => {
+  const handleCreateFacility = async () => {
     const code = formFacCode.trim().toUpperCase()
 
     if (!code) {
@@ -2351,8 +2406,37 @@ export default function BusinessApp({
     const pL = newUnitPrices.L || 15000000
     const pXL = newUnitPrices.XL || 22500000
 
+    let backendFacilityId: string | undefined
+    try {
+      const unitSpecsPayload = formFacUnitSpecs.map((s) => ({
+        sizeCode: s.sizeCode,
+        name: s.name,
+        count: s.count,
+        monthlyPrice: s.monthlyPrice,
+        lengthM: s.lengthM,
+        widthM: s.widthM,
+        heightM: s.heightM,
+        maxLoadKg: s.maxLoadKg,
+      }))
+
+      const apiRes = await createFacilityApi({
+        code,
+        name: formFacName.trim(),
+        address: formFacAddress.trim(),
+        city: formFacCity.trim(),
+        status: formFacStatus,
+        unitSpecs: unitSpecsPayload,
+      })
+      if (apiRes?.id) {
+        backendFacilityId = apiRes.id
+      }
+    } catch (err) {
+      console.warn("Backend create facility API failed/offline:", err)
+    }
+
     const created = createFacility(
       {
+        id: backendFacilityId,
         code,
 
         name: formFacName.trim(),
@@ -3283,53 +3367,36 @@ export default function BusinessApp({
           ) : (
             <div className="space-y-4">
               {filteredFacilities.map((f) => {
-                const facCode = f.code || f.id
+                const cleanF = sanitizeFacilityStrings(f)
+                const facCode = cleanF.code || cleanF.id
 
-                const totalUnitsInFac = getFacilityTotalUnits(f)
-                const occupiedInFac = getFacilityOccupiedCount(f)
+                const totalUnitsInFac = getFacilityTotalUnits(cleanF)
+                const occupiedInFac = getFacilityOccupiedCount(cleanF)
                 const occupancyRate = totalUnitsInFac
                   ? Math.round((occupiedInFac / totalUnitsInFac) * 100)
                   : 0
 
                 return (
                   <Card
-                    key={f.id}
+                    key={cleanF.id}
                     className="p-5 hover:border-amber-400/70 transition-all border border-stone-200/90 shadow-sm bg-white"
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                      <div className="flex items-start gap-4 flex-1 min-w-0">
-                        {/* Facility photo */}
-                        <div className="w-24 h-24 rounded-xl overflow-hidden bg-stone-100 border border-stone-200 shrink-0 hidden sm:block">
-                          <img
-                            src={
-                              f.image?.startsWith("http") || f.image?.startsWith("data:")
-                                ? f.image
-                                : `https://images.unsplash.com/${f.image || "photo-1586528116311-ad8dd3c8310d"}?w=240&auto=format&fit=crop`
-                            }
-                            alt={f.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src =
-                                WAREHOUSE_PHOTO_PRESETS[0].url
-                            }}
-                          />
-                        </div>
-
-                        <div className="flex-1 min-w-0 space-y-3">
-                          {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
+                      <div className="flex-1 min-w-0 space-y-3">
+                        {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
                           <div className="flex flex-wrap items-center gap-3">
                             <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
                               {facCode}
                             </span>
                             <h3 className="font-bold text-slate-900 text-lg leading-snug">
-                              {f.name}
+                              {cleanF.name}
                             </h3>
                             <Badge
                               variant={
-                                f.status === "active" ? "success" : "warning"
+                                cleanF.status === "active" ? "success" : "warning"
                               }
                             >
-                              {f.status === "active"
+                              {cleanF.status === "active"
                                 ? lang === "vi"
                                   ? "Đang hoạt động"
                                   : "Active"
@@ -3342,24 +3409,24 @@ export default function BusinessApp({
                           {/* Hàng 2: Địa chỉ + Quản lý + Hotline + Giờ mở cửa */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600">
                             <div className="flex items-start gap-1.5">
-                              <span className="truncate" title={f.address}>
-                                {f.address} ·{" "}
-                                <b className="text-slate-800">{f.city}</b>
+                              <span className="truncate" title={cleanF.address}>
+                                {cleanF.address} ·{" "}
+                                <b className="text-slate-800">{cleanF.city}</b>
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span>
                                 Quản lý:{" "}
-                                <b className="text-slate-800">{f.manager}</b>{" "}
-                                {f.phone ? `(${f.phone})` : ""}
+                                <b className="text-slate-800">{cleanF.manager}</b>{" "}
+                                {cleanF.phone ? `(${cleanF.phone})` : ""}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span
                                 className="truncate"
-                                title={f.accessHours || "06:00 - 22:00"}
+                                title={cleanF.accessHours || "06:00 - 22:00"}
                               >
-                                {f.accessHours || "06:00 - 22:00 hàng ngày"}
+                                {cleanF.accessHours || "06:00 - 22:00 hàng ngày"}
                               </span>
                             </div>
                           </div>
@@ -3532,13 +3599,12 @@ export default function BusinessApp({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setPolicyFacilityFilter(f.id)
+                                    setPolicyFacilityFilter(cleanF.id)
                                     setPage("policies")
                                   }}
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition cursor-pointer"
                                   title={lang === "vi" ? "Xem và quản lý các chính sách của cơ sở này" : "View and manage policies for this facility"}
                                 >
-                                  <span>📜</span>
                                   <span>
                                     {lang === "vi"
                                       ? `${activePoliciesForFac.length} chính sách áp dụng`
@@ -3555,7 +3621,6 @@ export default function BusinessApp({
                             )
                           })()}
                         </div>
-                      </div>
 
                       {/* Các nút hành động */}
                       <div className="flex lg:flex-col items-center justify-end gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
@@ -3564,7 +3629,7 @@ export default function BusinessApp({
                           size="sm"
                           className="w-full justify-center text-xs font-semibold"
                           onClick={() => {
-                            setSelectedFacility(f)
+                            setSelectedFacility(cleanF)
 
                             setViewFacilityModal(true)
                           }}
@@ -3575,7 +3640,7 @@ export default function BusinessApp({
                           variant="outline"
                           size="sm"
                           className="w-full justify-center text-xs font-semibold border-amber-300 text-amber-800 hover:bg-amber-50"
-                          onClick={() => handleOpenEditFacility(f)}
+                          onClick={() => handleOpenEditFacility(cleanF)}
                         >
                           {lang === "vi" ? "Chỉnh sửa" : "Edit"}
                         </Button>
@@ -3584,7 +3649,7 @@ export default function BusinessApp({
                           size="sm"
                           className="w-full justify-center text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
                           onClick={() => {
-                            setSelectedFacility(f)
+                            setSelectedFacility(cleanF)
 
                             setDeleteFacilityModal(true)
                           }}
@@ -7649,7 +7714,6 @@ export default function BusinessApp({
                     <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-base">📜</span>
                           <h4 className="font-bold text-slate-900 text-sm">
                             {lang === "vi" ? "Chính Sách & Quy Định Đang Áp Dụng" : "Active Policies & Rules"}
                           </h4>
