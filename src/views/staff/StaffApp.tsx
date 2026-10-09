@@ -31,6 +31,7 @@ import StaffPaymentUpload from "./StaffPaymentUpload"
 import StaffSupportPanel from "./StaffSupportPanel"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
@@ -64,6 +65,7 @@ import { formatVnd } from "../../i18n/currency"
 import { useStorageHub } from "../../store/StorageHubContext"
 
 import { isFacilityVisible } from "../../domain/managerRules"
+import { DEMO_DATA_ENABLED } from "../../config/runtime"
 
 import StaffPagination, { paginateStaffItems } from "./StaffPagination"
 
@@ -515,7 +517,7 @@ const mapSharedReturn = (
   }
 }
 
-const reservationSeed: StaffReservation[] = RESERVATIONS.map((item, index) => ({
+const reservationSeed: StaffReservation[] = DEMO_DATA_ENABLED ? RESERVATIONS.map((item, index) => ({
   ...item,
 
   // Keep one realistic exception in the Staff queue so the REVIEW_REQUIRED
@@ -536,9 +538,9 @@ const reservationSeed: StaffReservation[] = RESERVATIONS.map((item, index) => ({
   appointmentTime: index === 0 ? "11:00 AM" : "09:00 AM",
 
   checkInDeadline: addDays(item.moveIn, 14),
-}))
+})) : []
 
-const checkinSeed: StaffCheckin[] = CHECKINS.map((item) => ({
+const checkinSeed: StaffCheckin[] = DEMO_DATA_ENABLED ? CHECKINS.map((item) => ({
   ...item,
 
   status: item.status as StaffCheckin["status"],
@@ -552,9 +554,9 @@ const checkinSeed: StaffCheckin[] = CHECKINS.map((item) => ({
   scheduleChanged: false,
 
   customerHandoverStatus: "pending",
-}))
+})) : []
 
-const returnSeed: StaffReturn[] = RETURNS.map((item) => ({
+const returnSeed: StaffReturn[] = DEMO_DATA_ENABLED ? RETURNS.map((item) => ({
   ...item,
 
   status: item.status === "refunded" ? "refunded" : "pending",
@@ -564,7 +566,7 @@ const returnSeed: StaffReturn[] = RETURNS.map((item) => ({
   contractEnd: item.returnDate,
 
   requestReason: "khách hàng chủ động kết thúc kỳ thuê đúng hạn",
-}))
+})) : []
 
 const unitOperationSpecs: Record<string, {
   doorWidth: number
@@ -783,6 +785,7 @@ export default function StaffApp({
   const hub = useStorageHub()
 
   const nav: NavItem[] = [
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
     {
       id: "dashboard",
 
@@ -792,7 +795,7 @@ export default function StaffApp({
 
       group: "Ca làm việc",
 
-      permission: "view_dashboard",
+      permission: "dashboard:read",
     },
 
     {
@@ -804,7 +807,7 @@ export default function StaffApp({
 
       group: "Ca làm việc",
 
-      permission: "view_dashboard",
+      permission: "dashboard:read",
     },
 
     {
@@ -816,7 +819,7 @@ export default function StaffApp({
 
       group: "Vận hành",
 
-      permission: "approve_reservations",
+      permission: "reservations:approve",
     },
 
     {
@@ -828,7 +831,7 @@ export default function StaffApp({
 
       group: "Vận hành",
 
-      permission: "view_checkins",
+      permission: "checkins:read",
     },
 
     {
@@ -840,7 +843,7 @@ export default function StaffApp({
 
       group: "Vận hành",
 
-      permission: "view_returns",
+      permission: "returns:read",
     },
 
     {
@@ -852,7 +855,7 @@ export default function StaffApp({
 
       group: "Chăm sóc",
 
-      permission: "view_support",
+      permission: "support:read",
     },
   ]
 
@@ -1002,7 +1005,7 @@ export default function StaffApp({
     )
 
   const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() =>
-    hasFacilityScope
+    DEMO_DATA_ENABLED && hasFacilityScope
       ? SUPPORT_TICKETS.filter((item) =>
           isFacilityVisible(user, item.facilityId, item.facility),
         )
@@ -1015,7 +1018,7 @@ export default function StaffApp({
   const [assignedStaffByTicket, setAssignedStaffByTicket] =
     useState<Record<string, string>>(() =>
       Object.fromEntries(
-        SUPPORT_TICKETS.map((ticket) => {
+        (DEMO_DATA_ENABLED ? SUPPORT_TICKETS : []).map((ticket) => {
           const latestStaffMessage = [...ticket.messages]
 
             .reverse()
@@ -1454,7 +1457,7 @@ export default function StaffApp({
     ? hub.returns.find((item) => item.id === selectedReturn.id)
     : undefined
 
-  const expiringRentals = MY_RENTALS.filter((rental) =>
+  const expiringRentals = (DEMO_DATA_ENABLED ? MY_RENTALS : []).filter((rental) =>
     isFacilityVisible(user, undefined, rental.facility),
   ).filter((rental) => {
     const due = new Date(rental.nextDue)
@@ -1937,12 +1940,13 @@ export default function StaffApp({
       roleLabel="Nhân viên"
       roleColor="bg-green-100 text-green-700"
     >
+      {page === "renewal-signing" && isApiAuthenticated() && <StaffRenewalOperationsApiPanel key={user.id} />}
       {page === "dashboard" && (
         <div className="fade-in space-y-6">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · TỔNG QUAN VẬN HÀNH"}
             title={"Tổng quan ca làm việc"}
-            subtitle={`${user.facility ?? "Cơ sở được phân quyền"} · ${new Date().toLocaleDateString("vi-VN")}`}
+            subtitle={`${user.facility ?? "Chưa được gán cơ sở"} · ${new Date().toLocaleDateString("vi-VN")}`}
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
@@ -2377,7 +2381,7 @@ export default function StaffApp({
       )}
 
       {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'approve_reservations')} />}
+      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'reservations:approve')} facilityNames={user.facilityNames} />}
       {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
@@ -4013,7 +4017,7 @@ export default function StaffApp({
                 <span>
                   <b>{"Tiền cọc"}:</b>{" "}
                   {reservationForCheckin?.paid
-                    ? "20% · đã thu"
+                    ? "40% · đã thu"
                     : "Chưa xác nhận"}
                 </span>
                 <span>

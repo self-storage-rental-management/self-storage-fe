@@ -28,25 +28,25 @@ export function isManagerFacilityVisible(
 export type ManagerOperation =
   | 'monitor_handover'
   | 'manage_returns'
-  | 'manage_inventory'
-  | 'manage_rentals'
-  | 'manage_payments'
-  | 'manage_staff_tasks'
-  | 'view_reports'
+  | 'inventory:update'
+  | 'rentals:update'
+  | 'payments:collect'
+  | 'staff_tasks:update'
+  | 'reports:read'
   | 'assign_unit'
   | 'approve_reservation'
   | 'perform_handover'
   | 'handle_support'
-  | 'manage_policies'
+  | 'policies:update'
 
 const MANAGER_OPERATIONS = new Set<ManagerOperation>([
   'monitor_handover',
   'manage_returns',
-  'manage_inventory',
-  'manage_rentals',
-  'manage_payments',
-  'manage_staff_tasks',
-  'view_reports',
+  'inventory:update',
+  'rentals:update',
+  'payments:collect',
+  'staff_tasks:update',
+  'reports:read',
   'assign_unit'
 ])
 

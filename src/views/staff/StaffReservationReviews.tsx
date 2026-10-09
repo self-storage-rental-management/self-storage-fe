@@ -1,20 +1,6 @@
 import { useEffect, useState } from "react"
 
-import { Button, Card, Input, SectionHeader } from "../../components/ui"
-
-import {
-  decideStaffReservationReview,
-  listStaffReservationReviews,
-  type ReservationReview,
-} from "../../services/staffReservationApi"
-
-import { formatStaffDate, staffGoodsCategoryLabel } from "./staffPresentation"
-
-export default function StaffReservationReviews({
-  canApprove,
-}: {
-  canApprove: boolean
-}) {
+export default function StaffReservationReviews({ canApprove, facilityNames = {} }: { canApprove: boolean; facilityNames?: Record<string, string> }) {
   const [rows, setRows] = useState<ReservationReview[]>([])
 
   const [page, setPage] = useState(0)

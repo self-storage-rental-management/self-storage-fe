@@ -261,7 +261,6 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       <StatCard title="Quá hạn" value={overdueTasks.length} icon={Icon.alert} />
     </div>
 
-    {!staff.length && <ManagerActionNotice tone="warning">Cơ sở chưa có tài khoản Staff phù hợp. Manager không thể tạo nhiệm vụ cho đến khi có người phụ trách hợp lệ.</ManagerActionNotice>}
     {overdueTasks.length > 0 && <ManagerActionNotice tone="warning">Có {overdueTasks.length} nhiệm vụ quá hạn cần theo dõi hoặc giao lại.</ManagerActionNotice>}
     {hiddenTaskCount > 0 && <ManagerActionNotice tone="info"><div className="flex items-center justify-between gap-3"><span>{hiddenTaskCount} nhiệm vụ lịch sử đã được soft-delete khỏi danh sách Manager. Dữ liệu nhiệm vụ và nhật ký vẫn giữ nguyên.</span><Button size="sm" variant="outline" onClick={() => taskHistory.restoreAll()}>Khôi phục tất cả</Button></div></ManagerActionNotice>}
 

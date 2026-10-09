@@ -266,9 +266,9 @@ button:not(:disabled) { cursor: pointer; }
   transform: translateY(-1px);
 }
 
-main input:not([type="checkbox"]):not([type="radio"]),
+:where(main input:not([type="checkbox"]):not([type="radio"]),
 main select,
-main textarea {
+main textarea) {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #cfcdc1;
@@ -280,16 +280,16 @@ main textarea {
   transition: border-color .15s, box-shadow .15s;
 }
 
-main input[type="checkbox"],
-main input[type="radio"] {
-  width: auto !important;
-  padding: 0 !important;
-  margin: 0 !important;
+:where(main input[type="checkbox"],
+main input[type="radio"]) {
+  width: auto;
+  padding: 0;
+  margin: 0;
 }
 
-main input:focus,
+:where(main input:focus,
 main select:focus,
-main textarea:focus {
+main textarea:focus) {
   border-color: var(--amber);
   box-shadow: 0 0 0 3px rgba(233, 161, 44, .14);
 }

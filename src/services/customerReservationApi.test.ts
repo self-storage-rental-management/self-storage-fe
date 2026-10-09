@@ -11,6 +11,7 @@ import {
   getReservationPayment,
   generateBookingDocument,
   downloadBookingDocument,
+  uploadReservationGoodsImage,
 } from './customerReservationApi'
 import { clearAuthTokens, setAccessToken } from './apiClient'
 
@@ -109,6 +110,23 @@ describe('customerReservationApi', () => {
     const request = fetchMock.mock.calls[0][1] as RequestInit
     expect(new Headers(request.headers).get('Idempotency-Key')).toBe('reservation-fe-test-001')
     expect(request.body).toBe(JSON.stringify(input))
+  })
+
+  it('uploads a goods image with the saved goods item ownership target', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { id: 'file-1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const file = new File(['image-bytes'], 'hang-hoa.webp', { type: 'image/webp' })
+
+    await expect(uploadReservationGoodsImage('goods-item-1', file)).resolves.toEqual({ id: 'file-1' })
+
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('http://localhost:8080/api/files')
+    expect(request.method).toBe('POST')
+    expect(request.body).toBeInstanceOf(FormData)
+    const body = request.body as FormData
+    expect(body.get('entityType')).toBe('RESERVATION_GOODS_ITEM')
+    expect(body.get('entityId')).toBe('goods-item-1')
+    expect(body.get('file')).toBe(file)
   })
 
   it('cancels a reservation with the customer-provided reason', async () => {
