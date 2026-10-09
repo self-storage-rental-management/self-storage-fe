@@ -263,8 +263,8 @@ function WorkspaceData({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           "Tổng hồ sơ",
-          "Đang hiệu lực (active)",
-          "Active sắp hết hạn 30 ngày",
+          "Đang hiệu lực",
+          "Sắp hết hạn trong 30 ngày",
           "Gia hạn chờ duyệt",
         ].map((label, i) => (
           <Card className="p-4" key={label}>
@@ -278,8 +278,6 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <p className="text-xs text-stone-500">
-        {copy("KPI ngày hết hạn theo giá trị BE; các hồ sơ có cảnh báo ngày chưa xác thực cần được kiểm tra riêng.")}</p>
       <div className="flex gap-2">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
@@ -424,7 +422,7 @@ function WorkspaceData({
                 <tr>
                   {[
                     "Mã hồ sơ",
-                    copy("Customer / Cơ sở"),
+                    "Khách hàng / Cơ sở",
                     "Gian kho / Loại",
                     "Thời hạn",
                     "Đơn giá / Tiền gia hạn",

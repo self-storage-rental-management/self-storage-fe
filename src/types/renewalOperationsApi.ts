@@ -28,6 +28,22 @@ export interface RenewalOperationEvent {
   actorId: string | null
   data: unknown
 }
+export interface RenewalExceptionProposal {
+  renewalId: string
+  expectedVersion: number | null
+  decisionRef: string | null
+  status: "NONE" | "AVAILABLE" | "UNAVAILABLE"
+  checkedAt: string
+  currentAppointmentStart: string | null
+  currentAppointmentEnd: string | null
+  currentSigningDeadline: string | null
+  proposedAppointmentStart: string | null
+  proposedAppointmentEnd: string | null
+  proposedSigningDeadline: string | null
+  validUntil: string | null
+  confirmationAllowed: boolean
+  disabledReasons: string[]
+}
 export interface RenewalOperationResult {
   state: RenewalOperationState
   event: RenewalOperationEvent
