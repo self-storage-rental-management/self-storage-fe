@@ -1,6 +1,14 @@
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
+import type { RentalApiRecord } from "../../types/rentalApi"
+
+export function rentalPeriodText(rental: RentalApiRecord) {
+  const verified = rental.dateSemantics?.completeness === "COMPLETE"
+  const end = verified ? rental.dateSemantics!.lastPermittedDate : rental.contractEndDate
+  const interval = `${rentalDate(rental.startDate)} → ${rentalDate(end)}`
+  return verified ? interval : `${interval} (chưa xác minh ngày cuối sử dụng)`
+}
 
 export const rentalLabels: Record<string, string> = {
   active: "Đang hiệu lực",

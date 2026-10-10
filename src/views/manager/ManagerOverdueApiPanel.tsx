@@ -286,7 +286,7 @@ function OverdueSession({ identity }: { identity: string }) {
               <p>
                 {read.data.completeness === "PARTIAL"
                   ? "Chưa tìm thấy hồ sơ, nhưng dữ liệu quá hạn còn thiếu."
-                  : "Không có hồ sơ quá hạn phù hợp tại thời điểm hệ thống kiểm tra."}
+                  : "Không có dữ liệu"}
               </p>
             )}
             <ApiPager
@@ -429,7 +429,7 @@ function OverdueDetail({
             {history.data.data.map((e) => (
               <OverdueFollowUpCard key={e.id} event={e} />
             ))}
-            {history.data.data.length === 0 && <p>Chưa có lịch sử theo dõi.</p>}
+            {history.data.data.length === 0 && <p>Không có dữ liệu</p>}
           </div>
           <ApiPager
             disabled={locked}

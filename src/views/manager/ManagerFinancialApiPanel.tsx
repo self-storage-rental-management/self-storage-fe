@@ -50,7 +50,7 @@ function ManagerFinancialSession({ actor, setPage }: { actor: ApiActor; setPage:
       </form>
       <ApiReadState loading={read.loading} error={read.error} retry={read.refresh} />
       {result && <>
-        {result.data.length === 0 && <p role="status" className="text-sm text-stone-500">Không có hồ sơ thuê khớp bộ lọc.</p>}
+        {result.data.length === 0 && <p role="status" className="text-sm text-stone-500">Không có dữ liệu</p>}
         <div className="grid gap-3 lg:grid-cols-2">
           {result.data.map(record => <div key={record.id} className="min-w-0 rounded-lg border border-stone-200 p-4 space-y-2">
             <p className="font-semibold break-words">{record.customer.fullName}</p>

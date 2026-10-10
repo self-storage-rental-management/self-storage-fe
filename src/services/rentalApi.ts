@@ -88,6 +88,17 @@ export function rentalQuery(
   }
   return params.size ? `?${params.toString()}` : ""
 }
+function validDateSemantics(r: RentalApiRecord): boolean {
+  const d = r.dateSemantics
+  if (d == null) return true // Backward-compatible older API, not verified canonical dates.
+  if (d.completeness === "UNKNOWN") return d.convention === null && d.lastPermittedDate === null && d.endExclusive === null
+  const date = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s)
+    && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s
+  if (d.completeness !== "COMPLETE" || !["INCLUSIVE", "EXCLUSIVE"].includes(d.convention ?? "")
+    || !date(d.lastPermittedDate) || !date(d.endExclusive) || !date(r.startDate) || !date(r.contractEndDate)) return false
+  return r.startDate <= d.lastPermittedDate && Date.parse(d.endExclusive) - Date.parse(d.lastPermittedDate) === 86400000
+    && r.contractEndDate === (d.convention === "EXCLUSIVE" ? d.endExclusive : d.lastPermittedDate)
+}
 export function isRentalRecord(value: unknown): boolean {
   const r = value as RentalApiRecord | null
   return (
@@ -110,6 +121,7 @@ export function isRentalRecord(value: unknown): boolean {
       "completed",
     ].includes(r.status) &&
     r.currency === "VND" &&
+    validDateSemantics(r) &&
     (r.monthlyPrice === null || (Number.isFinite(r.monthlyPrice) && r.monthlyPrice >= 0)) &&
     Array.isArray(r.dataWarnings) &&
     r.dataWarnings.every(

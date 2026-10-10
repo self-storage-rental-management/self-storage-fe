@@ -21,6 +21,7 @@ import {
   rentalDate,
   rentalLabels,
   rentalMoney,
+  rentalPeriodText,
   renewalLabels,
 } from "./presentation"
 
@@ -264,7 +265,7 @@ function WorkspaceData({
         {[
           "Tổng hồ sơ",
           "Đang hiệu lực",
-          "Sắp hết hạn trong 30 ngày",
+          "Mốc kết thúc đã lưu trong 30 ngày",
           "Gia hạn chờ duyệt",
         ].map((label, i) => (
           <Card className="p-4" key={label}>
@@ -351,7 +352,7 @@ function WorkspaceData({
         {tab === "rental" && (
           <>
             <label>
-              Hết hạn từ
+              Ngày kết thúc đã lưu từ
               <input
                 type="date"
                 className={`${inputClass} block`}
@@ -362,7 +363,7 @@ function WorkspaceData({
               />
             </label>
             <label>
-              Đến ngày
+              Ngày kết thúc đã lưu đến
               <input
                 type="date"
                 className={`${inputClass} block`}
@@ -403,7 +404,7 @@ function WorkspaceData({
                 tab === "rental" ? "contractEndDate,asc" : "newEndDate,asc"
               }
             >
-              Ngày kết thúc gần nhất
+              {tab === "rental" ? "Mốc kết thúc đã lưu gần nhất" : "Ngày kết thúc đề nghị gần nhất"}
             </option>
             <option
               value={tab === "rental" ? "monthlyPrice,desc" : "amount,desc"}
@@ -451,7 +452,7 @@ function WorkspaceData({
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {"contractEndDate" in row
-                        ? `${rentalDate(row.startDate)} → ${rentalDate(row.contractEndDate)}`
+                        ? rentalPeriodText(row)
                         : rentalDate(row.newEndDate)}
                     </td>
                     <td className="p-3">
@@ -484,7 +485,7 @@ function WorkspaceData({
                 {read.data.page.data.length === 0 && (
                   <tr>
                     <td colSpan={7} className="p-6 text-center">
-                      Không có hồ sơ phù hợp.
+                      Không có dữ liệu
                     </td>
                   </tr>
                 )}

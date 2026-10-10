@@ -80,7 +80,7 @@ export default function CustomerRenewalRequestModal({
           </label>
         )}
         {options.data?.length === 0 && (
-          <p>Không có gói gia hạn đủ điều kiện.</p>
+          <p>Không có dữ liệu</p>
         )}
         <Button
           disabled={!code || locked}
