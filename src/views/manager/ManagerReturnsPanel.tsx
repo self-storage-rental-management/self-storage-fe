@@ -769,7 +769,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   }`}
                 >
                   <p className="font-bold text-xs text-emerald-800 flex items-center gap-1">
-                    🏢 1. Lỗi Cơ Sở Kho
+                    1. Lỗi Cơ Sở Kho
                   </p>
                   <p className="text-[11px] text-stone-600 mt-1">
                     Nóc dột / vách ngấm nước. Miễn 100% phí, hoàn cọc + bồi thường, tạo task sửa P1.
@@ -786,7 +786,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   }`}
                 >
                   <p className="font-bold text-xs text-amber-800 flex items-center gap-1">
-                    👤 2. Lỗi Khách Hàng
+                    2. Lỗi Khách Hàng
                   </p>
                   <p className="text-[11px] text-stone-600 mt-1">
                     Kho khô 100%, đồ ẩm phát mốc. Giữ nguyên trừ phí khử trùng 1.500.000₫.
@@ -803,7 +803,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   }`}
                 >
                   <p className="font-bold text-xs text-blue-800 flex items-center gap-1">
-                    🤝 3. Hòa Giải Thiện Chí
+                    3. Hòa Giải Thiện Chí
                   </p>
                   <p className="text-[11px] text-stone-600 mt-1">
                     Kho thường nồm ẩm. Giảm 50% phí khử trùng (750.000₫), chia sẻ trách nhiệm.

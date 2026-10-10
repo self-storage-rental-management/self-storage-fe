@@ -3774,7 +3774,7 @@ export default function StaffApp({
             <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <span>🏢</span> {"Kiểm tra kết cấu cơ sở (Trần — Vách — Sàn)"}
+                  {"Kiểm tra kết cấu cơ sở (Trần — Vách — Sàn)"}
                 </h4>
                 <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-stone-200 text-stone-700">
                   {"Căn cứ pháp lý đối chứng"}
@@ -3839,7 +3839,7 @@ export default function StaffApp({
             }`}>
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <span>💧</span> {"Giám định nguồn gốc ẩm mốc / hư hại hàng hóa"}
+                  {"Giám định nguồn gốc ẩm mốc / hư hại hàng hóa"}
                 </h4>
                 <span className="text-[11px] font-semibold text-slate-500">
                   {"Quy định bảo quản & SLA"}
