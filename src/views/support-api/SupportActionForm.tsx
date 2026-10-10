@@ -15,6 +15,7 @@ import type {
 import ApiPager from "../rental-api/ApiPager"
 import SupportReadState from "./SupportReadState"
 import SupportStaffPicker from "./SupportStaffPicker"
+import { EvidenceUpload } from "../duong-integration/EvidenceControls"
 import {
   supportActions,
   supportInputClass,
@@ -36,10 +37,12 @@ export default function SupportActionForm({
   role,
   ticket: t,
   command,
+  onUploadBusy,
 }: {
   role: SupportRole
   ticket: SupportTicket
   command: ReturnType<typeof useSupportCommand>
+  onUploadBusy?: (busy: boolean) => void
 }) {
   const { manager, copy } = useManagerPresentation()
 
@@ -51,6 +54,7 @@ export default function SupportActionForm({
   const [body, setBody] = useState(""),
     [staffId, setStaffId] = useState("")
   const [visibility, setVisibility] = useState<"PUBLIC" | "INTERNAL">("PUBLIC")
+  const [files, setFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
   const [module, setModule] = useState<SupportModule>("PAYMENT")
   const [escalationId, setEscalationId] = useState(""),
     [decision, setDecision] = useState<"ROUTE" | "REJECT">("ROUTE")
@@ -73,7 +77,7 @@ export default function SupportActionForm({
     (action !== "decision" || !!escalationId)
   const submit = () => {
     if (
-      !valid ||
+      !valid || uploading ||
       !supportActions(getAuthenticatedActor(), role, t).includes(action)
     )
       return
@@ -90,14 +94,14 @@ export default function SupportActionForm({
       case "message":
         input =
           role === "staff"
-            ? { kind: "message", body: reason, visibility }
-            : { kind: "message", body: reason, ...version }
+            ? { kind: "message", body: reason, visibility, evidenceFileIds: files }
+            : { kind: "message", body: reason, ...version, evidenceFileIds: files }
         break
       case "information":
-        input = { kind: "information", ...version, message: reason }
+        input = { kind: "information", ...version, message: reason, evidenceFileIds: files }
         break
       case "resolve":
-        input = { kind: "resolve", ...version, summary: reason }
+        input = { kind: "resolve", ...version, summary: reason, evidenceFileIds: files }
         break
       case "close":
         input = { kind: "close", ...version, feedback: reason || undefined }
@@ -106,7 +110,7 @@ export default function SupportActionForm({
         input = { kind: "reopen", ...version, reason }
         break
       case "escalate":
-        input = { kind: "escalate", ...version, targetModule: module, reason }
+        input = { kind: "escalate", ...version, targetModule: module, reason, evidenceFileIds: files }
         break
       case "decision":
         input = {
@@ -136,9 +140,10 @@ export default function SupportActionForm({
         <select
           className={supportInputClass}
           value={action}
-          disabled={command.locked}
+          disabled={command.locked || uploading}
           onChange={(e) => {
             setAction(e.target.value)
+            setFiles([])
             setBody("")
             setStaffId("")
             setEscalationId("")
@@ -166,10 +171,8 @@ export default function SupportActionForm({
           <select
             className={supportInputClass}
             value={visibility}
-            disabled={command.locked}
-            onChange={(e) =>
-              setVisibility(e.target.value as "PUBLIC" | "INTERNAL")
-            }
+            disabled={command.locked || uploading}
+            onChange={(e) => { setVisibility(e.target.value as "PUBLIC" | "INTERNAL"); setFiles([]) }}
           >
             <option value="PUBLIC">Khách hàng có thể xem</option>
             <option value="INTERNAL">Nội bộ - khách hàng không thể xem</option>
@@ -237,9 +240,14 @@ export default function SupportActionForm({
           />
         </label>
       )}
+      {["message", "information", "resolve", "escalate"].includes(action) && <EvidenceUpload
+        key={`${action}:${visibility}`}
+        entityType={action === "escalate" || (action === "message" && role === "staff" && visibility === "INTERNAL") ? "DUONG_SUPPORT_INTERNAL" : "DUONG_SUPPORT_PUBLIC"}
+        entityId={t.id} value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { setUploading(busy); onUploadBusy?.(busy) }}
+      />}
       <Button
         type="submit"
-        disabled={command.locked || command.conflict || !valid}
+        disabled={command.locked || uploading || command.conflict || !valid}
       >
         {copy(labels[action])}
       </Button>

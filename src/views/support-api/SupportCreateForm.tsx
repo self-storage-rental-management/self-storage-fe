@@ -15,6 +15,7 @@ import type { SupportCreate, SupportTicket } from "../../types/supportApi"
 import ApiPager from "../rental-api/ApiPager"
 import SupportReadState from "./SupportReadState"
 import { supportInputClass } from "./presentation"
+import { EvidenceUpload } from "../duong-integration/EvidenceControls"
 
 type Source = "facility" | "rental" | "reservation" | "unit" | "payment"
 type Choice = {
@@ -83,9 +84,11 @@ async function loadChoices(
 export default function SupportCreateForm({
   command,
   parent,
+  onUploadBusy,
 }: {
   command: ReturnType<typeof useSupportCommand>
   parent?: SupportTicket
+  onUploadBusy?: (busy: boolean) => void
 }) {
   const [subject, setSubject] = useState(""),
     [description, setDescription] = useState("")
@@ -93,6 +96,7 @@ export default function SupportCreateForm({
     [page, setPage] = useState(0)
   const [choice, setChoice] = useState<Choice>()
   const [paymentId, setPaymentId] = useState<string>()
+  const [files, setFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
   const actor = getAuthenticatedActor()
   const read = useRentalApiResource(
     `${actor?.id}:support-create:${source}:${page}:${parent?.id}`,
@@ -109,10 +113,11 @@ export default function SupportCreateForm({
     (!!choice || (!!parent && source === "facility")) &&
     (source !== "payment" || !!paymentId)
   const submit = () => {
-    if (!valid) return
+    if (!valid || uploading) return
     const body: SupportCreate = {
       subject: subject.trim(),
       description: description.trim(),
+      ...(files.length ? { evidenceFileIds: files } : {}),
     }
     if (choice && source === "facility") body.facilityId = choice.facilityId
     else if (choice)
@@ -233,10 +238,12 @@ export default function SupportCreateForm({
           onChange={setPaymentId}
         />
       )}
+      <EvidenceUpload entityType="DUONG_SUPPORT_PUBLIC" value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { setUploading(busy); onUploadBusy?.(busy) }} />
       <Button
         type="submit"
         disabled={
           command.locked ||
+          uploading ||
           command.conflict ||
           !valid ||
           read.loading ||
