@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { listRenewalAppointments } from "../../services/renewalOperationsApi"
@@ -40,15 +40,18 @@ function StaffSession({ identity }: { identity: string }) {
     size: 20,
   })
   const [selected, setSelected] = useState<string>()
-  const [locked, setLocked] = useState(false)
+  const lockRef = useRef(false)
+  const setLocked = useCallback((value: boolean) => { lockRef.current = value }, [])
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
     () => listRenewalAppointments(query),
   )
   const change = (patch: RenewalAppointmentQuery) => {
+    if (lockRef.current) return
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
     setSelected(undefined)
   }
+  const refresh = () => { if (!lockRef.current) read.refresh() }
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
@@ -115,7 +118,7 @@ function StaffSession({ identity }: { identity: string }) {
             ))}
           </select>
         </label>
-        <Button variant="outline" onClick={read.refresh}>
+        <Button variant="outline" onClick={refresh}>
           Tải lại
         </Button>
       </Card>
@@ -130,7 +133,7 @@ function StaffSession({ identity }: { identity: string }) {
           className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4"
         >
           <p>{rentalError(read.error)}</p>
-          <Button variant="outline" onClick={read.refresh}>
+          <Button variant="outline" onClick={refresh}>
             Tải lại
           </Button>
         </div>
@@ -153,7 +156,7 @@ function StaffSession({ identity }: { identity: string }) {
               </div>
               <Button
                 variant="outline"
-                onClick={() => setSelected(s.renewalId)}
+                onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}
               >
                 Xử lý
               </Button>
@@ -164,7 +167,7 @@ function StaffSession({ identity }: { identity: string }) {
           )}
           <ApiPager
             pagination={read.data.pagination}
-            onPage={(page) => setQuery((q) => ({ ...q, page }))}
+            onPage={(page) => { if (!lockRef.current) setQuery((q) => ({ ...q, page })) }}
           />
         </Card>
       )}
@@ -174,7 +177,7 @@ function StaffSession({ identity }: { identity: string }) {
           size="xl"
           title="Xử lý ký gia hạn — Nhân viên"
           onClose={() => {
-            if (!locked) setSelected(undefined)
+            if (!lockRef.current) setSelected(undefined)
           }}
         >
           <RenewalOperationsPanel

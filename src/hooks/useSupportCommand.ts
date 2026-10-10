@@ -22,6 +22,10 @@ export type SupportSubmission = {
 // Transport metadata only, in memory and keyed by API actor + role. No business/demo store.
 // Keep uncertain attempts through modal/page unmount so navigation cannot mint a second key.
 export class SupportAttempt {
+  private unknownOutcome = false
+  get uncertain() {
+    return this.unknownOutcome
+  }
   pending?: {
     signature: string
     key: string
@@ -54,7 +58,14 @@ export class SupportAttempt {
   clear(key?: string) {
     if (key && this.pending?.key !== key) return
     this.pending = undefined
+    this.unknownOutcome = false
     this.listeners.forEach((listener) => listener())
+  }
+  reject(key: string | undefined, error: unknown) {
+    if (!key || this.pending?.key !== key) return
+    // Rejecting a retry is not reconciliation of the original lost response.
+    this.unknownOutcome ||= uncertainSupportOutcome(error)
+    if (!this.unknownOutcome) this.clear(key)
   }
 }
 const attempts = new Map<string, SupportAttempt>()
@@ -79,7 +90,8 @@ export function useSupportCommand(scope: string, onSuccess: () => void) {
     attempt.snapshot,
   )
   const [error, setError] = useState<unknown>()
-  const conflict = error instanceof ApiClientError && error.status === 409
+  const conflict =
+    error instanceof ApiClientError && error.status === 409 && !attempt.uncertain
   const run = async (submission: SupportSubmission) => {
     if (lock.current || conflict) return
     const previous = attempt.pending
@@ -103,8 +115,7 @@ export function useSupportCommand(scope: string, onSuccess: () => void) {
       attempt.clear(sentKey)
       succeeded = true
     } catch (e) {
-      const unknown = uncertainSupportOutcome(e)
-      if (!unknown) attempt.clear(sentKey)
+      attempt.reject(sentKey, e)
       setError(e)
     } finally {
       lock.current = false

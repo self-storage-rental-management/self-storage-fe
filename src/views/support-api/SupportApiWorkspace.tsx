@@ -1,5 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useSupportCommand } from "../../hooks/useSupportCommand"
@@ -85,21 +85,33 @@ function SupportSession({
     setRevision((n) => n + 1)
     setCreation(undefined)
   })
+  const [uploading, setUploading] = useState(false)
+  const uploadLock = useRef(false)
+  const uploadBusy = (busy: boolean) => {
+    uploadLock.current = busy
+    setUploading(busy)
+    if (busy) onLocked?.(true)
+  }
+  const locked = command.locked || uploading
+  const formCommand = { ...command, locked }
   useEffect(() => {
-    onLocked?.(command.locked)
+    onLocked?.(locked)
     return () => onLocked?.(false)
-  }, [command.locked, onLocked])
+  }, [locked, onLocked])
   const reload = () => {
+    if (command.locked || uploadLock.current) return
     command.clearError()
     read.refresh()
     setRevision((n) => n + 1)
   }
   const change = (patch: SupportQuery) => {
+    if (command.locked || uploadLock.current) return
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
     setSelected(undefined)
   }
   const commandNotice = (
     <>
+      {uploading && <p role="status" className="text-sm">Đang lưu tệp. Vui lòng chờ trước khi đóng biểu mẫu.</p>}
       {command.busy && (
         <p role="status" className="text-sm">
           Đang gửi yêu cầu…</p>
@@ -110,7 +122,7 @@ function SupportSession({
           className="space-y-2 rounded border border-red-200 bg-red-50 p-3 text-sm"
         >
           <p>{errorText(command.error, supportError)}</p>
-          {!command.locked && !manager && (
+          {!locked && !manager && (
             <Button variant="outline" onClick={reload}>
               Tải lại hồ sơ trước khi thao tác tiếp
             </Button>
@@ -139,7 +151,7 @@ function SupportSession({
         </div>
         {role === "customer" && (
           <Button
-            disabled={command.locked}
+            disabled={locked}
             onClick={() => {
               setSelected(undefined)
               setCreation({})
@@ -163,7 +175,7 @@ function SupportSession({
             <input
               className={supportInputClass}
               maxLength={200}
-              disabled={command.locked}
+              disabled={locked}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -172,7 +184,7 @@ function SupportSession({
             Trạng thái
             <select
               className={supportInputClass}
-              disabled={command.locked}
+              disabled={locked}
               value={query.status ?? ""}
               onChange={(e) =>
                 change({
@@ -193,7 +205,7 @@ function SupportSession({
             Sắp xếp
             <select
               className={supportInputClass}
-              disabled={command.locked}
+              disabled={locked}
               value={query.sort}
               onChange={(e) => change({ sort: e.target.value })}
             >
@@ -204,12 +216,12 @@ function SupportSession({
             </select>
           </label>
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={command.locked}>
+            <Button type="submit" disabled={locked}>
               Tìm kiếm
             </Button>
             {!manager && (<Button
               variant="outline"
-              disabled={command.locked}
+              disabled={locked}
               onClick={reload}
             >
               Tải lại
@@ -220,7 +232,7 @@ function SupportSession({
               Cơ sở được cấp quyền
               <select
                 className={supportInputClass}
-                disabled={command.locked}
+                disabled={locked}
                 value={query.facilityId ?? ""}
                 onChange={(e) =>
                   change({
@@ -242,7 +254,7 @@ function SupportSession({
             Số yêu cầu / trang
             <select
               className={supportInputClass}
-              disabled={command.locked}
+              disabled={locked}
               value={query.size}
               onChange={(e) => change({ size: Number(e.target.value) })}
             >
@@ -255,7 +267,7 @@ function SupportSession({
           </label>
           <Button
             variant="ghost"
-            disabled={command.locked}
+            disabled={locked}
             onClick={() => {
               setSearch("")
               setQuery({ page: 0, size: 20, sort: "createdAt,desc" })
@@ -276,12 +288,12 @@ function SupportSession({
                 onChange={(staffId) =>
                   change({ staffId: staffId || undefined })
                 }
-                disabled={command.locked}
+                disabled={locked}
               />
             </div>
           )}
       </Card>
-      <SupportReadState {...read} retry={read.refresh} />
+      <SupportReadState {...read} retry={reload} />
       {read.data &&
         !read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <p
@@ -327,7 +339,7 @@ function SupportSession({
                   <p className="text-sm">Tạo lúc: {rentalDate(t.createdAt)}</p>
                   <Button
                     variant="outline"
-                    disabled={command.locked}
+                    disabled={locked}
                     onClick={() => {
                       setSelected(t.id)
                       command.clearError()
@@ -344,7 +356,7 @@ function SupportSession({
             )}
             <ApiPager
               pagination={read.data.pagination}
-              disabled={command.locked}
+              disabled={locked}
               onPage={(page) => setQuery((q) => ({ ...q, page }))}
             />
           </>
@@ -355,7 +367,7 @@ function SupportSession({
           size="xl"
           title="Chi tiết yêu cầu Hỗ trợ"
           onClose={() => {
-            if (!command.locked) setSelected(undefined)
+            if (!command.locked && !uploadLock.current) setSelected(undefined)
           }}
         >
           <div className="space-y-4">
@@ -364,8 +376,10 @@ function SupportSession({
               key={`${identity}:${selected}:${revision}`}
               role={role}
               id={selected}
-              command={command}
+              command={formCommand}
+              onUploadBusy={uploadBusy}
               onFollowUp={(parent) => {
+                if (command.locked || uploadLock.current) return
                 setSelected(undefined)
                 setCreation({ parent })
               }}
@@ -379,14 +393,15 @@ function SupportSession({
           size="lg"
           title={creation.parent ? "Yêu cầu tiếp nối" : "Tạo yêu cầu Hỗ trợ"}
           onClose={() => {
-            if (!command.locked) setCreation(undefined)
+            if (!command.locked && !uploadLock.current) setCreation(undefined)
           }}
         >
           <div className="space-y-4">
             {commandNotice}
             <SupportCreateForm
               key={revision}
-              command={command}
+              command={formCommand}
+              onUploadBusy={uploadBusy}
               parent={creation.parent}
             />
           </div>

@@ -21,6 +21,8 @@ import type {
 import ApiPager from "../rental-api/ApiPager"
 import { rentalDate } from "../rental-api/presentation"
 import SupportActionForm from "./SupportActionForm"
+import SupportNotificationReceipts from "../duong-integration/SupportNotificationReceipts"
+import { EvidenceDownload } from "../duong-integration/EvidenceControls"
 import SupportReadState from "./SupportReadState"
 import {
   supportActions,
@@ -123,11 +125,13 @@ export default function SupportTicketDetail({
   id,
   command,
   onFollowUp,
+  onUploadBusy,
 }: {
   role: SupportRole
   id: string
   command: ReturnType<typeof useSupportCommand>
   onFollowUp: (parent: SupportTicket) => void
+  onUploadBusy?: (busy: boolean) => void
 }) {
   const { manager, copy } = useManagerPresentation()
 
@@ -135,6 +139,9 @@ export default function SupportTicketDetail({
   const identity = `${actor?.id}:${role}:${id}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
   const read = useRentalApiResource(identity, () => getSupportTicket(role, id))
   const t = read.data
+  const refresh = () => {
+    if (!command.locked) read.refresh()
+  }
   if (t && (!actor || !supportTicketVisible(actor, role, t)))
     return (
       <p role="alert">
@@ -146,14 +153,15 @@ export default function SupportTicketDetail({
       {!manager && (<Button
         variant="outline"
         disabled={command.locked}
-        onClick={read.refresh}
+        onClick={refresh}
       >
         Tải lại chi tiết
       </Button>)}
-      <SupportReadState {...read} retry={read.refresh} />
+      <SupportReadState {...read} retry={refresh} />
       {t && (
         <>
           <SupportTicketSummary ticket={t} role={role} />
+          {role === "customer" && <SupportNotificationReceipts key={identity} ticketId={id} locked={command.locked} />}
           <SupportTimeline
             key={`${identity}:${t.version}`}
             role={role}
@@ -166,6 +174,7 @@ export default function SupportTicketDetail({
             role={role}
             ticket={t}
             command={command}
+            onUploadBusy={onUploadBusy}
           />
           {supportActions(actor, role, t).includes("follow-up") && (
             <Button disabled={command.locked} onClick={() => onFollowUp(t)}>
@@ -276,9 +285,10 @@ function MessageRow({ message: m }: { message: SupportMessage }) {
         {m.evidenceCompleteness === "UNKNOWN"
           ? "Chưa thể xem tệp đính kèm."
           : m.evidenceFileIds?.length
-            ? "Có tệp đính kèm, hiện chưa thể tải xuống."
+            ? "Tệp đính kèm:"
             : "Không có tệp đính kèm."}
       </p>
+      {m.evidenceCompleteness !== "UNKNOWN" && m.evidenceFileIds?.map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} />)}
     </>
   )
 }

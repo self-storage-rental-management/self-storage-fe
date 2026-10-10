@@ -29,7 +29,7 @@ vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.ac
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (key: string) => ({
     loading: state.loading, error: state.error, refresh: vi.fn(),
-    data: state.mode === "operations"
+    data: key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } } : state.mode === "operations"
       ? /:(payments|refunds|facility-incidents):/.test(key) ? apiPage([]) : key.endsWith(":proposal") ? null : state.data
       : state.mode === "support" && key.includes(":messages:")
         ? supportPage([{ ...supportMessage, evidenceFileIds: [ids.file] }])
@@ -125,12 +125,13 @@ describe("Dương delete-first UI copy regression", () => {
       expect(html).not.toContain(supportIds.customer)
     } else expect(html).toContain("Mã khách hàng")
   })
-  it("D5 attachment notice is truthful, without file UUID or fake download", () => {
+  it("D5 verified attachment uses authenticated download, without exposing file UUID", () => {
     state.actor = supportActor("customer"); state.mode = "support"
     state.data = { ...supportTicket, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu" }
     const command = { run: vi.fn(), retry: vi.fn(), clearError: vi.fn(), busy: false, uncertain: false, conflict: false, locked: false, error: undefined } as ReturnType<typeof useSupportCommand>
     const html = renderToStaticMarkup(<SupportTicketDetail id={supportIds.ticket} role="customer" command={command} onFollowUp={vi.fn()} />)
-    expect(html).toContain("Có tệp đính kèm, hiện chưa thể tải xuống.")
+    expect(html).toContain("Tải minh chứng 1")
+    expect(html).not.toContain("Có tệp đính kèm, hiện chưa thể tải xuống.")
     expect(html).toContain("Khách hàng")
     expect(html).not.toContain(ids.file)
     expect(html).not.toContain("FileAsset")
