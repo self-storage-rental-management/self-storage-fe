@@ -3854,36 +3854,94 @@ export default function BusinessApp({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="p-4 border-l-4 border-l-rose-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-rose-50/20">
               <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-800 font-bold shrink-0 text-sm">
-                  🏢 1
+                <span
+                  data-testid="protocol-badge-1"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-800 font-bold shrink-0 text-sm"
+                >
+                  1
                 </span>
-                <div className="space-y-1">
+                <div className="space-y-1.5 flex-1">
                   <h4 className="font-bold text-slate-900 text-sm">
                     {lang === "vi" ? "Xử Lý Sự Cố Kết Cấu Hạ Tầng Kho (Sàn vỡ, Dột nóc, Kẹt cửa)" : "Facility Structural Fault & SLA Protocol"}
                   </h4>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {lang === "vi"
-                      ? "• Lỗi kết cấu cơ sở (Facility Fault): Cơ sở chịu 100% trách nhiệm. Xử lý P1 khẩn cấp trong 4-12h.\n• Kho đang có khách: Kích hoạt luồng Di dời khẩn cấp (Relocation) sang kho trống tương đương, cấp mã PIN mới miễn phí và giữ nguyên hợp đồng.\n• Kho trống: Lập tức chuyển sang MAINTENANCE, ẩn khỏi trang đặt kho để sửa chữa."
-                      : "Facility structural issues require emergency relocation to equivalent unit with new PIN, or maintenance lock."}
-                  </p>
+                  {lang === "vi" ? (
+                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Lỗi kết cấu cơ sở (Facility Fault):</strong> Cơ sở chịu 100% trách nhiệm. Xử lý P1 khẩn cấp trong 4-12h.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho đang có khách:</strong> Kích hoạt luồng Di dời khẩn cấp (Relocation) sang kho trống tương đương, cấp mã PIN mới miễn phí và giữ nguyên hợp đồng.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho trống:</strong> Lập tức chuyển sang MAINTENANCE, ẩn khỏi trang đặt kho để sửa chữa.</span>
+                      </li>
+                    </ul>
+                  ) : (
+                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Facility Fault:</strong> 100% facility responsibility. P1 emergency handling within 4-12 hours.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Occupied Units:</strong> Trigger Emergency Relocation to equivalent unit with new PIN, contract preserved.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Vacant Units:</strong> Immediate lock to MAINTENANCE status, hidden from booking catalog.</span>
+                      </li>
+                    </ul>
+                  )}
                 </div>
               </div>
             </Card>
 
             <Card className="p-4 border-l-4 border-l-sky-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-sky-50/20">
               <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100 text-sky-800 font-bold shrink-0 text-sm">
-                  💧 2
+                <span
+                  data-testid="protocol-badge-2"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 text-sky-800 font-bold shrink-0 text-sm"
+                >
+                  2
                 </span>
-                <div className="space-y-1">
+                <div className="space-y-1.5 flex-1">
                   <h4 className="font-bold text-slate-900 text-sm">
                     {lang === "vi" ? "Phân Định Trách Nhiệm Ẩm Mốc Khi Trả Kho (Return Dispute)" : "Moisture & Mold Return Settlement"}
                   </h4>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {lang === "vi"
-                      ? "• Vách/trần loang ố hoặc máy lạnh hỏng -> Lỗi cơ sở: Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.\n• Kho khô 100%, đồ mốc do khách cất ẩm/hàng cấm -> Lỗi khách: Tự chịu 100% + trừ phí khử trùng 1.500.000₫ vào cọc.\n• Kho thường (Standard): Miễn trừ trách nhiệm độ ẩm tự nhiên theo cam kết hợp đồng."
-                      : "Moisture dispute resolution: Facility leak vs customer damp packaging vs standard storage climate SLA waiver."}
-                  </p>
+                  {lang === "vi" ? (
+                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Vách/trần loang ố hoặc máy lạnh hỏng → Lỗi cơ sở:</strong> Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho khô 100%, đồ mốc do khách cất ẩm/hàng cấm → Lỗi khách:</strong> Tự chịu 100% + trừ phí khử trùng 1.500.000₫ vào cọc.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho thường (Standard):</strong> Miễn trừ trách nhiệm độ ẩm tự nhiên theo cam kết hợp đồng.</span>
+                      </li>
+                    </ul>
+                  ) : (
+                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Facility Leak / AC Failure:</strong> Full deposit refund + compensation + maintenance lock.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Customer Packaging Fault:</strong> 100% customer liability + deduct 1,500,000₫ sanitization fee from deposit.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Standard Storage:</strong> Ambient climate humidity liability waiver per contract agreement.</span>
+                      </li>
+                    </ul>
+                  )}
                 </div>
               </div>
             </Card>
