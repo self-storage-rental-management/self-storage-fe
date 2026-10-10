@@ -39,6 +39,7 @@ export interface CheckInCase {
   checkInId: string | null
   checkInStatus: CheckInStatus
   scheduledAt: string | null
+  appointmentAt: string | null
   checkedInAt: string | null
   readinessNote: string | null
   rejectionReason: string | null

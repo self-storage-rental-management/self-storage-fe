@@ -159,6 +159,7 @@ export interface CreateReservationInput {
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
+  appointmentAt?: string | null
 }
 
 export interface CustomerReservation {
@@ -181,6 +182,19 @@ export interface CustomerReservation {
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
   holdExpiresAt: string
+  appointmentAt?: string | null
+  createdAt: string
+}
+
+export interface CheckInDocument {
+  id: string
+  originalName: string
+  contentType: string
+  sizeBytes: number
+  checksumSha256: string
+  entityType: 'CHECK_IN'
+  entityId: string
+  status: string
   createdAt: string
 }
 
@@ -409,6 +423,25 @@ export async function getCustomerReservation(reservationId: string) {
     `/api/customer/reservations/${reservationId}`,
   )
   return response.data
+}
+
+export async function setCustomerCheckInAppointment(reservationId: string, appointmentAt: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservation>>(
+    `/api/customer/reservations/${reservationId}/check-in-appointment`,
+    { method: 'POST', body: JSON.stringify({ appointmentAt }) },
+  )
+  return response.data
+}
+
+export async function getCustomerCheckInDocuments(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CheckInDocument[]>>(
+    `/api/customer/reservations/${reservationId}/check-in-documents`,
+  )
+  return response.data
+}
+
+export function downloadCustomerCheckInDocument(assetId: string) {
+  return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
 }
 
 export async function cancelCustomerReservation(reservationId: string, reason: string) {
