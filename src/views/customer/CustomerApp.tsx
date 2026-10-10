@@ -1507,6 +1507,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         goodsCondition,
         notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | ') || null,
         goodsItems: apiGoodsItems,
+        appointmentAt: bookingAppointmentTime
+          ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`).toISOString()
+          : undefined,
       }, idempotencyKey)
       let goodsImageMessage = ''
       const imageCount = goodsItems.reduce((total, item) => total + item.images.length, 0)
