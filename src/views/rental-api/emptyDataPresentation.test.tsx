@@ -30,6 +30,7 @@ vi.mock("../../hooks/useRentalApiResource", () => ({
     error: state.error,
     refresh: vi.fn(),
     data: state.loading || state.error ? undefined
+      : key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } }
       : state.mode === "rental" ? key.endsWith(":counts") ? [0, 0, 0, 0] : { kind: "rental", page: page([]) }
       : state.mode === "options" ? []
       : state.mode === "operations" ? /:(payments|refunds|facility-incidents):/.test(key) ? page([]) : key.endsWith(":proposal") ? null : operationState

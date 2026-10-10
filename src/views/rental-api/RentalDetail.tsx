@@ -1,19 +1,23 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
+import LedgerPanel from "../duong-integration/LedgerPanel"
 import type { RentalApiDetail } from "../../types/rentalApi"
 import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning, rentalPeriodText } from "./presentation"
 export default function RentalDetail({
   rental,
   onRequest,
+  role = "customer",
 }: {
   rental: RentalApiDetail
   onRequest?: () => void
+  role?: "customer" | "manager"
 }) {
   const { manager, copy, explain } = useManagerPresentation()
 
   const f = rental.financialSummary
   return (
     <div className="space-y-4">
+      <LedgerPanel key={`${role}:${rental.id}`} role={role} id={rental.id} />
       <Card className="p-4">
         <h3 className="font-bold mb-3">Hồ sơ thuê</h3>
         <dl className="grid gap-3 sm:grid-cols-2">

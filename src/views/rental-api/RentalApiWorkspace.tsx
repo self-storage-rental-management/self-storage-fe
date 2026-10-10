@@ -601,6 +601,7 @@ function DetailModal({
       <ApiReadState {...read} retry={read.refresh} />
       {read.data?.kind === "rental" ? (
         <RentalDetail
+          role={role}
           rental={read.data.record as RentalApiDetail}
           onRequest={
             role === "customer"
@@ -633,6 +634,7 @@ function DetailModal({
       ) : null}
       {detail.kind === "renewal" && operationOwner && (
         <RenewalOperationsPanel
+          status={read.data?.kind === "renewal" ? (read.data.record as RenewalApiRecord).status : undefined}
           id={detail.id}
           role={role}
           {...operationOwner}
