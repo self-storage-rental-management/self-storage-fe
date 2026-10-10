@@ -1,5 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { getRental, listRentals } from "../../services/rentalApi"
@@ -561,7 +561,10 @@ function DetailModal({
 }) {
   const { manager, copy } = useManagerPresentation()
 
-  const [operationLocked, setOperationLocked] = useState(false)
+  const operationLock = useRef(false)
+  const setOperationLocked = useCallback((value: boolean) => {
+    operationLock.current = value
+  }, [])
   const [operationOwner, setOperationOwner] = useState<{
     facilityId: string
     customerId: string
@@ -595,10 +598,12 @@ function DetailModal({
           : "Chi tiết yêu cầu gia hạn"
       }
       onClose={() => {
-        if (!operationLocked) onClose()
+        if (!operationLock.current) onClose()
       }}
     >
-      <ApiReadState {...read} retry={read.refresh} />
+      <ApiReadState {...read} retry={() => {
+        if (!operationLock.current) read.refresh()
+      }} />
       {read.data?.kind === "rental" ? (
         <RentalDetail
           role={role}
@@ -618,7 +623,7 @@ function DetailModal({
             renewal={read.data.record as RenewalApiRecord}
             role={role}
             onAction={(action) => {
-              if (operationLocked) return
+              if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord
               onClose()
               if (action === "ACCEPT_REVISED_QUOTE")

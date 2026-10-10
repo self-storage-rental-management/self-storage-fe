@@ -60,8 +60,14 @@ export default function RenewalCoordinationPanel({
     payload = useRef<RenewalCoordination | undefined>(undefined),
     actor = getAuthenticatedActor()
   const locked = command.busy || command.uncertain || uploading
+  const uploadLock = useRef(false)
+  const uploadBusy = (busy: boolean) => {
+    uploadLock.current = busy
+    setUploading(busy)
+    onLocked(busy || command.isLocked())
+  }
   useEffect(() => {
-    onLocked(locked)
+    onLocked(uploadLock.current || command.isLocked())
   }, [locked, onLocked])
   const incidents = useRentalApiResource(
     `${actor?.id}:${state.renewalId}:${state.expectedVersion}:coordination:${action}:${page}`,
@@ -101,6 +107,7 @@ export default function RenewalCoordinationPanel({
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault()
+          if (uploadLock.current || command.busy || command.conflict) return
           if (terminal && !payload.current) return
           setValidation(undefined)
           if (!canCoordinateRenewal(facilityId)) {
@@ -139,6 +146,7 @@ export default function RenewalCoordinationPanel({
           }
           const body = payload.current
           let event: RenewalOperationEvent | undefined
+          onLocked(true)
           void command.run(
             JSON.stringify({ id: state.renewalId, body }),
             async (key) => {
@@ -156,7 +164,9 @@ export default function RenewalCoordinationPanel({
               payload.current = undefined
               onChanged(event)
             },
-          )
+          ).finally(() => {
+            onLocked(uploadLock.current || command.isLocked())
+          })
         }}
       >
         <fieldset disabled={terminal || locked || command.conflict} className="space-y-3">
@@ -260,7 +270,7 @@ export default function RenewalCoordinationPanel({
                   setFiles(v)
                   payload.current = undefined
                 }}
-                onBusy={setUploading}
+                onBusy={uploadBusy}
               />
             </>
           )}
