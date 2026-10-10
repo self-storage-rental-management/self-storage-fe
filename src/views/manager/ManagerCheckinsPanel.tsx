@@ -103,7 +103,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       setSelectedCheckin(null)
       setDetailOpen(false)
     }
-    setFeedback({ tone: 'success', message: `Đã ẩn hồ sơ ${hideTarget.id} khỏi danh sách của Manager. Dữ liệu dùng chung không bị xóa.` })
+    setFeedback({ tone: 'success', message: `Đã ẩn hồ sơ ${hideTarget.id} khỏi danh sách của quản lý cơ sở. Dữ liệu dùng chung không bị xóa.` })
     setHideTarget(null)
   }
 
@@ -122,19 +122,16 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
     <div className="fade-in space-y-6">
       <SectionHeader
         title={'Giám sát quy trình nhận kho & bàn giao kho'}
-        subtitle={
-          'Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý 5 bước và biên bản kiểm đo thực tế'
-        }
       />
 
       <ManagerActionNotice>
-        Manager theo dõi tiến độ và hồ sơ bàn giao. Việc xác minh khách hàng, ký biên bản, cấp quyền truy cập và hoàn tất nhận kho do Staff thực hiện.
+        quản lý cơ sở theo dõi tiến độ và hồ sơ bàn giao. Việc xác minh khách hàng, ký biên bản, cấp quyền truy cập và hoàn tất nhận kho do nhân viên thực hiện.
       </ManagerActionNotice>
 
       {hiddenFacilityCount > 0 && (
         <ManagerActionNotice tone="info">
           <div className="flex items-center justify-between gap-3">
-            <span>{hiddenFacilityCount} hồ sơ chỉ đang bị ẩn khỏi giao diện Manager; dữ liệu dùng chung vẫn còn nguyên.</span>
+            <span>{hiddenFacilityCount} hồ sơ chỉ đang bị ẩn khỏi giao diện quản lý cơ sở, dữ liệu dùng chung vẫn còn nguyên.</span>
             <Button size="sm" variant="outline" onClick={restoreHiddenHistory}>Hiện lại</Button>
           </div>
         </ManagerActionNotice>
@@ -239,7 +236,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
             {filteredCheckins.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-stone-400 text-sm">
-                  {'Không có lịch hẹn check-in nào trong bộ lọc này.'}
+                  {"Không có lịch hẹn nhận kho nào trong bộ lọc này."}
                 </td>
               </tr>
             ) : (
@@ -256,7 +253,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                         <Avatar name={c.customerName} size="sm" />
                         <div>
                           <p className="font-medium text-sm text-stone-900">{c.customerName}</p>
-                          <p className="text-xs text-stone-400">ID: {c.customerId}</p>
+                          <p className="text-xs text-stone-400">Mã: {c.customerId}</p>
                         </div>
                       </div>
                     </Td>
@@ -312,7 +309,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                             </Button>
                           )}
                         </div>
-                        <ManagerActionNotice compact tone={c.status === 'completed' ? 'success' : c.status === 'cancelled' ? 'warning' : 'info'}>{c.status === 'scheduled' ? 'Chờ Staff thực hiện nhận kho.' : c.status === 'completed' ? 'Staff đã hoàn tất bàn giao.' : 'Lịch nhận kho đã hủy; không còn thao tác.'}</ManagerActionNotice>
+                        <ManagerActionNotice compact tone={c.status === 'completed' ? 'success' : c.status === 'cancelled' ? 'warning' : 'info'}>{c.status === 'scheduled' ? "Chờ nhân viên thực hiện nhận kho." : c.status === 'completed' ? "nhân viên đã hoàn tất bàn giao." : "Lịch nhận kho đã hủy, không còn thao tác."}</ManagerActionNotice>
                       </div>
                     </Td>
                   </Tr>
@@ -444,14 +441,14 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
       <Modal
         open={Boolean(hideTarget)}
         onClose={() => setHideTarget(null)}
-        title="Soft-delete hồ sơ lịch sử"
+        title="Ẩn khỏi danh sách hồ sơ lịch sử"
       >
         {hideTarget && (
           <div className="space-y-4">
             <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-              <p className="font-semibold">Xóa hồ sơ {hideTarget.id} khỏi lịch sử Manager?</p>
+              <p className="font-semibold">Xóa hồ sơ {hideTarget.id} khỏi lịch sử quản lý cơ sở?</p>
               <p className="mt-1 text-red-700">
-                Hồ sơ của {hideTarget.customerName}, gian kho {hideTarget.unitId}, sẽ chỉ bị ẩn ở giao diện Manager hiện tại. Dữ liệu bàn giao dùng chung vẫn được giữ nguyên cho các role và luồng nghiệp vụ khác.
+                Hồ sơ của {hideTarget.customerName}, gian kho {hideTarget.unitId}, sẽ chỉ bị ẩn ở giao diện quản lý cơ sở hiện tại. Dữ liệu bàn giao dùng chung vẫn được giữ nguyên cho các role và luồng nghiệp vụ khác.
               </p>
             </div>
             <div className="flex justify-end gap-2">

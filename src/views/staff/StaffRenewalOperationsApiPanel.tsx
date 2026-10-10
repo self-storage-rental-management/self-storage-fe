@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { listRenewalAppointments } from "../../services/renewalOperationsApi"
@@ -9,12 +9,10 @@ import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
-import { rentalDate } from "../rental-api/presentation"
-import SupportApiEntry from "../support-api/SupportApiEntry"
-import { staffErrorMessage } from "./staffPresentation"
+import { rentalDate, rentalError } from "../rental-api/presentation"
 
 export default function StaffRenewalOperationsApiPanel() {
-  return <SupportApiEntry role="staff"><StaffRenewalWorkspace /></SupportApiEntry>
+  return <StaffRenewalWorkspace />
 }
 function StaffRenewalWorkspace() {
   const actor = getAuthenticatedActor()
@@ -42,22 +40,21 @@ function StaffSession({ identity }: { identity: string }) {
     size: 20,
   })
   const [selected, setSelected] = useState<string>()
-  const [locked, setLocked] = useState(false)
+  const lockRef = useRef(false)
+  const setLocked = useCallback((value: boolean) => { lockRef.current = value }, [])
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
     () => listRenewalAppointments(query),
   )
   const change = (patch: RenewalAppointmentQuery) => {
+    if (lockRef.current) return
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
     setSelected(undefined)
   }
+  const refresh = () => { if (!lockRef.current) read.refresh() }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở (D3)</h1>
-      <p className="text-sm text-stone-500">
-        Chỉ hiển thị hồ sơ được phân công và thuộc cơ sở bạn được
-        phép vận hành.
-      </p>
+      <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
       <Card className="p-4 flex flex-wrap gap-3 items-end">
         <label>
           Cơ sở
@@ -121,7 +118,7 @@ function StaffSession({ identity }: { identity: string }) {
             ))}
           </select>
         </label>
-        <Button variant="outline" onClick={read.refresh}>
+        <Button variant="outline" onClick={refresh}>
           Tải lại
         </Button>
       </Card>
@@ -135,8 +132,8 @@ function StaffSession({ identity }: { identity: string }) {
           role="alert"
           className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4"
         >
-          <p>{staffErrorMessage(read.error, "Không thể tải lịch gia hạn.")}</p>
-          <Button variant="outline" onClick={read.refresh}>
+          <p>{rentalError(read.error)}</p>
+          <Button variant="outline" onClick={refresh}>
             Tải lại
           </Button>
         </div>
@@ -159,18 +156,18 @@ function StaffSession({ identity }: { identity: string }) {
               </div>
               <Button
                 variant="outline"
-                onClick={() => setSelected(s.renewalId)}
+                onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}
               >
                 Xử lý
               </Button>
             </div>
           ))}
           {read.data.data.length === 0 && (
-            <p>Không có lịch phù hợp với phân công hiện tại.</p>
+            <p>Không có dữ liệu</p>
           )}
           <ApiPager
             pagination={read.data.pagination}
-            onPage={(page) => setQuery((q) => ({ ...q, page }))}
+            onPage={(page) => { if (!lockRef.current) setQuery((q) => ({ ...q, page })) }}
           />
         </Card>
       )}
@@ -180,7 +177,7 @@ function StaffSession({ identity }: { identity: string }) {
           size="xl"
           title="Xử lý ký gia hạn — Nhân viên"
           onClose={() => {
-            if (!locked) setSelected(undefined)
+            if (!lockRef.current) setSelected(undefined)
           }}
         >
           <RenewalOperationsPanel

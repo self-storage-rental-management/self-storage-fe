@@ -122,6 +122,6 @@ export function supportActor(role: SupportRole): ApiActor {
         ? {}
         : { [supportIds.facility]: role === "manager" ? "MANAGE" : "OPERATE" },
     mustChangePassword: false,
-    permissions: role === "customer" ? [] : ["view_support", "manage_support"],
+    permissions: role === "customer" ? [] : ["support:read", "support:update"],
   }
 }

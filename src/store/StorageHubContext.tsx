@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react'
 import type {
   Facility,
   StorageUnit,
@@ -22,7 +22,11 @@ import type {
   ReservedPeriod,
   FacilityTask,
   FacilityUnitDistribution,
-  RentalPackage
+  RentalPackage,
+  StructuralInspection,
+  MoistureOrigin,
+  MaintenancePriority,
+  FacilityIssueCategory
 } from '../types/storageHub'
 import { generateDefaultRentalPackages } from '../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../domain/renewalPricing'
@@ -254,6 +258,67 @@ const LEGACY_FACILITY_NAMES: Record<string, string> = {
   'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
 }
 
+export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address?: string; city?: string }> = {
+  'FAC-Q1': {
+    name: 'StorageHub Chi nhánh Quận 1',
+    address: '123 Nguyễn Huệ, Phường Bến Nghé, Quận 1',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q1-F01': {
+    name: 'Kho Việt – Cơ sở Quận 1',
+    address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q7-F01': {
+    name: 'Kho Việt – Cơ sở Quận 7 (Phú Mỹ Hưng)',
+    address: '105 Nguyễn Lương Bằng, Phường Tân Phú, Quận 7, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'BD-F01': {
+    name: 'Kho Việt – Cơ sở Bình Dương',
+    address: '468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
+    city: 'Bình Dương'
+  },
+  'HCM-TD-F01': {
+    name: 'Kho Việt – Cơ sở Thủ Đức',
+    address: 'Số 1 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức',
+    city: 'TP. Hồ Chí Minh'
+  }
+}
+
+export function sanitizeFacilityStrings<T extends { code?: string; id?: string; name?: string; address?: string; city?: string }>(f: T): T {
+  if (!f) return f
+  const code = (f.code || f.id || '').toUpperCase()
+  let fix = KNOWN_FACILITY_CORRECTIONS[code]
+  if (!fix && f.id) {
+    fix = KNOWN_FACILITY_CORRECTIONS[f.id.toUpperCase()]
+  }
+  if (!fix) {
+    const addr = f.address || ''
+    const nm = f.name || ''
+    if (addr.includes('123 Nguy') || addr.includes('Huß') || addr.includes('Nguyß') || addr.includes('Phã') || (nm.includes('Quận 1') && nm.includes('StorageHub'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['FAC-Q1']
+    } else if (addr.includes('Võ Văn Ngân') || nm.includes('Thủ Đức')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-TD-F01']
+    } else if (addr.includes('Bình Dương') || nm.includes('Bình Dương')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['BD-F01']
+    } else if (addr.includes('Lương Bằng') || nm.includes('Quận 7')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q7-F01']
+    } else if (addr.includes('Bỉnh Khiêm') || (nm.includes('Quận 1') && nm.includes('Kho Việt'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q1-F01']
+    }
+  }
+  if (fix) {
+    return {
+      ...f,
+      name: fix.name || f.name,
+      address: fix.address || f.address,
+      city: fix.city || f.city
+    }
+  }
+  return f
+}
+
 export const isExcludedFacility = (_f: { code?: string; id?: string; city?: string; name?: string }) => false
 
 export const isExcludedUnit = (_u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => false
@@ -266,9 +331,10 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 }
 
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
-  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES
-  const cleaned = facilities.filter(f => !isExcludedFacility(f))
+  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES.map(sanitizeFacilityStrings)
+  const cleaned = facilities.filter(f => !isExcludedFacility(f)).map(sanitizeFacilityStrings)
   const mapped = cleaned.map(stored => {
+    stored = sanitizeFacilityStrings(stored)
     const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
     if (!canonical) return stored
     if (canonical.id === 'fac-001') {
@@ -1194,15 +1260,41 @@ interface StorageHubContextValue extends StorageHubState {
     staffNotes: string
     evidencePhotos: string[]
     returnedItems: { key: boolean; card: boolean; lock: boolean }
+    structuralInspection?: StructuralInspection
+    moistureOrigin?: MoistureOrigin
+    sanitizationFee?: number
+    facilityCompensationAmount?: number
   }) => void
   confirmReturnSettlement: (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => void
   payReturnBalance: (returnId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string) => void
   completeReturnRefund: (returnId: string, staffUser: User, transactionReference: string) => void
-  reviewReturnDispute: (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => void
-  createMaintenanceTask: (unitId: string, reason: string, staffUser?: User) => MaintenanceTask
+  reviewReturnDispute: (
+    returnId: string,
+    manager: User,
+    resolutionNote?: string,
+    settlement?: ManagerReturnSettlementFees,
+    preset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement',
+    facilityCompensationAmount?: number
+  ) => void
+  createMaintenanceTask: (unitId: string, reason: string, staffUser?: User, priority?: MaintenancePriority, faultCategory?: FacilityIssueCategory) => MaintenanceTask
   completeMaintenanceTask: (taskId: string, managerUser: User) => void
   releaseMaintenanceUnit: (unitId: string, staffUser: User) => void
-  updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
+  updateUnitStatus: (
+    unitId: string,
+    status: 'available' | 'maintenance',
+    manager: User,
+    reason?: string,
+    priority?: MaintenancePriority,
+    faultCategory?: FacilityIssueCategory
+  ) => void
+  emergencyRelocateRental: (params: {
+    rentalId: string
+    targetUnitId: string
+    reason: string
+    faultCategory: FacilityIssueCategory
+    manager: User
+    goodwillDiscountPercent?: number
+  }) => void
   recordRentalPayment: (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => void
   applyRentalLateFee: (rentalId: string, amount: number, manager: User) => void
   waiveRentalLateFee: (rentalId: string, manager: User) => void
@@ -1350,7 +1442,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             if (Array.isArray(directFacs)) {
               const knownIds = new Set(rawFacilities.map((f: any) => f.id))
               const knownCodes = new Set(rawFacilities.map((f: any) => (f.code || '').toUpperCase()))
-              for (const df of directFacs) {
+              for (let df of directFacs) {
+                df = sanitizeFacilityStrings(df)
                 if (df && df.id && !knownIds.has(df.id) && (!df.code || !knownCodes.has(df.code.toUpperCase()))) {
                   rawFacilities.push(df)
                   knownIds.add(df.id)
@@ -3180,6 +3273,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     staffNotes: string
     evidencePhotos: string[]
     returnedItems: { key: boolean; card: boolean; lock: boolean }
+    structuralInspection?: StructuralInspection
+    moistureOrigin?: MoistureOrigin
+    sanitizationFee?: number
+    facilityCompensationAmount?: number
   }) => {
     assertPermission(params.staffUser, 'returns:process')
     const returnCase = state.returns.find(r => r.id === params.returnId)
@@ -3194,25 +3291,58 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const overdueDays = inspectionDay.getTime() > contractEndDay.getTime() ? Math.floor((inspectionDay.getTime() - contractEndDay.getTime()) / 86_400_000) : 0
     const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
     const calculatedOverdueFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
-    const totalFees = params.damageFee + params.cleaningFee + params.lostItemFee + calculatedOverdueFee + params.outstandingFee
-    const netRefund = Math.max(0, returnCase.depositAmount - totalFees)
+
+    // VẤN ĐỀ 2: Nếu lỗi phát sinh do cơ sở (thấm dột trần/vách, máy lạnh hỏng), khách hàng được miễn trừ phí hư hỏng/vệ sinh
+    const isFacilityFault = params.moistureOrigin === 'facility_fault' || params.structuralInspection?.ceiling === 'leaking' || params.structuralInspection?.wall === 'damp_seepage'
+    const effectiveDamageFee = isFacilityFault ? 0 : params.damageFee
+    const effectiveCleaningFee = isFacilityFault ? 0 : (params.cleaningFee + (params.sanitizationFee || 0))
+    const totalFees = effectiveDamageFee + effectiveCleaningFee + params.lostItemFee + calculatedOverdueFee + params.outstandingFee
+
+    const compensation = isFacilityFault ? (params.facilityCompensationAmount || 0) : 0
+    const netRefund = Math.max(0, (returnCase.depositAmount + compensation) - totalFees)
     const amountDueFromCustomer = Math.max(0, Math.round((totalFees - returnCase.depositAmount) * 100) / 100)
 
-    // UNIT CONDITION: Separate from fees! Only physical repair/cleaning needs MAINTENANCE
-    const needsPhysicalRepair = params.damageClassification !== 'no_damage' || params.cleaningFee > 0 || params.inventoryMatch === 'excess'
+    // UNIT CONDITION: Nếu phát sinh hư hại kết cấu (dột nóc, vách thấm, sàn nứt) hoặc vệ sinh kho thì cần bảo trì
+    const hasStructuralDamage = params.structuralInspection && (
+      params.structuralInspection.ceiling !== 'dry_intact' ||
+      params.structuralInspection.wall !== 'dry_intact' ||
+      params.structuralInspection.floor !== 'dry_intact'
+    )
+    const needsPhysicalRepair = params.damageClassification !== 'no_damage' || effectiveCleaningFee > 0 || params.inventoryMatch === 'excess' || isFacilityFault || hasStructuralDamage
     const nextUnitStatus: 'available' | 'maintenance' = needsPhysicalRepair ? 'maintenance' : 'available'
+
+    // Tự động tạo phiếu bảo trì khẩn cấp nếu phát hiện hỏng hóc kết cấu cơ sở
+    const facilityFaultTask: MaintenanceTask | undefined = isFacilityFault || hasStructuralDamage ? {
+      id: `MNT-${Date.now().toString().slice(-6)}`,
+      unitId: unit.id,
+      facilityId: unit.facilityId,
+      reason: `[SỰ CỐ KẾT CẤU KHI TRẢ KHO] ${isFacilityFault ? 'Nghiệm thu trả kho: phát hiện thấm dột / sự cố cơ sở làm ẩm mốc.' : 'Hư hại kết cấu ghi nhận khi trả kho.'} ${params.staffNotes ? `Ghi chú: ${params.staffNotes}` : ''}`,
+      priority: isFacilityFault ? 'P1_CRITICAL' : 'P2_MEDIUM',
+      faultCategory: params.structuralInspection?.ceiling === 'leaking' ? 'roof_leak' : params.structuralInspection?.floor === 'cracked' ? 'floor_cracked' : 'wall_seepage',
+      status: 'pending',
+      createdAt: now.toISOString()
+    } : undefined
 
     setState(prev => ({
       ...prev,
-      units: prev.units.map(u => (u.id === unit.id ? { ...u, status: 'maintenance' } : u)),
+      units: prev.units.map(u => (u.id === unit.id ? {
+        ...u,
+        status: 'maintenance',
+        activeFacilityIssue: isFacilityFault || hasStructuralDamage ? {
+          reportedAt: now.toISOString(),
+          category: params.structuralInspection?.ceiling === 'leaking' ? 'roof_leak' : params.structuralInspection?.floor === 'cracked' ? 'floor_cracked' : 'wall_seepage',
+          priority: isFacilityFault ? 'P1_CRITICAL' : 'P2_MEDIUM',
+          notes: params.staffNotes || 'Sự cố kết cấu ghi nhận khi nghiệm thu trả kho'
+        } : u.activeFacilityIssue
+      } : u)),
       rentals: prev.rentals.map(r => (r.id === rental.id ? { ...r, status: 'closing' } : r)),
       returns: prev.returns.map(r => r.id === returnCase.id ? {
         ...r,
         status: 'awaiting_customer_confirmation',
         inspectedAt: now.toISOString(),
         damageClassification: params.damageClassification,
-        damageFee: params.damageFee,
-        cleaningFee: params.cleaningFee,
+        damageFee: effectiveDamageFee,
+        cleaningFee: effectiveCleaningFee,
         lostItemFee: params.lostItemFee,
         overdueFee: calculatedOverdueFee,
         overdueDays,
@@ -3224,8 +3354,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         customerConfirmed: false,
         returnedItems: params.returnedItems,
         staffId: params.staffUser.id,
-        proposedUnitStatus: nextUnitStatus
+        proposedUnitStatus: nextUnitStatus,
+        structuralInspection: params.structuralInspection,
+        moistureOrigin: params.moistureOrigin,
+        sanitizationFee: params.sanitizationFee,
+        facilityCompensationAmount: compensation
       } : r),
+      maintenanceTasks: facilityFaultTask ? [facilityFaultTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3236,7 +3371,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: unit.facilityId,
           entityType: 'return',
           entityId: returnCase.id,
-          notes: `Đã nghiệm thu kho ${unit.code}. Quá hạn ${overdueDays} ngày, phí trễ ${formatVnd(calculatedOverdueFee)}. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
+          notes: `Đã nghiệm thu kho ${unit.code}. ${isFacilityFault ? 'Ghi nhận lỗi cơ sở gây ẩm; miễn trừ phạt cho khách.' : ''} Quá hạn ${overdueDays} ngày. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -3245,19 +3380,36 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   // 9. Facility Manager: Maintenance Task Handling
-  const createMaintenanceTask = (unitId: string, reason: string, staffUser?: User): MaintenanceTask => {
+  const createMaintenanceTask = (
+    unitId: string,
+    reason: string,
+    staffUser?: User,
+    priority: MaintenancePriority = 'P2_MEDIUM',
+    faultCategory: FacilityIssueCategory = 'other'
+  ): MaintenanceTask => {
     if (staffUser) assertPermission(staffUser, 'inventory:update')
     const task: MaintenanceTask = {
       id: `MNT-${Date.now().toString().slice(-6)}`,
       unitId,
       facilityId: state.units.find(u => u.id === unitId)?.facilityId || 'fac-001',
       reason,
+      priority,
+      faultCategory,
       status: 'pending',
       createdAt: new Date().toISOString()
     }
     setState(prev => ({
       ...prev,
-      units: prev.units.map(u => u.id === unitId ? { ...u, status: 'maintenance' } : u),
+      units: prev.units.map(u => u.id === unitId ? {
+        ...u,
+        status: 'maintenance',
+        activeFacilityIssue: {
+          reportedAt: new Date().toISOString(),
+          category: faultCategory,
+          priority,
+          notes: reason
+        }
+      } : u),
       maintenanceTasks: [task, ...prev.maintenanceTasks]
     }))
     return task
@@ -3274,7 +3426,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       maintenanceTasks: prev.maintenanceTasks.map(t => t.id === taskId ? { ...t, status: 'completed', completedAt: now.toISOString() } : t),
-      units: prev.units.map(u => u.id === task.unitId ? { ...u, status: 'available' } : u),
+      units: prev.units.map(u => u.id === task.unitId ? { ...u, status: 'available', activeFacilityIssue: undefined } : u),
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3304,12 +3456,19 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } else {
       setState(prev => ({
         ...prev,
-        units: prev.units.map(u => u.id === unitId ? { ...u, status: 'available' } : u)
+        units: prev.units.map(u => u.id === unitId ? { ...u, status: 'available', activeFacilityIssue: undefined } : u)
       }))
     }
   }
 
-  const updateUnitStatus = (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => {
+  const updateUnitStatus = (
+    unitId: string,
+    status: 'available' | 'maintenance',
+    manager: User,
+    reason?: string,
+    priority: MaintenancePriority = 'P2_MEDIUM',
+    faultCategory: FacilityIssueCategory = 'other'
+  ) => {
     assertPermission(manager, 'inventory:update')
     const unit = state.units.find(item => item.id === unitId)
     if (!unit) throw new Error('Không tìm thấy gian kho.')
@@ -3327,18 +3486,153 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         unitId,
         facilityId: unit.facilityId,
         reason: reason?.trim() || 'Manager chuyển gian kho sang bảo trì.',
+        priority,
+        faultCategory,
         status: 'pending',
         createdAt: now.toISOString()
       } : undefined
       return {
         ...prev,
-        units: prev.units.map(item => item.id === unitId ? { ...item, status, conditionNotes: reason?.trim() || item.conditionNotes, version: item.version + 1 } : item),
+        units: prev.units.map(item => item.id === unitId ? {
+          ...item,
+          status,
+          conditionNotes: reason?.trim() || item.conditionNotes,
+          activeFacilityIssue: status === 'maintenance' ? {
+            reportedAt: now.toISOString(),
+            category: faultCategory,
+            priority,
+            notes: reason?.trim() || 'Bảo trì cơ sở'
+          } : undefined,
+          version: item.version + 1
+        } : item),
         maintenanceTasks: status === 'available'
           ? prev.maintenanceTasks.map(task => task.unitId === unitId && task.status !== 'completed' ? { ...task, status: 'completed', completedAt: now.toISOString(), notes: reason?.trim() || task.notes } : task)
           : maintenanceTask ? [maintenanceTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
         activities: [{ id: `act-${Date.now()}`, action: status === 'maintenance' ? 'UNIT_MAINTENANCE_STARTED' : 'UNIT_RELEASED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: unit.facilityId, entityType: 'unit', entityId: unit.id, beforeState: { status: unit.status, conditionNotes: unit.conditionNotes }, afterState: { status, conditionNotes: reason?.trim() || unit.conditionNotes }, notes: reason?.trim() || `Trạng thái gian kho chuyển sang ${status.toUpperCase()}.`, timestamp: now.toISOString() }, ...prev.activities]
       }
     })
+  }
+
+  // VẤN ĐỀ 1: Luồng Di dời gian kho khẩn cấp (Emergency Unit Relocation) khi sự cố kết cấu (sàn vỡ, nóc dột...)
+  const emergencyRelocateRental = (params: {
+    rentalId: string
+    targetUnitId: string
+    reason: string
+    faultCategory: FacilityIssueCategory
+    manager: User
+    goodwillDiscountPercent?: number
+  }) => {
+    assertPermission(params.manager, 'inventory:update')
+    const rental = state.rentals.find(r => r.id === params.rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    if (rental.status !== 'active') throw new Error('Chỉ có thể di dời hợp đồng đang hoạt động.')
+    assertFacilityManager(params.manager, rental.facilityId, rental.facilityName)
+
+    const sourceUnit = state.units.find(u => u.id === rental.unitId)
+    const targetUnit = state.units.find(u => u.id === params.targetUnitId)
+    if (!sourceUnit || !targetUnit) throw new Error('Không tìm thấy gian kho nguồn hoặc gian kho đích.')
+    if (targetUnit.facilityId !== sourceUnit.facilityId) throw new Error('Gian kho thay thế phải thuộc cùng cơ sở lưu trữ.')
+    if (targetUnit.status !== 'available') throw new Error(`Gian kho ${targetUnit.code} không khả dụng (hiện trạng: ${targetUnit.status}).`)
+
+    const now = new Date()
+    const newPin = Math.floor(100000 + Math.random() * 900000).toString()
+    const newCredentialId = `cred-${Date.now()}`
+
+    const newCredential: AccessCredential = {
+      id: newCredentialId,
+      rentalId: rental.id,
+      unitId: targetUnit.id,
+      type: 'PIN',
+      pinCode: newPin,
+      status: 'ACTIVE',
+      generatedAt: now.toISOString(),
+      activatedAt: now.toISOString()
+    }
+
+    const maintenanceTaskId = `MNT-EMG-${Date.now().toString().slice(-6)}`
+    const emergencyTask: MaintenanceTask = {
+      id: maintenanceTaskId,
+      unitId: sourceUnit.id,
+      facilityId: sourceUnit.facilityId,
+      reason: `[SỰ CỐ KHẨN CẤP P1 - DI DỜI KHO] ${params.reason} (Đã di dời khách sang ${targetUnit.code})`,
+      priority: 'P1_CRITICAL',
+      faultCategory: params.faultCategory,
+      isEmergencyRelocation: true,
+      relocatedFromRentalId: rental.id,
+      status: 'pending',
+      createdAt: now.toISOString()
+    }
+
+    const relocationRecord = {
+      fromUnitId: sourceUnit.id,
+      toUnitId: targetUnit.id,
+      relocatedAt: now.toISOString(),
+      reason: params.reason,
+      faultCategory: params.faultCategory
+    }
+
+    setState(prev => ({
+      ...prev,
+      units: prev.units.map(u => {
+        if (u.id === sourceUnit.id) {
+          return {
+            ...u,
+            status: 'maintenance',
+            conditionNotes: `[SỰ CỐ HẠ TẦNG] ${params.reason}`,
+            activeFacilityIssue: {
+              reportedAt: now.toISOString(),
+              category: params.faultCategory,
+              priority: 'P1_CRITICAL',
+              notes: params.reason
+            },
+            version: u.version + 1
+          }
+        }
+        if (u.id === targetUnit.id) {
+          return {
+            ...u,
+            status: 'occupied',
+            currentRentalId: rental.id,
+            version: u.version + 1
+          }
+        }
+        return u
+      }),
+      rentals: prev.rentals.map(r => {
+        if (r.id === rental.id) {
+          return {
+            ...r,
+            unitId: targetUnit.id,
+            previousUnitId: sourceUnit.id,
+            gateCode: newPin,
+            relocationHistory: [...(r.relocationHistory || []), relocationRecord]
+          }
+        }
+        return r
+      }),
+      accessCredentials: [
+        ...prev.accessCredentials.map(c => c.rentalId === rental.id && c.unitId === sourceUnit.id ? { ...c, status: 'REVOKED' as const, revokedAt: now.toISOString() } : c),
+        newCredential
+      ],
+      maintenanceTasks: [emergencyTask, ...prev.maintenanceTasks],
+      activities: [
+        {
+          id: `act-${Date.now()}`,
+          action: 'EMERGENCY_UNIT_RELOCATED',
+          actorId: params.manager.id,
+          actorName: params.manager.name,
+          actorRole: params.manager.role,
+          facilityId: sourceUnit.facilityId,
+          entityType: 'unit',
+          entityId: sourceUnit.id,
+          beforeState: { unitId: sourceUnit.id, code: sourceUnit.code, status: 'occupied' },
+          afterState: { unitId: targetUnit.id, code: targetUnit.code, status: 'occupied', newPin },
+          notes: `Di dời khẩn cấp khách ${rental.customerName} từ gian ${sourceUnit.code} sang gian ${targetUnit.code} do sự cố ${params.reason}. Đã cấp PIN mới: ${newPin}.`,
+          timestamp: now.toISOString()
+        },
+        ...prev.activities
+      ]
+    }))
   }
 
   const recordRentalPayment = (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => {
@@ -5048,7 +5342,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const reviewReturnDispute = (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => {
+  const reviewReturnDispute = (
+    returnId: string,
+    manager: User,
+    resolutionNote?: string,
+    settlement?: ManagerReturnSettlementFees,
+    preset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement',
+    facilityCompensationAmount?: number
+  ) => {
     assertPermission(manager, 'returns:process')
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
@@ -5062,6 +5363,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       ? calculateManagerReturnSettlement(returnCase.depositAmount, settlement)
       : undefined
     const now = new Date()
+
+    // Nếu phán quyết lỗi cơ sở (thấm dột): tạo task bảo trì sửa chữa trần/vách kho khẩn cấp
+    const isFacilityFaultVerdict = preset === 'facility_fault_full_refund' || returnCase.moistureOrigin === 'facility_fault'
+    const facilityFaultTask: MaintenanceTask | undefined = isFacilityFaultVerdict && !state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed') ? {
+      id: `MNT-LEAK-${Date.now().toString().slice(-6)}`,
+      unitId: returnCase.unitId,
+      facilityId: returnCase.facilityId,
+      reason: `[SỬA CHỮA HẠ TẦNG SAU TRANH CHẤP] Xử lý sự cố dột nóc / nứt sàn / thấm tường theo kết luận phân xử: ${resolutionNote?.trim()}`,
+      priority: 'P1_CRITICAL',
+      faultCategory: 'roof_leak',
+      status: 'pending',
+      createdAt: now.toISOString()
+    } : undefined
+
     setState(prev => ({
       ...prev,
       returns: prev.returns.map(r => r.id === returnId ? {
@@ -5076,8 +5391,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           netRefundAmount: recalculated?.netRefundAmount ?? r.netRefundAmount,
           amountDueFromCustomer: recalculated?.amountDueFromCustomer ?? r.amountDueFromCustomer
         } : {}),
-        staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager: ${resolutionNote?.trim() || 'Đã rà soát và giữ nguyên quyết toán.'}`
+        disputeResolutionPreset: preset,
+        facilityCompensationAmount: facilityCompensationAmount || r.facilityCompensationAmount,
+        staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager (${preset ? (preset === 'facility_fault_full_refund' ? 'Lỗi cơ sở kho' : preset === 'customer_fault_deduct' ? 'Lỗi khách hàng' : 'Hòa giải') : 'Phân xử'}): ${resolutionNote?.trim() || 'Đã rà soát quyết toán.'}`
       } : r),
+      units: isFacilityFaultVerdict ? prev.units.map(u => u.id === returnCase.unitId ? { ...u, status: 'maintenance' } : u) : prev.units,
+      maintenanceTasks: facilityFaultTask ? [facilityFaultTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
       activities: [{
         id: `act-${Date.now()}`,
         action: 'RETURN_DISPUTE_REVIEWED',
@@ -5096,7 +5415,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           netRefundAmount: returnCase.netRefundAmount,
           amountDueFromCustomer: returnCase.amountDueFromCustomer || 0
         } : undefined,
-        afterState: settlement ? { ...settlement, ...recalculated } : undefined,
+        afterState: settlement ? { ...settlement, ...recalculated, preset } : undefined,
         evidence: returnCase.evidence,
         notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.',
         timestamp: now.toISOString()
@@ -5253,8 +5572,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, contracts: prev.contracts.map(item => item.id === contractId ? { ...item, customerArchivedAt: new Date().toISOString() } : item) }))
   }
 
+  const sanitizedFacilities = useMemo(
+    () => state.facilities.map(sanitizeFacilityStrings),
+    [state.facilities]
+  )
+
   const contextValue: StorageHubContextValue = {
     ...state,
+    facilities: sanitizedFacilities,
     unitTypes: UNIT_TYPES,
     can,
     updateRolePermissions,
@@ -5302,6 +5627,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     completeMaintenanceTask,
     releaseMaintenanceUnit,
     updateUnitStatus,
+    emergencyRelocateRental,
     recordRentalPayment,
     applyRentalLateFee,
     waiveRentalLateFee,

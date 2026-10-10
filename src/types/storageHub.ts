@@ -190,6 +190,12 @@ export interface StorageUnit {
   conditionNotes?: string
   rentalPackages?: RentalPackage[]
   version: number
+  activeFacilityIssue?: {
+    reportedAt: string
+    category: FacilityIssueCategory
+    priority: MaintenancePriority
+    notes: string
+  }
   // Optional legacy fields for backward-compatibility during refactoring
   sqft?: number
 }
@@ -541,11 +547,26 @@ export interface ReturnSettlementAdjustments {
   resolutionNote: string
 }
 
+export type MaintenancePriority = 'P1_CRITICAL' | 'P2_MEDIUM' | 'P3_LOW'
+
+export type FacilityIssueCategory =
+  | 'roof_leak' // Nóc nhà dột, thấm nước từ trần
+  | 'floor_cracked' // Sàn vỡ, sụt lún, bung gạch lát
+  | 'wall_seepage' // Vách tường thấm ẩm, loang ố
+  | 'door_lock' // Cửa cuốn, bản lề, khóa số bị kẹt hỏng
+  | 'climate_hvac' // Hệ thống điều hòa, máy hút ẩm ngưng tụ nước/mất điện
+  | 'customer_damage' // Hư hại kết cấu do khách thuê gây ra
+  | 'other' // Hỏng hóc cơ sở khác
+
 export interface MaintenanceTask {
   id: string
   unitId: string
   facilityId: string
   reason: string
+  priority?: MaintenancePriority
+  faultCategory?: FacilityIssueCategory
+  isEmergencyRelocation?: boolean
+  relocatedFromRentalId?: string
   damageClassification?: DamageClassification
   assignedStaffId?: string
   assignedStaffName?: string
@@ -598,6 +619,15 @@ export interface RentalRecord {
   overlocked?: boolean
   lastReminderAt?: string
   remindersSent?: number
+  // Thông tin di dời khẩn cấp khi sự cố kho
+  previousUnitId?: string
+  relocationHistory?: Array<{
+    fromUnitId: string
+    toUnitId: string
+    relocatedAt: string
+    reason: string
+    faultCategory?: FacilityIssueCategory
+  }>
   // Optional legacy fields for backward-compatibility during refactoring
   size?: number
   sqft?: number
@@ -632,6 +662,18 @@ export interface FacilityTask {
   cancellationReason?: string
   lastAssignedStaffId?: string
   lastAssignedStaffName?: string
+}
+
+export type MoistureOrigin =
+  | 'none' // Không phát sinh nấm mốc hay ẩm ướt
+  | 'facility_fault' // Do lỗi cơ sở: trần/vách loang ố dột nước, hỏng máy lạnh/hút ẩm
+  | 'customer_fault' // Do lỗi khách hàng: đóng gói ẩm ướt, nông sản/thực phẩm cấm, đồ không thông khí
+  | 'climate_standard_uncontrolled' // Do độ ẩm tự nhiên ở kho tiêu chuẩn (miễn trừ trách nhiệm)
+
+export interface StructuralInspection {
+  ceiling: 'dry_intact' | 'leaking' | 'stained' // Trần: Khô ráo / Dột nước / Loang ố
+  wall: 'dry_intact' | 'damp_seepage' | 'cracked' // Vách: Khô ráo / Thấm ẩm / Nứt nẻ
+  floor: 'dry_intact' | 'cracked' | 'water_pooling' // Sàn: Khô ráo / Nứt vỡ / Đọng nước
 }
 
 export interface ReturnCase {
@@ -677,6 +719,12 @@ export interface ReturnCase {
   staffId?: string
   returnedItems?: { key: boolean; card: boolean; lock: boolean }
   refundTransaction?: { id: string; type: 'refund'; amount: number; status: 'pending' | 'paid'; recordedAt: string }
+  // Kết quả kiểm tra kết cấu & phân định ẩm mốc theo quy chế mới
+  structuralInspection?: StructuralInspection
+  moistureOrigin?: MoistureOrigin
+  sanitizationFee?: number
+  facilityCompensationAmount?: number
+  disputeResolutionPreset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement'
 }
 
 export interface ActivityRecord {

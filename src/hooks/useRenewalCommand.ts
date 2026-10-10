@@ -10,10 +10,14 @@ export function newRenewalIdempotencyKey() {
 }
 
 export class RenewalAttempt {
+  private unknownOutcome = false
   private attempt: {
     signature: string
     key: string
   } | null = null
+  isUncertain() {
+    return this.unknownOutcome
+  }
   key(signature: string) {
     if (this.attempt && this.attempt.signature !== signature)
       throw new Error(
@@ -24,6 +28,13 @@ export class RenewalAttempt {
   }
   clear() {
     this.attempt = null
+    this.unknownOutcome = false
+  }
+  reject(error: unknown) {
+    // A later denial does not prove that the earlier uncertain transaction rolled back.
+    this.unknownOutcome ||= isUncertainRenewalOutcome(error)
+    if (!this.unknownOutcome) this.clear()
+    return this.unknownOutcome
   }
 }
 export function isUncertainRenewalOutcome(error: unknown) {
@@ -41,7 +52,8 @@ export function useRenewalCommand() {
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<unknown>()
-  const conflict = error instanceof ApiClientError && error.status === 409
+  const conflict =
+    error instanceof ApiClientError && error.status === 409 && !uncertain
   const run = async (
     signature: string,
     send: (key: string) => Promise<unknown>,
@@ -56,8 +68,7 @@ export function useRenewalCommand() {
       attempt.current.clear()
       setUncertain(false)
     } catch (e) {
-      const unknownOutcome = isUncertainRenewalOutcome(e)
-      if (!unknownOutcome) attempt.current.clear()
+      const unknownOutcome = attempt.current.reject(e)
       setUncertain(unknownOutcome)
       setError(e)
       return
@@ -67,5 +78,7 @@ export function useRenewalCommand() {
     }
     success()
   }
-  return { run, busy, uncertain, error, conflict }
+  // Event/effect callbacks may precede a rerender; read the current attempt lock.
+  const isLocked = () => lock.current || attempt.current.isUncertain()
+  return { run, busy, uncertain, error, conflict, isLocked }
 }
