@@ -1,6 +1,14 @@
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
+import type { RentalApiRecord } from "../../types/rentalApi"
+
+export function rentalPeriodText(rental: RentalApiRecord) {
+  const verified = rental.dateSemantics?.completeness === "COMPLETE"
+  const end = verified ? rental.dateSemantics!.lastPermittedDate : rental.contractEndDate
+  const interval = `${rentalDate(rental.startDate)} → ${rentalDate(end)}`
+  return verified ? interval : `${interval} (chưa xác minh ngày cuối sử dụng)`
+}
 
 export const rentalLabels: Record<string, string> = {
   active: "Đang hiệu lực",
@@ -43,18 +51,27 @@ export function rentalDate(value: string | null | undefined) {
 }
 export function rentalError(error: unknown) {
   if (error instanceof ApiClientError) {
+    if (error.code === "INVALID_RESPONSE") return "Thông tin nhận được không hợp lệ. Vui lòng thử lại."
+    if (error.status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
     if (error.status === 403)
       return "Bạn không có quyền hoặc phạm vi cơ sở để thực hiện thao tác này."
     if (error.status === 404)
       return "Không tìm thấy hồ sơ hoặc hồ sơ không thuộc phạm vi truy cập."
     if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))
-      return `Chưa có nguồn dữ liệu/policy chung để xử lý. ${error.message}`
+      return "Chưa đủ dữ liệu hoặc chính sách để tiếp tục xử lý."
     if (error.status === 409)
-      return `Xung đột nghiệp vụ hoặc phiên bản. Hãy tải lại hồ sơ; nếu điều khoản thay đổi, Customer cần xác nhận báo giá mới. ${error.message}`
+      return "Hồ sơ đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng mở lại hồ sơ, nếu điều khoản thay đổi hãy xác nhận báo giá mới."
+    if (error.status === null || error.status >= 500)
+      return "Chưa nhận được kết quả. Vui lòng kiểm tra kết nối và thử lại."
+    return "Không thể thực hiện yêu cầu. Vui lòng kiểm tra thông tin đã nhập."
   }
-  return error instanceof Error
-    ? error.message
-    : "Không thể tải dữ liệu. Vui lòng thử lại."
+  return "Không thể thực hiện yêu cầu. Vui lòng thử lại."
+}
+export const financialCompletenessLabels: Record<string,string> = { UNKNOWN: "Chưa có thông tin", PARTIAL: "Đã kiểm tra một phần", COMPLETE: "Đã kiểm tra đầy đủ" }
+export const accessStatusLabels: Record<string,string> = { ACTIVE: "Đang hoạt động", INACTIVE: "Chưa hoạt động", SUSPENDED: "Tạm ngừng", REVOKED: "Đã thu hồi", EXPIRED: "Đã hết hạn" }
+export function rentalDataWarning(field: string) {
+  const labels: Record<string,string> = { startDate: "Ngày bắt đầu", contractEndDate: "Ngày kết thúc", monthlyPrice: "Đơn giá", currency: "Đơn vị tiền", customer: "Khách hàng", storageUnit: "Gian kho", unitType: "Loại gian kho", facility: "Cơ sở" }
+  return `${labels[field] ?? "Thông tin hồ sơ"} cần được kiểm tra.`
 }
 export function hasRenewalAction(
   record: RenewalApiRecord,
@@ -69,6 +86,13 @@ export function hasRenewalAction(
     !record.allowedActions.includes(action)
   )
     return false
+  // An advertised action cannot turn missing/contradictory financial data into approval.
+  if (action === "APPROVE" && (
+    record.status !== "pending" || record.reviewState !== "READY" || !record.acceptedTerms ||
+    record.financialCheck.completeness !== "COMPLETE" || !record.financialCheck.checkedAt ||
+    record.financialCheck.hasUnresolvedDispute !== false ||
+    record.financialCheck.blockingObligationRefs?.length !== 0
+  )) return false
   if (role === "manager")
     return (
       actor.roles.includes("MANAGER") &&

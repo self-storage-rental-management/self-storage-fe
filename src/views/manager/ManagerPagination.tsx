@@ -16,8 +16,8 @@ export default function ManagerPagination({ page, pageCount, total, pageSize, on
   const from = (page - 1) * pageSize + 1
   const to = Math.min(page * pageSize, total)
 
-  return <nav aria-label="Phân trang danh sách Manager" className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
-    <p className="text-xs text-stone-500">Hiển thị {from}–{to} trong {total} mục · Trang {page}/{pageCount}</p>
+  return <nav aria-label="Phân trang danh sách quản lý cơ sở" className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
+    <p className="text-xs text-stone-500">Hiển thị {from}-{to} trong {total} mục · Trang {page}/{pageCount}</p>
     <div className="flex flex-wrap items-center gap-2">
       <Select aria-label="Số dòng mỗi trang" value={String(pageSize)} onChange={event => onPageSizeChange(Number(event.target.value))}>
         {MANAGER_PAGE_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size} dòng</option>)}

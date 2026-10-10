@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useManagerPresentation } from "../manager/managerPresentation"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { getRental, listRentals } from "../../services/rentalApi"
@@ -20,6 +21,7 @@ import {
   rentalDate,
   rentalLabels,
   rentalMoney,
+  rentalPeriodText,
   renewalLabels,
 } from "./presentation"
 
@@ -54,6 +56,8 @@ function Pager({
   setPage: (p: number) => void
   setSize: (s: number) => void
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 p-4">
       <span>
@@ -191,6 +195,8 @@ function WorkspaceData({
   action?: Action
   setAction: (a?: Action) => void
 }) {
+  const { manager, copy } = useManagerPresentation()
+
   const actor = getAuthenticatedActor()!
   const [rentalFilterDraft, setRentalFilterDraft] = useState(nq.rentalId || "")
   const query = tab === "rental" ? rq : nq
@@ -255,21 +261,17 @@ function WorkspaceData({
       <h1 className="text-2xl font-bold">
         {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê của tôi"}
       </h1>
-      <p className="text-sm text-stone-500">
-        Dữ liệu từ API. Duyệt gia hạn không tự kéo dài hồ sơ thuê; không có thao
-        tác ký/thanh toán D3 nằm trong chi tiết yêu cầu gia hạn.
-      </p>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           "Tổng hồ sơ",
-          "Đang hiệu lực (active)",
-          "Active sắp hết hạn 30 ngày",
+          "Đang hiệu lực",
+          "Mốc kết thúc đã lưu trong 30 ngày",
           "Gia hạn chờ duyệt",
         ].map((label, i) => (
           <Card className="p-4" key={label}>
             <p className="text-sm text-stone-500">{label}</p>
             <p className="text-2xl font-bold">
-              {counts.loading ? "…" : (counts.data?.[i] ?? "—")}
+              {counts.loading ? "…" : (counts.data?.[i] ?? copy("—"))}
             </p>
           </Card>
         ))}
@@ -277,10 +279,6 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <p className="text-xs text-stone-500">
-        KPI ngày hết hạn theo giá trị BE; các hồ sơ có cảnh báo ngày chưa xác
-        thực cần được kiểm tra riêng.
-      </p>
       <div className="flex gap-2">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
@@ -294,9 +292,9 @@ function WorkspaceData({
         >
           Yêu cầu gia hạn
         </Button>
-        <Button variant="outline" onClick={refresh}>
+        {!manager && (<Button variant="outline" onClick={refresh}>
           Tải lại
-        </Button>
+        </Button>)}
       </div>
       <Card className="p-4 flex flex-wrap items-end gap-3">
         {(tab === "rental" || role === "manager") && (
@@ -354,7 +352,7 @@ function WorkspaceData({
         {tab === "rental" && (
           <>
             <label>
-              Hết hạn từ
+              Ngày kết thúc đã lưu từ
               <input
                 type="date"
                 className={`${inputClass} block`}
@@ -365,7 +363,7 @@ function WorkspaceData({
               />
             </label>
             <label>
-              Đến ngày
+              Ngày kết thúc đã lưu đến
               <input
                 type="date"
                 className={`${inputClass} block`}
@@ -406,7 +404,7 @@ function WorkspaceData({
                 tab === "rental" ? "contractEndDate,asc" : "newEndDate,asc"
               }
             >
-              Ngày kết thúc gần nhất
+              {tab === "rental" ? "Mốc kết thúc đã lưu gần nhất" : "Ngày kết thúc đề nghị gần nhất"}
             </option>
             <option
               value={tab === "rental" ? "monthlyPrice,desc" : "amount,desc"}
@@ -425,7 +423,7 @@ function WorkspaceData({
                 <tr>
                   {[
                     "Mã hồ sơ",
-                    "Customer / Cơ sở",
+                    "Khách hàng / Cơ sở",
                     "Gian kho / Loại",
                     "Thời hạn",
                     "Đơn giá / Tiền gia hạn",
@@ -450,11 +448,11 @@ function WorkspaceData({
                     <td className="p-3">
                       {row.storageUnit.code}
                       <br />
-                      {"unitType" in row ? row.unitType.name : ""}
+                      {"unitType" in row ? copy(row.unitType.name) : ""}
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {"contractEndDate" in row
-                        ? `${rentalDate(row.startDate)} → ${rentalDate(row.contractEndDate)}`
+                        ? rentalPeriodText(row)
                         : rentalDate(row.newEndDate)}
                     </td>
                     <td className="p-3">
@@ -487,7 +485,7 @@ function WorkspaceData({
                 {read.data.page.data.length === 0 && (
                   <tr>
                     <td colSpan={7} className="p-6 text-center">
-                      Không có hồ sơ phù hợp.
+                      Không có dữ liệu
                     </td>
                   </tr>
                 )}
@@ -561,7 +559,12 @@ function DetailModal({
   onAction: (a: Action) => void
   onChanged: () => void
 }) {
-  const [operationLocked, setOperationLocked] = useState(false)
+  const { manager, copy } = useManagerPresentation()
+
+  const operationLock = useRef(false)
+  const setOperationLocked = useCallback((value: boolean) => {
+    operationLock.current = value
+  }, [])
   const [operationOwner, setOperationOwner] = useState<{
     facilityId: string
     customerId: string
@@ -595,12 +598,15 @@ function DetailModal({
           : "Chi tiết yêu cầu gia hạn"
       }
       onClose={() => {
-        if (!operationLocked) onClose()
+        if (!operationLock.current) onClose()
       }}
     >
-      <ApiReadState {...read} retry={read.refresh} />
+      <ApiReadState {...read} retry={() => {
+        if (!operationLock.current) read.refresh()
+      }} />
       {read.data?.kind === "rental" ? (
         <RentalDetail
+          role={role}
           rental={read.data.record as RentalApiDetail}
           onRequest={
             role === "customer"
@@ -617,7 +623,7 @@ function DetailModal({
             renewal={read.data.record as RenewalApiRecord}
             role={role}
             onAction={(action) => {
-              if (operationLocked) return
+              if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord
               onClose()
               if (action === "ACCEPT_REVISED_QUOTE")
@@ -633,6 +639,7 @@ function DetailModal({
       ) : null}
       {detail.kind === "renewal" && operationOwner && (
         <RenewalOperationsPanel
+          status={read.data?.kind === "renewal" ? (read.data.record as RenewalApiRecord).status : undefined}
           id={detail.id}
           role={role}
           {...operationOwner}

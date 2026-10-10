@@ -23,10 +23,26 @@ export interface RenewalOperationState {
 }
 export interface RenewalOperationEvent {
   id: string
-  kind: "DEPOSIT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY"
+  kind: "DEPOSIT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY"
   occurredAt: string
   actorId: string | null
   data: unknown
+}
+export interface RenewalExceptionProposal {
+  renewalId: string
+  expectedVersion: number | null
+  decisionRef: string | null
+  status: "NONE" | "AVAILABLE" | "UNAVAILABLE"
+  checkedAt: string
+  currentAppointmentStart: string | null
+  currentAppointmentEnd: string | null
+  currentSigningDeadline: string | null
+  proposedAppointmentStart: string | null
+  proposedAppointmentEnd: string | null
+  proposedSigningDeadline: string | null
+  validUntil: string | null
+  confirmationAllowed: boolean
+  disabledReasons: string[]
 }
 export interface RenewalOperationResult {
   state: RenewalOperationState
