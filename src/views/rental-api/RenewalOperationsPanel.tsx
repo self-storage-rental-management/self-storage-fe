@@ -1,5 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useRenewalCommand } from "../../hooks/useRenewalCommand"
@@ -321,9 +321,14 @@ export default function RenewalOperationsPanel({
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}:${id}`
   const [revision, setRevision] = useState(0)
-  const [selected, setSelected] = useState<RenewalOperationAction>()
+  const [selected, setSelected] = useState<{
+    action: RenewalOperationAction
+    state: RenewalOperationState
+    proposal?: RenewalExceptionProposal | null
+  }>()
   const [lastEvent, setLastEvent] = useState<RenewalOperationEvent>()
   const [locked, setLocked] = useState(false)
+  const lockRef = useRef(false)
   const read = useRentalApiResource(`${identity}:${revision}`, () =>
     getRenewalOperations(role, id),
   )
@@ -343,9 +348,14 @@ export default function RenewalOperationsPanel({
       : role === "staff"
         ? ["arrival", "incident", "cash", "completion"]
         : ["exception", "refund"]
-  const lock = (value: boolean) => {
+  const lock = useCallback((value: boolean) => {
+    lockRef.current = value
     setLocked(value)
     onLocked?.(value)
+  }, [onLocked])
+  const refresh = () => {
+    if (lockRef.current) return
+    read.refresh()
   }
   return (
     <div className="space-y-4 mt-4">
@@ -354,6 +364,7 @@ export default function RenewalOperationsPanel({
           variant="outline"
           disabled={locked}
           onClick={() => {
+            if (lockRef.current) return
             setSelected(undefined)
             setRevision((v) => v + 1)
             onChanged?.()
@@ -362,7 +373,7 @@ export default function RenewalOperationsPanel({
           Tải lại tiến độ
         </Button>
       </div>)}
-      <ApiReadState {...read} retry={read.refresh} />
+      <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <>
           <RenewalOperationsSummary state={read.data} />
@@ -372,7 +383,11 @@ export default function RenewalOperationsPanel({
             onLocked={lock} onChanged={event => { if (event) setLastEvent(event); lock(false); setRevision(v => v + 1); onChanged?.() }}
           />}
           {role === "customer" && read.data.pendingExceptionRef && <>
-            <ApiReadState {...proposalRead} retry={() => { read.refresh(); proposalRead.refresh() }} />
+            <ApiReadState {...proposalRead} retry={() => {
+              if (lockRef.current) return
+              read.refresh()
+              proposalRead.refresh()
+            }} />
             {proposalRead.data && <RenewalExceptionProposalCard proposal={proposalRead.data} />}
           </>}
           {lastEvent && (
@@ -398,7 +413,10 @@ export default function RenewalOperationsPanel({
                     <Button
                       variant="outline"
                       disabled={!!reason || locked}
-                      onClick={() => setSelected(action)}
+                      onClick={() => {
+                        if (lockRef.current || reason) return
+                        setSelected({ action, state: read.data!, proposal: proposalRead.data })
+                      }}
                     >
                       {copy(operationLabels[action])}
                     </Button>
@@ -411,27 +429,29 @@ export default function RenewalOperationsPanel({
               })}
             </div>
           </Card>
-          {selected && (
-            <OperationForm
-              key={`${identity}:${revision}:${selected}:${proposalRead.data?.decisionRef}:${proposalRead.data?.expectedVersion}`}
-              action={selected}
-              state={read.data}
-              proposal={proposalRead.data}
-              onLocked={lock}
-              onCancel={() => {
-                setSelected(undefined)
-                setRevision((v) => v + 1)
-                onChanged?.()
-              }}
-              onSuccess={(e) => {
-                setLastEvent(e)
-                setSelected(undefined)
-                setRevision((v) => v + 1)
-                onChanged?.()
-              }}
-            />
-          )}
         </>
+      )}
+      {/* Keep the selected snapshot mounted across background read/proposal updates.
+          The server still validates its version; uncertain retries retain the original body/key. */}
+      {selected && (
+        <OperationForm
+          key={`${identity}:${revision}:${selected.action}`}
+          action={selected.action}
+          state={selected.state}
+          proposal={selected.proposal}
+          onLocked={lock}
+          onCancel={() => {
+            setSelected(undefined)
+            setRevision((v) => v + 1)
+            onChanged?.()
+          }}
+          onSuccess={(e) => {
+            setLastEvent(e)
+            setSelected(undefined)
+            setRevision((v) => v + 1)
+            onChanged?.()
+          }}
+        />
       )}
       <EventTimeline
         key={`${identity}:${revision}:payments`}
@@ -483,6 +503,14 @@ function OperationForm({
   const pendingPayload = useRef<RenewalOperationCommand | undefined>(undefined)
   const [uploading, setUploading] = useState(false)
   const locked = command.busy || command.uncertain || uploading
+  const interactionLock = useRef(false)
+  const uploadLock = useRef(false)
+  const uploadBusy = (busy: boolean) => {
+    uploadLock.current = busy
+    setUploading(busy)
+    interactionLock.current = busy || command.isLocked()
+    onLocked(interactionLock.current)
+  }
   const [reason, setReason] = useState("")
   const [evidence, setEvidence] = useState("")
   const [appointment, setAppointment] = useState("")
@@ -516,8 +544,9 @@ function OperationForm({
         : Promise.resolve(null),
   )
   useEffect(() => {
-    onLocked(locked)
-  }, [locked]) // Parent cannot dismiss/reload an uncertain mutation.
+    interactionLock.current = uploadLock.current || command.isLocked()
+    onLocked(interactionLock.current)
+  }, [locked, onLocked]) // Parent cannot dismiss/reload an uncertain mutation.
   const files = evidence.split(/[\s,;]+/).filter(Boolean)
   const needReason = ["reschedule", "incident", "exception", "refund"].includes(
     action,
@@ -785,7 +814,7 @@ function OperationForm({
         {needFiles && <EvidenceUpload
           entityType={`DUONG_RENEWAL_${action.toUpperCase()}`}
           entityId={s.renewalId} value={files}
-          onChange={ids => setEvidence(ids.join(", "))} onBusy={setUploading}
+          onChange={ids => setEvidence(ids.join(", "))} onBusy={uploadBusy}
         />}
         {action === "cash" && (
           <>
@@ -827,7 +856,7 @@ function OperationForm({
           <>
             <EvidenceUpload entityType="DUONG_RENEWAL_SIGNED_CONTRACT" entityId={s.renewalId}
               value={signedFile ? [signedFile] : []} limit={1}
-              onChange={ids => setSignedFile(ids[0] || "")} onBusy={setUploading} />
+              onChange={ids => setSignedFile(ids[0] || "")} onBusy={uploadBusy} />
             <label className="block">
               Mã tài liệu gia hạn đã ký<input
                 className={operationsInputClass}
@@ -865,6 +894,7 @@ function OperationForm({
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
           }
           onClick={() => {
+            if (uploadLock.current || command.busy || command.conflict) return
             let payload: RenewalOperationCommand
             try {
               payload =
@@ -877,6 +907,7 @@ function OperationForm({
               return
             }
             pendingPayload.current = payload
+            interactionLock.current = true
             onLocked(true)
             let event: RenewalOperationEvent | undefined
             void command.run(
@@ -894,7 +925,11 @@ function OperationForm({
                 onLocked(false)
                 onSuccess(event!)
               },
-            )
+            ).finally(() => {
+              // A fast rejection can be batched without a busy render/effect.
+              interactionLock.current = uploadLock.current || command.isLocked()
+              onLocked(interactionLock.current)
+            })
           }}
         >
           {command.busy
@@ -907,6 +942,7 @@ function OperationForm({
           variant="outline"
           disabled={locked}
           onClick={() => {
+            if (interactionLock.current) return
             onLocked(false)
             onCancel()
           }}

@@ -15,6 +15,9 @@ export class RenewalAttempt {
     signature: string
     key: string
   } | null = null
+  isUncertain() {
+    return this.unknownOutcome
+  }
   key(signature: string) {
     if (this.attempt && this.attempt.signature !== signature)
       throw new Error(
@@ -75,5 +78,7 @@ export function useRenewalCommand() {
     }
     success()
   }
-  return { run, busy, uncertain, error, conflict }
+  // Event/effect callbacks may precede a rerender; read the current attempt lock.
+  const isLocked = () => lock.current || attempt.current.isUncertain()
+  return { run, busy, uncertain, error, conflict, isLocked }
 }
