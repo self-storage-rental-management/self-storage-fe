@@ -59,12 +59,6 @@ const emptyChecklist = () =>
     checklistLabels.map(([key]) => [key, false]),
   ) as unknown as CheckInChecklist
 
-function localDateTimeInput(date = new Date(Date.now() + 24 * 60 * 60 * 1000)) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-
-  return local.toISOString().slice(0, 16)
-}
-
 function hasMaterialVariance(
   actual: string,
   declared: number,
@@ -128,18 +122,6 @@ export default function StaffCheckInOperationsPanel({
 
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const [scheduleTarget, setScheduleTarget] = useState<CheckInCase | null>(null)
-
-  const [scheduleAt, setScheduleAt] = useState(localDateTimeInput())
-
-  const [contractVerified, setContractVerified] = useState(false)
-
-  const [paymentVerified, setPaymentVerified] = useState(false)
-
-  const [scheduleNote, setScheduleNote] = useState(
-    "Hồ sơ đã đủ điều kiện nhận kho",
-  )
-
   const [handoverTarget, setHandoverTarget] = useState<CheckInCase | null>(null)
 
   const [checklist, setChecklist] = useState<CheckInChecklist>(emptyChecklist)
@@ -171,6 +153,8 @@ export default function StaffCheckInOperationsPanel({
   const [goodsCategory, setGoodsCategory] = useState("Hàng hóa đã khai báo")
 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
+
+  const [contractFile, setContractFile] = useState<File | null>(null)
 
   const [evidenceReferences, setEvidenceReferences] = useState<string[]>([])
 
@@ -322,42 +306,19 @@ export default function StaffCheckInOperationsPanel({
   const fail = (reason: unknown, fallback: string) =>
     setError(staffErrorMessage(reason, fallback))
 
-  const submitSchedule = async () => {
-    if (!scheduleTarget || !scheduleAt || !contractVerified || !paymentVerified)
-      return
-
-    setSubmitting(true)
-
-    try {
-      await scheduleCheckIn(scheduleTarget.reservationId, {
-        scheduledAt: new Date(scheduleAt).toISOString(),
-
-        contractVerified,
-
-        paymentVerified,
-
-        note: scheduleNote.trim(),
-      })
-
-      showToast(`Đã lên lịch nhận kho cho ${scheduleTarget.reservationCode}.`)
-
-      setScheduleTarget(null)
-
-      refresh()
-    } catch (reason) {
-      fail(reason, "Không thể lên lịch nhận kho.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   const submitHandover = async () => {
-    if (!handoverTarget?.checkInId || !allChecksComplete) return
+    if (!handoverTarget?.checkInId || !allChecksComplete || !contractFile) return
 
     setSubmitting(true)
 
     try {
       const uploadedEvidence = [...evidenceReferences]
+
+      const contractAsset = await uploadCheckInEvidence(
+        handoverTarget.checkInId,
+        contractFile,
+      )
+      uploadedEvidence.push(contractAsset.id)
 
       for (const file of evidenceFiles) {
         const asset = await uploadCheckInEvidence(
@@ -410,6 +371,8 @@ export default function StaffCheckInOperationsPanel({
 
         notes: handoverNotes.trim(),
       })
+
+      setContractFile(null)
 
       showToast(
         `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}; đang chờ khách xác nhận nhận kho.`,
@@ -521,28 +484,14 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
-  const openSchedule = (item: CheckInCase) => {
-    setScheduleTarget(item)
-
-    setScheduleAt(
-      item.scheduledAt
-        ? localDateTimeInput(new Date(item.scheduledAt))
-        : localDateTimeInput(),
-    )
-
-    setContractVerified(false)
-
-    setPaymentVerified(false)
-
-    setScheduleNote("Hồ sơ đã đủ điều kiện nhận kho")
-  }
-
   const openHandover = (item: CheckInCase) => {
     setHandoverTarget(item)
 
     setChecklist(emptyChecklist())
 
     setEvidenceFiles([])
+
+    setContractFile(null)
 
     setEvidenceReferences([])
 
@@ -553,6 +502,37 @@ export default function StaffCheckInOperationsPanel({
     setVarianceAccepted(false)
 
     setVarianceReason("")
+  }
+
+  const beginHandover = async (item: CheckInCase) => {
+    if (item.checkInStatus === "scheduled") {
+      openHandover(item)
+      return
+    }
+    const appointmentAt = item.appointmentAt || item.scheduledAt
+    if (!appointmentAt) {
+      fail(
+        new Error("Khách hàng chưa đặt thời gian hẹn nhận kho."),
+        "Không thể bắt đầu bàn giao.",
+      )
+      return
+    }
+    setSubmitting(true)
+    try {
+      const scheduled = await scheduleCheckIn(item.reservationId, {
+        // Backend pins this to reservation.appointmentAt; the value here is
+        // only used for legacy reservations that predate the customer field.
+        scheduledAt: appointmentAt,
+        contractVerified: true,
+        paymentVerified: true,
+        note: "Lịch hẹn do khách hàng đặt; xác nhận tại quầy khi khách đến.",
+      })
+      openHandover(scheduled)
+    } catch (reason) {
+      fail(reason, "Không thể bắt đầu bàn giao.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const openRejection = (item: CheckInCase) => {
@@ -571,7 +551,7 @@ export default function StaffCheckInOperationsPanel({
     <div className="fade-in space-y-5">
       <SectionHeader
         title="Nhận kho & bàn giao"
-        subtitle="Lên lịch, đối chiếu hàng hóa và hoàn tất bàn giao vật lý cho khách hàng."
+        subtitle="Đối chiếu hàng hóa và hoàn tất bàn giao theo lịch hẹn do khách hàng đặt."
       />
       <Card className="p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.7fr)_minmax(180px,1fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
@@ -664,7 +644,10 @@ export default function StaffCheckInOperationsPanel({
                     {staffStorageUnitStatusLabel(item.storageUnitStatus)}
                   </p>
                 </Td>
-                <Td>{formatStaffDateTime(item.scheduledAt)}</Td>
+                <Td>
+                  <span>{formatStaffDateTime(item.appointmentAt || item.scheduledAt)}</span>
+                  <p className="mt-1 text-[11px] text-stone-500">Lịch khách đặt · Có thể bàn giao sớm</p>
+                </Td>
                 <Td>
                   <Badge
                     variant={
@@ -686,25 +669,9 @@ export default function StaffCheckInOperationsPanel({
                 </Td>
                 <Td className="text-right">
                   <div className="flex justify-end gap-2">
-                    {(!item.checkInId || item.checkInStatus === "no_show") && (
-                      <Button size="sm" onClick={() => openSchedule(item)}>
-                        {item.checkInStatus === "no_show"
-                          ? "Lên lịch lại"
-                          : "Lên lịch"}
-                      </Button>
-                    )}
-                    {item.checkInStatus === "scheduled" && (
-                      <Button size="sm" onClick={() => openHandover(item)}>
+                    {(!item.checkInId || item.checkInStatus === "no_show" || item.checkInStatus === "scheduled") && (
+                      <Button size="sm" onClick={() => void beginHandover(item)}>
                         Bàn giao
-                      </Button>
-                    )}
-                    {item.checkInStatus === "scheduled" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openSchedule(item)}
-                      >
-                        Đổi lịch
                       </Button>
                     )}
                     {item.checkInStatus === "scheduled" && (
@@ -794,67 +761,6 @@ export default function StaffCheckInOperationsPanel({
       </Card>
 
       <Modal
-        open={Boolean(scheduleTarget)}
-        onClose={() => {
-          if (!submitting) setScheduleTarget(null)
-        }}
-        title="Xác nhận hồ sơ sẵn sàng nhận kho"
-      >
-        {scheduleTarget && (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-stone-50 p-3 text-sm">
-              <b>{scheduleTarget.reservationCode}</b> ·{" "}
-              {scheduleTarget.storageUnitCode} · {scheduleTarget.customerName}
-            </div>
-            <Input
-              label="Thời gian hẹn"
-              type="datetime-local"
-              value={scheduleAt}
-              onChange={(event) => setScheduleAt(event.target.value)}
-            />
-            <label className="flex gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={contractVerified}
-                onChange={(event) => setContractVerified(event.target.checked)}
-              />{" "}
-              Hợp đồng đã được kiểm tra
-            </label>
-            <label className="flex gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={paymentVerified}
-                onChange={(event) => setPaymentVerified(event.target.checked)}
-              />{" "}
-              Thanh toán cần thiết đã được xác nhận
-            </label>
-            <Input
-              label="Ghi chú"
-              value={scheduleNote}
-              maxLength={1000}
-              onChange={(event) => setScheduleNote(event.target.value)}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setScheduleTarget(null)}>
-                Đóng
-              </Button>
-              <Button
-                disabled={
-                  submitting ||
-                  !scheduleAt ||
-                  !contractVerified ||
-                  !paymentVerified
-                }
-                onClick={() => void submitSchedule()}
-              >
-                {submitting ? "Đang lưu…" : "Xác nhận sẵn sàng"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      <Modal
         open={Boolean(handoverTarget)}
         onClose={() => {
           if (!submitting) setHandoverTarget(null)
@@ -867,6 +773,10 @@ export default function StaffCheckInOperationsPanel({
             <div className="rounded-lg bg-stone-50 p-3 text-sm">
               <b>{handoverTarget.reservationCode}</b> ·{" "}
               {handoverTarget.storageUnitCode} · {handoverTarget.customerName}
+            </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+              Lịch nhận kho do khách hàng đặt: <b>{formatStaffDateTime(handoverTarget.appointmentAt || handoverTarget.scheduledAt)}</b>.
+              Nhân viên không thể đổi lịch; nếu khách đến sớm, vẫn có thể đối chiếu và bàn giao ngay.
             </div>
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
               Khai báo của khách:{" "}
@@ -957,6 +867,19 @@ export default function StaffCheckInOperationsPanel({
               onChange={(event) => setGoodsCondition(event.target.value)}
             />
             <label className="block text-sm font-medium text-stone-700">
+              Văn bản hợp đồng đã ký (bắt buộc)
+              <input
+                className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                onChange={(event) => setContractFile(event.target.files?.[0] || null)}
+              />
+              <span className="mt-1 block text-xs font-normal text-stone-500">
+                Tải lên bản PDF/ảnh hợp đồng đã ký để khách hàng xem lại sau khi bàn giao.
+                {contractFile ? ` Đã chọn: ${contractFile.name}` : " Chưa chọn tệp."}
+              </span>
+            </label>
+            <label className="block text-sm font-medium text-stone-700">
               Bằng chứng bàn giao (ảnh hoặc PDF)
               <input
                 className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -972,7 +895,9 @@ export default function StaffCheckInOperationsPanel({
                   ? `${evidenceFiles.length} tệp chờ tải lên`
                   : evidenceReferences.length
                     ? `${evidenceReferences.length} tệp đã tải lên`
-                    : "Bắt buộc ít nhất một tệp."}
+                    : contractFile
+                      ? "Đã chọn hợp đồng; có thể thêm ảnh hiện trạng nếu cần."
+                      : "Hợp đồng là bắt buộc; có thể thêm ảnh hiện trạng."}
               </span>
             </label>
             <Input
@@ -1017,9 +942,9 @@ export default function StaffCheckInOperationsPanel({
                 disabled={
                   submitting ||
                   !allChecksComplete ||
+                  !contractFile ||
                   !initialCondition.trim() ||
                   !goodsCondition.trim() ||
-                  (!evidenceFiles.length && !evidenceReferences.length) ||
                   !handedOverItems.trim() ||
                   (measurementVariance &&
                     (!varianceAccepted || !varianceReason.trim()))

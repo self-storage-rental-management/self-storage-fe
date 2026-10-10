@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { downloadBookingDocument, generateBookingDocument, getBookingDocument, getCustomerReservation, type BookingDocument, type CustomerReservation, type CustomerReservationDetail } from '../../services/customerReservationApi'
+import { downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
@@ -14,6 +14,14 @@ const GOODS_CATEGORY_LABELS: Record<string, string> = {
   CAMERA_EQUIPMENT: 'Thiết bị máy ảnh', EVENT_EQUIPMENT: 'Thiết bị sự kiện',
   STORE_FIXTURES: 'Thiết bị cửa hàng', FINE_ART: 'Mỹ thuật',
   CERAMIC_GLASS: 'Gốm, sứ và thủy tinh', MOVING_ITEMS: 'Đồ chuyển nhà', OTHER: 'Khác',
+}
+
+function localDateTimeInput(value?: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
 }
 
 interface Props {
@@ -32,6 +40,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [goodsDetailOpen, setGoodsDetailOpen] = useState(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
+  const [handoverDocuments, setHandoverDocuments] = useState<CheckInDocument[]>([])
+  const [handoverDocumentsOpen, setHandoverDocumentsOpen] = useState(false)
+  const [appointmentInput, setAppointmentInput] = useState(() => localDateTimeInput(r.appointmentAt))
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -96,6 +107,49 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải phiếu xác nhận giữ kho.') }
   }
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
+  const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
+  const saveAppointment = async () => {
+    if (!appointmentInput || busy) return
+    setBusy(true); setMessage(null)
+    try {
+      await setCustomerCheckInAppointment(r.id, new Date(appointmentInput).toISOString())
+      await onRefresh()
+      setMessage('Đã lưu lịch hẹn do bạn đặt. Nhân viên không thể tự thay đổi lịch này.')
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể lưu lịch hẹn.') }
+    finally { setBusy(false) }
+  }
+  const loadHandoverDocuments = async () => {
+    if (busy) return
+    setBusy(true); setMessage(null)
+    try {
+      setHandoverDocuments(await getCustomerCheckInDocuments(r.id))
+      setHandoverDocumentsOpen(true)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải văn bản bàn giao.') }
+    finally { setBusy(false) }
+  }
+  const viewHandoverDocument = async (document: CheckInDocument) => {
+    const preview = window.open('', '_blank')
+    if (preview) preview.opener = null
+    try {
+      const file = await downloadCustomerCheckInDocument(document.id)
+      const url = URL.createObjectURL(file.blob)
+      if (preview) preview.location.href = url
+      else window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) {
+      preview?.close()
+      setMessage(error instanceof Error ? error.message : 'Không thể mở văn bản bàn giao.')
+    }
+  }
+  const saveHandoverDocument = async (fileDocument: CheckInDocument) => {
+    try {
+      const file = await downloadCustomerCheckInDocument(fileDocument.id)
+      const url = URL.createObjectURL(file.blob)
+      const link = window.document.createElement('a')
+      link.href = url; link.download = file.fileName || fileDocument.originalName; window.document.body.appendChild(link); link.click(); link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải văn bản bàn giao.') }
+  }
   return <Card className={`p-6 border-l-4 ${inactive ? 'border-l-stone-300 text-stone-500' : 'border-l-amber-500'}`}>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
       <div className="min-w-0">
@@ -105,6 +159,12 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
         <p className="text-xs text-stone-500">Lịch thuê: <b>{r.startDate} → {r.endDate}</b></p>
+        <p className="text-xs text-blue-800">Lịch nhận kho khách đặt: <b>{r.appointmentAt ? new Date(r.appointmentAt).toLocaleString('vi-VN') : 'Chưa đặt lịch'}</b></p>
+        {['UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
+          <label className="flex flex-col gap-1 font-semibold">Chọn lịch đến nhận kho<input className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 font-normal" type="datetime-local" min={localDateTimeInput(new Date().toISOString())} value={appointmentInput} onChange={event => setAppointmentInput(event.target.value)} /></label>
+          <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : 'Lưu lịch hẹn'}</Button>
+          <span className="basis-full text-[11px]">Lịch do customer đặt; khách đến sớm vẫn được nhân viên đối chiếu và bàn giao.</span>
+        </div>}
         <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 space-y-1.5">
           <p><b>Hàng hóa khai báo:</b> {detail?.goodsItems.map(item => `${item.description || item.customGoodsName || item.category} (${item.quantity} kiện)`).join(' · ') || 'Đang tải chi tiết…'}</p>
           <p><b>Thể tích / trọng lượng:</b> {r.totalGoodsVolumeM3} m³ · {r.totalGoodsWeightKg} kg</p>
@@ -144,6 +204,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
         {documentAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
+        {handoverDocumentsAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
         {!inactive && r.status !== 'COMPLETED' && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={onCancel}>✕ Hủy giữ kho</Button>}
       </div>
@@ -163,6 +224,13 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <Button onClick={() => void saveBookingDocument()}>Tải PDF</Button>
         </div>
       </div>}
+    </Modal>
+    <Modal open={handoverDocumentsOpen} onClose={() => setHandoverDocumentsOpen(false)} title="Văn bản hợp đồng và bàn giao">
+      <div className="space-y-3">
+        <p className="text-sm text-stone-600">Các tệp được nhân viên tải lên khi hoàn tất bàn giao kho.</p>
+        {handoverDocuments.map((document, index) => <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span><b className="mr-2">{index === 0 ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}</b>{document.originalName}</span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => void viewHandoverDocument(document)}>Xem</Button><Button size="sm" onClick={() => void saveHandoverDocument(document)}>Tải xuống</Button></span></div>)}
+        {!handoverDocuments.length && <p className="rounded-lg border border-dashed border-stone-300 p-5 text-center text-sm text-stone-500">Chưa có văn bản bàn giao được tải lên.</p>}
+      </div>
     </Modal>
   </Card>
 }
