@@ -15,6 +15,21 @@ const request: SupportSubmission = {
   },
 }
 describe("D5 retry safety", () => {
+  it.each([400, 401, 403, 404, 409])("first HTTP %i rejection releases key and does not become uncertain", status => {
+    const attempt = new SupportAttempt(), saved = attempt.prepare(request)
+    attempt.reject(saved.key, new ApiClientError("Test", { status }))
+    expect(attempt.pending).toBeUndefined()
+    expect(attempt.uncertain).toBe(false)
+    expect(attempt.prepare(request).key).not.toBe(saved.key)
+  })
+  it("stale failed response cannot mark a newer attempt uncertain", () => {
+    const attempt = new SupportAttempt(), first = attempt.prepare(request)
+    attempt.clear(first.key)
+    const second = attempt.prepare(request)
+    attempt.reject(first.key, new ApiClientError("Test", { status: 503 }))
+    expect(attempt.pending?.key).toBe(second.key)
+    expect(attempt.uncertain).toBe(false)
+  })
   it("reuses the exact key/body until outcome is known", () => {
     const attempt = new SupportAttempt()
     const first = attempt.prepare(request)

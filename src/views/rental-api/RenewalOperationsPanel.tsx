@@ -37,6 +37,8 @@ import {
 } from "./operationsPresentation"
 import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
+import RenewalCoordinationPanel from "../duong-integration/RenewalCoordinationPanel"
+import { EvidenceUpload, EvidenceDownload } from "../duong-integration/EvidenceControls"
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -141,20 +143,23 @@ export function OperationEventCard({
         "statementRef",
         "incidentId",
         "appointmentRef",
+        "staffId",
       ].map((key) =>
         field(key) ? (
           <p key={key} className="break-all">
-            {{ paymentRef: "Mã thanh toán", reference: "Mã biên nhận", statementRef: "Mã bảng kê", incidentId: "Mã sự cố", appointmentRef: "Mã lịch hẹn" }[key]}: {field(key)}
+            {{ paymentRef: "Mã thanh toán", reference: "Mã biên nhận", statementRef: "Mã bảng kê", incidentId: "Mã sự cố", appointmentRef: "Mã lịch hẹn", staffId: "Mã nhân viên phụ trách" }[key]}: {field(key)}
           </p>
         ) : null,
       )}
       {Array.isArray(d.evidenceFileIds) && (
         <p className="break-all">
           Minh chứng:{" "}
-          {d.evidenceFileIds.filter(isUuid).join(", ") ||
-            "Không có tệp đính kèm"}
+          {d.evidenceFileIds.filter(isUuid).length
+            ? `${d.evidenceFileIds.filter(isUuid).length} tệp`
+            : "Không có tệp đính kèm"}
         </p>
       )}
+      {Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.filter(isUuid).map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} />)}
       {reservation && (
         <div className="space-y-1">
           <p>
@@ -299,6 +304,7 @@ export default function RenewalOperationsPanel({
   role,
   facilityId,
   customerId,
+  status,
   onChanged,
   onLocked,
 }: {
@@ -306,6 +312,7 @@ export default function RenewalOperationsPanel({
   role: RenewalOperationsRole
   facilityId?: string
   customerId?: string
+  status?: string
   onChanged?: () => void
   onLocked?: (locked: boolean) => void
 }) {
@@ -359,6 +366,11 @@ export default function RenewalOperationsPanel({
       {read.data && (
         <>
           <RenewalOperationsSummary state={read.data} />
+          {role === "manager" && !selected && <RenewalCoordinationPanel
+            key={`${identity}:${revision}`}
+            state={read.data} facilityId={facilityId} status={status}
+            onLocked={lock} onChanged={event => { if (event) setLastEvent(event); lock(false); setRevision(v => v + 1); onChanged?.() }}
+          />}
           {role === "customer" && read.data.pendingExceptionRef && <>
             <ApiReadState {...proposalRead} retry={() => { read.refresh(); proposalRead.refresh() }} />
             {proposalRead.data && <RenewalExceptionProposalCard proposal={proposalRead.data} />}
@@ -469,7 +481,8 @@ function OperationForm({
 
   const command = useRenewalCommand()
   const pendingPayload = useRef<RenewalOperationCommand | undefined>(undefined)
-  const locked = command.busy || command.uncertain
+  const [uploading, setUploading] = useState(false)
+  const locked = command.busy || command.uncertain || uploading
   const [reason, setReason] = useState("")
   const [evidence, setEvidence] = useState("")
   const [appointment, setAppointment] = useState("")
@@ -769,6 +782,11 @@ function OperationForm({
               Nhập tối đa 10 mã tệp đã liên kết với hồ sơ, cách nhau bằng dấu phẩy.</span>
           </label>
         )}
+        {needFiles && <EvidenceUpload
+          entityType={`DUONG_RENEWAL_${action.toUpperCase()}`}
+          entityId={s.renewalId} value={files}
+          onChange={ids => setEvidence(ids.join(", "))} onBusy={setUploading}
+        />}
         {action === "cash" && (
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
@@ -807,6 +825,9 @@ function OperationForm({
         )}
         {action === "completion" && (
           <>
+            <EvidenceUpload entityType="DUONG_RENEWAL_SIGNED_CONTRACT" entityId={s.renewalId}
+              value={signedFile ? [signedFile] : []} limit={1}
+              onChange={ids => setSignedFile(ids[0] || "")} onBusy={setUploading} />
             <label className="block">
               Mã tài liệu gia hạn đã ký<input
                 className={operationsInputClass}
@@ -840,7 +861,7 @@ function OperationForm({
       <div className="flex gap-2">
         <Button
           disabled={
-            command.busy || command.conflict || decisionMissing.length > 0 ||
+            command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
           }
           onClick={() => {

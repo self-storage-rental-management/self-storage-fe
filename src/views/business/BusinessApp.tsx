@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
+import DuongPolicyWorkspace from "../duong-integration/DuongPolicyWorkspace"
 
 import {
   XAxis,
@@ -495,6 +496,13 @@ export default function BusinessApp({
     },
 
     {
+      id: "rental-source-policies",
+      label: "Chính sách gia hạn và hỗ trợ",
+      icon: Icon.policy,
+      group: "Thương mại",
+      permission: "policies:read",
+    },
+    {
       id: "pricing",
       label: "Bảng giá & Phí",
       icon: Icon.dollar,
@@ -516,6 +524,7 @@ export default function BusinessApp({
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, "facilities"))
+  const [integrationLocked, setIntegrationLocked] = useState(false)
 
   const [pricingModal, setPricingModal] = useState(false)
 
@@ -3194,12 +3203,13 @@ export default function BusinessApp({
       user={user}
       navItems={NAV}
       currentPage={page}
-      onNavigate={setPage}
-      onLogout={onLogout}
+      onNavigate={next => { if (!integrationLocked) setPage(next) }}
+      onLogout={() => { if (!integrationLocked) onLogout() }}
       canAccess={(permission) => (hub?.can ? hub.can(user, permission) : true)}
       roleLabel={"Giám Đốc Thương Mại"}
       roleColor="bg-amber-100 text-amber-700"
     >
+      {page === "rental-source-policies" && <DuongPolicyWorkspace onLocked={setIntegrationLocked} />}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
