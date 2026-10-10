@@ -44,6 +44,8 @@ const eventLabels: Record<string, string> = {
   DEPOSIT: "Kết quả thanh toán cọc thử nghiệm",
   CASH: "Biên nhận tiền mặt",
   INCIDENT: "Sự cố cơ sở",
+  FAULT_REVIEW: "Kết quả xác minh lỗi cơ sở",
+  STAFF_ASSIGNMENT: "Phân công nhân viên gia hạn",
   EXCEPTION: "Quyết định ngoại lệ",
   REFUND: "Quyết định hoàn tiền",
   COMPLETION: "Hoàn tất ký gia hạn",
@@ -91,6 +93,9 @@ export function OperationEventCard({
       </p>
       {e.kind === "DEPOSIT" && (
         <p className="text-amber-800">Thanh toán thử nghiệm - không thu tiền thật.</p>
+      )}
+      {e.kind === "FAULT_REVIEW" && typeof d.facilityFault === "boolean" && (
+        <p>{d.facilityFault ? "Xác nhận lỗi từ cơ sở" : "Không xác nhận lỗi từ cơ sở"}</p>
       )}
       <p className="break-all">
         Mã sự kiện: {e.id}
@@ -279,7 +284,7 @@ function EventTimeline({
           ))}
           {read.data.data.length === 0 && (
             <p>
-              Chưa có lịch sử trong nhóm này.
+              Không có dữ liệu
             </p>
           )}
           <ApiPager pagination={read.data.pagination} onPage={setPage} />

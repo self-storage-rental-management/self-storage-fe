@@ -128,6 +128,8 @@ export function isOperationEvent(
         "APPOINTMENT",
         "ARRIVAL",
         "INCIDENT",
+        "FAULT_REVIEW",
+        "STAFF_ASSIGNMENT",
         "EXCEPTION",
         "CONFIRMATION",
         "REFUND",
@@ -142,6 +144,14 @@ export function isOperationEvent(
   )
     return false
   const d = e.data as Record<string, unknown>
+  if (e.kind === "FAULT_REVIEW")
+    return isUuid(d.incidentId) && typeof d.facilityFault === "boolean" &&
+      typeof d.reason === "string" && d.reason.trim().length > 0 &&
+      Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.every(isUuid)
+  if (e.kind === "STAFF_ASSIGNMENT")
+    return isUuid(d.renewalId) && isUuid(d.facilityId) && isUuid(d.staffId) &&
+      isUuid(d.acceptedQuoteId) && Number.isSafeInteger(d.workflowRevision) &&
+      Number(d.workflowRevision) >= 0
   const money = (v: unknown) =>
     typeof v === "number" && Number.isFinite(v) && v >= 0
   if (e.kind === "DEPOSIT")
@@ -240,7 +250,7 @@ export async function listRenewalOperationEvents(
       ? ["DEPOSIT", "CASH"]
       : category === "refunds"
         ? ["REFUND"]
-        : ["INCIDENT", "EXCEPTION"]
+        : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION"]
   return readRentalPage<RenewalOperationEvent>(
     await apiRequest(`${path(role, id)}/${category}${suffix}`),
     (v) =>

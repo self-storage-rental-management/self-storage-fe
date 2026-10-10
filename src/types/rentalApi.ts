@@ -34,6 +34,12 @@ export interface RentalApiRecord {
   status: RentalApiStatus
   startDate: string | null
   contractEndDate: string | null
+  dateSemantics?: {
+    completeness: "COMPLETE" | "UNKNOWN"
+    convention: "INCLUSIVE" | "EXCLUSIVE" | null
+    lastPermittedDate: string | null
+    endExclusive: string | null
+  } | null
   monthlyPrice: number | null
   currency: string
   dataWarnings: {

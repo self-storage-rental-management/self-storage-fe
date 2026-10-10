@@ -246,7 +246,7 @@ function SupportTimeline({
           ))}
           {read.data.data.length === 0 && (
             <p className="text-sm text-stone-500">
-              Chưa có bản ghi trong phạm vi này.
+              Không có dữ liệu
             </p>
           )}
           <ApiPager

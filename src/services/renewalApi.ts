@@ -9,12 +9,21 @@ import type {
 } from "../types/renewalApi"
 
 type AcceptedTerms = NonNullable<RenewalApiRecord["acceptedTerms"]>
+function validPeriodMetadata(t: AcceptedTerms): boolean {
+  if (t.endDateConvention == null && t.rentalStartDate == null) return true // Readable legacy snapshot, not permission to execute.
+  if (!["INCLUSIVE", "EXCLUSIVE"].includes(t.endDateConvention ?? "") || typeof t.rentalStartDate !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(t.rentalStartDate) || !Number.isFinite(Date.parse(t.rentalStartDate))
+    || new Date(t.rentalStartDate).toISOString().slice(0, 10) !== t.rentalStartDate) return false
+  const rawEnd = Date.parse(t.oldEndDate), extension = Date.parse(t.extensionStartDate)
+  return Date.parse(t.rentalStartDate) < extension
+    && extension - rawEnd === (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
+}
 function isAcceptedTerms(value: unknown): value is AcceptedTerms {
   if (!value || typeof value !== "object") return false
   const t = value as AcceptedTerms
   const money = [t.monthlyPrice, t.subtotal, t.discountAmount, t.totalAfterDiscount,
     t.renewalDepositAmount, t.remainingRentalAmount]
-  return money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
+  return validPeriodMetadata(t) && money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
     typeof t.discountRate === "number" && Number.isFinite(t.discountRate) && t.discountRate >= 0 && t.discountRate <= 1 &&
     Number.isInteger(t.rentalMonths) && t.rentalMonths > 0 &&
     [t.unitTypeId, t.storageUnitId, t.facilityId, t.pricingPackageCode, t.packagePolicyRef,

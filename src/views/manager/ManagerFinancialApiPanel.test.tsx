@@ -32,14 +32,14 @@ describe('Manager financial API screen', () => {
     const html = render()
     expect(html).toContain('role="alert"')
     expect(html).not.toContain('A-01')
-    expect(html).not.toContain('Không có hồ sơ thuê khớp bộ lọc')
+    expect(html).not.toContain('Không có dữ liệu')
     expect(html).not.toContain('0 bản ghi')
   })
   it('shows the honest empty state only for a successful verified list', () => {
     state.list = { data: page([]) }
-    expect(render()).toContain('Không có hồ sơ thuê khớp bộ lọc')
+    expect(render()).toContain('Không có dữ liệu')
     state.list = { loading: true, data: page([]) }
-    expect(render()).not.toContain('Không có hồ sơ thuê khớp bộ lọc')
+    expect(render()).not.toContain('Không có dữ liệu')
   })
   it('does not invent financial or access facts for UNKNOWN detail or expose a raw PIN', () => {
     state.detail = { data: { ...rental, accessCode: '9004#' } }
