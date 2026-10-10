@@ -621,6 +621,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
   const [inputToken, setInputToken] = useState('')
+  const storedPoliciesList = useMemo(() => getStoredPolicies(), [])
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -2533,6 +2534,25 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     return <div className="border-t border-stone-200 bg-stone-50 px-5 py-4 text-xs">
                       <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-stone-950">{'Nghiệm thu và quyết toán trả kho'}</p><p className="mt-1 text-stone-500">{returnCase.id} · {badgeFor(returnCase.status)}</p></div>{returnCase.refundTransaction && <span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">{'Đã hoàn cọc'} {formatVnd(returnCase.refundTransaction.amount)}</span>}</div>
                       {['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(returnCase.status) && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Hiện trạng ban đầu'}</p><p className="mt-1 font-semibold">{returnCase.initialConditionSnapshot}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Kết quả nghiệm thu'}</p><p className="mt-1 font-semibold">{returnCase.damageClassification || '—'} · {returnCase.staffNotes || '—'}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{`Phí quá hạn (${returnCase.overdueDays || 0} ngày)`}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.overdueFee || 0)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Cọc được hoàn'}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(returnCase.netRefundAmount)}</p></div><div className={`rounded-lg p-3 ${(returnCase.amountDueFromCustomer || 0) > 0 ? 'bg-red-100' : 'bg-white'}`}><p className="text-stone-500">{'Khách phải đóng thêm'}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.amountDueFromCustomer || 0)}</p></div></div>}
+                      {returnCase.structuralInspection && (
+                        <div className="mt-2.5 rounded-lg border border-stone-200 bg-white p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-stone-700">Kiểm tra kết cấu:</span>
+                            <span>Trần: {returnCase.structuralInspection.ceiling === 'leaking' ? 'Dột nước (Lỗi cơ sở)' : returnCase.structuralInspection.ceiling === 'stained' ? 'Loang ố' : 'Khô ráo'}</span>
+                            <span>·</span>
+                            <span>Vách: {returnCase.structuralInspection.wall === 'damp_seepage' ? 'Thấm ẩm ngoài vào (Lỗi cơ sở)' : 'Khô ráo'}</span>
+                            <span>·</span>
+                            <span>Sàn: {returnCase.structuralInspection.floor === 'cracked' ? 'Nứt vỡ sàn' : returnCase.structuralInspection.floor === 'water_pooling' ? 'Đọng nước' : 'Khô ráo'}</span>
+                          </div>
+                          {returnCase.moistureOrigin && returnCase.moistureOrigin !== 'none' && (
+                            <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                              returnCase.moistureOrigin === 'facility_fault' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {returnCase.moistureOrigin === 'facility_fault' ? '✓ Xác nhận do lỗi dột thấm cơ sở kho (Được bồi thường)' : 'Do đóng gói ẩm / hàng cấm (Khách chịu phí khử trùng)'}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {returnCase.status === 'awaiting_customer_confirmation' && <div className="mt-3 flex flex-wrap justify-end gap-2"><Button variant="outline" size="sm" onClick={() => { setReturnDisputeTargetId(returnCase.id); setReturnDisputeReason('') }}>{'Yêu cầu xem xét lại'}</Button><Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền đảm bảo. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và PIN đã hết hiệu lực; đang chờ Staff chuyển hoàn cọc.')) } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xác nhận quyết toán.') } } }) }}>{'Đồng ý quyết toán'}</Button></div>}
                       {returnCase.status === 'payment_due' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-3"><div><p className="font-bold text-red-900">{`Cần thanh toán thêm ${formatVnd(returnCase.amountDueFromCustomer ?? 0)}`}</p><p className="mt-1 text-red-700">{'Sau khi thanh toán, hệ thống sẽ đóng hồ sơ và phát hành biên nhận trong Lịch sử thanh toán.'}</p></div><Button size="sm" onClick={() => requestConfirmation({ title: 'Xác nhận thanh toán', message: `Thanh toán ${formatVnd(returnCase.amountDueFromCustomer ?? 0)} bằng chuyển khoản?`, confirmLabel: 'Thanh toán', onConfirm: () => { const reference = `RET-BAL-${Date.now()}`; try { payReturnBalance(returnCase.id, user, 'BANK_TRANSFER', reference); showToast('Đã thanh toán phần thiếu và phát hành biên nhận.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể thanh toán.') } } })}>{'Thanh toán phần thiếu'}</Button></div>}
                       {returnCase.status === 'disputed' && <p className="mt-3 rounded-lg bg-amber-100 p-3 font-semibold text-amber-900">{'Đang chờ Facility Manager xem xét lại'}: {returnCase.customerDecisionNote}</p>}
@@ -2686,6 +2706,83 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <div className="px-5 py-3 text-sm font-semibold text-amber-950 sm:px-6">{'Công thức: Tổng cần chuẩn bị = Tổng tiền thuê kỳ đầu + Tiền đảm bảo kho. Cọc giữ chỗ 40% chỉ là phần trả trước của tiền thuê.'}</div>
           </section>
 
+          {/* ── KHỐI 2: KHUNG QUY ĐỊNH VẬN HÀNH & PHÁP LÝ SỰ CỐ / ẨM MỐC (BO PROTOCOLS) ── */}
+          <div className="space-y-3">
+            <div className="border-b border-stone-200/80 pb-2">
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-amber-800">
+                Cam Kết Vận Hành & Bảo Vệ Quyền Lợi Khách Hàng
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-stone-950">
+                Khung Quy Định Vận Hành & Pháp Lý Sự Cố / Ẩm Mốc
+              </h3>
+              <p className="text-xs text-stone-600 mt-0.5">
+                Chính sách áp dụng thống nhất toàn hệ thống StorageHub do Ban Điều Hành (BO) ban hành
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="p-4 border-l-4 border-l-rose-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-rose-50/20">
+                <div className="flex items-start gap-3">
+                  <span
+                    data-testid="customer-protocol-badge-1"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-800 font-bold shrink-0 text-sm"
+                  >
+                    1
+                  </span>
+                  <div className="space-y-1.5 flex-1">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      Xử Lý Sự Cố Kết Cấu Hạ Tầng Kho (Sàn vỡ, Dột nóc, Kẹt cửa)
+                    </h4>
+                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Lỗi kết cấu cơ sở (Facility Fault):</strong> Cơ sở chịu 100% trách nhiệm. Xử lý P1 khẩn cấp trong 4-12h.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho đang có khách:</strong> Kích hoạt luồng Di dời khẩn cấp (Relocation) sang kho trống tương đương, cấp mã PIN mới miễn phí và giữ nguyên hợp đồng.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-rose-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho trống:</strong> Lập tức chuyển sang MAINTENANCE, ẩn khỏi trang đặt kho để sửa chữa.</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-l-sky-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-sky-50/20">
+                <div className="flex items-start gap-3">
+                  <span
+                    data-testid="customer-protocol-badge-2"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 text-sky-800 font-bold shrink-0 text-sm"
+                  >
+                    2
+                  </span>
+                  <div className="space-y-1.5 flex-1">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      Phân Định Trách Nhiệm Ẩm Mốc Khi Trả Kho (Return Dispute)
+                    </h4>
+                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Vách/trần loang ố hoặc máy lạnh hỏng → Lỗi cơ sở:</strong> Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho khô 100%, đồ mốc do khách cất ẩm/hàng cấm → Lỗi khách:</strong> Tự chịu 100% + trừ phí khử trùng 1.500.000₫ vào cọc.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-sky-500 font-bold shrink-0">•</span>
+                        <span><strong className="text-slate-800">Kho thường (Standard):</strong> Miễn trừ trách nhiệm độ ẩm tự nhiên theo cam kết hợp đồng.</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 font-extrabold text-amber-800">1</span><div><h3 className="font-bold text-stone-950">{'Thuê kho và thanh toán ban đầu'}</h3><p className="text-xs text-stone-500">{'Từ lúc chọn kho đến khi xác nhận đặt giữ'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
               'Kho chỉ được giữ sau khi yêu cầu đặt kho được hệ thống ghi nhận thành công.',
@@ -2720,6 +2817,46 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <Card className="border-rose-200 p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-rose-700">{'Quy định trễ hạn'}</p><h3 className="mt-2 font-bold text-stone-950">{'Thời hạn và phụ thu được tính theo từng giai đoạn'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Quá 24 giờ chưa ghi nhận thanh toán cọc: đơn được chuyển sang bước đối soát để bảo vệ quyền lợi khách hàng.'}</li><li>• {'Quá 14 ngày kể từ ngày cọc mà chưa nhận kho: không thể kích hoạt hồ sơ thuê và cọc giữ chỗ không được hoàn.'}</li><li>• {'Hợp đồng quá hạn không có thời gian ân hạn; từ ngày sau ngày hết hạn, phụ thu mỗi ngày bằng 50% đơn giá thuê ngày.'}</li><li>• {'Gia hạn hợp đồng đã quá hạn phải hoàn tất trong 3 ngày kể từ khi thanh toán cọc gia hạn.'}</li></ul></Card>
             <Card className="p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-stone-500">{'Tóm tắt thanh toán giữ kho'}</p><h3 className="mt-2 font-bold text-stone-950">{'Khoản phải trả theo báo giá'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Đặt giữ: 40% tổng tiền thuê sau giảm của kỳ đầu.'}</li><li>• {'Khi nhận kho: tiền thuê còn lại và tiền đảm bảo kho theo báo giá.'}</li><li>• {'Số tiền chính thức luôn lấy từ báo giá đã lưu cùng đơn giữ kho.'}</li></ul></Card>
           </div>
+
+          {/* ── KHỐI 4: DANH SÁCH TIÊU CHUẨN & QUY ĐỊNH VẬN HÀNH DO BO THIẾT LẬP ── */}
+          <Card className="p-5 border border-stone-200/90 shadow-sm bg-white space-y-3">
+            <div className="border-b border-stone-100 pb-3">
+              <h3 className="font-bold text-slate-900 text-base">
+                Danh Sách Tiêu Chuẩn & Quy Định Vận Hành Đang Áp Dụng
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Các quy định về độ ẩm kho mát, hàng cấm, phí khử trùng và SLA hỗ trợ được đồng bộ từ Ban Điều Hành (BO)
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {storedPoliciesList.map((policy) => (
+                <div
+                  key={policy.id}
+                  className="rounded-xl border border-stone-200 bg-stone-50/50 p-3.5 flex flex-col justify-between hover:border-amber-400 transition"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-slate-900 text-xs">
+                        {policy.name}
+                      </span>
+                      <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100/90 text-amber-900 shrink-0">
+                        {policy.value}
+                      </span>
+                    </div>
+                    {policy.description && (
+                      <p className="mt-2 text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
+                        {policy.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-2.5 pt-2 border-t border-stone-200/60 text-[10px] text-slate-500">
+                    Phạm vi: {policy.scope || 'Toàn bộ cơ sở'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
 
         </div>
       )}
@@ -3536,7 +3673,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
                       'Gia hạn theo gói tháng, chỉ thanh toán sau khi quản lý cơ sở kiểm tra lịch và phê duyệt.',
                       'Khi trả kho, nhân viên lập biên bản trước–sau; khấu trừ phải có nội dung, số tiền và minh chứng.',
-                      'Khách được xem, đồng ý hoặc yêu cầu xem xét lại quyết toán trước khi đóng hồ sơ.'
+                      'Khách được xem, đồng ý hoặc yêu cầu xem xét lại quyết toán trước khi đóng hồ sơ.',
+                      'Sự cố kết cấu hạ tầng (Facility Fault): Cơ sở chịu 100% trách nhiệm, xử lý P1 trong 4-12h; kích hoạt di dời khẩn cấp 0đ sang kho tương đương và giữ nguyên hợp đồng.',
+                      'Phân định trách nhiệm ẩm mốc khi trả kho: Hoàn 100% cọc và đền bù nếu do thấm dột hoặc hỏng máy lạnh cơ sở; khách hàng tự chịu và khấu trừ phí khử trùng 1.500.000₫ nếu do đóng gói ẩm hoặc vi phạm hàng cấm.'
                     ].map((term, index) => <div key={term} className="flex gap-2 rounded-lg bg-stone-50 p-3 leading-5"><span className="font-bold text-amber-700">{index + 1}.</span><span>{term}</span></div>)}</div></section>
                     {completedRenewals.length > 0 && <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'4. Hợp đồng gia hạn đã phát hành'}</p><div className="space-y-2">{completedRenewals.map(renewal => {
                       const renewalContract = contracts.find(contract => contract.id === renewal.renewalContractId || contract.renewalId === renewal.id)
@@ -3867,6 +4006,27 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       <Modal open={Boolean(returnDisputeTargetId)} onClose={() => { setReturnDisputeTargetId(null); setReturnDisputeReason('') }} title="Yêu cầu xem xét lại quyết toán">
         <div className="space-y-4">
+          <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-3.5 text-xs text-slate-700 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded bg-sky-600 text-white font-bold text-[11px]">2</span>
+              <p className="font-bold text-sky-950">Căn cứ: Phân Định Trách Nhiệm Ẩm Mốc Khi Trả Kho (Return Dispute)</p>
+            </div>
+            <ul className="space-y-1 pl-1 leading-relaxed">
+              <li className="flex items-start gap-1.5">
+                <span className="text-sky-600 font-bold shrink-0">•</span>
+                <span><strong>Lỗi cơ sở (vách/trần loang ố, dột hoặc máy lạnh hỏng):</strong> Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-sky-600 font-bold shrink-0">•</span>
+                <span><strong>Lỗi khách hàng (kho khô 100%, đồ mốc do khách cất ẩm/hàng cấm):</strong> Khách tự chịu 100% + trừ phí khử trùng 1.500.000₫ vào cọc.</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-sky-600 font-bold shrink-0">•</span>
+                <span><strong>Kho thường (Standard):</strong> Miễn trừ trách nhiệm độ ẩm tự nhiên theo cam kết hợp đồng.</span>
+              </li>
+            </ul>
+          </div>
+
           <div><label className="text-sm font-medium text-stone-700">Lý do cần xem xét lại *</label><textarea rows={4} value={returnDisputeReason} onChange={event => setReturnDisputeReason(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" placeholder="Mô tả khoản phí hoặc kết quả nghiệm thu cần kiểm tra lại..." /></div>
           <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => { setReturnDisputeTargetId(null); setReturnDisputeReason('') }}>{'Hủy'}</Button><Button disabled={!returnDisputeReason.trim()} onClick={() => { if (!returnDisputeTargetId) return; try { confirmReturnSettlement(returnDisputeTargetId, user, 'disputed', returnDisputeReason.trim()); setReturnDisputeTargetId(null); setReturnDisputeReason(''); showToast('Đã gửi yêu cầu xem xét lại.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể gửi yêu cầu.') } }}>{'Gửi yêu cầu'}</Button></div>
         </div>

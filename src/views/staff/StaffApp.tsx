@@ -1025,6 +1025,14 @@ export default function StaffApp({
 
   const [feeDetails, setFeeDetails] = useState<Record<string, string>>({})
 
+  // VẤN ĐỀ 1 & 2: Kiểm tra kết cấu & phân định ẩm mốc khi trả kho
+  const [returnCeilingStatus, setReturnCeilingStatus] = useState<'dry_intact' | 'leaking' | 'stained'>('dry_intact')
+  const [returnWallStatus, setReturnWallStatus] = useState<'dry_intact' | 'damp_seepage' | 'cracked'>('dry_intact')
+  const [returnFloorStatus, setReturnFloorStatus] = useState<'dry_intact' | 'cracked' | 'water_pooling'>('dry_intact')
+  const [returnMoistureOrigin, setReturnMoistureOrigin] = useState<'none' | 'facility_fault' | 'customer_fault' | 'climate_standard_uncontrolled'>('none')
+  const [returnSanitizationFee, setReturnSanitizationFee] = useState("")
+  const [returnFacilityCompensation, setReturnFacilityCompensation] = useState("")
+
   // Support Tickets state
 
   const hasFacilityScope =
@@ -3204,6 +3212,18 @@ export default function StaffApp({
 
                             setReturnClassification("no-damage")
 
+                            setReturnCeilingStatus("dry_intact")
+
+                            setReturnWallStatus("dry_intact")
+
+                            setReturnFloorStatus("dry_intact")
+
+                            setReturnMoistureOrigin("none")
+
+                            setReturnSanitizationFee("")
+
+                            setReturnFacilityCompensation("")
+
                             setReturnEvidence("")
 
                             setReturnNotes(r.finalCondition)
@@ -3262,6 +3282,18 @@ export default function StaffApp({
                             setReturnOtherDebt(
                               String(saved?.outstandingFee ?? 0),
                             )
+
+                            setReturnCeilingStatus(saved?.structuralInspection?.ceiling ?? "dry_intact")
+
+                            setReturnWallStatus(saved?.structuralInspection?.wall ?? "dry_intact")
+
+                            setReturnFloorStatus(saved?.structuralInspection?.floor ?? "dry_intact")
+
+                            setReturnMoistureOrigin(saved?.moistureOrigin ?? "none")
+
+                            setReturnSanitizationFee(saved?.sanitizationFee ? String(saved.sanitizationFee) : "")
+
+                            setReturnFacilityCompensation(saved?.facilityCompensationAmount ? String(saved.facilityCompensationAmount) : "")
 
                             setReturnInventory("match")
 
@@ -3738,6 +3770,139 @@ export default function StaffApp({
                 onChange={(event) => setReturnKeys(event.target.value)}
               />
             </div>
+            {/* VẤN ĐỀ 1: Khối Kiểm Tra Kết Cấu Cơ Sở Gian Kho (Trần - Vách - Sàn) */}
+            <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  {"Kiểm tra kết cấu cơ sở (Trần — Vách — Sàn)"}
+                </h4>
+                <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-stone-200 text-stone-700">
+                  {"Căn cứ pháp lý đối chứng"}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    {"1. Trần / Mái kho"}
+                  </label>
+                  <select
+                    disabled={returnDetailsOnly}
+                    value={returnCeilingStatus}
+                    onChange={(e) => setReturnCeilingStatus(e.target.value as any)}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                  >
+                    <option value="dry_intact">{"🟢 Khô ráo, kín gió, nguyên vẹn"}</option>
+                    <option value="stained">{"🟡 Có vết loang ố nước cũ / ẩm"}</option>
+                    <option value="leaking">{"🔴 Dột nước / thấm dột mái (Lỗi cơ sở)"}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    {"2. Vách tường ngăn"}
+                  </label>
+                  <select
+                    disabled={returnDetailsOnly}
+                    value={returnWallStatus}
+                    onChange={(e) => setReturnWallStatus(e.target.value as any)}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                  >
+                    <option value="dry_intact">{"🟢 Khô ráo, sạch sẽ"}</option>
+                    <option value="damp_seepage">{"🔴 Thấm ẩm tường ngoài (Lỗi cơ sở)"}</option>
+                    <option value="cracked">{"🟠 Móp méo / nứt vỡ vách"}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    {"3. Sàn gian kho"}
+                  </label>
+                  <select
+                    disabled={returnDetailsOnly}
+                    value={returnFloorStatus}
+                    onChange={(e) => setReturnFloorStatus(e.target.value as any)}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                  >
+                    <option value="dry_intact">{"🟢 Khô ráo, chịu lực tốt"}</option>
+                    <option value="cracked">{"🔴 Nứt vỡ sàn / bong gạch lát"}</option>
+                    <option value="water_pooling">{"🔴 Có đọng vũng nước / ngấm sàn"}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* VẤN ĐỀ 2: Phân Định Nguồn Gốc Ẩm Mốc / Hư Hại Hàng Hóa */}
+            <div className={`rounded-xl border p-3.5 space-y-3 transition-colors ${
+              returnMoistureOrigin === 'facility_fault'
+                ? 'border-rose-300 bg-rose-50/70'
+                : returnMoistureOrigin === 'customer_fault'
+                  ? 'border-amber-300 bg-amber-50/70'
+                  : 'border-stone-200 bg-stone-50/70'
+            }`}>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  {"Giám định nguồn gốc ẩm mốc / hư hại hàng hóa"}
+                </h4>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {"Quy định bảo quản & SLA"}
+                </span>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  {"Kết luận nguồn gốc ẩm mốc"}
+                </label>
+                <select
+                  disabled={returnDetailsOnly}
+                  value={returnMoistureOrigin}
+                  onChange={(e) => {
+                    const origin = e.target.value as any
+                    setReturnMoistureOrigin(origin)
+                    if (origin === 'facility_fault') {
+                      setReturnDamageFee("0")
+                      setReturnCleaningFee("0")
+                    } else if (origin === 'customer_fault' && !returnCleaningFee) {
+                      setReturnCleaningFee("1500000")
+                    }
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs bg-white"
+                >
+                  <option value="none">{"🟢 Không phát sinh ẩm mốc / Hàng hóa & kho bình thường"}</option>
+                  <option value="facility_fault">{"🔴 Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)"}</option>
+                  <option value="customer_fault">{"🟠 Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)"}</option>
+                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn (Standard) — Độ ẩm tự nhiên mùa nồm (Miễn trừ SLA)"}</option>
+                </select>
+              </div>
+
+              {returnMoistureOrigin === 'facility_fault' && (
+                <div className="rounded-lg border border-rose-200 bg-rose-100/80 p-2.5 text-xs text-rose-900 space-y-1">
+                  <p className="font-bold">{"✓ Trách nhiệm cơ sở kho (Facility Fault):"}</p>
+                  <p>{"Hệ thống tự động miễn trừ toàn bộ phí hư hại/vệ sinh đối với khách hàng; hoàn 100% tiền cọc và kích hoạt phiếu sửa chữa bảo trì khẩn cấp (P1) cho Đội Kỹ thuật."}</p>
+                </div>
+              )}
+
+              {returnMoistureOrigin === 'customer_fault' && (
+                <div className="rounded-lg border border-amber-200 bg-amber-100/80 p-2.5 text-xs text-amber-950 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold">{"Trách nhiệm khách hàng vi phạm quy chuẩn bảo quản:"}</p>
+                    {!returnDetailsOnly && (
+                      <button
+                        type="button"
+                        onClick={() => setReturnCleaningFee("1500000")}
+                        className="px-2 py-0.5 rounded bg-amber-800 text-white font-semibold hover:bg-amber-900 text-[11px]"
+                      >
+                        {"Áp dụng phí khử trùng 1.500.000₫"}
+                      </button>
+                    )}
+                  </div>
+                  <p>{"Khách hàng tự chịu tổn thất hàng hóa; khấu trừ thêm Phí dọn dẹp & Khử trùng nấm mốc ozone từ tiền cọc."}</p>
+                </div>
+              )}
+
+              {returnMoistureOrigin === 'climate_standard_uncontrolled' && (
+                <div className="rounded-lg border border-stone-200 bg-stone-100 p-2.5 text-xs text-stone-700">
+                  <p>{"Áp dụng điều khoản Miễn trừ trách nhiệm kho tiêu chuẩn: Khách đã ký cam kết tự bảo quản đối với đồ nhạy cảm ẩm ở kho không có kiểm soát nhiệt độ."}</p>
+                </div>
+              )}
+            </div>
+
             <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
               <b>{"Bằng chứng bàn giao ban đầu (bất biến)"}:</b>{" "}
               {selectedReturn.evidence.join(" · ")}
@@ -3991,8 +4156,26 @@ export default function StaffApp({
 
                         outstandingFee: Number(returnOtherDebt) || 0,
 
+                        structuralInspection: {
+                          ceiling: returnCeilingStatus,
+                          wall: returnWallStatus,
+                          floor: returnFloorStatus,
+                        },
+
+                        moistureOrigin: returnMoistureOrigin,
+
+                        sanitizationFee: Number(returnSanitizationFee) || 0,
+
+                        facilityCompensationAmount: Number(returnFacilityCompensation) || 0,
+
                         staffNotes: [
                           returnNotes.trim(),
+
+                          `[Hiện trạng kết cấu: Trần ${returnCeilingStatus === 'dry_intact' ? 'khô ráo' : returnCeilingStatus === 'leaking' ? 'dột nước (lỗi cơ sở)' : 'loang ố'}; Vách ${returnWallStatus === 'dry_intact' ? 'khô ráo' : returnWallStatus === 'damp_seepage' ? 'thấm ẩm ngoài vào (lỗi cơ sở)' : 'nứt vỡ'}; Sàn ${returnFloorStatus === 'dry_intact' ? 'khô ráo' : returnFloorStatus === 'cracked' ? 'nứt vỡ' : 'đọng nước'}]`,
+
+                          returnMoistureOrigin !== 'none'
+                            ? `[Nguồn gốc ẩm mốc: ${returnMoistureOrigin === 'facility_fault' ? 'Do lỗi cơ sở kho thấm dột / sự cố hệ thống' : returnMoistureOrigin === 'customer_fault' ? 'Do khách hàng đóng gói ẩm / vi phạm hàng cấm' : 'Kho tiêu chuẩn - độ ẩm tự nhiên'}]`
+                            : '',
 
                           ...Object.values(feeDetails),
                         ]
