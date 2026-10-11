@@ -1,4 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
+import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
@@ -48,6 +49,7 @@ function Pager({
   size,
   setPage,
   setSize,
+  fixedSize = false,
 }: {
   page: number
   pages: number
@@ -55,16 +57,17 @@ function Pager({
   size: number
   setPage: (p: number) => void
   setSize: (s: number) => void
+  fixedSize?: boolean
 }) {
   const { manager, copy } = useManagerPresentation()
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 p-4">
       <span>
-        {total} hồ sơ · Trang {pages ? page + 1 : 0}/{pages}
+        {total} hồ sơ, Trang {pages ? page + 1 : 0}/{pages}
       </span>
       <div className="flex gap-2">
-        <select
+        {!fixedSize && <select
           aria-label="Số hồ sơ mỗi trang"
           className={inputClass}
           value={size}
@@ -75,7 +78,7 @@ function Pager({
               {n}/trang
             </option>
           ))}
-        </select>
+        </select>}
         <Button
           variant="outline"
           disabled={page === 0}
@@ -103,16 +106,19 @@ export default function RentalApiWorkspace({ role }: { role: RentalApiRole }) {
 
 function WorkspaceSession({ role }: { role: RentalApiRole }) {
   const actor = getAuthenticatedActor()
+  const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
   const [tab, setTab] = useState<"rental" | "renewal">("rental")
   const [rq, setRq] = useState<RentalApiQuery>({
     page: 0,
-    size: 20,
+    size: role === "manager" ? 10 : 20,
+    facilityId,
     sort: "createdAt,desc",
   })
   const [nq, setNq] = useState<RenewalApiQuery>({
     page: 0,
-    size: 20,
+    size: role === "manager" ? 10 : 20,
+    facilityId,
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState("")
@@ -136,6 +142,8 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
     return (
       <Card className="p-5">Bạn chưa có quyền đọc hồ sơ thuê/gia hạn.</Card>
     )
+  if (role === "manager" && !facilityId)
+    return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
   return (
     <WorkspaceData
       key={identity}
@@ -265,7 +273,7 @@ function WorkspaceData({
         {[
           "Tổng hồ sơ",
           "Đang hiệu lực",
-          "Mốc kết thúc đã lưu trong 30 ngày",
+          "Hết hạn trong 30 ngày",
           "Gia hạn chờ duyệt",
         ].map((label, i) => (
           <Card className="p-4" key={label}>
@@ -328,31 +336,10 @@ function WorkspaceData({
             ))}
           </select>
         </label>
-        {role === "manager" && (
-          <label>
-            Cơ sở
-            <select
-              className={`${inputClass} block max-w-xs`}
-              value={query.facilityId || ""}
-              onChange={(e) => {
-                setDetail(undefined)
-                setAction(undefined)
-                change({ facilityId: e.target.value || undefined })
-              }}
-            >
-              <option value="">Tất cả cơ sở được đọc</option>
-              {Object.keys(actor.facilityScopes).map((id) => (
-                <option key={id} value={id}>
-                  {id}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         {tab === "rental" && (
           <>
             <label>
-              Ngày kết thúc đã lưu từ
+              Ngày hết hạn từ
               <input
                 type="date"
                 className={`${inputClass} block`}
@@ -363,7 +350,7 @@ function WorkspaceData({
               />
             </label>
             <label>
-              Ngày kết thúc đã lưu đến
+              Ngày hết hạn đến
               <input
                 type="date"
                 className={`${inputClass} block`}
@@ -404,7 +391,7 @@ function WorkspaceData({
                 tab === "rental" ? "contractEndDate,asc" : "newEndDate,asc"
               }
             >
-              {tab === "rental" ? "Mốc kết thúc đã lưu gần nhất" : "Ngày kết thúc đề nghị gần nhất"}
+              {tab === "rental" ? "Ngày hết hạn gần nhất" : "Ngày kết thúc đề nghị gần nhất"}
             </option>
             <option
               value={tab === "rental" ? "monthlyPrice,desc" : "amount,desc"}
@@ -493,6 +480,7 @@ function WorkspaceData({
             </table>
           </div>
           <Pager
+            fixedSize={role === "manager"}
             {...{
               page: read.data.page.pagination.page,
               pages: read.data.page.pagination.totalPages,
@@ -606,7 +594,6 @@ function DetailModal({
       }} />
       {read.data?.kind === "rental" ? (
         <RentalDetail
-          role={role}
           rental={read.data.record as RentalApiDetail}
           onRequest={
             role === "customer"

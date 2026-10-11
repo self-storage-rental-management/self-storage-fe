@@ -1,10 +1,10 @@
-import { useState } from 'react'
-import { Card, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { Card, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { formatVndAmount } from '../../i18n/currency'
 import { ApiClientError } from '../../services/apiClient'
 import { managerDisplayError } from './managerPresentation'
+import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
 import { facilityCatalogTypeName, loadManagerFacilityCatalog, type FacilityCatalogRow } from './managerFacilityCatalogApi'
 
 const number = (value: number | null) => value === null ? 'Chưa có thông tin' : value.toLocaleString('vi-VN')
@@ -33,18 +33,13 @@ function CatalogRead({ facilityId, identity }: { facilityId: string; identity: s
 
 export default function ManagerFacilityCatalog() {
   const actor = getAuthenticatedActor()
-  const scopes = Object.keys(actor?.facilityScopes ?? {}).sort()
-  const [selected, setSelected] = useState('')
-  const facilityId = scopes.includes(selected) ? selected : scopes[0]
+  const facilityId = singleManagerFacility(actor)
   const permitted = actor?.status === 'ACTIVE' && actor.roles.includes('MANAGER')
   const identity = `${actor?.id}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}:${facilityId}`
   return <Card>
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 p-4">
       <h2 className="font-bold text-stone-900">Loại gian kho tại cơ sở</h2>
-      {permitted && scopes.length > 0 && <Select aria-label="Cơ sở xem loại gian kho" value={facilityId} onChange={event => setSelected(event.target.value)}>
-        {scopes.map((id, index) => <option key={id} value={id}>{actor?.facilityNames?.[id] || `Cơ sở được phân công ${index + 1}`}</option>)}
-      </Select>}
     </div>
-    {!permitted ? <p role="alert" className="p-4">Bạn chưa có quyền xem loại gian kho của cơ sở.</p> : !facilityId ? <p role="status" className="p-4">Tài khoản chưa được phân công cơ sở.</p> : <CatalogRead key={identity} identity={identity} facilityId={facilityId} />}
+    {!permitted ? <p role="alert" className="p-4">Bạn chưa có quyền xem loại gian kho của cơ sở.</p> : !facilityId ? <p role="status" className="p-4">{managerFacilityNotice(actor)}</p> : <CatalogRead key={identity} identity={identity} facilityId={facilityId} />}
   </Card>
 }

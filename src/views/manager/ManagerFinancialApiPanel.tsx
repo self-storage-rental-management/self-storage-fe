@@ -8,11 +8,13 @@ import RentalDetail from '../rental-api/RentalDetail'
 import { rentalMoney } from '../rental-api/presentation'
 import { loadManagerRentalFinancial, loadManagerRentalPage, managerApiIdentity, requireManagerRead } from './managerD1D5Api'
 import { managerDisplayError } from './managerPresentation'
+import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
 
 export default function ManagerFinancialApiPanel({ setPage }: { setPage: (page: string) => void }) {
   let actor: ApiActor
   try { actor = requireManagerRead(getAuthenticatedActor(), 'rentals:read') }
   catch (error) { return <Card className="p-5" role="alert">{managerDisplayError(error)}</Card> }
+  if (!singleManagerFacility(actor)) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
   return <ManagerFinancialSession key={managerApiIdentity(actor)} actor={actor} setPage={setPage} />
 }
 
@@ -23,7 +25,7 @@ function ManagerFinancialSession({ actor, setPage }: { actor: ApiActor; setPage:
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const identity = managerApiIdentity(actor)
   const read = useRentalApiResource(`${identity}:financial-list:${page}:${search}`, () =>
-    loadManagerRentalPage(actor, { page, size: 20, search, sort: 'createdAt,desc' }))
+    loadManagerRentalPage(actor, { page, size: 10, facilityId: singleManagerFacility(actor), search, sort: 'createdAt,desc' }))
   const result = !read.loading && !read.error ? read.data : undefined
   function submit(event: FormEvent) {
     event.preventDefault()
