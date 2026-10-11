@@ -33,6 +33,8 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
+import StaffCredentialRevocationPanel from './StaffCredentialRevocationPanel'
+import { listCredentialAlerts, type CredentialAlert } from '../../services/checkInApi'
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
@@ -873,6 +875,8 @@ export default function StaffApp({
 
   const [returns, setReturns] = useState<StaffReturn[]>([])
 
+  const [credentialAlerts, setCredentialAlerts] = useState<CredentialAlert[]>([])
+
   const [inspectModal, setInspectModal] = useState(false)
 
   const [checkinModal, setCheckinModal] = useState(false)
@@ -1166,6 +1170,18 @@ export default function StaffApp({
 
     setReturns(sharedReturns)
   }, [hub.returns, hub.rentals, user.facility, user.facilityId])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setCredentialAlerts([])
+      return
+    }
+    let active = true
+    void listCredentialAlerts(user.facilityId && user.facilityId !== 'ALL' ? user.facilityId : undefined)
+      .then(items => { if (active) setCredentialAlerts(items) })
+      .catch(() => { if (active) setCredentialAlerts([]) })
+    return () => { active = false }
+  }, [user.facilityId, page])
 
   const showToast = (message: string) => {
     setToast(
@@ -1702,6 +1718,19 @@ export default function StaffApp({
   }
 
   const operationalTasks = [
+    ...credentialAlerts.map(alert => ({
+      id: `credential-${alert.action.toLowerCase()}-${alert.id}`,
+      title: alert.action === 'ISSUE'
+        ? `Cấp quyền truy cập ${alert.storageUnitCode}`
+        : `Thu hồi quyền truy cập ${alert.storageUnitCode}`,
+      customer: alert.customerName,
+      time: alert.dueAt ? formatExactDateTime(alert.dueAt) : 'Trong ca',
+      dueAt: alert.dueAt || new Date().toISOString(),
+      sla: alert.reason,
+      priority: 'high',
+      page: alert.action === 'ISSUE' ? 'checkin' : 'return',
+    })),
+
     ...reservations
 
       .filter((r) => r.status === "REVIEW_REQUIRED")
@@ -3086,6 +3115,8 @@ export default function StaffApp({
       )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
+      {page === "return" && isApiAuthenticated() && <StaffCredentialRevocationPanel showToast={showToast} />}
+
       {page === "return" && (
         <div className="fade-in">
           <SectionHeader

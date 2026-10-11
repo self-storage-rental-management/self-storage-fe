@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import {
   completeCheckIn,
   downloadCheckInEvidence,
+  issueAccessCredential,
   listCheckIns,
   markCheckInNoShow,
   rejectCheckIn,
@@ -11,6 +12,7 @@ import {
   type CheckInCase,
   type CheckInChecklist,
   type CheckInListStatus,
+  type AccessCredentialType,
 } from "../../services/checkInApi"
 
 import {
@@ -164,6 +166,12 @@ export default function StaffCheckInOperationsPanel({
 
   const [handoverNotes, setHandoverNotes] = useState("")
 
+  const [credentialType, setCredentialType] = useState<AccessCredentialType>("PIN")
+
+  const [credentialReference, setCredentialReference] = useState("")
+
+  const [credentialSecret, setCredentialSecret] = useState("")
+
   const [noShowTarget, setNoShowTarget] = useState<CheckInCase | null>(null)
 
   const [noShowReason, setNoShowReason] = useState("")
@@ -307,7 +315,7 @@ export default function StaffCheckInOperationsPanel({
     setError(staffErrorMessage(reason, fallback))
 
   const submitHandover = async () => {
-    if (!handoverTarget?.checkInId || !allChecksComplete || !contractFile) return
+    if (!handoverTarget?.checkInId || !allChecksComplete || !contractFile || !credentialReference.trim()) return
 
     setSubmitting(true)
 
@@ -334,6 +342,13 @@ export default function StaffCheckInOperationsPanel({
 
         setEvidenceFiles([])
       }
+
+      await issueAccessCredential(handoverTarget.checkInId, {
+        type: credentialType,
+        reference: credentialReference.trim(),
+        secret: credentialSecret.trim() || undefined,
+        note: "Cấp trong bước bàn giao & nhận kho",
+      })
 
       await completeCheckIn(handoverTarget.checkInId, {
         checklist,
@@ -494,6 +509,12 @@ export default function StaffCheckInOperationsPanel({
     setContractFile(null)
 
     setEvidenceReferences([])
+
+    setCredentialType("PIN")
+
+    setCredentialReference("")
+
+    setCredentialSecret("")
 
     setWeightKg(String(item.declaredGoodsWeightKg || ""))
 
@@ -879,6 +900,20 @@ export default function StaffCheckInOperationsPanel({
                 {contractFile ? ` Đã chọn: ${contractFile.name}` : " Chưa chọn tệp."}
               </span>
             </label>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
+              <p className="font-semibold text-amber-950">Cấp quyền truy cập cho khách hàng</p>
+              <p className="text-xs text-amber-900">Staff cấp PIN, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận <code>issuedAt</code>; không lưu PIN thô.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select label="Loại credential" value={credentialType} onChange={event => setCredentialType(event.target.value as AccessCredentialType)}>
+                  <option value="PIN">Mã PIN / access code</option>
+                  <option value="CARD">Thẻ ra vào</option>
+                  <option value="KEY">Chìa khóa</option>
+                  <option value="LOCK">Khóa / ổ khóa</option>
+                </Select>
+                <Input label="Mã tham chiếu / số seri" value={credentialReference} onChange={event => setCredentialReference(event.target.value)} placeholder="Ví dụ: PIN-2048 hoặc CARD-018" />
+                {credentialType === "PIN" && <Input label="PIN (tuỳ chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
+              </div>
+            </div>
             <label className="block text-sm font-medium text-stone-700">
               Bằng chứng bàn giao (ảnh hoặc PDF)
               <input
@@ -943,6 +978,7 @@ export default function StaffCheckInOperationsPanel({
                   submitting ||
                   !allChecksComplete ||
                   !contractFile ||
+                  !credentialReference.trim() ||
                   !initialCondition.trim() ||
                   !goodsCondition.trim() ||
                   !handedOverItems.trim() ||
