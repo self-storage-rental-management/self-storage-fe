@@ -14,6 +14,7 @@ import type {
 import type { RenewalApiQuery, RenewalApiRecord } from "../../types/renewalApi"
 import ApiReadState from "./ApiReadState"
 import RentalDetail from "./RentalDetail"
+import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import RenewalDetail from "./RenewalDetail"
 import RenewalOperationsPanel from "./RenewalOperationsPanel"
 import RenewalDecisionModal from "./RenewalDecisionModal"
@@ -593,7 +594,7 @@ function DetailModal({
         if (!operationLock.current) read.refresh()
       }} />
       {read.data?.kind === "rental" ? (
-        <RentalDetail
+        <><RentalDetail
           rental={read.data.record as RentalApiDetail}
           onRequest={
             role === "customer"
@@ -604,6 +605,8 @@ function DetailModal({
               : undefined
           }
         />
+        {(role === 'customer' || role === 'manager') && <ReturnApiPanel role={role} rentalId={detail.id}
+          rentalActive={(read.data.record as RentalApiDetail).status === 'active'} onChanged={() => read.refresh()} />}</>
       ) : read.data?.kind === "renewal" ? (
         <div>
           <RenewalDetail
