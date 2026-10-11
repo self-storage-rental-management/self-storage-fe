@@ -616,8 +616,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       } catch { /* The reservation screens remain usable if notifications are temporarily unavailable. */ }
     }
     void load()
+    const refreshAfterPayment = () => void load()
+    window.addEventListener('storagehub:notifications-refresh', refreshAfterPayment)
     const timer = window.setInterval(() => void load(), 10_000)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      window.removeEventListener('storagehub:notifications-refresh', refreshAfterPayment)
+    }
   }, [])
 
   useEffect(() => {

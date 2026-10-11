@@ -52,6 +52,10 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     void getReservationPayment(reservation.id)
       .then(value => {
         setPayment(value)
+        window.dispatchEvent(new Event('storagehub:notifications-refresh'))
+        window.requestAnimationFrame(() => {
+          document.getElementById(`customer-reservation-${reservation.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        })
         if (status === 'success' && value.paymentStatus === 'PAID') {
           setReturnFailure(null)
           setReceiptOpen(true)
