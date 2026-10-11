@@ -61,6 +61,7 @@ export interface CheckInCase {
   assignmentStatus: 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   startDate: string
   endDate: string
+  declaredPackageCount: number | null
   declaredGoodsWeightKg: number
   declaredGoodsVolumeM3: number
   handover: CompleteCheckInRequest | null
