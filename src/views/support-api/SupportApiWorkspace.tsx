@@ -1,4 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
+import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useEffect, useRef, useState } from "react"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -44,6 +45,8 @@ export default function SupportApiWorkspace({
       </Card>
     )
   const identity = `${actor!.id}:${role}:${JSON.stringify(actor!.facilityScopes)}:${JSON.stringify(actor!.permissions)}`
+  if (role === "manager" && !singleManagerFacility(actor))
+    return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
   return (
     <SupportSession
       key={identity}
@@ -67,9 +70,11 @@ function SupportSession({
 }) {
   const { manager, copy, errorText } = useManagerPresentation()
 
+  const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const [query, setQuery] = useState<SupportQuery>({
     page: 0,
-    size: 20,
+    size: role === "manager" ? 10 : 20,
+    facilityId,
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState(""),
@@ -255,7 +260,7 @@ function SupportSession({
             disabled={locked}
             onClick={() => {
               setSearch("")
-              setQuery({ page: 0, size: 20, sort: "createdAt,desc" })
+              setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
             }}
           >
             Xóa bộ lọc

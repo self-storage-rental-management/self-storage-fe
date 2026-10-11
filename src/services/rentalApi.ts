@@ -1,4 +1,5 @@
 import { ApiClientError, apiRequest } from "./apiClient"
+import { isRentalBookingEvidence } from "./rentalBookingEvidence"
 import type {
   RentalApiDetail,
   RentalApiPage,
@@ -182,6 +183,7 @@ export async function getRental(role: RentalApiRole, id: string) {
     (value) => {
       const r = value as RentalApiDetail | null
       if (!isRentalRecord(value) || !r || r.id !== id ||
+        !isRentalBookingEvidence(r.bookingEvidence, r.id, r.reservationId) ||
         !isFinancialSummary(r.financialSummary) || !r.access ||
         !(r.access.reason === null || typeof r.access.reason === "string")) return false
       return r.access.completeness === "UNKNOWN"

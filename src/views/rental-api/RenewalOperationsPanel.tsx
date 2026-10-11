@@ -37,8 +37,8 @@ import {
 } from "./operationsPresentation"
 import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
-import RenewalCoordinationPanel from "../duong-integration/RenewalCoordinationPanel"
-import { EvidenceUpload, EvidenceDownload } from "../duong-integration/EvidenceControls"
+import RenewalCoordinationPanel from "../rental-support-integration/RenewalCoordinationPanel"
+import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -91,7 +91,7 @@ export function OperationEventCard({
   return (
     <article className="rounded border border-stone-200 p-3 space-y-1 text-sm break-words">
       <p className="font-semibold">
-        {copy(eventLabels[e.kind])} · {rentalDate(e.occurredAt)}
+        {copy(eventLabels[e.kind])}, {rentalDate(e.occurredAt)}
       </p>
       {e.kind === "DEPOSIT" && (
         <p className="text-amber-800">Thanh toán thử nghiệm - không thu tiền thật.</p>
@@ -179,8 +179,7 @@ export function OperationEventCard({
               typeof reservation.reviewDueAt === "string"
                 ? reservation.reviewDueAt
                 : null,
-            )}{" "}
-            · Hạn thực thi:{" "}
+            )}, Hạn thực thi:{" "}
             {rentalDate(
               typeof reservation.executionDueAt === "string"
                 ? reservation.executionDueAt
@@ -211,7 +210,7 @@ export function RenewalOperationsSummary({
       </p>
       <p>Cọc được ghi nhận lúc: {rentalDate(s.depositPaidAt)}</p>
       <p>
-        Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)} · Hạn ký hiệu
+        Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}, Hạn ký hiệu
         lực: {rentalDate(s.effectiveSigningDeadline)}
       </p>
       <p>Mốc thu hồi: {rentalDate(s.recoveryCutoff)}</p>
@@ -706,7 +705,7 @@ function OperationForm({
                   .filter((e) => e.kind === "INCIDENT")
                   .map((e) => (
                     <option key={e.id} value={e.id}>
-                      {rentalDate(e.occurredAt)} · {e.id}
+                      {rentalDate(e.occurredAt)}, {e.id}
                     </option>
                   ))}
               </select>

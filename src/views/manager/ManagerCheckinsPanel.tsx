@@ -341,7 +341,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     {`Gian Kho ${selectedCheckin.unitId}`}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {selectedCheckin.customerName} · {'Lịch hẹn:'} {formatManagerDate(selectedCheckin.scheduledDate)} {selectedCheckin.scheduledTime}
+                    {selectedCheckin.customerName}, {'Lịch hẹn:'} {formatManagerDate(selectedCheckin.scheduledDate)} {selectedCheckin.scheduledTime}
                   </p>
                 </div>
                 <div className="text-right">

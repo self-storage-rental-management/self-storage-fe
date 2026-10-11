@@ -15,7 +15,7 @@ import type {
 import ApiPager from "../rental-api/ApiPager"
 import SupportReadState from "./SupportReadState"
 import SupportStaffPicker from "./SupportStaffPicker"
-import { EvidenceUpload } from "../duong-integration/EvidenceControls"
+import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
 import {
   supportActions,
   supportInputClass,
@@ -290,7 +290,7 @@ function EscalationPicker({
             .filter((e) => e.status === "REQUESTED")
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {copy(supportModuleLabels[e.targetModule])} · {e.id}
+                {copy(supportModuleLabels[e.targetModule])}, {e.id}
               </option>
             ))}
         </select>
