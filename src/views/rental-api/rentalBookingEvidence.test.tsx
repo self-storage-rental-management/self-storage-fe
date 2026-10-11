@@ -29,12 +29,33 @@ describe("Booking evidence connects DB response without financial or permission 
     expect(detail.access.status).toBeNull()
   })
   it("shows agreed amounts separately and does not present a simulation as actual money", () => {
-    const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, bookingEvidence: evidence }} />)
+    const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, bookingEvidence: evidence }} onRequest={() => {}} />)
+    expect(html).not.toContain("Cọc theo thỏa thuận ban đầu")
+    expect(html).not.toContain("Xem các khoản tài chính đã ghi nhận")
     expect(html).toContain("Cọc bảo đảm theo thỏa thuận")
+    expect(html).toContain("Theo dõi quá hạn")
+    expect(html).toContain("Gia hạn")
     expect(html).toContain("không phải xác nhận đã thu tiền hoặc dư nợ hiện tại")
     expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật")
     expect(html).toContain("Chưa có dữ liệu xác thực")
     expect(html).not.toMatch(/SIMULATED|RESERVATION_DEPOSIT|UNVERIFIED|FileAsset|gatewayIntent/)
+  })
+  it("does not duplicate the deposit in the rental summary when financial data is complete", () => {
+    const html = renderToStaticMarkup(<RentalDetail rental={{
+      ...rental,
+      bookingEvidence: evidence,
+      financialSummary: {
+        ...rental.financialSummary,
+        completeness: "COMPLETE",
+        securityDepositAmount: 25,
+        outstandingAmount: 0,
+        overdueAmount: 0,
+        billingMode: "PREPAID_FULL_PERIOD",
+      },
+    }} />)
+    expect(html).not.toContain("Cọc hồ sơ thuê")
+    expect(html).not.toContain("25 đ")
+    expect(html).toContain("Cọc bảo đảm theo thỏa thuận")
   })
   it("renders no-source states without manufacturing zero or changing a legacy response", async () => {
     const empty = { ...evidence, agreedAmounts: null, payments: [] }

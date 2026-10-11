@@ -594,7 +594,6 @@ function DetailModal({
       }} />
       {read.data?.kind === "rental" ? (
         <RentalDetail
-          role={role}
           rental={read.data.record as RentalApiDetail}
           onRequest={
             role === "customer"

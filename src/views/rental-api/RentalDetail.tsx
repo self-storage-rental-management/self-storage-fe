@@ -1,17 +1,14 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
-import LedgerPanel from "../rental-support-integration/LedgerPanel"
 import type { RentalApiDetail } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning, rentalPeriodText } from "./presentation"
 export default function RentalDetail({
   rental,
   onRequest,
-  role = "customer",
 }: {
   rental: RentalApiDetail
   onRequest?: () => void
-  role?: "customer" | "manager"
 }) {
   const { copy } = useManagerPresentation()
 
@@ -20,7 +17,6 @@ export default function RentalDetail({
   const agreed = evidence?.agreedAmounts
   return (
     <div className="space-y-4">
-      <LedgerPanel key={`${role}:${rental.id}`} role={role} id={rental.id} />
       <Card className="p-4">
         <h3 className="font-bold mb-3">Hồ sơ thuê</h3>
         <dl className="grid gap-3 sm:grid-cols-2">
@@ -53,13 +49,18 @@ export default function RentalDetail({
             </dd>
           </div>
           <div>
-            <dt className="font-bold">Đơn giá áp dụng / tháng</dt>
-            <dd>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>
+            <dt className="font-bold">Trạng thái truy cập</dt>
+            <dd>
+              {rental.access.completeness === "UNKNOWN"
+                ? unknown
+                : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || unknown}
+            </dd>
           </div>
-          <div>
-            <dt className="font-bold">Cọc hồ sơ thuê</dt>
-            <dd>{f.completeness === "COMPLETE" ? rentalMoney(f.securityDepositAmount ?? null, f.currency) : unknown}</dd>
-          </div>
+        </dl>
+      </Card>
+      <Card className="p-4">
+        <h3 className="font-bold mb-3">Theo dõi quá hạn</h3>
+        <dl className="grid gap-3 sm:grid-cols-2">
           <div>
             <dt className="font-bold">Tình trạng tài chính</dt>
             <dd>{f.completeness === "UNKNOWN" ? unknown :
@@ -88,16 +89,21 @@ export default function RentalDetail({
               )}
             </dd>
           </div>
-          <div>
-            <dt className="font-bold">Trạng thái truy cập</dt>
-            <dd>
-              {rental.access.completeness === "UNKNOWN"
-                ? unknown
-                : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || unknown}
-            </dd>
-          </div>
         </dl>
       </Card>
+      {onRequest && (
+        <Card className="p-4 space-y-3">
+          <h3 className="font-bold">Gia hạn</h3>
+          <Button disabled={rental.status !== "active"} onClick={onRequest}>
+            Yêu cầu gia hạn
+          </Button>
+          {rental.status !== "active" && (
+            <p>
+              Chỉ có thể yêu cầu gia hạn khi hồ sơ đang hiệu lực và chưa yêu cầu trả kho.
+            </p>
+          )}
+        </Card>
+      )}
       {evidence && (
         <Card className="p-4">
           <h3 className="font-bold mb-3">Thỏa thuận ban đầu</h3>
@@ -142,17 +148,6 @@ export default function RentalDetail({
             </p>
           ))}
         </div>
-      )}
-      {onRequest && (
-        <>
-          <Button disabled={rental.status !== "active"} onClick={onRequest}>
-            Yêu cầu gia hạn
-          </Button>
-          {rental.status !== "active" && (
-            <p>
-              Chỉ có thể yêu cầu gia hạn khi hồ sơ đang hiệu lực và chưa yêu cầu trả kho.</p>
-          )}
-        </>
       )}
     </div>
   )
