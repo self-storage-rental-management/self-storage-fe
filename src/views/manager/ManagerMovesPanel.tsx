@@ -3,8 +3,6 @@ import { Tabs } from '../../components/ui'
 import type { User } from '../../types'
 import ManagerCheckinsPanel from './ManagerCheckinsPanel'
 import ManagerReturnsPanel from './ManagerReturnsPanel'
-import ReturnApiPanel from '../return-api/ReturnApiPanel'
-import { isApiAuthenticated } from '../../services/authApi'
 import ManagerExceptionsPanel from './ManagerExceptionsPanel'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { isManagerFacilityVisible } from '../../domain/managerRules'
@@ -24,7 +22,7 @@ export default function ManagerMovesPanel({ user, showToast, statusBadge, onNavi
   const labels = ['Nhận kho', 'Trả kho', 'Ngoại lệ vận hành']
   return <div className="space-y-5">
     <Tabs tabs={labels} active={tab === 'move-ins' ? labels[0] : tab === 'move-outs' ? labels[1] : labels[2]} onChange={value => setTab(value === labels[0] ? 'move-ins' : value === labels[1] ? 'move-outs' : 'exceptions')} />
-    {tab === 'move-ins' ? <ManagerCheckinsPanel user={user} sb={statusBadge} /> : tab === 'move-outs' ? (isApiAuthenticated() ? <ReturnApiPanel role="manager" /> : <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} />) : <ManagerExceptionsPanel user={user} onOpen={destination => {
+    {tab === 'move-ins' ? <ManagerCheckinsPanel user={user} sb={statusBadge} /> : tab === 'move-outs' ? <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} /> : <ManagerExceptionsPanel user={user} onOpen={destination => {
       if (destination === 'move-ins' || destination === 'move-outs') setTab(destination)
       else onNavigate(destination)
     }} />}
