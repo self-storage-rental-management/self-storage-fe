@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
@@ -161,7 +161,16 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải văn bản bàn giao.') }
   }
-  return <Card className={`p-6 border-l-4 ${inactive ? 'border-l-stone-300 text-stone-500' : 'border-l-amber-500'}`}>
+  return (
+  <Card
+    id={`customer-reservation-${r.id}`}
+    tabIndex={-1}
+    className={`p-6 border-l-4 ${
+      inactive
+        ? 'border-l-stone-300 text-stone-500'
+        : 'border-l-amber-500'
+    }`}
+  >
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -244,5 +253,6 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {!handoverDocuments.length && <p className="rounded-lg border border-dashed border-stone-300 p-5 text-center text-sm text-stone-500">Chưa có văn bản bàn giao được tải lên.</p>}
       </div>
     </Modal>
-  </Card>
+ </Card>
+  )
 }
