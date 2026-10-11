@@ -23,6 +23,11 @@ function respond(data: unknown, status = 200) {
 beforeEach(() => { state.actor = operationsActor('customer'); setAccessToken('TEST-token') })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens() })
 describe('real Return transport and unknown settlement presentation', () => {
+  it('accepts and displays the backend inspected state', () => {
+    const inspected: ApiReturn = { ...record, status: 'inspected' }
+    expect(isApiReturn(inspected)).toBe(true)
+    expect(renderToStaticMarkup(<ReturnSummary record={inspected} />)).toContain('Đã nghiệm thu')
+  })
   it('preserves null balances and displays unresolved money without a refund success claim', () => {
     expect(isApiReturn(record)).toBe(true)
     const html = renderToStaticMarkup(<ReturnSummary record={record} />)

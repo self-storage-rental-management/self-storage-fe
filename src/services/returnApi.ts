@@ -4,7 +4,7 @@ import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager'
-export const returnStatuses = ['requested', 'scheduled', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
+export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
 export interface ApiReturn {
   id: string; rentalId: string; facilityId: string; customerId: string
   facilityName: string; unitNumber: string; customerName: string
