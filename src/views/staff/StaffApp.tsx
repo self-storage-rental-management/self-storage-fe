@@ -33,8 +33,11 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
-import StaffCredentialRevocationPanel from './StaffCredentialRevocationPanel'
-import { listCredentialAlerts, type CredentialAlert } from '../../services/checkInApi'
+import {
+  listCredentialAlerts,
+  revokeAccessCredential,
+  type CredentialAlert,
+} from "../../services/checkInApi"
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
@@ -115,6 +118,8 @@ type StaffCheckin = Omit<typeof CHECKINS[number], "status"> & {
 
 type StaffReturn = Omit<typeof RETURNS[number], "status"> & {
   status: "pending" | "waiting-customer" | "disputed" | "payment-due" | "refund-pending" | "refunded"
+
+  rentalId?: string
 
   contractStart: string
 
@@ -462,6 +467,8 @@ const mapSharedReturn = (
 
   return {
     id: item.id,
+
+    rentalId: item.rentalId,
 
     customer: item.customerName,
 
@@ -877,6 +884,10 @@ export default function StaffApp({
 
   const [credentialAlerts, setCredentialAlerts] = useState<CredentialAlert[]>([])
 
+  const [credentialError, setCredentialError] = useState<string | null>(null)
+
+  const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
+
   const [inspectModal, setInspectModal] = useState(false)
 
   const [checkinModal, setCheckinModal] = useState(false)
@@ -1174,12 +1185,18 @@ export default function StaffApp({
   useEffect(() => {
     if (!isApiAuthenticated()) {
       setCredentialAlerts([])
+      setCredentialError(null)
       return
     }
+    setCredentialError(null)
     let active = true
     void listCredentialAlerts(user.facilityId && user.facilityId !== 'ALL' ? user.facilityId : undefined)
       .then(items => { if (active) setCredentialAlerts(items) })
-      .catch(() => { if (active) setCredentialAlerts([]) })
+      .catch(reason => {
+        if (!active) return
+        setCredentialAlerts([])
+        setCredentialError(staffErrorMessage(reason, "Không thể tải quyền truy cập cần thu hồi."))
+      })
     return () => { active = false }
   }, [user.facilityId, page])
 
@@ -1205,6 +1222,45 @@ export default function StaffApp({
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
 
     toastTimer.current = window.setTimeout(() => setToast(null), 7000)
+  }
+
+  const returnCredentialAlerts = (returnItem: StaffReturn) => {
+    const rentalId =
+      returnItem.rentalId ||
+      hub.returns.find((item) => item.id === returnItem.id)?.rentalId
+
+    if (!rentalId) return []
+
+    return credentialAlerts.filter(
+      (alert) => alert.action === "REVOKE" && alert.rentalId === rentalId,
+    )
+  }
+
+  const revokeReturnCredential = async (alert: CredentialAlert) => {
+    setCredentialBusy(alert.id)
+
+    try {
+      await revokeAccessCredential(
+        alert.id,
+        "Thu hồi trong nghiệm thu trả kho",
+      )
+
+      setCredentialAlerts((items) =>
+        items.filter((item) => item.id !== alert.id),
+      )
+
+      showToast(
+        "Đã thu hồi " +
+          (alert.credentialType || "quyền truy cập") +
+          " của " +
+          alert.storageUnitCode +
+          ".",
+      )
+    } catch (error) {
+      showToast(staffErrorMessage(error, "Không thể thu hồi quyền truy cập."))
+    } finally {
+      setCredentialBusy(null)
+    }
   }
 
   useEffect(() => {
@@ -1917,6 +1973,16 @@ export default function StaffApp({
   )
 
   const returnsPagination = paginateStaffItems(displayedReturns, returnsPage)
+
+  const returnCredentialAlertIds = new Set(
+    returns.flatMap((returnItem) =>
+      returnCredentialAlerts(returnItem).map((alert) => alert.id),
+    ),
+  )
+
+  const unmatchedCredentialAlerts = credentialAlerts
+    .filter((alert) => alert.action === "REVOKE")
+    .filter((alert) => !returnCredentialAlertIds.has(alert.id))
 
   useEffect(() => {
     setAssignedTasksPage(1)
@@ -3115,7 +3181,6 @@ export default function StaffApp({
       )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
-      {page === "return" && isApiAuthenticated() && <StaffCredentialRevocationPanel showToast={showToast} />}
 
       {page === "return" && (
         <div className="fade-in">
@@ -3170,6 +3235,11 @@ export default function StaffApp({
             </p>
           </Card>
           <Card>
+            {credentialError && (
+              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                {credentialError}
+              </div>
+            )}
             <Table>
               <Thead>
                 <tr>
@@ -3180,6 +3250,7 @@ export default function StaffApp({
                   <Th>{"Hiện trạng"}</Th>
                   <Th>{"Tiền cọc"}</Th>
                   <Th>{"Trạng thái"}</Th>
+                  <Th>{"Quyền truy cập cần thu hồi"}</Th>
                   <Th></Th>
                 </tr>
               </Thead>
@@ -3228,6 +3299,39 @@ export default function StaffApp({
 
                         refunded: "success",
                       })}
+                    </Td>
+                    <Td>
+                      {returnCredentialAlerts(r).map((alert) => (
+                        <div key={alert.id} className="space-y-1">
+                          <Badge variant="warning">
+                            {alert.credentialType || "Quyền truy cập"}
+                          </Badge>
+                          <p className="font-mono text-xs text-stone-500">
+                            {alert.reference || "Chưa có mã tham chiếu"}
+                          </p>
+                          <p className="text-xs text-stone-500">
+                            {alert.dueAt
+                              ? "Hạn thu hồi: " +
+                                formatExactDateTime(alert.dueAt)
+                              : "Thu hồi trong nghiệm thu trả kho"}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={credentialBusy === alert.id}
+                            onClick={() => void revokeReturnCredential(alert)}
+                          >
+                            {credentialBusy === alert.id
+                              ? "Đang thu hồi…"
+                              : "Thu hồi và vô hiệu hóa"}
+                          </Button>
+                        </div>
+                      ))}
+                      {!returnCredentialAlerts(r).length && (
+                        <span className="text-xs text-stone-500">
+                          Không có quyền truy cập cần thu hồi
+                        </span>
+                      )}
                     </Td>
                     <Td>
                       {r.status === "pending" && (
@@ -3350,6 +3454,42 @@ export default function StaffApp({
                           {"Chi tiết"}
                         </Button>
                       )}
+                    </Td>
+                  </Tr>
+                ))}
+                {unmatchedCredentialAlerts.map((alert) => (
+                  <Tr key={"unmatched-credential-" + alert.id}>
+                    <Td>
+                      <span className="font-mono text-xs text-slate-500">
+                        {alert.reservationCode}
+                      </span>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Chưa có hồ sơ nghiệm thu tương ứng
+                      </p>
+                    </Td>
+                    <Td>
+                      <span className="text-sm font-medium">
+                        {alert.customerName}
+                      </span>
+                    </Td>
+                    <Td className="font-medium">{alert.storageUnitCode}</Td>
+                    <Td>Chưa xác định</Td>
+                    <Td>
+                      <Badge variant="warning">Chờ thu hồi quyền truy cập</Badge>
+                    </Td>
+                    <Td>—</Td>
+                    <Td>Chờ xử lý</Td>
+                    <Td>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={credentialBusy === alert.id}
+                        onClick={() => void revokeReturnCredential(alert)}
+                      >
+                        {credentialBusy === alert.id
+                          ? "Đang thu hồi…"
+                          : "Thu hồi và vô hiệu hóa"}
+                      </Button>
                     </Td>
                   </Tr>
                 ))}
