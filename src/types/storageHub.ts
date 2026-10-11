@@ -287,10 +287,11 @@ export interface AccessCredential {
   rentalId?: string
   reservationId?: string
   unitId: string
-  type: 'PIN' | 'KEY' | 'CARD'
+  type: 'PIN' | 'KEY' | 'CARD' | 'LOCK'
   pinCode?: string
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED'
   generatedAt?: string
+  issuedAt?: string
   activatedAt?: string
   revokedAt?: string
 }
