@@ -172,12 +172,16 @@ function MainContent() {
   }, [sessionId, sessionUserId, sessions])
 
   useEffect(() => {
-    if (user) return
+    // VNPay performs a full-page round trip. While the API session is being
+    // restored, `user` is temporarily null; removing `page=reservations` here
+    // would send a successful payment back to the customer overview.
+    if (user || restoringSession) return
     const url = new URL(window.location.href)
+    if (url.searchParams.get('vnpayReturn') === 'true') return
     if (!url.searchParams.has('page')) return
     url.searchParams.delete('page')
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
-  }, [user])
+  }, [user, restoringSession])
 
   useEffect(() => {
     const syncUpdatedActor = () => setApiActor(getAuthenticatedActor())
