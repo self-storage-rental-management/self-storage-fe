@@ -610,6 +610,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const [page, setPage] = useState(() => getInitialPage(NAV, 'overview'))
   const [previousPage, setPreviousPage] = useState('overview')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('vnpayReturn') === 'true' && params.get('reservationId')) {
+      setPage('reservations')
+    }
+  }, [])
+
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(() => {
     return new URLSearchParams(window.location.search).get('facilityId') || new URLSearchParams(window.location.search).get('facility')
   })
