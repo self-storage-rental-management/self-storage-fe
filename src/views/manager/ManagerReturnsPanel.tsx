@@ -516,7 +516,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                     {`Gian Kho ${selectedReturn.unitId}`}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {selectedReturn.customerName} · {selectedReturn.customerPhone}
+                    {selectedReturn.customerName}, {selectedReturn.customerPhone}
                   </p>
                 </div>
                 <div className="text-right">
@@ -550,7 +550,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                 <span className="text-stone-400 block">{'Vật tư bàn giao lại'}</span>
                 <span className="font-medium text-stone-700">
                   {selectedReturn.returnedItems
-                    ? `Chìa: ${selectedReturn.returnedItems.key ? '✓' : '✗'} · Thẻ: ${selectedReturn.returnedItems.card ? '✓' : '✗'} · Khóa: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`
+                    ? `Chìa: ${selectedReturn.returnedItems.key ? '✓' : '✗'}, Thẻ: ${selectedReturn.returnedItems.card ? '✓' : '✗'}, Khóa: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`
                     : 'N/A'}
                 </span>
               </div>
@@ -742,7 +742,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                 {`Khiếu nại từ khách: ${selectedReturn.customerName}`}
               </p>
               <p className="text-rose-800 font-mono">
-                {`Kho ${selectedReturn.unitId} · Hồ sơ ${selectedReturn.id}`}
+                {`Kho ${selectedReturn.unitId}, Hồ sơ ${selectedReturn.id}`}
               </p>
               <div className="mt-2 pt-2 border-t border-rose-200/80">
                 <p className="text-stone-500">{'Ý kiến phản ánh của khách:'}</p>

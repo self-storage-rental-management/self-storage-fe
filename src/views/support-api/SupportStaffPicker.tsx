@@ -43,7 +43,7 @@ export default function SupportStaffPicker({
           )}
           {read.data?.data.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.fullName} · {s.id}
+              {s.fullName}, {s.id}
             </option>
           ))}
         </select>

@@ -12,7 +12,7 @@ export default function ApiPager({
   return (
     <div className="flex flex-wrap justify-between items-center gap-2 py-3 text-sm">
       <span>
-        {p.totalItems} bản ghi · Trang {p.totalPages ? p.page + 1 : 0}/
+        {p.totalItems} bản ghi, Trang {p.totalPages ? p.page + 1 : 0}/
         {p.totalPages}
       </span>
       <div className="flex gap-2">

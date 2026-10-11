@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ApiActor } from "../../services/authApi"
-import { LedgerContent } from "./LedgerPanel"
+import { LedgerContent, ledgerReadError } from "./LedgerPanel"
+import { ApiClientError } from "../../services/apiClient"
 import RenewalCoordinationPanel, {
   canCoordinateRenewal,
   RenewalAssignmentSummary,
@@ -50,6 +51,25 @@ const draft = {
   eligiblePackageIds: "",
 }
 describe("Dương integration presentation and safe policy builders", () => {
+  it.each([
+    new ApiClientError("Internal private server detail", { status: 500 }),
+    new ApiClientError("Gateway unavailable", { status: 503 }),
+    new ApiClientError("Network unavailable", { code: "NETWORK_ERROR" }),
+    new ApiClientError("Response timeout", { code: "TIMEOUT" }),
+    new ApiClientError("Invalid ledger response", { code: "INVALID_API_RESPONSE" }),
+    new Error("Private unexpected error"),
+  ])("uses read-only feedback for ledger failure instead of uncertain mutation instructions: %j", error => {
+    expect(ledgerReadError(error)).toBe("Không tải được dữ liệu tài chính. Vui lòng thử lại.")
+    expect(ledgerReadError(error)).not.toMatch(/cùng nội dung|không tạo yêu cầu|Private|Internal/)
+  })
+  it.each([
+    [401, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."],
+    [403, "Bạn không có quyền thực hiện thao tác này."],
+    [404, "Chưa có dữ liệu, chức năng chưa được bật hoặc hồ sơ không thuộc quyền truy cập."],
+    [409, "Dữ liệu đã thay đổi hoặc chưa đủ điều kiện xử lý. Kiểm tra lại hồ sơ trước khi tiếp tục."],
+  ])("preserves ledger authentication, authorization and blocked-state feedback for HTTP %i", (status, message) => {
+    expect(ledgerReadError(new ApiClientError("Raw backend detail", { status: Number(status) }))).toBe(message)
+  })
   it.each(["completed", "cancelled", "rejected", "payment_expired"])("terminal %s does not expose a new coordination command", status => {
     state.actor = operationsActor("manager")
     expect(renderToStaticMarkup(<RenewalCoordinationPanel state={operationState} facilityId={ids.facility} status={status} onLocked={vi.fn()} onChanged={vi.fn()} />)).toBe("")

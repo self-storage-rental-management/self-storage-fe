@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import { ApiClientError } from "../../services/apiClient"
 import {
   getRentalLedger,
   integrationError,
@@ -15,6 +16,11 @@ const kinds = {
   SECURITY_DEPOSIT: "Cọc bảo đảm",
   RENEWAL_DEPOSIT: "Cọc gia hạn",
   RENEWAL_REMAINDER: "Tiền thuê gia hạn còn lại",
+}
+export function ledgerReadError(error: unknown): string {
+  if (error instanceof ApiClientError && [401, 403, 404, 409].includes(error.status ?? 0))
+    return integrationError(error)
+  return "Không tải được dữ liệu tài chính. Vui lòng thử lại."
 }
 export function LedgerContent({ data }: { data: LedgerView }) {
   if (data.completeness === "UNKNOWN")
@@ -33,7 +39,7 @@ export function LedgerContent({ data }: { data: LedgerView }) {
           <div key={o.id} className="rounded border p-3">
             <p>{kinds[o.kind]}</p>
             <p>
-              Số tiền: {rentalMoney(o.amount, "VND")} · Còn phải trả:{" "}
+              Số tiền: {rentalMoney(o.amount, "VND")}, Còn phải trả:{" "}
               {rentalMoney(o.outstanding, "VND")}
             </p>
             <p>Hạn thanh toán: {rentalDate(o.dueAt)}</p>
@@ -54,7 +60,7 @@ export function LedgerContent({ data }: { data: LedgerView }) {
                   : "Thanh toán thử nghiệm - không thu tiền thật"}
             </p>
             <p>
-              {rentalMoney(p.amount, "VND")} · {rentalDate(p.receivedAt)}
+              {rentalMoney(p.amount, "VND")}, {rentalDate(p.receivedAt)}
             </p>
           </div>
         ))
@@ -65,7 +71,7 @@ export function LedgerContent({ data }: { data: LedgerView }) {
       ) : (
         data.refunds.map((f) => (
           <p key={f.id}>
-            {rentalMoney(f.amount, "VND")} ·{" "}
+            {rentalMoney(f.amount, "VND")},{" "}
             {f.status === "RESERVED"
               ? "Đã dành tiền để hoàn, chưa chuyển tiền"
               : "Đã ghi nhận chi hoàn tiền"}
@@ -87,7 +93,7 @@ function LedgerRead({ role, id }: {
   return (
     <div>
       {read.loading && <p role="status">Đang tải dữ liệu...</p>}
-      {!!read.error && <p role="alert">{integrationError(read.error)}</p>}
+      {!!read.error && <p role="alert">{ledgerReadError(read.error)}</p>}
       {read.data && <LedgerContent data={read.data} />}
     </div>
   )

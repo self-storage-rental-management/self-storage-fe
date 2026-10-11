@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { singleManagerFacility, managerFacilityNotice } from "./managerFacilityUi"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import {
@@ -46,7 +47,7 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
       role="status"
     >
       <p>
-        Dữ liệu lúc {rentalDate(p.asOf)} ·{" "}
+        Dữ liệu lúc {rentalDate(p.asOf)},{" "}
         {p.completeness === "COMPLETE"
           ? "Đầy đủ"
           : "Chỉ có dữ liệu một phần"}
@@ -71,14 +72,13 @@ export function OverdueCaseSummary({ record: r }: { record: OverdueCase }) {
     <div className="space-y-2 text-sm">
       <p className="break-all">Mã theo dõi: {r.caseRef}</p>
       <p>
-        {r.customerName} · Gian kho {r.storageUnitCode}
+        {r.customerName}, Gian kho {r.storageUnitCode}
       </p>
       <p className="break-all">Hồ sơ thuê: {r.rentalId}</p>
       <p>
         {r.kind === "RENTAL_TERM"
           ? "Quá thời hạn thuê"
-          : "Nghĩa vụ thanh toán quá hạn"}{" "}
-        · {r.overdueDays} ngày · {priorityLabels[r.priority]}
+          : "Nghĩa vụ thanh toán quá hạn"}, {r.overdueDays} ngày, {priorityLabels[r.priority]}
       </p>
       {r.kind === "PAYMENT_DUE" ? (
         <>
@@ -108,12 +108,11 @@ export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
             REMINDER: "Yêu cầu nhắc nợ",
             RECOVERY_HANDOFF: "Bàn giao tới thu hồi kho",
           }[e.type]
-        }{" "}
-        · {rentalDate(e.recordedAt)}
+        }, {rentalDate(e.recordedAt)}
       </p>
       <p className="whitespace-pre-wrap break-words">{e.content}</p>
       <p className="break-all">
-        Người ghi: {e.actorId} · Sự kiện: {e.id}
+        Người ghi: {e.actorId}, Sự kiện: {e.id}
       </p>
       {e.externalRef && (
         <p className="break-all">Tham chiếu hệ thống nhận: {e.externalRef}</p>
@@ -143,13 +142,18 @@ export default function ManagerOverdueApiPanel() {
       <Card className="p-5" role="alert">Bạn chưa có quyền xem hồ sơ thuê tại cơ sở này.</Card>
     )
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
-  return <OverdueSession key={identity} identity={identity} />
+  const facilityId = singleManagerFacility(actor)
+  if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
+  return <OverdueSession key={identity} identity={identity} facilityId={facilityId} />
 }
-function OverdueSession({ identity }: { identity: string }) {
-  const actor = getAuthenticatedActor()!
+function OverdueSession({ identity, facilityId }: {
+  identity: string
+  facilityId: string
+}) {
   const [query, setQuery] = useState<OverdueQuery>({
     page: 0,
-    size: 20,
+    size: 10,
+    facilityId,
     kind: "ALL",
     sort: "priority,desc",
   })
@@ -188,23 +192,6 @@ function OverdueSession({ identity }: { identity: string }) {
             Tìm
           </Button>
           <label>
-            Cơ sở
-            <select
-              className={operationsInputClass}
-              value={query.facilityId || ""}
-              onChange={(e) =>
-                change({ facilityId: e.target.value || undefined })
-              }
-            >
-              <option value="">Các cơ sở được đọc</option>
-              {Object.keys(actor.facilityScopes).map((id) => (
-                <option key={id} value={id}>
-                  {actor.facilityNames?.[id] || id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
             Loại
             <select
               className={operationsInputClass}
@@ -231,21 +218,6 @@ function OverdueSession({ identity }: { identity: string }) {
               <option value="caseRef,asc">Mã tăng dần</option>
             </select>
           </label>
-          <label>
-            Số hồ sơ
-            <select
-              className={operationsInputClass}
-              value={query.size}
-              onChange={(e) => change({ size: Number(e.target.value) })}
-            >
-              {[10, 20, 50].map((n) => (
-                <option key={n} value={n}>
-                  {n}/trang
-                </option>
-              ))}
-            </select>
-          </label>
-
         </div>
       </Card>
       <ApiReadState {...read} retry={read.refresh} />
@@ -260,14 +232,13 @@ function OverdueSession({ identity }: { identity: string }) {
               >
                 <div className="space-y-1 text-sm min-w-0">
                   <p className="font-semibold">
-                    {r.customerName} · {r.storageUnitCode} ·{" "}
+                    {r.customerName}, {r.storageUnitCode},{" "}
                     {priorityLabels[r.priority]}
                   </p>
                   <p>
                     {r.kind === "PAYMENT_DUE"
                       ? "Thanh toán quá hạn"
-                      : "Quá thời hạn thuê"}{" "}
-                    · {r.overdueDays} ngày
+                      : "Quá thời hạn thuê"}, {r.overdueDays} ngày
                   </p>
                   {r.kind === "PAYMENT_DUE" && (
                     <p>{rentalMoney(r.outstanding, r.currency!)}</p>
