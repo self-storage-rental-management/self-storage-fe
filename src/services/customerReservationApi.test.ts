@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createCustomerReservation,
+  confirmCustomerReceipt,
   cancelCustomerReservation,
   getAvailability,
   listCustomerFacilities,
@@ -23,6 +24,18 @@ const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), {
 
 describe('customerReservationApi', () => {
   afterEach(() => { clearAuthTokens(); vi.unstubAllGlobals() })
+  it('confirms receipt through the existing backend endpoint and returns committed state', async () => {
+    const detail = { reservation: { id: 'reservation-1', status: 'COMPLETED' } }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: detail }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await confirmCustomerReceipt('reservation-1')).toEqual(detail)
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/customer/reservations/reservation-1/receipt-confirmation')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+  })
+  it('does not fabricate receipt success when the backend rejects confirmation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: 'CONFLICT', message: 'Handover incomplete' } }), { status: 409, headers: { 'Content-Type': 'application/json' } })))
+    await expect(confirmCustomerReceipt('reservation-1')).rejects.toMatchObject({ status: 409 })
+  })
 
   it('reloads stored payment details from the backend for receipts', async () => {
     const result = { paymentId: 'payment-1', reservationId: 'reservation-1', paymentStatus: 'PAID', amount: 600000 }
