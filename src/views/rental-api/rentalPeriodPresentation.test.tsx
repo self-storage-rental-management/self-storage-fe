@@ -18,9 +18,12 @@ describe("P03 canonical period FE compatibility", () => {
     const labels = Array.from(html.matchAll(/<dt class="font-bold">([^<]+)<\/dt>/g), match => match[1])
     expect(labels).toEqual([
       "Mã hồ sơ thuê", "Khách hàng", "Cơ sở / Gian kho", "Loại gian kho",
-      "Trạng thái", "Thời hạn sử dụng", "Đơn giá áp dụng / tháng", "Cọc hồ sơ thuê",
-      "Tình trạng tài chính", "Hạn nghĩa vụ thanh toán kế tiếp", "Dư nợ / Quá hạn", "Trạng thái truy cập",
+      "Trạng thái", "Thời hạn sử dụng", "Trạng thái truy cập",
+      "Tình trạng tài chính", "Hạn nghĩa vụ thanh toán kế tiếp", "Dư nợ / Quá hạn",
     ])
+    expect(html).toContain("Theo dõi quá hạn")
+    expect(html).not.toContain("Đơn giá áp dụng / tháng")
+    expect(html).not.toContain("Cọc theo thỏa thuận ban đầu")
     expect(html).toContain(exclusive.id)
     expect(html).toContain(exclusive.customer.fullName)
     const unknownHtml = renderToStaticMarkup(<RentalDetail rental={{ ...exclusive, dateSemantics: null }} />)

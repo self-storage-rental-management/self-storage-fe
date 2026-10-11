@@ -31,7 +31,7 @@ describe.skipIf(!enabled)("Local real API → existing DB → rental response �
     expect(detail.dateSemantics?.lastPermittedDate).toBe(detail.contractEndDate)
     expect(detail.financialSummary.completeness).toBe("UNKNOWN")
     expect(detail.access.completeness).toBe("UNKNOWN")
-    const html = renderToStaticMarkup(<RentalDetail rental={detail} role={role} />)
+    const html = renderToStaticMarkup(<RentalDetail rental={detail} />)
     expect(html).toContain("Thời hạn sử dụng")
     expect(html).toContain("Cọc bảo đảm theo thỏa thuận")
     expect(html).toContain("Chưa có dữ liệu xác thực")
