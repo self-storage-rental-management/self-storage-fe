@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ManagerPresentationProvider } from './managerPresentation'
 import './managerTypography.css'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
@@ -25,7 +25,6 @@ import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
-import { listUnitAssignmentCandidates, type UnitAssignmentCandidate } from '../../services/unitAssignmentApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
@@ -46,33 +45,10 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
-  const [assignmentCandidates, setAssignmentCandidates] = useState<UnitAssignmentCandidate[]>([])
   const showToast = (message: string) => {
     setToast(message)
     window.setTimeout(() => setToast(null), 3500)
   }
-
-  useEffect(() => {
-    if (!isApiAuthenticated()) return
-    let cancelled = false
-    const load = async () => {
-      try {
-        const response = await listUnitAssignmentCandidates({ page: 0, pageSize: 100, q: '' })
-        if (!cancelled) setAssignmentCandidates(response.data)
-      } catch {
-        // The assignment screen still reports its own API error when opened.
-      }
-    }
-    void load()
-    const refresh = () => void load()
-    window.addEventListener('storagehub:unit-assignments-refresh', refresh)
-    const timer = window.setInterval(refresh, 10_000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-      window.removeEventListener('storagehub:unit-assignments-refresh', refresh)
-    }
-  }, [])
 
   const statusBadge = (status: string) => {
     const variants: Record<string, string> = {
@@ -115,15 +91,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       if (isFacilityTaskOverdue(task)) notifications.push({ id: `manager-task-overdue-${task.id}-${task.dueAt}`, date: task.dueAt, title: 'Nhiệm vụ đã quá hạn', message: `${task.title} · ${task.assignedStaffName || 'Chưa phân công'}`, page: 'staff-tasks', targetId: task.id })
       return notifications
     })
-  const assignmentNotifications: LayoutNotification[] = assignmentCandidates.map(item => ({
-    id: `manager-unit-assignment-${item.reservationId}`,
-    date: item.confirmedAt || undefined,
-    title: 'Có đơn đã thanh toán cọc chờ phân gian',
-    message: `${item.reservationCode} · ${item.customerName} · ${item.facilityName}`,
-    page: 'unit-assignments',
-    targetId: item.reservationId,
-  }))
-  const managerNotifications = [...assignmentNotifications, ...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
+  const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
 
   return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={managerNotifications} canAccess={permission => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && (isApiAuthenticated() ? <ManagerDashboardApiPanel setPage={setPage} /> : <ManagerDashboardPanel user={user} setPage={setPage} />)}

@@ -88,10 +88,9 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
     setSubmitting(true)
     try {
       const result = await createUnitAssignment(selected.reservationId, storageUnitId)
-      showToast(`Đã phân gian ${result.storageUnitCode} cho đơn ${result.reservationCode}.`)
+      showToast(`Đã phân gian ${result.storageUnitCode} cho reservation ${result.reservationCode}.`)
       setSelected(null)
       setRefreshKey(value => value + 1)
-      window.dispatchEvent(new Event('storagehub:unit-assignments-refresh'))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể tạo phân gian.")
     } finally {
@@ -108,7 +107,7 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
     <SectionHeader
       eyebrow="Quản lý gian kho"
       title="Phân kho cho đặt chỗ"
-      subtitle="Các đơn dưới đây đã thanh toán cọc thành công và đang chờ Manager chọn một gian kho vật lý phù hợp."
+      subtitle="Chọn gian kho còn trống, cùng cơ sở và đúng loại kho cho đặt chỗ đã xác nhận."
     />
 
     <Card className="p-4">
@@ -139,14 +138,14 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
         </Tr></Thead>
         <Tbody>
           {items.map(item => <Tr key={item.reservationId}>
-            <Td><b className="font-mono">{item.reservationCode}</b><p className="mt-1 text-xs text-stone-500">Thanh toán được xác nhận {formatDate(item.confirmedAt)}</p></Td>
+            <Td><b className="font-mono">{item.reservationCode}</b><p className="mt-1 text-xs text-stone-500">Xác nhận {formatDate(item.confirmedAt)}</p></Td>
             <Td><b>{item.customerName}</b><p className="mt-1 text-xs text-stone-500">{item.customerEmail}</p></Td>
             <Td><b>{item.facilityName}</b><p className="mt-1 text-xs text-stone-500">{managerUnitTypeLabel(item.unitTypeName, 'vi')}</p></Td>
             <Td>{formatDate(item.startDate)} - {formatDate(item.endDate)}</Td>
-            <Td><Badge variant="warning">Đã thanh toán cọc · Chờ phân gian</Badge></Td>
+            <Td><Badge variant="success">Đã xác nhận</Badge></Td>
             <Td className="text-right"><Button size="sm" onClick={() => void openAssignment(item)}>Chọn gian kho</Button></Td>
           </Tr>)}
-          {!loading && !items.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-stone-500">Không có đơn đã thanh toán cọc đang chờ phân gian.</td></tr>}
+          {!loading && !items.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-stone-500">Không có đặt chỗ đã xác nhận đang chờ phân kho.</td></tr>}
           {loading && <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-stone-500">Đang tải danh sách…</td></tr>}
         </Tbody>
       </Table>
