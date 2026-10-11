@@ -208,13 +208,28 @@ export interface ReservationEmailVerificationResult {
 export interface ReservationPaymentResult {
   paymentId: string
   reservationId: string
+  transactionReference: string
+  gatewayTransactionNo: string | null
   amount: number
   currency: string
-  outcome: 'SUCCESS' | 'FAILED' | 'NOT_RECEIVED'
+  refundedAmount: number
   paymentStatus: string
   reservationStatus: ReservationStatus
+  responseCode: string | null
+  transactionStatus: string | null
+  gatewayPayDate: string | null
   message: string
-  processedAt: string
+  processedAt: string | null
+  lastReconciledAt: string | null
+}
+
+export interface VnpayPaymentUrlResult {
+  paymentId: string
+  reservationId: string
+  transactionReference: string
+  amount: number
+  currency: string
+  paymentUrl: string
 }
 
 export type PaymentComplaintStatus = 'PENDING' | 'REVIEW_OVERDUE' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
@@ -306,9 +321,9 @@ export async function withdrawPaymentComplaint(complaintId: string) {
   return response.data
 }
 
-export async function payReservationDeposit(reservationId: string, idempotencyKey: string) {
-  const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(
-    `/api/customer/reservations/${reservationId}/simulated-payment`,
+export async function createVnpayPaymentUrl(reservationId: string, idempotencyKey: string) {
+  const response = await apiRequest<ApiEnvelope<VnpayPaymentUrlResult>>(
+    `/api/customer/reservations/${reservationId}/vnpay/payment-url`,
     { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } },
   )
   return response.data
