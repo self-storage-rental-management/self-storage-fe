@@ -3,9 +3,11 @@ import type { User } from './types'
 import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
+import AdminPortalLogin from './views/auth/AdminPortalLogin'
 import HomePage from './views/home/HomePage'
 import RequiredPasswordChange from './views/RequiredPasswordChange'
-import { actorToUser, getAuthenticatedActor, logoutFromApi, type ApiActor } from './services/authApi'
+import { actorToUser, getAuthenticatedActor, logoutFromApi, refreshApiSession, type ApiActor } from './services/authApi'
+import { clearAuthTokens, getRefreshToken } from './services/apiClient'
 
 const CHUNK_RELOAD_KEY = 'storagehub:chunk-reload'
 
@@ -33,7 +35,7 @@ const ManagerApp = lazyWithChunkRecovery(() => import('./views/manager/ManagerAp
 const BusinessApp = lazyWithChunkRecovery(() => import('./views/business/BusinessApp'))
 const AdminApp = lazyWithChunkRecovery(() => import('./views/admin/AdminApp'))
 
-type GuestView = 'home' | 'login' | 'register'
+type GuestView = 'home' | 'login' | 'register' | 'admin-login'
 
 function normalizedPathname() {
   return window.location.pathname.replace(/\/+$/, '') || '/'
@@ -42,16 +44,46 @@ function normalizedPathname() {
 function resolveGuestView(): GuestView {
   const url = new URL(window.location.href)
   const pathname = normalizedPathname()
+  const hostname = window.location.hostname.toLowerCase()
+
+  // 1. Subdomain matching: staff.storagehub.vn or admin.storagehub.vn
+  if (hostname.startsWith('staff.') || hostname.startsWith('admin.')) {
+    return 'admin-login'
+  }
+  // Subdomain matching: portal.storagehub.vn
+  if (hostname.startsWith('portal.')) {
+    if (pathname === '/register') return 'register'
+    return 'login'
+  }
+
+  // 2. Back-office / Admin routes: /admin/login, /staff/login, /admin, /staff
+  if (
+    pathname === '/admin/login'
+    || pathname === '/staff/login'
+    || pathname === '/admin'
+    || pathname === '/staff'
+    || pathname.startsWith('/admin/')
+    || pathname.startsWith('/staff/')
+  ) {
+    return 'admin-login'
+  }
+
+  // 3. Customer Portal routes
   if (pathname === '/register') return 'register'
   if (
     pathname === '/login'
+    || pathname === '/customer/login'
+    || pathname === '/portal/login'
     || pathname === '/verify-email'
     || pathname === '/reset-password'
     || pathname === '/profile'
     || pathname === '/profile/security'
     || url.searchParams.has('verifyEmail')
     || url.searchParams.has('resetPassword')
-  ) return 'login'
+  ) {
+    return 'login'
+  }
+
   return 'home'
 }
 
@@ -68,7 +100,30 @@ function MainContent() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
+  const [restoringSession, setRestoringSession] = useState(() => Boolean(getRefreshToken()))
   const [guestView, setGuestView] = useState<GuestView>(resolveGuestView)
+
+  useEffect(() => {
+    if (!getRefreshToken()) {
+      setRestoringSession(false)
+      return
+    }
+    let cancelled = false
+    void refreshApiSession()
+      .then(actor => {
+        if (!cancelled) setApiActor(actor)
+      })
+      .catch(() => {
+        clearAuthTokens()
+        if (!cancelled) setApiActor(null)
+      })
+      .finally(() => {
+        if (!cancelled) setRestoringSession(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const canonicalRecord = sessionUserId ? users.find(item => item.id === sessionUserId) : null
   const accountStatus = canonicalRecord && 'status' in canonicalRecord ? String(canonicalRecord.status) : 'active'
@@ -138,7 +193,7 @@ function MainContent() {
   }, [user])
 
   const handleLogin = (nextUser: User) => {
-    if (['/login', '/register', '/verify-email', '/reset-password'].includes(normalizedPathname())) {
+    if (['/login', '/register', '/admin/login', '/staff/login', '/admin', '/staff', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
       window.history.replaceState(null, '', '/')
     }
     const authenticatedActor = getAuthenticatedActor()
@@ -162,20 +217,37 @@ function MainContent() {
     window.history.replaceState(null, '', '/')
   }
 
+  if (restoringSession) {
+    return <div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm font-medium text-stone-600">Đang khôi phục phiên đăng nhập…</div>
+  }
+
   if (!user) {
     if (guestView === 'home') {
       return (
         <HomePage
           onOpenLogin={() => navigateGuest('/login', 'login', setGuestView)}
           onOpenRegister={() => navigateGuest('/register', 'register', setGuestView)}
+          onOpenAdminLogin={() => navigateGuest('/admin/login', 'admin-login', setGuestView)}
         />
       )
     }
+
+    if (guestView === 'admin-login') {
+      return (
+        <AdminPortalLogin
+          onLogin={handleLogin}
+          onBackToHome={() => navigateGuest('/', 'home', setGuestView)}
+          onSwitchToCustomerPortal={() => navigateGuest('/login', 'login', setGuestView)}
+        />
+      )
+    }
+
     return (
       <Login
         onLogin={handleLogin}
         initialTab={guestView === 'register' ? 'register' : 'login'}
         onBackToHome={() => navigateGuest('/', 'home', setGuestView)}
+        onSwitchToAdminPortal={() => navigateGuest('/admin/login', 'admin-login', setGuestView)}
       />
     )
   }

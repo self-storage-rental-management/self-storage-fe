@@ -124,6 +124,14 @@ export interface ReservationQuoteInput extends ReservationSelectionInput {
   pricingPackageCode: string
 }
 
+export interface ReservationRentalPackage {
+  code: string
+  name: string
+  rentalMonths: number
+  discountRate: number
+  policyVersion: string
+}
+
 export interface ReservationQuote {
   quoteId: string
   facilityId: string
@@ -151,6 +159,7 @@ export interface CreateReservationInput {
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
+  appointmentAt?: string | null
 }
 
 export interface CustomerReservation {
@@ -173,6 +182,19 @@ export interface CustomerReservation {
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
   holdExpiresAt: string
+  appointmentAt?: string | null
+  createdAt: string
+}
+
+export interface CheckInDocument {
+  id: string
+  originalName: string
+  contentType: string
+  sizeBytes: number
+  checksumSha256: string
+  entityType: 'CHECK_IN'
+  entityId: string
+  status: string
   createdAt: string
 }
 
@@ -347,6 +369,10 @@ export async function listCustomerFacilities(page = 0, size = 50) {
   return apiRequest<PageResponse<CustomerFacility>>(`/api/facilities${query({ status: 'active', page, size })}`)
 }
 
+export async function listAccessibleFacilities(page = 0, size = 100) {
+  return apiRequest<PageResponse<CustomerFacility>>(`/api/facilities${query({ page, size })}`)
+}
+
 export async function listCustomerUnitTypes(facilityId: string, options: {
   startDate?: string
   endDate?: string
@@ -385,6 +411,13 @@ export async function createReservationQuote(input: ReservationQuoteInput) {
   return response.data
 }
 
+export async function listReservationRentalPackages(facilityId: string, startDate?: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationRentalPackage[]>>(
+    `/api/customer/reservations/rental-packages${query({ facilityId, startDate })}`,
+  )
+  return response.data
+}
+
 export async function createCustomerReservation(input: CreateReservationInput, idempotencyKey: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservation>>('/api/customer/reservations', {
     method: 'POST',
@@ -405,6 +438,25 @@ export async function getCustomerReservation(reservationId: string) {
     `/api/customer/reservations/${reservationId}`,
   )
   return response.data
+}
+
+export async function setCustomerCheckInAppointment(reservationId: string, appointmentAt: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservation>>(
+    `/api/customer/reservations/${reservationId}/check-in-appointment`,
+    { method: 'POST', body: JSON.stringify({ appointmentAt }) },
+  )
+  return response.data
+}
+
+export async function getCustomerCheckInDocuments(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CheckInDocument[]>>(
+    `/api/customer/reservations/${reservationId}/check-in-documents`,
+  )
+  return response.data
+}
+
+export function downloadCustomerCheckInDocument(assetId: string) {
+  return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
 }
 
 export async function cancelCustomerReservation(reservationId: string, reason: string) {
