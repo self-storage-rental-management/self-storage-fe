@@ -52,6 +52,7 @@ export interface CheckInCase {
   customerId: string
   customerName: string
   customerEmail: string
+  customerPhone: string | null
   facilityId: string
   facilityName: string
   storageUnitId: string
@@ -64,6 +65,7 @@ export interface CheckInCase {
   declaredPackageCount: number | null
   declaredGoodsWeightKg: number
   declaredGoodsVolumeM3: number
+  dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
 }
 
@@ -156,6 +158,13 @@ function assertEnvelope(payload: unknown): CheckInCase {
   return (payload as ApiEnvelope<CheckInCase>).data
 }
 
+function assertPaymentEnvelope(payload: unknown): CheckInPayment {
+  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+    throw new ApiClientError('Backend trả về biên lai thanh toán không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return (payload as ApiEnvelope<CheckInPayment>).data
+}
+
 export async function listCheckIns(params: {
   page?: number
   pageSize?: number
@@ -193,6 +202,32 @@ export async function scheduleCheckIn(
 export async function completeCheckIn(checkInId: string, request: CompleteCheckInRequest) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/complete`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export interface CheckInPayment {
+  paymentId: string
+  reservationId: string
+  amount: number
+  currency: string
+  purpose: 'RENTAL_BALANCE'
+  status: string
+  transactionReference: string
+  paymentMethod: string
+  paidAt: string | null
+  processedAt: string | null
+  initiatedByName: string
+}
+
+export async function recordCheckInRemainingPayment(checkInId: string, request: {
+  amount: number
+  paymentMethod: string
+  transactionReference: string
+  note?: string
+}) {
+  return assertPaymentEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/remaining-payment`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
 }
