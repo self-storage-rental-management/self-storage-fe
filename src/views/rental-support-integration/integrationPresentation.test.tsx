@@ -51,6 +51,16 @@ const draft = {
   eligiblePackageIds: "",
 }
 describe("Dương integration presentation and safe policy builders", () => {
+  it("explains partial inventory without rendering technical references or a zero-debt claim", () => {
+    const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 0,
+      obligations: [], receipts: [], refunds: [], coverageInventory: { rentalId: ids.rental, ledgerRevision: 0,
+        completeness: "PARTIAL", gaps: ["INITIAL_OBLIGATION_UNPOSTED_OR_INVALID:RENT", "PAYMENT_REFUND_EXECUTION_UNRECONCILED"],
+        payments: [], consistentThroughApproval: false } }} />)
+    expect(html).toContain("Nghĩa vụ tiền thuê hoặc cọc chưa được đối soát")
+    expect(html).toContain("Chưa xác minh hoàn tiền đã được chuyển")
+    expect(html).not.toContain("INITIAL_OBLIGATION")
+    expect(html).not.toContain("0 ₫")
+  })
   it.each([
     new ApiClientError("Internal private server detail", { status: 500 }),
     new ApiClientError("Gateway unavailable", { status: 503 }),
