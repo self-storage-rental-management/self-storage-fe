@@ -250,21 +250,6 @@ function SupportSession({
               </select>
             </label>
           )}
-          <label className="block text-sm">
-            Số yêu cầu / trang
-            <select
-              className={supportInputClass}
-              disabled={locked}
-              value={query.size}
-              onChange={(e) => change({ size: Number(e.target.value) })}
-            >
-              {[10, 20, 50].map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
           <Button
             variant="ghost"
             disabled={locked}
