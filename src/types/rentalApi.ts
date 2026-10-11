@@ -86,7 +86,7 @@ export interface RentalBookingEvidence {
     status: "PENDING" | "PROCESSING" | "PAID" | "NOT_RECEIVED" | "FAILED" | "CANCELLED"
     amount: number
     processedAt: string | null
-    verification: "SIMULATED" | "UNVERIFIED"
+    verification: "SIMULATED" | "UNVERIFIED" | "VERIFIED" | "SANDBOX" | "DISPUTED" | "ATTEMPT"
   }[]
   paymentsTruncated: boolean
 }

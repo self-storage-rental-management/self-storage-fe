@@ -8,6 +8,14 @@ export const bookingPaymentStatuses: Record<RentalBookingEvidence["payments"][nu
   PENDING: "Chờ xử lý", PROCESSING: "Đang xử lý", PAID: "Ghi nhận thành công",
   NOT_RECEIVED: "Chưa nhận tiền", FAILED: "Không thành công", CANCELLED: "Đã hủy",
 }
+export const bookingPaymentVerification: Record<RentalBookingEvidence["payments"][number]["verification"], string> = {
+  SIMULATED: "Thanh toán thử nghiệm - không thu tiền thật",
+  SANDBOX: "Giao dịch cổng thanh toán thử nghiệm - không xác nhận thu tiền thật",
+  VERIFIED: "Giao dịch đã được cổng thanh toán xác thực; chưa xác nhận đầy đủ tài chính hồ sơ thuê",
+  DISPUTED: "Giao dịch đang có khiếu nại chưa được giải quyết",
+  ATTEMPT: "Đang chờ kết quả xác thực từ cổng thanh toán",
+  UNVERIFIED: "Chưa có bằng chứng xác minh tiền thực nhận",
+}
 export function isRentalBookingEvidence(value: unknown, rentalId: string, reservationId: string | null): boolean {
   // Compatible with servers before the additive field was introduced, never synthetic evidence.
   if (value == null) return true
@@ -31,7 +39,7 @@ export function isRentalBookingEvidence(value: unknown, rentalId: string, reserv
       typeof p.purpose !== "string" || typeof p.status !== "string" ||
       !Object.prototype.hasOwnProperty.call(bookingPaymentPurposes, p.purpose) ||
       !Object.prototype.hasOwnProperty.call(bookingPaymentStatuses, p.status) ||
-      !["SIMULATED", "UNVERIFIED"].includes(p.verification) ||
+      !Object.prototype.hasOwnProperty.call(bookingPaymentVerification, p.verification) ||
       !(p.processedAt === null || (typeof p.processedAt === "string" &&
         /^\d{4}-\d{2}-\d{2}T/.test(p.processedAt) && Number.isFinite(Date.parse(p.processedAt))))) return false
     ids.add(p.id)
