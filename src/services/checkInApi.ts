@@ -176,7 +176,12 @@ export async function listCheckIns(params: {
 
 export async function scheduleCheckIn(
   reservationId: string,
-  request: { scheduledAt: string; contractVerified: boolean; paymentVerified: boolean; note: string },
+  request: {
+    scheduledAt: string
+    contractVerified: boolean
+    paymentVerified: boolean
+    note: string
+  },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/reservations/${encodeURIComponent(reservationId)}/schedule`,
@@ -200,7 +205,11 @@ export async function markCheckInNoShow(checkInId: string, reason: string) {
 
 export async function rejectCheckIn(
   checkInId: string,
-  request: { reason: string; disposition: 'AVAILABLE' | 'MAINTENANCE'; evidenceReferences: string[] },
+  request: {
+    reason: string
+    disposition: 'AVAILABLE' | 'MAINTENANCE'
+    evidenceReferences: string[]
+  },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/reject`,
@@ -226,7 +235,7 @@ export async function downloadCheckInEvidence(assetId: string) {
 
 function assertCredentialEnvelope(payload: unknown): AccessCredential {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Backend trả về quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<AccessCredential>).data
 }
@@ -254,7 +263,7 @@ export async function listCredentialAlerts(facilityId?: string) {
   const query = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : ''
   const payload = await apiRequest<unknown>(`/api/staff/credential-alerts${query}`)
   if (!Array.isArray(payload)) {
-    throw new ApiClientError('Backend trả về cảnh báo credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Backend trả về cảnh báo quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return payload as CredentialAlert[]
 }
@@ -272,7 +281,17 @@ export async function listAccessCredentials(params: {
   if (params.status) query.set('status', params.status)
   const payload = await apiRequest<unknown>(`/api/manager/access-credentials?${query}`)
   if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { data?: unknown }).data)) {
-    throw new ApiClientError('Backend trả về lịch sử credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Backend trả về lịch sử quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
-  return payload as { data: AccessCredential[]; pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; sort: string }; correlationId: string }
+  return payload as {
+    data: AccessCredential[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+      sort: string
+    }
+    correlationId: string
+  }
 }
