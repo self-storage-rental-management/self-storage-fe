@@ -13,6 +13,19 @@ const exclusive: RentalApiDetail = {
   dateSemantics: { completeness: "COMPLETE", convention: "EXCLUSIVE", lastPermittedDate: "2026-10-31", endExclusive: "2026-11-01" },
 }
 describe("P03 canonical period FE compatibility", () => {
+  it("renders all rental detail field labels in bold without changing their data", () => {
+    const html = renderToStaticMarkup(<RentalDetail rental={exclusive} />)
+    const labels = Array.from(html.matchAll(/<dt class="font-bold">([^<]+)<\/dt>/g), match => match[1])
+    expect(labels).toEqual([
+      "Mã hồ sơ thuê", "Khách hàng", "Cơ sở / Gian kho", "Loại gian kho",
+      "Trạng thái", "Thời hạn sử dụng", "Đơn giá áp dụng / tháng", "Cọc hồ sơ thuê",
+      "Tình trạng tài chính", "Hạn nghĩa vụ thanh toán kế tiếp", "Dư nợ / Quá hạn", "Trạng thái truy cập",
+    ])
+    expect(html).toContain(exclusive.id)
+    expect(html).toContain(exclusive.customer.fullName)
+    const unknownHtml = renderToStaticMarkup(<RentalDetail rental={{ ...exclusive, dateSemantics: null }} />)
+    expect(unknownHtml).toContain('<dt class="font-bold">Ngày thuê đang lưu</dt>')
+  })
   it("uses the verified last permitted day, not the raw exclusive marker", () => {
     expect(isRentalRecord(exclusive)).toBe(true)
     const html = renderToStaticMarkup(<RentalDetail rental={exclusive} />)

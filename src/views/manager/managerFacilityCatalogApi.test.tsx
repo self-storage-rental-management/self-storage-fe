@@ -126,16 +126,23 @@ describe('Vietnamese catalog presentation', () => {
     actor.current.facilityScopes = { 'facility-a': 'READ', 'facility-b': 'MANAGE' }
     actor.current.facilityNames = { 'facility-a': 'Cơ sở A', 'facility-b': 'Cơ sở B' }
     const html = renderToStaticMarkup(<ManagerFacilityCatalog />)
-    expect(html).toContain('Cơ sở A')
-    expect(html).toContain('Cơ sở B')
-    expect(html).toContain('Đang tải')
+    expect(html).toContain('Tài khoản đang được gán nhiều cơ sở')
+    expect(html).not.toContain('<select')
+    expect(html).not.toContain('Đang tải')
     expect(html).not.toContain('0 gian')
+    actor.current.facilityScopes = { 'facility-a': 'READ' }
+    const assigned = renderToStaticMarkup(<ManagerFacilityCatalog />)
+    expect(assigned).toContain('Đang tải')
+    expect(assigned).not.toContain('<select')
   })
 
-  it('mounts the DB catalog in API mode without changing unrelated inventory sections', () => {
+  it('keeps the DB catalog and zone distribution without the removed inventory summaries', () => {
     const source = readFileSync(new URL('./ManagerInventoryPanel.tsx', import.meta.url), 'utf8')
     expect(source).toContain('isApiAuthenticated() ? <ManagerFacilityCatalog /> : <Card>')
     expect(source).not.toContain('Lịch khả dụng tương lai')
-    expect(source).toContain('Hàng đợi bảo trì')
+    expect(source).toContain('Phân bổ theo khu vực')
+    expect(source).not.toContain('Hàng đợi bảo trì')
+    expect(source).not.toContain('Năng lực khai thác hiện có')
+    expect(source).not.toContain('Công suất theo loại gian kho')
   })
 })

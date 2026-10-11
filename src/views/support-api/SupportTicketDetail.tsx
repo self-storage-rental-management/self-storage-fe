@@ -21,8 +21,8 @@ import type {
 import ApiPager from "../rental-api/ApiPager"
 import { rentalDate } from "../rental-api/presentation"
 import SupportActionForm from "./SupportActionForm"
-import SupportNotificationReceipts from "../duong-integration/SupportNotificationReceipts"
-import { EvidenceDownload } from "../duong-integration/EvidenceControls"
+import SupportNotificationReceipts from "../rental-support-integration/SupportNotificationReceipts"
+import { EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 import SupportReadState from "./SupportReadState"
 import {
   supportActions,
@@ -274,7 +274,7 @@ function MessageRow({ message: m }: { message: SupportMessage }) {
   return (
     <>
       <p>
-        {m.authorRole === "STAFF" ? "Nhân viên" : "Khách hàng"} ·{" "}
+        {m.authorRole === "STAFF" ? "Nhân viên" : "Khách hàng"},{" "}
         {rentalDate(m.sentAt)}{" "}
         <Badge variant={m.visibility === "INTERNAL" ? "warning" : "muted"}>
           {m.visibility === "INTERNAL" ? "Nội bộ" : "Công khai"}
@@ -298,13 +298,13 @@ function EventRow({ event: e }: { event: SupportEvent }) {
   return (
     <>
       <p className="font-semibold">
-        {copy(supportEventLabels[e.type] ?? "Hoạt động chưa có mô tả")} · Lần phân công{" "}
+        {copy(supportEventLabels[e.type] ?? "Hoạt động chưa có mô tả")}, Lần phân công{" "}
         {e.assignmentRevision}
       </p>
       <p>{rentalDate(e.recordedAt)}</p>
       <p className="whitespace-pre-wrap break-words">{e.reason}</p>
       <p className="break-all text-xs text-stone-500">
-        Mã người thực hiện: {e.actorId ?? "Tác vụ hệ thống"} · Nhân viên:{" "}
+        Mã người thực hiện: {e.actorId ?? "Tác vụ hệ thống"}, Nhân viên:{" "}
         {e.assignedStaffId ?? "Chưa phân công"}
       </p>
     </>
@@ -316,7 +316,7 @@ function EscalationRow({ escalation: e }: { escalation: SupportEscalation }) {
   return (
     <>
       <p className="font-semibold">
-        {copy(supportModuleLabels[e.targetModule])} ·{" "}
+        {copy(supportModuleLabels[e.targetModule])},{" "}
         {e.status === "REQUESTED"
           ? "Chờ quản lý chuyển bộ phận"
           : e.status === "ROUTED"

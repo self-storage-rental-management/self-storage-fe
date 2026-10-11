@@ -230,7 +230,7 @@ export default function RenewalCoordinationPanel({
                     .filter((e) => e.kind === "INCIDENT")
                     .map((e) => (
                       <option key={e.id} value={e.id}>
-                        {e.occurredAt} · {e.id}
+                        {e.occurredAt}, {e.id}
                       </option>
                     ))}
                 </select>

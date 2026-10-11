@@ -45,13 +45,13 @@ export default function RenewalDetail({
       <p className="break-all">Mã gia hạn: {r.id}</p>
       <p className="break-all">Hồ sơ thuê: {r.rentalId}</p>
       <p>
-        {r.customer.fullName} · {r.facility.name} · {r.storageUnit.code}
+        {r.customer.fullName}, {r.facility.name}, {r.storageUnit.code}
       </p>
       <p>
         Trạng thái: {copy(renewalLabels[r.status] || unknown)}
       </p>
       <p>
-        Mốc kết thúc kỳ thuê cũ: {rentalDate(r.oldEndDate)} · Ngày cuối kỳ gia hạn:{" "}
+        Mốc kết thúc kỳ thuê cũ: {rentalDate(r.oldEndDate)}, Ngày cuối kỳ gia hạn:{" "}
         {rentalDate(r.newEndDate)}
       </p>
       <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>
@@ -65,7 +65,7 @@ export default function RenewalDetail({
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason}</p>}
       <p>
-        Kiểm tra thanh toán: {financialCompletenessLabels[r.financialCheck.completeness] ?? unknown} ·{" "}
+        Kiểm tra thanh toán: {financialCompletenessLabels[r.financialCheck.completeness] ?? unknown},{" "}
         {rentalDate(r.financialCheck.checkedAt)}
       </p>
       <p>
@@ -89,7 +89,7 @@ export default function RenewalDetail({
       {terms ? (
         <section className="rounded border border-stone-200 p-3 space-y-2">
           <h4 className="font-semibold">Điều khoản khách hàng đã chấp nhận</h4>
-          <p>Gói: {terms.pricingPackageCode} · {terms.rentalMonths} tháng</p>
+          <p>Gói: {terms.pricingPackageCode}, {terms.rentalMonths} tháng</p>
           <p>Kỳ gia hạn: {rentalDate(terms.extensionStartDate)} → {rentalDate(terms.newEndDate)}</p>
           <dl className="grid gap-2 sm:grid-cols-2">
             <div><dt>Đơn giá/tháng</dt><dd>{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
