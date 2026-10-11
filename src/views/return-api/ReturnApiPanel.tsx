@@ -6,7 +6,7 @@ import { rentalMoney } from '../rental-api/presentation'
 import { listReturns, getReturn, requestReturn, inspectReturn, reviewDispute, confirmReturn, returnError, feeKeys,
   type ApiReturn, type ReturnRole, type ReturnFees, type InspectionInput } from '../../services/returnApi'
 
-const labels: Record<ApiReturn['status'], string> = { requested: 'Đã yêu cầu trả kho', scheduled: 'Đã hẹn nghiệm thu', awaiting_customer_confirmation: 'Chờ khách xác nhận',
+const labels: Record<ApiReturn['status'], string> = { requested: 'Đã yêu cầu trả kho', scheduled: 'Đã hẹn nghiệm thu', inspected: 'Đã nghiệm thu', awaiting_customer_confirmation: 'Chờ khách xác nhận',
   disputed: 'Đang xem xét khiếu nại', payment_due: 'Chờ thanh toán quyết toán', refund_pending: 'Chờ chứng cứ hoàn tiền', completed: 'Đã hoàn tất' }
 export function ReturnSummary({ record }: { record: ApiReturn }) {
   return <div className="space-y-2"><h4 className="font-semibold">{record.unitNumber} · {labels[record.status]}</h4>
