@@ -4,7 +4,7 @@ import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { ApiClientError } from '../../services/apiClient'
 import {
   getReservationPayment,
-  payReservationDeposit,
+  createVnpayPaymentUrl,
   type CustomerReservation,
   type ReservationPaymentResult,
 } from '../../services/customerReservationApi'
@@ -25,6 +25,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
   const [payment, setPayment] = useState<ReservationPaymentResult | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [receiptOpen, setReceiptOpen] = useState(false)
+  const [returnFailure, setReturnFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const paymentKey = useRef<string | null>(null)
   const onRefreshRef = useRef(onRefresh)
@@ -43,6 +44,40 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     return () => { disposed = true }
   }, [reservation.id, reservation.status, onMessage])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('vnpayReturn') !== 'true' || params.get('reservationId') !== reservation.id) return
+    const status = params.get('status')
+    const code = params.get('code') || 'không xác định'
+    void getReservationPayment(reservation.id)
+      .then(value => {
+        setPayment(value)
+        window.dispatchEvent(new Event('storagehub:notifications-refresh'))
+        window.requestAnimationFrame(() => {
+          document.getElementById(`customer-reservation-${reservation.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        })
+        if (status === 'success' && value.paymentStatus === 'PAID') {
+          setReturnFailure(null)
+          setReceiptOpen(true)
+          onMessage('VNPay đã xác nhận thanh toán cọc thành công. Biên lai đã được lưu trong đơn.')
+        } else {
+          setReturnFailure(value.paymentStatus === 'PENDING' || value.paymentStatus === 'NOT_RECEIVED'
+            ? `StorageHub chưa nhận được kết quả cuối cùng từ VNPay (mã ${code}). Hệ thống sẽ tiếp tục đối soát; không thanh toán lại nếu tài khoản đã bị trừ tiền.`
+            : `Giao dịch VNPay không thành công (mã ${code}). Bạn có thể thử lại nếu đơn vẫn còn thời hạn.`)
+        }
+      })
+      .catch(() => setReturnFailure(
+        `StorageHub chưa tải được kết quả giao dịch VNPay (mã ${code}). Vui lòng kiểm tra lại trạng thái đơn trước khi thanh toán lại.`
+      ))
+    void onRefreshRef.current()
+    params.delete('vnpayReturn')
+    params.delete('status')
+    params.delete('code')
+    params.delete('reservationId')
+    const search = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`)
+  }, [reservation.id, onMessage])
+
   const countdown = paymentCountdown(paymentExpiresAt || reservation.holdExpiresAt, now)
   useEffect(() => {
     if (reservation.status !== 'AWAITING_PAYMENT' || !countdown.expired) return
@@ -58,15 +93,8 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     setBusy(true)
     try {
       paymentKey.current ??= crypto.randomUUID()
-      const result = await payReservationDeposit(reservation.id, paymentKey.current)
-      setPayment(result)
-      if (result.outcome === 'FAILED') paymentKey.current = null
-      onMessage(result.outcome === 'SUCCESS' ? 'Thanh toán cọc thành công. Đơn đã được xác nhận.'
-        : result.outcome === 'NOT_RECEIVED' ? 'Hệ thống chưa ghi nhận tiền. Không chuyển lại nếu đã bị trừ tiền; cần đối soát.'
-        : 'Thanh toán thất bại. Bạn có thể thử lại trong thời hạn của đơn.')
-      setPayOpen(false)
-      if (result.paymentStatus === 'PAID') setReceiptOpen(true)
-      await onRefresh()
+      const result = await createVnpayPaymentUrl(reservation.id, paymentKey.current)
+      window.location.assign(result.paymentUrl)
     } catch (error) {
       onMessage(error instanceof Error ? error.message : 'Không thể thanh toán cọc.')
     } finally {
@@ -92,12 +120,19 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
         </div>
         <div className="rounded-lg bg-stone-50 p-3 text-sm space-y-1"><div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(reservation.remainingRentalAmount)}</b></div><div className="flex justify-between gap-4"><span>Tiền đảm bảo kho</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng thanh toán khi nhận kho</span><b>{formatVnd(reservation.dueAtCheckIn)}</b></div><p className="pt-1 text-xs text-stone-500">Các khoản trên chưa thu trong bước này.</p></div>
         <div className="rounded-lg bg-red-700 p-3 text-center text-white"><p className="text-xs font-bold uppercase tracking-wide">Thời gian thanh toán còn lại</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
-        <p className="text-sm text-stone-600">Sau khi thanh toán thành công, đơn giữ kho và biên lai sẽ được cập nhật tự động.</p>
-        <Button className="w-full" disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang xử lý…' : `Thanh toán ${formatVnd(reservation.reservationDepositAmount)}`}</Button>
+        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi hoàn tất, VNPay sẽ đưa bạn trở lại StorageHub và cập nhật biên lai tự động.</p>
+        <Button className="w-full" disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(reservation.reservationDepositAmount)}`}</Button>
       </div>
     </Modal>
     <Modal open={receiptOpen} onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán">
       {payment && <ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} />}
+    </Modal>
+    <Modal open={returnFailure !== null} onClose={() => setReturnFailure(null)} title="Kết quả thanh toán VNPay">
+      <div className="space-y-4">
+        <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950">{returnFailure}</div>
+        <p className="text-sm text-stone-600">Nếu tài khoản đã bị trừ tiền, hãy giữ lại thông báo ngân hàng, lịch sử giao dịch hoặc ảnh biên nhận để đối soát.</p>
+        <Button className="w-full" onClick={() => setReturnFailure(null)}>Đã hiểu</Button>
+      </div>
     </Modal>
   </>
 }
