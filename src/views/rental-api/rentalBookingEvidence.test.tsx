@@ -73,6 +73,20 @@ describe("Booking evidence connects DB response without financial or permission 
       .toContain("Chưa có bằng chứng xác minh tiền thực nhận")
   })
   it.each([
+    ["VERIFIED", "chưa xác nhận đầy đủ tài chính hồ sơ thuê"],
+    ["SANDBOX", "không xác nhận thu tiền thật"],
+    ["DISPUTED", "khiếu nại chưa được giải quyết"],
+    ["ATTEMPT", "Đang chờ kết quả xác thực"],
+  ] as const)("accepts %s provenance without promoting unknown Rental debt", async (verification, label) => {
+    const updated = { ...evidence, payments: [{ ...evidence.payments[0], verification }] }
+    expect(isRentalBookingEvidence(updated, rental.id, rental.reservationId)).toBe(true)
+    vi.mocked(apiRequest).mockResolvedValue({ data: { ...rental, bookingEvidence: updated } })
+    const detail = await getRental("customer", rental.id)
+    expect(detail.financialSummary.completeness).toBe("UNKNOWN")
+    expect(detail.financialSummary.outstandingAmount).toBeNull()
+    expect(renderToStaticMarkup(<RentalDetail rental={detail} />)).toContain(label)
+  })
+  it.each([
     { rentalId: "other" }, { reservationId: "other" }, { currency: "USD" },
     { agreedAmounts: { ...evidence.agreedAmounts!, totalInitialObligation: 0 } },
     { agreedAmounts: { ...evidence.agreedAmounts!, securityDepositAmount: -1 } },

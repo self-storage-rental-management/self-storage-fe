@@ -4,8 +4,14 @@ import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { ApiClientError } from '../../services/apiClient'
 import { getReservationPayment, listCustomerReservations, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import ReservationReceipt from './ReservationReceipt'
+import { bookingDepositAccepted, paymentRecordLabel } from './paymentPresentation'
 
 interface PaymentEntry { reservationCode: string; payment: ReservationPaymentResult }
+
+export function paymentHistoryTimestamp(value: string | null) {
+  if (!value || !Number.isFinite(Date.parse(value))) return 'Chưa ghi nhận'
+  return new Date(value).toLocaleString('vi-VN')
+}
 
 export default function CustomerPaymentHistory() {
   const [entries, setEntries] = useState<PaymentEntry[]>([])
@@ -46,11 +52,11 @@ export default function CustomerPaymentHistory() {
   }, [revision])
   return <div className="fade-in space-y-4">
     <SectionHeader title="Lịch Sử Thanh Toán & Biên Lai" action={<Button variant="outline" disabled={loading} onClick={() => setRevision(value => value + 1)}>Làm mới</Button>} />
-    <Card className="p-4"><p className="text-xs text-stone-500">Cọc giữ chỗ đã thanh toán</p><p className="mt-1 text-2xl font-extrabold text-stone-950">{formatVnd(entries.filter(entry => entry.payment.paymentStatus === 'PAID').reduce((sum, entry) => sum + entry.payment.amount, 0))}</p></Card>
+    <Card className="p-4"><p className="text-xs text-stone-500">Cọc đã được đơn xác nhận</p><p className="mt-1 text-2xl font-extrabold text-stone-950">{formatVnd(entries.filter(entry => bookingDepositAccepted(entry.payment)).reduce((sum, entry) => sum + entry.payment.amount, 0))}</p></Card>
     {loading && <p role="status" className="text-sm text-stone-500">Đang tải giao dịch…</p>}
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {!loading && !error && !entries.length && <Card className="p-8 text-center text-stone-500">Chưa có giao dịch nào.</Card>}
-    {entries.map(entry => <Card key={entry.payment.paymentId} className="flex flex-wrap items-center justify-between gap-4 p-5"><div><p className="text-sm font-bold">{entry.reservationCode} · Cọc giữ chỗ</p><p className="mt-1 break-all text-xs text-stone-500">Mã giao dịch: {entry.payment.paymentId}</p><p className="text-xs text-stone-500">{new Date(entry.payment.processedAt).toLocaleString('vi-VN')}</p></div><div className="space-y-2 text-right"><p className="font-bold">{formatVnd(entry.payment.amount)}</p><p className={`text-xs font-bold ${entry.payment.paymentStatus === 'PAID' ? 'text-emerald-700' : 'text-amber-800'}`}>{entry.payment.paymentStatus === 'PAID' ? 'Đã thanh toán' : entry.payment.outcome === 'NOT_RECEIVED' ? 'Chưa ghi nhận tiền' : 'Thanh toán thất bại'}</p>{entry.payment.paymentStatus === 'PAID' && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</div></Card>)}
-    <Modal open={Boolean(receipt)} onClose={() => setReceipt(null)} title="Biên lai thanh toán">{receipt && <ReservationReceipt payment={receipt.payment} reservationCode={receipt.reservationCode} />}</Modal>
+    {entries.map(entry => <Card key={entry.payment.paymentId} className="flex flex-wrap items-center justify-between gap-4 p-5"><div><p className="text-sm font-bold">{entry.reservationCode} · Cọc giữ chỗ</p><p className="mt-1 break-all text-xs text-stone-500">Mã giao dịch: {entry.payment.paymentId}</p><p className="text-xs text-stone-500">{paymentHistoryTimestamp(entry.payment.processedAt)}</p></div><div className="space-y-2 text-right"><p className="font-bold">{formatVnd(entry.payment.amount)}</p><p className={`text-xs font-bold ${bookingDepositAccepted(entry.payment) ? 'text-emerald-700' : 'text-amber-800'}`}>{paymentRecordLabel(entry.payment)}</p>{entry.payment.paymentStatus === 'PAID' && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>{bookingDepositAccepted(entry.payment) ? 'Xem biên lai' : 'Xem giao dịch'}</Button>}</div></Card>)}
+    <Modal open={Boolean(receipt)} onClose={() => setReceipt(null)} title={receipt && bookingDepositAccepted(receipt.payment) ? 'Biên lai thanh toán' : 'Chi tiết giao dịch'}>{receipt && <ReservationReceipt payment={receipt.payment} reservationCode={receipt.reservationCode} />}</Modal>
   </div>
 }

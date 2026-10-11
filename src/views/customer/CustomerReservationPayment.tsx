@@ -10,6 +10,7 @@ import {
 } from '../../services/customerReservationApi'
 import { paymentCountdown } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
+import { bookingDepositAccepted } from './paymentPresentation'
 
 interface Props {
   reservation: CustomerReservation
@@ -56,10 +57,12 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
         window.requestAnimationFrame(() => {
           document.getElementById(`customer-reservation-${reservation.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         })
-        if (status === 'success' && value.paymentStatus === 'PAID') {
+        if (status === 'success' && bookingDepositAccepted(value)) {
           setReturnFailure(null)
           setReceiptOpen(true)
           onMessage('VNPay đã xác nhận thanh toán cọc thành công. Biên lai đã được lưu trong đơn.')
+        } else if (value.paymentStatus === 'PAID') {
+          setReturnFailure('VNPay đã ghi nhận giao dịch, nhưng trạng thái đơn hiện không xác nhận cọc. Vui lòng kiểm tra và đối soát trước khi thanh toán thêm.')
         } else {
           setReturnFailure(value.paymentStatus === 'PENDING' || value.paymentStatus === 'NOT_RECEIVED'
             ? `StorageHub chưa nhận được kết quả cuối cùng từ VNPay (mã ${code}). Hệ thống sẽ tiếp tục đối soát; không thanh toán lại nếu tài khoản đã bị trừ tiền.`
@@ -109,7 +112,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
       <Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => setPayOpen(true)}>Thanh toán cọc</Button>
     </div>}
-    {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)}>Xem biên lai thanh toán</Button>}
+    {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai thanh toán' : 'Xem giao dịch cần đối soát'}</Button>}
     <Modal open={payOpen} onClose={() => { if (!busy) setPayOpen(false) }} title="Thanh toán cọc giữ chỗ">
       <div className="space-y-4">
         <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>Kỳ thuê: <b>{reservation.startDate} → {reservation.endDate}</b></p></div>
@@ -124,7 +127,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
         <Button className="w-full" disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(reservation.reservationDepositAmount)}`}</Button>
       </div>
     </Modal>
-    <Modal open={receiptOpen} onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán">
+    <Modal open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai thanh toán' : 'Chi tiết giao dịch'}>
       {payment && <ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} />}
     </Modal>
     <Modal open={returnFailure !== null} onClose={() => setReturnFailure(null)} title="Kết quả thanh toán VNPay">

@@ -44,6 +44,14 @@ export interface LedgerView {
   currency: "VND"
   revision: number | null
   reason: string
+  coverageInventory?: {
+    rentalId: string
+    ledgerRevision: number | null
+    completeness: "UNKNOWN" | "PARTIAL"
+    gaps: string[]
+    payments: { paymentId: string; provenance: "VERIFIED" | "SIMULATED" | "SANDBOX" | "UNVERIFIED" | "DISPUTED" | "ATTEMPT"; linkedReceipt: boolean; refundUnreconciled: boolean }[]
+    consistentThroughApproval: false
+  }
   obligations: {
     id: string
     renewalId: string | null
@@ -73,6 +81,15 @@ export function isLedgerView(v: unknown): v is LedgerView {
     !text(v.reason)
   )
     return false
+  if (v.coverageInventory !== undefined) {
+    const inventory = v.coverageInventory
+    if (!object(inventory) || inventory.rentalId !== v.rentalId || inventory.ledgerRevision !== v.revision ||
+      inventory.completeness !== v.completeness || inventory.consistentThroughApproval !== false ||
+      !Array.isArray(inventory.gaps) || !inventory.gaps.every(text) || !Array.isArray(inventory.payments) ||
+      !inventory.payments.every(p => object(p) && isUuid(p.paymentId) &&
+        ["VERIFIED", "SIMULATED", "SANDBOX", "UNVERIFIED", "DISPUTED", "ATTEMPT"].includes(String(p.provenance)) &&
+        typeof p.linkedReceipt === "boolean" && typeof p.refundUnreconciled === "boolean")) return false
+  }
   if (v.completeness === "UNKNOWN")
     return (
       v.revision === null &&
