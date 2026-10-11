@@ -1010,14 +1010,21 @@ export const POLICIES = [
   { id: 'pol-2', name: 'Late Fee', value: '50% đơn giá ngày / ngày trễ', scope: 'All Facilities', editable: true, description: 'Phí phạt quá hạn tính theo ngày trễ thực tế: (Cước thuê tháng ÷ 30) × 50% × số ngày trễ.' },
   { id: 'pol-3', name: 'Security Deposit', value: '1 month', scope: 'All Facilities', editable: true, description: 'Tiền cọc an ninh tương đương 01 tháng cước cơ sở (hoàn trả 100% trong 24h sau khi hoàn tất kiểm tra trả kho nguyên trạng).' },
   { id: 'pol-4', name: 'Notice to Vacate', value: '15 days', scope: 'All Facilities', editable: true, description: 'Thời hạn thông báo trước khi kết thúc hợp đồng trước hạn (chỉ áp dụng khi trả kho sớm; hợp đồng trọn gói hết kỳ hạn tự động thanh lý).' },
-  { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', editable: true, description: 'Kỳ hạn hợp đồng thuê kho tự quản tối thiểu là 01 tháng.' }
+  { id: 'pol-5', name: 'Minimum Lease', value: '1 month', scope: 'All Facilities', editable: true, description: 'Kỳ hạn hợp đồng thuê kho tự quản tối thiểu là 01 tháng.' },
+  { id: 'pol-6', name: 'Climate Control SLA (<65% RH)', value: 'Độ ẩm < 65% RH · Nhiệt độ 22-26°C', scope: 'All Facilities', editable: true, description: 'Cam kết chất lượng kho mát (Climate-Controlled): Duy trì độ ẩm dưới 65% và nhiệt độ ổn định 22°C - 26°C với cảm biến tự động lưu log. Nếu cơ sở gặp sự cố ngắt lạnh/hút ẩm gây hư hại ẩm mốc hàng hóa, cơ sở hoàn 100% cọc và bồi thường thiệt hại hàng hóa.' },
+  { id: 'pol-7', name: 'Standard Storage Moisture Disclaimer', value: 'Miễn trừ độ ẩm tự nhiên', scope: 'All Facilities', editable: true, description: 'Miễn trừ trách nhiệm kho tiêu chuẩn (Standard): Cơ sở bảo đảm kho che mưa nắng, kín gió, khô ráo nhưng không cam kết kiểm soát độ ẩm tự nhiên theo mùa nồm. Khách hàng lưu trữ đồ da, điện tử, tài liệu nhạy cảm tự bảo quản túi hút ẩm hoặc chọn kho mát.' },
+  { id: 'pol-8', name: 'Prohibited Items & Environmental Fine', value: 'Phạt 1.000.000₫ – 2.000.000₫', scope: 'All Facilities', editable: true, description: 'Danh mục hàng cấm lưu trữ: Nghiêm cấm thực phẩm tươi sống, nông sản dễ ủ men, hàng hóa còn ướt chưa sấy khô, chất lỏng hở nắp, hóa chất ăn mòn. Vi phạm bị phạt phí xử lý môi trường từ 1.000.000₫ - 2.000.000₫ và khách tự chịu mọi tổn thất lây lan nấm mốc.' },
+  { id: 'pol-9', name: 'Mold Sanitization & Cleaning Fee', value: '1.500.000 ₫ – 2.500.000 ₫ / lần', scope: 'All Facilities', editable: true, description: 'Khấu trừ tiền cọc khi trả kho để lại mùi ẩm mốc / bẩn: Áp dụng khi tường trần sàn kho khô ráo nhưng đồ của khách bị nấm mốc bốc mùi, làm ố sàn hoặc ô nhiễm gian kho, cần phun khử khuẩn ozone và sấy khô công nghiệp.' },
+  { id: 'pol-10', name: 'Facility Maintenance & Relocation SLA', value: 'Xử lý P1 trong 4-12h · Đổi kho 0đ', scope: 'All Facilities', editable: true, description: 'Quy trình xử lý sự cố hạ tầng (nóc dột, nứt vỡ sàn, thấm tường): Khẩn cấp P1 xử lý trong 4-12h. Nếu kho đang có khách thuê gặp nguy cơ dột nóc/thấm tường, hệ thống kích hoạt Di dời khẩn cấp (Relocation) sang kho tương đương, cấp PIN mới miễn phí và bảo lưu hợp đồng.' }
 ]
 
 export const FEES = [
   { type: 'Phí nộp muộn', amount: '50% đơn giá ngày / ngày trễ', trigger: 'Áp dụng sau 3 ngày ân hạn kể từ ngày đến hạn thanh toán. Công thức: (giá thuê tháng ÷ 30) × 50% × số ngày trễ.', applies: 'Tất cả khách thuê' },
   { type: 'Phí thay thế khóa số', amount: '1.170.000 ₫', trigger: 'Khi khách làm mất hoặc hư hỏng khóa / thẻ từ', applies: 'Trách nhiệm khách thuê' },
   { type: 'Phí dọn vệ sinh kho', amount: '2.080.000 ₫', trigger: 'Áp dụng nếu trả kho còn rác bẩn hoặc chất nguy hại', applies: 'Kiểm tra khi trả kho' },
-  { type: 'Phí hỗ trợ mở khóa khẩn cấp', amount: '780.000 ₫', trigger: 'Mở khóa thủ công ngoài giờ hành chính tại cơ sở', applies: 'Mỗi lần yêu cầu' }
+  { type: 'Phí hỗ trợ mở khóa khẩn cấp', amount: '780.000 ₫', trigger: 'Mở khóa thủ công ngoài giờ hành chính tại cơ sở', applies: 'Mỗi lần yêu cầu' },
+  { type: 'Phí khử trùng nấm mốc & xử lý mùi', amount: '1.500.000 ₫', trigger: 'Khách để hàng bị mốc ẩm bốc mùi hoặc làm ố bẩn kho khi trả (lỗi từ khách hàng)', applies: 'Khấu trừ từ tiền cọc' },
+  { type: 'Phí phạt vi phạm hàng cấm / hàng ẩm ướt', amount: '2.000.000 ₫', trigger: 'Mang đồ còn ướt hoặc hàng cấm vào kho gây ô nhiễm, nấm mốc', applies: 'Xử phạt vi phạm quy định' }
 ]
 
 // Policy fixture retained for verification tests; the Admin settings screen reads the API.
