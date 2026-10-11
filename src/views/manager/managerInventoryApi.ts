@@ -25,7 +25,6 @@ export interface InventoryFilters {
   type: string
   floor: string
   zone: string
-  maintenance: string
   sort: string
 }
 export const emptyInventoryFilters: InventoryFilters = {
@@ -34,7 +33,6 @@ export const emptyInventoryFilters: InventoryFilters = {
   type: "all",
   floor: "all",
   zone: "all",
-  maintenance: "all",
   sort: "attention",
 }
 const statuses: UnitStatus[] = [
@@ -111,8 +109,6 @@ export function filterInventory(units: InventoryUnit[], f: InventoryFilters) {
       (f.type === "all" || u.unitTypeId === f.type) &&
       (f.floor === "all" || u.floor === f.floor) &&
       (f.zone === "all" || u.zone === f.zone) &&
-      (f.maintenance === "all" ||
-        (u.status === "maintenance") === (f.maintenance === "maintenance")) &&
       matchesManagerSearch(f.query, [
         u.code,
         u.definition.name,

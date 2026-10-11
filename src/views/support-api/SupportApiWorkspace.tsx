@@ -24,6 +24,7 @@ import {
   supportInputClass,
   supportStatusLabels,
   supportTicketVisible,
+  supportAssigneeLabel,
 } from "./presentation"
 
 export default function SupportApiWorkspace({
@@ -231,6 +232,17 @@ function SupportSession({
             >
               Tải lại
             </Button>)}
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={locked}
+              onClick={() => {
+                setSearch("")
+                setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
+              }}
+            >
+              Xóa bộ lọc
+            </Button>
           </div>
           {role !== "manager" && <label className="block text-sm">
             Số yêu cầu / trang
@@ -247,16 +259,6 @@ function SupportSession({
               ))}
             </select>
           </label>}
-          <Button
-            variant="ghost"
-            disabled={locked}
-            onClick={() => {
-              setSearch("")
-              setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
-            }}
-          >
-            Xóa bộ lọc
-          </Button>
         </form>
         {role === "manager" &&
           query.facilityId &&
@@ -316,7 +318,7 @@ function SupportSession({
                       "Chưa có thông tin"}
                   </p>
                   <p className="break-all text-sm">
-                    Nhân viên phụ trách: {role === "customer" ? (t.assignedStaffId ? "Đã phân công" : "Chưa phân công") : (t.assignedStaffId ?? "Chưa phân công")}
+                    Nhân viên phụ trách: {supportAssigneeLabel(t, role)}
                   </p>
                   <p className="text-sm">Tạo lúc: {rentalDate(t.createdAt)}</p>
                   <Button
