@@ -41,7 +41,7 @@ import {
 const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
   ["identityVerified", "Đã đối chiếu giấy tờ tùy thân"],
 
-  ["reservationMatched", "Đơn đặt kho, cơ sở và gian kho trùng khớp"],
+  ["reservationMatched", "Đơn đặt giữ kho, cơ sở và gian kho trùng khớp"],
 
   ["contractVerified", "Hợp đồng đã được ký và kiểm tra"],
 
@@ -49,7 +49,7 @@ const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
 
   ["measurementVerified", "Đã đo và đối chiếu hàng hóa thực tế"],
 
-  ["unitWalkthrough", "Đã kiểm tra trực tiếp gian kho với khách"],
+  ["unitWalkthrough", "Đã kiểm tra trực tiếp gian kho với khách hàng"],
 
   ["conditionRecorded", "Đã ghi nhận hiện trạng ban đầu"],
 
@@ -390,7 +390,7 @@ export default function StaffCheckInOperationsPanel({
       setContractFile(null)
 
       showToast(
-        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}; đang chờ khách xác nhận nhận kho.`,
+        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Đang chờ khách hàng xác nhận nhận kho.`,
       )
 
       setHandoverTarget(null)
@@ -541,12 +541,12 @@ export default function StaffCheckInOperationsPanel({
     setSubmitting(true)
     try {
       const scheduled = await scheduleCheckIn(item.reservationId, {
-        // Backend pins this to reservation.appointmentAt; the value here is
+        // Backend pins this to reservation.appointmentAt. The value here is
         // only used for legacy reservations that predate the customer field.
         scheduledAt: appointmentAt,
         contractVerified: true,
         paymentVerified: true,
-        note: "Lịch hẹn do khách hàng đặt; xác nhận tại quầy khi khách đến.",
+        note: "Lịch hẹn do khách hàng đặt. Xác nhận tại quầy khi khách đến.",
       })
       openHandover(scheduled)
     } catch (reason) {
@@ -636,7 +636,7 @@ export default function StaffCheckInOperationsPanel({
         <Table>
           <Thead>
             <Tr>
-              <Th>Đơn đặt kho</Th>
+              <Th>Đơn đặt giữ kho</Th>
               <Th>Khách hàng</Th>
               <Th>Gian kho</Th>
               <Th>Lịch nhận</Th>
@@ -667,7 +667,7 @@ export default function StaffCheckInOperationsPanel({
                 </Td>
                 <Td>
                   <span>{formatStaffDateTime(item.appointmentAt || item.scheduledAt)}</span>
-                  <p className="mt-1 text-[11px] text-stone-500">Lịch khách đặt · Có thể bàn giao sớm</p>
+                  <p className="mt-1 text-[11px] text-stone-500">Lịch do khách hàng đặt. Có thể bàn giao sớm.</p>
                 </Td>
                 <Td>
                   <Badge
@@ -797,7 +797,7 @@ export default function StaffCheckInOperationsPanel({
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
               Lịch nhận kho do khách hàng đặt: <b>{formatStaffDateTime(handoverTarget.appointmentAt || handoverTarget.scheduledAt)}</b>.
-              Nhân viên không thể đổi lịch; nếu khách đến sớm, vẫn có thể đối chiếu và bàn giao ngay.
+              Nhân viên không thể thay đổi lịch. Nếu khách đến sớm, nhân viên vẫn có thể đối chiếu và bàn giao ngay.
             </div>
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
               Khai báo của khách:{" "}
@@ -896,22 +896,22 @@ export default function StaffCheckInOperationsPanel({
                 onChange={(event) => setContractFile(event.target.files?.[0] || null)}
               />
               <span className="mt-1 block text-xs font-normal text-stone-500">
-                Tải lên bản PDF/ảnh hợp đồng đã ký để khách hàng xem lại sau khi bàn giao.
+              Tải lên bản PDF hoặc ảnh hợp đồng đã ký để khách hàng xem lại sau khi bàn giao.
                 {contractFile ? ` Đã chọn: ${contractFile.name}` : " Chưa chọn tệp."}
               </span>
             </label>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
               <p className="font-semibold text-amber-950">Cấp quyền truy cập cho khách hàng</p>
-              <p className="text-xs text-amber-900">Staff cấp PIN, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận <code>issuedAt</code>; không lưu PIN thô.</p>
+              <p className="text-xs text-amber-900">Nhân viên cấp PIN, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận <code>issuedAt</code>. PIN thô không được lưu.</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Select label="Loại credential" value={credentialType} onChange={event => setCredentialType(event.target.value as AccessCredentialType)}>
-                  <option value="PIN">Mã PIN / access code</option>
+                <Select label="Loại quyền truy cập" value={credentialType} onChange={event => setCredentialType(event.target.value as AccessCredentialType)}>
+                  <option value="PIN">Mã PIN / mã truy cập</option>
                   <option value="CARD">Thẻ ra vào</option>
                   <option value="KEY">Chìa khóa</option>
                   <option value="LOCK">Khóa / ổ khóa</option>
                 </Select>
                 <Input label="Mã tham chiếu / số seri" value={credentialReference} onChange={event => setCredentialReference(event.target.value)} placeholder="Ví dụ: PIN-2048 hoặc CARD-018" />
-                {credentialType === "PIN" && <Input label="PIN (tuỳ chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
+                {credentialType === "PIN" && <Input label="PIN (tùy chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
               </div>
             </div>
             <label className="block text-sm font-medium text-stone-700">
@@ -931,12 +931,12 @@ export default function StaffCheckInOperationsPanel({
                   : evidenceReferences.length
                     ? `${evidenceReferences.length} tệp đã tải lên`
                     : contractFile
-                      ? "Đã chọn hợp đồng; có thể thêm ảnh hiện trạng nếu cần."
-                      : "Hợp đồng là bắt buộc; có thể thêm ảnh hiện trạng."}
+                    ? "Đã chọn hợp đồng. Bạn có thể thêm ảnh hiện trạng nếu cần."
+                    : "Hợp đồng là bắt buộc. Bạn có thể thêm ảnh hiện trạng nếu cần."}
               </span>
             </label>
             <Input
-              label="Vật dụng/quyền truy cập đã bàn giao"
+              label="Vật dụng hoặc quyền truy cập đã bàn giao"
               value={handedOverItems}
               onChange={(event) => setHandedOverItems(event.target.value)}
             />
@@ -965,9 +965,10 @@ export default function StaffCheckInOperationsPanel({
               onChange={(event) => setHandoverNotes(event.target.value)}
             />
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-              Sau khi hoàn tất, đơn đặt kho sẽ chuyển sang chờ khách hàng xác
-              nhận; lệnh phân kho và gian kho sẽ được ghi nhận đã bàn giao. Hợp
-              đồng thuê chỉ được tạo sau khi khách hàng xác nhận nhận kho.
+              Sau khi hoàn tất, đơn đặt giữ kho sẽ chuyển sang trạng thái chờ
+              khách hàng xác nhận. Lệnh phân kho và gian kho sẽ được ghi nhận
+              đã bàn giao. Hợp đồng thuê chỉ được tạo sau khi khách hàng xác
+              nhận nhận kho.
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setHandoverTarget(null)}>
@@ -1079,7 +1080,7 @@ export default function StaffCheckInOperationsPanel({
             </label>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
               Từ chối sẽ kết thúc lệnh phân kho hiện hành. Chọn bảo trì nếu gian
-              kho cần kiểm tra, vệ sinh hoặc sửa chữa; hệ thống sẽ không trả
+              kho cần kiểm tra, vệ sinh hoặc sửa chữa. Hệ thống sẽ không trả
               gian kho về trạng thái sẵn sàng.
             </div>
             <div className="flex justify-end gap-2">
