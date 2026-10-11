@@ -214,7 +214,7 @@ function page<T>(
     return invalid()
   return value as unknown as SupportPage<T>
 }
-function queryString(query: SupportQuery, manager = false, timeline = false) {
+function queryString(query: SupportQuery, manager = false, timeline = false, customerList = false) {
   const allowed = timeline
     ? ["page", "size"]
     : [
@@ -223,6 +223,7 @@ function queryString(query: SupportQuery, manager = false, timeline = false) {
         "status",
         "search",
         "sort",
+        ...(customerList ? ["facilityId"] : []),
         ...(manager ? ["facilityId", "staffId"] : []),
       ]
   strictKeys(query, allowed)
@@ -265,7 +266,7 @@ export async function listSupportTickets(
 ) {
   return page<SupportTicket>(
     await apiRequest(
-      `${rolePath(role)}${queryString(query, role === "manager")}`,
+      `${rolePath(role)}${queryString(query, role === "manager", false, role === "customer")}`,
     ),
     isSupportTicket,
     query.page ?? 0,
