@@ -96,7 +96,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải phiếu xác nhận giữ kho.') }
   }
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
-  return <Card className={`p-6 border-l-4 ${inactive ? 'border-l-stone-300 text-stone-500' : 'border-l-amber-500'}`}>
+  return <Card id={`customer-reservation-${r.id}`} tabIndex={-1} className={`p-6 border-l-4 ${inactive ? 'border-l-stone-300 text-stone-500' : 'border-l-amber-500'}`}>
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
