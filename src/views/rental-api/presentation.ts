@@ -57,8 +57,38 @@ export function rentalError(error: unknown) {
       return "Bạn không có quyền hoặc phạm vi cơ sở để thực hiện thao tác này."
     if (error.status === 404)
       return "Không tìm thấy hồ sơ hoặc hồ sơ không thuộc phạm vi truy cập."
+    const renewalErrors: Array<[string, string]> = [
+      ["Eligibility UNKNOWN", "Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau; nếu vẫn gặp lỗi, liên hệ quản lý cơ sở."],
+      ["Eligibility/cutoff missing", "Chưa có dữ liệu xác định hạn xử lý gia hạn. Vui lòng tải lại sau."],
+      ["Unverified date provenance/cutoff", "Ngày hết hạn hoặc mốc xử lý của hồ sơ chưa được xác minh. Vui lòng liên hệ quản lý cơ sở để kiểm tra hồ sơ."],
+      ["BO renewal policy missing", "Cơ sở chưa công bố chính sách gia hạn đang có hiệu lực. Vui lòng liên hệ quản lý cơ sở."],
+      ["Incomplete BO policy", "Chính sách gia hạn của cơ sở còn thiếu thông tin bắt buộc. Vui lòng liên hệ quản lý cơ sở."],
+      ["Rental date provenance unknown", "Chưa xác minh được ngày thuê của hồ sơ nên chưa thể tính kỳ gia hạn. Vui lòng liên hệ quản lý cơ sở."],
+      ["Renewal window not open", "Hồ sơ chưa đến thời hạn được yêu cầu gia hạn. Vui lòng thử lại gần ngày hết hạn."],
+      ["Recovery/cutoff conflict", "Hồ sơ đã đến mốc xử lý quá hạn hoặc đang được chuyển xử lý. Không thể tiếp tục gia hạn."],
+      ["Authoritative renewal pricing/rounding source missing", "Chưa lấy được bảng giá gia hạn chính thức của cơ sở. Vui lòng tải lại sau."],
+      ["Renewal pricing UNKNOWN", "Chưa có giá gói gia hạn đã được xác minh cho gian kho này. Vui lòng liên hệ quản lý cơ sở."],
+      ["Pricing mapping/rounding incomplete or ambiguous", "Thông tin giá hoặc cách tính tiền của gói gia hạn chưa đầy đủ. Vui lòng liên hệ quản lý cơ sở."],
+      ["Incomplete pricing", "Dữ liệu giá gói gia hạn chưa đầy đủ. Vui lòng tải lại sau hoặc liên hệ quản lý cơ sở."],
+      ["Package not eligible for Renewal", "Gói đã chọn không áp dụng cho gian kho hoặc chính sách gia hạn hiện tại. Hãy chọn gói khác."],
+      ["Rental already has an open or unresolved legacy renewal", "Hồ sơ này đã có yêu cầu gia hạn đang xử lý. Mở danh sách yêu cầu để xem trạng thái hiện tại."],
+      ["Move-out/non-active or incomplete rental blocks renewal", "Hồ sơ thuê không còn hiệu lực hoặc đang trong quy trình trả kho nên không thể gia hạn."],
+      ["Rental unit type missing", "Hồ sơ chưa xác định được loại gian kho để tính giá gia hạn. Vui lòng liên hệ quản lý cơ sở."],
+      ["Due obligations or dispute block approval", "Còn khoản phải thanh toán hoặc vấn đề tài chính chưa được giải quyết. Vui lòng kiểm tra công nợ với cơ sở."],
+      ["Financial state UNKNOWN", "Chưa xác minh được tình trạng thanh toán của hồ sơ. Vui lòng tải lại sau."],
+      ["Financial state incomplete", "Dữ liệu thanh toán của hồ sơ chưa đầy đủ để xét gia hạn. Vui lòng liên hệ quản lý cơ sở."],
+      ["Consistent financial source missing", "Chưa kết nối được nguồn đối soát thanh toán của cơ sở. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
+      ["Atomic shared extension hold unavailable", "Hệ thống chưa thể giữ gian kho an toàn cho yêu cầu này. Chưa có thay đổi nào được xác nhận; vui lòng thử lại sau."],
+      ["Approval expiry/payment/hold lifecycle unavailable", "Hệ thống chưa sẵn sàng theo dõi thời hạn duyệt và giữ gian kho. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
+      ["Terms changed: new quote and Customer confirmation required", "Điều khoản hoặc giá đã thay đổi. Hãy lấy báo giá mới và xác nhận lại trước khi gửi."],
+      ["Rental allocation/end changed; requote required", "Gian kho hoặc ngày hết hạn đã thay đổi. Hãy tải lại hồ sơ và lấy báo giá mới."],
+      ["Accepted Renewal terms do not match persisted request", "Điều khoản được xác nhận không còn khớp với yêu cầu đã lưu. Hãy tải lại yêu cầu và xác nhận báo giá mới."],
+      ["Shared renewal amount exceeds supported precision", "Số tiền gia hạn không hợp lệ theo quy tắc làm tròn hiện tại. Vui lòng liên hệ quản lý cơ sở."],
+    ]
+    const specific = renewalErrors.find(([sourceText]) => error.message.includes(sourceText))
+    if (specific) return specific[1]
     if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))
-      return "Chưa đủ dữ liệu hoặc chính sách để tiếp tục xử lý."
+      return "Một nguồn dữ liệu cần thiết cho gia hạn hiện chưa sẵn sàng. Yêu cầu chưa được xử lý; vui lòng thử lại sau hoặc liên hệ quản lý cơ sở nếu lỗi tiếp diễn."
     if (error.status === 409)
       return "Hồ sơ đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng mở lại hồ sơ, nếu điều khoản thay đổi hãy xác nhận báo giá mới."
     if (error.status === null || error.status >= 500)

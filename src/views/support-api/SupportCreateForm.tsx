@@ -15,7 +15,7 @@ import type { SupportCreate, SupportTicket } from "../../types/supportApi"
 import ApiPager from "../rental-api/ApiPager"
 import SupportReadState from "./SupportReadState"
 import { supportInputClass } from "./presentation"
-import { EvidenceUpload } from "../duong-integration/EvidenceControls"
+import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
 
 type Source = "facility" | "rental" | "reservation" | "unit" | "payment"
 type Choice = {
@@ -38,7 +38,7 @@ async function loadChoices(
         )
         .map((f) => ({
           id: f.id,
-          label: `${f.name} · ${f.code}`,
+          label: `${f.name}, ${f.code}`,
           facilityId: f.id,
         })),
       pagination: {
@@ -57,7 +57,7 @@ async function loadChoices(
         .filter((r) => !parent || r.facilityId === parent.facilityId)
         .map((r) => ({
           id: r.id,
-          label: `${r.reservationCode} · ${r.id}`,
+          label: `${r.reservationCode}, ${r.id}`,
           facilityId: r.facilityId,
         })),
       pagination: {
@@ -76,7 +76,7 @@ async function loadChoices(
       .filter((r) => !parent || r.facility.id === parent.facilityId)
       .map((r) => ({
         id: source === "unit" ? r.storageUnit.id : r.id,
-        label: `${r.storageUnit.code} · ${r.id}`,
+        label: `${r.storageUnit.code}, ${r.id}`,
         facilityId: r.facility.id,
       })),
   }

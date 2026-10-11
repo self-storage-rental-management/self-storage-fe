@@ -29,16 +29,18 @@ describe('customer reservation layout regression', () => {
 
   it('renders a receipt only for a recorded PAID payment', () => {
     const payment: ReservationPaymentResult = { paymentId: 'transaction-1', reservationId: base.id,
-    amount: 6402000, currency: 'VND', outcome: 'SUCCESS', paymentStatus: 'PAID',
-      reservationStatus: 'CONFIRMED', message: '', processedAt: '2026-11-01T09:55:00Z' }
+      transactionReference: 'SH-REFERENCE', gatewayTransactionNo: '12345678', amount: 6402000,
+      currency: 'VND', refundedAmount: 0, paymentStatus: 'PAID', reservationStatus: 'CONFIRMED',
+      responseCode: '00', transactionStatus: '00', gatewayPayDate: '20261101165500', message: '',
+      processedAt: '2026-11-01T09:55:00Z', lastReconciledAt: null }
     const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode={base.reservationCode} />)
-    for (const text of ['Biên lai cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Ngày giờ ghi nhận', 'Đã thanh toán']) expect(html).toContain(text)
+    for (const text of ['Biên lai cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
     expect(html).toContain('6.402.000 ₫')
     expect(html).not.toContain('166.452.000.000')
-    for (const outcome of ['FAILED', 'NOT_RECEIVED'] as const) {
-      const failedHtml = renderToStaticMarkup(<ReservationReceipt payment={{ ...payment, outcome, paymentStatus: outcome }} reservationCode={base.reservationCode} />)
+    for (const paymentStatus of ['FAILED', 'NOT_RECEIVED'] as const) {
+      const failedHtml = renderToStaticMarkup(<ReservationReceipt payment={{ ...payment, paymentStatus }} reservationCode={base.reservationCode} />)
       expect(failedHtml).toContain('chưa có biên lai thanh toán')
-      expect(failedHtml).not.toContain('Đã thanh toán')
+      expect(failedHtml).not.toContain('Đơn đã xác nhận cọc')
     }
   })
 

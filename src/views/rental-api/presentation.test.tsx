@@ -31,12 +31,13 @@ describe("Rental/Renewal business presentation", () => {
     expect(html).toContain("1.234 đ")
     expect(html).toContain("234 đ")
     expect(html).not.toContain("Chưa xác minh cọc bảo đảm")
-    expect(html).toMatch(/Cọc hồ sơ thuê<\/dt><dd>Chưa có dữ liệu xác thực/)
+    expect(html).not.toContain("Cọc hồ sơ thuê")
+    expect(html).toContain("Theo dõi quá hạn")
     expect(html).toContain(unknown)
   })
   it("renders authoritative prepaid financial details without inventing a recurring due date", () => {
     const html=renderToStaticMarkup(<RentalDetail rental={{...rental, financialSummary:{...rental.financialSummary, completeness:"COMPLETE", outstandingAmount:0, overdueAmount:0, securityDepositAmount:1234567, billingMode:"PREPAID_FULL_PERIOD"}}} />)
-    expect(html).toContain("1.234.567 đ")
+    expect(html).not.toContain("1.234.567 đ")
     expect(html).toContain("Trả trước toàn kỳ, không có kỳ thu tiền định kỳ")
     expect(html).not.toContain("API D1 chưa cung cấp")
   })
@@ -86,7 +87,8 @@ describe("Rental/Renewal business presentation", () => {
   it("uses nested UnitType and hides legal/database/PIN fiction", () => {
     const html = renderToStaticMarkup(<RentalDetail rental={rental} />)
     expect(html).toContain("Small Storage")
-    expect(html).toContain("5.500.000 đ")
+    expect(html).not.toContain("Đơn giá áp dụng / tháng")
+    expect(html).not.toContain("5.500.000 đ")
     expect(html).toContain(unknown)
     expect(html).not.toContain("143.000.000.000")
     expect(html).not.toContain("9004#")
@@ -177,7 +179,39 @@ describe("Rental/Renewal business presentation", () => {
       rentalError(
         new ApiClientError("DEFERRED_SOURCE: policy", { status: 409 }),
       ),
-    ).toContain("Chưa đủ dữ liệu hoặc chính sách")
+    ).toContain("nguồn dữ liệu cần thiết cho gia hạn")
+  })
+  it("explains the renewal eligibility source blocker without exposing backend wording", () => {
+    expect(
+      rentalError(
+        new ApiClientError("DEFERRED_SOURCE: Eligibility UNKNOWN", { status: 409 }),
+      ),
+    ).toBe("Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau; nếu vẫn gặp lỗi, liên hệ quản lý cơ sở.")
+  })
+  it("explains when the rental is outside the renewal request window", () => {
+    expect(
+      rentalError(new ApiClientError("Renewal window not open", { status: 409 })),
+    ).toBe("Hồ sơ chưa đến thời hạn được yêu cầu gia hạn. Vui lòng thử lại gần ngày hết hạn.")
+  })
+  it.each([
+    ["DEFERRED_SOURCE: BO renewal policy missing", "Cơ sở chưa công bố chính sách gia hạn đang có hiệu lực."],
+    ["DEFERRED_SOURCE: Rental date provenance unknown", "Chưa xác minh được ngày thuê của hồ sơ"],
+    ["DEFERRED_SOURCE: Renewal pricing UNKNOWN", "Chưa có giá gói gia hạn đã được xác minh"],
+    ["Recovery/cutoff conflict", "đã đến mốc xử lý quá hạn"],
+    ["Due obligations or dispute block approval", "Còn khoản phải thanh toán"],
+    ["Atomic shared extension hold unavailable", "chưa thể giữ gian kho an toàn"],
+    ["Terms changed: new quote and Customer confirmation required", "Điều khoản hoặc giá đã thay đổi"],
+  ])("shows a specific safe message for renewal error %s", (source, expected) => {
+    expect(rentalError(new ApiClientError(source, { status: 409 }))).toContain(expected)
+    expect(rentalError(new ApiClientError(source, { status: 409 }))).not.toContain(source)
+  })
+  it("does not expose unknown deferred backend diagnostics", () => {
+    const message = rentalError(
+      new ApiClientError("DEFERRED_SOURCE: internal_table secret_column", { status: 409 }),
+    )
+    expect(message).toContain("nguồn dữ liệu cần thiết")
+    expect(message).not.toContain("internal_table")
+    expect(message).not.toContain("secret_column")
   })
   it("retry uses same key, refuses changed payload until outcome is resolved", () => {
     const attempt = new RenewalAttempt()

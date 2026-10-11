@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import { ApiClientError } from "../../services/apiClient"
 import {
   getRentalLedger,
   integrationError,
@@ -16,15 +17,21 @@ const kinds = {
   RENEWAL_DEPOSIT: "Cọc gia hạn",
   RENEWAL_REMAINDER: "Tiền thuê gia hạn còn lại",
 }
+export function ledgerReadError(error: unknown): string {
+  if (error instanceof ApiClientError && [401, 403, 404, 409].includes(error.status ?? 0))
+    return integrationError(error)
+  return "Không tải được dữ liệu tài chính. Vui lòng thử lại."
+}
 export function LedgerContent({ data }: { data: LedgerView }) {
   if (data.completeness === "UNKNOWN")
-    return <p role="status">Không có dữ liệu</p>
+    return <div><p role="status">Không có dữ liệu</p><CoverageDetails data={data} /></div>
   return (
     <div className="space-y-3 text-sm">
       <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
         Dữ liệu tài chính chưa được xác minh đầy đủ. Các khoản dưới đây không
         xác nhận toàn bộ công nợ.
       </p>
+      <CoverageDetails data={data} />
       <h4 className="font-semibold">Các khoản phải thanh toán đã ghi nhận</h4>
       {!data.obligations?.length ? (
         <p>Không có dữ liệu</p>
@@ -33,7 +40,7 @@ export function LedgerContent({ data }: { data: LedgerView }) {
           <div key={o.id} className="rounded border p-3">
             <p>{kinds[o.kind]}</p>
             <p>
-              Số tiền: {rentalMoney(o.amount, "VND")} · Còn phải trả:{" "}
+              Số tiền: {rentalMoney(o.amount, "VND")}, Còn phải trả:{" "}
               {rentalMoney(o.outstanding, "VND")}
             </p>
             <p>Hạn thanh toán: {rentalDate(o.dueAt)}</p>
@@ -54,7 +61,7 @@ export function LedgerContent({ data }: { data: LedgerView }) {
                   : "Thanh toán thử nghiệm - không thu tiền thật"}
             </p>
             <p>
-              {rentalMoney(p.amount, "VND")} · {rentalDate(p.receivedAt)}
+              {rentalMoney(p.amount, "VND")}, {rentalDate(p.receivedAt)}
             </p>
           </div>
         ))
@@ -65,7 +72,7 @@ export function LedgerContent({ data }: { data: LedgerView }) {
       ) : (
         data.refunds.map((f) => (
           <p key={f.id}>
-            {rentalMoney(f.amount, "VND")} ·{" "}
+            {rentalMoney(f.amount, "VND")},{" "}
             {f.status === "RESERVED"
               ? "Đã dành tiền để hoàn, chưa chuyển tiền"
               : "Đã ghi nhận chi hoàn tiền"}
@@ -74,6 +81,25 @@ export function LedgerContent({ data }: { data: LedgerView }) {
       )}
     </div>
   )
+}
+function CoverageDetails({ data }: { data: LedgerView }) {
+  const inventory = data.coverageInventory
+  if (!inventory) return null
+  const labels = [...new Set(inventory.gaps.map(gap => {
+    if (gap.startsWith("INITIAL_OBLIGATION")) return "Nghĩa vụ tiền thuê hoặc cọc chưa được đối soát."
+    if (gap.startsWith("BOOKING_SNAPSHOT") || gap === "BOOKING_SOURCE_MISSING") return "Thông tin giá đã chấp nhận chưa được xác minh đầy đủ."
+    if (gap.includes("REFUND")) return "Chưa xác minh hoàn tiền đã được chuyển."
+    if (gap === "PAYMENT_DISPUTED") return "Có giao dịch đang được khiếu nại."
+    if (gap.includes("PAYMENT") || gap.includes("RECEIPT")) return "Chứng cứ thu tiền chưa được đối soát đầy đủ."
+    if (gap.includes("SECURITY_DEPOSIT")) return "Chưa xác minh số tiền cọc đang được giữ."
+    if (gap.includes("RENEWAL")) return "Nghĩa vụ gia hạn chưa được xác minh đầy đủ."
+    return "Dữ liệu tài chính lịch sử chưa được xác minh đầy đủ."
+  }))]
+  return <section aria-label="Dữ liệu cần đối soát" className="rounded border border-amber-200 p-3">
+    <p className="font-semibold">Dữ liệu cần đối soát</p>
+    <ul className="list-disc pl-5">{labels.map(label => <li key={label}>{label}</li>)}</ul>
+    <p>Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.</p>
+  </section>
 }
 function LedgerRead({ role, id }: {
   role: LedgerRole
@@ -87,7 +113,7 @@ function LedgerRead({ role, id }: {
   return (
     <div>
       {read.loading && <p role="status">Đang tải dữ liệu...</p>}
-      {!!read.error && <p role="alert">{integrationError(read.error)}</p>}
+      {!!read.error && <p role="alert">{ledgerReadError(read.error)}</p>}
       {read.data && <LedgerContent data={read.data} />}
     </div>
   )
