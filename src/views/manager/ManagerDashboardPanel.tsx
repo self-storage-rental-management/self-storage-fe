@@ -304,7 +304,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         date: item.scheduledDate,
         time: item.scheduledTime,
         title: "Nhận kho",
-        detail: `${item.customerName} · Gian ${item.unitId}${item.staffName ? ` · ${item.staffName}` : ""}`,
+        detail: `${item.customerName}, Gian ${item.unitId}${item.staffName ? `, ${item.staffName}` : ""}`,
         status: item.status,
         page: "moves",
         variant: "info",
@@ -318,7 +318,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         id: `tra-kho-${item.id}`,
         date: item.scheduledDate,
         title: "Trả kho",
-        detail: `${item.customerName} · Gian ${item.unitId}${item.staffId ? ` · nhân viên ${item.staffId}` : ""}`,
+        detail: `${item.customerName}, Gian ${item.unitId}${item.staffId ? `, nhân viên ${item.staffId}` : ""}`,
         status: item.status,
         page: "moves",
         variant: item.status === "disputed" ? "error" : "warning",
@@ -330,7 +330,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         id: `nhiem-vu-${item.id}`,
         date: item.dueAt,
         title: "Nhiệm vụ cơ sở",
-        detail: `Hạn hoàn thành · ${item.assignedStaffName || "Chưa phân công"}`,
+        detail: `Hạn hoàn thành, ${item.assignedStaffName || "Chưa phân công"}`,
         status: item.status,
         page: "staff-tasks",
         variant:
@@ -352,7 +352,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         date: item.appointmentDate || "",
         time: item.appointmentTime,
         title: "Ký gia hạn",
-        detail: `${item.customerName} · Gian ${item.unitId}`,
+        detail: `${item.customerName}, Gian ${item.unitId}`,
         status: item.status,
         page: "rentals",
         variant: "info",
@@ -768,7 +768,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
                     {managerActivityLabel(activity.action, "vi")}
                   </Td>
                   <Td>
-                    {managerEntityLabel(activity.entityType, "vi")} ·{" "}
+                    {managerEntityLabel(activity.entityType, "vi")},{" "}
                     <span className="font-mono text-xs">
                       {activity.entityId}
                     </span>

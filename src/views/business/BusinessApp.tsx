@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
-import DuongPolicyWorkspace from "../duong-integration/DuongPolicyWorkspace"
+import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
 
 import {
   XAxis,

@@ -323,11 +323,13 @@ export default function Layout({
         </div>
 
         {/* Role badge */}
-        <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-          <span className="inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold bg-[#3a3933] text-[#f3c675] border border-[#4b4940]">
-            {getTranslatedRole()}
-          </span>
-        </div>
+        {user.role !== 'manager' && (
+          <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+            <span className="inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold bg-[#3a3933] text-[#f3c675] border border-[#4b4940]">
+              {getTranslatedRole()}
+            </span>
+          </div>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 overflow-y-auto" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
