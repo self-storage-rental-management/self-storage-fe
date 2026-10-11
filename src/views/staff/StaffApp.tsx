@@ -37,7 +37,6 @@ import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
-import ReturnApiPanel from '../return-api/ReturnApiPanel'
 
 import type { User } from "../../types"
 
@@ -3087,8 +3086,7 @@ export default function StaffApp({
       )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
-      {page === "return" && isApiAuthenticated() && <ReturnApiPanel role="staff" />}
-      {page === "return" && !isApiAuthenticated() && (
+      {page === "return" && (
         <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
