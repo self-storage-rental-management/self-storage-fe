@@ -260,11 +260,6 @@ export function InventoryContent({
             ["all", "Tất cả khu vực"],
             ...zones.map((z) => [z, z] as [string, string]),
           ])}
-          {filter("Trạng thái bảo trì", "maintenance", [
-            ["all", "Tất cả gian kho"],
-            ["maintenance", "Kho đang bảo trì"],
-            ["none", "Kho không bảo trì"],
-          ])}
           {filter("Sắp xếp", "sort", [
             ["attention", "Cần chú ý trước"],
             ["code", "Sắp xếp theo mã gian"],

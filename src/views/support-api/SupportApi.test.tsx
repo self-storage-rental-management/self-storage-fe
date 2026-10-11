@@ -40,6 +40,22 @@ beforeEach(() => {
 })
 
 describe("D5 role and lifecycle boundaries", () => {
+  it("shows the authoritative assignee name to Manager and Staff while Customer remains generic", () => {
+    const ticket = { ...supportActive, assignedStaffName: "Nhân viên kiểm thử" }
+    for (const role of ["manager", "staff"] as const) {
+      const html = renderToStaticMarkup(<SupportTicketSummary ticket={ticket} role={role} />)
+      expect(html).toContain("Nhân viên kiểm thử")
+      expect(html).not.toContain(supportIds.staff)
+    }
+    const customer = renderToStaticMarkup(<SupportTicketSummary ticket={ticket} role="customer" />)
+    expect(customer).toContain("Đã phân công")
+    expect(customer).not.toContain("Nhân viên kiểm thử")
+  })
+  it("does not present a missing assignee name as unassigned or as a raw UUID", () => {
+    const html = renderToStaticMarkup(<SupportTicketSummary ticket={supportActive} role="manager" />)
+    expect(html).toContain("Đã phân công (chưa có tên nhân viên)")
+    expect(html).not.toContain(supportIds.staff)
+  })
   it("does not promise auto-close from resolved timestamp or invent a delivery deadline", () => {
     const html = renderToStaticMarkup(<SupportTicketSummary ticket={{
       ...supportActive, status: "resolved", resolvedAt: "2026-10-08T03:00:00Z",
