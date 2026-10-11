@@ -870,7 +870,7 @@ setSavingProfile(true)
           <Card className="p-6 xl:col-span-2">
             <SectionTitle title={`Kho đang thuê (${visibleRentals.length})`} description="Các hợp đồng còn hiệu lực thuộc tài khoản của bạn." />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {apiMode && visibleRentals.map(rental => (
+              {apiMode && apiRentals.filter(rental => ['active', 'return_requested'].includes(rental.status)).map(rental => (
                 <div key={rental.id} className="rounded-xl border border-stone-200 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-semibold text-stone-900">{rental.storageUnitCode}</p>

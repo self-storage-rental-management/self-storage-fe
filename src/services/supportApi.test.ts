@@ -99,6 +99,13 @@ describe("D5 transport and response boundaries", () => {
     expect(url.searchParams.get("facilityId")).toBe(ids.facility)
     expect(url.searchParams.get("staffId")).toBe(ids.staff)
   })
+  it("passes Customer facility filter while keeping staff filters unavailable", async () => {
+    const fetch = respond(supportPage([]))
+    await listSupportTickets("customer", { facilityId: ids.facility })
+    const url = new URL(fetch.mock.calls[0][0])
+    expect(url.searchParams.get("facilityId")).toBe(ids.facility)
+    expect(url.pathname).toBe("/api/customer/support-workflows")
+  })
   it.each([
     { version: null },
     { assignmentRevision: -1 },

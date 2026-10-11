@@ -44,6 +44,37 @@ export default function CustomerRenewalRequestModal({
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
+  useEffect(() => {
+    let current = true
+    if (!code) {
+      setQuoteBusy(false)
+      return () => {
+        current = false
+      }
+    }
+
+    setQuote(undefined)
+    setQuoteError(undefined)
+    setConfirmed(false)
+    setQuoteBusy(true)
+    void quoteRenewal(rentalId, code)
+      .then((nextQuote) => {
+        if (current) {
+          setQuote(nextQuote)
+          setNow(Date.now())
+        }
+      })
+      .catch((error) => {
+        if (current) setQuoteError(error)
+      })
+      .finally(() => {
+        if (current) setQuoteBusy(false)
+      })
+
+    return () => {
+      current = false
+    }
+  }, [code, rentalId])
   const expired = quote ? now >= Date.parse(quote.expiresAt) : false
   const locked = command.busy || command.uncertain || quoteBusy
   return (
@@ -82,25 +113,7 @@ export default function CustomerRenewalRequestModal({
         {options.data?.length === 0 && (
           <p>Không có dữ liệu</p>
         )}
-        <Button
-          disabled={!code || locked}
-          onClick={async () => {
-            setQuoteBusy(true)
-            setQuoteError(undefined)
-            setQuote(undefined)
-            setConfirmed(false)
-            try {
-              setQuote(await quoteRenewal(rentalId, code))
-            } catch (e) {
-              setQuoteError(e)
-            } finally {
-              setQuoteBusy(false)
-              setNow(Date.now())
-            }
-          }}
-        >
-          {quoteBusy ? "Đang lấy báo giá…" : "Lấy báo giá mới"}
-        </Button>
+        {quoteBusy ? <p role="status">Đang lấy báo giá…</p> : null}
         {quoteError ? <p role="alert">{rentalError(quoteError)}</p> : null}
         {quote && (
           <div className="rounded-lg border p-4 space-y-2">
@@ -131,7 +144,7 @@ export default function CustomerRenewalRequestModal({
             <p>Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}</p>
             {expired && !command.uncertain && (
               <p role="alert" className="text-red-700">
-                Báo giá đã hết hạn, vui lòng lấy báo giá mới.
+                Báo giá đã hết hạn, vui lòng chọn lại gói gia hạn để cập nhật báo giá.
               </p>
             )}
             <label className="flex gap-2">
