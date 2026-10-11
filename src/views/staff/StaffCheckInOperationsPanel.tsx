@@ -89,6 +89,18 @@ function localDateBoundary(date: string, nextDay = false) {
   return boundary.toISOString()
 }
 
+function ComparisonBadge({ matches }: { matches: boolean | null }) {
+  if (matches === null) {
+    return <Badge variant="muted">Chưa đủ dữ liệu</Badge>
+  }
+
+  return (
+    <Badge variant={matches ? "success" : "error"}>
+      {matches ? "Khớp" : "Chênh lệch"}
+    </Badge>
+  )
+}
+
 export default function StaffCheckInOperationsPanel({
   showToast,
 }: {
@@ -244,22 +256,51 @@ export default function StaffCheckInOperationsPanel({
     [checklist],
   )
 
-  const measurementVariance = useMemo(() => {
-    if (!handoverTarget) return false
+  const checkInComparison = useMemo(() => {
+    if (!handoverTarget) return null
 
-    return (
-      hasMaterialVariance(
-        weightKg,
-        handoverTarget.declaredGoodsWeightKg,
-        0.1,
-      ) ||
-      hasMaterialVariance(
-        volumeM3,
-        handoverTarget.declaredGoodsVolumeM3,
-        0.0001,
-      )
-    )
-  }, [handoverTarget, volumeM3, weightKg])
+    const declaredPackageCount = handoverTarget.declaredPackageCount ?? null
+    const actualPackageCount = packageCount.trim()
+      ? Number(packageCount)
+      : Number.NaN
+    const actualWeight = weightKg.trim() ? Number(weightKg) : Number.NaN
+    const actualVolume = volumeM3.trim() ? Number(volumeM3) : Number.NaN
+    const packageCountMatches =
+      declaredPackageCount !== null && Number.isFinite(actualPackageCount)
+        ? actualPackageCount === declaredPackageCount
+        : null
+    const weightMatches = Number.isFinite(actualWeight)
+      ? !hasMaterialVariance(
+          weightKg,
+          handoverTarget.declaredGoodsWeightKg,
+          0.1,
+        )
+      : null
+    const volumeMatches = Number.isFinite(actualVolume)
+      ? !hasMaterialVariance(
+          volumeM3,
+          handoverTarget.declaredGoodsVolumeM3,
+          0.0001,
+        )
+      : null
+
+    return {
+      declaredPackageCount,
+      actualPackageCount,
+      packageCountMatches,
+      declaredWeight: handoverTarget.declaredGoodsWeightKg,
+      actualWeight,
+      weightMatches,
+      declaredVolume: handoverTarget.declaredGoodsVolumeM3,
+      actualVolume,
+      volumeMatches,
+      hasVariance: [packageCountMatches, weightMatches, volumeMatches].some(
+        (matches) => matches === false,
+      ),
+    }
+  }, [handoverTarget, packageCount, volumeM3, weightKg])
+
+  const measurementVariance = checkInComparison?.hasVariance ?? false
 
   const refresh = () => setRefreshKey((value) => value + 1)
 
@@ -519,6 +560,8 @@ export default function StaffCheckInOperationsPanel({
     setWeightKg(String(item.declaredGoodsWeightKg || ""))
 
     setVolumeM3(String(item.declaredGoodsVolumeM3 || ""))
+
+    setPackageCount(String(item.declaredPackageCount ?? 1))
 
     setVarianceAccepted(false)
 
@@ -800,10 +843,15 @@ export default function StaffCheckInOperationsPanel({
               Nhân viên không thể thay đổi lịch. Nếu khách đến sớm, nhân viên vẫn có thể đối chiếu và bàn giao ngay.
             </div>
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
-              Khai báo của khách:{" "}
+              Thông tin khách khai báo:{" "}
+              <b>
+                {handoverTarget.declaredPackageCount == null
+                  ? "Chưa có số kiện"
+                  : `${handoverTarget.declaredPackageCount} kiện`}
+              </b>{" "}·{" "}
               <b>{handoverTarget.declaredGoodsWeightKg} kg</b> ·{" "}
-              <b>{handoverTarget.declaredGoodsVolumeM3} m³</b>. Chênh lệch quá
-              5% phải được xác nhận và ghi rõ lý do.
+              <b>{handoverTarget.declaredGoodsVolumeM3} m³</b>. Nhân viên cần
+              nhập thông tin thực tế để đối chiếu trước khi hoàn tất.
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Input
@@ -849,10 +897,68 @@ export default function StaffCheckInOperationsPanel({
                 onChange={(event) => setPackageCount(event.target.value)}
               />
             </div>
+            {checkInComparison && (
+              <div className="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950">
+                <div>
+                  <b>Đối chiếu khai báo và thực tế</b>
+                  <p className="mt-1 text-xs text-indigo-800">
+                    Kiểm tra số kiện, khối lượng và thể tích trước khi xác nhận
+                    bàn giao. Chênh lệch khối lượng hoặc thể tích trên 5% cần
+                    được nhân viên ghi nhận lý do.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-md border border-indigo-100 bg-white p-3">
+                    <div className="font-semibold">Số kiện</div>
+                    <div className="mt-1 text-xs text-stone-600">
+                      Khách khai báo: {checkInComparison.declaredPackageCount == null
+                        ? "Chưa có dữ liệu"
+                        : checkInComparison.declaredPackageCount + " kiện"}
+                    </div>
+                    <div className="text-xs text-stone-600">
+                      Thực tế: {Number.isFinite(checkInComparison.actualPackageCount)
+                        ? checkInComparison.actualPackageCount + " kiện"
+                        : "Chưa nhập"}
+                    </div>
+                    <div className="mt-2">
+                      <ComparisonBadge matches={checkInComparison.packageCountMatches} />
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-indigo-100 bg-white p-3">
+                    <div className="font-semibold">Khối lượng</div>
+                    <div className="mt-1 text-xs text-stone-600">
+                      Khách khai báo: {checkInComparison.declaredWeight} kg
+                    </div>
+                    <div className="text-xs text-stone-600">
+                      Thực tế: {Number.isFinite(checkInComparison.actualWeight)
+                        ? checkInComparison.actualWeight + " kg"
+                        : "Chưa nhập"}
+                    </div>
+                    <div className="mt-2">
+                      <ComparisonBadge matches={checkInComparison.weightMatches} />
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-indigo-100 bg-white p-3">
+                    <div className="font-semibold">Thể tích</div>
+                    <div className="mt-1 text-xs text-stone-600">
+                      Khách khai báo: {checkInComparison.declaredVolume} m³
+                    </div>
+                    <div className="text-xs text-stone-600">
+                      Thực tế: {Number.isFinite(checkInComparison.actualVolume)
+                        ? checkInComparison.actualVolume + " m³"
+                        : "Chưa nhập"}
+                    </div>
+                    <div className="mt-2">
+                      <ComparisonBadge matches={checkInComparison.volumeMatches} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {measurementVariance && (
               <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                 <b>
-                  Phát hiện số đo thực tế chênh lệch đáng kể so với khai báo.
+                  Phát hiện số kiện hoặc số đo thực tế chênh lệch so với khai báo.
                 </b>
                 <label className="flex gap-2">
                   <input
@@ -862,7 +968,7 @@ export default function StaffCheckInOperationsPanel({
                       setVarianceAccepted(event.target.checked)
                     }
                   />{" "}
-                  Tôi đã đối chiếu với khách và chấp nhận chênh lệch này.
+                  Tôi đã đối chiếu với khách hàng và chấp nhận chênh lệch này.
                 </label>
                 <Input
                   label="Lý do chênh lệch"
@@ -983,6 +1089,9 @@ export default function StaffCheckInOperationsPanel({
                   !initialCondition.trim() ||
                   !goodsCondition.trim() ||
                   !handedOverItems.trim() ||
+                  !packageCount.trim() ||
+                  Number(packageCount) < 1 ||
+                  !Number.isInteger(Number(packageCount)) ||
                   (measurementVariance &&
                     (!varianceAccepted || !varianceReason.trim()))
                 }
