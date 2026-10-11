@@ -93,6 +93,50 @@ export interface CheckInEvidenceAsset {
   status: string
 }
 
+export type AccessCredentialType = 'PIN' | 'CARD' | 'KEY' | 'LOCK'
+export type AccessCredentialStatus = 'ACTIVE' | 'REVOKED'
+
+export interface AccessCredential {
+  id: string
+  reservationId: string
+  reservationCode: string
+  rentalId: string | null
+  facilityId: string
+  facilityName: string
+  storageUnitId: string
+  storageUnitCode: string
+  customerId: string
+  customerName: string
+  type: AccessCredentialType
+  status: AccessCredentialStatus
+  reference: string
+  issuedBy: string
+  issuedByName: string
+  issuedAt: string
+  revokedBy: string | null
+  revokedByName: string | null
+  revokedAt: string | null
+  note: string | null
+}
+
+export interface CredentialAlert {
+  id: string
+  action: 'ISSUE' | 'REVOKE'
+  reservationId: string
+  reservationCode: string
+  rentalId: string | null
+  facilityId: string
+  facilityName: string
+  storageUnitId: string
+  storageUnitCode: string
+  customerId: string
+  customerName: string
+  credentialType: AccessCredentialType | null
+  reference: string | null
+  dueAt: string | null
+  reason: string
+}
+
 function assertPage(payload: unknown): CheckInPage {
   const value = payload as Partial<CheckInPage> | null
   if (!value || !Array.isArray(value.data) || !value.pagination
@@ -178,4 +222,57 @@ export async function uploadCheckInEvidence(checkInId: string, file: File) {
 
 export async function downloadCheckInEvidence(assetId: string) {
   return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
+}
+
+function assertCredentialEnvelope(payload: unknown): AccessCredential {
+  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+    throw new ApiClientError('Backend trả về credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return (payload as ApiEnvelope<AccessCredential>).data
+}
+
+export async function issueAccessCredential(checkInId: string, request: {
+  type: AccessCredentialType
+  reference: string
+  secret?: string
+  note?: string
+}) {
+  return assertCredentialEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/credentials`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function revokeAccessCredential(credentialId: string, reason: string) {
+  return assertCredentialEnvelope(await apiRequest<unknown>(
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/revoke`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  ))
+}
+
+export async function listCredentialAlerts(facilityId?: string) {
+  const query = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : ''
+  const payload = await apiRequest<unknown>(`/api/staff/credential-alerts${query}`)
+  if (!Array.isArray(payload)) {
+    throw new ApiClientError('Backend trả về cảnh báo credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return payload as CredentialAlert[]
+}
+
+export async function listAccessCredentials(params: {
+  facilityId?: string
+  q?: string
+  status?: AccessCredentialStatus
+  page?: number
+  pageSize?: number
+} = {}) {
+  const query = new URLSearchParams({ page: String(params.page ?? 0), pageSize: String(params.pageSize ?? 20) })
+  if (params.facilityId && params.facilityId !== 'ALL') query.set('facilityId', params.facilityId)
+  if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.status) query.set('status', params.status)
+  const payload = await apiRequest<unknown>(`/api/manager/access-credentials?${query}`)
+  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { data?: unknown }).data)) {
+    throw new ApiClientError('Backend trả về lịch sử credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return payload as { data: AccessCredential[]; pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; sort: string }; correlationId: string }
 }
