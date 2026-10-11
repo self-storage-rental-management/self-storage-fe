@@ -6,6 +6,7 @@ import {
   getNotificationAcknowledgement,
   coordinateRenewal,
   getRentalLedger,
+  isLedgerView,
   getIntegrationPolicy,
   getStoredIntegrationPolicy,
   getRenewalAssignment,
@@ -16,6 +17,18 @@ import {
   validPolicyInput,
   type RenewalPolicyInput,
 } from "./duongIntegrationApi"
+describe("ledger coverage inventory", () => {
+  it("requires matching rental/revision and never accepts approval certification from inventory", () => {
+    const view = { rentalId: "11111111-1111-4111-8111-111111111111", completeness: "PARTIAL", currency: "VND", revision: 0,
+      obligations: [], receipts: [], refunds: [], reason: "Incomplete", coverageInventory: {
+        rentalId: "11111111-1111-4111-8111-111111111111", ledgerRevision: 0, completeness: "PARTIAL",
+        gaps: ["PAYMENT_NOT_PRODUCTION_VERIFIED"], payments: [], consistentThroughApproval: false } }
+    expect(isLedgerView(view)).toBe(true)
+    expect(isLedgerView({ ...view, coverageInventory: { ...view.coverageInventory, ledgerRevision: 1 } })).toBe(false)
+    expect(isLedgerView({ ...view, coverageInventory: { ...view.coverageInventory, rentalId: "22222222-2222-4222-8222-222222222222" } })).toBe(false)
+    expect(isLedgerView({ ...view, coverageInventory: { ...view.coverageInventory, consistentThroughApproval: true } })).toBe(false)
+  })
+})
 import {
   ids,
   instant,

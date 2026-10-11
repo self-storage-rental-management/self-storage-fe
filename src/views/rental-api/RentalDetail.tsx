@@ -1,7 +1,7 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
 import type { RentalApiDetail } from "../../types/rentalApi"
-import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
+import { bookingPaymentPurposes, bookingPaymentStatuses, bookingPaymentVerification } from "../../services/rentalBookingEvidence"
 import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning, rentalPeriodText } from "./presentation"
 export default function RentalDetail({
   rental,
@@ -129,9 +129,7 @@ export default function RentalDetail({
                 <li key={payment.id} className="border-t pt-3">
                   <p><strong>{bookingPaymentPurposes[payment.purpose]}:</strong> {rentalMoney(payment.amount, evidence.currency)}</p>
                   <p><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
-                  <p role="status">{payment.verification === "SIMULATED"
-                    ? "Thanh toán thử nghiệm - không thu tiền thật"
-                    : "Chưa có bằng chứng xác minh tiền thực nhận"}</p>
+                  <p role="status">{bookingPaymentVerification[payment.verification]}</p>
                 </li>
               ))}
             </ul>

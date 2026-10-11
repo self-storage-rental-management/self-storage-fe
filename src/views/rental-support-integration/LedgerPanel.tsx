@@ -24,13 +24,14 @@ export function ledgerReadError(error: unknown): string {
 }
 export function LedgerContent({ data }: { data: LedgerView }) {
   if (data.completeness === "UNKNOWN")
-    return <p role="status">Không có dữ liệu</p>
+    return <div><p role="status">Không có dữ liệu</p><CoverageDetails data={data} /></div>
   return (
     <div className="space-y-3 text-sm">
       <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
         Dữ liệu tài chính chưa được xác minh đầy đủ. Các khoản dưới đây không
         xác nhận toàn bộ công nợ.
       </p>
+      <CoverageDetails data={data} />
       <h4 className="font-semibold">Các khoản phải thanh toán đã ghi nhận</h4>
       {!data.obligations?.length ? (
         <p>Không có dữ liệu</p>
@@ -80,6 +81,25 @@ export function LedgerContent({ data }: { data: LedgerView }) {
       )}
     </div>
   )
+}
+function CoverageDetails({ data }: { data: LedgerView }) {
+  const inventory = data.coverageInventory
+  if (!inventory) return null
+  const labels = [...new Set(inventory.gaps.map(gap => {
+    if (gap.startsWith("INITIAL_OBLIGATION")) return "Nghĩa vụ tiền thuê hoặc cọc chưa được đối soát."
+    if (gap.startsWith("BOOKING_SNAPSHOT") || gap === "BOOKING_SOURCE_MISSING") return "Thông tin giá đã chấp nhận chưa được xác minh đầy đủ."
+    if (gap.includes("REFUND")) return "Chưa xác minh hoàn tiền đã được chuyển."
+    if (gap === "PAYMENT_DISPUTED") return "Có giao dịch đang được khiếu nại."
+    if (gap.includes("PAYMENT") || gap.includes("RECEIPT")) return "Chứng cứ thu tiền chưa được đối soát đầy đủ."
+    if (gap.includes("SECURITY_DEPOSIT")) return "Chưa xác minh số tiền cọc đang được giữ."
+    if (gap.includes("RENEWAL")) return "Nghĩa vụ gia hạn chưa được xác minh đầy đủ."
+    return "Dữ liệu tài chính lịch sử chưa được xác minh đầy đủ."
+  }))]
+  return <section aria-label="Dữ liệu cần đối soát" className="rounded border border-amber-200 p-3">
+    <p className="font-semibold">Dữ liệu cần đối soát</p>
+    <ul className="list-disc pl-5">{labels.map(label => <li key={label}>{label}</li>)}</ul>
+    <p>Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.</p>
+  </section>
 }
 function LedgerRead({ role, id }: {
   role: LedgerRole

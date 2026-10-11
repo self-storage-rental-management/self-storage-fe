@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail } from '../../services/customerReservationApi'
@@ -38,6 +38,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
+  const receiptLock = useRef(false)
   const [goodsDetailOpen, setGoodsDetailOpen] = useState(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
@@ -108,14 +109,18 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải phiếu xác nhận giữ kho.') }
   }
   const confirmReceipt = async () => {
-    if (confirmingReceipt) return
+    if (receiptLock.current) return
+    receiptLock.current = true
     setConfirmingReceipt(true); setMessage(null)
     try {
       await confirmCustomerReceipt(r.id)
       setMessage('Đã xác nhận nhận kho. Hồ sơ thuê đã được tạo thành công.')
       await onRefresh()
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể xác nhận nhận kho.') }
-    finally { setConfirmingReceipt(false) }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Không thể xác nhận nhận kho.')
+      try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
+    }
+    finally { receiptLock.current = false; setConfirmingReceipt(false) }
   }
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
