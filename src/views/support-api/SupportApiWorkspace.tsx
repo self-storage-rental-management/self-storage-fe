@@ -169,7 +169,7 @@ function SupportSession({
       {!selected && !creation && commandNotice}
       <Card className="space-y-3 p-4">
         <form
-          className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
           onSubmit={(e) => {
             e.preventDefault()
             change({ search: search.trim() })
