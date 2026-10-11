@@ -70,7 +70,9 @@ describe("Dương verified empty-data presentation", () => {
   })
   it("D2 Customer empty renewal options", () => {
     state.actor = operationsActor("customer"); state.mode = "options"
-    verifyEmptyOnlyAfterSuccess(<CustomerRenewalRequestModal actorId={ids.customer} rentalId={ids.rental} onClose={vi.fn()} onSuccess={vi.fn()} />)
+    const modal = <CustomerRenewalRequestModal actorId={ids.customer} rentalId={ids.rental} onClose={vi.fn()} onSuccess={vi.fn()} />
+    verifyEmptyOnlyAfterSuccess(modal)
+    expect(renderToStaticMarkup(modal)).not.toContain("Lấy báo giá mới")
   })
   it("D3 Staff empty appointment list", () => {
     state.actor = operationsActor("staff")
