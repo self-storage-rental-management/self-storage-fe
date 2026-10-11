@@ -74,24 +74,24 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
           item.inventoryMatch && item.inventoryMatch !== 'match' ? inventoryLabels[item.inventoryMatch] || item.inventoryMatch : ''
         ].filter(Boolean)
         if (!reasons.length) return
-        items.push({ id: item.id, kind: 'return', title: `Hồ sơ trả kho ${item.id}`, subject: `${item.customerName} · ${item.unitId}`, reason: reasons.join(' · '), status: item.status, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, evidenceCount: item.evidence.length, destination: 'move-outs' })
+        items.push({ id: item.id, kind: 'return', title: `Hồ sơ trả kho ${item.id}`, subject: `${item.customerName}, ${item.unitId}`, reason: reasons.join(', '), status: item.status, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, evidenceCount: item.evidence.length, destination: 'move-outs' })
       })
 
     hub.checkins
       .filter(item => unitIds.has(item.unitId) && item.status === 'completed' && !item.actualMeasurements.varianceAccepted)
-      .forEach(item => items.push({ id: item.id, kind: 'checkin', title: `Biên bản nhận kho ${item.id}`, subject: `${item.customerName} · ${item.unitId}`, reason: item.actualMeasurements.varianceNotes || 'Sai lệch đo đạc chưa được xác nhận chấp nhận', status: item.status, date: item.completedAt || item.scheduledDate, evidenceCount: item.evidencePhotos.length, destination: 'move-ins' }))
+      .forEach(item => items.push({ id: item.id, kind: 'checkin', title: `Biên bản nhận kho ${item.id}`, subject: `${item.customerName}, ${item.unitId}`, reason: item.actualMeasurements.varianceNotes || 'Sai lệch đo đạc chưa được xác nhận chấp nhận', status: item.status, date: item.completedAt || item.scheduledDate, evidenceCount: item.evidencePhotos.length, destination: 'move-ins' }))
 
     holds
       .filter(item => !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && (item.exceptionReason || ['PENDING', 'REJECTED'].includes(item.goodsReviewStatus || '')))
       .forEach(item => {
         const reasons = [
           item.exceptionReason ? exceptionReasonLabels[item.exceptionReason] || item.exceptionReason : '',
-          item.goodsReviewStatus === 'PENDING' ? 'Hàng hóa đang chờ Staff kiểm tra' : '',
-          item.goodsReviewStatus === 'REJECTED' ? 'Hàng hóa đã bị Staff từ chối' : '',
+          item.goodsReviewStatus === 'PENDING' ? "Hàng hóa đang chờ nhân viên kiểm tra" : '',
+          item.goodsReviewStatus === 'REJECTED' ? "Hàng hóa đã bị nhân viên từ chối" : '',
           item.exceptionDetails || ''
         ].filter(Boolean)
         const goodsImages = item.goods.items?.flatMap(goodsItem => goodsItem.images || []) || []
-        items.push({ id: item.id, kind: 'reservation', title: `Đặt chỗ ${item.id}`, subject: `${item.customerName} · ${item.unitTypeName}`, reason: reasons.join(' · '), status: item.status, date: item.goodsReviewSubmittedAt || item.createdAt, evidenceCount: item.evidence.length + goodsImages.length, destination: 'move-ins' })
+        items.push({ id: item.id, kind: 'reservation', title: `Đặt chỗ ${item.id}`, subject: `${item.customerName}, ${item.unitTypeName}`, reason: reasons.join(', '), status: item.status, date: item.goodsReviewSubmittedAt || item.createdAt, evidenceCount: item.evidence.length + goodsImages.length, destination: 'move-ins' })
       })
 
     const facilityReturns = hub.returns.filter(item => isManagerFacilityVisible(user, item.facilityId, item.facilityName))
@@ -101,7 +101,7 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
 
     rentals
       .filter(item => isManagerRentalOverdue(item))
-      .forEach(item => items.push({ id: item.id, kind: 'payment', title: `Công nợ ${item.id}`, subject: `${item.customerName} · ${item.unitId}`, reason: `Quá hạn kỳ thanh toán ${item.nextDue}`, status: 'overdue', date: item.nextDue, evidenceCount: hub.payments.filter(payment => payment.rentalId === item.id && Boolean(payment.proofImage)).length, destination: 'payments' }))
+      .forEach(item => items.push({ id: item.id, kind: 'payment', title: `Công nợ ${item.id}`, subject: `${item.customerName}, ${item.unitId}`, reason: `Quá hạn kỳ thanh toán ${item.nextDue}`, status: 'overdue', date: item.nextDue, evidenceCount: hub.payments.filter(payment => payment.rentalId === item.id && Boolean(payment.proofImage)).length, destination: 'payments' }))
 
     return items.sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
   }, [hub.holds, hub.rentals, hub.units, hub.returns, hub.checkins, hub.maintenanceTasks, hub.payments, user])
@@ -124,9 +124,9 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
   useEffect(() => setPage(1), [kind, query, statusFilter, evidenceFilter, sortBy, pageSize])
 
   return <div className="space-y-5">
-    <SectionHeader eyebrow="Giám sát ngoại lệ" title="Ngoại lệ vận hành của cơ sở" subtitle="Tổng hợp trực tiếp từ đặt chỗ, nhận/trả kho, bảo trì và công nợ. Mỗi hồ sơ vẫn được xử lý tại đúng luồng nghiệp vụ nguồn." />
+    <SectionHeader eyebrow="Giám sát ngoại lệ" title="Ngoại lệ vận hành của cơ sở" />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-      {(['return', 'checkin', 'reservation', 'maintenance', 'payment'] as ExceptionKind[]).map(item => <StatCard key={item} title={kindLabels[item]} value={exceptions.filter(exception => exception.kind === item).length} icon={item === 'payment' ? Icon.dollar : item === 'maintenance' ? Icon.tasks : Icon.alert} />)}
+      {(['return', 'checkin', "đặt chỗ", 'maintenance', 'payment'] as ExceptionKind[]).map(item => <StatCard key={item} title={kindLabels[item]} value={exceptions.filter(exception => exception.kind === item).length} icon={item === 'payment' ? Icon.dollar : item === 'maintenance' ? Icon.tasks : Icon.alert} />)}
     </div>
     <Card>
       <div className="grid gap-3 border-b border-stone-200 p-4 md:grid-cols-2 xl:grid-cols-5"><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm mã hồ sơ, khách hàng, gian kho hoặc lý do…" /><Select value={kind} onChange={event => setKind(event.target.value as 'all' | ExceptionKind)}><option value="all">Tất cả loại ngoại lệ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select><Select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="all">Tất cả trạng thái</option>{statuses.map(status => <option key={status} value={status}>{managerStatusLabel(status, 'vi')}</option>)}</Select><Select value={evidenceFilter} onChange={event => setEvidenceFilter(event.target.value)}><option value="all">Mọi tình trạng bằng chứng</option><option value="yes">Có bằng chứng</option><option value="no">Chưa có bằng chứng</option></Select><Select value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="priority">Nghiêm trọng trước</option><option value="oldest">Chờ lâu nhất</option><option value="newest">Mới nhất</option></Select></div>
@@ -135,6 +135,5 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
         {!visible.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có ngoại lệ phù hợp với bộ lọc.</td></tr>}
       </Tbody></Table><ManagerPagination {...pagination} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </Card>
-    <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><b>Phân quyền:</b> các ngoại lệ hàng hóa của đặt chỗ chỉ được Manager theo dõi; quyết định kiểm tra hàng và nhận kho vẫn thuộc Staff. Manager xử lý tranh chấp trả kho, công nợ, trạng thái gian và điều phối nhiệm vụ đúng theo từng màn hình nguồn.</Card>
   </div>
 }

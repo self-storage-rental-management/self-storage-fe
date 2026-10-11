@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react'
 import type {
   Facility,
   StorageUnit,
@@ -22,11 +22,15 @@ import type {
   ReservedPeriod,
   FacilityTask,
   FacilityUnitDistribution,
-  RentalPackage
+  RentalPackage,
+  StructuralInspection,
+  MoistureOrigin,
+  MaintenancePriority,
+  FacilityIssueCategory
 } from '../types/storageHub'
 import { generateDefaultRentalPackages } from '../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../domain/renewalPricing'
-import type { PermissionKey, Role, RolePermissionsState, User, LoginHistoryRecord, SessionRecord, SecurityAlert, ProfileChangeRequest } from '../types'
+import { PERMISSION_KEYS, type PermissionKey, type Role, type RolePermissionsState, type User, type LoginHistoryRecord, type SessionRecord, type SecurityAlert, type ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
 import {
@@ -52,6 +56,7 @@ import {
 import { formatVnd, USD_TO_VND_RATE } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
 import { storageSizeCode, unitTypeMatches } from '../domain/facilityRules'
+import { DEMO_DATA_ENABLED } from '../config/runtime'
 
 const STORAGE_KEY = 'storagehub:v5:released-orphan-holds'
 
@@ -81,7 +86,7 @@ type StoredUser = (typeof USERS)[number] & Partial<Pick<User, 'permanentAddress'
  * be able to promote an account by changing its role field.
  */
 function normalizeUsers(value: unknown): StoredUser[] {
-  if (!Array.isArray(value)) return USERS
+  if (!Array.isArray(value)) return DEMO_DATA_ENABLED ? USERS : []
 
   return value
     .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate && typeof candidate === 'object'))
@@ -253,6 +258,67 @@ const LEGACY_FACILITY_NAMES: Record<string, string> = {
   'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
 }
 
+export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address?: string; city?: string }> = {
+  'FAC-Q1': {
+    name: 'StorageHub Chi nhánh Quận 1',
+    address: '123 Nguyễn Huệ, Phường Bến Nghé, Quận 1',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q1-F01': {
+    name: 'Kho Việt – Cơ sở Quận 1',
+    address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q7-F01': {
+    name: 'Kho Việt – Cơ sở Quận 7 (Phú Mỹ Hưng)',
+    address: '105 Nguyễn Lương Bằng, Phường Tân Phú, Quận 7, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'BD-F01': {
+    name: 'Kho Việt – Cơ sở Bình Dương',
+    address: '468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
+    city: 'Bình Dương'
+  },
+  'HCM-TD-F01': {
+    name: 'Kho Việt – Cơ sở Thủ Đức',
+    address: 'Số 1 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức',
+    city: 'TP. Hồ Chí Minh'
+  }
+}
+
+export function sanitizeFacilityStrings<T extends { code?: string; id?: string; name?: string; address?: string; city?: string }>(f: T): T {
+  if (!f) return f
+  const code = (f.code || f.id || '').toUpperCase()
+  let fix = KNOWN_FACILITY_CORRECTIONS[code]
+  if (!fix && f.id) {
+    fix = KNOWN_FACILITY_CORRECTIONS[f.id.toUpperCase()]
+  }
+  if (!fix) {
+    const addr = f.address || ''
+    const nm = f.name || ''
+    if (addr.includes('123 Nguy') || addr.includes('Huß') || addr.includes('Nguyß') || addr.includes('Phã') || (nm.includes('Quận 1') && nm.includes('StorageHub'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['FAC-Q1']
+    } else if (addr.includes('Võ Văn Ngân') || nm.includes('Thủ Đức')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-TD-F01']
+    } else if (addr.includes('Bình Dương') || nm.includes('Bình Dương')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['BD-F01']
+    } else if (addr.includes('Lương Bằng') || nm.includes('Quận 7')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q7-F01']
+    } else if (addr.includes('Bỉnh Khiêm') || (nm.includes('Quận 1') && nm.includes('Kho Việt'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q1-F01']
+    }
+  }
+  if (fix) {
+    return {
+      ...f,
+      name: fix.name || f.name,
+      address: fix.address || f.address,
+      city: fix.city || f.city
+    }
+  }
+  return f
+}
+
 export const isExcludedFacility = (_f: { code?: string; id?: string; city?: string; name?: string }) => false
 
 export const isExcludedUnit = (_u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => false
@@ -265,9 +331,10 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 }
 
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
-  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES
-  const cleaned = facilities.filter(f => !isExcludedFacility(f))
+  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES.map(sanitizeFacilityStrings)
+  const cleaned = facilities.filter(f => !isExcludedFacility(f)).map(sanitizeFacilityStrings)
   const mapped = cleaned.map(stored => {
+    stored = sanitizeFacilityStrings(stored)
     const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
     if (!canonical) return stored
     if (canonical.id === 'fac-001') {
@@ -776,8 +843,8 @@ const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(renta
       ...rental,
       unitId: 'HCM-Q1-F01-S-001',
       unitType: 'Kho Nhỏ (S)',
-      areaM2: 33.6,
-      volumeM3: 107.52,
+      areaM2: 80.0,
+      volumeM3: 400.0,
       monthlyRate: 5500000,
       deposit: 5500000,
       securityDeposit: 5500000,
@@ -790,8 +857,8 @@ const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(renta
       ...rental,
       unitId: 'HCM-Q1-F01-M-001',
       unitType: 'Kho Trung (M)',
-      areaM2: 57.6,
-      volumeM3: 195.84,
+      areaM2: 131.04,
+      volumeM3: 655.2,
       monthlyRate: 9500000,
       deposit: 9500000,
       securityDeposit: 9500000,
@@ -804,8 +871,8 @@ const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(renta
       ...rental,
       unitId: 'HCM-Q1-F01-L-001',
       unitType: 'Kho Lớn (L)',
-      areaM2: 91.8,
-      volumeM3: 330.48,
+      areaM2: 197.64,
+      volumeM3: 988.2,
       monthlyRate: 15000000,
       deposit: 15000000,
       securityDeposit: 15000000,
@@ -831,8 +898,8 @@ const INITIAL_RENTALS: RentalRecord[] = [
     customerEmail: 'ha.pham@gmail.com',
     customerPhone: '093 555 0128',
     unitType: 'Kho Lớn (L)',
-    areaM2: 91.8,
-    volumeM3: 330.48,
+    areaM2: 197.64,
+    volumeM3: 988.2,
     startDate: 'Mar 18, 2026',
     endDate: 'Sep 18, 2026',
     nextDue: 'Sep 18, 2026',
@@ -857,8 +924,8 @@ const INITIAL_RENTALS: RentalRecord[] = [
     customerEmail: 'customer@storagehub.demo',
     customerPhone: '+84 908 123 456',
     unitType: 'Kho Nhỏ (S)',
-    areaM2: 33.6,
-    volumeM3: 107.52,
+    areaM2: 80.0,
+    volumeM3: 400.0,
     startDate: 'Jan 12, 2026',
     endDate: 'Jan 12, 2027',
     nextDue: 'Oct 12, 2026',
@@ -883,8 +950,8 @@ const INITIAL_RENTALS: RentalRecord[] = [
     customerEmail: 'contact@sg-logistics.vn',
     customerPhone: '+84 28 3822 9999',
     unitType: 'Kho Trung (M)',
-    areaM2: 57.6,
-    volumeM3: 195.84,
+    areaM2: 131.04,
+    volumeM3: 655.2,
     startDate: 'May 01, 2026',
     endDate: 'May 01, 2027',
     nextDue: 'Oct 01, 2026',
@@ -1193,15 +1260,41 @@ interface StorageHubContextValue extends StorageHubState {
     staffNotes: string
     evidencePhotos: string[]
     returnedItems: { key: boolean; card: boolean; lock: boolean }
+    structuralInspection?: StructuralInspection
+    moistureOrigin?: MoistureOrigin
+    sanitizationFee?: number
+    facilityCompensationAmount?: number
   }) => void
   confirmReturnSettlement: (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => void
   payReturnBalance: (returnId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string) => void
   completeReturnRefund: (returnId: string, staffUser: User, transactionReference: string) => void
-  reviewReturnDispute: (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => void
-  createMaintenanceTask: (unitId: string, reason: string, staffUser?: User) => MaintenanceTask
+  reviewReturnDispute: (
+    returnId: string,
+    manager: User,
+    resolutionNote?: string,
+    settlement?: ManagerReturnSettlementFees,
+    preset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement',
+    facilityCompensationAmount?: number
+  ) => void
+  createMaintenanceTask: (unitId: string, reason: string, staffUser?: User, priority?: MaintenancePriority, faultCategory?: FacilityIssueCategory) => MaintenanceTask
   completeMaintenanceTask: (taskId: string, managerUser: User) => void
   releaseMaintenanceUnit: (unitId: string, staffUser: User) => void
-  updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
+  updateUnitStatus: (
+    unitId: string,
+    status: 'available' | 'maintenance',
+    manager: User,
+    reason?: string,
+    priority?: MaintenancePriority,
+    faultCategory?: FacilityIssueCategory
+  ) => void
+  emergencyRelocateRental: (params: {
+    rentalId: string
+    targetUnitId: string
+    reason: string
+    faultCategory: FacilityIssueCategory
+    manager: User
+    goodwillDiscountPercent?: number
+  }) => void
   recordRentalPayment: (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => void
   applyRentalLateFee: (rentalId: string, amount: number, manager: User) => void
   waiveRentalLateFee: (rentalId: string, manager: User) => void
@@ -1236,10 +1329,16 @@ const StorageHubContext = createContext<StorageHubContextValue | null>(null)
 const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
 
 function normalizeRuntimeRolePermissions(value: unknown) {
-  const normalized = normalizeRolePermissions(value)
+  const empty = Object.fromEntries(
+    (['customer', 'staff', 'manager', 'business', 'admin'] as Role[]).map(role => [
+      role,
+      Object.fromEntries(PERMISSION_KEYS.map(key => [key, false]))
+    ])
+  ) as RolePermissionsState
+  const normalized = !DEMO_DATA_ENABLED && !value ? empty : normalizeRolePermissions(value)
   try {
-    if (!localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
-      normalized.manager.assign_units = true
+    if (DEMO_DATA_ENABLED && !localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
+      normalized.manager['storage_units:assign'] = true
       localStorage.setItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY, 'done')
     }
   } catch {}
@@ -1323,7 +1422,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StorageHubState>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
+      if (DEMO_DATA_ENABLED && saved) {
         const parsed = JSON.parse(saved)
         const normalizedHolds = Array.isArray(parsed.holds) ? parsed.holds.filter((hold: StorageReservation) => !['RSV-6618', 'RSV-2104', 'RSV-9654'].includes(hold.id) && !isExcludedRelated(hold)).map((hold: StorageReservation) => {
             const facility = findCanonicalFacility(hold.facilityId, hold.facilityName)
@@ -1338,12 +1437,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         let rawFacilities = Array.isArray(parsed.facilities) && parsed.facilities.length ? [...parsed.facilities] : []
         try {
           const directFacsStr = localStorage.getItem('storagehub:facilities')
-          if (directFacsStr) {
+          if (DEMO_DATA_ENABLED && directFacsStr) {
             const directFacs = JSON.parse(directFacsStr)
             if (Array.isArray(directFacs)) {
               const knownIds = new Set(rawFacilities.map((f: any) => f.id))
               const knownCodes = new Set(rawFacilities.map((f: any) => (f.code || '').toUpperCase()))
-              for (const df of directFacs) {
+              for (let df of directFacs) {
+                df = sanitizeFacilityStrings(df)
                 if (df && df.id && !knownIds.has(df.id) && (!df.code || !knownCodes.has(df.code.toUpperCase()))) {
                   rawFacilities.push(df)
                   knownIds.add(df.id)
@@ -1356,7 +1456,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         let rawUnits = Array.isArray(parsed.units) && parsed.units.length ? [...parsed.units] : []
         try {
           const directUnitsStr = localStorage.getItem('storagehub:units')
-          if (directUnitsStr) {
+          if (DEMO_DATA_ENABLED && directUnitsStr) {
             const directUnits = JSON.parse(directUnitsStr)
             if (Array.isArray(directUnits)) {
               const knownUnitIds = new Set(rawUnits.map((u: any) => u.id))
@@ -1370,8 +1470,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           }
         } catch {}
 
-        const normalizedFacilities = rawFacilities.length ? normalizeStoredFacilities(rawFacilities as Facility[]) : INITIAL_FACILITIES
-        const normalizedUnits = rawUnits.length ? normalizeStoredUnits(rawUnits as StorageUnit[]) : INITIAL_UNITS
+        const normalizedFacilities = rawFacilities.length ? normalizeStoredFacilities(rawFacilities as Facility[]) : (DEMO_DATA_ENABLED ? INITIAL_FACILITIES : [])
+        const normalizedUnits = rawUnits.length ? normalizeStoredUnits(rawUnits as StorageUnit[]) : (DEMO_DATA_ENABLED ? INITIAL_UNITS : [])
 
         return {
           ...parsed,
@@ -1380,7 +1480,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           rolePermissions: normalizeRuntimeRolePermissions(parsed.rolePermissions),
           units: normalizedUnits.map(unit => unit.currentRentalId === 'RNT-9654' || (unit.currentRentalId && RETIRED_EXPIRY_TEST_RENTAL_IDS.has(unit.currentRentalId)) ? { ...unit, status: 'available' as const, currentRentalId: undefined, reservedPeriods: (unit.reservedPeriods || []).filter(period => period.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(period.reservationId)) } : unit),
           holds: normalizedHolds,
-          contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654' && !isExcludedRelated(contract))) : INITIAL_CONTRACTS,
+          contracts: Array.isArray(parsed.contracts) ? mergeRenewalTestContracts(parsed.contracts.filter((contract: StorageContract) => contract.reservationId !== 'RSV-9654' && !isExcludedRelated(contract))) : (DEMO_DATA_ENABLED ? INITIAL_CONTRACTS : []),
           payments: Array.isArray(parsed.payments) ? parsed.payments.filter((payment: StoragePayment) => payment.reservationId !== 'RSV-9654' && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(payment.reservationId) && payment.rentalId !== 'RNT-9654' && (!payment.rentalId || !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(payment.rentalId)) && !isExcludedRelated(payment)) : [],
           renewals: Array.isArray(parsed.renewals)
             ? parsed.renewals.filter((renewal: RenewalRecord) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(renewal.rentalId) && !isExcludedRelated(renewal)).map((renewal: RenewalRecord) => {
@@ -1414,14 +1514,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           checkins: reconcileReservationCheckins(normalizedHolds, Array.isArray(parsed.checkins) ? parsed.checkins.filter((checkin: CheckInRecord) => checkin.holdId !== 'RSV-9654' && !isExcludedRelated(checkin)) : []),
           rentals: Array.isArray(parsed.rentals)
             ? mergeRenewalTestRentals(normalizeRentalFacilities(parsed.rentals.filter((rental: RentalRecord) => rental.id !== 'RNT-9654' && rental.holdId !== 'RSV-9654' && !isExcludedRelated(rental))))
-            : INITIAL_RENTALS,
+            : (DEMO_DATA_ENABLED ? INITIAL_RENTALS : []),
           returns: Array.isArray(parsed.returns) ? parsed.returns.filter((returnCase: ReturnCase) => !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(returnCase.rentalId) && !isExcludedRelated(returnCase)) : [],
-          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId) && !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(activity.entityId) && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(activity.entityId) && !isExcludedRelated(activity)) : INITIAL_ACTIVITIES,
-          loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : INITIAL_LOGIN_HISTORY,
-          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS,
-          securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : INITIAL_SECURITY_ALERTS,
+          activities: Array.isArray(parsed.activities) ? parsed.activities.filter((activity: ActivityRecord) => !['RSV-9654', 'RNT-9654'].includes(activity.entityId) && !RETIRED_EXPIRY_TEST_RENTAL_IDS.has(activity.entityId) && !RETIRED_EXPIRY_TEST_RESERVATION_IDS.has(activity.entityId) && !isExcludedRelated(activity)) : (DEMO_DATA_ENABLED ? INITIAL_ACTIVITIES : []),
+          loginHistory: Array.isArray(parsed.loginHistory) ? parsed.loginHistory : (DEMO_DATA_ENABLED ? INITIAL_LOGIN_HISTORY : []),
+          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : (DEMO_DATA_ENABLED ? INITIAL_SESSIONS : []),
+          securityAlerts: Array.isArray(parsed.securityAlerts) ? parsed.securityAlerts : (DEMO_DATA_ENABLED ? INITIAL_SECURITY_ALERTS : []),
           profileChangeRequests: Array.isArray(parsed.profileChangeRequests) ? parsed.profileChangeRequests : INITIAL_PROFILE_CHANGE_REQUESTS,
-          tickets: Array.isArray(parsed.tickets) ? normalizeStoredTickets((parsed.tickets as TicketItem[]).filter(t => !isExcludedRelated(t))) : TICKETS,
+          tickets: Array.isArray(parsed.tickets) ? normalizeStoredTickets((parsed.tickets as TicketItem[]).filter(t => !isExcludedRelated(t))) : (DEMO_DATA_ENABLED ? TICKETS : []),
           config: parsed.config || DEFAULT_BUSINESS_CONFIG
         }
       }
@@ -1429,18 +1529,18 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       console.error('Failed to load storageHub state from localStorage', e)
     }
 
-    let fallbackFacilities = INITIAL_FACILITIES
-    let fallbackUnits = INITIAL_UNITS
+    let fallbackFacilities = DEMO_DATA_ENABLED ? INITIAL_FACILITIES : []
+    let fallbackUnits = DEMO_DATA_ENABLED ? INITIAL_UNITS : []
     try {
       const directFacsStr = localStorage.getItem('storagehub:facilities')
-      if (directFacsStr) {
+      if (DEMO_DATA_ENABLED && directFacsStr) {
         const directFacs = JSON.parse(directFacsStr)
         if (Array.isArray(directFacs) && directFacs.length > 0) {
           fallbackFacilities = normalizeStoredFacilities(directFacs)
         }
       }
       const directUnitsStr = localStorage.getItem('storagehub:units')
-      if (directUnitsStr) {
+      if (DEMO_DATA_ENABLED && directUnitsStr) {
         const directUnits = JSON.parse(directUnitsStr)
         if (Array.isArray(directUnits) && directUnits.length > 0) {
           fallbackUnits = normalizeStoredUnits(directUnits)
@@ -1449,26 +1549,26 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     return {
-      users: USERS,
-      rolePermissions: normalizeRolePermissions(undefined),
+      users: DEMO_DATA_ENABLED ? USERS : [],
+      rolePermissions: normalizeRuntimeRolePermissions(undefined),
       facilities: fallbackFacilities,
       units: fallbackUnits,
       holds: [],
       contracts: [],
       payments: [],
       checkins: [],
-      rentals: INITIAL_RENTALS,
+      rentals: DEMO_DATA_ENABLED ? INITIAL_RENTALS : [],
       returns: [],
       renewals: [],
       maintenanceTasks: [],
       staffTasks: [],
       accessCredentials: [],
-      activities: INITIAL_ACTIVITIES,
-      loginHistory: INITIAL_LOGIN_HISTORY,
-      sessions: INITIAL_SESSIONS,
-      securityAlerts: INITIAL_SECURITY_ALERTS,
+      activities: DEMO_DATA_ENABLED ? INITIAL_ACTIVITIES : [],
+      loginHistory: DEMO_DATA_ENABLED ? INITIAL_LOGIN_HISTORY : [],
+      sessions: DEMO_DATA_ENABLED ? INITIAL_SESSIONS : [],
+      securityAlerts: DEMO_DATA_ENABLED ? INITIAL_SECURITY_ALERTS : [],
       profileChangeRequests: INITIAL_PROFILE_CHANGE_REQUESTS,
-      tickets: TICKETS,
+      tickets: DEMO_DATA_ENABLED ? TICKETS : [],
       config: DEFAULT_BUSINESS_CONFIG
     }
   })
@@ -1478,20 +1578,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!canonicalActor || canonicalActor.role !== 'admin' || canonicalActor.status !== 'active') {
       throw new Error('Chỉ Admin đang hoạt động được quản lý tài khoản.')
     }
-    if (!state.rolePermissions.admin.manage_users) {
+    if (!state.rolePermissions.admin['users:manage']) {
       throw new Error('Quyền quản lý tài khoản của Admin đang bị tắt.')
     }
     return canonicalActor
   }
 
   const updateRolePermissions = (role: Role, permissions: Partial<Record<PermissionKey, boolean>>, actor: User) => {
-    const canonicalActor = assertPermission(actor, 'manage_roles')
+    const canonicalActor = assertPermission(actor, 'roles:manage')
     const current = state.rolePermissions[role]
     const next = { ...current }
     for (const key of Object.keys(permissions) as PermissionKey[]) {
       if (typeof permissions[key] === 'boolean') next[key] = permissions[key] as boolean
     }
-    if (role === 'admin' && (!next.manage_roles || !next.manage_users)) {
+    if (role === 'admin' && (!next['roles:manage'] || !next['users:manage'])) {
       throw new Error('Không thể tắt quyền quản lý quyền hoặc tài khoản của Admin để tránh tự khóa hệ thống.')
     }
     const timestamp = new Date().toISOString()
@@ -1721,21 +1821,38 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const resolveCanonicalActor = (actor: User): StoredUser => {
     const canonical = state.users.find(item => item.id === actor.id)
-    if (!canonical || canonical.status !== 'active') throw new Error('Tài khoản không tồn tại hoặc đã bị khóa.')
-    return canonical
+    if (canonical) {
+      if (canonical.status !== 'active') throw new Error('Tài khoản không tồn tại hoặc đã bị khóa.')
+      return canonical
+    }
+    if (actor?.id && actor.role) {
+      return {
+        ...actor,
+        status: 'active',
+        lastLogin: '',
+        joined: '',
+      } as StoredUser
+    }
+    throw new Error('Tài khoản không tồn tại hoặc đã bị khóa.')
   }
 
   const can = (actor: User | Role, permission: PermissionKey): boolean => {
+    if (typeof actor !== 'string' && actor.permissions) {
+      return actor.permissions.includes(permission)
+    }
     const role = (typeof actor === 'string'
       ? actor
-      : state.users.find(item => item.id === actor.id && item.status === 'active')?.role) as Role | undefined
+      : state.users.find(item => item.id === actor.id && item.status === 'active')?.role ?? actor.role) as Role | undefined
     if (!role) return false
     return Boolean(state.rolePermissions[role]?.[permission])
   }
 
   const assertPermission = (actor: User, permission: PermissionKey): StoredUser => {
     const canonical = resolveCanonicalActor(actor)
-    if (!state.rolePermissions[canonical.role as Role]?.[permission]) {
+    const hasPermission = actor.permissions
+      ? actor.permissions.includes(permission)
+      : Boolean(state.rolePermissions[canonical.role as Role]?.[permission])
+    if (!hasPermission) {
       throw new Error(`Vai trò ${canonical.role} không có quyền thực hiện thao tác này.`)
     }
     return canonical
@@ -1752,6 +1869,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // Save to localStorage on state change
   useEffect(() => {
+    if (!DEMO_DATA_ENABLED) {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem('storagehub:facilities')
+      localStorage.removeItem('storagehub:units')
+      return
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch (e) {
@@ -1844,7 +1967,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     packageName?: string
     packagePrice?: number
   }): ReservationValidationResult => {
-    assertPermission(params.customer, 'book_storage')
+    assertPermission(params.customer, 'reservations:create')
     const normalizedTargetId =
       params.unitTypeId === 'S' || params.unitTypeId === 's' ? 'small' :
       params.unitTypeId === 'M' || params.unitTypeId === 'm' ? 'medium' :
@@ -2121,7 +2244,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const approveReservation = (reservationId: string, reviewer: User) => {
-    assertPermission(reviewer, 'approve_reservations')
+    assertPermission(reviewer, 'reservations:approve')
     if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ đặt kho thuộc nghiệp vụ của Facility Staff.')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation) throw new Error('Không tìm thấy yêu cầu đặt giữ kho.')
@@ -2172,7 +2295,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const rejectGoodsReview = (reservationId: string, reviewer: User, note: string) => {
-    assertPermission(reviewer, 'approve_reservations')
+    assertPermission(reviewer, 'reservations:approve')
     if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ hàng hóa thuộc nghiệp vụ của Facility Staff.')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || reservation.goodsReviewStatus !== 'PENDING') throw new Error('Không tìm thấy yêu cầu hàng hóa đang chờ duyệt.')
@@ -2214,7 +2337,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // Facility Manager manually reserves a compatible physical unit after deposit payment.
   const assignUnitToHold = (reservationId: string, unitId: string, managerUser: User) => {
-    assertPermission(managerUser, 'assign_units')
+    assertPermission(managerUser, 'storage_units:assign')
     const reservation = state.holds.find(h => h.id === reservationId)
     const unit = state.units.find(u => u.id === unitId)
     if (!reservation || !unit) throw new Error('Không tìm thấy thông tin đơn đặt hoặc gian kho.')
@@ -2343,7 +2466,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 3. Cancel / Expired / No-show: Release Unit allocation
   const cancelReservation = (reservationId: string, user: User, reason?: string) => {
-    assertPermission(user, 'view_reservations')
+    assertPermission(user, 'reservations:read')
     const reservation = state.holds.find(h => h.id === reservationId)
     if (!reservation) return
     if (reservation.customerId !== user.id && reservation.customerEmail !== user.email) throw new Error('Đơn giữ kho không thuộc tài khoản này.')
@@ -2448,7 +2571,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     scannedFileName: string
   }) => {
     const reservation = state.holds.find(h => h.id === params.holdId)
-    assertPermission(params.staffUser, 'perform_checkin')
+    assertPermission(params.staffUser, 'checkins:process')
     if (params.staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Ký và ghi nhận bàn giao trực tiếp thuộc nghiệp vụ của Facility Staff.')
     if (params.staffUser.role !== 'staff') {
       throw new Error('Chỉ nhân viên cơ sở được ghi nhận hợp đồng giấy.')
@@ -2547,7 +2670,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }
   ) => {
     const reservation = state.holds.find(h => h.id === reservationId)
-    assertPermission(staffUser, 'manage_payments')
+    assertPermission(staffUser, 'payments:collect')
     if (staffUser.role !== 'staff' && staffUser.role !== 'manager') {
       throw new Error('Chỉ nhân viên cơ sở được ghi nhận thanh toán tại quầy.')
     }
@@ -2664,7 +2787,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     goodsHandover: NonNullable<CheckInRecord['goodsHandover']>
     handedOverItems: string[]
   }): void => {
-    assertPermission(params.staffUser, 'perform_checkin')
+    assertPermission(params.staffUser, 'checkins:process')
     if (params.staffUser.role !== 'staff') throw new Error('Chỉ nhân viên ca trực được hoàn tất check-in.')
     const reservation = state.holds.find(h => h.id === params.holdId)
     if (!reservation) throw new Error('Không tìm thấy đơn đặt kho.')
@@ -2716,7 +2839,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const confirmUnitReceipt = (reservationId: string, customer: User) => {
-    assertPermission(customer, 'view_reservations')
+    assertPermission(customer, 'reservations:read')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || (reservation.customerId !== customer.id && reservation.customerEmail !== customer.email)) throw new Error('Không tìm thấy đơn đặt giữ kho thuộc tài khoản này.')
     if (reservation.status !== 'COMPLETED') throw new Error('Kho chưa hoàn tất bàn giao để khách hàng xác nhận.')
@@ -2784,7 +2907,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 7. Renewals: Customer requests, Manager approves, Customer pays
   const requestRenewal = (rentalId: string, renewalMonths: number, customer: User): RenewalRecord => {
-    assertPermission(customer, 'manage_rentals')
+    assertPermission(customer, 'rentals:update')
     const rental = state.rentals.find(r => r.id === rentalId)
     if (!rental || rental.status !== 'active') throw new Error('Chỉ hợp đồng đang hoạt động mới được yêu cầu gia hạn.')
     if (rental.customerId !== customer.id && rental.customerEmail !== customer.email) throw new Error('Hợp đồng không thuộc tài khoản Customer này.')
@@ -2842,7 +2965,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const updateRenewalRequest = (renewalId: string, renewalMonths: number, customer: User) => {
-    assertPermission(customer, 'manage_rentals')
+    assertPermission(customer, 'rentals:update')
     const renewal = state.renewals.find(item => item.id === renewalId)
     if (!renewal || renewal.status !== 'pending') throw new Error('Chỉ có thể sửa yêu cầu đang chờ Manager xét duyệt.')
     if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
@@ -2864,7 +2987,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const cancelRenewalRequest = (renewalId: string, customer: User) => {
-    assertPermission(customer, 'manage_rentals')
+    assertPermission(customer, 'rentals:update')
     const renewal = state.renewals.find(item => item.id === renewalId)
     if (!renewal || !['pending', 'approved', 'appointment_scheduled'].includes(renewal.status)) throw new Error('Chỉ có thể hủy yêu cầu trước khi ký phụ lục và hoàn tất gia hạn.')
     if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
@@ -2879,7 +3002,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const approveRenewal = (renewalId: string, managerUser: User) => {
-    assertPermission(managerUser, 'manage_rentals')
+    assertPermission(managerUser, 'rentals:update')
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') {
       if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
@@ -2940,7 +3063,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const rejectRenewal = (renewalId: string, managerUser: User, reason: string) => {
-    assertPermission(managerUser, 'manage_rentals')
+    assertPermission(managerUser, 'rentals:update')
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') {
       if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
@@ -2965,7 +3088,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const payRenewal = (renewalId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionId: string, termsAccepted: boolean, appointmentDate: string, appointmentTime: string) => {
-    assertPermission(customer, 'manage_rentals')
+    assertPermission(customer, 'rentals:update')
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'approved') throw new Error('Đơn gia hạn chưa được Manager duyệt.')
     if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
@@ -3055,7 +3178,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     scannedFileName: string
   }) => {
     const { renewalId, staffUser, transactionReference, identityVerified, unitAndTermsVerified, contractNumber, signedAt, scannedFileUrl, scannedFileName } = params
-    assertPermission(staffUser, 'perform_checkin')
+    assertPermission(staffUser, 'checkins:process')
     if (staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Hoàn tất ký gia hạn tại cơ sở thuộc nghiệp vụ của Facility Staff.')
     if (staffUser.role !== 'staff') throw new Error('Chỉ nhân viên cơ sở được hoàn tất gia hạn.')
     const renewal = state.renewals.find(item => item.id === renewalId)
@@ -3092,7 +3215,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 8. Return & Checkout: Separate Refund Calculation vs Unit Condition
   const requestReturn = (rentalId: string, scheduledDate: string, customer: User, reason?: string): ReturnCase => {
-    assertPermission(customer, 'process_returns')
+    assertPermission(customer, 'returns:process')
     const rental = state.rentals.find(r => r.id === rentalId)
     if (!rental || rental.status !== 'active') throw new Error('Chỉ hợp đồng đang hoạt động mới được gửi yêu cầu trả kho.')
     const requestedReturnDate = toValidDate(scheduledDate)
@@ -3150,8 +3273,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     staffNotes: string
     evidencePhotos: string[]
     returnedItems: { key: boolean; card: boolean; lock: boolean }
+    structuralInspection?: StructuralInspection
+    moistureOrigin?: MoistureOrigin
+    sanitizationFee?: number
+    facilityCompensationAmount?: number
   }) => {
-    assertPermission(params.staffUser, 'process_returns')
+    assertPermission(params.staffUser, 'returns:process')
     const returnCase = state.returns.find(r => r.id === params.returnId)
     if (!returnCase) throw new Error('Không tìm thấy hồ sơ trả kho.')
     const rental = state.rentals.find(r => r.id === returnCase.rentalId)
@@ -3164,25 +3291,58 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const overdueDays = inspectionDay.getTime() > contractEndDay.getTime() ? Math.floor((inspectionDay.getTime() - contractEndDay.getTime()) / 86_400_000) : 0
     const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
     const calculatedOverdueFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
-    const totalFees = params.damageFee + params.cleaningFee + params.lostItemFee + calculatedOverdueFee + params.outstandingFee
-    const netRefund = Math.max(0, returnCase.depositAmount - totalFees)
+
+    // VẤN ĐỀ 2: Nếu lỗi phát sinh do cơ sở (thấm dột trần/vách, máy lạnh hỏng), khách hàng được miễn trừ phí hư hỏng/vệ sinh
+    const isFacilityFault = params.moistureOrigin === 'facility_fault' || params.structuralInspection?.ceiling === 'leaking' || params.structuralInspection?.wall === 'damp_seepage'
+    const effectiveDamageFee = isFacilityFault ? 0 : params.damageFee
+    const effectiveCleaningFee = isFacilityFault ? 0 : (params.cleaningFee + (params.sanitizationFee || 0))
+    const totalFees = effectiveDamageFee + effectiveCleaningFee + params.lostItemFee + calculatedOverdueFee + params.outstandingFee
+
+    const compensation = isFacilityFault ? (params.facilityCompensationAmount || 0) : 0
+    const netRefund = Math.max(0, (returnCase.depositAmount + compensation) - totalFees)
     const amountDueFromCustomer = Math.max(0, Math.round((totalFees - returnCase.depositAmount) * 100) / 100)
 
-    // UNIT CONDITION: Separate from fees! Only physical repair/cleaning needs MAINTENANCE
-    const needsPhysicalRepair = params.damageClassification !== 'no_damage' || params.cleaningFee > 0 || params.inventoryMatch === 'excess'
+    // UNIT CONDITION: Nếu phát sinh hư hại kết cấu (dột nóc, vách thấm, sàn nứt) hoặc vệ sinh kho thì cần bảo trì
+    const hasStructuralDamage = params.structuralInspection && (
+      params.structuralInspection.ceiling !== 'dry_intact' ||
+      params.structuralInspection.wall !== 'dry_intact' ||
+      params.structuralInspection.floor !== 'dry_intact'
+    )
+    const needsPhysicalRepair = params.damageClassification !== 'no_damage' || effectiveCleaningFee > 0 || params.inventoryMatch === 'excess' || isFacilityFault || hasStructuralDamage
     const nextUnitStatus: 'available' | 'maintenance' = needsPhysicalRepair ? 'maintenance' : 'available'
+
+    // Tự động tạo phiếu bảo trì khẩn cấp nếu phát hiện hỏng hóc kết cấu cơ sở
+    const facilityFaultTask: MaintenanceTask | undefined = isFacilityFault || hasStructuralDamage ? {
+      id: `MNT-${Date.now().toString().slice(-6)}`,
+      unitId: unit.id,
+      facilityId: unit.facilityId,
+      reason: `[SỰ CỐ KẾT CẤU KHI TRẢ KHO] ${isFacilityFault ? 'Nghiệm thu trả kho: phát hiện thấm dột / sự cố cơ sở làm ẩm mốc.' : 'Hư hại kết cấu ghi nhận khi trả kho.'} ${params.staffNotes ? `Ghi chú: ${params.staffNotes}` : ''}`,
+      priority: isFacilityFault ? 'P1_CRITICAL' : 'P2_MEDIUM',
+      faultCategory: params.structuralInspection?.ceiling === 'leaking' ? 'roof_leak' : params.structuralInspection?.floor === 'cracked' ? 'floor_cracked' : 'wall_seepage',
+      status: 'pending',
+      createdAt: now.toISOString()
+    } : undefined
 
     setState(prev => ({
       ...prev,
-      units: prev.units.map(u => (u.id === unit.id ? { ...u, status: 'maintenance' } : u)),
+      units: prev.units.map(u => (u.id === unit.id ? {
+        ...u,
+        status: 'maintenance',
+        activeFacilityIssue: isFacilityFault || hasStructuralDamage ? {
+          reportedAt: now.toISOString(),
+          category: params.structuralInspection?.ceiling === 'leaking' ? 'roof_leak' : params.structuralInspection?.floor === 'cracked' ? 'floor_cracked' : 'wall_seepage',
+          priority: isFacilityFault ? 'P1_CRITICAL' : 'P2_MEDIUM',
+          notes: params.staffNotes || 'Sự cố kết cấu ghi nhận khi nghiệm thu trả kho'
+        } : u.activeFacilityIssue
+      } : u)),
       rentals: prev.rentals.map(r => (r.id === rental.id ? { ...r, status: 'closing' } : r)),
       returns: prev.returns.map(r => r.id === returnCase.id ? {
         ...r,
         status: 'awaiting_customer_confirmation',
         inspectedAt: now.toISOString(),
         damageClassification: params.damageClassification,
-        damageFee: params.damageFee,
-        cleaningFee: params.cleaningFee,
+        damageFee: effectiveDamageFee,
+        cleaningFee: effectiveCleaningFee,
         lostItemFee: params.lostItemFee,
         overdueFee: calculatedOverdueFee,
         overdueDays,
@@ -3194,8 +3354,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         customerConfirmed: false,
         returnedItems: params.returnedItems,
         staffId: params.staffUser.id,
-        proposedUnitStatus: nextUnitStatus
+        proposedUnitStatus: nextUnitStatus,
+        structuralInspection: params.structuralInspection,
+        moistureOrigin: params.moistureOrigin,
+        sanitizationFee: params.sanitizationFee,
+        facilityCompensationAmount: compensation
       } : r),
+      maintenanceTasks: facilityFaultTask ? [facilityFaultTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3206,7 +3371,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: unit.facilityId,
           entityType: 'return',
           entityId: returnCase.id,
-          notes: `Đã nghiệm thu kho ${unit.code}. Quá hạn ${overdueDays} ngày, phí trễ ${formatVnd(calculatedOverdueFee)}. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
+          notes: `Đã nghiệm thu kho ${unit.code}. ${isFacilityFault ? 'Ghi nhận lỗi cơ sở gây ẩm; miễn trừ phạt cho khách.' : ''} Quá hạn ${overdueDays} ngày. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -3215,26 +3380,43 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   // 9. Facility Manager: Maintenance Task Handling
-  const createMaintenanceTask = (unitId: string, reason: string, staffUser?: User): MaintenanceTask => {
-    if (staffUser) assertPermission(staffUser, 'manage_inventory')
+  const createMaintenanceTask = (
+    unitId: string,
+    reason: string,
+    staffUser?: User,
+    priority: MaintenancePriority = 'P2_MEDIUM',
+    faultCategory: FacilityIssueCategory = 'other'
+  ): MaintenanceTask => {
+    if (staffUser) assertPermission(staffUser, 'inventory:update')
     const task: MaintenanceTask = {
       id: `MNT-${Date.now().toString().slice(-6)}`,
       unitId,
       facilityId: state.units.find(u => u.id === unitId)?.facilityId || 'fac-001',
       reason,
+      priority,
+      faultCategory,
       status: 'pending',
       createdAt: new Date().toISOString()
     }
     setState(prev => ({
       ...prev,
-      units: prev.units.map(u => u.id === unitId ? { ...u, status: 'maintenance' } : u),
+      units: prev.units.map(u => u.id === unitId ? {
+        ...u,
+        status: 'maintenance',
+        activeFacilityIssue: {
+          reportedAt: new Date().toISOString(),
+          category: faultCategory,
+          priority,
+          notes: reason
+        }
+      } : u),
       maintenanceTasks: [task, ...prev.maintenanceTasks]
     }))
     return task
   }
 
   const completeMaintenanceTask = (taskId: string, managerUser: User) => {
-    assertPermission(managerUser, 'manage_inventory')
+    assertPermission(managerUser, 'inventory:update')
     const task = state.maintenanceTasks.find(t => t.id === taskId)
     if (!task) return
     const unit = state.units.find(item => item.id === task.unitId)
@@ -3244,7 +3426,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       maintenanceTasks: prev.maintenanceTasks.map(t => t.id === taskId ? { ...t, status: 'completed', completedAt: now.toISOString() } : t),
-      units: prev.units.map(u => u.id === task.unitId ? { ...u, status: 'available' } : u),
+      units: prev.units.map(u => u.id === task.unitId ? { ...u, status: 'available', activeFacilityIssue: undefined } : u),
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3264,7 +3446,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const releaseMaintenanceUnit = (unitId: string, staffUser: User) => {
-    assertPermission(staffUser, 'manage_inventory')
+    assertPermission(staffUser, 'inventory:update')
     const unit = state.units.find(item => item.id === unitId)
     if (!unit) throw new Error('Không tìm thấy gian kho.')
     assertFacilityManager(staffUser, unit.facilityId, unit.facilityName)
@@ -3274,13 +3456,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } else {
       setState(prev => ({
         ...prev,
-        units: prev.units.map(u => u.id === unitId ? { ...u, status: 'available' } : u)
+        units: prev.units.map(u => u.id === unitId ? { ...u, status: 'available', activeFacilityIssue: undefined } : u)
       }))
     }
   }
 
-  const updateUnitStatus = (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => {
-    assertPermission(manager, 'manage_inventory')
+  const updateUnitStatus = (
+    unitId: string,
+    status: 'available' | 'maintenance',
+    manager: User,
+    reason?: string,
+    priority: MaintenancePriority = 'P2_MEDIUM',
+    faultCategory: FacilityIssueCategory = 'other'
+  ) => {
+    assertPermission(manager, 'inventory:update')
     const unit = state.units.find(item => item.id === unitId)
     if (!unit) throw new Error('Không tìm thấy gian kho.')
     assertFacilityManager(manager, unit.facilityId, unit.facilityName)
@@ -3297,12 +3486,25 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         unitId,
         facilityId: unit.facilityId,
         reason: reason?.trim() || 'Manager chuyển gian kho sang bảo trì.',
+        priority,
+        faultCategory,
         status: 'pending',
         createdAt: now.toISOString()
       } : undefined
       return {
         ...prev,
-        units: prev.units.map(item => item.id === unitId ? { ...item, status, conditionNotes: reason?.trim() || item.conditionNotes, version: item.version + 1 } : item),
+        units: prev.units.map(item => item.id === unitId ? {
+          ...item,
+          status,
+          conditionNotes: reason?.trim() || item.conditionNotes,
+          activeFacilityIssue: status === 'maintenance' ? {
+            reportedAt: now.toISOString(),
+            category: faultCategory,
+            priority,
+            notes: reason?.trim() || 'Bảo trì cơ sở'
+          } : undefined,
+          version: item.version + 1
+        } : item),
         maintenanceTasks: status === 'available'
           ? prev.maintenanceTasks.map(task => task.unitId === unitId && task.status !== 'completed' ? { ...task, status: 'completed', completedAt: now.toISOString(), notes: reason?.trim() || task.notes } : task)
           : maintenanceTask ? [maintenanceTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
@@ -3311,8 +3513,130 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     })
   }
 
+  // VẤN ĐỀ 1: Luồng Di dời gian kho khẩn cấp (Emergency Unit Relocation) khi sự cố kết cấu (sàn vỡ, nóc dột...)
+  const emergencyRelocateRental = (params: {
+    rentalId: string
+    targetUnitId: string
+    reason: string
+    faultCategory: FacilityIssueCategory
+    manager: User
+    goodwillDiscountPercent?: number
+  }) => {
+    assertPermission(params.manager, 'inventory:update')
+    const rental = state.rentals.find(r => r.id === params.rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    if (rental.status !== 'active') throw new Error('Chỉ có thể di dời hợp đồng đang hoạt động.')
+    assertFacilityManager(params.manager, rental.facilityId, rental.facilityName)
+
+    const sourceUnit = state.units.find(u => u.id === rental.unitId)
+    const targetUnit = state.units.find(u => u.id === params.targetUnitId)
+    if (!sourceUnit || !targetUnit) throw new Error('Không tìm thấy gian kho nguồn hoặc gian kho đích.')
+    if (targetUnit.facilityId !== sourceUnit.facilityId) throw new Error('Gian kho thay thế phải thuộc cùng cơ sở lưu trữ.')
+    if (targetUnit.status !== 'available') throw new Error(`Gian kho ${targetUnit.code} không khả dụng (hiện trạng: ${targetUnit.status}).`)
+
+    const now = new Date()
+    const newPin = Math.floor(100000 + Math.random() * 900000).toString()
+    const newCredentialId = `cred-${Date.now()}`
+
+    const newCredential: AccessCredential = {
+      id: newCredentialId,
+      rentalId: rental.id,
+      unitId: targetUnit.id,
+      type: 'PIN',
+      pinCode: newPin,
+      status: 'ACTIVE',
+      generatedAt: now.toISOString(),
+      activatedAt: now.toISOString()
+    }
+
+    const maintenanceTaskId = `MNT-EMG-${Date.now().toString().slice(-6)}`
+    const emergencyTask: MaintenanceTask = {
+      id: maintenanceTaskId,
+      unitId: sourceUnit.id,
+      facilityId: sourceUnit.facilityId,
+      reason: `[SỰ CỐ KHẨN CẤP P1 - DI DỜI KHO] ${params.reason} (Đã di dời khách sang ${targetUnit.code})`,
+      priority: 'P1_CRITICAL',
+      faultCategory: params.faultCategory,
+      isEmergencyRelocation: true,
+      relocatedFromRentalId: rental.id,
+      status: 'pending',
+      createdAt: now.toISOString()
+    }
+
+    const relocationRecord = {
+      fromUnitId: sourceUnit.id,
+      toUnitId: targetUnit.id,
+      relocatedAt: now.toISOString(),
+      reason: params.reason,
+      faultCategory: params.faultCategory
+    }
+
+    setState(prev => ({
+      ...prev,
+      units: prev.units.map(u => {
+        if (u.id === sourceUnit.id) {
+          return {
+            ...u,
+            status: 'maintenance',
+            conditionNotes: `[SỰ CỐ HẠ TẦNG] ${params.reason}`,
+            activeFacilityIssue: {
+              reportedAt: now.toISOString(),
+              category: params.faultCategory,
+              priority: 'P1_CRITICAL',
+              notes: params.reason
+            },
+            version: u.version + 1
+          }
+        }
+        if (u.id === targetUnit.id) {
+          return {
+            ...u,
+            status: 'occupied',
+            currentRentalId: rental.id,
+            version: u.version + 1
+          }
+        }
+        return u
+      }),
+      rentals: prev.rentals.map(r => {
+        if (r.id === rental.id) {
+          return {
+            ...r,
+            unitId: targetUnit.id,
+            previousUnitId: sourceUnit.id,
+            gateCode: newPin,
+            relocationHistory: [...(r.relocationHistory || []), relocationRecord]
+          }
+        }
+        return r
+      }),
+      accessCredentials: [
+        ...prev.accessCredentials.map(c => c.rentalId === rental.id && c.unitId === sourceUnit.id ? { ...c, status: 'REVOKED' as const, revokedAt: now.toISOString() } : c),
+        newCredential
+      ],
+      maintenanceTasks: [emergencyTask, ...prev.maintenanceTasks],
+      activities: [
+        {
+          id: `act-${Date.now()}`,
+          action: 'EMERGENCY_UNIT_RELOCATED',
+          actorId: params.manager.id,
+          actorName: params.manager.name,
+          actorRole: params.manager.role,
+          facilityId: sourceUnit.facilityId,
+          entityType: 'unit',
+          entityId: sourceUnit.id,
+          beforeState: { unitId: sourceUnit.id, code: sourceUnit.code, status: 'occupied' },
+          afterState: { unitId: targetUnit.id, code: targetUnit.code, status: 'occupied', newPin },
+          notes: `Di dời khẩn cấp khách ${rental.customerName} từ gian ${sourceUnit.code} sang gian ${targetUnit.code} do sự cố ${params.reason}. Đã cấp PIN mới: ${newPin}.`,
+          timestamp: now.toISOString()
+        },
+        ...prev.activities
+      ]
+    }))
+  }
+
   const recordRentalPayment = (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => {
-    assertPermission(manager, 'manage_payments')
+    assertPermission(manager, 'payments:collect')
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
@@ -3346,7 +3670,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const applyRentalLateFee = (rentalId: string, amount: number, manager: User) => {
-    assertPermission(manager, 'manage_payments')
+    assertPermission(manager, 'payments:collect')
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
@@ -3362,7 +3686,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const waiveRentalLateFee = (rentalId: string, manager: User) => {
-    assertPermission(manager, 'manage_payments')
+    assertPermission(manager, 'payments:collect')
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
@@ -3377,7 +3701,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const setRentalOverlock = (rentalId: string, overlocked: boolean, manager: User) => {
-    assertPermission(manager, 'manage_payments')
+    assertPermission(manager, 'payments:collect')
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
@@ -3392,7 +3716,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const sendDelinquencyReminder = (rentalId: string, manager: User) => {
-    assertPermission(manager, 'manage_payments')
+    assertPermission(manager, 'payments:collect')
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
     assertFacilityManager(manager, rental.facilityId, rental.facilityName)
@@ -3402,7 +3726,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const createFacilityTask = (task: Omit<FacilityTask, 'id' | 'createdAt' | 'status'>, manager: User): FacilityTask => {
-    assertPermission(manager, 'manage_staff_tasks')
+    assertPermission(manager, 'staff_tasks:update')
     assertFacilityManager(manager, task.facilityId, task.facilityName)
     if (!task.title.trim() || !task.dueAt) throw new Error('Nhiệm vụ cần có tiêu đề và hạn xử lý.')
     if (manager.role === 'manager' && !task.assignedStaffId) {
@@ -3456,7 +3780,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     let activityNote = 'Đã cập nhật nhiệm vụ.'
 
     if (actor.role === 'manager') {
-      assertPermission(actor, 'manage_staff_tasks')
+      assertPermission(actor, 'staff_tasks:update')
       assertFacilityManager(actor, task.facilityId, task.facilityName)
       if (!canManagerEditFacilityTask(task)) throw new Error('Nhiệm vụ đã kết thúc và không thể chỉnh sửa lại.')
       if (updates.status === 'completed' || updates.status === 'in_progress') {
@@ -3544,7 +3868,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         }
       }
     } else if (actor.role === 'admin') {
-      assertPermission(actor, 'manage_staff_tasks')
+      assertPermission(actor, 'staff_tasks:update')
       normalizedUpdates = updates
     } else {
       throw new Error('Bạn không có quyền cập nhật nhiệm vụ cơ sở.')
@@ -3574,8 +3898,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 10. Operations Config & Support Tickets
   const updateBusinessConfig = (newConfig: Partial<BusinessConfig>, actor: User) => {
-    assertPermission(actor, 'manage_policies')
-    if (actor.role === 'manager' && !isManagerOperationAllowed('manage_policies')) throw new Error('Chính sách thuê không thuộc phạm vi Facility Manager.')
+    assertPermission(actor, 'policies:update')
+    if (actor.role === 'manager' && !isManagerOperationAllowed('policies:update')) throw new Error('Chính sách thuê không thuộc phạm vi Facility Manager.')
     if (actor.role !== 'admin' && actor.role !== 'business') throw new Error('Chỉ Admin và Business Owner được cập nhật cấu hình vận hành tại đây.')
     setState(prev => ({
       ...prev,
@@ -3584,7 +3908,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const respondSupportTicket = (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => {
-    assertPermission(staffUser, 'manage_support')
+    assertPermission(staffUser, 'support:update')
     if (staffUser.role === 'manager' && !isManagerOperationAllowed('handle_support')) throw new Error('Xử lý yêu cầu hỗ trợ thuộc nghiệp vụ của Facility Staff.')
     if (staffUser.role !== 'staff' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được cập nhật yêu cầu hỗ trợ.')
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung phản hồi.')
@@ -3625,7 +3949,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const createSupportTicket = (ticket: Omit<TicketItem, 'id' | 'created' | 'messages'>, initialMessage: string, customer: User): TicketItem => {
-    assertPermission(customer, 'view_support')
+    assertPermission(customer, 'support:read')
     if (customer.role !== 'customer') throw new Error('Chỉ khách hàng được tạo yêu cầu hỗ trợ từ cổng khách hàng.')
     if (!ticket.subject.trim() || !initialMessage.trim()) throw new Error('Tiêu đề và nội dung yêu cầu là bắt buộc.')
     const id = `TKT-${Date.now().toString(36).toUpperCase()}`
@@ -3964,6 +4288,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const resetToDemoData = () => {
+    if (!DEMO_DATA_ENABLED) throw new Error('Dữ liệu demo đang tắt; dữ liệu phải được đọc từ backend.')
     localStorage.removeItem(STORAGE_KEY)
     try {
       localStorage.removeItem('storagehub:facilities')
@@ -3996,7 +4321,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // ── Facility & Unit CRUD ──
   const createFacility = (data: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User): Facility => {
-    if (actor) assertPermission(actor, 'view_facilities')
+    if (actor) assertPermission(actor, 'facilities:read')
     const id = data.id || `fac-${Date.now().toString(36)}`
     const code = (data.code?.trim() || id).toUpperCase()
 
@@ -4239,7 +4564,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const updateFacility = (facilityId: string, updates: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => {
-    if (actor) assertPermission(actor, 'view_facilities')
+    if (actor) assertPermission(actor, 'facilities:read')
     setState(prev => {
       const targetFac = prev.facilities.find(f => f.id === facilityId || f.code === facilityId)
       if (!targetFac) return prev
@@ -4494,7 +4819,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const deleteFacility = (facilityId: string, actor?: User): { success: boolean; reason?: string } => {
-    if (actor) assertPermission(actor, 'view_facilities')
+    if (actor) assertPermission(actor, 'facilities:read')
     const targetFac = state.facilities.find(f => f.id === facilityId || f.code === facilityId)
     const hasActiveHolds = state.holds.some(h => (h.facilityId === facilityId || (targetFac && (h.facilityId === targetFac.id || h.facilityId === targetFac.code)) || h.facilityName?.includes(facilityId)) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status))
     const hasActiveRentals = state.rentals.some(r => (r.facilityId === facilityId || (targetFac && (r.facilityId === targetFac.id || r.facilityId === targetFac.code)) || r.facilityName?.includes(facilityId)) && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status))
@@ -4532,11 +4857,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (state.units.some(item => item.id.toUpperCase() === code || item.code.toUpperCase() === code)) throw new Error('Mã gian kho đã tồn tại trong hệ thống.')
     const targetFacility = state.facilities.find(f => f.id === data.facilityId || f.code === data.facilityId)
     if (actor.role === 'manager') {
-      assertPermission(actor, 'manage_inventory')
+      assertPermission(actor, 'inventory:update')
       if (!targetFacility) throw new Error('Cơ sở được chọn không tồn tại trong dữ liệu hệ thống.')
       assertFacilityManager(actor, targetFacility.id, targetFacility.name)
     } else {
-      assertPermission(actor, 'view_facilities')
+      assertPermission(actor, 'facilities:read')
     }
     const facilityId = targetFacility ? targetFacility.id : (data.facilityId || 'fac-001')
     const facilityName = targetFacility ? targetFacility.name : (data.facilityName || 'Kho Việt')
@@ -4630,7 +4955,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!targetUnit) throw new Error('Không tìm thấy gian kho.')
     let permittedUpdates = { ...updates }
     if (actor.role === 'manager') {
-      assertPermission(actor, 'manage_inventory')
+      assertPermission(actor, 'inventory:update')
       assertFacilityManager(actor, targetUnit.facilityId, targetUnit.facilityName)
       if (managerUnitHasOperationalLock(targetUnit.id, state.holds, state.rentals)) {
         throw new Error('Không thể sửa gian kho khi còn đặt chỗ, hợp đồng hoặc hồ sơ trả kho chưa hoàn tất.')
@@ -4661,7 +4986,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         } : {})
       }
     } else {
-      assertPermission(actor, 'view_facilities')
+      assertPermission(actor, 'facilities:read')
     }
     setState(prev => {
       const nextUnits = prev.units.map(u => {
@@ -4721,10 +5046,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const unit = state.units.find(u => u.id === unitId || u.code === unitId)
     if (!unit) return { success: false, reason: 'Không tìm thấy gian kho.' }
     if (actor.role === 'manager') {
-      assertPermission(actor, 'manage_inventory')
+      assertPermission(actor, 'inventory:update')
       assertFacilityManager(actor, unit.facilityId, unit.facilityName)
     } else {
-      assertPermission(actor, 'view_facilities')
+      assertPermission(actor, 'facilities:read')
     }
     if (unit.status === 'occupied') {
       return { success: false, reason: 'Không thể xóa gian kho đang có khách thuê hoạt động!' }
@@ -4823,9 +5148,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const payStorageHold = (holdId: string, paymentMethod: string = 'Chuyển khoản VietQR', customer: User) => {
     const paidAt = new Date()
     const checkInDeadline = new Date(paidAt.getTime() + 14 * 24 * 60 * 60 * 1000)
-    const targetHold = assertHoldPermission(holdId, 'book_storage')
+    const targetHold = assertHoldPermission(holdId, 'reservations:create')
     if (targetHold.customerId !== customer.id && targetHold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
-    assertPermission(customer, 'book_storage')
+    assertPermission(customer, 'reservations:create')
     if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
     if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 24 giờ thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
@@ -4885,7 +5210,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const replySupportTicket = (ticketId: string, replyText: string, customer: User) => {
-    assertPermission(customer, 'view_support')
+    assertPermission(customer, 'support:read')
     if (customer.role !== 'customer') throw new Error('Chỉ Customer được phản hồi từ cổng khách hàng.')
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung tin nhắn.')
     const ticket = state.tickets.find(item => item.id === ticketId)
@@ -4903,7 +5228,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const deleteResolvedSupportTicket = (ticketId: string, customer: User) => {
-    assertPermission(customer, 'view_support')
+    assertPermission(customer, 'support:read')
     if (customer.role !== 'customer') throw new Error('Chỉ khách hàng được xóa yêu cầu hỗ trợ của mình.')
     const ticket = state.tickets.find(item => item.id === ticketId)
     if (!ticket || (ticket.email !== customer.email && ticket.customer !== customer.name)) throw new Error('Không tìm thấy yêu cầu hỗ trợ thuộc tài khoản này.')
@@ -4915,7 +5240,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const confirmReturnSettlement = (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => {
-    assertPermission(customer, 'process_returns')
+    assertPermission(customer, 'returns:process')
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.customerId !== customer.id) throw new Error('Không tìm thấy hồ sơ trả kho thuộc tài khoản này.')
     if (returnCase.status !== 'awaiting_customer_confirmation') throw new Error('Hồ sơ chưa sẵn sàng để xác nhận quyết toán.')
@@ -4974,7 +5299,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const payReturnBalance = (returnId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string) => {
-    assertPermission(customer, 'process_returns')
+    assertPermission(customer, 'returns:process')
     const returnCase = state.returns.find(item => item.id === returnId)
     if (!returnCase || returnCase.customerId !== customer.id || returnCase.status !== 'payment_due') throw new Error('Không tìm thấy khoản quyết toán trả kho cần thanh toán.')
     const amountDue = returnCase.amountDueFromCustomer ?? 0
@@ -4995,7 +5320,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const completeReturnRefund = (returnId: string, staffUser: User, transactionReference: string) => {
-    assertPermission(staffUser, 'process_returns')
+    assertPermission(staffUser, 'returns:process')
     if (staffUser.role !== 'staff' && staffUser.role !== 'manager' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được xác nhận chuyển hoàn cọc.')
     const returnCase = state.returns.find(item => item.id === returnId)
     if (!returnCase || returnCase.status !== 'refund_pending') throw new Error('Hồ sơ không ở trạng thái chờ hoàn cọc.')
@@ -5017,8 +5342,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const reviewReturnDispute = (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => {
-    assertPermission(manager, 'process_returns')
+  const reviewReturnDispute = (
+    returnId: string,
+    manager: User,
+    resolutionNote?: string,
+    settlement?: ManagerReturnSettlementFees,
+    preset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement',
+    facilityCompensationAmount?: number
+  ) => {
+    assertPermission(manager, 'returns:process')
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
     assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
@@ -5031,6 +5363,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       ? calculateManagerReturnSettlement(returnCase.depositAmount, settlement)
       : undefined
     const now = new Date()
+
+    // Nếu phán quyết lỗi cơ sở (thấm dột): tạo task bảo trì sửa chữa trần/vách kho khẩn cấp
+    const isFacilityFaultVerdict = preset === 'facility_fault_full_refund' || returnCase.moistureOrigin === 'facility_fault'
+    const facilityFaultTask: MaintenanceTask | undefined = isFacilityFaultVerdict && !state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed') ? {
+      id: `MNT-LEAK-${Date.now().toString().slice(-6)}`,
+      unitId: returnCase.unitId,
+      facilityId: returnCase.facilityId,
+      reason: `[SỬA CHỮA HẠ TẦNG SAU TRANH CHẤP] Xử lý sự cố dột nóc / nứt sàn / thấm tường theo kết luận phân xử: ${resolutionNote?.trim()}`,
+      priority: 'P1_CRITICAL',
+      faultCategory: 'roof_leak',
+      status: 'pending',
+      createdAt: now.toISOString()
+    } : undefined
+
     setState(prev => ({
       ...prev,
       returns: prev.returns.map(r => r.id === returnId ? {
@@ -5045,8 +5391,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           netRefundAmount: recalculated?.netRefundAmount ?? r.netRefundAmount,
           amountDueFromCustomer: recalculated?.amountDueFromCustomer ?? r.amountDueFromCustomer
         } : {}),
-        staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager: ${resolutionNote?.trim() || 'Đã rà soát và giữ nguyên quyết toán.'}`
+        disputeResolutionPreset: preset,
+        facilityCompensationAmount: facilityCompensationAmount || r.facilityCompensationAmount,
+        staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager (${preset ? (preset === 'facility_fault_full_refund' ? 'Lỗi cơ sở kho' : preset === 'customer_fault_deduct' ? 'Lỗi khách hàng' : 'Hòa giải') : 'Phân xử'}): ${resolutionNote?.trim() || 'Đã rà soát quyết toán.'}`
       } : r),
+      units: isFacilityFaultVerdict ? prev.units.map(u => u.id === returnCase.unitId ? { ...u, status: 'maintenance' } : u) : prev.units,
+      maintenanceTasks: facilityFaultTask ? [facilityFaultTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
       activities: [{
         id: `act-${Date.now()}`,
         action: 'RETURN_DISPUTE_REVIEWED',
@@ -5065,7 +5415,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           netRefundAmount: returnCase.netRefundAmount,
           amountDueFromCustomer: returnCase.amountDueFromCustomer || 0
         } : undefined,
-        afterState: settlement ? { ...settlement, ...recalculated } : undefined,
+        afterState: settlement ? { ...settlement, ...recalculated, preset } : undefined,
         evidence: returnCase.evidence,
         notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.',
         timestamp: now.toISOString()
@@ -5074,9 +5424,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const verifyHoldEmail = (holdId: string, token: string, customer: User): boolean => {
-    const hold = assertHoldPermission(holdId, 'book_storage')
+    const hold = assertHoldPermission(holdId, 'reservations:create')
     if (hold.customerId !== customer.id && hold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
-    assertPermission(customer, 'book_storage')
+    assertPermission(customer, 'reservations:create')
     let success = false
     setState(prev => ({
       ...prev,
@@ -5118,9 +5468,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const resendHoldEmail = (holdId: string, customer: User) => {
-    const hold = assertHoldPermission(holdId, 'book_storage')
+    const hold = assertHoldPermission(holdId, 'reservations:create')
     if (hold.customerId !== customer.id && hold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
-    assertPermission(customer, 'book_storage')
+    assertPermission(customer, 'reservations:create')
     const newToken = crypto.getRandomValues(new Uint32Array(1))[0].toString().padStart(6, '0').slice(-6)
     setState(prev => ({
       ...prev,
@@ -5144,9 +5494,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const scheduleCheckIn = (holdId: string, appointmentDate: string, appointmentTime: string, customer: User) => {
-    const hold = assertHoldPermission(holdId, 'view_reservations')
+    const hold = assertHoldPermission(holdId, 'reservations:read')
     if (hold.customerId !== customer.id && hold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
-    assertPermission(customer, 'view_reservations')
+    assertPermission(customer, 'reservations:read')
     setState(prev => {
       const reservation = prev.holds.find(h => h.id === holdId)
       if (!reservation) return prev
@@ -5196,7 +5546,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const archiveReservationHistory = (reservationId: string, customer: User) => {
-    assertPermission(customer, 'view_reservations')
+    assertPermission(customer, 'reservations:read')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || (reservation.customerId !== customer.id && reservation.customerEmail !== customer.email)) throw new Error('Không tìm thấy lịch sử giữ kho thuộc tài khoản này.')
     const linkedRental = state.rentals.find(item => item.holdId === reservationId)
@@ -5206,7 +5556,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const archiveRentalHistory = (rentalId: string, customer: User) => {
-    assertPermission(customer, 'view_rentals')
+    assertPermission(customer, 'rentals:read')
     const rental = state.rentals.find(item => item.id === rentalId)
     if (!rental || (rental.customerId !== customer.id && rental.customerEmail !== customer.email)) throw new Error('Không tìm thấy hồ sơ thuê thuộc tài khoản này.')
     if (rental.status !== 'completed') throw new Error('Chỉ có thể xóa khỏi danh sách hồ sơ thuê đã hết hiệu lực.')
@@ -5214,7 +5564,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const archiveContractHistory = (contractId: string, customer: User) => {
-    assertPermission(customer, 'view_contracts')
+    assertPermission(customer, 'contracts:read')
     const contract = state.contracts.find(item => item.id === contractId)
     if (!contract || contract.customerId !== customer.id) throw new Error('Không tìm thấy hợp đồng thuộc tài khoản này.')
     const rental = state.rentals.find(item => item.contractId === contract.id || item.holdId === contract.reservationId)
@@ -5222,8 +5572,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, contracts: prev.contracts.map(item => item.id === contractId ? { ...item, customerArchivedAt: new Date().toISOString() } : item) }))
   }
 
+  const sanitizedFacilities = useMemo(
+    () => state.facilities.map(sanitizeFacilityStrings),
+    [state.facilities]
+  )
+
   const contextValue: StorageHubContextValue = {
     ...state,
+    facilities: sanitizedFacilities,
     unitTypes: UNIT_TYPES,
     can,
     updateRolePermissions,
@@ -5271,6 +5627,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     completeMaintenanceTask,
     releaseMaintenanceUnit,
     updateUnitStatus,
+    emergencyRelocateRental,
     recordRentalPayment,
     applyRentalLateFee,
     waiveRentalLateFee,

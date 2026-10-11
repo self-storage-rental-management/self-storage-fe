@@ -1,7 +1,8 @@
-import { ApiClientError, apiRequest } from './apiClient'
+import { ApiClientError, apiDownload, apiRequest } from './apiClient'
 
 export type CheckInStatus = 'scheduled' | 'completed' | 'rejected' | 'no_show' | 'cancelled' | null
-export type CheckInReservationStatus = 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT'
+export type CheckInListStatus = 'UNSCHEDULED' | 'scheduled' | 'completed' | 'no_show'
+export type CheckInReservationStatus = 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'REJECTED'
 
 export interface CheckInChecklist {
   identityVerified: boolean
@@ -24,6 +25,7 @@ export interface CompleteCheckInRequest {
     actualVolumeM3: number
     varianceAccepted: boolean
   }
+  varianceReason: string | null
   initialUnitCondition: string
   goodsCondition: string
   packageCount: number
@@ -37,8 +39,11 @@ export interface CheckInCase {
   checkInId: string | null
   checkInStatus: CheckInStatus
   scheduledAt: string | null
+  appointmentAt: string | null
   checkedInAt: string | null
   readinessNote: string | null
+  rejectionReason: string | null
+  rejectionDisposition: 'AVAILABLE' | 'MAINTENANCE' | null
   performedBy: string | null
   performedByName: string | null
   reservationId: string
@@ -51,11 +56,13 @@ export interface CheckInCase {
   facilityName: string
   storageUnitId: string
   storageUnitCode: string
-  storageUnitStatus: 'reserved' | 'assigned'
+  storageUnitStatus: 'reserved' | 'assigned' | 'available' | 'maintenance'
   assignmentId: string
-  assignmentStatus: 'ACTIVE' | 'COMPLETED'
+  assignmentStatus: 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   startDate: string
   endDate: string
+  declaredGoodsWeightKg: number
+  declaredGoodsVolumeM3: number
   handover: CompleteCheckInRequest | null
 }
 
@@ -104,12 +111,22 @@ function assertEnvelope(payload: unknown): CheckInCase {
   return (payload as ApiEnvelope<CheckInCase>).data
 }
 
-export async function listCheckIns(params: { page?: number; pageSize?: number; q?: string } = {}) {
+export async function listCheckIns(params: {
+  page?: number
+  pageSize?: number
+  q?: string
+  status?: CheckInListStatus
+  scheduledFrom?: string
+  scheduledTo?: string
+} = {}) {
   const query = new URLSearchParams({
     page: String(params.page ?? 0),
     pageSize: String(params.pageSize ?? 20),
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.status) query.set('status', params.status)
+  if (params.scheduledFrom) query.set('scheduledFrom', params.scheduledFrom)
+  if (params.scheduledTo) query.set('scheduledTo', params.scheduledTo)
   return assertPage(await apiRequest<unknown>(`/api/staff/check-ins?${query}`))
 }
 
@@ -137,6 +154,16 @@ export async function markCheckInNoShow(checkInId: string, reason: string) {
   ))
 }
 
+export async function rejectCheckIn(
+  checkInId: string,
+  request: { reason: string; disposition: 'AVAILABLE' | 'MAINTENANCE'; evidenceReferences: string[] },
+) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/reject`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
 export async function uploadCheckInEvidence(checkInId: string, file: File) {
   const form = new FormData()
   form.set('file', file)
@@ -147,4 +174,8 @@ export async function uploadCheckInEvidence(checkInId: string, file: File) {
     throw new ApiClientError('Backend trả về bằng chứng check-in không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<CheckInEvidenceAsset>).data
+}
+
+export async function downloadCheckInEvidence(assetId: string) {
+  return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
 }
