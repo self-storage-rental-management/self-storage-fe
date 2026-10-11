@@ -34,13 +34,13 @@ describe('customer reservation layout regression', () => {
       responseCode: '00', transactionStatus: '00', gatewayPayDate: '20261101165500', message: '',
       processedAt: '2026-11-01T09:55:00Z', lastReconciledAt: null }
     const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode={base.reservationCode} />)
-    for (const text of ['Biên lai cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đã thanh toán']) expect(html).toContain(text)
+    for (const text of ['Biên lai cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
     expect(html).toContain('6.402.000 ₫')
     expect(html).not.toContain('166.452.000.000')
     for (const paymentStatus of ['FAILED', 'NOT_RECEIVED'] as const) {
       const failedHtml = renderToStaticMarkup(<ReservationReceipt payment={{ ...payment, paymentStatus }} reservationCode={base.reservationCode} />)
       expect(failedHtml).toContain('chưa có biên lai thanh toán')
-      expect(failedHtml).not.toContain('Đã thanh toán')
+      expect(failedHtml).not.toContain('Đơn đã xác nhận cọc')
     }
   })
 
