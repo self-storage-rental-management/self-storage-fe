@@ -6,6 +6,7 @@ import {
   issueAccessCredential,
   listCheckIns,
   markCheckInNoShow,
+  recordCheckInRemainingPayment,
   rejectCheckIn,
   scheduleCheckIn,
   uploadCheckInEvidence,
@@ -184,6 +185,10 @@ export default function StaffCheckInOperationsPanel({
 
   const [credentialSecret, setCredentialSecret] = useState("")
 
+  const [paymentMethod, setPaymentMethod] = useState("CASH")
+
+  const [paymentReference, setPaymentReference] = useState("")
+
   const [noShowTarget, setNoShowTarget] = useState<CheckInCase | null>(null)
 
   const [noShowReason, setNoShowReason] = useState("")
@@ -356,16 +361,28 @@ export default function StaffCheckInOperationsPanel({
     setError(staffErrorMessage(reason, fallback))
 
   const submitHandover = async () => {
-    if (!handoverTarget?.checkInId || !allChecksComplete || !contractFile || !credentialReference.trim()) return
+    const dueAtCheckIn = handoverTarget?.dueAtCheckIn ?? 0
+    if (
+      !handoverTarget?.checkInId ||
+      !allChecksComplete ||
+      !contractFile ||
+      !credentialReference.trim() ||
+      (dueAtCheckIn > 0 && !paymentReference.trim())
+    ) return
 
     setSubmitting(true)
 
     try {
       const uploadedEvidence = [...evidenceReferences]
 
+      const contractUpload = new File(
+        [contractFile],
+        `hop-dong-da-ky-${contractFile.name}`,
+        { type: contractFile.type, lastModified: contractFile.lastModified },
+      )
       const contractAsset = await uploadCheckInEvidence(
         handoverTarget.checkInId,
-        contractFile,
+        contractUpload,
       )
       uploadedEvidence.push(contractAsset.id)
 
@@ -382,6 +399,15 @@ export default function StaffCheckInOperationsPanel({
         setEvidenceReferences(uploadedEvidence)
 
         setEvidenceFiles([])
+      }
+
+      if (dueAtCheckIn > 0) {
+        await recordCheckInRemainingPayment(handoverTarget.checkInId, {
+          amount: dueAtCheckIn,
+          paymentMethod,
+          transactionReference: paymentReference.trim(),
+          note: "Ghi nhận tại bước bàn giao và nhận kho",
+        })
       }
 
       await issueAccessCredential(handoverTarget.checkInId, {
@@ -556,6 +582,10 @@ export default function StaffCheckInOperationsPanel({
     setCredentialReference("")
 
     setCredentialSecret("")
+
+    setPaymentMethod("CASH")
+
+    setPaymentReference("")
 
     setWeightKg(String(item.declaredGoodsWeightKg || ""))
 
@@ -838,6 +868,20 @@ export default function StaffCheckInOperationsPanel({
               <b>{handoverTarget.reservationCode}</b> ·{" "}
               {handoverTarget.storageUnitCode} · {handoverTarget.customerName}
             </div>
+            <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm sm:grid-cols-3">
+              <div>
+                <span className="text-stone-500">Khách hàng</span>
+                <p className="font-semibold">{handoverTarget.customerName}</p>
+              </div>
+              <div>
+                <span className="text-stone-500">Email</span>
+                <p className="font-semibold">{handoverTarget.customerEmail || "Chưa cập nhật"}</p>
+              </div>
+              <div>
+                <span className="text-stone-500">Số điện thoại</span>
+                <p className="font-semibold">{handoverTarget.customerPhone || "Chưa cập nhật"}</p>
+              </div>
+            </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
               Lịch nhận kho do khách hàng đặt: <b>{formatStaffDateTime(handoverTarget.appointmentAt || handoverTarget.scheduledAt)}</b>.
               Nhân viên không thể thay đổi lịch. Nếu khách đến sớm, nhân viên vẫn có thể đối chiếu và bàn giao ngay.
@@ -978,6 +1022,29 @@ export default function StaffCheckInOperationsPanel({
                 />
               </div>
             )}
+            {(handoverTarget.dueAtCheckIn ?? 0) > 0 && (
+              <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
+                <div>
+                  <b>Thanh toán phần còn lại khi nhận kho</b>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    Số tiền cần thu: {Number(handoverTarget.dueAtCheckIn).toLocaleString("vi-VN")} VND. Biên lai sẽ được hiển thị trong tài khoản khách hàng.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                    <option value="CASH">Tiền mặt</option>
+                    <option value="BANK_TRANSFER">Chuyển khoản</option>
+                  </Select>
+                  <Input
+                    label="Mã giao dịch hoặc số phiếu thu"
+                    value={paymentReference}
+                    maxLength={40}
+                    onChange={(event) => setPaymentReference(event.target.value)}
+                    placeholder="Ví dụ: PT-20261012-001"
+                  />
+                </div>
+              </div>
+            )}
             <Input
               label="Loại hàng"
               value={goodsCategory}
@@ -1086,6 +1153,8 @@ export default function StaffCheckInOperationsPanel({
                   !allChecksComplete ||
                   !contractFile ||
                   !credentialReference.trim() ||
+                  ((handoverTarget.dueAtCheckIn ?? 0) > 0 &&
+                    !paymentReference.trim()) ||
                   !initialCondition.trim() ||
                   !goodsCondition.trim() ||
                   !handedOverItems.trim() ||
@@ -1233,6 +1302,20 @@ export default function StaffCheckInOperationsPanel({
                   "nhân viên cơ sở"}
               </p>
             </div>
+            <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 sm:grid-cols-3">
+              <div>
+                <span className="text-stone-500">Khách hàng</span>
+                <p className="font-semibold">{detailTarget.customerName}</p>
+              </div>
+              <div>
+                <span className="text-stone-500">Email</span>
+                <p className="font-semibold">{detailTarget.customerEmail || "Chưa cập nhật"}</p>
+              </div>
+              <div>
+                <span className="text-stone-500">Số điện thoại</span>
+                <p className="font-semibold">{detailTarget.customerPhone || "Chưa cập nhật"}</p>
+              </div>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-lg border border-stone-200 p-3">
                 <span className="text-stone-500">Kích thước thực tế</span>
@@ -1255,6 +1338,51 @@ export default function StaffCheckInOperationsPanel({
                   {detailTarget.handover.packageCount} kiện ·{" "}
                   {detailTarget.handover.goodsCategory}
                 </p>
+              </div>
+            </div>
+            <div className="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-indigo-950">
+              <b>Đối chiếu với thông tin khách đã khai báo</b>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Số kiện</span>
+                  <p className="mt-1 text-xs">Khai báo: {detailTarget.declaredPackageCount ?? "Chưa có dữ liệu"}</p>
+                  <p className="text-xs">Thực tế: {detailTarget.handover.packageCount}</p>
+                  <div className="mt-2">
+                    <ComparisonBadge
+                      matches={detailTarget.declaredPackageCount == null
+                        ? null
+                        : detailTarget.declaredPackageCount === detailTarget.handover.packageCount}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Khối lượng</span>
+                  <p className="mt-1 text-xs">Khai báo: {detailTarget.declaredGoodsWeightKg} kg</p>
+                  <p className="text-xs">Thực tế: {detailTarget.handover.actualMeasurements.weightKg} kg</p>
+                  <div className="mt-2">
+                    <ComparisonBadge
+                      matches={!hasMaterialVariance(
+                        String(detailTarget.handover.actualMeasurements.weightKg),
+                        detailTarget.declaredGoodsWeightKg,
+                        0.1,
+                      )}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Thể tích</span>
+                  <p className="mt-1 text-xs">Khai báo: {detailTarget.declaredGoodsVolumeM3} m³</p>
+                  <p className="text-xs">Thực tế: {detailTarget.handover.actualMeasurements.actualVolumeM3} m³</p>
+                  <div className="mt-2">
+                    <ComparisonBadge
+                      matches={!hasMaterialVariance(
+                        String(detailTarget.handover.actualMeasurements.actualVolumeM3),
+                        detailTarget.declaredGoodsVolumeM3,
+                        0.0001,
+                      )}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             {detailTarget.handover.varianceReason && (
