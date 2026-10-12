@@ -80,6 +80,19 @@ function hasMaterialVariance(
   )
 }
 
+function dimensionsMatch(
+  actual: [number, number, number],
+  declared: [number | null, number | null, number | null],
+) {
+  if (declared.some((value) => value == null || !Number.isFinite(value))) return null
+  const actualSorted = [...actual].sort((left, right) => left - right)
+  const declaredSorted = [...declared].sort((left, right) => Number(left) - Number(right))
+  return actualSorted.every((value, index) =>
+    Math.abs(value - Number(declaredSorted[index])) <=
+    Math.max(Math.abs(Number(declaredSorted[index])) * 0.05, 0.5),
+  )
+}
+
 function localDateBoundary(date: string, nextDay = false) {
   if (!date) return undefined
 
@@ -296,6 +309,19 @@ export default function StaffCheckInOperationsPanel({
           0.0001,
         )
       : null
+    const declaredDimensions: [number | null, number | null, number | null] = [
+      handoverTarget.declaredGoodsLengthCm,
+      handoverTarget.declaredGoodsWidthCm,
+      handoverTarget.declaredGoodsHeightCm,
+    ]
+    const actualDimensions: [number, number, number] = [
+      Number(lengthCm),
+      Number(widthCm),
+      Number(heightCm),
+    ]
+    const dimensionMatches = actualDimensions.every((value) => Number.isFinite(value))
+      ? dimensionsMatch(actualDimensions, declaredDimensions)
+      : null
 
     return {
       declaredPackageCount,
@@ -307,11 +333,14 @@ export default function StaffCheckInOperationsPanel({
       declaredVolume: handoverTarget.declaredGoodsVolumeM3,
       actualVolume,
       volumeMatches,
-      hasVariance: [packageCountMatches, weightMatches, volumeMatches].some(
+      declaredDimensions,
+      actualDimensions,
+      dimensionMatches,
+      hasVariance: [packageCountMatches, weightMatches, volumeMatches, dimensionMatches].some(
         (matches) => matches === false,
       ),
     }
-  }, [handoverTarget, packageCount, volumeM3, weightKg])
+  }, [handoverTarget, heightCm, lengthCm, packageCount, volumeM3, weightKg, widthCm])
 
   const measurementVariance = checkInComparison?.hasVariance ?? false
 
@@ -653,7 +682,7 @@ export default function StaffCheckInOperationsPanel({
     <div className="fade-in space-y-5">
       <SectionHeader
         title="Nhận kho & bàn giao"
-        subtitle="Đối chiếu hàng hóa và hoàn tất bàn giao theo lịch hẹn do khách hàng đặt."
+        subtitle="Đối chiếu hàng hóa và hoàn tất bàn giao theo lịch hẹn do khách hàng đặt. Đơn đã bàn giao được lưu lịch sử và chỉ hiện khi lọc trạng thái ‘Đã bàn giao’."
       />
       <Card className="p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.7fr)_minmax(180px,1fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
@@ -954,12 +983,28 @@ export default function StaffCheckInOperationsPanel({
                 <div>
                   <b>Đối chiếu khai báo và thực tế</b>
                   <p className="mt-1 text-xs text-indigo-800">
-                    Kiểm tra số kiện, khối lượng và thể tích trước khi xác nhận
-                    bàn giao. Chênh lệch khối lượng hoặc thể tích trên 5% cần
-                    được nhân viên ghi nhận lý do.
+                    Kiểm tra số kiện, kích thước, khối lượng và thể tích trước
+                    khi xác nhận bàn giao. Nếu không đạt yêu cầu, nhân viên có
+                    thể từ chối nhận kho ngay tại đây.
                   </p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-md border border-indigo-100 bg-white p-3">
+                    <div className="font-semibold">Kích thước</div>
+                    <div className="mt-1 text-xs text-stone-600">
+                      Khách khai báo: {checkInComparison.declaredDimensions.every((value) => value != null)
+                        ? `${checkInComparison.declaredDimensions.join(" × ")} cm`
+                        : "Chưa có dữ liệu"}
+                    </div>
+                    <div className="text-xs text-stone-600">
+                      Thực tế: {checkInComparison.actualDimensions.every((value) => Number.isFinite(value))
+                        ? `${checkInComparison.actualDimensions.join(" × ")} cm`
+                        : "Chưa nhập"}
+                    </div>
+                    <div className="mt-2">
+                      <ComparisonBadge matches={checkInComparison.dimensionMatches} />
+                    </div>
+                  </div>
                   <div className="rounded-md border border-indigo-100 bg-white p-3">
                     <div className="font-semibold">Số kiện</div>
                     <div className="mt-1 text-xs text-stone-600">
@@ -1010,7 +1055,9 @@ export default function StaffCheckInOperationsPanel({
             {measurementVariance && (
               <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                 <b>
-                  Phát hiện số kiện hoặc số đo thực tế chênh lệch so với khai báo.
+                  Phát hiện số kiện, kích thước hoặc số đo thực tế chênh lệch so
+                  với khai báo. Hãy xác nhận lý do, hoặc từ chối nhận kho nếu
+                  hàng hóa không đạt yêu cầu.
                 </b>
                 <label className="flex gap-2">
                   <input
@@ -1154,6 +1201,17 @@ export default function StaffCheckInOperationsPanel({
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setHandoverTarget(null)}>
                 Đóng
+              </Button>
+              <Button
+                variant="danger"
+                disabled={submitting}
+                onClick={() => {
+                  const target = handoverTarget
+                  setHandoverTarget(null)
+                  if (target) openRejection(target)
+                }}
+              >
+                Từ chối nhận kho
               </Button>
               <Button
                 disabled={
@@ -1350,7 +1408,7 @@ export default function StaffCheckInOperationsPanel({
             </div>
             <div className="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-indigo-950">
               <b>Đối chiếu với thông tin khách đã khai báo</b>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-md border border-indigo-100 bg-white p-3">
                   <span className="text-xs text-stone-500">Số kiện</span>
                   <p className="mt-1 text-xs">Khai báo: {detailTarget.declaredPackageCount ?? "Chưa có dữ liệu"}</p>
@@ -1360,6 +1418,43 @@ export default function StaffCheckInOperationsPanel({
                       matches={detailTarget.declaredPackageCount == null
                         ? null
                         : detailTarget.declaredPackageCount === detailTarget.handover.packageCount}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Kích thước</span>
+                  <p className="mt-1 text-xs">
+                    Khai báo: {detailTarget.declaredGoodsLengthCm != null &&
+                    detailTarget.declaredGoodsWidthCm != null &&
+                    detailTarget.declaredGoodsHeightCm != null
+                      ? `${detailTarget.declaredGoodsLengthCm} × ${detailTarget.declaredGoodsWidthCm} × ${detailTarget.declaredGoodsHeightCm} cm`
+                      : "Chưa có dữ liệu"}
+                  </p>
+                  <p className="text-xs">
+                    Thực tế: {detailTarget.handover.actualMeasurements.lengthCm} ×{" "}
+                    {detailTarget.handover.actualMeasurements.widthCm} ×{" "}
+                    {detailTarget.handover.actualMeasurements.heightCm} cm
+                  </p>
+                  <div className="mt-2">
+                    <ComparisonBadge
+                      matches={
+                        detailTarget.declaredGoodsLengthCm != null &&
+                        detailTarget.declaredGoodsWidthCm != null &&
+                        detailTarget.declaredGoodsHeightCm != null
+                          ? dimensionsMatch(
+                              [
+                                detailTarget.handover.actualMeasurements.lengthCm,
+                                detailTarget.handover.actualMeasurements.widthCm,
+                                detailTarget.handover.actualMeasurements.heightCm,
+                              ],
+                              [
+                                detailTarget.declaredGoodsLengthCm,
+                                detailTarget.declaredGoodsWidthCm,
+                                detailTarget.declaredGoodsHeightCm,
+                              ],
+                            )
+                          : null
+                      }
                     />
                   </div>
                 </div>

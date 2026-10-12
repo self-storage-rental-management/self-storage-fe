@@ -105,7 +105,7 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
 
   return <div className="space-y-6">
     <SectionHeader
-      eyebrow="Quản lý gian kho"
+      eyebrow="Vận hành nhận kho"
       title="Phân kho cho đặt chỗ"
       subtitle="Chọn gian kho còn trống, cùng cơ sở và đúng loại kho cho đặt chỗ đã xác nhận."
     />
