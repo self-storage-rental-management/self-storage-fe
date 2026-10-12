@@ -93,6 +93,7 @@ function CoverageDetails({ data }: { data: LedgerView }) {
     if (gap.startsWith("BOOKING_SNAPSHOT") || gap === "BOOKING_SOURCE_MISSING") return "Thông tin giá đã chấp nhận chưa được xác minh đầy đủ."
     if (gap.includes("REFUND")) return "Chưa xác minh hoàn tiền đã được chuyển."
     if (gap === "PAYMENT_DISPUTED") return "Có giao dịch đang được khiếu nại."
+    if (gap === "SANDBOX_RECEIPT_BINDING_INVALID") return "Chứng cứ hoặc phân bổ VNPay Sandbox không khớp dữ liệu đã lưu."
     if (gap.includes("PAYMENT") || gap.includes("RECEIPT")) return "Chứng cứ thu tiền chưa được đối soát đầy đủ."
     if (gap.includes("SECURITY_DEPOSIT")) return "Chưa xác minh số tiền cọc đang được giữ."
     if (gap.includes("RENEWAL")) return "Nghĩa vụ gia hạn chưa được xác minh đầy đủ."
@@ -103,6 +104,9 @@ function CoverageDetails({ data }: { data: LedgerView }) {
     <ul className="list-disc pl-5">{labels.map(label => <li key={label}>{label}</li>)}</ul>
     <p>Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.</p>
   </section>
+}
+export function canReconcileSandboxPayment(payment: NonNullable<LedgerView["coverageInventory"]>["payments"][number]) {
+  return payment.provenance === "SANDBOX" && payment.eligibleForReconciliation === true && !payment.linkedReceipt && !payment.refundUnreconciled
 }
 function LedgerRead({ role, id }: {
   role: LedgerRole
@@ -136,7 +140,7 @@ function LedgerRead({ role, id }: {
       {read.data && <LedgerContent data={read.data} />}
       {error && <p role="alert">{error} Thử lại cùng yêu cầu để xác định kết quả, không tạo khoản thu mới.</p>}
       {role === "manager" && read.data?.sandboxReconciliationEnabled === true && actor?.permissions.includes("payments:update") && read.data?.revision != null &&
-        read.data.coverageInventory?.payments.filter(p => p.provenance === "SANDBOX" && !p.linkedReceipt && !p.refundUnreconciled).map(p => (
+        read.data.coverageInventory?.payments.filter(canReconcileSandboxPayment).map(p => (
           <Button key={p.paymentId} disabled={busy || (!!pending && pending !== p.paymentId)} onClick={() => void reconcile(p.paymentId)}>
             {pending === p.paymentId ? "Thử lại đối soát Sandbox" : "Đối soát VNPay Sandbox"}
           </Button>

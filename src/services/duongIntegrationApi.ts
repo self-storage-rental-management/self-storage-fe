@@ -50,7 +50,7 @@ export interface LedgerView {
     ledgerRevision: number | null
     completeness: "UNKNOWN" | "PARTIAL"
     gaps: string[]
-    payments: { paymentId: string; provenance: "VERIFIED" | "SIMULATED" | "SANDBOX" | "UNVERIFIED" | "DISPUTED" | "ATTEMPT"; linkedReceipt: boolean; refundUnreconciled: boolean }[]
+    payments: { paymentId: string; provenance: "VERIFIED" | "SIMULATED" | "SANDBOX" | "UNVERIFIED" | "DISPUTED" | "ATTEMPT"; linkedReceipt: boolean; refundUnreconciled: boolean; eligibleForReconciliation?: boolean }[]
     consistentThroughApproval: false
   }
   obligations: {
@@ -89,7 +89,7 @@ export function isLedgerView(v: unknown): v is LedgerView {
       !Array.isArray(inventory.gaps) || !inventory.gaps.every(text) || !Array.isArray(inventory.payments) ||
       !inventory.payments.every(p => object(p) && isUuid(p.paymentId) &&
         ["VERIFIED", "SIMULATED", "SANDBOX", "UNVERIFIED", "DISPUTED", "ATTEMPT"].includes(String(p.provenance)) &&
-        typeof p.linkedReceipt === "boolean" && typeof p.refundUnreconciled === "boolean")) return false
+        typeof p.linkedReceipt === "boolean" && typeof p.refundUnreconciled === "boolean" && (p.eligibleForReconciliation === undefined || typeof p.eligibleForReconciliation === "boolean"))) return false
   }
   if (v.completeness === "UNKNOWN")
     return (
