@@ -87,7 +87,7 @@ function MaintenanceWorkspace({ actorId, identity, showToast }: {
       })
     }, makeUnitAvailable
       ? `Đã hoàn thành bảo trì gian ${selected.unitCode} và chuyển gian sang sẵn sàng.`
-      : `Đã hoàn thành phần sửa chữa gian ${selected.unitCode}; gian vẫn được giữ ở trạng thái cần bảo trì.`)
+      : `Đã hoàn thành phần sửa chữa gian ${selected.unitCode}. Gian vẫn được giữ ở trạng thái cần bảo trì.`)
   }
 
   const actor = getAuthenticatedActor()
