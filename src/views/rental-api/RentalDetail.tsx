@@ -130,6 +130,11 @@ export default function RentalDetail({
                   <p><strong>{bookingPaymentPurposes[payment.purpose]}:</strong> {rentalMoney(payment.amount, evidence.currency)}</p>
                   <p><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
                   <p role="status">{bookingPaymentVerification[payment.verification]}</p>
+                  {payment.projectRecognition && <p role="status">
+                    {payment.projectRecognition.eligibleForReconciliation
+                      ? "Chứng cứ VNPay Sandbox hợp lệ để đối soát trong dự án; chưa xác nhận phân bổ vào sổ công nợ."
+                      : "Giao dịch chưa đủ điều kiện đối soát theo chính sách VNPay Sandbox của dự án."}
+                  </p>}
                 </li>
               ))}
             </ul>

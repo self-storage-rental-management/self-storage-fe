@@ -39,6 +39,7 @@ function fields(value: object, allowed: string[]) {
 
 export type LedgerRole = "customer" | "manager" | "business"
 export interface LedgerView {
+  sandboxReconciliationEnabled?: boolean
   rentalId: string
   completeness: "UNKNOWN" | "PARTIAL"
   currency: "VND"
@@ -49,7 +50,8 @@ export interface LedgerView {
     ledgerRevision: number | null
     completeness: "UNKNOWN" | "PARTIAL"
     gaps: string[]
-    payments: { paymentId: string; provenance: "VERIFIED" | "SIMULATED" | "SANDBOX" | "UNVERIFIED" | "DISPUTED" | "ATTEMPT"; linkedReceipt: boolean; refundUnreconciled: boolean }[]
+    payments: { paymentId: string; provenance: "VERIFIED" | "SIMULATED" | "SANDBOX" | "UNVERIFIED" | "DISPUTED" | "ATTEMPT"; linkedReceipt: boolean; refundUnreconciled: boolean; eligibleForReconciliation?: boolean }[]
+    renewalDeposits?: { renewalId: string; acceptedRevisionId: string; status: "MATCHED" | "UNPOSTED_OR_INVALID" | "APPROVAL_UNCERTIFIED" | "NOT_EFFECTIVE"; obligationId: string | null }[]
     consistentThroughApproval: false
   }
   obligations: {
@@ -62,7 +64,7 @@ export interface LedgerView {
   }[] | null
   receipts: {
     id: string
-    method: "CASH" | "VERIFIED_BANK" | "SIMULATED"
+    method: "CASH" | "VERIFIED_BANK" | "SIMULATED" | "VNPAY_SANDBOX"
     amount: number
     receivedAt: string
     simulated: boolean
@@ -78,7 +80,7 @@ export function isLedgerView(v: unknown): v is LedgerView {
     !object(v) ||
     !isUuid(v.rentalId) ||
     v.currency !== "VND" ||
-    !text(v.reason)
+    !text(v.reason) || (v.sandboxReconciliationEnabled !== undefined && typeof v.sandboxReconciliationEnabled !== "boolean")
   )
     return false
   if (v.coverageInventory !== undefined) {
@@ -88,7 +90,11 @@ export function isLedgerView(v: unknown): v is LedgerView {
       !Array.isArray(inventory.gaps) || !inventory.gaps.every(text) || !Array.isArray(inventory.payments) ||
       !inventory.payments.every(p => object(p) && isUuid(p.paymentId) &&
         ["VERIFIED", "SIMULATED", "SANDBOX", "UNVERIFIED", "DISPUTED", "ATTEMPT"].includes(String(p.provenance)) &&
-        typeof p.linkedReceipt === "boolean" && typeof p.refundUnreconciled === "boolean")) return false
+        typeof p.linkedReceipt === "boolean" && typeof p.refundUnreconciled === "boolean" && (p.eligibleForReconciliation === undefined || typeof p.eligibleForReconciliation === "boolean"))) return false
+    if (inventory.renewalDeposits !== undefined && (!Array.isArray(inventory.renewalDeposits) || !inventory.renewalDeposits.every(d =>
+      object(d) && isUuid(d.renewalId) && isUuid(d.acceptedRevisionId) &&
+      ["MATCHED", "UNPOSTED_OR_INVALID", "APPROVAL_UNCERTIFIED", "NOT_EFFECTIVE"].includes(String(d.status)) &&
+      (d.status === "MATCHED" ? isUuid(d.obligationId) && Array.isArray(v.obligations) && v.obligations.some(o => object(o) && o.id === d.obligationId && o.renewalId === d.renewalId && o.kind === "RENEWAL_DEPOSIT") : d.obligationId === null)))) return false
   }
   if (v.completeness === "UNKNOWN")
     return (
@@ -123,7 +129,7 @@ export function isLedgerView(v: unknown): v is LedgerView {
       (p) =>
         object(p) &&
         isUuid(p.id) &&
-        ["CASH", "VERIFIED_BANK", "SIMULATED"].includes(String(p.method)) &&
+        ["CASH", "VERIFIED_BANK", "SIMULATED", "VNPAY_SANDBOX"].includes(String(p.method)) &&
         money(p.amount) &&
         p.amount > 0 &&
         isInstant(p.receivedAt) &&
@@ -146,6 +152,15 @@ export async function getRentalLedger(role: LedgerRole, id: string) {
   return readRentalEnvelope<LedgerView>(
     await apiRequest(`/api/${role}/rentals/${id}/ledger`),
     (v) => isLedgerView(v) && v.rentalId === id,
+  )
+}
+export async function reconcileSandboxPayment(rentalId: string, paymentId: string, expectedRevision: number, key: string) {
+  requireId(rentalId); requireId(paymentId)
+  if (!isVersion(expectedRevision) || !key.trim() || key.length > 128) throw new Error("Yêu cầu đối soát không hợp lệ.")
+  return readRentalEnvelope<{receiptId: string; ledgerRevision: number; method: "VNPAY_SANDBOX"}>(
+    await apiRequest(`/api/manager/rentals/${rentalId}/sandbox-payments/${paymentId}/reconciliation`, {
+      method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ expectedRevision }),
+    }), v => object(v) && isUuid(v.receiptId) && isVersion(v.ledgerRevision) && v.method === "VNPAY_SANDBOX",
   )
 }
 
@@ -476,6 +491,8 @@ export interface DuongFile {
   entityId: string
   status: "ACTIVE"
 }
+export const renewalSignedContractEntityType = "DUONG_RENEWAL_SIGNED_CONTRACT"
+
 export async function uploadDuongEvidence(
   file: File,
   entityType: string,

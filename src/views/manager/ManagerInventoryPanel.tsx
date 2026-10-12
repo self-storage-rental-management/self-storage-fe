@@ -138,7 +138,6 @@ function DemoManagerInventoryPanel({
   const [typeFilter, setTypeFilter] = useState('all')
   const [floorFilter, setFloorFilter] = useState('all')
   const [zoneFilter, setZoneFilter] = useState('all')
-  const [maintenanceFilter, setMaintenanceFilter] = useState('all')
   const [sortBy, setSortBy] = useState('attention')
   const [unitPage, setUnitPage] = useState(1)
   const [unitPageSize, setUnitPageSize] = useState(10)
@@ -251,7 +250,6 @@ function DemoManagerInventoryPanel({
         (typeFilter === 'all' || unit.type === typeFilter) &&
         (floorFilter === 'all' || String(unit.floor) === floorFilter) &&
         (zoneFilter === 'all' || unit.zone === zoneFilter) &&
-        (maintenanceFilter === 'all' || (maintenanceFilter === 'maintenance' ? unit.status === 'maintenance' : unit.status !== 'maintenance')) &&
         matchesManagerSearch(query, searchValues)
       )
     })
@@ -270,7 +268,7 @@ function DemoManagerInventoryPanel({
       }
       return left.code.localeCompare(right.code)
     })
-  }, [facilityUnits, facilityRentals, facilityReservations, facilityMaintenance, facilityReturns, query, statusFilter, typeFilter, floorFilter, zoneFilter, maintenanceFilter, sortBy])
+  }, [facilityUnits, facilityRentals, facilityReservations, facilityMaintenance, facilityReturns, query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy])
   const unitPagination = paginateManagerItems(visibleUnits, unitPage, unitPageSize)
 
   const availableCount = facilityUnits.filter(unit => unit.status === 'available').length
@@ -355,13 +353,12 @@ function DemoManagerInventoryPanel({
     setTypeFilter('all')
     setFloorFilter('all')
     setZoneFilter('all')
-    setMaintenanceFilter('all')
     setSortBy('attention')
   }
 
   useEffect(() => {
     setUnitPage(1)
-  }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, maintenanceFilter, sortBy, unitPageSize])
+  }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy, unitPageSize])
 
   return (
     <div className="fade-in space-y-6">
@@ -410,11 +407,6 @@ function DemoManagerInventoryPanel({
           <Select label="Khu vực" value={zoneFilter} onChange={event => setZoneFilter(event.target.value)}>
             <option value="all">Tất cả khu vực</option>
             {zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}
-          </Select>
-          <Select label="Trạng thái bảo trì" value={maintenanceFilter} onChange={event => setMaintenanceFilter(event.target.value)}>
-            <option value="all">Tất cả gian kho</option>
-            <option value="maintenance">Kho đang bảo trì</option>
-            <option value="none">Kho không bảo trì</option>
           </Select>
           <Select label="Sắp xếp" value={sortBy} onChange={event => setSortBy(event.target.value)}>
             <option value="attention">Cần chú ý trước</option>

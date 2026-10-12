@@ -43,8 +43,8 @@ async function loadChoices(
         })),
       pagination: {
         page: p.pagination.page,
-        pageSize: p.pagination.size,
-        totalItems: p.pagination.totalElements,
+        pageSize: p.pagination.pageSize,
+        totalItems: p.pagination.totalItems,
         totalPages: p.pagination.totalPages,
         sort: "",
       },
@@ -62,8 +62,8 @@ async function loadChoices(
         })),
       pagination: {
         page: p.pagination.page,
-        pageSize: p.pagination.size,
-        totalItems: p.pagination.totalElements,
+        pageSize: p.pagination.pageSize,
+        totalItems: p.pagination.totalItems,
         totalPages: p.pagination.totalPages,
         sort: "",
       },

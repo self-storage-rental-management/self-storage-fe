@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ApiActor } from "../../services/authApi"
-import { LedgerContent, ledgerReadError } from "./LedgerPanel"
+import { LedgerContent, ledgerReadError, canReconcileSandboxPayment } from "./LedgerPanel"
 import { ApiClientError } from "../../services/apiClient"
 import RenewalCoordinationPanel, {
   canCoordinateRenewal,
@@ -25,11 +25,26 @@ import {
   operationsActor,
 } from "../../../tests/rentalOperationsApiFixtures"
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null }))
+it("requires explicit server Sandbox policy eligibility before exposing reconciliation", () => {
+  const payment = { paymentId: ids.event, provenance: "SANDBOX" as const, linkedReceipt: false, refundUnreconciled: false }
+  expect(canReconcileSandboxPayment(payment)).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: false })).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true })).toBe(true)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true, linkedReceipt: true })).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true, refundUnreconciled: true })).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true, provenance: "SIMULATED" })).toBe(false)
+})
 vi.mock("../../services/authApi", () => ({
   getAuthenticatedActor: () => state.actor,
 }))
 beforeEach(() => {
   state.actor = null
+})
+it("renders an authenticated Sandbox receipt as project collection, distinct from internal simulation", () => {
+  const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 2,
+    obligations: [], refunds: [], receipts: [{ id: ids.event, method: "VNPAY_SANDBOX", amount: 20, receivedAt: instant, simulated: false }] }} />)
+  expect(html).toContain("VNPay Sandbox đã đối soát trong dự án - không thu tiền thật")
+  expect(html).not.toContain("Chuyển khoản đã xác minh")
 })
 const unknown: LedgerView = {
   rentalId: ids.rental,
@@ -51,6 +66,15 @@ const draft = {
   eligiblePackageIds: "",
 }
 describe("Dương integration presentation and safe policy builders", () => {
+  it("distinguishes matched Renewal debt source from a paid deposit", () => {
+    const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 1,
+      obligations: [], receipts: [], refunds: [], coverageInventory: { rentalId: ids.rental, ledgerRevision: 1,
+        completeness: "PARTIAL", gaps: ["RENEWAL_REMAINDER_EFFECTIVE_EVENT_UNCERTIFIED"], payments: [], consistentThroughApproval: false,
+        renewalDeposits: [{ renewalId: ids.renewal, acceptedRevisionId: ids.event, status: "MATCHED", obligationId: ids.event }] } }} />)
+    expect(html).toContain("Cọc gia hạn đã khớp nguồn duyệt và nghĩa vụ đã ghi; chưa xác nhận đã thanh toán.")
+    expect(html).toContain("Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.")
+    expect(html).not.toContain(ids.renewal)
+  })
   it("explains partial inventory without rendering technical references or a zero-debt claim", () => {
     const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 0,
       obligations: [], receipts: [], refunds: [], coverageInventory: { rentalId: ids.rental, ledgerRevision: 0,

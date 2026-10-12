@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { decideStaffReservationReview, listStaffReservationReviews } from './staffReservationApi'
+import { decideStaffReservationReview, listStaffActiveReservations, listStaffReservationReviews } from './staffReservationApi'
 
 describe('staff goods review API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -23,5 +23,12 @@ describe('staff goods review API', () => {
     vi.stubGlobal('fetch', fetchMock)
     await expect(decideStaffReservationReview('r1', 'REJECT', ' ')).rejects.toThrow('lý do')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('loads active reservations with server-side filters and pagination', async () => {
+    const result = { data: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 0 } }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await listStaffActiveReservations({ page: 1, size: 10, q: 'RSV-1', status: 'READY_FOR_CHECKIN' })).toEqual(result)
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/staff/reservations?page=1&size=10&q=RSV-1&status=READY_FOR_CHECKIN')
   })
 })

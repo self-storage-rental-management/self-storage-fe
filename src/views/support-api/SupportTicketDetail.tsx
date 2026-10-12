@@ -33,6 +33,7 @@ import {
   supportLinkLabels,
   supportReceiverLabels,
   supportTicketVisible,
+  supportAssigneeLabel,
 } from "./presentation"
 
 export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket: SupportTicket; role?: SupportRole }) {
@@ -60,7 +61,7 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
         {([
           ...(role === "customer" ? [] : [["Mã khách hàng", t.customerId]]),
           ["Cơ sở", t.facilityId ?? "Chưa có thông tin"],
-          ["Nhân viên phụ trách", role === "customer" ? (t.assignedStaffId ? "Đã phân công" : "Chưa phân công") : (t.assignedStaffId ?? "Chưa phân công")],
+          ["Nhân viên phụ trách", supportAssigneeLabel(t, role)],
           [
             "Hồ sơ liên kết",
             t.linkedId ? `${supportLinkLabels[t.linkedType || ""] || "Hồ sơ"}: ${t.linkedId}` : "Không liên kết",
