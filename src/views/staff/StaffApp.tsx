@@ -33,6 +33,7 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
+import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   listCredentialAlerts,
   revokeAccessCredential,
@@ -1199,6 +1200,16 @@ export default function StaffApp({
       })
     return () => { active = false }
   }, [user.facilityId, page])
+
+  const refreshCredentialAlerts = () => {
+    if (!isApiAuthenticated()) return
+    void listCredentialAlerts(user.facilityId && user.facilityId !== 'ALL' ? user.facilityId : undefined)
+      .then(items => setCredentialAlerts(items))
+      .catch(reason => {
+        setCredentialAlerts([])
+        setCredentialError(staffErrorMessage(reason, "Không thể tải quyền truy cập cần thu hồi."))
+      })
+  }
 
   const showToast = (message: string) => {
     setToast(
@@ -3183,7 +3194,20 @@ export default function StaffApp({
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
       {page === "return" && (
-        <div className="fade-in">
+        <>
+          {isApiAuthenticated() && (
+            <div className="fade-in space-y-4">
+              <SectionHeader
+                eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
+                title="Nghiệm thu trả kho"
+                subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
+              />
+              <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
+            </div>
+          )}
+
+          {!isApiAuthenticated() && (
+            <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
             title={"Nghiệm thu trả kho"}
@@ -3501,7 +3525,9 @@ export default function StaffApp({
               onPageChange={setReturnsPage}
             />
           </Card>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}

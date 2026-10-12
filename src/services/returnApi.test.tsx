@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
-import { isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, returnError, type ApiReturn } from './returnApi'
+import { completeRefund, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import { ReturnSummary } from '../views/return-api/ReturnApiPanel'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
@@ -78,6 +78,34 @@ describe('real Return transport and unknown settlement presentation', () => {
       returnedKey: true, returnedCard: false, returnedLock: true, proposedUnitStatus: 'maintenance' })
     expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/inspection`)
     expect(JSON.parse(fetch.mock.calls[0][1].body).returnedCard).toBe(false)
+  })
+  it('uploads return evidence and sends the stored asset ID to the inspection endpoint', async () => {
+    state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
+    const assetId = ids.file
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { id: assetId, originalName: 'return.jpg', contentType: 'image/jpeg', sizeBytes: 4 } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { ...record, status: 'awaiting_customer_confirmation', evidencePhotos: [assetId] } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetch)
+
+    const uploaded = await uploadReturnEvidence(ids.event, new File(['test'], 'return.jpg', { type: 'image/jpeg' }))
+    expect(uploaded.id).toBe(assetId)
+    const options = fetch.mock.calls[0][1] as RequestInit
+    expect(options.body).toBeInstanceOf(FormData)
+    expect((options.body as FormData).get('entityType')).toBe('RETURN_CASE')
+    expect((options.body as FormData).get('entityId')).toBe(ids.event)
+
+    await inspectReturn(ids.event, { damageFee: 5000, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0,
+      inventoryMatch: 'match', damageClassification: 'minor_damage', staffNotes: 'TEST inspection', evidencePhotos: [uploaded.id],
+      returnedKey: true, returnedCard: true, returnedLock: true, proposedUnitStatus: 'available' })
+    expect(JSON.parse(fetch.mock.calls[1][1].body).evidencePhotos).toEqual([assetId])
+  })
+  it('records the refund transaction reference through the staff endpoint', async () => {
+    state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
+    const fetch = respond({ data: { ...record, status: 'completed' } })
+    const result = await completeRefund(ids.event, { transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
+    expect(result.status).toBe('completed')
+    expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/complete-refund`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
   })
   it('manager review records deductions without calling payout or local store', async () => {
     state.actor = operationsActor('manager'); state.actor.permissions.push('returns:read', 'rentals:update')
