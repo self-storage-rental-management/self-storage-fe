@@ -613,7 +613,9 @@ export default function AdminPortalLogin({ onLogin, onBackToHome, onSwitchToCust
                   {otpDigits.map((digit, index) => (
                     <input
                       key={index}
-                      ref={el => (otpInputRefs.current[index] = el)}
+                      ref={el => {
+                        otpInputRefs.current[index] = el
+                      }}
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
