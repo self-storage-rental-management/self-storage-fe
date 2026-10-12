@@ -274,6 +274,13 @@ describe("D3 operation prerequisites and truthful UI", () => {
     expect(() => vietnamLocalInstant("2026-10-08")).toThrow()
   })
 })
+describe("D3 calendar reservation failure presentation", () => {
+  it("explains an appointment rejected after slow reservation without claiming it was saved", () => {
+    const text = rentalError(new ApiClientError("Appointment expired during reservation", { status: 409 }))
+    expect(text).toContain("chọn lịch khác")
+    expect(text).toContain("lịch mới chưa được lưu")
+  })
+})
 describe("D4 truthful overdue presentation", () => {
   it("PARTIAL zero list does not claim no debt", () => {
     const html = renderToStaticMarkup(
@@ -282,12 +289,13 @@ describe("D4 truthful overdue presentation", () => {
           ...overduePage,
           ...apiPage([]),
           completeness: "PARTIAL",
-          missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS"],
+          missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS", "FINANCIAL_COVERAGE_PARTIAL"],
         }}
       />,
     )
     expect(html).toContain("một phần")
     expect(html).toContain("Chưa đủ dữ liệu để xác định tất cả khoản nợ")
+    expect(html).toContain("Chỉ hiển thị khoản nợ đã xác minh")
     expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
@@ -328,6 +336,6 @@ describe("D4 truthful overdue presentation", () => {
           status: 409,
         }),
       ),
-    ).toContain("Chưa đủ dữ liệu hoặc chính sách")
+    ).toContain("Một nguồn dữ liệu cần thiết")
   })
 })

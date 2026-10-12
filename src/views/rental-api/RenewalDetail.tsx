@@ -1,6 +1,7 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import LedgerPanel from "../rental-support-integration/LedgerPanel"
 import type { RentalApiRole } from "../../types/rentalApi"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import {
@@ -107,6 +108,7 @@ export default function RenewalDetail({
         <p className="rounded bg-amber-50 p-3">
           Đã duyệt, chờ thanh toán và hoàn tất ký gia hạn. Ngày kết thúc thuê chưa thay đổi.</p>
       )}
+      <LedgerPanel key={`${r.id}:${r.version}`} role={role} id={r.rentalId} />
       {r.version === null && (
         <p className="text-amber-700">
           Hồ sơ chưa đủ thông tin để xử lý, hiện chỉ có thể xem.</p>

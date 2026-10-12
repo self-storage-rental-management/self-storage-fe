@@ -39,6 +39,7 @@ import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
 import RenewalCoordinationPanel from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
+import { renewalSignedContractEntityType } from "../../services/duongIntegrationApi"
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -853,7 +854,7 @@ function OperationForm({
         )}
         {action === "completion" && (
           <>
-            <EvidenceUpload entityType="DUONG_RENEWAL_SIGNED_CONTRACT" entityId={s.renewalId}
+            <EvidenceUpload entityType={renewalSignedContractEntityType} entityId={s.renewalId}
               value={signedFile ? [signedFile] : []} limit={1}
               onChange={ids => setSignedFile(ids[0] || "")} onBusy={uploadBusy} />
             <label className="block">
