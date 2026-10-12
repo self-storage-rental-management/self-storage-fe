@@ -18,14 +18,16 @@ export const rentalLabels: Record<string, string> = {
   completed: "Hoàn tất",
 }
 export const renewalLabels: Record<string, string> = {
-  pending: "Chờ xét duyệt",
-  deposit_paid: "Đã trả cọc",
-  approved: "Đã duyệt",
+  pending: "Hệ thống đang kiểm tra điều kiện",
+  accepted: "Đã xác nhận; thanh toán chưa mở",
+  deposit_paid: "Đã thanh toán cọc theo điều khoản gia hạn cũ",
+  full_rent_paid: "Đã thanh toán toàn kỳ gia hạn",
+  approved: "Đã mở thanh toán (hồ sơ cũ)",
   appointment_scheduled: "Đã hẹn",
   payment_processing: "Đang xử lý thanh toán",
   payment_failed: "Thanh toán thất bại",
   payment_expired: "Hết hạn thanh toán",
-  rejected: "Từ chối",
+  rejected: "Đã đóng (hồ sơ cũ)",
   cancelled: "Đã hủy",
   completed: "Hoàn tất",
 }
@@ -81,7 +83,7 @@ export function rentalError(error: unknown) {
       ["Financial state incomplete", "Dữ liệu thanh toán của hồ sơ chưa đầy đủ để xét gia hạn. Vui lòng liên hệ quản lý cơ sở."],
       ["Consistent financial source missing", "Chưa kết nối được nguồn đối soát thanh toán của cơ sở. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
       ["Atomic shared extension hold unavailable", "Hệ thống chưa thể giữ gian kho an toàn cho yêu cầu này. Chưa có thay đổi nào được xác nhận; vui lòng thử lại sau."],
-      ["Approval expiry/payment/hold lifecycle unavailable", "Hệ thống chưa sẵn sàng theo dõi thời hạn duyệt và giữ gian kho. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
+      ["System payment deadline/hold lifecycle unavailable", "Hệ thống chưa sẵn sàng theo dõi hạn thanh toán và giữ gian kho. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
       ["Terms changed: new quote and Customer confirmation required", "Điều khoản hoặc giá đã thay đổi. Hãy lấy báo giá mới và xác nhận lại trước khi gửi."],
       ["Rental allocation/end changed; requote required", "Gian kho hoặc ngày hết hạn đã thay đổi. Hãy tải lại hồ sơ và lấy báo giá mới."],
       ["Accepted Renewal terms do not match persisted request", "Điều khoản được xác nhận không còn khớp với yêu cầu đã lưu. Hãy tải lại yêu cầu và xác nhận báo giá mới."],
@@ -118,20 +120,7 @@ export function hasRenewalAction(
     !record.allowedActions.includes(action)
   )
     return false
-  // An advertised action cannot turn missing/contradictory financial data into approval.
-  if (action === "APPROVE" && (
-    record.status !== "pending" || record.reviewState !== "READY" || !record.acceptedTerms ||
-    record.financialCheck.completeness !== "COMPLETE" || !record.financialCheck.checkedAt ||
-    record.financialCheck.hasUnresolvedDispute !== false ||
-    record.financialCheck.blockingObligationRefs?.length !== 0
-  )) return false
-  if (role === "manager")
-    return (
-      actor.roles.includes("MANAGER") &&
-      actor.permissions.includes("rentals:update") &&
-      actor.facilityScopes[record.facility.id] === "MANAGE" &&
-      ["APPROVE", "REJECT"].includes(action)
-    )
+  if (role === "manager") return false
   return (
     actor.roles.includes("CUSTOMER") &&
     actor.id === record.customer.id &&

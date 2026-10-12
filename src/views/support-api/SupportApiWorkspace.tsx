@@ -192,10 +192,7 @@ function SupportSession({
           {supportStatuses.map((status) => <span key={status}>{supportStatusLabels[status]}: {summary.data!.counts[status]}</span>)}
         </Card>
       )}
-      {role === "staff" && <div className="flex gap-2" role="tablist" aria-label="Danh sách hỗ trợ">
-        <Button role="tab" aria-selected={staffView === "queue"} variant={staffView === "queue" ? undefined : "outline"} onClick={() => setStaffView("queue")}>Chưa tiếp nhận</Button>
-        <Button role="tab" aria-selected={staffView === "assigned"} variant={staffView === "assigned" ? undefined : "outline"} onClick={() => setStaffView("assigned")}>Đang phụ trách</Button>
-      </div>}
+
       <Card className="space-y-3 p-4">
         <form
           className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
@@ -249,7 +246,13 @@ function SupportSession({
               <option value="subject,asc">Tiêu đề A-Z</option>
             </select>
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={`flex items-center gap-2 flex-wrap sm:flex-nowrap sm:col-span-2 ${
+              role !== "staff" || staffView === "assigned"
+                ? "lg:col-span-2"
+                : "lg:col-span-3"
+            }`}
+          >
             <Button type="submit" disabled={locked}>
               Tìm kiếm
             </Button>
@@ -273,21 +276,7 @@ function SupportSession({
               Xóa bộ lọc
             </Button>
           </div>
-          {role !== "manager" && <label className="block text-sm">
-            Số yêu cầu / trang
-            <select
-              className={supportInputClass}
-              disabled={locked}
-              value={query.size}
-              onChange={(e) => change({ size: Number(e.target.value) })}
-            >
-              {[10, 20, 50].map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>}
+
         </form>
         {role === "manager" &&
           query.facilityId &&
