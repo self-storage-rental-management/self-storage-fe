@@ -39,6 +39,7 @@ function fields(value: object, allowed: string[]) {
 
 export type LedgerRole = "customer" | "manager" | "business"
 export interface LedgerView {
+  sandboxReconciliationEnabled?: boolean
   rentalId: string
   completeness: "UNKNOWN" | "PARTIAL"
   currency: "VND"
@@ -62,7 +63,7 @@ export interface LedgerView {
   }[] | null
   receipts: {
     id: string
-    method: "CASH" | "VERIFIED_BANK" | "SIMULATED"
+    method: "CASH" | "VERIFIED_BANK" | "SIMULATED" | "VNPAY_SANDBOX"
     amount: number
     receivedAt: string
     simulated: boolean
@@ -78,7 +79,7 @@ export function isLedgerView(v: unknown): v is LedgerView {
     !object(v) ||
     !isUuid(v.rentalId) ||
     v.currency !== "VND" ||
-    !text(v.reason)
+    !text(v.reason) || (v.sandboxReconciliationEnabled !== undefined && typeof v.sandboxReconciliationEnabled !== "boolean")
   )
     return false
   if (v.coverageInventory !== undefined) {
@@ -123,7 +124,7 @@ export function isLedgerView(v: unknown): v is LedgerView {
       (p) =>
         object(p) &&
         isUuid(p.id) &&
-        ["CASH", "VERIFIED_BANK", "SIMULATED"].includes(String(p.method)) &&
+        ["CASH", "VERIFIED_BANK", "SIMULATED", "VNPAY_SANDBOX"].includes(String(p.method)) &&
         money(p.amount) &&
         p.amount > 0 &&
         isInstant(p.receivedAt) &&
@@ -146,6 +147,15 @@ export async function getRentalLedger(role: LedgerRole, id: string) {
   return readRentalEnvelope<LedgerView>(
     await apiRequest(`/api/${role}/rentals/${id}/ledger`),
     (v) => isLedgerView(v) && v.rentalId === id,
+  )
+}
+export async function reconcileSandboxPayment(rentalId: string, paymentId: string, expectedRevision: number, key: string) {
+  requireId(rentalId); requireId(paymentId)
+  if (!isVersion(expectedRevision) || !key.trim() || key.length > 128) throw new Error("Yêu cầu đối soát không hợp lệ.")
+  return readRentalEnvelope<{receiptId: string; ledgerRevision: number; method: "VNPAY_SANDBOX"}>(
+    await apiRequest(`/api/manager/rentals/${rentalId}/sandbox-payments/${paymentId}/reconciliation`, {
+      method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ expectedRevision }),
+    }), v => object(v) && isUuid(v.receiptId) && isVersion(v.ledgerRevision) && v.method === "VNPAY_SANDBOX",
   )
 }
 

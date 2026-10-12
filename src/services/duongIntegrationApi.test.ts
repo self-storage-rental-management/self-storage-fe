@@ -6,6 +6,7 @@ import {
   getNotificationAcknowledgement,
   coordinateRenewal,
   getRentalLedger,
+  reconcileSandboxPayment,
   isLedgerView,
   getIntegrationPolicy,
   getStoredIntegrationPolicy,
@@ -18,6 +19,14 @@ import {
   type RenewalPolicyInput,
 } from "./duongIntegrationApi"
 describe("ledger coverage inventory", () => {
+  it("posts a resource-bound Sandbox reconciliation with the same caller key and no client amount", async () => {
+    const id = "11111111-1111-4111-8111-111111111111"
+    const fetch = respond({ data: { receiptId: id, ledgerRevision: 2, method: "VNPAY_SANDBOX" } })
+    await reconcileSandboxPayment(id, id, 1, "stable-key")
+    expect(fetch.mock.calls[0][0]).toContain(`/api/manager/rentals/${id}/sandbox-payments/${id}/reconciliation`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ expectedRevision: 1 })
+    expect(new Headers(fetch.mock.calls[0][1].headers).get("Idempotency-Key")).toBe("stable-key")
+  })
   it("requires matching rental/revision and never accepts approval certification from inventory", () => {
     const view = { rentalId: "11111111-1111-4111-8111-111111111111", completeness: "PARTIAL", currency: "VND", revision: 0,
       obligations: [], receipts: [], refunds: [], reason: "Incomplete", coverageInventory: {
