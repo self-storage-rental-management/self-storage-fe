@@ -1082,7 +1082,7 @@ export default function StaffCheckInOperationsPanel({
                 <div>
                   <b>Thanh toán phần còn lại khi nhận kho</b>
                   <p className="mt-1 text-xs text-emerald-800">
-                    Số tiền cần thu: {Number(handoverTarget.dueAtCheckIn).toLocaleString("vi-VN")} VND. Biên lai sẽ được hiển thị trong tài khoản khách hàng.
+                    Số tiền cần thu: {Number(handoverTarget.dueAtCheckIn).toLocaleString("vi-VN")} đồng. Biên lai sẽ được hiển thị trong tài khoản khách hàng.
                   </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1130,16 +1130,16 @@ export default function StaffCheckInOperationsPanel({
             </label>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
               <p className="font-semibold text-amber-950">Cấp quyền truy cập cho khách hàng</p>
-              <p className="text-xs text-amber-900">Nhân viên cấp PIN, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận <code>issuedAt</code>. PIN thô không được lưu.</p>
+              <p className="text-xs text-amber-900">Nhân viên cấp mã truy cập, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận thời điểm cấp. Mã truy cập gốc không được lưu.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select label="Loại quyền truy cập" value={credentialType} onChange={event => setCredentialType(event.target.value as AccessCredentialType)}>
-                  <option value="PIN">Mã PIN / mã truy cập</option>
+                  <option value="PIN">Mã truy cập</option>
                   <option value="CARD">Thẻ ra vào</option>
                   <option value="KEY">Chìa khóa</option>
                   <option value="LOCK">Khóa / ổ khóa</option>
                 </Select>
                 <Input label="Mã tham chiếu / số seri" value={credentialReference} onChange={event => setCredentialReference(event.target.value)} placeholder="Ví dụ: PIN-2048 hoặc CARD-018" />
-                {credentialType === "PIN" && <Input label="PIN (tùy chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
+                {credentialType === "PIN" && <Input label="Mã truy cập (tùy chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
               </div>
             </div>
             <label className="block text-sm font-medium text-stone-700">
