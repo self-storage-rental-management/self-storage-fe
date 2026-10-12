@@ -66,6 +66,15 @@ const draft = {
   eligiblePackageIds: "",
 }
 describe("Dương integration presentation and safe policy builders", () => {
+  it("distinguishes matched Renewal debt source from a paid deposit", () => {
+    const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 1,
+      obligations: [], receipts: [], refunds: [], coverageInventory: { rentalId: ids.rental, ledgerRevision: 1,
+        completeness: "PARTIAL", gaps: ["RENEWAL_REMAINDER_EFFECTIVE_EVENT_UNCERTIFIED"], payments: [], consistentThroughApproval: false,
+        renewalDeposits: [{ renewalId: ids.renewal, acceptedRevisionId: ids.event, status: "MATCHED", obligationId: ids.event }] } }} />)
+    expect(html).toContain("Cọc gia hạn đã khớp nguồn duyệt và nghĩa vụ đã ghi; chưa xác nhận đã thanh toán.")
+    expect(html).toContain("Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.")
+    expect(html).not.toContain(ids.renewal)
+  })
   it("explains partial inventory without rendering technical references or a zero-debt claim", () => {
     const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 0,
       obligations: [], receipts: [], refunds: [], coverageInventory: { rentalId: ids.rental, ledgerRevision: 0,

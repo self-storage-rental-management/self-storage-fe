@@ -89,6 +89,9 @@ function CoverageDetails({ data }: { data: LedgerView }) {
   const inventory = data.coverageInventory
   if (!inventory) return null
   const labels = [...new Set(inventory.gaps.map(gap => {
+    if (gap === "RENEWAL_DEPOSIT_UNPOSTED_OR_INVALID") return "Nghĩa vụ cọc gia hạn chưa khớp số tiền, hạn trả hoặc nguồn duyệt."
+    if (gap === "RENEWAL_APPROVAL_UNCERTIFIED") return "Chưa xác minh quyết định duyệt làm phát sinh cọc gia hạn."
+    if (gap === "RENEWAL_TERMINAL_ACCOUNTING_UNRECONCILED") return "Gia hạn đã kết thúc hoặc hết hạn cần đối soát nghĩa vụ đã ghi."
     if (gap.startsWith("INITIAL_OBLIGATION")) return "Nghĩa vụ tiền thuê hoặc cọc chưa được đối soát."
     if (gap.startsWith("BOOKING_SNAPSHOT") || gap === "BOOKING_SOURCE_MISSING") return "Thông tin giá đã chấp nhận chưa được xác minh đầy đủ."
     if (gap.includes("REFUND")) return "Chưa xác minh hoàn tiền đã được chuyển."
@@ -101,6 +104,11 @@ function CoverageDetails({ data }: { data: LedgerView }) {
   }))]
   return <section aria-label="Dữ liệu cần đối soát" className="rounded border border-amber-200 p-3">
     <p className="font-semibold">Dữ liệu cần đối soát</p>
+    {inventory.renewalDeposits?.map(deposit => <p key={deposit.acceptedRevisionId}>
+      {deposit.status === "NOT_EFFECTIVE" ? "Gia h?n ch?a ph?t sinh ngh?a v? c?c t? quy?t ??nh duy?t." : deposit.status === "MATCHED" ? "Cọc gia hạn đã khớp nguồn duyệt và nghĩa vụ đã ghi; chưa xác nhận đã thanh toán."
+        : deposit.status === "UNPOSTED_OR_INVALID" ? "Cọc gia hạn đã có nguồn duyệt, nhưng nghĩa vụ chưa được đối soát."
+        : "Cọc gia hạn chưa có nguồn duyệt được xác minh."}
+    </p>)}
     <ul className="list-disc pl-5">{labels.map(label => <li key={label}>{label}</li>)}</ul>
     <p>Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.</p>
   </section>

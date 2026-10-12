@@ -51,6 +51,7 @@ export interface LedgerView {
     completeness: "UNKNOWN" | "PARTIAL"
     gaps: string[]
     payments: { paymentId: string; provenance: "VERIFIED" | "SIMULATED" | "SANDBOX" | "UNVERIFIED" | "DISPUTED" | "ATTEMPT"; linkedReceipt: boolean; refundUnreconciled: boolean; eligibleForReconciliation?: boolean }[]
+    renewalDeposits?: { renewalId: string; acceptedRevisionId: string; status: "MATCHED" | "UNPOSTED_OR_INVALID" | "APPROVAL_UNCERTIFIED" | "NOT_EFFECTIVE"; obligationId: string | null }[]
     consistentThroughApproval: false
   }
   obligations: {
@@ -90,6 +91,10 @@ export function isLedgerView(v: unknown): v is LedgerView {
       !inventory.payments.every(p => object(p) && isUuid(p.paymentId) &&
         ["VERIFIED", "SIMULATED", "SANDBOX", "UNVERIFIED", "DISPUTED", "ATTEMPT"].includes(String(p.provenance)) &&
         typeof p.linkedReceipt === "boolean" && typeof p.refundUnreconciled === "boolean" && (p.eligibleForReconciliation === undefined || typeof p.eligibleForReconciliation === "boolean"))) return false
+    if (inventory.renewalDeposits !== undefined && (!Array.isArray(inventory.renewalDeposits) || !inventory.renewalDeposits.every(d =>
+      object(d) && isUuid(d.renewalId) && isUuid(d.acceptedRevisionId) &&
+      ["MATCHED", "UNPOSTED_OR_INVALID", "APPROVAL_UNCERTIFIED", "NOT_EFFECTIVE"].includes(String(d.status)) &&
+      (d.status === "MATCHED" ? isUuid(d.obligationId) && Array.isArray(v.obligations) && v.obligations.some(o => object(o) && o.id === d.obligationId && o.renewalId === d.renewalId && o.kind === "RENEWAL_DEPOSIT") : d.obligationId === null)))) return false
   }
   if (v.completeness === "UNKNOWN")
     return (
