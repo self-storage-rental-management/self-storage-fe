@@ -4,6 +4,11 @@ import type { SupportRole, SupportTicket } from "../../types/supportApi"
 
 export const supportInputClass =
   "w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm disabled:bg-stone-100"
+export function supportAssigneeLabel(ticket: SupportTicket, role: SupportRole) {
+  if (!ticket.assignedStaffId) return "Chưa phân công"
+  if (role === "customer") return "Đã phân công"
+  return ticket.assignedStaffName?.trim() || "Đã phân công (chưa có tên nhân viên)"
+}
 export const supportStatusLabels = {
   open: "Chờ phân công / Chờ nhận",
   in_progress: "Đang xử lý",

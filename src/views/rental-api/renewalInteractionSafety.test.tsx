@@ -6,7 +6,7 @@ import ApiReadState from "./ApiReadState"
 import RenewalDetail from "./RenewalDetail"
 import StaffPanel from "../staff/StaffRenewalOperationsApiPanel"
 import RenewalCoordinationPanel from "../rental-support-integration/RenewalCoordinationPanel"
-import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
+import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 import { Button, Modal } from "../../components/ui"
 import { ApiClientError } from "../../services/apiClient"
 import { apiPage, ids, operationEvent, operationsActor, signingState } from "../../../tests/rentalOperationsApiFixtures"
@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   slots: [] as any[], cursor: 0, effects: [] as (() => void)[],
   actor: undefined as any, state: undefined as any, proposal: undefined as any,
   operationLoading: false, detail: undefined as any, staffPage: undefined as any,
-  refresh: vi.fn(), send: vi.fn(), upload: vi.fn(),
+  refresh: vi.fn(), send: vi.fn(), upload: vi.fn(), download: vi.fn(),
 }))
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
@@ -50,6 +50,7 @@ vi.mock("../../services/renewalOperationsApi", async original => ({ ...await ori
 vi.mock("../../services/duongIntegrationApi", async original => ({
   ...await original<typeof import("../../services/duongIntegrationApi")>(),
   uploadDuongEvidence: (...args: unknown[]) => h.upload(...args),
+  downloadDuongEvidence: (...args: unknown[]) => h.download(...args),
   coordinateRenewal: (...args: unknown[]) => h.send(...args),
 }))
 
@@ -75,7 +76,30 @@ beforeEach(() => {
   h.state = { ...signingState, pendingExceptionRef: ids.file }
   h.proposal = { loading: false, error: new ApiClientError("proposal unavailable", { status: 503 }) }
   h.operationLoading = false; h.detail = undefined; h.staffPage = undefined
-  h.refresh.mockReset(); h.send.mockReset(); h.upload.mockReset()
+  h.refresh.mockReset(); h.send.mockReset(); h.upload.mockReset(); h.download.mockReset()
+})
+
+describe("Evidence download request safety", () => {
+  it("blocks repeated clicks before rerender and unlocks after a denied download", async () => {
+    const slots: any[] = []
+    const view = () => render(() => EvidenceDownload({ id: ids.file }), slots)
+    let reject!: (reason: unknown) => void
+    h.download.mockImplementation(() => new Promise((_, fail) => { reject = fail }))
+    const click = find(view(), Button).props.onClick
+    const first = click()
+    await click()
+    expect(h.download).toHaveBeenCalledTimes(1)
+    expect(h.download).toHaveBeenCalledWith(ids.file)
+    expect(find(view(), Button).props.disabled).toBe(true)
+    reject(new ApiClientError("denied-file-private-detail", { status: 404 }))
+    await first
+    expect(find(view(), Button).props.disabled).toBe(false)
+    h.download.mockRejectedValue(new ApiClientError("scope-revoked", { status: 403 }))
+    await find(view(), Button).props.onClick()
+    expect(h.download).toHaveBeenCalledTimes(2)
+    expect(find(view(), Button).props.disabled).toBe(false)
+    expect(JSON.stringify(view())).not.toContain("scope-revoked")
+  })
 })
 
 describe("D3 form identity and original retry request", () => {

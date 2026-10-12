@@ -43,6 +43,16 @@ afterEach(() => {
   clearAuthTokens()
 })
 describe("D5 transport and response boundaries", () => {
+  it("reads an optional authoritative assigned staff name without rejecting legacy responses", async () => {
+    respond({ data: { ...supportActive, assignedStaffName: "Demo Staff" } })
+    expect((await getSupportTicket("manager", ids.ticket)).assignedStaffName).toBe("Demo Staff")
+    respond({ data: supportActive })
+    expect((await getSupportTicket("manager", ids.ticket)).assignedStaffName).toBeUndefined()
+  })
+  it("rejects malformed assigned staff names", async () => {
+    respond({ data: { ...supportActive, assignedStaffName: { fullName: "Injected" } } })
+    await expect(getSupportTicket("manager", ids.ticket)).rejects.toThrow()
+  })
   it("keeps the shared Customer ticket client on its original endpoint", async () => {
     const fetch = respond(supportPage([]))
     await listCustomerSupportTickets("open", 0, 20)

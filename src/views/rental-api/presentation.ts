@@ -58,6 +58,7 @@ export function rentalError(error: unknown) {
     if (error.status === 404)
       return "Không tìm thấy hồ sơ hoặc hồ sơ không thuộc phạm vi truy cập."
     const renewalErrors: Array<[string, string]> = [
+      ["Appointment expired during reservation", "Lịch hẹn đã qua trong lúc xử lý. Hãy tải lại hồ sơ và chọn lịch khác; lịch mới chưa được lưu."],
       ["Eligibility UNKNOWN", "Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau; nếu vẫn gặp lỗi, liên hệ quản lý cơ sở."],
       ["Eligibility/cutoff missing", "Chưa có dữ liệu xác định hạn xử lý gia hạn. Vui lòng tải lại sau."],
       ["Unverified date provenance/cutoff", "Ngày hết hạn hoặc mốc xử lý của hồ sơ chưa được xác minh. Vui lòng liên hệ quản lý cơ sở để kiểm tra hồ sơ."],

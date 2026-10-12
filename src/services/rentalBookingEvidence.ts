@@ -43,6 +43,12 @@ export function isRentalBookingEvidence(value: unknown, rentalId: string, reserv
       !(p.processedAt === null || (typeof p.processedAt === "string" &&
         /^\d{4}-\d{2}-\d{2}T/.test(p.processedAt) && Number.isFinite(Date.parse(p.processedAt))))) return false
     ids.add(p.id)
+    if (p.projectRecognition != null) {
+      const r = p.projectRecognition
+      if (typeof r.environment !== "string" || typeof r.enabled !== "boolean" ||
+        typeof r.eligibleForReconciliation !== "boolean" || typeof r.reason !== "string" ||
+        (r.eligibleForReconciliation && (!r.enabled || r.environment !== "VNPAY_SANDBOX" || p.verification !== "SANDBOX"))) return false
+    }
     return true
   })
 }
