@@ -463,7 +463,7 @@ export default function CustomerSupportSection({
               {/* Latest message preview */}
               {latestMessage && (
                 <div className="mt-3 rounded-lg bg-stone-50 p-2.5 text-xs text-stone-700 border border-stone-200">
-                  <b>{latestMessage.role === 'staff' ? `${ticket.assignedStaff || 'Staff'} phản hồi:` : 'Bạn:'} </b>
+                  <b>{latestMessage.role === 'staff' ? `${ticket.assignedStaff || 'Nhân viên cơ sở'} phản hồi:` : 'Bạn:'} </b>
                   <span className="text-stone-600 line-clamp-2">{latestMessage.text}</span>
                 </div>
               )}
