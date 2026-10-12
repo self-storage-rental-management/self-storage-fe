@@ -70,6 +70,17 @@ describe('customer reservation layout regression', () => {
       expect(render(status)).toContain('Xem phiếu giữ kho')
     }
   })
+  it('allows customers to set or change the appointment until check-in starts', () => {
+    for (const status of ['AWAITING_EMAIL', 'AWAITING_REVIEW', 'AWAITING_PAYMENT', 'PAYMENT_GRACE', 'PAYMENT_REVIEW', 'CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'] as const) {
+      expect(render(status)).toContain('Lưu lịch nhận kho')
+    }
+    expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Lưu lịch nhận kho')
+  })
+  it('requires an explicit cancellation confirmation', () => {
+    const html = render('AWAITING_EMAIL')
+    expect(html).toContain('Hủy giữ kho')
+    expect(html).not.toContain('Xác nhận hủy giữ kho')
+  })
   it('describes PAYMENT_GRACE as a complaint window instead of a payment extension', () => {
     expect(reservationStatusLabels.PAYMENT_GRACE).toBe('Chờ khiếu nại thanh toán')
     const html = render('PAYMENT_GRACE')

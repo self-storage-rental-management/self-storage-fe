@@ -2270,7 +2270,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       if (capacity <= earlierCapacityHolds) throw new Error('Loại kho này không còn suất trống để duyệt hồ sơ.')
     }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
-    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
+    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
     const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.4 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
@@ -5147,17 +5147,17 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const payStorageHold = (holdId: string, paymentMethod: string = 'Chuyển khoản VietQR', customer: User) => {
     const paidAt = new Date()
-    const checkInDeadline = new Date(paidAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const checkInDeadline = new Date(paidAt.getTime() + 7 * 24 * 60 * 60 * 1000)
     const targetHold = assertHoldPermission(holdId, 'reservations:create')
     if (targetHold.customerId !== customer.id && targetHold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
     assertPermission(customer, 'reservations:create')
     if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
-    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 24 giờ thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
+    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 6 giờ thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
     const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
-    if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong 14 ngày sau khi thanh toán cọc. Vui lòng đổi lịch trước khi thanh toán.')
+    if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong cửa sổ 7 ngày. Vui lòng đổi lịch trước khi thanh toán.')
     setState(prev => {
       const nextHolds = prev.holds.map(h => {
         if (h.id === holdId) {
@@ -5442,7 +5442,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               : h.goodsReviewDueAt
             const paymentExpiresAt = requiresGoodsReview
               ? h.paymentExpiresAt
-              : new Date(verifiedAt.getTime() + 24 * 60 * 60 * 1000).toISOString()
+              : new Date(verifiedAt.getTime() + 6 * 60 * 60 * 1000).toISOString()
             return {
               ...h,
               status: requiresGoodsReview ? transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL') : 'awaiting_payment',
@@ -5508,10 +5508,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const paidAt = reservation.depositPaidAt || reservation.payment.paidAt
       const deadline = reservation.checkInDeadline
         ? toValidDate(reservation.checkInDeadline)
-        : new Date(toValidDate(paidAt || reservation.createdAt).getTime() + 14 * 24 * 60 * 60 * 1000)
+        : new Date(toValidDate(paidAt || reservation.createdAt).getTime() + 7 * 24 * 60 * 60 * 1000)
       deadline.setHours(23, 59, 59, 999)
       if (requestedDate < today || requestedDate > deadline) {
-        throw new Error(`Lịch Check-in phải từ hôm nay đến ${toDateInputValue(deadline)} (trong 14 ngày sau khi đóng cọc).`)
+        throw new Error(`Lịch Check-in phải từ hôm nay đến ${toDateInputValue(deadline)} (trong cửa sổ 7 ngày).`)
       }
       const nextEndDate = addCalendarMonths(appointmentDate, reservation.rentalMonths)
       if (reservation.assignedUnitId) {
