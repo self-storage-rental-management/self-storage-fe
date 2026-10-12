@@ -19,6 +19,17 @@ const evidence: RentalBookingEvidence = {
 }
 beforeEach(() => vi.clearAllMocks())
 describe("Booking evidence connects DB response without financial or permission shortcuts", () => {
+  it("shows authenticated project Sandbox eligibility without promoting unknown debt or allocation", () => {
+    const updated = { ...evidence, payments: [{ ...evidence.payments[0], verification: "SANDBOX" as const,
+      projectRecognition: { environment: "VNPAY_SANDBOX", enabled: true, eligibleForReconciliation: true, reason: "AUTHENTICATED_SANDBOX_EVIDENCE" } }] }
+    expect(isRentalBookingEvidence(updated, rental.id, rental.reservationId)).toBe(true)
+    const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, bookingEvidence: updated }} />)
+    expect(html).toContain("Chứng cứ VNPay Sandbox hợp lệ để đối soát")
+    expect(html).toContain("chưa xác nhận phân bổ vào sổ công nợ")
+    expect(rental.financialSummary.completeness).toBe("UNKNOWN")
+    expect(isRentalBookingEvidence({ ...updated, payments: [{ ...updated.payments[0], verification: "SIMULATED" }] }, rental.id, rental.reservationId)).toBe(false)
+    expect(isRentalBookingEvidence({ ...updated, payments: [{ ...updated.payments[0], projectRecognition: { ...updated.payments[0].projectRecognition, enabled: false } }] }, rental.id, rental.reservationId)).toBe(false)
+  })
   it("reads the existing endpoint and preserves unknown debt/access despite a paid simulated record", async () => {
     vi.mocked(apiRequest).mockResolvedValue({ data: { ...rental, bookingEvidence: evidence } })
     const detail = await getRental("customer", rental.id)
