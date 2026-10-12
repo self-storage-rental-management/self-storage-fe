@@ -33,6 +33,7 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
+import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   listCredentialAlerts,
@@ -3532,15 +3533,18 @@ export default function StaffApp({
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
       {page === 'support' && (
-        <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
-        <StaffSupportPanel
-          user={user}
-          tickets={hub.tickets}
-          respondSupportTicket={hub.respondSupportTicket}
-          canManageSupport={true}
-          showToast={showToast}
-        />
-        </SupportApiRoute>
+        <div className="space-y-4">
+          <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
+            <StaffSupportPanel
+              user={user}
+              tickets={hub.tickets}
+              respondSupportTicket={hub.respondSupportTicket}
+              canManageSupport={true}
+              showToast={showToast}
+            />
+          </SupportApiRoute>
+          {isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
+        </div>
       )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
