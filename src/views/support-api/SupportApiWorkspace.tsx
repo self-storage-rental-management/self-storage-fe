@@ -146,11 +146,6 @@ function SupportSession({
           className="space-y-2 rounded border border-red-200 bg-red-50 p-3 text-sm"
         >
           <p>{errorText(command.error, supportError)}</p>
-          {!locked && !manager && (
-            <Button variant="outline" onClick={reload}>
-              Tải lại hồ sơ trước khi thao tác tiếp
-            </Button>
-          )}
         </div>
       )}
       {command.uncertain && (
@@ -256,13 +251,6 @@ function SupportSession({
             <Button type="submit" disabled={locked}>
               Tìm kiếm
             </Button>
-            {!manager && (<Button
-              variant="outline"
-              disabled={locked}
-              onClick={reload}
-            >
-              Tải lại
-            </Button>)}
             <Button
               type="button"
               variant="ghost"

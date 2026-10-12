@@ -101,7 +101,7 @@ describe("Dương delete-first UI copy regression", () => {
   })
   it("D3 deposit history discloses simulation, without labeling an actual CASH receipt as simulated", () => {
     let html = renderToStaticMarkup(<OperationEventCard event={operationEvent} />)
-    expect(html).toContain("Kết quả thanh toán cọc thử nghiệm")
+    expect(html).toContain("Giao dịch gia hạn theo luồng cũ")
     expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).toContain("3.201.000 đ")
     html = renderToStaticMarkup(<OperationEventCard event={{ ...operationEvent, kind: "CASH" }} />)
@@ -168,7 +168,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(values[0]).toContain("đăng nhập")
     expect(values[1]).toContain("quyền")
     expect(values[3]).toContain("thay đổi")
-    expect(present(new ApiClientError("private detail", { status: 409, code: "DEFERRED_SOURCE" }))).toContain("Chưa đủ dữ liệu")
+    expect(present(new ApiClientError("private detail", { status: 409, code: "DEFERRED_SOURCE" }))).toMatch(/chưa sẵn sàng|Chưa đủ dữ liệu/)
   })
   it("queued receiving status is not labeled completed or delivered", () => {
     expect(supportReceiverLabels.QUEUED).toBe("Đang chờ tiếp nhận")

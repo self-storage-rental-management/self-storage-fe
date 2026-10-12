@@ -280,9 +280,6 @@ function EventTimeline({
             }[category]
           }
         </h4>
-        {!manager && (<Button variant="outline" onClick={read.refresh}>
-          Tải lại
-        </Button>)}
       </div>
       <ApiReadState {...read} retry={read.refresh} />
       {read.data && (
@@ -362,20 +359,6 @@ export default function RenewalOperationsPanel({
   }
   return (
     <div className="space-y-4 mt-4">
-      {!manager && (<div className="flex gap-2">
-        <Button
-          variant="outline"
-          disabled={locked}
-          onClick={() => {
-            if (lockRef.current) return
-            setSelected(undefined)
-            setRevision((v) => v + 1)
-            onChanged?.()
-          }}
-        >
-          Tải lại tiến độ
-        </Button>
-      </div>)}
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <>

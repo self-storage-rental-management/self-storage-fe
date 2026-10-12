@@ -47,8 +47,10 @@ describe("Rental/Renewal business presentation", () => {
   })
   it("shows accepted terms and persisted cancellation reason without recalculating", () => {
     const html=renderToStaticMarkup(<RenewalDetail role="customer" renewal={{...renewal,acceptedTerms:quote,cancellationReason:"Khách đổi kế hoạch"}} onAction={()=>{}} />)
-    expect(html).toContain("3.201.000 đ")
-    expect(html).toContain("12.804.000 đ")
+    expect(html).toContain(rentalMoney(quote.totalAfterDiscount, quote.currency))
+    expect(html).not.toContain("Cọc gia hạn")
+    expect(html).not.toContain("Tiền thuê còn lại")
+    expect(html).not.toContain("Thời điểm duyệt")
     expect(html).toContain("Khách đổi kế hoạch")
     expect(html).not.toContain("không phải xác nhận đã thanh toán")
     expect(html).not.toContain("policy1")
@@ -128,8 +130,8 @@ describe("Rental/Renewal business presentation", () => {
         onAction={() => {}}
       />,
     )
-    expect(html).toContain("Ngày kết thúc thuê chưa thay đổi")
-    expect(html).toContain("chờ thanh toán và hoàn tất ký gia hạn")
+    expect(html).toContain("ngày kết thúc thuê chưa thay đổi")
+    expect(html).toContain("chưa xác nhận đã thanh toán hoặc hoàn tất ký")
     expect(html).not.toContain("D3")
     expect(html).not.toContain("Thanh toán ngay")
   })

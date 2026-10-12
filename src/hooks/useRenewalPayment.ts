@@ -1,0 +1,94 @@
+import { useEffect, useRef, useState } from "react"
+import { ApiClientError } from "../services/apiClient"
+import { createRenewalVnpayPaymentIntent, getRenewalVnpayPayment, renewalPaymentRedirectUrl } from "../services/renewalApi"
+import type { RenewalApiRecord, RenewalVnpayPaymentResponse } from "../types/renewalApi"
+import { newRenewalIdempotencyKey } from "./useRenewalCommand"
+
+export function renewalPaymentError(error: unknown): string {
+  if(error instanceof ApiClientError) {
+    if(error.status===401)return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại rồi tiếp tục thanh toán."
+    if(error.message.includes("DEFERRED_SOURCE")||error.code==="DEFERRED_SOURCE")
+      return "Hệ thống chưa đủ dữ liệu để mở thanh toán gia hạn. Vui lòng liên hệ hỗ trợ để kiểm tra hồ sơ."
+    if(error.status===409)return `Chưa thể mở thanh toán: ${error.message}. Vui lòng cập nhật hồ sơ hoặc liên hệ hỗ trợ.`
+    if(error.status!==null&&error.status>=500)
+      return "Hệ thống gặp lỗi khi xử lý thanh toán gia hạn. Vui lòng thử lại sau hoặc liên hệ hỗ trợ."
+    if(error.status===null)return "Chưa xác định kết quả do lỗi kết nối. Hãy thử lại; hệ thống sẽ dùng lại yêu cầu thanh toán này."
+  }
+  return error instanceof Error?error.message:"Không thể mở thanh toán gia hạn. Vui lòng thử lại."
+}
+
+/** Both intent retries and read responses remain bound to the selected customer/revision. */
+export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, onChange?: () => void) {
+  const scope=`storagehub:renewal-payment:${renewal.customer.id}:${renewal.id}:${renewal.acceptedRevision??"unknown"}`
+  const currentScope=useRef(scope);currentScope.current=scope
+  const currentEnabled=useRef(enabled);currentEnabled.current=enabled
+  const mounted=useRef(true)
+  const lock=useRef(false)
+  const attempt=useRef<{scope:string,key:string}|null>(null)
+  const refresh=useRef(onChange);refresh.current=onChange
+  const epoch=useRef(0)
+  const lastStatus=useRef<string|null>(null)
+  const [payment,setPayment]=useState<RenewalVnpayPaymentResponse|null>(null)
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState<string|null>(null)
+  useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false}},[])
+  const forget=()=>{
+    attempt.current=null
+    try { sessionStorage.removeItem(scope) } catch {}
+  }
+
+  useEffect(()=>{
+    let active=true
+    let reading=false
+    setPayment(null);setError(null);lastStatus.current=null
+    if(!enabled)return
+    const read=async()=>{
+      if(lock.current||reading)return
+      reading=true
+      const request=++epoch.current
+      try {
+        const result=await getRenewalVnpayPayment(renewal.id)
+        if(!active||currentScope.current!==scope||request!==epoch.current)return
+        setPayment(result);setError(null)
+        if(result.paymentStatus==="FAILED"||result.paymentStatus==="CANCELLED")forget()
+        const signature=`${result.paymentStatus}:${result.settlementStage}:${result.reconciliationRequired}`
+        if(signature!==lastStatus.current&&(lastStatus.current!==null||result.paymentStatus==="PAID"))refresh.current?.()
+        lastStatus.current=signature
+      } catch(e) {
+        if(!active||currentScope.current!==scope||request!==epoch.current)return
+        if(e instanceof ApiClientError&&e.status===404)return
+        setError(renewalPaymentError(e))
+      } finally { reading=false }
+    }
+    void read()
+    // Poll authoritative state on an open detail, including the VNPay return view.
+    const timer=typeof document==="undefined"?null:globalThis.setInterval(()=>{
+      if(document.visibilityState!=="hidden")void read()
+    },5000)
+    return ()=>{active=false;if(timer!==null)globalThis.clearInterval(timer)}
+  },[enabled,scope,renewal.id])
+
+  const pay=async()=>{
+    if(lock.current||!enabled||renewal.status!=="accepted"||renewal.acceptedRevision===null||payment?.paymentStatus==="PAID")return
+    lock.current=true;++epoch.current;setBusy(true);setError(null)
+    try {
+      if(attempt.current?.scope!==scope)attempt.current=null
+      let key=attempt.current?.key
+      if(!key) { try { key=sessionStorage.getItem(scope)??undefined } catch {} }
+      key??=newRenewalIdempotencyKey()
+      attempt.current={scope,key}
+      try { sessionStorage.setItem(scope,key) } catch {}
+      const result=await createRenewalVnpayPaymentIntent(renewal.id,key)
+      if(!mounted.current||currentScope.current!==scope||!currentEnabled.current)return
+      setPayment(result);refresh.current?.()
+      if(result.paymentStatus==="PAID")return
+      if(result.paymentStatus==="FAILED"||result.paymentStatus==="CANCELLED") {
+        forget();throw new Error("Giao dịch trước đã kết thúc. Vui lòng bấm thanh toán lại để tạo giao dịch mới.")
+      }
+      window.location.assign(renewalPaymentRedirectUrl(result))
+    } catch(e) {
+      if(mounted.current&&currentScope.current===scope)setError(renewalPaymentError(e))
+    } finally { lock.current=false;if(mounted.current)setBusy(false) }
+  }
+  return {payment,busy,error,pay}
+}

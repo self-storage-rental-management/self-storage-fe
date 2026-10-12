@@ -38,6 +38,24 @@ describe('Booking acceptance uses Payment and Reservation response fields', () =
 })
 
 describe('VNPay history nullable processing timestamp', () => {
+  it('keeps missing payment metadata unknown for a deposit from the older payment API', () => {
+    const html = renderToStaticMarkup(<ReservationReceipt payment={paid} reservationCode="RSV-TEST" />)
+    expect(html).toContain('Phương thức thanh toán')
+    expect(html).not.toContain('Hệ thống tự động qua VNPay')
+    expect(html).not.toContain('>VNPay<')
+    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>—<\/dd>/)
+    expect(html).toMatch(/Người ghi nhận<\/dt><dd[^>]*>—<\/dd>/)
+  })
+  it('shows the bank returned by VNPay', () => {
+    const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, paymentMethod: 'NCB' }} reservationCode="RSV-TEST" />)
+    expect(html).toContain('>NCB<')
+  })
+  it('keeps the counter payment method and employee on the remaining rental receipt', () => {
+    const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, purpose: 'RENTAL_BALANCE', paymentMethod: 'Tiền mặt', initiatedByName: 'Nhân viên cơ sở' }} reservationCode="RSV-TEST" />)
+    expect(html).toContain('Tiền mặt')
+    expect(html).toContain('Nhân viên cơ sở')
+    expect(html).not.toContain('Hệ thống tự động qua VNPay')
+  })
   it('never invents an epoch date for pending transactions', () => {
     expect(paymentHistoryTimestamp(null)).toBe('Chưa ghi nhận')
     expect(paymentHistoryTimestamp('invalid')).toBe('Chưa ghi nhận')

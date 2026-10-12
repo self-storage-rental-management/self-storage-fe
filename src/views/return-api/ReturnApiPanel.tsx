@@ -10,6 +10,7 @@ import {
   getReturn,
   inspectReturn,
   listReturns,
+  paySettlement,
   requestReturn,
   reviewDispute,
   returnError,
@@ -178,6 +179,8 @@ function ReturnActions({ role, id, run, busy }: { role: ReturnRole; id: string; 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
   const [refundReference, setRefundReference] = useState('')
   const [refundNotes, setRefundNotes] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('Chuyển khoản')
+  const [paymentNotes, setPaymentNotes] = useState('')
   const initialized = useRef(false)
 
   useEffect(() => {
@@ -196,6 +199,7 @@ function ReturnActions({ role, id, run, busy }: { role: ReturnRole; id: string; 
   const canInspect = write && role === 'staff' && ['requested', 'scheduled'].includes(record.status)
   const canReview = write && role === 'manager' && record.status === 'disputed'
   const canRefund = write && role === 'staff' && record.status === 'refund_pending'
+  const canPaySettlement = role === 'customer' && record.status === 'payment_due'
   const submitInspection = async () => {
     const evidencePhotos: string[] = []
     for (const file of evidenceFiles) {
@@ -226,6 +230,12 @@ function ReturnActions({ role, id, run, busy }: { role: ReturnRole; id: string; 
         <label className="block">Mã giao dịch hoàn cọc<input className="block w-full rounded border p-2" maxLength={120} required disabled={busy} value={refundReference} onChange={(event) => setRefundReference(event.target.value)} placeholder="Ví dụ: REFUND-VCB-883921" /></label>
         <label className="block">Ghi chú chuyển tiền<textarea className="block w-full rounded border p-2" maxLength={1000} disabled={busy} value={refundNotes} onChange={(event) => setRefundNotes(event.target.value)} /></label>
         <Button type="submit" disabled={busy || !refundReference.trim()}>Xác nhận đã hoàn cọc</Button>
+      </form>}
+      {canPaySettlement && <form className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3" onSubmit={(event) => { event.preventDefault(); void run(() => paySettlement(id, paymentMethod, paymentNotes)) }}>
+        <h5 className="font-semibold">Thanh toán phần quyết toán còn thiếu</h5>
+        <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" disabled={busy} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option>Chuyển khoản</option><option>Tiền mặt</option><option>Ví điện tử</option></select></label>
+        <label className="block">Ghi chú<textarea className="block w-full rounded border p-2" maxLength={1000} disabled={busy} value={paymentNotes} onChange={(event) => setPaymentNotes(event.target.value)} /></label>
+        <Button type="submit" disabled={busy || !paymentMethod.trim()}>Ghi nhận thanh toán</Button>
       </form>}
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && <div className="flex gap-2"><Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button><Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button></div>}
     </section>
