@@ -135,7 +135,7 @@ export default function ManagerApiStaffTasksPanel({ facilityId, showToast }: Pro
         action={<Button disabled={loading || !units.length || !staff.length} onClick={() => setModalOpen(true)}>Tạo nhiệm vụ</Button>}
       />
 
-      {error && <ManagerActionNotice tone="warning">{managerDisplayError(error)} <Button size="sm" variant="outline" onClick={() => void reload()}>Tải lại</Button></ManagerActionNotice>}
+      {Boolean(error) && <ManagerActionNotice tone="warning">{managerDisplayError(error)} <Button size="sm" variant="outline" onClick={() => void reload()}>Tải lại</Button></ManagerActionNotice>}
       {!error && !loading && !staff.length && <ManagerActionNotice tone="info">Chưa có Staff ACTIVE với phạm vi OPERATE/MANAGE tại cơ sở này.</ManagerActionNotice>}
       {!error && !loading && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
 

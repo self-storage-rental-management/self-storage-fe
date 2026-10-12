@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import Layout, {
   getInitialPage,
   Icon,
+  type LayoutNotification,
   type NavItem,
 } from "../../components/Layout"
 
@@ -33,6 +34,9 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
+import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
+import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
+import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   listCredentialAlerts,
   revokeAccessCredential,
@@ -42,6 +46,7 @@ import {
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
+import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 
 import type { User } from "../../types"
 
@@ -876,6 +881,30 @@ export default function StaffApp({
 
   const [page, setPage] = useState(() => getInitialPage(nav, "dashboard"))
 
+  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let cancelled = false
+    const loadNotifications = async () => {
+      try {
+        const result = await listNotifications(0, 50)
+        if (!cancelled) setBackendNotifications(result.data)
+      } catch {
+        // Staff operations remain available if notifications are temporarily unavailable.
+      }
+    }
+    void loadNotifications()
+    const refreshNotifications = () => void loadNotifications()
+    window.addEventListener("storagehub:notifications-refresh", refreshNotifications)
+    const timer = window.setInterval(refreshNotifications, 10_000)
+    return () => {
+      cancelled = true
+      window.removeEventListener("storagehub:notifications-refresh", refreshNotifications)
+      window.clearInterval(timer)
+    }
+  }, [])
+
   const [reservations, setReservations] = useState<StaffReservation[]>([])
 
   const [checkins, setCheckins] = useState<StaffCheckin[]>([])
@@ -885,6 +914,10 @@ export default function StaffApp({
   const [credentialAlerts, setCredentialAlerts] = useState<CredentialAlert[]>([])
 
   const [credentialError, setCredentialError] = useState<string | null>(null)
+
+  const [apiDailyOperations, setApiDailyOperations] = useState<StaffDailyOperation[]>([])
+
+  const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
 
   const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
 
@@ -1199,6 +1232,45 @@ export default function StaffApp({
       })
     return () => { active = false }
   }, [user.facilityId, page])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setApiDailyOperations([])
+      setApiDailyOperationsError(null)
+      return
+    }
+    const requestedDate = operationalTaskDateFilter || toDateInputValue(new Date().toISOString())
+    let active = true
+    void loadStaffDailyOperations(requestedDate, user.id, credentialAlerts)
+      .then(result => {
+        if (!active) return
+        setApiDailyOperations(result.tasks)
+        const failedSources = credentialError
+          ? [...result.failedSources, "quyền truy cập"]
+          : result.failedSources
+        setApiDailyOperationsError(
+          failedSources.length
+            ? `Chưa đồng bộ được dữ liệu: ${failedSources.join(', ')}.`
+            : null,
+        )
+      })
+      .catch(reason => {
+        if (!active) return
+        setApiDailyOperations([])
+        setApiDailyOperationsError(staffErrorMessage(reason, 'Không thể tải nhiệm vụ vận hành trong ngày.'))
+      })
+    return () => { active = false }
+  }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id])
+
+  const refreshCredentialAlerts = () => {
+    if (!isApiAuthenticated()) return
+    void listCredentialAlerts(user.facilityId && user.facilityId !== 'ALL' ? user.facilityId : undefined)
+      .then(items => setCredentialAlerts(items))
+      .catch(reason => {
+        setCredentialAlerts([])
+        setCredentialError(staffErrorMessage(reason, "Không thể tải quyền truy cập cần thu hồi."))
+      })
+  }
 
   const showToast = (message: string) => {
     setToast(
@@ -1773,7 +1845,7 @@ export default function StaffApp({
     setCheckinModal(true)
   }
 
-  const operationalTasks = [
+  const localOperationalTasks = [
     ...credentialAlerts.map(alert => ({
       id: `credential-${alert.action.toLowerCase()}-${alert.id}`,
       title: alert.action === 'ISSUE'
@@ -1930,6 +2002,10 @@ export default function StaffApp({
     })),
   ].sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
 
+  const operationalTasks = isApiAuthenticated()
+    ? apiDailyOperations
+    : localOperationalTasks
+
   const filteredOperationalTasks = operationalTasks
     .filter(
       (task) =>
@@ -1997,6 +2073,13 @@ export default function StaffApp({
   ])
 
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
+    if (isApiAuthenticated()) {
+      setPage(task.page)
+      if (task.id.startsWith("return-"))
+        showToast(`Đã mở danh sách hồ sơ trả kho cho ${task.customer}.`)
+      return
+    }
+
     if (task.id.startsWith("allocation-")) {
       const reservation = reservations.find(
         (item) => item.id === task.id.replace("allocation-", ""),
@@ -2054,7 +2137,9 @@ export default function StaffApp({
       showToast(`Đã mở nhiệm vụ theo dõi gia hạn cho ${task.customer}.`)
   }
 
-  const operationalCompletedCount =
+  const operationalCompletedCount = isApiAuthenticated()
+    ? 0
+    :
     reservations.filter((r) => r.status === "COMPLETED").length +
     checkins.filter((c) => c.status === "completed").length +
     returns.filter(
@@ -2065,17 +2150,17 @@ export default function StaffApp({
     ).length +
     facilityTickets.filter((ticket) => ticket.status === "resolved").length
 
-  const totalCount =
-    operationalTasks.length +
-    operationalCompletedCount +
-    assignedFacilityTasks.length
+  const totalCount = isApiAuthenticated()
+    ? operationalTasks.length
+    : operationalTasks.length + operationalCompletedCount + assignedFacilityTasks.length
 
-  const completedCount =
-    operationalCompletedCount +
-    assignedFacilityTasks.filter((task) => task.status === "completed").length
+  const completedCount = isApiAuthenticated()
+    ? 0
+    : operationalCompletedCount + assignedFacilityTasks.filter((task) => task.status === "completed").length
 
-  const remainingTaskCount =
-    operationalTasks.length + openAssignedFacilityTasks.length
+  const remainingTaskCount = isApiAuthenticated()
+    ? operationalTasks.length
+    : operationalTasks.length + openAssignedFacilityTasks.length
 
   const assignedTaskNotifications = openAssignedFacilityTasks.map((task) => ({
     id: `assigned-task-${task.id}`,
@@ -2091,6 +2176,25 @@ export default function StaffApp({
     page: "tasks",
   }))
 
+  const notificationPage = (type: ApiNotification["type"]) => {
+    if (type === "CHECKIN") return "checkin"
+    if (type === "SUPPORT") return "support"
+    if (type === "RETURN") return "return"
+    if (type === "PAYMENT" || type === "OVERDUE") return "payments"
+    if (type === "RESERVATION") return "reservations"
+    return "dashboard"
+  }
+
+  const staffApiNotifications: LayoutNotification[] = backendNotifications.map((notification) => ({
+    id: `api-notification-${notification.id}`,
+    title: notification.title,
+    message: notification.content,
+    date: notification.createdAt,
+    page: notificationPage(notification.type),
+    targetId: notification.relatedEntityId ?? undefined,
+    isRead: notification.isRead,
+  }))
+
   return (
     <Layout
       user={user}
@@ -2099,6 +2203,7 @@ export default function StaffApp({
       onNavigate={setPage}
       onLogout={onLogout}
       notifications={[
+        ...staffApiNotifications,
         ...assignedTaskNotifications,
 
         ...operationalTasks
@@ -2116,6 +2221,22 @@ export default function StaffApp({
           })),
       ]}
       onNotificationClick={(notification) => {
+        if (notification.id.startsWith("api-notification-")) {
+          const notificationId = notification.id.replace("api-notification-", "")
+          setPage(notification.page)
+          setBackendNotifications((current) => current.map((item) =>
+            item.id === notificationId ? { ...item, isRead: true } : item
+          ))
+          void markNotificationRead(notificationId).catch(() => undefined)
+          if (notification.page === "checkin") {
+            window.setTimeout(() => window.dispatchEvent(new Event("storagehub:checkins-refresh")), 0)
+          }
+          if (notification.page === "reservations") {
+            window.setTimeout(() => window.dispatchEvent(new Event("storagehub:staff-reservations-refresh")), 0)
+          }
+          return
+        }
+
         if (notification.id.startsWith("assigned-task-")) {
           setPage("tasks")
 
@@ -2378,6 +2499,8 @@ export default function StaffApp({
             />
           </div>
 
+          {isApiAuthenticated() && <StaffMaintenanceOperationsPanel showToast={showToast} />}
+
           <Card className="mb-6">
             <div className="border-b border-stone-200 p-4">
               <h3 className="font-bold text-stone-900">
@@ -2571,6 +2694,11 @@ export default function StaffApp({
                 }
               </p>
             </div>
+            {apiDailyOperationsError && isApiAuthenticated() && (
+              <div className="border-b border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                {apiDailyOperationsError}
+              </div>
+            )}
             <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
               <Input
                 label="Ngày đến hạn"
@@ -3183,7 +3311,20 @@ export default function StaffApp({
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
       {page === "return" && (
-        <div className="fade-in">
+        <>
+          {isApiAuthenticated() && (
+            <div className="fade-in space-y-4">
+              <SectionHeader
+                eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
+                title="Nghiệm thu trả kho"
+                subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
+              />
+              <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
+            </div>
+          )}
+
+          {!isApiAuthenticated() && (
+            <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
             title={"Nghiệm thu trả kho"}
@@ -3501,20 +3642,25 @@ export default function StaffApp({
               onPageChange={setReturnsPage}
             />
           </Card>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
       {page === 'support' && (
-        <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
-        <StaffSupportPanel
-          user={user}
-          tickets={hub.tickets}
-          respondSupportTicket={hub.respondSupportTicket}
-          canManageSupport={true}
-          showToast={showToast}
-        />
-        </SupportApiRoute>
+        <div className="space-y-4">
+          <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
+            <StaffSupportPanel
+              user={user}
+              tickets={hub.tickets}
+              respondSupportTicket={hub.respondSupportTicket}
+              canManageSupport={true}
+              showToast={showToast}
+            />
+          </SupportApiRoute>
+          {isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
+        </div>
       )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}

@@ -1267,11 +1267,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
                         <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
                           <p className="text-stone-400 font-medium text-[10px] sm:text-[11px] mb-1">Kích cỡ hàng tối đa (D×R×C)</p>
                           <div className="flex flex-wrap items-center gap-1">
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{spec.maxCargoDimCm.lengthCm} cm</span>
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{spec.largeBox.lengthCm} cm</span>
                             <span className="text-stone-300">×</span>
-                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">{spec.maxCargoDimCm.widthCm} cm</span>
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">{spec.largeBox.widthCm} cm</span>
                             <span className="text-stone-300">×</span>
-                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{spec.maxCargoDimCm.heightCm} cm</span>
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{spec.largeBox.heightCm} cm</span>
                           </div>
                         </div>
                         <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
