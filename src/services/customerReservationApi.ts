@@ -11,9 +11,10 @@ export type ReservationStatus =
 
 export interface Pagination {
   page: number
-  size: number
-  totalElements: number
+  pageSize: number
+  totalItems: number
   totalPages: number
+  sort?: string
 }
 
 export interface PageResponse<T> {
@@ -209,6 +210,17 @@ export interface ReservationGoodsItem extends GoodsItemInput {
   requiresStaffReview: boolean
   reviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
   reviewNote: string | null
+  images: Array<{
+    id: string
+    originalName: string
+    contentType: string
+    sizeBytes: number
+    checksumSha256: string
+    entityType: string
+    entityId: string
+    status: string
+    createdAt: string
+  }>
 }
 
 export interface CustomerReservationDetail {

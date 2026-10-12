@@ -295,6 +295,30 @@ export async function revokeAccessCredential(credentialId: string, reason: strin
   ))
 }
 
+export interface ReissueAccessCredentialRequest {
+  credentialId: string
+  identityVerified: boolean
+  verificationMethod: 'ID_DOCUMENT' | 'CUSTOMER_ACCOUNT' | 'AUTHORIZED_REPRESENTATIVE' | 'OTHER'
+  reason: string
+  reference: string
+  secret?: string
+  note?: string
+}
+
+export async function reissueAccessCredential(rentalId: string, request: ReissueAccessCredentialRequest) {
+  if (!rentalId.trim() || !request.credentialId.trim() || !request.identityVerified || !request.reason.trim() || !request.reference.trim()) {
+    throw new Error('Xác minh khách hàng, lý do và mã tham chiếu là bắt buộc.')
+  }
+  if (request.reason.length > 1000 || request.reference.length > 160 ||
+    (request.secret?.length ?? 0) > 200 || (request.note?.length ?? 0) > 1000) {
+    throw new Error('Thông tin thay quyền truy cập vượt quá giới hạn cho phép.')
+  }
+  return assertCredentialEnvelope(await apiRequest<unknown>(
+    `/api/staff/rentals/${encodeURIComponent(rentalId)}/credentials/reissue`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
 export async function listCredentialAlerts(facilityId?: string) {
   const query = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : ''
   const payload = await apiRequest<unknown>(`/api/staff/credential-alerts${query}`)
@@ -304,7 +328,7 @@ export async function listCredentialAlerts(facilityId?: string) {
   return payload as CredentialAlert[]
 }
 
-export async function listAccessCredentials(params: {
+async function listAccessCredentialsAt(path: string, params: {
   facilityId?: string
   q?: string
   status?: AccessCredentialStatus
@@ -315,7 +339,7 @@ export async function listAccessCredentials(params: {
   if (params.facilityId && params.facilityId !== 'ALL') query.set('facilityId', params.facilityId)
   if (params.q?.trim()) query.set('q', params.q.trim())
   if (params.status) query.set('status', params.status)
-  const payload = await apiRequest<unknown>(`/api/manager/access-credentials?${query}`)
+  const payload = await apiRequest<unknown>(`${path}?${query}`)
   if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { data?: unknown }).data)) {
     throw new ApiClientError('Backend trả về lịch sử quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
@@ -330,4 +354,24 @@ export async function listAccessCredentials(params: {
     }
     correlationId: string
   }
+}
+
+export function listAccessCredentials(params: {
+  facilityId?: string
+  q?: string
+  status?: AccessCredentialStatus
+  page?: number
+  pageSize?: number
+} = {}) {
+  return listAccessCredentialsAt('/api/manager/access-credentials', params)
+}
+
+export function listStaffAccessCredentials(params: {
+  facilityId?: string
+  q?: string
+  status?: AccessCredentialStatus
+  page?: number
+  pageSize?: number
+} = {}) {
+  return listAccessCredentialsAt('/api/staff/access-credentials', params)
 }
