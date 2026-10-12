@@ -59,7 +59,7 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
           </p>
           <ul className="list-disc pl-5">
             {p.missingSources.map((ref) => (
-              <li key={ref}>{managerDisplayText(sourceLabels[ref] || 'Thông tin bổ sung')}</li>
+              <li key={ref}>{managerDisplayText(ref === "FINANCIAL_COVERAGE_PARTIAL" ? "Chỉ hiển thị khoản nợ đã xác minh; tổng công nợ và lịch sử thanh toán Sandbox chưa đầy đủ." : sourceLabels[ref] || 'Thông tin bổ sung')}</li>
             ))}
           </ul>
         </>

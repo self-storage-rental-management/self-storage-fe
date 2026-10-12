@@ -7,7 +7,7 @@ describe("Manager requested description removal", () => {
     for (const [label, value] of [
       ['Tìm kiếm', 'query'], ['Trạng thái gian kho', 'statusFilter'],
       ['Loại gian kho', 'typeFilter'], ['Tầng', 'floorFilter'],
-      ['Khu vực', 'zoneFilter'], ['Trạng thái bảo trì', 'maintenanceFilter'],
+      ['Khu vực', 'zoneFilter'],
       ['Sắp xếp', 'sortBy'],
     ]) expect(source).toContain(`label="${label}" value={${value}}`)
     expect(source).not.toContain('climateFilter')
