@@ -1,20 +1,30 @@
 import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
-import { customerRentalApiNav, CUSTOMER_RENTAL_API_PAGE } from "./customerRentalApiIntegration"
+import { CUSTOMER_RENTAL_API_PAGE, resolveCustomerInitialPage } from "./customerRentalApiIntegration"
 import CustomerRentalsApiPanel from "./CustomerRentalsApiPanel"
 
 vi.mock("../rental-api/RentalApiWorkspace", () => ({
   default: ({ role }: { role: string }) => <div data-role={role}>D1–D4 API workspace</div>,
 }))
 
-describe("Customer rental workspace integration", () => {
-  it("does not add a duplicate API navigation item", () => {
-    const nav = customerRentalApiNav(true)
-    expect(nav).toEqual([])
+describe("Customer Rental API integration", () => {
+  it("uses the existing rental-records route", () => {
+    expect(CUSTOMER_RENTAL_API_PAGE).toBe("rental-records")
   })
-  it("does not expose an API-only navigation item in demo sessions", () => {
-    expect(customerRentalApiNav(false)).toEqual([])
+  it.each([
+    ["?page=rental-renewals", "overview", "rental-records"],
+    ["?page=payments&vnpayReturn=true&reservationId=reservation-1", "payments", "reservations"],
+    ["?vnpayReturn=true&renewalId=renewal-1", "overview", "rental-records"],
+    ["?page=support", "support", "support"],
+    ["?reservationId=reservation-1", "overview", "overview"],
+  ])("opens the correct customer page for %s", (search, fallback, expected) => {
+    expect(resolveCustomerInitialPage(search, fallback)).toBe(expected)
+  })
+  it("shows one Hồ sơ Thuê navigation item", () => {
+    const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
+    expect(source).toContain("{ id: 'rental-records', label: 'Hồ sơ Thuê'")
+    expect(source).not.toContain("...customerRentalApiNav(")
   })
   it("keeps the Customer API workspace implemented and customer-scoped", () => {
     const html = renderToStaticMarkup(<CustomerRentalsApiPanel />)
@@ -38,11 +48,11 @@ describe("Customer rental workspace integration", () => {
     expect(source).toContain("...(isApiAuthenticated() ? [] : myTickets).flatMap")
     expect(source).toContain("...myReturns.filter")
   })
-  it("mounts the API workspace from the shared rental route and keeps the old alias", () => {
+  it("mounts the API workspace once on the shared rental-records page", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("...customerRentalApiNav(isApiAuthenticated()),")
-    expect(source).toContain("page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated() && <CustomerRentalsApiPanel")
+    expect(source.match(/<CustomerRentalsApiPanel\b/g)).toHaveLength(1)
     expect(source).toContain("page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel")
+    expect(source).not.toContain("page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated()")
   })
   it("keeps Staff renewal-signing as an additive route alongside existing operations", () => {
     const source = readFileSync(new URL("../staff/StaffApp.tsx", import.meta.url), "utf8")

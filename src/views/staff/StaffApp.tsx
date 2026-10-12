@@ -43,6 +43,10 @@ import {
   revokeAccessCredential,
   type CredentialAlert,
 } from "../../services/checkInApi"
+import {
+  loadStaffDailyOperations,
+  type StaffDailyOperation,
+} from "../../services/staffDailyOperationsApi"
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
@@ -78,10 +82,6 @@ import { useStorageHub } from "../../store/StorageHubContext"
 
 import { isFacilityVisible } from "../../domain/managerRules"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
-import {
-  loadStaffDailyOperations,
-  type StaffDailyOperation,
-} from "../../services/staffDailyOperationsApi"
 
 import StaffPagination, { paginateStaffItems } from "./StaffPagination"
 import {

@@ -74,7 +74,7 @@ describe("D1/D5 overview: authoritative counts only", () => {
   })
   it("directs the overview to the rental workspace without fabricated PIN, access or payment facts", () => {
     const html = renderToStaticMarkup(<CustomerRentalApiLink onOpen={() => {}} />)
-    expect(html).toContain("Xem hồ sơ thuê &amp; Gia hạn")
+    expect(html).toContain("Xem Hồ sơ Thuê")
     for (const text of ["24/7", "9004#", "Đã thanh toán", "chưa có hồ sơ thuê"]) expect(html).not.toContain(text)
   })
 })

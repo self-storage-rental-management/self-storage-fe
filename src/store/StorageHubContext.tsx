@@ -3084,7 +3084,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const expireRenewalPayment = (renewalId: string) => {
     const renewal = state.renewals.find(item => item.id === renewalId)
     if (!renewal || renewal.status !== 'approved' || !renewal.paymentDueAt || new Date(renewal.paymentDueAt).getTime() > Date.now()) return
-    setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá 72 giờ thanh toán cọc gia hạn.' } : item) }))
+    setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá hạn thanh toán toàn kỳ gia hạn.' } : item) }))
   }
 
   const payRenewal = (renewalId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionId: string, termsAccepted: boolean, appointmentDate: string, appointmentTime: string) => {
@@ -3092,12 +3092,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'approved') throw new Error('Đơn gia hạn chưa được Manager duyệt.')
     if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
+    if ((renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.renewalFee).depositAmount) === 0)
+      throw new Error('Gia hạn không thu cọc. Cổng VNPay Sandbox thanh toán toàn kỳ chưa được tích hợp; chưa thể ghi nhận thanh toán.')
     if (!termsAccepted) throw new Error('Vui lòng xác nhận thông tin và điều khoản gia hạn.')
     if (!transactionId.trim()) throw new Error('Vui lòng nhập mã giao dịch thanh toán.')
     if (!appointmentDate || !appointmentTime) throw new Error('Vui lòng chọn ngày và giờ đến cơ sở ký phụ lục.')
     if (appointmentTime < '08:00' || appointmentTime > '17:00') throw new Error('Giờ hẹn phải nằm trong giờ làm việc 08:00–17:00.')
     if (!renewal.paymentDueAt || new Date(renewal.paymentDueAt).getTime() < Date.now()) {
-      setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá 72 giờ thanh toán cọc gia hạn.' } : item) }))
+      setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá hạn thanh toán toàn kỳ gia hạn.' } : item) }))
       throw new Error('Đã quá thời hạn thanh toán 72 giờ. Vui lòng gửi yêu cầu gia hạn mới.')
     }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
@@ -3182,7 +3184,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Hoàn tất ký gia hạn tại cơ sở thuộc nghiệp vụ của Facility Staff.')
     if (staffUser.role !== 'staff') throw new Error('Chỉ nhân viên cơ sở được hoàn tất gia hạn.')
     const renewal = state.renewals.find(item => item.id === renewalId)
-    if (!renewal || renewal.status !== 'appointment_scheduled') throw new Error('Yêu cầu chưa cọc hoặc chưa có lịch ký hợp lệ.')
+    if (!renewal || renewal.status !== 'appointment_scheduled') throw new Error('Yêu cầu chưa có lịch ký hợp lệ.')
+    if ((renewal.bookingDepositAmount ?? 0) <= 0) throw new Error('Renewal mới không thu cọc và không thể ghi nhận tiền mặt tại quầy. Cần xác minh thanh toán toàn kỳ qua VNPay Sandbox trước khi hoàn tất.')
     if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã phiếu thu hoặc mã giao dịch.')
     if (!identityVerified) throw new Error('Cần đối chiếu giấy tờ khách hàng trước khi hoàn tất gia hạn.')
     if (!unitAndTermsVerified) throw new Error('Cần kiểm tra gian kho và xác nhận lại điều khoản gia hạn.')

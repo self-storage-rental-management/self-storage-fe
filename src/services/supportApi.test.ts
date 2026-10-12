@@ -9,6 +9,8 @@ import {
   listSupportMessages,
   listSupportStaff,
   listSupportTickets,
+  listSupportQueue,
+  getSupportSummary,
   sendSupportCommand,
 } from "./supportApi"
 import type {
@@ -43,6 +45,28 @@ afterEach(() => {
   clearAuthTokens()
 })
 describe("D5 transport and response boundaries", () => {
+  it("reads a safe Staff queue and rejects private fields", async () => {
+    const item = { id: ids.ticket, facilityId: ids.facility, subject: "Need help", createdAt: "2026-10-08T03:00:00Z", version: 0 }
+    const fetch = respond(supportPage([item]))
+    expect((await listSupportQueue()).data).toEqual([item])
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/api/staff/support-workflows/queue")
+    respond(supportPage([{ ...item, description: "private" }]))
+    await expect(listSupportQueue()).rejects.toThrow()
+  })
+  it("sends Staff claim with version and idempotency key", async () => {
+    const fetch = respond({ data: { ...supportActive, id: ids.ticket } })
+    await sendSupportCommand("staff", ids.ticket, { kind: "claim", expectedVersion: 0 }, "claim-test")
+    const [url, init] = fetch.mock.calls[0]
+    expect(new URL(url).pathname).toBe(`/api/staff/support-workflows/${ids.ticket}/claim`)
+    expect(JSON.parse(init.body)).toEqual({ expectedVersion: 0 })
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBe("claim-test")
+  })
+  it("reads Manager counts from the scoped summary endpoint", async () => {
+    const counts = Object.fromEntries(["open", "in_progress", "waiting_customer", "resolved", "closed"].map(s => [s, 0]))
+    const fetch = respond({ data: { counts, unassignedOpen: 0 } })
+    expect((await getSupportSummary(ids.facility)).unassignedOpen).toBe(0)
+    expect(new URL(fetch.mock.calls[0][0]).searchParams.get("facilityId")).toBe(ids.facility)
+  })
   it("reads an optional authoritative assigned staff name without rejecting legacy responses", async () => {
     respond({ data: { ...supportActive, assignedStaffName: "Demo Staff" } })
     expect((await getSupportTicket("manager", ids.ticket)).assignedStaffName).toBe("Demo Staff")
