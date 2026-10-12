@@ -42,10 +42,10 @@ function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string)
   return readRentalEnvelope<ApiReturn>(value, v => isApiReturn(v) && (!id || v.id === id) && (!rentalId || v.rentalId === rentalId) &&
     (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || !!a.facilityScopes[v.facilityId]))
 }
-export async function listReturns(role: ReturnRole, page = 0) {
+export async function listReturns(role: ReturnRole, page = 0, pageSize = 20) {
   const a = actor(role)
-  if (!Number.isSafeInteger(page) || page < 0) throw new Error('Trang không hợp lệ.')
-  return readRentalPage<ApiReturn>(await apiRequest(`/api/${role}/returns?page=${page}&pageSize=20`),
+  if (!Number.isSafeInteger(page) || page < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new Error('Trang không hợp lệ.')
+  return readRentalPage<ApiReturn>(await apiRequest(`/api/${role}/returns?page=${page}&pageSize=${pageSize}`),
     v => isApiReturn(v) && (role === 'customer' ? v.customerId === a.id : !!a.facilityScopes[v.facilityId]), page)
 }
 export async function getReturn(role: ReturnRole, id: string) {
