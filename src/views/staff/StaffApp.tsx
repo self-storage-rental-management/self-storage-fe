@@ -34,6 +34,7 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
+import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   listCredentialAlerts,
@@ -2389,6 +2390,8 @@ export default function StaffApp({
               iconBg="bg-amber-50"
             />
           </div>
+
+          {isApiAuthenticated() && <StaffMaintenanceOperationsPanel showToast={showToast} />}
 
           <Card className="mb-6">
             <div className="border-b border-stone-200 p-4">
