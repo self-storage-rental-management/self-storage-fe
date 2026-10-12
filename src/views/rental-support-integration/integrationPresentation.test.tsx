@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ApiActor } from "../../services/authApi"
-import { LedgerContent, ledgerReadError } from "./LedgerPanel"
+import { LedgerContent, ledgerReadError, canReconcileSandboxPayment } from "./LedgerPanel"
 import { ApiClientError } from "../../services/apiClient"
 import RenewalCoordinationPanel, {
   canCoordinateRenewal,
@@ -25,6 +25,15 @@ import {
   operationsActor,
 } from "../../../tests/rentalOperationsApiFixtures"
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null }))
+it("requires explicit server Sandbox policy eligibility before exposing reconciliation", () => {
+  const payment = { paymentId: ids.event, provenance: "SANDBOX" as const, linkedReceipt: false, refundUnreconciled: false }
+  expect(canReconcileSandboxPayment(payment)).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: false })).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true })).toBe(true)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true, linkedReceipt: true })).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true, refundUnreconciled: true })).toBe(false)
+  expect(canReconcileSandboxPayment({ ...payment, eligibleForReconciliation: true, provenance: "SIMULATED" })).toBe(false)
+})
 vi.mock("../../services/authApi", () => ({
   getAuthenticatedActor: () => state.actor,
 }))
