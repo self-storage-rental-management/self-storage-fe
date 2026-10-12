@@ -95,7 +95,8 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
           quoteTtlMinutes: n("quoteTtlMinutes"),
           paymentWindowHours: n("paymentWindowHours"),
           requestWindowDays: n("requestWindowDays"),
-          depositRate: n("depositRate"),
+          // Retained in the legacy policy DTO; new Renewal terms do not collect a deposit.
+          depositRate: 0,
           eligiblePackageIds: (d.eligiblePackageIds || "")
             .split(/[\s,]+/)
             .filter(Boolean),
@@ -377,7 +378,6 @@ function PolicyEditor({
                 "quoteTtlMinutes",
                 "paymentWindowHours",
                 "requestWindowDays",
-                "depositRate",
               ].map((k) => field(k))}
               <label className="block">
                 Mã gói thuê đủ điều kiện (cách nhau bằng dấu phẩy, để trống nếu

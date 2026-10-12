@@ -203,8 +203,7 @@ export default function RenewalCoordinationPanel({
               </label>
               {!assignmentAllowed && (
                 <p role="status">
-                  Chỉ phân công khi yêu cầu đã được duyệt và chưa ghi nhận khách
-                  đến.
+                  Chỉ phân công khi hệ thống đã mở bước vận hành và chưa ghi nhận khách đến.
                 </p>
               )}
             </>

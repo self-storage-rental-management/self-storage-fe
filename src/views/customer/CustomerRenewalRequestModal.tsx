@@ -134,12 +134,8 @@ export default function CustomerRenewalRequestModal({
               {rentalMoney(quote.totalAfterDiscount, quote.currency)}
             </p>
             <p>
-              Cọc gia hạn:{" "}
-              {rentalMoney(quote.renewalDepositAmount, quote.currency)}
-            </p>
-            <p>
-              Còn lại:{" "}
-              {rentalMoney(quote.remainingRentalAmount, quote.currency)}
+              Số tiền cần thanh toán cho toàn bộ kỳ gia hạn:{" "}
+              {rentalMoney(quote.totalAfterDiscount, quote.currency)}
             </p>
             <p>Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}</p>
             {expired && !command.uncertain && (

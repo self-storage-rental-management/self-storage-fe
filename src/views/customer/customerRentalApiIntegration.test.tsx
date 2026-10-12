@@ -1,23 +1,21 @@
 import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
-import { customerRentalApiNav, CUSTOMER_RENTAL_API_PAGE } from "./customerRentalApiIntegration"
+import { CUSTOMER_RENTAL_API_PAGE } from "./customerRentalApiIntegration"
 import CustomerRentalsApiPanel from "./CustomerRentalsApiPanel"
 
 vi.mock("../rental-api/RentalApiWorkspace", () => ({
   default: ({ role }: { role: string }) => <div data-role={role}>D1–D4 API workspace</div>,
 }))
 
-describe("additive D1–D4 Customer integration", () => {
-  it("adds a separate API route without reusing the team rental-records route", () => {
-    const nav = customerRentalApiNav(true)
-    expect(nav).toHaveLength(1)
-    expect(nav[0].id).toBe(CUSTOMER_RENTAL_API_PAGE)
-    expect(nav[0].id).not.toBe("rental-records")
-    expect(nav[0].permission).toBe("rentals:read")
+describe("Customer Rental API integration", () => {
+  it("uses the existing rental-records route", () => {
+    expect(CUSTOMER_RENTAL_API_PAGE).toBe("rental-records")
   })
-  it("does not expose an API-only navigation item in demo sessions", () => {
-    expect(customerRentalApiNav(false)).toEqual([])
+  it("shows one Hồ sơ Thuê navigation item", () => {
+    const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
+    expect(source).toContain("{ id: 'rental-records', label: 'Hồ sơ Thuê'")
+    expect(source).not.toContain("...customerRentalApiNav(")
   })
   it("keeps the Customer API workspace implemented and customer-scoped", () => {
     const html = renderToStaticMarkup(<CustomerRentalsApiPanel />)
@@ -42,10 +40,11 @@ describe("additive D1–D4 Customer integration", () => {
     expect(source).toContain("...(isApiAuthenticated() ? [] : myTickets).flatMap")
     expect(source).toContain("...myReturns.filter")
   })
-  it("mounts D1–D4 only on the separate authenticated route", () => {
+  it("mounts the API workspace inside the shared rental-records page", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("...customerRentalApiNav(isApiAuthenticated()),")
-    expect(source).toContain("page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated() && <CustomerRentalsApiPanel")
+    expect(source).toContain("{page === 'rental-records' && (")
+    expect(source).toContain("isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />")
+    expect(source).not.toContain("page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated()")
   })
   it("keeps Staff renewal-signing as an additive route alongside existing operations", () => {
     const source = readFileSync(new URL("../staff/StaffApp.tsx", import.meta.url), "utf8")

@@ -1,6 +1,6 @@
 import type { RentalApiRecord } from "./rentalApi"
-export type RenewalApiStatus = "pending" | "deposit_paid" | "approved" | "appointment_scheduled" | "payment_processing" | "payment_failed" | "payment_expired" | "rejected" | "cancelled" | "completed"
-export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE" | "APPROVE" | "REJECT"
+export type RenewalApiStatus = "pending" | "accepted" | "deposit_paid" | "full_rent_paid" | "approved" | "appointment_scheduled" | "payment_processing" | "payment_failed" | "payment_expired" | "rejected" | "cancelled" | "completed"
+export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {
   id: string
   rentalId: string
@@ -29,6 +29,12 @@ export interface RenewalApiRecord {
     blockingObligationRefs: string[] | null
     hasUnresolvedDispute: boolean | null
   }
+  systemVerification?: {
+    status: "VERIFIED" | "BLOCKED" | "INCOMPLETE" | "UNKNOWN"
+    checkedAt: string | null
+    verifiedChecks: string[]
+    blockingReasons: string[]
+  } | null
   allowedActions: RenewalApiAction[]
   disabledReasons: string[]
   acceptedTerms?: Omit<RenewalApiQuote, "id" | "rentalId" | "customerId" | "quotedAt" | "expiresAt"> | null
@@ -37,6 +43,20 @@ export interface RenewalApiRecord {
 export interface RenewalApiOption {
   pricingPackageCode: string
   rentalMonths: number
+}
+export interface RenewalVnpayPaymentResponse {
+  paymentId: string
+  renewalId: string
+  acceptedRevisionId: string | null
+  transactionReference: string
+  amount: number
+  currency: "VND"
+  paymentStatus: "PENDING" | "PROCESSING" | "PAID" | "NOT_RECEIVED" | "FAILED" | "CANCELLED"
+  paymentDeadline: string | null
+  paidAt: string | null
+  reconciliationRequired: boolean
+  message: string
+  paymentUrl: string | null
 }
 export interface RenewalApiQuote {
   id: string
