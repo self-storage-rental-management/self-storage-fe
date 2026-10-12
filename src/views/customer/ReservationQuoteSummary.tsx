@@ -3,7 +3,7 @@ import type { ReservationQuote } from '../../services/customerReservationApi'
 
 function formatDisplayDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replaceAll('-', '/')
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replace(/-/g, '/')
 }
 
 export default function ReservationQuoteSummary({ quote: q, needsReview }: { quote: ReservationQuote; needsReview: boolean }) {
