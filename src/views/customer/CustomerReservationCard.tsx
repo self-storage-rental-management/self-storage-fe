@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
+import ReservationReceipt from './ReservationReceipt'
 
 const GOODS_CATEGORY_LABELS: Record<string, string> = {
   FURNITURE: 'Nội thất', KITCHENWARE: 'Đồ dùng nhà bếp', DECOR: 'Đồ trang trí',
@@ -44,6 +45,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
   const [handoverDocuments, setHandoverDocuments] = useState<CheckInDocument[]>([])
   const [handoverDocumentsOpen, setHandoverDocumentsOpen] = useState(false)
+  const [paymentReceipt, setPaymentReceipt] = useState<ReservationPaymentResult | null>(null)
   const [appointmentInput, setAppointmentInput] = useState(() => localDateTimeInput(r.appointmentAt))
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -59,11 +61,12 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const countdown = paymentCountdown(detail?.paymentExpiresAt || r.holdExpiresAt, now)
   const progress = reservationProgress(r.status)
   const inactive = progress === null
+  const remainingPayment = detail?.payments?.find(payment => payment.purpose === 'RENTAL_BALANCE' && payment.paymentStatus === 'PAID') || null
   const steps = [
     { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
     { label: 'Phê duyệt hồ sơ', detail: r.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa' : 'Hồ sơ được duyệt tự động' },
     { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán cọc', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất cọc giữ chỗ' },
-    { label: 'Quản lý phân kho', detail: 'Chờ phân gian kho cụ thể' },
+    { label: 'Quản lý phân kho', detail: r.assignedUnitCode ? `Đã phân ${r.assignedUnitCode}` : 'Chờ phân gian kho cụ thể' },
     { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
     { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' },
   ]
@@ -185,6 +188,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
         <p className="text-xs text-stone-500">Lịch thuê: <b>{r.startDate} → {r.endDate}</b></p>
         <p className="text-xs text-blue-800">Lịch nhận kho khách đặt: <b>{r.appointmentAt ? new Date(r.appointmentAt).toLocaleString('vi-VN') : 'Chưa đặt lịch'}</b></p>
+        <p className="text-xs text-emerald-800">Gian kho được gán: <b>{r.assignedUnitCode || 'Chưa được phân gian kho cụ thể'}</b></p>
         {['UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
           <label className="flex flex-col gap-1 font-semibold">Chọn lịch đến nhận kho<input className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 font-normal" type="datetime-local" min={localDateTimeInput(new Date().toISOString())} value={appointmentInput} onChange={event => setAppointmentInput(event.target.value)} /></label>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : 'Lưu lịch hẹn'}</Button>
@@ -211,6 +215,11 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</p><p>Tiền thuê cả kỳ: {formatVnd(r.totalRentalAmount)}</p><p>Cọc giữ chỗ: {formatVnd(r.reservationDepositAmount)}</p><p>Tiền thuê còn lại: {formatVnd(r.remainingRentalAmount)}</p></div>
             <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">Khoản thu khi nhận kho</p><p>Tiền đảm bảo kho: {formatVnd(r.securityDepositAmount)}</p><p className="border-t border-amber-200 pt-1 font-bold">Tổng thu khi nhận kho: {formatVnd(r.dueAtCheckIn)}</p></div>
           </div>
+            {remainingPayment && <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+              <p className="font-bold">Biên lai thanh toán phần còn lại</p>
+              <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} qua {remainingPayment.paymentMethod || 'phương thức tại quầy'}.</p>
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai</Button>
+            </div>}
         </div>
         {progress !== null && <div className="mt-4 border-t border-stone-200 pt-4">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold text-black">Tiến trình đơn đặt kho</p><p className="mt-0.5 text-[11px] text-stone-500">Đã hoàn thành {progress}/{steps.length} bước</p></div>{steps[progress] && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">Đang thực hiện: {steps[progress].label}</span>}</div>
@@ -254,9 +263,15 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     <Modal open={handoverDocumentsOpen} onClose={() => setHandoverDocumentsOpen(false)} title="Văn bản hợp đồng và bàn giao">
       <div className="space-y-3">
         <p className="text-sm text-stone-600">Các tệp được nhân viên tải lên khi hoàn tất bàn giao kho.</p>
-        {handoverDocuments.map((document, index) => <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span><b className="mr-2">{index === 0 ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}</b>{document.originalName}</span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => void viewHandoverDocument(document)}>Xem</Button><Button size="sm" onClick={() => void saveHandoverDocument(document)}>Tải xuống</Button></span></div>)}
+        {handoverDocuments.map((document, index) => {
+          const isSignedContract = document.originalName.toLowerCase().startsWith('hop-dong-da-ky-') || index === 0
+          return <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span><b className="mr-2">{isSignedContract ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}</b>{document.originalName.replace(/^hop-dong-da-ky-/i, '')}</span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => void viewHandoverDocument(document)}>Xem</Button><Button size="sm" onClick={() => void saveHandoverDocument(document)}>Tải xuống</Button></span></div>
+        })}
         {!handoverDocuments.length && <p className="rounded-lg border border-dashed border-stone-300 p-5 text-center text-sm text-stone-500">Chưa có văn bản bàn giao được tải lên.</p>}
       </div>
+    </Modal>
+    <Modal open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai thanh toán nhận kho">
+      {paymentReceipt && <ReservationReceipt payment={paymentReceipt} reservationCode={r.reservationCode} />}
     </Modal>
  </Card>
   )

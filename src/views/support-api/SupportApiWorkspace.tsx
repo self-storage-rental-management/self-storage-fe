@@ -170,7 +170,7 @@ function SupportSession({
       {!selected && !creation && commandNotice}
       <Card className="space-y-3 p-4">
         <form
-          className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
           onSubmit={(e) => {
             e.preventDefault()
             change({ search: search.trim() })
@@ -259,6 +259,29 @@ function SupportSession({
               ))}
             </select>
           </label>}
+          {role === "manager" && (
+            <label className="block text-sm">
+              Cơ sở được cấp quyền
+              <select
+                className={supportInputClass}
+                disabled={locked}
+                value={query.facilityId ?? ""}
+                onChange={(e) =>
+                  change({
+                    facilityId: e.target.value || undefined,
+                    staffId: undefined,
+                  })
+                }
+              >
+                <option value="">Tất cả cơ sở trong phạm vi</option>
+                {Object.keys(actor.facilityScopes).map((id) => (
+                  <option key={id} value={id}>
+                    {actor.facilityNames?.[id] ?? id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </form>
         {role === "manager" &&
           query.facilityId &&
