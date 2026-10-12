@@ -18,7 +18,7 @@ const h = vi.hoisted(() => ({
   actor: null as ApiActor | null,
   slots: [] as unknown[], cursor: 0,
   loaders: [] as (() => Promise<unknown>)[],
-  rental: vi.fn(), renewal: vi.fn(), support: vi.fn(), overdue: vi.fn(), financial: vi.fn(),
+  rental: vi.fn(), renewal: vi.fn(), support: vi.fn(), queue: vi.fn(), summary: vi.fn(), overdue: vi.fn(), financial: vi.fn(),
 }))
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
@@ -49,6 +49,8 @@ vi.mock("../../services/renewalApi", async original => ({
 }))
 vi.mock("../../services/supportApi", async original => ({
   ...await original<typeof import("../../services/supportApi")>(), listSupportTickets: (...args: unknown[]) => h.support(...args),
+  listSupportQueue: (...args: unknown[]) => h.queue(...args),
+  getSupportSummary: (...args: unknown[]) => h.summary(...args),
 }))
 vi.mock("../../services/overdueApi", async original => ({
   ...await original<typeof import("../../services/overdueApi")>(), listOverdueCases: (...args: unknown[]) => h.overdue(...args),
@@ -60,7 +62,9 @@ vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (identity: string, loader: () => Promise<unknown>) => {
     h.loaders.push(loader)
     const pagination = { page: 0, pageSize: 10, totalItems: 21, totalPages: 3 }
-    return { loading: false, refresh: vi.fn(), data: identity.endsWith(":counts") ? [0, 0, 0, 0]
+    return { loading: false, refresh: vi.fn(), data: identity.includes(":summary:")
+      ? { counts: { open: 0, in_progress: 0, waiting_customer: 0, resolved: 0, closed: 0 }, unassignedOpen: 0 }
+      : identity.endsWith(":counts") ? [0, 0, 0, 0]
       : identity.includes(":rental:") || identity.includes(":renewal:")
         ? { kind: identity.includes(":rental:") ? "rental" : "renewal", page: { data: [], pagination } }
         : { data: [], pagination, completeness: "COMPLETE", missingSources: [], asOf: "2026-10-10T00:00:00Z" } }
@@ -94,7 +98,8 @@ const load = async () => { for (const fn of h.loaders) await fn() }
 beforeEach(() => {
   h.actor = { ...manager, permissions: [...manager.permissions, "support:read"] }
   h.slots = []; h.cursor = 0; h.loaders = []
-  for (const mock of [h.rental, h.renewal, h.support, h.overdue, h.financial]) mock.mockReset().mockResolvedValue(page([]))
+  for (const mock of [h.rental, h.renewal, h.support, h.queue, h.overdue, h.financial]) mock.mockReset().mockResolvedValue(page([]))
+  h.summary.mockReset().mockResolvedValue({ counts: { open: 0, in_progress: 0, waiting_customer: 0, resolved: 0, closed: 0 }, unassignedOpen: 0 })
 })
 
 describe("single assigned Manager facility", () => {

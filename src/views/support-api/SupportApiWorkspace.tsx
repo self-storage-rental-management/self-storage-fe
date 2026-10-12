@@ -5,7 +5,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useSupportCommand } from "../../hooks/useSupportCommand"
 import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
-import { listSupportTickets } from "../../services/supportApi"
+import { getSupportSummary, listSupportQueue, listSupportTickets } from "../../services/supportApi"
 import { supportStatuses } from "../../types/supportApi"
 import type {
   SupportQuery,
@@ -82,12 +82,27 @@ function SupportSession({
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
   const [revision, setRevision] = useState(0)
+  const [staffView, setStaffView] = useState<"queue" | "assigned">("queue")
+  const [queuePage, setQueuePage] = useState(0)
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
     () => listSupportTickets(role, query),
   )
+  const queueQuery: SupportQuery = { page: queuePage, size: query.size, search: query.search, sort: query.sort }
+  const queueRead = useRentalApiResource(
+    `${identity}:queue:${JSON.stringify(queueQuery)}`,
+    () => role === "staff" ? listSupportQueue(queueQuery) : Promise.resolve({
+      data: [], pagination: { page: 0, pageSize: 20, totalItems: 0, totalPages: 0, sort: "createdAt,desc" }, correlationId: null,
+    }),
+  )
+  const summary = useRentalApiResource(
+    `${identity}:summary:${facilityId ?? ""}`,
+    () => role === "manager" && facilityId ? getSupportSummary(facilityId) : Promise.resolve(undefined),
+  )
   const command = useSupportCommand(`${actor.id}:support:${role}`, () => {
     read.refresh()
+    queueRead.refresh()
+    summary.refresh()
     setRevision((n) => n + 1)
     setCreation(undefined)
   })
@@ -108,11 +123,14 @@ function SupportSession({
     if (command.locked || uploadLock.current) return
     command.clearError()
     read.refresh()
+    queueRead.refresh()
+    summary.refresh()
     setRevision((n) => n + 1)
   }
   const change = (patch: SupportQuery) => {
     if (command.locked || uploadLock.current) return
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
+    setQueuePage(0)
     setSelected(undefined)
   }
   const commandNotice = (
@@ -168,6 +186,16 @@ function SupportSession({
         )}
       </div>
       {!selected && !creation && commandNotice}
+      {role === "manager" && summary.data && (
+        <Card className="flex flex-wrap gap-4 p-4 text-sm" aria-label="Thống kê hỗ trợ tại cơ sở">
+          <span>Chưa tiếp nhận: {summary.data.unassignedOpen}</span>
+          {supportStatuses.map((status) => <span key={status}>{supportStatusLabels[status]}: {summary.data!.counts[status]}</span>)}
+        </Card>
+      )}
+      {role === "staff" && <div className="flex gap-2" role="tablist" aria-label="Danh sách hỗ trợ">
+        <Button role="tab" aria-selected={staffView === "queue"} variant={staffView === "queue" ? undefined : "outline"} onClick={() => setStaffView("queue")}>Chưa tiếp nhận</Button>
+        <Button role="tab" aria-selected={staffView === "assigned"} variant={staffView === "assigned" ? undefined : "outline"} onClick={() => setStaffView("assigned")}>Đang phụ trách</Button>
+      </div>}
       <Card className="space-y-3 p-4">
         <form
           className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
@@ -186,7 +214,7 @@ function SupportSession({
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
-          <label className="block text-sm">
+          {(role !== "staff" || staffView === "assigned") && <label className="block text-sm">
             Trạng thái
             <select
               className={supportInputClass}
@@ -206,7 +234,7 @@ function SupportSession({
                 </option>
               ))}
             </select>
-          </label>
+          </label>}
           <label className="block text-sm">
             Sắp xếp
             <select
@@ -239,6 +267,7 @@ function SupportSession({
               onClick={() => {
                 setSearch("")
                 setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
+                setQueuePage(0)
               }}
             >
               Xóa bộ lọc
@@ -259,29 +288,6 @@ function SupportSession({
               ))}
             </select>
           </label>}
-          {role === "manager" && (
-            <label className="block text-sm">
-              Cơ sở được cấp quyền
-              <select
-                className={supportInputClass}
-                disabled={locked}
-                value={query.facilityId ?? ""}
-                onChange={(e) =>
-                  change({
-                    facilityId: e.target.value || undefined,
-                    staffId: undefined,
-                  })
-                }
-              >
-                <option value="">Tất cả cơ sở trong phạm vi</option>
-                {Object.keys(actor.facilityScopes).map((id) => (
-                  <option key={id} value={id}>
-                    {actor.facilityNames?.[id] ?? id}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
         </form>
         {role === "manager" &&
           query.facilityId &&
@@ -300,6 +306,25 @@ function SupportSession({
             </div>
           )}
       </Card>
+      {role === "staff" && staffView === "queue" ? <>
+        <SupportReadState {...queueRead} retry={reload} />
+        {queueRead.data && <>
+          <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
+            {queueRead.data.data.map((item) => <Card key={item.id} className="space-y-3 p-4">
+              <h2 className="break-words font-semibold">{item.subject}</h2>
+              <p className="text-sm">Cơ sở: {actor.facilityNames?.[item.facilityId] ?? item.facilityId}</p>
+              <p className="text-sm">Tạo lúc: {rentalDate(item.createdAt)}</p>
+              <Button disabled={locked || command.conflict} onClick={async () => {
+                const succeeded = await command.run({ kind: "command", role: "staff", id: item.id,
+                  command: { kind: "claim", expectedVersion: item.version } })
+                if (succeeded) { setStaffView("assigned"); setSelected(item.id) }
+              }}>Nhận xử lý</Button>
+            </Card>)}
+          </div>
+          {queueRead.data.data.length === 0 && <Card className="p-5 text-sm">Không có yêu cầu chờ tiếp nhận</Card>}
+          <ApiPager pagination={queueRead.data.pagination} disabled={locked} onPage={setQueuePage} />
+        </>}
+      </> : <>
       <SupportReadState {...read} retry={reload} />
       {read.data &&
         !read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
@@ -329,7 +354,7 @@ function SupportSession({
                       {t.status === "open"
                         ? t.assignedStaffId
                           ? "Chờ nhân viên nhận"
-                          : "Chờ quản lý phân công"
+                          : "Chờ nhân viên tiếp nhận"
                         : supportStatusLabels[t.status]}
                     </Badge>
                   </div>
@@ -368,6 +393,7 @@ function SupportSession({
             />
           </>
         )}
+      </>}
       {selected && (
         <Modal
           open

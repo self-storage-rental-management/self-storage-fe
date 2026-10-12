@@ -9,6 +9,7 @@ import type {
   SupportMessage,
   SupportPage,
   SupportQuery,
+  SupportQueueItem,
   SupportRole,
   SupportStaffOption,
   SupportTicket,
@@ -273,6 +274,23 @@ export async function listSupportTickets(
     query.page ?? 0,
   )
 }
+export async function listSupportQueue(query: SupportQuery = {}) {
+  const value = await apiRequest(`${rolePath("staff")}/queue${queryString(query)}`)
+  return page<SupportQueueItem>(
+    value,
+    (v) => record(v) && isUuid(v.id) && isUuid(v.facilityId) &&
+      string(v.subject) && isInstant(v.createdAt) && isVersion(v.version) &&
+      Object.keys(v).every((key) => ["id", "facilityId", "subject", "createdAt", "version"].includes(key)),
+    query.page ?? 0,
+  )
+}
+export async function getSupportSummary(facilityId: string) {
+  check(isUuid(facilityId), "Cơ sở không hợp lệ.")
+  return envelope(await apiRequest(`${rolePath("manager")}/summary?facilityId=${encodeURIComponent(facilityId)}`),
+    (v): v is { counts: Record<string, number>; unassignedOpen: number } =>
+      record(v) && record(v.counts) && supportStatuses.every((status) => isVersion((v.counts as Record<string, unknown>)[status])) &&
+      isVersion(v.unassignedOpen))
+}
 export async function getSupportTicket(role: SupportRole, id: string) {
   return envelope(
     await apiRequest(path(role, id)),
@@ -392,11 +410,12 @@ export async function sendSupportCommand(
   const allowed: Record<SupportRole, string[]> = {
     customer: ["message", "close", "reopen"],
     manager: ["assign", "decision"],
-    staff: ["accept", "message", "information", "resolve", "escalate"],
+    staff: ["claim", "accept", "message", "information", "resolve", "escalate"],
   }
   check(allowed[role].includes(command.kind), "Thao tác không thuộc role này.")
   const routes = {
     assign: "assignment",
+    claim: "claim",
     accept: "accept",
     message: "messages",
     information: "request-information",
@@ -408,6 +427,7 @@ export async function sendSupportCommand(
   }
   const fields: Record<SupportCommand["kind"], string[]> = {
     assign: ["assignedStaffId", "reason", "expectedVersion"],
+    claim: ["expectedVersion"],
     accept: ["expectedVersion"],
     message: [
       "body",
