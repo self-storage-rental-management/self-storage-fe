@@ -13,12 +13,25 @@ import {
   getRenewalAssignment,
   publishIntegrationPolicy,
   uploadDuongEvidence,
+  renewalSignedContractEntityType,
   downloadDuongEvidence,
   integrationError,
   validPolicyInput,
   type RenewalPolicyInput,
 } from "./duongIntegrationApi"
 describe("ledger coverage inventory", () => {
+  it("uploads signed Renewal evidence using the published resource-bound purpose", async () => {
+    const id = "11111111-1111-4111-8111-111111111111"
+    const fileId = "22222222-2222-4222-8222-222222222222"
+    const data = { id: fileId, originalName: "signed.pdf", entityType: renewalSignedContractEntityType, entityId: id, status: "ACTIVE" }
+    const fetch = respond({ data })
+    expect(await uploadDuongEvidence(new File(["test signed fixture"], "signed.pdf"), renewalSignedContractEntityType, id)).toEqual(data)
+    const form = fetch.mock.calls[0][1].body as FormData
+    expect(form.get("entityType")).toBe("DUONG_RENEWAL_SIGNED_CONTRACT")
+    expect(form.get("entityId")).toBe(id)
+    await expect(uploadDuongEvidence(new File(["test"], "signed.pdf"), "DUONG_RENEWAL_SIGNED_RENEWAL", id)).rejects.toThrow()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
   it("validates additive Renewal deposit evidence against the same Rental obligation", () => {
     const id = "11111111-1111-4111-8111-111111111111"
     const other = "22222222-2222-4222-8222-222222222222"
