@@ -65,7 +65,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           setReturnFailure('VNPay đã ghi nhận giao dịch, nhưng trạng thái đơn hiện không xác nhận cọc. Vui lòng kiểm tra và đối soát trước khi thanh toán thêm.')
         } else {
           setReturnFailure(value.paymentStatus === 'PENDING' || value.paymentStatus === 'NOT_RECEIVED'
-            ? `StorageHub chưa nhận được kết quả cuối cùng từ VNPay (mã ${code}). Hệ thống sẽ tiếp tục đối soát; không thanh toán lại nếu tài khoản đã bị trừ tiền.`
+            ? `StorageHub chưa nhận được kết quả cuối cùng từ VNPay (mã ${code}). Hệ thống sẽ tiếp tục đối soát. Không thanh toán lại nếu tài khoản đã bị trừ tiền.`
             : `Giao dịch VNPay không thành công (mã ${code}). Bạn có thể thử lại nếu đơn vẫn còn thời hạn.`)
         }
       })
@@ -115,7 +115,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai thanh toán' : 'Xem giao dịch cần đối soát'}</Button>}
     <Modal open={payOpen} onClose={() => { if (!busy) setPayOpen(false) }} title="Thanh toán cọc giữ chỗ">
       <div className="space-y-4">
-        <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>Kỳ thuê: <b>{reservation.startDate} → {reservation.endDate}</b></p></div>
+        <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>Kỳ thuê: <b>{reservation.startDate.split('-').reverse().join('/')} đến {reservation.endDate.split('-').reverse().join('/')}</b></p></div>
         <div className="rounded-xl border-2 border-amber-500 bg-amber-50 p-4 text-center">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Số tiền cần thanh toán ngay</p>
           <p className="mt-1 text-3xl font-extrabold text-stone-950">{formatVnd(reservation.reservationDepositAmount)}</p>

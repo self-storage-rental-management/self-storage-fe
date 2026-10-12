@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import Layout, {
   getInitialPage,
   Icon,
+  type LayoutNotification,
   type NavItem,
 } from "../../components/Layout"
 
@@ -42,6 +43,7 @@ import {
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
+import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 
 import type { User } from "../../types"
 
@@ -875,6 +877,30 @@ export default function StaffApp({
   ]
 
   const [page, setPage] = useState(() => getInitialPage(nav, "dashboard"))
+
+  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let cancelled = false
+    const loadNotifications = async () => {
+      try {
+        const result = await listNotifications(0, 50)
+        if (!cancelled) setBackendNotifications(result.data)
+      } catch {
+        // Staff operations remain available if notifications are temporarily unavailable.
+      }
+    }
+    void loadNotifications()
+    const refreshNotifications = () => void loadNotifications()
+    window.addEventListener("storagehub:notifications-refresh", refreshNotifications)
+    const timer = window.setInterval(refreshNotifications, 10_000)
+    return () => {
+      cancelled = true
+      window.removeEventListener("storagehub:notifications-refresh", refreshNotifications)
+      window.clearInterval(timer)
+    }
+  }, [])
 
   const [reservations, setReservations] = useState<StaffReservation[]>([])
 
@@ -2091,6 +2117,25 @@ export default function StaffApp({
     page: "tasks",
   }))
 
+  const notificationPage = (type: ApiNotification["type"]) => {
+    if (type === "CHECKIN") return "checkin"
+    if (type === "SUPPORT") return "support"
+    if (type === "RETURN") return "return"
+    if (type === "PAYMENT" || type === "OVERDUE") return "payments"
+    if (type === "RESERVATION") return "reservations"
+    return "dashboard"
+  }
+
+  const staffApiNotifications: LayoutNotification[] = backendNotifications.map((notification) => ({
+    id: `api-notification-${notification.id}`,
+    title: notification.title,
+    message: notification.content,
+    date: notification.createdAt,
+    page: notificationPage(notification.type),
+    targetId: notification.relatedEntityId ?? undefined,
+    isRead: notification.isRead,
+  }))
+
   return (
     <Layout
       user={user}
@@ -2099,6 +2144,7 @@ export default function StaffApp({
       onNavigate={setPage}
       onLogout={onLogout}
       notifications={[
+        ...staffApiNotifications,
         ...assignedTaskNotifications,
 
         ...operationalTasks
@@ -2116,6 +2162,22 @@ export default function StaffApp({
           })),
       ]}
       onNotificationClick={(notification) => {
+        if (notification.id.startsWith("api-notification-")) {
+          const notificationId = notification.id.replace("api-notification-", "")
+          setPage(notification.page)
+          setBackendNotifications((current) => current.map((item) =>
+            item.id === notificationId ? { ...item, isRead: true } : item
+          ))
+          void markNotificationRead(notificationId).catch(() => undefined)
+          if (notification.page === "checkin") {
+            window.setTimeout(() => window.dispatchEvent(new Event("storagehub:checkins-refresh")), 0)
+          }
+          if (notification.page === "reservations") {
+            window.setTimeout(() => window.dispatchEvent(new Event("storagehub:staff-reservations-refresh")), 0)
+          }
+          return
+        }
+
         if (notification.id.startsWith("assigned-task-")) {
           setPage("tasks")
 
