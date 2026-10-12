@@ -18,6 +18,8 @@ import RenewalDetail from "./RenewalDetail"
 import RenewalOperationsPanel from "./RenewalOperationsPanel"
 import RenewalDecisionModal from "./RenewalDecisionModal"
 import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal"
+import ReturnApiPanel from "../return-api/ReturnApiPanel"
+import CustomerPaymentHistory from "../customer/CustomerPaymentHistory"
 import {
   rentalDate,
   rentalLabels,
@@ -108,7 +110,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  const [tab, setTab] = useState<"rental" | "renewal">("rental")
+  const [tab, setTab] = useState<"rental" | "renewal" | "returns" | "receipts">("rental")
   const [rq, setRq] = useState<RentalApiQuery>({
     page: 0,
     size: role === "manager" ? 10 : 20,
@@ -190,8 +192,8 @@ function WorkspaceData({
 }: {
   role: RentalApiRole
   identity: string
-  tab: "rental" | "renewal"
-  setTab: (t: "rental" | "renewal") => void
+  tab: "rental" | "renewal" | "returns" | "receipts"
+  setTab: (t: "rental" | "renewal" | "returns" | "receipts") => void
   rq: RentalApiQuery
   nq: RenewalApiQuery
   setRq: (q: RentalApiQuery) => void
@@ -208,10 +210,11 @@ function WorkspaceData({
   const actor = getAuthenticatedActor()!
   const [rentalFilterDraft, setRentalFilterDraft] = useState(nq.rentalId || "")
   const query = tab === "rental" ? rq : nq
+  const dataTab = tab === "renewal" ? "renewal" : "rental"
   const read = useRentalApiResource(
-    `${identity}:${tab}:${JSON.stringify(query)}`,
+    `${identity}:${dataTab}:${JSON.stringify(query)}`,
     async () =>
-      tab === "rental"
+      dataTab === "rental"
         ? { kind: "rental" as const, page: await listRentals(role, rq) }
         : { kind: "renewal" as const, page: await listRenewals(role, nq) },
   )
@@ -267,7 +270,7 @@ function WorkspaceData({
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold">
-        {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê của tôi"}
+        {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}
       </h1>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -300,10 +303,27 @@ function WorkspaceData({
         >
           Yêu cầu gia hạn
         </Button>
+        {role === "customer" && <>
+          <Button
+            variant={tab === "returns" ? "primary" : "outline"}
+            onClick={() => setTab("returns")}
+          >
+            Trả kho & quyết toán
+          </Button>
+          <Button
+            variant={tab === "receipts" ? "primary" : "outline"}
+            onClick={() => setTab("receipts")}
+          >
+            Biên nhận
+          </Button>
+        </>}
         {!manager && (<Button variant="outline" onClick={refresh}>
           Tải lại
         </Button>)}
       </div>
+      {tab === "returns" && role === "customer" && <ReturnApiPanel role="customer" />}
+      {tab === "receipts" && role === "customer" && <CustomerPaymentHistory />}
+      {(tab === "rental" || tab === "renewal") && <>
       <Card className="p-4 flex flex-wrap items-end gap-3">
         {(tab === "rental" || role === "manager") && (
           <label>
@@ -528,6 +548,7 @@ function WorkspaceData({
           }}
         />
       )}
+      </>}
     </div>
   )
 }
@@ -593,18 +614,26 @@ function DetailModal({
         if (!operationLock.current) read.refresh()
       }} />
       {read.data?.kind === "rental" ? (
-        <RentalDetail
-          rental={read.data.record as RentalApiDetail}
-          showTechnicalWarnings={role === "manager"}
-          onRequest={
-            role === "customer"
-              ? () => {
-                  onClose()
-                  onAction({ kind: "request", rentalId: detail.id })
-                }
-              : undefined
-          }
-        />
+        <>
+          <RentalDetail
+            rental={read.data.record as RentalApiDetail}
+            showTechnicalWarnings={role === "manager"}
+            onRequest={
+              role === "customer"
+                ? () => {
+                    onClose()
+                    onAction({ kind: "request", rentalId: detail.id })
+                  }
+                : undefined
+            }
+          />
+          {role === "customer" && <ReturnApiPanel
+            role="customer"
+            rentalId={detail.id}
+            rentalActive={(read.data.record as RentalApiDetail).status === "active"}
+            onChanged={onChanged}
+          />}
+        </>
       ) : read.data?.kind === "renewal" ? (
         <div>
           <RenewalDetail

@@ -34,7 +34,7 @@ function CustomerMetricSession({ metric, identity, customerId }: { metric: Metri
   const read = useRentalApiResource(identity, () => loadCustomerApiCount(metric, customerId))
   return <div>
     <MetricValue metric={metric} value={read.loading ? "…" : read.error ? undefined : read.data} />
-    {!!read.error && <p role="status" className="mt-1 text-xs text-amber-800">Chưa xác minh được số liệu. Xem chi tiết tại trang {metric === "active-rentals" ? "Hồ sơ thuê & Gia hạn" : "Hỗ trợ khách hàng"}.</p>}
+    {!!read.error && <p role="status" className="mt-1 text-xs text-amber-800">Chưa xác minh được số liệu. Xem chi tiết tại trang {metric === "active-rentals" ? "Hồ sơ thuê" : "Hỗ trợ khách hàng"}.</p>}
   </div>
 }
 
@@ -43,10 +43,10 @@ function MetricValue({ metric, value }: { metric: Metric; value?: number | strin
     value={value ?? "Chưa xác minh"} icon={metric === "active-rentals" ? Icon.key : Icon.support} />
 }
 
-/** Keep the teammate Return/receipt card unchanged in demo mode. */
+/** Mở không gian chung cho hồ sơ thuê, gia hạn, trả kho và biên nhận. */
 export function CustomerRentalApiLink({ onOpen }: { onOpen: () => void }) {
   return <Card className="space-y-3 p-5">
-    <h2 className="font-bold text-stone-900">Hồ sơ thuê & Gia hạn</h2>
-    <Button variant="outline" onClick={onOpen}>Xem hồ sơ thuê & Gia hạn</Button>
+    <h2 className="font-bold text-stone-900">Hồ sơ thuê</h2>
+    <Button variant="outline" onClick={onOpen}>Xem hồ sơ thuê</Button>
   </Card>
 }
