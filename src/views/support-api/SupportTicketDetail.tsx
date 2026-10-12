@@ -146,18 +146,11 @@ export default function SupportTicketDetail({
   if (t && (!actor || !supportTicketVisible(actor, role, t)))
     return (
       <p role="alert">
-        Bạn không còn quyền với yêu cầu này. Vui lòng tải lại hàng đợi.
+        Bạn không còn quyền với yêu cầu này. Vui lòng quay về danh sách yêu cầu.
       </p>
     )
   return (
     <div className="min-w-0 space-y-5">
-      {!manager && (<Button
-        variant="outline"
-        disabled={command.locked}
-        onClick={refresh}
-      >
-        Tải lại chi tiết
-      </Button>)}
       <SupportReadState {...read} retry={refresh} />
       {t && (
         <>
@@ -170,13 +163,22 @@ export default function SupportTicketDetail({
             identity={identity}
             locked={command.locked}
           />
-          <SupportActionForm
+          {role === "manager" ? <details className="rounded-lg border border-stone-200 p-3">
+            <summary className="cursor-pointer font-medium">Điều phối ngoại lệ</summary>
+            <SupportActionForm
+              key={`${id}:${t.version}`}
+              role={role}
+              ticket={t}
+              command={command}
+              onUploadBusy={onUploadBusy}
+            />
+          </details> : <SupportActionForm
             key={`${id}:${t.version}`}
             role={role}
             ticket={t}
             command={command}
             onUploadBusy={onUploadBusy}
-          />
+          />}
           {supportActions(actor, role, t).includes("follow-up") && (
             <Button disabled={command.locked} onClick={() => onFollowUp(t)}>
               Tạo yêu cầu tiếp nối
