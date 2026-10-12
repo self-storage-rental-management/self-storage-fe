@@ -615,7 +615,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'support:read' }
   ]
 
-  const [page, setPage] = useState(() => getInitialPage(NAV, 'overview'))
+  const [page, setPage] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('vnpayReturn') === 'true' && params.get('reservationId')) return 'reservations'
+    return getInitialPage(NAV, 'overview')
+  })
   const [previousPage, setPreviousPage] = useState('overview')
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(() => {
     return new URLSearchParams(window.location.search).get('facilityId') || new URLSearchParams(window.location.search).get('facility')
