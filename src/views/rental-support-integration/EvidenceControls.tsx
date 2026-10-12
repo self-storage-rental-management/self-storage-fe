@@ -81,6 +81,7 @@ export function EvidenceDownload({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>()
+  const lock = useRef(false)
   return (
     <span className="inline-block mr-2">
       <Button
@@ -88,6 +89,8 @@ export function EvidenceDownload({
         variant="outline"
         disabled={busy}
         onClick={async () => {
+          if (lock.current) return
+          lock.current = true
           setBusy(true)
           setError(undefined)
           try {
@@ -101,6 +104,7 @@ export function EvidenceDownload({
           } catch (e) {
             setError(e)
           } finally {
+            lock.current = false
             setBusy(false)
           }
         }}
