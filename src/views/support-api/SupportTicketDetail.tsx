@@ -170,13 +170,22 @@ export default function SupportTicketDetail({
             identity={identity}
             locked={command.locked}
           />
-          <SupportActionForm
+          {role === "manager" ? <details className="rounded-lg border border-stone-200 p-3">
+            <summary className="cursor-pointer font-medium">Điều phối ngoại lệ</summary>
+            <SupportActionForm
+              key={`${id}:${t.version}`}
+              role={role}
+              ticket={t}
+              command={command}
+              onUploadBusy={onUploadBusy}
+            />
+          </details> : <SupportActionForm
             key={`${id}:${t.version}`}
             role={role}
             ticket={t}
             command={command}
             onUploadBusy={onUploadBusy}
-          />
+          />}
           {supportActions(actor, role, t).includes("follow-up") && (
             <Button disabled={command.locked} onClick={() => onFollowUp(t)}>
               Tạo yêu cầu tiếp nối
