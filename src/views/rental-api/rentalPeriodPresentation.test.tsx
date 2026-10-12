@@ -51,6 +51,14 @@ describe("P03 canonical period FE compatibility", () => {
     expect(html).toContain("01/11/2026")
     expect(html).not.toContain("Thời hạn sử dụng")
   })
+  it("can show the stored period without exposing the technical date warning", () => {
+    const legacy = { ...exclusive, dateSemantics: null }
+    expect(rentalPeriodText(legacy, false)).toBe("01/10/2026 → 01/11/2026")
+    const html = renderToStaticMarkup(<RentalDetail rental={legacy} showTechnicalWarnings={false} />)
+    expect(html).toContain("Thời hạn sử dụng")
+    expect(html).not.toContain("chưa xác minh ngày cuối sử dụng")
+    expect(html).not.toContain("Cần kiểm tra dữ liệu")
+  })
   it.each([
     { lastPermittedDate: "2026-11-01" }, { convention: "INCLUSIVE" },
     { endExclusive: "2026-11-02" }, { completeness: "UNKNOWN" },
