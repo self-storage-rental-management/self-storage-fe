@@ -282,12 +282,13 @@ describe("D4 truthful overdue presentation", () => {
           ...overduePage,
           ...apiPage([]),
           completeness: "PARTIAL",
-          missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS"],
+          missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS", "FINANCIAL_COVERAGE_PARTIAL"],
         }}
       />,
     )
     expect(html).toContain("một phần")
     expect(html).toContain("Chưa đủ dữ liệu để xác định tất cả khoản nợ")
+    expect(html).toContain("Chỉ hiển thị khoản nợ đã xác minh")
     expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
@@ -328,6 +329,6 @@ describe("D4 truthful overdue presentation", () => {
           status: 409,
         }),
       ),
-    ).toContain("Chưa đủ dữ liệu hoặc chính sách")
+    ).toContain("Một nguồn dữ liệu cần thiết")
   })
 })
