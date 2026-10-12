@@ -19,6 +19,21 @@ import {
   type RenewalPolicyInput,
 } from "./duongIntegrationApi"
 describe("ledger coverage inventory", () => {
+  it("validates additive Renewal deposit evidence against the same Rental obligation", () => {
+    const id = "11111111-1111-4111-8111-111111111111"
+    const other = "22222222-2222-4222-8222-222222222222"
+    const evidence = { renewalId: id, acceptedRevisionId: id, status: "MATCHED", obligationId: id }
+    const view = { rentalId: id, completeness: "PARTIAL", currency: "VND", revision: 1, reason: "Incomplete",
+      obligations: [{ id, renewalId: id, kind: "RENEWAL_DEPOSIT", amount: 20, dueAt: "2026-10-07T00:00:00Z", outstanding: 20 }], receipts: [], refunds: [],
+      coverageInventory: { rentalId: id, ledgerRevision: 1, completeness: "PARTIAL", gaps: [], payments: [], consistentThroughApproval: false, renewalDeposits: [evidence] } }
+    expect(isLedgerView(view)).toBe(true)
+    const withEvidence = (item: unknown) => ({ ...view, coverageInventory: { ...view.coverageInventory, renewalDeposits: [item] } })
+    expect(isLedgerView(withEvidence({ ...evidence, obligationId: other }))).toBe(false)
+    expect(isLedgerView(withEvidence({ ...evidence, renewalId: other }))).toBe(false)
+    expect(isLedgerView(withEvidence({ ...evidence, status: "COMPLETE" }))).toBe(false)
+    expect(isLedgerView(withEvidence({ ...evidence, status: "UNPOSTED_OR_INVALID", obligationId: null }))).toBe(true)
+    expect(isLedgerView(withEvidence({ ...evidence, status: "UNPOSTED_OR_INVALID" }))).toBe(false)
+  })
   it("posts a resource-bound Sandbox reconciliation with the same caller key and no client amount", async () => {
     const id = "11111111-1111-4111-8111-111111111111"
     const fetch = respond({ data: { receiptId: id, ledgerRevision: 2, method: "VNPAY_SANDBOX" } })
