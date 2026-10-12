@@ -267,6 +267,7 @@ export interface ReservationPaymentResult {
   paidAt?: string | null
   initiatedByName?: string | null
   createdAt?: string | null
+  reservationCode?: string
 }
 
 export interface VnpayPaymentUrlResult {
@@ -385,6 +386,10 @@ export async function listReservationPayments(reservationId: string) {
     `/api/customer/reservations/${reservationId}/payments`,
   )
   return response.data
+}
+
+export async function listCustomerPaymentHistory(page = 0, size = 50) {
+  return apiRequest<PageResponse<ReservationPaymentResult>>(`/api/customer/reservations/payment-history?page=${page}&size=${size}`)
 }
 
 function query(params: Record<string, string | number | undefined>) {
