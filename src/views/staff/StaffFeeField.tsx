@@ -5,12 +5,18 @@ import { USD_TO_VND_RATE, formatVnd } from '../../i18n/currency'
 export const formatStaffMoney = formatVnd
 
 export default function StaffFeeField({ label, hint, value, onChange, onDetailChange, disabled }: {
-  label: string; hint: string; value: string; onChange: (value: string) => void; onDetailChange: (value: string) => void; disabled: boolean
+  label: string
+  hint: string
+  value: string
+  onChange: (value: string) => void
+  onDetailChange: (value: string) => void
+  disabled: boolean
 }) {
   const [quantity, setQuantity] = useState(value && Number(value) > 0 ? '1' : '')
   const [price, setPrice] = useState(value && Number(value) > 0 ? String(Math.round(Number(value) * USD_TO_VND_RATE)) : '')
   const update = (nextQuantity: string, nextPrice: string) => {
-    setQuantity(nextQuantity); setPrice(nextPrice)
+    setQuantity(nextQuantity)
+    setPrice(nextPrice)
     const valid = /^\d+(?:\.\d{1,2})?$/.test(nextQuantity) && /^\d+$/.test(nextPrice)
     const totalVnd = Number(nextQuantity) * Number(nextPrice)
     const totalBase = totalVnd / USD_TO_VND_RATE

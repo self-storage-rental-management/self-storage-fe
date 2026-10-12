@@ -183,6 +183,12 @@ export interface CustomerReservation {
   totalGoodsWeightKg: number
   holdExpiresAt: string
   appointmentAt?: string | null
+  assignedUnitId?: string | null
+  assignedUnitCode?: string | null
+  assignedUnitStatus?: string | null
+  customerName?: string | null
+  customerEmail?: string | null
+  customerPhone?: string | null
   createdAt: string
 }
 
@@ -216,6 +222,7 @@ export interface CustomerReservationDetail {
   cancelledAt: string | null
   cancelReason: string | null
   goodsItems: ReservationGoodsItem[]
+  payments: ReservationPaymentResult[]
 }
 
 export interface ReservationEmailVerificationResult {
@@ -243,6 +250,10 @@ export interface ReservationPaymentResult {
   message: string
   processedAt: string | null
   lastReconciledAt: string | null
+  purpose?: string
+  paymentMethod?: string | null
+  paidAt?: string | null
+  initiatedByName?: string | null
 }
 
 export interface VnpayPaymentUrlResult {
@@ -353,6 +364,13 @@ export async function createVnpayPaymentUrl(reservationId: string, idempotencyKe
 
 export async function getReservationPayment(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(`/api/customer/reservations/${reservationId}/payment`)
+  return response.data
+}
+
+export async function listReservationPayments(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationPaymentResult[]>>(
+    `/api/customer/reservations/${reservationId}/payments`,
+  )
   return response.data
 }
 

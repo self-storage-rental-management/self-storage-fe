@@ -19,7 +19,11 @@ export default function StaffFileUpload({ label, value, onChange, onNameChange, 
   useEffect(() => () => { ++version.current }, [])
   const remove = () => {
     ++version.current
-    onChange(''); onNameChange?.(''); setName(''); setError(''); setLoading(false)
+    onChange('')
+    onNameChange?.('')
+    setName('')
+    setError('')
+    setLoading(false)
     if (input.current) input.current.value = ''
   }
   return <div className="min-w-0 space-y-2 text-sm" role="group" aria-labelledby={id}>
@@ -35,20 +39,35 @@ export default function StaffFileUpload({ label, value, onChange, onNameChange, 
         if (!file) return
         // An invalid replacement must not discard the previously selected file.
         if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
-          setError('Vui lòng chọn ảnh JPEG, PNG, WEBP hoặc tài liệu PDF.'); return
+          setError('Vui lòng chọn ảnh JPEG, PNG, WEBP hoặc tài liệu PDF.')
+          return
         }
         if (!file.size || file.size > 3 * 1024 * 1024) {
-          setError('Tệp phải có nội dung và dung lượng không quá 3 MB.'); return
+          setError('Tệp phải có nội dung và dung lượng không quá 3 MB.')
+          return
         }
         const request = ++version.current
-        onChange(''); onNameChange?.(''); setName(''); setError(''); setLoading(true)
+        onChange('')
+        onNameChange?.('')
+        setName('')
+        setError('')
+        setLoading(true)
         const reader = new FileReader()
         reader.onload = () => {
           if (request !== version.current) return
           setLoading(false)
-          if (typeof reader.result === 'string') { onChange(reader.result); onNameChange?.(file.name); setName(file.name) }
+          if (typeof reader.result === 'string') {
+            onChange(reader.result)
+            onNameChange?.(file.name)
+            setName(file.name)
+          }
         }
-        reader.onerror = () => { if (request === version.current) { setLoading(false); setError('Không đọc được tệp. Vui lòng chọn lại.'); } }
+        reader.onerror = () => {
+          if (request === version.current) {
+            setLoading(false)
+            setError('Không đọc được tệp. Vui lòng chọn lại.')
+          }
+        }
         reader.readAsDataURL(file)
       }} />
       {!disabled && <p className="mt-2 text-xs leading-5 text-stone-500">Ảnh JPEG, PNG, WEBP hoặc tài liệu PDF · Tối đa 3 MB</p>}

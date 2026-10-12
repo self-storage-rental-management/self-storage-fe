@@ -52,6 +52,7 @@ export interface CheckInCase {
   customerId: string
   customerName: string
   customerEmail: string
+  customerPhone: string | null
   facilityId: string
   facilityName: string
   storageUnitId: string
@@ -61,8 +62,10 @@ export interface CheckInCase {
   assignmentStatus: 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   startDate: string
   endDate: string
+  declaredPackageCount: number | null
   declaredGoodsWeightKg: number
   declaredGoodsVolumeM3: number
+  dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
 }
 
@@ -93,6 +96,50 @@ export interface CheckInEvidenceAsset {
   status: string
 }
 
+export type AccessCredentialType = 'PIN' | 'CARD' | 'KEY' | 'LOCK'
+export type AccessCredentialStatus = 'ACTIVE' | 'REVOKED'
+
+export interface AccessCredential {
+  id: string
+  reservationId: string
+  reservationCode: string
+  rentalId: string | null
+  facilityId: string
+  facilityName: string
+  storageUnitId: string
+  storageUnitCode: string
+  customerId: string
+  customerName: string
+  type: AccessCredentialType
+  status: AccessCredentialStatus
+  reference: string
+  issuedBy: string
+  issuedByName: string
+  issuedAt: string
+  revokedBy: string | null
+  revokedByName: string | null
+  revokedAt: string | null
+  note: string | null
+}
+
+export interface CredentialAlert {
+  id: string
+  action: 'ISSUE' | 'REVOKE'
+  reservationId: string
+  reservationCode: string
+  rentalId: string | null
+  facilityId: string
+  facilityName: string
+  storageUnitId: string
+  storageUnitCode: string
+  customerId: string
+  customerName: string
+  credentialType: AccessCredentialType | null
+  reference: string | null
+  dueAt: string | null
+  reason: string
+}
+
 function assertPage(payload: unknown): CheckInPage {
   const value = payload as Partial<CheckInPage> | null
   if (!value || !Array.isArray(value.data) || !value.pagination
@@ -109,6 +156,13 @@ function assertEnvelope(payload: unknown): CheckInCase {
     throw new ApiClientError('Backend trả về hồ sơ check-in không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<CheckInCase>).data
+}
+
+function assertPaymentEnvelope(payload: unknown): CheckInPayment {
+  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+    throw new ApiClientError('Backend trả về biên lai thanh toán không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return (payload as ApiEnvelope<CheckInPayment>).data
 }
 
 export async function listCheckIns(params: {
@@ -132,7 +186,12 @@ export async function listCheckIns(params: {
 
 export async function scheduleCheckIn(
   reservationId: string,
-  request: { scheduledAt: string; contractVerified: boolean; paymentVerified: boolean; note: string },
+  request: {
+    scheduledAt: string
+    contractVerified: boolean
+    paymentVerified: boolean
+    note: string
+  },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/reservations/${encodeURIComponent(reservationId)}/schedule`,
@@ -147,6 +206,32 @@ export async function completeCheckIn(checkInId: string, request: CompleteCheckI
   ))
 }
 
+export interface CheckInPayment {
+  paymentId: string
+  reservationId: string
+  amount: number
+  currency: string
+  purpose: 'RENTAL_BALANCE'
+  status: string
+  transactionReference: string
+  paymentMethod: string
+  paidAt: string | null
+  processedAt: string | null
+  initiatedByName: string
+}
+
+export async function recordCheckInRemainingPayment(checkInId: string, request: {
+  amount: number
+  paymentMethod: string
+  transactionReference: string
+  note?: string
+}) {
+  return assertPaymentEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/remaining-payment`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
 export async function markCheckInNoShow(checkInId: string, reason: string) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/no-show`,
@@ -156,7 +241,11 @@ export async function markCheckInNoShow(checkInId: string, reason: string) {
 
 export async function rejectCheckIn(
   checkInId: string,
-  request: { reason: string; disposition: 'AVAILABLE' | 'MAINTENANCE'; evidenceReferences: string[] },
+  request: {
+    reason: string
+    disposition: 'AVAILABLE' | 'MAINTENANCE'
+    evidenceReferences: string[]
+  },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/reject`,
@@ -178,4 +267,67 @@ export async function uploadCheckInEvidence(checkInId: string, file: File) {
 
 export async function downloadCheckInEvidence(assetId: string) {
   return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
+}
+
+function assertCredentialEnvelope(payload: unknown): AccessCredential {
+  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+    throw new ApiClientError('Backend trả về quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return (payload as ApiEnvelope<AccessCredential>).data
+}
+
+export async function issueAccessCredential(checkInId: string, request: {
+  type: AccessCredentialType
+  reference: string
+  secret?: string
+  note?: string
+}) {
+  return assertCredentialEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/credentials`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function revokeAccessCredential(credentialId: string, reason: string) {
+  return assertCredentialEnvelope(await apiRequest<unknown>(
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/revoke`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  ))
+}
+
+export async function listCredentialAlerts(facilityId?: string) {
+  const query = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : ''
+  const payload = await apiRequest<unknown>(`/api/staff/credential-alerts${query}`)
+  if (!Array.isArray(payload)) {
+    throw new ApiClientError('Backend trả về cảnh báo quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return payload as CredentialAlert[]
+}
+
+export async function listAccessCredentials(params: {
+  facilityId?: string
+  q?: string
+  status?: AccessCredentialStatus
+  page?: number
+  pageSize?: number
+} = {}) {
+  const query = new URLSearchParams({ page: String(params.page ?? 0), pageSize: String(params.pageSize ?? 20) })
+  if (params.facilityId && params.facilityId !== 'ALL') query.set('facilityId', params.facilityId)
+  if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.status) query.set('status', params.status)
+  const payload = await apiRequest<unknown>(`/api/manager/access-credentials?${query}`)
+  if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { data?: unknown }).data)) {
+    throw new ApiClientError('Backend trả về lịch sử quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return payload as {
+    data: AccessCredential[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+      sort: string
+    }
+    correlationId: string
+  }
 }

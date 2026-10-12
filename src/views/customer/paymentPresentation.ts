@@ -6,7 +6,8 @@ const acceptedReservationStatuses = new Set([
 ])
 
 export function bookingDepositAccepted(payment: ReservationPaymentResult): boolean {
-  return payment.paymentStatus === 'PAID' && acceptedReservationStatuses.has(payment.reservationStatus)
+  const isDeposit = payment.purpose === undefined || payment.purpose === 'RESERVATION_DEPOSIT'
+  return isDeposit && payment.paymentStatus === 'PAID' && acceptedReservationStatuses.has(payment.reservationStatus)
 }
 
 export function paymentRecordLabel(payment: ReservationPaymentResult): string {

@@ -26,7 +26,10 @@ const STAFF_TASK_PRIORITY_RANK: Record<string, number> = {
 }
 
 export function compareStaffTaskSchedule<
-  T extends { dueAt: string; priority: string },
+  T extends {
+    dueAt: string
+    priority: string
+  },
 >(left: T, right: T, sort: StaffTaskSort) {
   const timestamp = (value: string) => {
     const result = new Date(value).getTime()
