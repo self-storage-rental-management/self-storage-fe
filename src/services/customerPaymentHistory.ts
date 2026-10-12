@@ -1,11 +1,10 @@
-import { apiRequest, ApiClientError } from "./apiClient"
+import { apiRequest } from "./apiClient"
 import { getAuthenticatedActor } from "./authApi"
 import { readRentalPage } from "./rentalApi"
 import { listRenewals } from "./renewalApi"
 import { listRenewalOperationEvents } from "./renewalOperationsApi"
 import {
-  listCustomerReservations,
-  listReservationPayments,
+  listCustomerPaymentHistory,
   type ReservationPaymentResult,
 } from "./customerReservationApi"
 
@@ -25,6 +24,7 @@ export interface HistoryEntry {
   amount: number | null
   currency: string
   timestamp: string | null
+  updatedAt?: string | null
   status: string
   method: string | null
   reservationPayment?: ReservationPaymentResult
@@ -53,6 +53,18 @@ export function sortPaymentHistory(entries: HistoryEntry[]): HistoryEntry[] {
     (a, b) => time(b.timestamp) - time(a.timestamp) || a.id.localeCompare(b.id),
   )
 }
+export function latestPaymentRecords(entries: HistoryEntry[]): HistoryEntry[] {
+  const latest = new Map<string, HistoryEntry>()
+  const updateTime = (entry: HistoryEntry) => {
+    const value = entry.updatedAt || entry.timestamp
+    return value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : 0
+  }
+  for (const entry of entries) {
+    const existing = latest.get(entry.id)
+    if (!existing || updateTime(entry) > updateTime(existing)) latest.set(entry.id, entry)
+  }
+  return sortPaymentHistory([...latest.values()])
+}
 async function allPages<T>(
   load: (
     page: number,
@@ -60,12 +72,20 @@ async function allPages<T>(
     data: T[]
     pagination: { totalPages: number }
   }>,
+  onError?: () => void,
 ): Promise<T[]> {
   const entries: T[] = []
   let page = 0,
     totalPages = 1
   do {
-    const result = await load(page++)
+    let result
+    try {
+      result = await load(page++)
+    } catch (error) {
+      if (!onError) throw error
+      onError()
+      break
+    }
     entries.push(...result.data)
     totalPages = result.pagination.totalPages
   } while (page < totalPages)
@@ -102,44 +122,23 @@ export async function loadCustomerPaymentHistory(): Promise<{
   warnings: string[]
 }> {
   const warnings: string[] = []
-  const reservations = await allPages((page) =>
-    listCustomerReservations(undefined, page, 50),
+  const payments = await allPages(
+    page => listCustomerPaymentHistory(page, 50),
+    () => warnings.push("Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho."),
   )
-  const reservationEntries = (
-    await Promise.all(
-      reservations.map(async (reservation) => {
-        const payments = await listReservationPayments(reservation.id).catch(
-          (error) => {
-            if (error instanceof ApiClientError && error.status === 404)
-              return []
-            throw error
-          },
-        )
-        return payments.map(
-          (payment) =>
-            ({
-              id: payment.paymentId,
-              reference: reservation.reservationCode,
-              category: reservationPaymentCategory(payment),
-              amount: payment.amount,
-              currency: payment.currency,
-              timestamp:
-                payment.paidAt ||
-                payment.processedAt ||
-                payment.createdAt ||
-                null,
-              status: payment.paymentStatus,
-              method: payment.paymentMethod || null,
-              reservationPayment: payment,
-            }) satisfies HistoryEntry,
-        )
-      }),
-    )
-  ).flat()
+  const reservationEntries: HistoryEntry[] = payments.map(payment => ({
+    id: payment.paymentId,
+    reference: payment.reservationCode || payment.reservationId,
+    category: reservationPaymentCategory(payment), amount: payment.amount, currency: payment.currency,
+    timestamp: payment.paidAt || payment.processedAt || payment.createdAt || null,
+    updatedAt: payment.processedAt || payment.createdAt || null,
+    status: payment.paymentStatus, method: payment.paymentMethod || null, reservationPayment: payment,
+  }))
   const supplemental = await Promise.allSettled([
     (async (): Promise<HistoryEntry[]> => {
       const renewals = await allPages((page) =>
         listRenewals("customer", { page, size: 50 }),
+        () => warnings.push("Chưa tải được đầy đủ danh sách gia hạn."),
       )
       return (
         await Promise.all(
@@ -152,6 +151,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 page,
                 50,
               ),
+              () => warnings.push(`Chưa tải được đầy đủ thanh toán của đơn gia hạn ${renewal.id}.`),
             )
             return events.map((event) => {
               const data = event.data as Record<string, unknown>,
@@ -165,6 +165,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 timestamp: String(
                   cash ? data.receivedAt : data.paidAt || event.occurredAt,
                 ),
+                updatedAt: event.occurredAt,
                 status:
                   cash || data.outcome === "SUCCESS"
                     ? "PAID"
@@ -182,6 +183,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
           (result) =>
             readRentalPage<ReturnPayment>(result, isReturnPayment, page),
         ),
+        () => warnings.push("Chưa tải được đầy đủ lịch sử thanh toán bổ sung khi trả kho."),
       )
       return returns
         .filter(
@@ -213,9 +215,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
       )
   })
   return {
-    entries: sortPaymentHistory([
-      ...new Map(entries.map((entry) => [entry.id, entry])).values(),
-    ]),
+    entries: latestPaymentRecords(entries),
     warnings,
   }
 }
