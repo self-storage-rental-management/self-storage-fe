@@ -231,7 +231,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         state={{ ...operationState, missingSources: ["RENEWAL_ACCOUNTING"] }}
       />,
     )
-    expect(html).toContain("Chờ thanh toán cọc")
+    expect(html).toContain("Chờ thanh toán toàn kỳ")
     expect(html).toContain("Thanh toán và phân bổ tiền gia hạn")
     expect(html).toContain("Chưa đủ thông tin để xử lý")
     expect(html).not.toContain("không dùng dữ liệu demo")

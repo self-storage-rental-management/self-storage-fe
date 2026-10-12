@@ -44,7 +44,8 @@ import { renewalSignedContractEntityType } from "../../services/duongIntegration
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
 const eventLabels: Record<string, string> = {
-  DEPOSIT: "Kết quả thanh toán cọc thử nghiệm",
+  DEPOSIT: "Giao dịch gia hạn theo luồng cũ",
+  FULL_RENT_PAYMENT: "Thanh toán toàn kỳ bằng VNPay Sandbox",
   CASH: "Biên nhận tiền mặt",
   INCIDENT: "Sự cố cơ sở",
   FAULT_REVIEW: "Kết quả xác minh lỗi cơ sở",
@@ -126,7 +127,7 @@ export function OperationEventCard({
           <p key={key}>
             {
               {
-                paidAt: "Lúc trả cọc",
+                paidAt: "Thời điểm thanh toán theo luồng cũ",
                 receivedAt: "Lúc thu tiền",
                 start: "Bắt đầu lịch",
                 end: "Kết thúc lịch",
@@ -209,7 +210,8 @@ export function RenewalOperationsSummary({
       <p>
         Trạng thái: {copy(phaseLabels[s.phase])}
       </p>
-      <p>Cọc được ghi nhận lúc: {rentalDate(s.depositPaidAt)}</p>
+      {s.depositPaidAt && <p>Giao dịch theo hồ sơ cũ được ghi nhận lúc: {rentalDate(s.depositPaidAt)}</p>}
+      {s.fullRentPaidAt && <p>Thanh toán toàn kỳ được ghi nhận lúc: {rentalDate(s.fullRentPaidAt)}</p>}
       <p>
         Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}, Hạn ký hiệu
         lực: {rentalDate(s.effectiveSigningDeadline)}
@@ -265,13 +267,14 @@ function EventTimeline({
   const read = useRentalApiResource(`${identity}:${category}:${page}`, () =>
     listRenewalOperationEvents(role, id, category, page),
   )
+  if (!read.loading && !read.error && read.data?.data.length === 0) return null
   return (
     <Card className="p-4 space-y-3">
       <div className="flex justify-between gap-3">
         <h4 className="font-semibold">
           {
             {
-              payments: "Lịch sử cọc và thu tiền mặt",
+              payments: "Lịch sử thanh toán gia hạn và biên nhận tiền mặt",
               refunds: "Lịch sử quyết định hoàn tiền (chưa xác nhận chuyển tiền)",
               "facility-incidents": "Sự cố & xem xét ngoại lệ",
             }[category]
@@ -344,7 +347,7 @@ export default function RenewalOperationsPanel({
   }, [role])
   const actions: RenewalOperationAction[] =
     role === "customer"
-      ? ["deposit", "appointment", "reschedule", "confirmation"]
+      ? ["appointment", "reschedule", "confirmation"]
       : role === "staff"
         ? ["arrival", "incident", "cash", "completion"]
         : ["exception", "refund"]

@@ -10,7 +10,7 @@ import type {
 } from "../../types/renewalOperationsApi"
 
 export const operationLabels: Record<RenewalOperationAction, string> = {
-  deposit: "Thanh toán cọc thử nghiệm",
+  deposit: "Thanh toán gia hạn (tác vụ cũ)",
   appointment: "Đề nghị lịch ký",
   reschedule: "Đổi lịch ký",
   confirmation: "Xác nhận đề xuất ngoại lệ",
@@ -22,8 +22,9 @@ export const operationLabels: Record<RenewalOperationAction, string> = {
   refund: "Xem xét hoàn tiền",
 }
 export const phaseLabels: Record<RenewalOperationState["phase"], string> = {
+  AWAITING_PAYMENT_INTENT: "Chờ mở thanh toán toàn kỳ",
   UNKNOWN: "Chưa có thông tin xử lý gia hạn",
-  AWAITING_DEPOSIT: "Chờ thanh toán cọc",
+  AWAITING_DEPOSIT: "Chờ thanh toán toàn kỳ",
   SIGNING: "Đang xử lý ký gia hạn",
   SIGNING_EXPIRY_PENDING: "Đã quá hạn ký, chờ đối soát",
   SIGNING_EXPIRED: "Hết hạn ký, cần xem xét",
@@ -123,7 +124,7 @@ export function operationBlockedReason(
   if (missing.length)
     return `Chưa đủ thông tin: ${missing.map((ref) => sourceLabels[ref] || "Thông tin xử lý gia hạn").join(", ")}.`
   if (action === "deposit" && s.phase !== "AWAITING_DEPOSIT")
-    return "Không ở bước chờ cọc."
+    return "Không ở bước thanh toán theo điều khoản gia hạn cũ."
   if (
     ["appointment", "reschedule", "arrival", "cash", "completion"].includes(
       action,

@@ -56,7 +56,7 @@ describe("Rental/Renewal business presentation", () => {
   })
   it("legacy renewal has honest missing snapshot state", () => {
     const html=renderToStaticMarkup(<RenewalDetail role="customer" renewal={renewal} onAction={()=>{}} />)
-    expect(html).toContain("chưa thể xác định giá và tiền cọc")
+    expect(html).toContain("chưa thể xác định giá và khoản thanh toán")
     expect(html).not.toContain("catalog")
     expect(html).not.toContain("3.201.000 đ")
   })
@@ -105,46 +105,8 @@ describe("Rental/Renewal business presentation", () => {
       ),
     ).toContain("disabled")
   })
-  it("Manager action needs server action + real version + MANAGE + permission", () => {
-    const ready = { ...renewal, acceptedTerms: quote, allowedActions: ["APPROVE" as const],
-      financialCheck: { completeness: "COMPLETE", checkedAt: "2026-10-06T00:00:00Z", blockingObligationRefs: [], hasUnresolvedDispute: false } }
-    expect(hasRenewalAction(ready, "APPROVE", manager, "manager")).toBe(true)
-    expect(
-      hasRenewalAction(
-        { ...ready, version: null },
-        "APPROVE",
-        manager,
-        "manager",
-      ),
-    ).toBe(false)
-    expect(
-      hasRenewalAction(
-        ready,
-        "APPROVE",
-        { ...manager, permissions: ["rentals:read"] },
-        "manager",
-      ),
-    ).toBe(false)
-    expect(
-      hasRenewalAction(
-        ready,
-        "APPROVE",
-        { ...manager, facilityScopes: { f1: "READ" } },
-        "manager",
-      ),
-    ).toBe(false)
-    expect(hasRenewalAction(renewal, "APPROVE", manager, "manager")).toBe(false)
-  })
-  it("does not approve from UNKNOWN money, missing accepted terms, debt or a dispute even if an action is advertised", () => {
-    const ready = { ...renewal, acceptedTerms: quote, allowedActions: ["APPROVE" as const],
-      financialCheck: { completeness: "COMPLETE", checkedAt: "2026-10-06T00:00:00Z", blockingObligationRefs: [] as string[], hasUnresolvedDispute: false } }
-    for (const record of [
-      { ...ready, financialCheck: renewal.financialCheck },
-      { ...ready, acceptedTerms: null },
-      { ...ready, financialCheck: { ...ready.financialCheck, blockingObligationRefs: ["real-obligation"] } },
-      { ...ready, financialCheck: { ...ready.financialCheck, hasUnresolvedDispute: true } },
-      { ...ready, reviewState: "UNKNOWN" as const },
-    ]) expect(hasRenewalAction(record, "APPROVE", manager, "manager")).toBe(false)
+  it("Manager can monitor Renewal but has no decision action", () => {
+    expect(hasRenewalAction(renewal, "CANCEL", manager, "manager")).toBe(false)
   })
   it("Customer action is owned by UUID, never by display name", () => {
     const customer = { ...manager, id: "c1", roles: ["CUSTOMER" as const] }
@@ -157,9 +119,6 @@ describe("Rental/Renewal business presentation", () => {
         "customer",
       ),
     ).toBe(false)
-    expect(hasRenewalAction(renewal, "APPROVE", customer, "customer")).toBe(
-      false,
-    )
   })
   it("approved does not claim Rental extended or expose fake payment controls", () => {
     const html = renderToStaticMarkup(

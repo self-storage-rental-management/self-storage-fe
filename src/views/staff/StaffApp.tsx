@@ -42,6 +42,10 @@ import {
   revokeAccessCredential,
   type CredentialAlert,
 } from "../../services/checkInApi"
+import {
+  loadStaffDailyOperations,
+  type StaffDailyOperation,
+} from "../../services/staffDailyOperationsApi"
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'

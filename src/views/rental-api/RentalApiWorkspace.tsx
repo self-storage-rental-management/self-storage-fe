@@ -37,10 +37,15 @@ type Action = {
   rentalId: string
   revision?: RenewalApiRecord
 } | {
-  kind: "decision"
+  kind: "cancel"
   renewal: RenewalApiRecord
-  action: "APPROVE" | "REJECT" | "CANCEL"
 }
+const customerRenewalFilterStatuses = new Set([
+  "pending",
+  "accepted",
+  "full_rent_paid",
+  "appointment_scheduled",
+])
 
 function Pager({
   page,
@@ -108,7 +113,14 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  const [tab, setTab] = useState<"rental" | "renewal">("rental")
+  const [paymentReturn] = useState(() => {
+    if(typeof window==="undefined")return null
+    const params=new URLSearchParams(window.location.search)
+    const renewalId=params.get("renewalId")
+    return role==="customer"&&params.get("vnpayReturn")==="true"&&renewalId
+      ? {renewalId,status:params.get("status")} : null
+  })
+  const [tab, setTab] = useState<"rental" | "renewal">(paymentReturn?"renewal":"rental")
   const [rq, setRq] = useState<RentalApiQuery>({
     page: 0,
     size: role === "manager" ? 10 : 20,
@@ -122,12 +134,18 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState("")
-  const [detail, setDetail] = useState<Detail>()
+  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:undefined)
   const [action, setAction] = useState<Action>()
   const permitted =
     actor?.status === "ACTIVE" &&
     actor.roles.includes(role === "manager" ? "MANAGER" : "CUSTOMER") &&
     (role !== "manager" || actor.permissions.includes("rentals:read"))
+  useEffect(()=>{
+    if(!paymentReturn||typeof window==="undefined")return
+    const url=new URL(window.location.href)
+    for(const key of ["renewalId","vnpayReturn","status","code"])url.searchParams.delete(key)
+    window.history.replaceState(null,"",`${url.pathname}${url.search}${url.hash}`)
+  },[paymentReturn])
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (tab === "rental")
@@ -239,8 +257,14 @@ function WorkspaceData({
           endTo: end.toISOString().slice(0, 10),
         }),
         listRenewals(role, { ...scope, size: 1, status: "pending" }),
+        listRenewals(role, { ...scope, size: 1, status: "accepted" }),
       ])
-      return result.map((p) => p.pagination.totalItems)
+      return [
+        result[0].pagination.totalItems,
+        result[1].pagination.totalItems,
+        result[2].pagination.totalItems,
+        result[3].pagination.totalItems + result[4].pagination.totalItems,
+      ]
     },
   )
   const change = (patch: RentalApiQuery | RenewalApiQuery) => {
@@ -274,7 +298,7 @@ function WorkspaceData({
           "Tổng hồ sơ",
           "Đang hiệu lực",
           "Hết hạn trong 30 ngày",
-          "Gia hạn chờ duyệt",
+          "Yêu cầu gia hạn",
         ].map((label, i) => (
           <Card className="p-4" key={label}>
             <p className="text-sm text-stone-500">{label}</p>
@@ -300,16 +324,13 @@ function WorkspaceData({
         >
           Yêu cầu gia hạn
         </Button>
-        {!manager && (<Button variant="outline" onClick={refresh}>
-          Tải lại
-        </Button>)}
       </div>
-      <Card className="p-4 flex flex-wrap items-end gap-3">
+      <Card className={`grid gap-3 p-4 sm:grid-cols-2 ${role === "manager" ? (tab === "renewal" ? "xl:grid-cols-4" : "xl:grid-cols-3") : "xl:grid-cols-2"}`}>
         {(tab === "rental" || role === "manager") && (
           <label>
             Tìm kiếm
             <input
-              className={`${inputClass} block`}
+              className={`${inputClass} block w-full`}
               value={search}
               maxLength={200}
               placeholder="Mã hồ sơ / gian kho"
@@ -320,51 +341,27 @@ function WorkspaceData({
         <label>
           Trạng thái
           <select
-            className={`${inputClass} block`}
+            className={`${inputClass} block w-full`}
             value={query.status || ""}
             onChange={(e) =>
               change({ status: e.target.value || undefined } as RentalApiQuery)
             }
           >
             <option value="">Tất cả</option>
-            {Object.entries(
-              tab === "rental" ? rentalLabels : renewalLabels,
-            ).map(([value, label]) => (
+            {Object.entries(tab === "rental" ? rentalLabels : renewalLabels)
+              .filter(([value]) => tab !== "renewal" || role === "manager" || customerRenewalFilterStatuses.has(value))
+              .map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
-            ))}
+              ))}
           </select>
         </label>
-        {tab === "rental" && (
-          <>
-            <label>
-              Ngày hết hạn từ
-              <input
-                type="date"
-                className={`${inputClass} block`}
-                value={rq.endFrom || ""}
-                onChange={(e) =>
-                  change({ endFrom: e.target.value || undefined })
-                }
-              />
-            </label>
-            <label>
-              Ngày hết hạn đến
-              <input
-                type="date"
-                className={`${inputClass} block`}
-                value={rq.endTo || ""}
-                onChange={(e) => change({ endTo: e.target.value || undefined })}
-              />
-            </label>
-          </>
-        )}
         {tab === "renewal" && (
           <label>
-            Mã hồ sơ thuê (Enter để lọc)
+            Mã hồ sơ thuê
             <input
-              className={`${inputClass} block`}
+              className={`${inputClass} block w-full`}
               value={rentalFilterDraft}
               onChange={(e) => setRentalFilterDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -377,29 +374,25 @@ function WorkspaceData({
             />
           </label>
         )}
-        <label>
-          Sắp xếp
-          <select
-            className={`${inputClass} block`}
-            value={query.sort || "createdAt,desc"}
-            onChange={(e) => change({ sort: e.target.value })}
-          >
-            <option value="createdAt,desc">Mới nhất</option>
-            <option value="createdAt,asc">Cũ nhất</option>
-            <option
-              value={
-                tab === "rental" ? "contractEndDate,asc" : "newEndDate,asc"
-              }
+        {role === "manager" && (
+          <label>
+            Sắp xếp
+            <select
+              className={`${inputClass} block w-full`}
+              value={query.sort || "createdAt,desc"}
+              onChange={(e) => change({ sort: e.target.value })}
             >
-              {tab === "rental" ? "Ngày hết hạn gần nhất" : "Ngày kết thúc đề nghị gần nhất"}
-            </option>
-            <option
-              value={tab === "rental" ? "monthlyPrice,desc" : "amount,desc"}
-            >
-              Giá giảm dần
-            </option>
-          </select>
-        </label>
+              <option value="createdAt,desc">Mới nhất</option>
+              <option value="createdAt,asc">Cũ nhất</option>
+              <option value={tab === "rental" ? "contractEndDate,asc" : "newEndDate,asc"}>
+                {tab === "rental" ? "Ngày hết hạn gần nhất" : "Ngày kết thúc đề nghị gần nhất"}
+              </option>
+              <option value={tab === "rental" ? "monthlyPrice,desc" : "amount,desc"}>
+                Giá giảm dần
+              </option>
+            </select>
+          </label>
+        )}
       </Card>
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
@@ -449,9 +442,11 @@ function WorkspaceData({
                     </td>
                     <td className="p-3">
                       {
-                        (read.data!.kind === "rental"
-                          ? rentalLabels
-                          : renewalLabels)[row.status]
+                        read.data!.kind === "rental"
+                          ? rentalLabels[row.status]
+                          : "systemVerification" in row && row.status === "accepted" && row.systemVerification?.status === "VERIFIED"
+                            ? "Đã xác nhận điều kiện"
+                            : renewalLabels[row.status]
                       }
                       {"dataWarnings" in row && row.dataWarnings.length > 0 && (
                         <p className="text-amber-700">Có cảnh báo dữ liệu</p>
@@ -515,11 +510,11 @@ function WorkspaceData({
           onSuccess={success}
         />
       )}
-      {action?.kind === "decision" && (
+      {action?.kind === "cancel" && (
         <RenewalDecisionModal
-          key={`${identity}:${action.renewal.id}:${action.action}`}
+          key={`${identity}:${action.renewal.id}:CANCEL`}
           renewal={action.renewal}
-          action={action.action}
+          action="CANCEL"
           onClose={() => setAction(undefined)}
           onSuccess={success}
           onRefresh={() => {
@@ -619,14 +614,14 @@ function DetailModal({
                   rentalId: renewal.rentalId,
                   revision: renewal,
                 })
-              else onAction({ kind: "decision", renewal, action })
+              else if (action === "CANCEL") onAction({ kind: "cancel", renewal })
             }}
           />
         </div>
       ) : null}
-      {detail.kind === "renewal" && operationOwner && (
+      {detail.kind === "renewal" && operationOwner && read.data?.kind === "renewal" && !["pending", "accepted"].includes(read.data.record.status) && (
         <RenewalOperationsPanel
-          status={read.data?.kind === "renewal" ? (read.data.record as RenewalApiRecord).status : undefined}
+          status={(read.data.record as RenewalApiRecord).status}
           id={detail.id}
           role={role}
           {...operationOwner}
