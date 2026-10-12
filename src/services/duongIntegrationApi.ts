@@ -491,6 +491,8 @@ export interface DuongFile {
   entityId: string
   status: "ACTIVE"
 }
+export const renewalSignedContractEntityType = "DUONG_RENEWAL_SIGNED_CONTRACT"
+
 export async function uploadDuongEvidence(
   file: File,
   entityType: string,
