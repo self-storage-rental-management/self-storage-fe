@@ -4205,13 +4205,13 @@ export default function StaffApp({
                   <option value="none">{"🟢 Không phát sinh ẩm mốc / Hàng hóa & kho bình thường"}</option>
                   <option value="facility_fault">{"🔴 Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)"}</option>
                   <option value="customer_fault">{"🟠 Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)"}</option>
-                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn (Standard) — Độ ẩm tự nhiên mùa nồm (Miễn trừ SLA)"}</option>
+                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn — Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)"}</option>
                 </select>
               </div>
 
               {returnMoistureOrigin === 'facility_fault' && (
                 <div className="rounded-lg border border-rose-200 bg-rose-100/80 p-2.5 text-xs text-rose-900 space-y-1">
-                  <p className="font-bold">{"✓ Trách nhiệm cơ sở kho (Facility Fault):"}</p>
+                  <p className="font-bold">{"✓ Trách nhiệm của cơ sở kho:"}</p>
                   <p>{"Hệ thống tự động miễn trừ toàn bộ phí hư hại và vệ sinh đối với khách hàng. Hệ thống hoàn 100% tiền cọc và kích hoạt phiếu sửa chữa bảo trì khẩn cấp (P1) cho Đội Kỹ thuật."}</p>
                 </div>
               )}
