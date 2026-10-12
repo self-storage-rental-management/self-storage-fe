@@ -64,6 +64,7 @@ export function rentalError(error: unknown) {
       ["Unverified date provenance/cutoff", "Ngày hết hạn hoặc mốc xử lý của hồ sơ chưa được xác minh. Vui lòng liên hệ quản lý cơ sở để kiểm tra hồ sơ."],
       ["BO renewal policy missing", "Cơ sở chưa công bố chính sách gia hạn đang có hiệu lực. Vui lòng liên hệ quản lý cơ sở."],
       ["Incomplete BO policy", "Chính sách gia hạn của cơ sở còn thiếu thông tin bắt buộc. Vui lòng liên hệ quản lý cơ sở."],
+      ["Rental date provenance is unknown", "Chưa xác minh được ngày thuê của hồ sơ nên chưa thể tính kỳ gia hạn. Vui lòng liên hệ quản lý cơ sở."],
       ["Rental date provenance unknown", "Chưa xác minh được ngày thuê của hồ sơ nên chưa thể tính kỳ gia hạn. Vui lòng liên hệ quản lý cơ sở."],
       ["Renewal window not open", "Hồ sơ chưa đến thời hạn được yêu cầu gia hạn. Vui lòng thử lại gần ngày hết hạn."],
       ["Recovery/cutoff conflict", "Hồ sơ đã đến mốc xử lý quá hạn hoặc đang được chuyển xử lý. Không thể tiếp tục gia hạn."],
