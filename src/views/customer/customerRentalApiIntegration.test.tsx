@@ -8,13 +8,10 @@ vi.mock("../rental-api/RentalApiWorkspace", () => ({
   default: ({ role }: { role: string }) => <div data-role={role}>D1–D4 API workspace</div>,
 }))
 
-describe("additive D1–D4 Customer integration", () => {
-  it("adds a separate API route without reusing the team rental-records route", () => {
+describe("Customer rental workspace integration", () => {
+  it("does not add a duplicate API navigation item", () => {
     const nav = customerRentalApiNav(true)
-    expect(nav).toHaveLength(1)
-    expect(nav[0].id).toBe(CUSTOMER_RENTAL_API_PAGE)
-    expect(nav[0].id).not.toBe("rental-records")
-    expect(nav[0].permission).toBe("rentals:read")
+    expect(nav).toEqual([])
   })
   it("does not expose an API-only navigation item in demo sessions", () => {
     expect(customerRentalApiNav(false)).toEqual([])
@@ -24,11 +21,10 @@ describe("additive D1–D4 Customer integration", () => {
     expect(html).toContain('data-role="customer"')
     expect(html).toContain("D1–D4 API workspace")
   })
-  it("keeps the owner Rental/Return/Settlement page and dialogs ungated by D1–D4", () => {
+  it("keeps the demo lifecycle page separate from the authenticated API workspace", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("{page === 'rental-records' && (")
-    expect(source).not.toContain("page === 'rental-records' && isApiAuthenticated()")
-    expect(source).not.toContain("page === 'rental-records' && !isApiAuthenticated()")
+    expect(source).toContain("{page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel")
+    expect(source).toContain("{page === 'rental-records' && !isApiAuthenticated() && (")
     expect(source).toContain("open={renewalModalOpen && !isApiAuthenticated()}")
     expect(source).toContain("open={renewalPaymentOpen && !isApiAuthenticated()}")
     for (const action of ["Yêu cầu trả kho", "Đồng ý quyết toán", "Thanh toán phần thiếu"])
@@ -42,10 +38,11 @@ describe("additive D1–D4 Customer integration", () => {
     expect(source).toContain("...(isApiAuthenticated() ? [] : myTickets).flatMap")
     expect(source).toContain("...myReturns.filter")
   })
-  it("mounts D1–D4 only on the separate authenticated route", () => {
+  it("mounts the API workspace from the shared rental route and keeps the old alias", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
     expect(source).toContain("...customerRentalApiNav(isApiAuthenticated()),")
     expect(source).toContain("page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated() && <CustomerRentalsApiPanel")
+    expect(source).toContain("page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel")
   })
   it("keeps Staff renewal-signing as an additive route alongside existing operations", () => {
     const source = readFileSync(new URL("../staff/StaffApp.tsx", import.meta.url), "utf8")
@@ -65,7 +62,7 @@ describe("additive D1–D4 Customer integration", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
     expect(source).toContain('isApiAuthenticated() ? <CustomerApiMetric metric="active-rentals"')
     expect(source).toContain('isApiAuthenticated() ? <CustomerApiMetric metric="open-support"')
-    expect(source).toContain('isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo(CUSTOMER_RENTAL_API_PAGE)}')
-    expect(source).toContain("if (isApiAuthenticated()) { navigateTo(CUSTOMER_RENTAL_API_PAGE); return }")
+    expect(source).toContain("isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo('rental-records')}")
+    expect(source).toContain("if (isApiAuthenticated()) { navigateTo('rental-records'); return }")
   })
 })

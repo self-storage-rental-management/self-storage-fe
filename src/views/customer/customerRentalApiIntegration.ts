@@ -1,14 +1,10 @@
-import { Icon, type NavItem } from "../../components/Layout"
+import { type NavItem } from "../../components/Layout"
 
-// D1–D4 is additive: never replace the team's rental-records/Return UI.
+// Hồ sơ thuê API dùng chung một mục điều hướng với các thao tác trả kho và biên nhận.
 export const CUSTOMER_RENTAL_API_PAGE = "rental-renewals"
 
 export function customerRentalApiNav(apiAuthenticated: boolean): NavItem[] {
-  return apiAuthenticated ? [{
-    id: CUSTOMER_RENTAL_API_PAGE,
-    label: "Hồ sơ thuê & Gia hạn",
-    icon: Icon.calendar,
-    group: "Kho của tôi",
-    permission: "rentals:read",
-  }] : []
+  // Giữ hàm để các liên kết cũ không bị lỗi, nhưng không tạo mục thứ hai trên thanh điều hướng.
+  void apiAuthenticated
+  return []
 }

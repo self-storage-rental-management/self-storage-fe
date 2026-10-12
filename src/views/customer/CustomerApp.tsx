@@ -609,7 +609,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'facilities:read' },
     { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'storage_units:read' },
     { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'reservations:read' },
-    { id: 'rental-records', label: isApiAuthenticated() ? 'Trả kho & Biên nhận' : 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'rentals:read' },
+    { id: 'rental-records', label: isApiAuthenticated() ? 'Hồ sơ thuê' : 'Hồ sơ thuê của tôi', icon: Icon.key, group: isApiAuthenticated() ? 'Kho của tôi' : 'Đặt giữ kho', permission: 'rentals:read' },
     ...customerRentalApiNav(isApiAuthenticated()),
     { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'payments:read' },
     { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'policies:read' },
@@ -1759,7 +1759,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           </section>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
-            {isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo(CUSTOMER_RENTAL_API_PAGE)} /> : (
+            {isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo('rental-records')} /> : (
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
                 <div>
@@ -2320,9 +2320,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {/* D1–D4 API workspace is separate; preserve the team's existing lifecycle page. */}
+      {/* Hồ sơ thuê API là màn hình chung cho thuê, gia hạn, trả kho và biên nhận. */}
       {page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />}
-      {page === 'rental-records' && (
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />}
+      {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <SectionHeader
             title={'Hồ Sơ Thuê Kho Của Tôi'}
@@ -2477,7 +2478,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               size="sm"
                               disabled={!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status))}
                               onClick={() => {
-                                if (isApiAuthenticated()) { navigateTo(CUSTOMER_RENTAL_API_PAGE); return }
+                                if (isApiAuthenticated()) { navigateTo('rental-records'); return }
                                 setActiveRentalForRenewal(rental)
                                 setRenewalMonths(1)
                                 setEditingRenewalId(null)
