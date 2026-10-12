@@ -6,9 +6,11 @@ import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, ren
 export default function RentalDetail({
   rental,
   onRequest,
+  showTechnicalWarnings = true,
 }: {
   rental: RentalApiDetail
   onRequest?: () => void
+  showTechnicalWarnings?: boolean
 }) {
   const { copy } = useManagerPresentation()
 
@@ -43,9 +45,9 @@ export default function RentalDetail({
             <dd>{copy(rentalLabels[rental.status])}</dd>
           </div>
           <div>
-            <dt className="font-bold">{rental.dateSemantics?.completeness === "COMPLETE" ? "Thời hạn sử dụng" : "Ngày thuê đang lưu"}</dt>
+            <dt className="font-bold">{showTechnicalWarnings && rental.dateSemantics?.completeness !== "COMPLETE" ? "Ngày thuê đang lưu" : "Thời hạn sử dụng"}</dt>
             <dd>
-              {rentalPeriodText(rental)}
+              {rentalPeriodText(rental, showTechnicalWarnings)}
             </dd>
           </div>
           <div>
@@ -142,7 +144,7 @@ export default function RentalDetail({
           {evidence.paymentsTruncated && <p role="status" className="mt-3">Chỉ hiển thị 20 giao dịch gần nhất, chưa phải toàn bộ lịch sử.</p>}
         </Card>
       )}
-      {rental.dataWarnings.length > 0 && (
+      {showTechnicalWarnings && rental.dataWarnings.length > 0 && (
         <div role="status" className="rounded-lg bg-amber-50 p-4">
           <h4 className="font-semibold">Cần kiểm tra dữ liệu</h4>
           {rental.dataWarnings.map((w, i) => (

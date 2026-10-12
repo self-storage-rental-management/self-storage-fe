@@ -439,7 +439,7 @@ function WorkspaceData({
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {"contractEndDate" in row
-                        ? rentalPeriodText(row)
+                        ? rentalPeriodText(row, role === "manager")
                         : rentalDate(row.newEndDate)}
                     </td>
                     <td className="p-3">
@@ -453,7 +453,7 @@ function WorkspaceData({
                           ? rentalLabels
                           : renewalLabels)[row.status]
                       }
-                      {"dataWarnings" in row && row.dataWarnings.length > 0 && (
+                      {role === "manager" && "dataWarnings" in row && row.dataWarnings.length > 0 && (
                         <p className="text-amber-700">Có cảnh báo dữ liệu</p>
                       )}
                     </td>
@@ -595,6 +595,7 @@ function DetailModal({
       {read.data?.kind === "rental" ? (
         <RentalDetail
           rental={read.data.record as RentalApiDetail}
+          showTechnicalWarnings={role === "manager"}
           onRequest={
             role === "customer"
               ? () => {
