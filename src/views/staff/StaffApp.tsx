@@ -37,6 +37,7 @@ import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
+import UnitAssignmentPanel from "../UnitAssignmentPanel"
 import {
   listCredentialAlerts,
   revokeAccessCredential,
@@ -77,6 +78,10 @@ import { useStorageHub } from "../../store/StorageHubContext"
 
 import { isFacilityVisible } from "../../domain/managerRules"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
+import {
+  loadStaffDailyOperations,
+  type StaffDailyOperation,
+} from "../../services/staffDailyOperationsApi"
 
 import StaffPagination, { paginateStaffItems } from "./StaffPagination"
 import {
@@ -840,6 +845,18 @@ export default function StaffApp({
       group: "Vận hành",
 
       permission: "reservations:approve",
+    },
+
+    {
+      id: "unit-assignments",
+
+      label: "Phân kho đặt chỗ",
+
+      icon: Icon.box,
+
+      group: "Vận hành",
+
+      permission: "storage_units:assign",
     },
 
     {
@@ -2075,6 +2092,8 @@ export default function StaffApp({
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
     if (isApiAuthenticated()) {
       setPage(task.page)
+      if (task.id.startsWith("assignment-"))
+        showToast(`Đã mở danh sách đặt chỗ chờ phân kho cho ${task.customer}.`)
       if (task.id.startsWith("return-"))
         showToast(`Đã mở danh sách hồ sơ trả kho cho ${task.customer}.`)
       return
@@ -3077,6 +3096,8 @@ export default function StaffApp({
           </Card>
         </div>
       )}
+
+      {page === "unit-assignments" && <UnitAssignmentPanel showToast={showToast} />}
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}

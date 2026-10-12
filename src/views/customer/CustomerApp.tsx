@@ -356,7 +356,7 @@ function dateInputValue(value: Date): string {
 function displayDateValue(value?: string): string {
   if (!value) return 'Chưa có'
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replaceAll('-', '/')
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replace(/-/g, '/')
 }
 
 function notificationTimestamp(value?: string): number {

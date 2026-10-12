@@ -2,7 +2,7 @@ import { ApiClientError, apiDownload, apiRequest } from './apiClient'
 
 export type CheckInStatus = 'scheduled' | 'completed' | 'rejected' | 'no_show' | 'cancelled' | null
 export type CheckInListStatus = 'UNSCHEDULED' | 'scheduled' | 'completed' | 'no_show'
-export type CheckInReservationStatus = 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'REJECTED'
+export type CheckInReservationStatus = 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED' | 'REJECTED'
 
 export interface CheckInChecklist {
   identityVerified: boolean
@@ -65,6 +65,9 @@ export interface CheckInCase {
   declaredPackageCount: number | null
   declaredGoodsWeightKg: number
   declaredGoodsVolumeM3: number
+  declaredGoodsLengthCm: number | null
+  declaredGoodsWidthCm: number | null
+  declaredGoodsHeightCm: number | null
   dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
 }
