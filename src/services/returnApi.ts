@@ -11,7 +11,7 @@ export interface ApiReturn {
   status: typeof returnStatuses[number]; scheduledDate: string
   inspectionNotes: string | null; managerResolutionNote: string | null
   depositAmount: number | null; totalDeductions: number; netRefundAmount: number | null; amountDueFromCustomer: number | null
-  settlementBlocker: string | null; customerConfirmed: boolean
+  settlementBlocker?: string | null; customerConfirmed: boolean
   damageFee: number; cleaningFee: number; lostItemFee: number; overdueFee: number; outstandingFee: number
   proposedUnitStatus: 'available' | 'maintenance' | null
   evidencePhotos?: string[]
@@ -27,7 +27,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
     (v.evidencePhotos === undefined || (Array.isArray(v.evidencePhotos) && v.evidencePhotos.every(item => typeof item === 'string'))) &&
     ['depositAmount', 'netRefundAmount', 'amountDueFromCustomer'].every(k => v[k] === null || money(v[k])) &&
-    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker'].every(k => v[k] === null || typeof v[k] === 'string')
+    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string')
 }
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
@@ -129,6 +129,11 @@ export function confirmReturn(id: string, decision: 'accepted' | 'disputed', not
   if (decision === 'disputed' && !note.trim()) throw new Error('Nhập lý do yêu cầu xem xét lại.')
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
   return mutate('customer', id, 'confirm', { decision, note })
+}
+export function paySettlement(id: string, paymentMethod: string, notes = '') {
+  if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')
+  if (notes.length > 1000) throw new Error('Ghi chú thanh toán quá dài.')
+  return mutate('customer', id, 'pay-settlement', { paymentMethod: paymentMethod.trim(), notes: notes.trim() || undefined })
 }
 export function returnError(error: unknown) {
   if (error instanceof ApiClientError) {

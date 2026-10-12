@@ -105,9 +105,9 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
 
   return <div className="space-y-6">
     <SectionHeader
-      eyebrow="Quản lý gian kho"
+      eyebrow="Vận hành nhận kho"
       title="Phân kho cho đặt chỗ"
-      subtitle="Chọn gian kho còn trống, cùng cơ sở và đúng loại kho cho đặt chỗ đã xác nhận."
+      subtitle="Chọn gian kho còn trống, cùng cơ sở và đúng loại kho cho đơn đã thanh toán cọc và đang chờ phân gian."
     />
 
     <Card className="p-4">
@@ -142,10 +142,10 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
             <Td><b>{item.customerName}</b><p className="mt-1 text-xs text-stone-500">{item.customerEmail}</p></Td>
             <Td><b>{item.facilityName}</b><p className="mt-1 text-xs text-stone-500">{managerUnitTypeLabel(item.unitTypeName, 'vi')}</p></Td>
             <Td>{formatDate(item.startDate)} - {formatDate(item.endDate)}</Td>
-            <Td><Badge variant="success">Đã xác nhận</Badge></Td>
+            <Td><Badge variant="success">Đã thanh toán cọc, chờ phân gian</Badge></Td>
             <Td className="text-right"><Button size="sm" onClick={() => void openAssignment(item)}>Chọn gian kho</Button></Td>
           </Tr>)}
-          {!loading && !items.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-stone-500">Không có đặt chỗ đã xác nhận đang chờ phân kho.</td></tr>}
+          {!loading && !items.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-stone-500">Không có đơn đã thanh toán cọc đang chờ phân gian.</td></tr>}
           {loading && <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-stone-500">Đang tải danh sách…</td></tr>}
         </Tbody>
       </Table>

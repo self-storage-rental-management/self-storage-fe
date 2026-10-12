@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
-import { CUSTOMER_RENTAL_API_PAGE } from "./customerRentalApiIntegration"
+import { CUSTOMER_RENTAL_API_PAGE, resolveCustomerInitialPage } from "./customerRentalApiIntegration"
 import CustomerRentalsApiPanel from "./CustomerRentalsApiPanel"
 
 vi.mock("../rental-api/RentalApiWorkspace", () => ({
@@ -11,6 +11,15 @@ vi.mock("../rental-api/RentalApiWorkspace", () => ({
 describe("Customer Rental API integration", () => {
   it("uses the existing rental-records route", () => {
     expect(CUSTOMER_RENTAL_API_PAGE).toBe("rental-records")
+  })
+  it.each([
+    ["?page=rental-renewals", "overview", "rental-records"],
+    ["?page=payments&vnpayReturn=true&reservationId=reservation-1", "payments", "reservations"],
+    ["?vnpayReturn=true&renewalId=renewal-1", "overview", "rental-records"],
+    ["?page=support", "support", "support"],
+    ["?reservationId=reservation-1", "overview", "overview"],
+  ])("opens the correct customer page for %s", (search, fallback, expected) => {
+    expect(resolveCustomerInitialPage(search, fallback)).toBe(expected)
   })
   it("shows one Hồ sơ Thuê navigation item", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
@@ -22,11 +31,10 @@ describe("Customer Rental API integration", () => {
     expect(html).toContain('data-role="customer"')
     expect(html).toContain("D1–D4 API workspace")
   })
-  it("keeps the owner Rental/Return/Settlement page and dialogs ungated by D1–D4", () => {
+  it("keeps the demo lifecycle page separate from the authenticated API workspace", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("{page === 'rental-records' && (")
-    expect(source).not.toContain("page === 'rental-records' && isApiAuthenticated()")
-    expect(source).not.toContain("page === 'rental-records' && !isApiAuthenticated()")
+    expect(source).toContain("{page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel")
+    expect(source).toContain("{page === 'rental-records' && !isApiAuthenticated() && (")
     expect(source).toContain("open={renewalModalOpen && !isApiAuthenticated()}")
     expect(source).toContain("open={renewalPaymentOpen && !isApiAuthenticated()}")
     for (const action of ["Yêu cầu trả kho", "Đồng ý quyết toán", "Thanh toán phần thiếu"])
@@ -40,10 +48,10 @@ describe("Customer Rental API integration", () => {
     expect(source).toContain("...(isApiAuthenticated() ? [] : myTickets).flatMap")
     expect(source).toContain("...myReturns.filter")
   })
-  it("mounts the API workspace inside the shared rental-records page", () => {
+  it("mounts the API workspace once on the shared rental-records page", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("{page === 'rental-records' && (")
-    expect(source).toContain("isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />")
+    expect(source.match(/<CustomerRentalsApiPanel\b/g)).toHaveLength(1)
+    expect(source).toContain("page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel")
     expect(source).not.toContain("page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated()")
   })
   it("keeps Staff renewal-signing as an additive route alongside existing operations", () => {
@@ -64,7 +72,7 @@ describe("Customer Rental API integration", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
     expect(source).toContain('isApiAuthenticated() ? <CustomerApiMetric metric="active-rentals"')
     expect(source).toContain('isApiAuthenticated() ? <CustomerApiMetric metric="open-support"')
-    expect(source).toContain('isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo(CUSTOMER_RENTAL_API_PAGE)}')
-    expect(source).toContain("if (isApiAuthenticated()) { navigateTo(CUSTOMER_RENTAL_API_PAGE); return }")
+    expect(source).toContain("isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo('rental-records')}")
+    expect(source).toContain("if (isApiAuthenticated()) { navigateTo('rental-records'); return }")
   })
 })

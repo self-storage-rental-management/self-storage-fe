@@ -16,7 +16,7 @@ const verificationMethods: Array<{ value: ReissueAccessCredentialRequest['verifi
 ]
 
 const typeLabel: Record<AccessCredential['type'], string> = {
-  PIN: 'PIN / mã truy cập',
+  PIN: 'Mã truy cập',
   CARD: 'Thẻ ra vào',
   KEY: 'Chìa khóa',
   LOCK: 'Khóa / ổ khóa',
@@ -95,35 +95,35 @@ export default function StaffCredentialReissuePanel({ showToast }: { showToast: 
     <Card className="p-4">
       <SectionHeader
         title="Thay chìa khóa / mã truy cập"
-        subtitle="Dùng khi khách đang thuê làm mất chìa khóa, mất thẻ, lộ PIN hoặc cần thay khóa. Hệ thống thu hồi credential cũ và cấp credential mới trong cùng một giao dịch."
+        subtitle="Dùng khi khách đang thuê làm mất chìa khóa, mất thẻ, làm lộ mã truy cập hoặc cần thay khóa. Hệ thống thu hồi quyền truy cập cũ và cấp quyền mới trong cùng một giao dịch."
       />
       {error && <div role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
       <div className="grid gap-3 md:grid-cols-2">
         <Input label="Tìm khách hàng / gian kho / mã tham chiếu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nhập từ khóa" />
         <label className="block text-sm font-medium text-stone-700">
-          Credential đang hoạt động
+          Quyền truy cập đang hoạt động
           <select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={selectedId} disabled={loading || busy} onChange={(event) => selectCredential(event.target.value)}>
             <option value="">{loading ? 'Đang tải…' : 'Chọn quyền cần thay'}</option>
             {credentials.map((item) => <option key={item.id} value={item.id}>{item.customerName} · {item.storageUnitCode} · {typeLabel[item.type]} · {item.reference}</option>)}
           </select>
         </label>
       </div>
-      {!loading && !credentials.length && <p className="mt-3 text-sm text-stone-500">Không có credential đang hoạt động gắn với hợp đồng thuê.</p>}
+      {!loading && !credentials.length && <p className="mt-3 text-sm text-stone-500">Không có quyền truy cập đang hoạt động gắn với hợp đồng thuê.</p>}
       {selected && (
         <div className="mt-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <div className="flex flex-wrap items-center gap-2 text-sm"><b>{selected.customerName}</b><span>·</span><span>{selected.storageUnitCode}</span><Badge variant="warning">{typeLabel[selected.type]}</Badge><span className="font-mono text-xs">Cũ: {selected.reference}</span></div>
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={identityVerified} disabled={busy} onChange={(event) => setIdentityVerified(event.target.checked)} className="mt-1" /> <span><b>Đã xác minh khách hàng</b><span className="block text-xs text-amber-900">Chỉ tiếp tục sau khi đối chiếu khách hàng hoặc người được ủy quyền theo quy trình.</span></span></label>
           <div className="grid gap-3 md:grid-cols-2">
             <Select label="Cách xác minh" value={verificationMethod} disabled={busy} onChange={(event) => setVerificationMethod(event.target.value as ReissueAccessCredentialRequest['verificationMethod'])}>{verificationMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</Select>
-            <Input label="Mã tham chiếu mới / số seri mới" value={reference} maxLength={160} disabled={busy} onChange={(event) => setReference(event.target.value)} placeholder="Không nhập PIN thô vào mã tham chiếu" />
+            <Input label="Mã tham chiếu mới / số seri mới" value={reference} maxLength={160} disabled={busy} onChange={(event) => setReference(event.target.value)} placeholder="Không nhập mã truy cập gốc vào mã tham chiếu" />
           </div>
-          {selected.type === 'PIN' && <Input label="PIN / mã truy cập mới (không lưu dạng thô)" type="password" autoComplete="off" value={secret} maxLength={200} disabled={busy} onChange={(event) => setSecret(event.target.value)} />}
+          {selected.type === 'PIN' && <Input label="Mã truy cập mới (không lưu dạng gốc)" type="password" autoComplete="off" value={secret} maxLength={200} disabled={busy} onChange={(event) => setSecret(event.target.value)} />}
           <Input label="Lý do thay quyền truy cập" value={reason} maxLength={1000} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: khách báo mất chìa khóa tại quầy" />
           <Input label="Ghi chú bàn giao (tùy chọn)" value={note} maxLength={1000} disabled={busy} onChange={(event) => setNote(event.target.value)} />
           <div className="flex justify-end"><Button disabled={busy || !identityVerified || !reason.trim() || !reference.trim()} onClick={() => void submit()}>{busy ? 'Đang thu hồi và cấp lại…' : 'Xác nhận thay quyền truy cập'}</Button></div>
         </div>
       )}
-      <p className="mt-3 text-xs text-stone-500">Không hiển thị hoặc lưu PIN thô trong danh sách; chỉ mã tham chiếu được trả về để đối chiếu.</p>
+      <p className="mt-3 text-xs text-stone-500">Không hiển thị hoặc lưu mã truy cập gốc trong danh sách. Chỉ mã tham chiếu được trả về để đối chiếu.</p>
     </Card>
   )
 }

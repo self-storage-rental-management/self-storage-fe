@@ -51,7 +51,6 @@ function StaffSession({ identity }: { identity: string }) {
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
     setSelected(undefined)
   }
-  const refresh = () => { if (!lockRef.current) read.refresh() }
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
@@ -118,9 +117,6 @@ function StaffSession({ identity }: { identity: string }) {
             ))}
           </select>
         </label>
-        <Button variant="outline" onClick={refresh}>
-          Tải lại
-        </Button>
       </Card>
       {read.loading && (
         <p role="status" className="p-4 text-stone-500">
@@ -133,9 +129,6 @@ function StaffSession({ identity }: { identity: string }) {
           className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4"
         >
           <p>{rentalError(read.error)}</p>
-          <Button variant="outline" onClick={refresh}>
-            Tải lại
-          </Button>
         </div>
       )}
       {read.data && (

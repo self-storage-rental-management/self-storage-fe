@@ -252,6 +252,19 @@ function isRenewalPaymentResponse(value: unknown,renewalId: string): value is Re
     &&(result.paidAt===null||Number.isFinite(Date.parse(result.paidAt)))
     &&typeof result.reconciliationRequired==="boolean"&&typeof result.message==="string"
     &&(result.paymentUrl===null||typeof result.paymentUrl==="string")
+    &&(result.settlementStage===undefined||["AWAITING_PAYMENT","VERIFIED_AWAITING_ALLOCATION","ALLOCATED_AWAITING_SIGNING","AWAITING_SIGNING","COMPLETED","RECONCILIATION_REQUIRED"].includes(result.settlementStage))
+}
+
+export function renewalPaymentRedirectUrl(payment: RenewalVnpayPaymentResponse): string {
+  if(!payment.paymentUrl)throw new Error("Backend chưa trả về đường dẫn thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.")
+  let url: URL
+  try { url=new URL(payment.paymentUrl) } catch { throw new Error("Đường dẫn thanh toán VNPay không hợp lệ.") }
+  if(url.protocol!=="https:"||!["sandbox.vnpayment.vn","pay.vnpay.vn"].includes(url.hostname)
+    ||url.port||url.username||url.password||url.pathname!=="/paymentv2/vpcpay.html"
+    ||url.searchParams.get("vnp_TxnRef")!==payment.transactionReference
+    ||url.searchParams.get("vnp_Amount")!==String(Math.round(payment.amount*100)))
+    throw new Error("Đường dẫn thanh toán không khớp giao dịch VNPay. Vui lòng liên hệ hỗ trợ.")
+  return url.href
 }
 
 export async function createRenewalVnpayPaymentIntent(renewalId:string,idempotencyKey:string) {

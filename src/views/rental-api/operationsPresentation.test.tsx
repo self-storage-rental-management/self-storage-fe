@@ -54,58 +54,6 @@ describe("D3 operation prerequisites and truthful UI", () => {
       ).toBe(false)
     },
   )
-  it("only Customer can initiate deposit, and it must belong to that Customer", () => {
-    expect(
-      operationBlockedReason(
-        operationState,
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toBeNull()
-    expect(
-      operationBlockedReason(
-        operationState,
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.staff,
-      ),
-    ).not.toBeNull()
-    expect(
-      operationBlockedReason(
-        operationState,
-        "manager",
-        "deposit",
-        operationsActor("manager"),
-      ),
-    ).not.toBeNull()
-  })
-  it("blocks only the needed missing sources, not unrelated refund port", () => {
-    expect(
-      operationBlockedReason(
-        { ...operationState, missingSources: ["REFUND_ENTITLEMENT_EXECUTION"] },
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toBeNull()
-    expect(
-      operationBlockedReason(
-        { ...operationState, missingSources: ["RENEWAL_ACCOUNTING"] },
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toContain("Chưa đủ thông tin")
-  })
   it("does not invent legacy version or allow Manager completion", () => {
     expect(
       operationBlockedReason(

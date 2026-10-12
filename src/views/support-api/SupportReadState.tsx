@@ -1,17 +1,15 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { Button } from "../../components/ui"
 import { supportError } from "./presentation"
 
 export default function SupportReadState({
   loading,
   error,
-  retry,
 }: {
   loading: boolean
   error?: unknown
   retry: () => void
 }) {
-  const { manager, copy, errorText } = useManagerPresentation()
+  const { errorText } = useManagerPresentation()
 
   if (loading)
     return (
@@ -26,9 +24,6 @@ export default function SupportReadState({
       className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm"
     >
       <p>{errorText(error, supportError)}</p>
-      {!manager && (<Button variant="outline" onClick={retry}>
-        Tải lại
-      </Button>)}
     </div>
   )
 }
