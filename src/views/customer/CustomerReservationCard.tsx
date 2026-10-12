@@ -7,6 +7,7 @@ import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
 import ReservationReceipt from './ReservationReceipt'
+import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateTimeInput } from '../../domain/reservationCheckInPolicy'
 
 const GOODS_CATEGORY_LABELS: Record<string, string> = {
   FURNITURE: 'Nội thất', KITCHENWARE: 'Đồ dùng nhà bếp', DECOR: 'Đồ trang trí',
@@ -17,12 +18,28 @@ const GOODS_CATEGORY_LABELS: Record<string, string> = {
   CERAMIC_GLASS: 'Gốm, sứ và thủy tinh', MOVING_ITEMS: 'Đồ chuyển nhà', OTHER: 'Khác',
 }
 
+const APPOINTMENT_EDITABLE_STATUSES = [
+  'AWAITING_EMAIL',
+  'AWAITING_REVIEW',
+  'AWAITING_PAYMENT',
+  'PAYMENT_GRACE',
+  'PAYMENT_REVIEW',
+  'CONFIRMED',
+  'UNIT_RESERVED',
+  'READY_FOR_CHECKIN',
+] as const
+
 function localDateTimeInput(value?: string | null) {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
   return local.toISOString().slice(0, 16)
+}
+
+function formatDisplayDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replaceAll('-', '/')
 }
 
 interface Props {
@@ -47,11 +64,15 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [handoverDocumentsOpen, setHandoverDocumentsOpen] = useState(false)
   const [paymentReceipt, setPaymentReceipt] = useState<ReservationPaymentResult | null>(null)
   const [appointmentInput, setAppointmentInput] = useState(() => localDateTimeInput(r.appointmentAt))
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
+  useEffect(() => {
+    setAppointmentInput(localDateTimeInput(r.appointmentAt))
+  }, [r.appointmentAt])
   useEffect(() => {
     let disposed = false
     void getCustomerReservation(r.id).then(value => { if (!disposed) setDetail(value) })
@@ -59,6 +80,10 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     return () => { disposed = true }
   }, [r.id, r.status])
   const countdown = paymentCountdown(detail?.paymentExpiresAt || r.holdExpiresAt, now)
+  const appointmentWindow = plannedCheckInWindow(
+    r.createdAt,
+    r.goodsReviewStatus !== 'NOT_REQUIRED',
+  )
   const progress = reservationProgress(r.status)
   const inactive = progress === null
   const remainingPayment = detail?.payments?.find(payment => payment.purpose === 'RENTAL_BALANCE' && payment.paymentStatus === 'PAID') || null
@@ -129,11 +154,15 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const saveAppointment = async () => {
     if (!appointmentInput || busy) return
+    if (!isCheckInAppointmentAllowed(new Date(appointmentInput), appointmentWindow)) {
+      setMessage('Lịch nhận kho phải nằm trong thời hạn cho phép, trong giờ làm việc từ 08:00 đến 17:00 và theo khung 30 phút.')
+      return
+    }
     setBusy(true); setMessage(null)
     try {
       await setCustomerCheckInAppointment(r.id, new Date(appointmentInput).toISOString())
       await onRefresh()
-      setMessage('Đã lưu lịch hẹn do bạn đặt. Nhân viên không thể tự thay đổi lịch này.')
+      setMessage('Đã lưu lịch nhận kho. Nhân viên tại cơ sở đã được thông báo về thay đổi này.')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể lưu lịch hẹn.') }
     finally { setBusy(false) }
   }
@@ -186,13 +215,13 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
-        <p className="text-xs text-stone-500">Lịch thuê: <b>{r.startDate} → {r.endDate}</b></p>
+        <p className="text-xs text-stone-500">Lịch thuê: <b>{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
         <p className="text-xs text-blue-800">Lịch nhận kho khách đặt: <b>{r.appointmentAt ? new Date(r.appointmentAt).toLocaleString('vi-VN') : 'Chưa đặt lịch'}</b></p>
         <p className="text-xs text-emerald-800">Gian kho được gán: <b>{r.assignedUnitCode || 'Chưa được phân gian kho cụ thể'}</b></p>
-        {['UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
-          <label className="flex flex-col gap-1 font-semibold">Chọn lịch đến nhận kho<input className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 font-normal" type="datetime-local" min={localDateTimeInput(new Date().toISOString())} value={appointmentInput} onChange={event => setAppointmentInput(event.target.value)} /></label>
-          <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : 'Lưu lịch hẹn'}</Button>
-          <span className="basis-full text-[11px]">Lịch do customer đặt; khách đến sớm vẫn được nhân viên đối chiếu và bàn giao.</span>
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
+          <label className="flex flex-col gap-1 font-semibold">Chọn lịch đến nhận kho<input className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 font-normal" type="datetime-local" min={policyDateTimeInput(appointmentWindow.availableAt)} max={policyDateTimeInput(appointmentWindow.deadlineAt)} step="1800" value={appointmentInput} onChange={event => setAppointmentInput(event.target.value)} /></label>
+          <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
+          <span className="basis-full text-[11px]">Lịch hợp lệ từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
         </div>}
         <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 space-y-1.5">
           <p><b>Hàng hóa khai báo:</b> {detail?.goodsItems.map(item => `${item.description || item.customGoodsName || item.category} (${item.quantity} kiện)`).join(' · ') || 'Đang tải chi tiết…'}</p>
@@ -241,7 +270,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {documentAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
-        {!inactive && r.status !== 'COMPLETED' && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={onCancel}>✕ Hủy giữ kho</Button>}
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={() => setCancelConfirmOpen(true)}>✕ Hủy giữ kho</Button>}
       </div>
     </div>
     {message && <p role="status" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
@@ -272,6 +301,19 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     </Modal>
     <Modal open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai thanh toán nhận kho">
       {paymentReceipt && <ReservationReceipt payment={paymentReceipt} reservationCode={r.reservationCode} />}
+    </Modal>
+    <Modal open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} title="Xác nhận hủy giữ kho" closeLabel="Đóng xác nhận hủy">
+      <div className="space-y-5">
+        <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
+          {progress !== null && progress >= 3
+            ? `Đơn ${r.reservationCode} đã được xác nhận thanh toán cọc. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
+            : `Bạn có chắc muốn hủy ${r.reservationCode}? Suất kho đang giữ sẽ được giải phóng.`}
+        </p>
+        <div className="flex justify-end gap-2 border-t border-stone-100 pt-4">
+          <Button variant="outline" onClick={() => setCancelConfirmOpen(false)}>Quay lại</Button>
+          <Button variant="danger" onClick={() => { setCancelConfirmOpen(false); onCancel() }}>Xác nhận hủy giữ kho</Button>
+        </div>
+      </div>
     </Modal>
  </Card>
   )

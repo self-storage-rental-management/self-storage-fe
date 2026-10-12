@@ -214,6 +214,14 @@ export default function StaffCheckInOperationsPanel({
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
+    const refreshCheckIns = () => setRefreshKey((value) => value + 1)
+    window.addEventListener("storagehub:checkins-refresh", refreshCheckIns)
+    return () => {
+      window.removeEventListener("storagehub:checkins-refresh", refreshCheckIns)
+    }
+  }, [])
+
+  useEffect(() => {
     let active = true
 
     setLoading(true)

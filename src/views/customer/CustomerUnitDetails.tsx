@@ -16,7 +16,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
   const overdueExampleDays = 4
   return <div className="space-y-5">
     <div className="rounded-2xl bg-[#292a27] p-5 text-white"><p className="text-xs text-amber-300">{facilityName}</p><h3 className="mt-1 text-2xl font-bold">{size ? `Kho cỡ ${size}` : 'Loại kho lưu trữ'}</h3><p className="mt-2 text-sm">{address}</p><p className="mt-2 text-xl font-bold">{formatVndAmount(t.monthlyPrice)} / tháng</p></div>
-    {size && <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"><img src={`/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`} alt={`Sơ đồ bố trí kho cỡ ${size}`} className="max-h-[520px] w-full object-contain" /><figcaption className="border-t border-stone-100 p-3 text-center text-xs text-stone-500">Sơ đồ bố trí kho cỡ {size}; đối chiếu thông số chi tiết bên dưới.</figcaption></figure>}
+    {size && <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"><img src={`/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`} alt={`Sơ đồ bố trí kho cỡ ${size}`} className="max-h-[520px] w-full object-contain" /><figcaption className="border-t border-stone-100 p-3 text-center text-xs text-stone-500">Sơ đồ bố trí kho cỡ {size}. Đối chiếu thông số chi tiết bên dưới.</figcaption></figure>}
     <h4 className="text-lg font-bold">1. Thông tin kho chi tiết</h4>
     <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 text-sm">{[
       ['Diện tích', `${t.areaM2} m²`], ['Kích thước kho (D × R × C)', `${t.lengthM} × ${t.widthM} × ${t.heightM} m`],
@@ -38,14 +38,14 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       </div>
       <p className="mt-3 text-xs leading-5 text-stone-500">Số thùng chỉ dùng để tham khảo cách bố trí. Kết quả phù hợp chính thức được kiểm tra từ kích thước, số lượng và cân nặng bạn khai báo.</p>
     </section>}
-    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, cọc giữ chỗ, cọc đảm bảo và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng; nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
+    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, cọc giữ chỗ, cọc đảm bảo và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>
       <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, cọc giữ chỗ 40%, tiền thuê còn lại và tiền đảm bảo kho.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {[[3, 3], [6, 5], [12, 8]].map(([months, discount]) => <article key={months} className="rounded-xl border border-emerald-200 bg-white p-4 text-sm"><b>Thuê {months} tháng</b><p className="mt-1 font-semibold text-emerald-700">Giảm {discount}% tiền thuê</p></article>)}
       </div>
-      <p className="mt-3 text-xs leading-5 text-stone-600">Mức áp dụng và số tiền cuối cùng được xác nhận trên báo giá của đơn; không cộng ưu đãi hai lần.</p>
+      <p className="mt-3 text-xs leading-5 text-stone-600">Mức áp dụng và số tiền cuối cùng được xác nhận trên báo giá của đơn. Không cộng ưu đãi hai lần.</p>
     </section>
     <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5">
       <h4 className="font-bold text-blue-900">Chính sách và quy định áp dụng</h4>
@@ -53,7 +53,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Phí quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">50% đơn giá thuê ngày cho mỗi ngày trễ</p><p className="text-sm leading-6 text-stone-600">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.</p></article>
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Tiền đảm bảo kho</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">{formatVndAmount(t.securityDepositAmount)}</p><p className="text-sm leading-6 text-stone-600">Thu khi nhận kho và được quyết toán sau khi kiểm tra bàn giao, công nợ, vệ sinh và hư hại.</p></article>
-        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Thời hạn thuê tối thiểu</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">01 tháng</p><p className="text-sm leading-6 text-stone-600">Kỳ thuê sử dụng trọn tháng; thời gian và ưu đãi cụ thể được xác nhận trong báo giá.</p></article>
+        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Thời hạn thuê tối thiểu</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">01 tháng</p><p className="text-sm leading-6 text-stone-600">Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.</p></article>
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Gia hạn quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">Tối đa 7 ngày</p><p className="text-sm leading-6 text-stone-600">Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.</p></article>
       </div>
     </section>
@@ -66,7 +66,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
           <ul className="mt-2 list-disc space-y-2 pl-5 text-stone-700">
             <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
             <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-            <li>Tổng phí = số ngày quá hạn × phí mỗi ngày; khoản còn thiếu sau khấu trừ tiền đảm bảo được đưa vào quyết toán.</li>
+            <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền đảm bảo được đưa vào quyết toán.</li>
           </ul>
         </article>
         <article className="rounded-xl border border-amber-200 bg-white p-4 text-sm">
@@ -84,8 +84,8 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
         ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá và xác minh email.'],
-        ['Thanh toán cọc', 'Duyệt hồ sơ nếu cần; thanh toán cọc 40% theo báo giá.'],
-        ['Nhận kho', 'Quản lý phân gian kho; khách nhận kho và ký hồ sơ.'],
+        ['Thanh toán cọc', 'Duyệt hồ sơ nếu cần. Thanh toán cọc 40% theo báo giá.'],
+        ['Nhận kho', 'Quản lý cơ sở phân gian kho. Khách hàng nhận kho và ký hồ sơ.'],
       ].map(([title, description], i) => <li key={title} className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">
         <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-sm font-bold text-white">{i + 1}</span>
         <h5 className="text-sm font-bold text-stone-900">{title}</h5><p className="mt-2 text-xs leading-5 text-stone-600">{description}</p>
