@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react"
-import { Button, Card, Modal, SectionHeader } from "../../components/ui"
+import { Button, Card, Modal, SectionHeader, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
 import { formatVndAmount as formatVnd } from "../../i18n/currency"
 import {
   loadCustomerPaymentHistory,
   paymentCategories,
   type HistoryEntry,
-  type PaymentCategory,
 } from "../../services/customerPaymentHistory"
 import ReservationReceipt from "./ReservationReceipt"
 import {
-  bookingDepositAccepted,
   paymentRecordLabel,
 } from "./paymentPresentation"
 
@@ -28,7 +26,6 @@ export default function CustomerPaymentHistory() {
   const [warnings, setWarnings] = useState<string[]>([])
   const [revision, setRevision] = useState(0)
   const [receipt, setReceipt] = useState<HistoryEntry | null>(null)
-  const [category, setCategory] = useState<PaymentCategory | "all">("all")
   useEffect(() => {
     let disposed = false
     setLoading(true)
@@ -56,9 +53,12 @@ export default function CustomerPaymentHistory() {
       disposed = true
     }
   }, [revision])
-  const filtered = entries.filter(
-    (entry) => category === "all" || entry.category === category,
-  )
+  const totalPaid = (records: HistoryEntry[]) => {
+    const paid = records.filter((entry) => entry.status === "PAID")
+    return paid.some((entry) => entry.amount === null)
+      ? null
+      : paid.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
+  }
   const statusLabel = (entry: HistoryEntry) =>
     entry.reservationPayment && entry.category === "deposit"
       ? paymentRecordLabel(entry.reservationPayment)
@@ -70,7 +70,7 @@ export default function CustomerPaymentHistory() {
   return (
     <div className="fade-in space-y-4">
       <SectionHeader
-        title="Lịch sử thanh toán và biên lai"
+        title="Lịch Sử Thanh Toán & Quyết Toán"
         action={
           <Button
             variant="outline"
@@ -81,44 +81,20 @@ export default function CustomerPaymentHistory() {
           </Button>
         }
       />
-      <Card className="p-4">
-        <p className="text-xs text-stone-500">Cọc đã được đơn xác nhận</p>
-        <p className="mt-1 text-2xl font-extrabold text-stone-950">
-          {formatVnd(
-            entries
-              .filter(
-                (entry) =>
-                  entry.reservationPayment &&
-                  bookingDepositAccepted(entry.reservationPayment),
-              )
-              .reduce((sum, entry) => sum + (entry.amount ?? 0), 0),
-          )}
-        </p>
-      </Card>
-      <Card className="p-4">
-        <label htmlFor="payment-category" className="block text-sm font-medium">
-          Loại thanh toán
-        </label>
-        <select
-          id="payment-category"
-          value={category}
-          onChange={(event) =>
-            setCategory(event.target.value as PaymentCategory | "all")
-          }
-          className="mt-2 w-full rounded-lg border border-stone-300 bg-white p-2 sm:max-w-md"
-        >
-          <option value="all">Tất cả thanh toán</option>
-          {Object.entries(paymentCategories).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <p className="mt-2 text-xs text-stone-500">
-          Hiển thị từ mới đến cũ theo thời điểm giao dịch. Có {filtered.length}{" "}
-          giao dịch phù hợp.
-        </p>
-      </Card>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs text-stone-500">Đã ghi nhận thanh toán</p>
+          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? "—" : historyAmount(totalPaid(entries))}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-stone-500">Thanh toán gia hạn</p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "—" : historyAmount(totalPaid(entries.filter((entry) => entry.category === "renewal" || entry.category === "renewalSigning")))}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-stone-500">Tổng giao dịch</p>
+          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? "—" : entries.length}</p>
+        </Card>
+      </div>
       {loading && (
         <p role="status" className="text-sm text-stone-500">
           Đang tải giao dịch…
@@ -141,48 +117,43 @@ export default function CustomerPaymentHistory() {
           {warning} Nhấn làm mới để thử lại.
         </p>
       ))}
-      {!loading && !error && !filtered.length && (
-        <Card className="p-8 text-center text-stone-500">
-          Chưa có giao dịch phù hợp bộ lọc.
-        </Card>
-      )}
-      {filtered.map((entry) => (
-        <Card
-          key={entry.id}
-          className="flex flex-wrap items-center justify-between gap-4 p-5"
-        >
-          <div>
-            <p className="text-sm font-bold">
-              {entry.reference} · {paymentCategories[entry.category]}
-            </p>
-            <p className="mt-1 break-all text-xs text-stone-500">
-              Mã giao dịch: {entry.id}
-            </p>
-            <p className="text-xs text-stone-500">
-              {paymentHistoryTimestamp(entry.timestamp)}
-            </p>
-          </div>
-          <div className="space-y-2 text-right">
-            <p className="font-bold">{historyAmount(entry.amount)}</p>
-            <p
-              className={`text-xs font-bold ${
-                entry.status === "PAID" ? "text-emerald-700" : "text-amber-800"
-              }`}
-            >
-              {statusLabel(entry)}
-            </p>
-            {entry.status === "PAID" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setReceipt(entry)}
-              >
-                {entry.reservationPayment ? "Xem biên lai" : "Xem giao dịch"}
-              </Button>
+      <Card>
+        <Table>
+          <Thead>
+            <tr>
+              <Th>Mã Giao Dịch</Th>
+              <Th>Hồ Sơ</Th>
+              <Th>Nội Dung</Th>
+              <Th>Phương Thức</Th>
+              <Th>Số Tiền</Th>
+              <Th>Trạng Thái</Th>
+            </tr>
+          </Thead>
+          <Tbody>
+            {entries.map((entry) => (
+              <Tr key={entry.id}>
+                <Td>
+                  <span className="break-all text-xs text-stone-600">{entry.reservationPayment?.transactionReference || entry.id}</span>
+                  <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
+                </Td>
+                <Td><b className="break-all">{entry.reference}</b></Td>
+                <Td>{paymentCategories[entry.category]}</Td>
+                <Td><span className="text-xs text-stone-500">{entry.method || "Chưa có thông tin"}</span></Td>
+                <Td><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b></Td>
+                <Td>
+                  <div className="space-y-2">
+                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (entry.status === "PAID" ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                    {entry.status === "PAID" && <div><Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>{entry.reservationPayment ? "Xem biên lai" : "Xem giao dịch"}</Button></div>}
+                  </div>
+                </Td>
+              </Tr>
+            ))}
+            {!loading && !error && !entries.length && (
+              <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">Chưa có giao dịch nào.</p></td></tr>
             )}
-          </div>
-        </Card>
-      ))}
+          </Tbody>
+        </Table>
+      </Card>
       <Modal
         open={Boolean(receipt)}
         onClose={() => setReceipt(null)}

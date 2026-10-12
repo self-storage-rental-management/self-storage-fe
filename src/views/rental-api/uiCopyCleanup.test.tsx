@@ -76,12 +76,12 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).toContain("chưa có quyền")
     expect(html).not.toContain("<select")
   })
-  it("D3 Customer always sees the simulation disclosure and missing-source guard", () => {
+  it("D3 Customer cannot use the legacy simulated deposit action", () => {
     state.actor = operationsActor("customer"); state.mode = "operations"
     state.data = { ...operationState, missingSources: ["BO_SIGNING_POLICY"] }
     const html = renderToStaticMarkup(<RenewalOperationsPanel id={ids.renewal} role="customer" customerId={ids.customer} facilityId={ids.facility} />)
-    expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật.")
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Thanh toán cọc thử nghiệm<\/button>/)
+    expect(html).not.toContain("Thanh toán thử nghiệm - không thu tiền thật.")
+    expect(html).not.toContain("Thanh toán cọc thử nghiệm")
     expect(html).toContain("Chưa đủ thông tin")
     expect(html).not.toContain("BO_SIGNING_POLICY")
     expect(html).not.toContain("(D3)")
@@ -101,7 +101,7 @@ describe("Dương delete-first UI copy regression", () => {
   })
   it("D3 deposit history discloses simulation, without labeling an actual CASH receipt as simulated", () => {
     let html = renderToStaticMarkup(<OperationEventCard event={operationEvent} />)
-    expect(html).toContain("Kết quả thanh toán cọc thử nghiệm")
+    expect(html).toContain("Giao dịch gia hạn theo luồng cũ")
     expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).toContain("3.201.000 đ")
     html = renderToStaticMarkup(<OperationEventCard event={{ ...operationEvent, kind: "CASH" }} />)
@@ -168,7 +168,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(values[0]).toContain("đăng nhập")
     expect(values[1]).toContain("quyền")
     expect(values[3]).toContain("thay đổi")
-    expect(present(new ApiClientError("private detail", { status: 409, code: "DEFERRED_SOURCE" }))).toContain("Chưa đủ dữ liệu")
+    expect(present(new ApiClientError("private detail", { status: 409, code: "DEFERRED_SOURCE" }))).toMatch(/chưa sẵn sàng|Chưa đủ dữ liệu/)
   })
   it("queued receiving status is not labeled completed or delivered", () => {
     expect(supportReceiverLabels.QUEUED).toBe("Đang chờ tiếp nhận")

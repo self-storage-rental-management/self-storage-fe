@@ -7,7 +7,7 @@ import { managerDisplayError } from './managerPresentation'
 const metrics: { metric: ManagerApiMetric; title: string; page: string }[] = [
   { metric: 'rentals', title: 'Tổng hồ sơ thuê', page: 'rentals' },
   { metric: 'active-rentals', title: 'Đang thuê', page: 'rentals' },
-  { metric: 'pending-renewals', title: 'Chờ duyệt gia hạn', page: 'rentals' },
+  { metric: 'pending-renewals', title: 'Gia hạn cần theo dõi', page: 'rentals' },
   { metric: 'open-support', title: 'Yêu cầu hỗ trợ mới', page: 'support-api' },
   { metric: 'payment-overdue', title: 'Thanh toán quá hạn', page: 'overdue-cases' },
   { metric: 'term-overdue', title: 'Quá thời hạn thuê', page: 'overdue-cases' },

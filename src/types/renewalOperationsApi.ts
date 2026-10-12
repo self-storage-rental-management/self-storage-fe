@@ -1,13 +1,15 @@
 import type { RentalApiPage } from "./rentalApi"
 
 export type RenewalOperationsRole = "customer" | "manager" | "staff"
-export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED"
+export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_PAYMENT_INTENT" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED"
 export interface RenewalOperationState {
   renewalId: string
   expectedVersion: number | null
   phase: RenewalOperationsPhase
   depositPaymentRef: string | null
   depositPaidAt: string | null
+  fullRentPaymentRef: string | null
+  fullRentPaidAt: string | null
   originalSigningDeadline: string | null
   effectiveSigningDeadline: string | null
   recoveryCutoff: string | null
@@ -23,7 +25,7 @@ export interface RenewalOperationState {
 }
 export interface RenewalOperationEvent {
   id: string
-  kind: "DEPOSIT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY"
+  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY"
   occurredAt: string
   actorId: string | null
   data: unknown
