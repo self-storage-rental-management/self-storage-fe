@@ -274,6 +274,13 @@ describe("D3 operation prerequisites and truthful UI", () => {
     expect(() => vietnamLocalInstant("2026-10-08")).toThrow()
   })
 })
+describe("D3 calendar reservation failure presentation", () => {
+  it("explains an appointment rejected after slow reservation without claiming it was saved", () => {
+    const text = rentalError(new ApiClientError("Appointment expired during reservation", { status: 409 }))
+    expect(text).toContain("chọn lịch khác")
+    expect(text).toContain("lịch mới chưa được lưu")
+  })
+})
 describe("D4 truthful overdue presentation", () => {
   it("PARTIAL zero list does not claim no debt", () => {
     const html = renderToStaticMarkup(
