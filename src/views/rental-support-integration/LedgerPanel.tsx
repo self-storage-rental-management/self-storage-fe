@@ -1,9 +1,10 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { ApiClientError } from "../../services/apiClient"
 import {
   getRentalLedger,
+  reconcileSandboxPayment,
   integrationError,
   type LedgerRole,
   type LedgerView,
@@ -58,7 +59,9 @@ export function LedgerContent({ data }: { data: LedgerView }) {
                 ? "Tiền mặt"
                 : p.method === "VERIFIED_BANK"
                   ? "Chuyển khoản đã xác minh"
-                  : "Thanh toán thử nghiệm - không thu tiền thật"}
+                  : p.method === "VNPAY_SANDBOX"
+                    ? "VNPay Sandbox đã đối soát trong dự án - không thu tiền thật"
+                    : "Thanh toán thử nghiệm - không thu tiền thật"}
             </p>
             <p>
               {rentalMoney(p.amount, "VND")}, {rentalDate(p.receivedAt)}
@@ -106,15 +109,38 @@ function LedgerRead({ role, id }: {
   id: string
 }) {
   const actor = getAuthenticatedActor()
+  const lock = useRef(false)
+  const attempt = useRef<{paymentId: string; revision: number; key: string} | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<string>()
+  const [error, setError] = useState<string>()
   const read = useRentalApiResource(
     `${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:ledger:${id}`,
     () => getRentalLedger(role, id),
   )
+  const reconcile = async (paymentId: string) => {
+    if (lock.current || read.data?.revision == null || (attempt.current && attempt.current.paymentId !== paymentId)) return
+    lock.current = true; setBusy(true); setError(undefined)
+    attempt.current ??= { paymentId, revision: read.data.revision, key: crypto.randomUUID() }
+    setPending(paymentId)
+    try {
+      await reconcileSandboxPayment(id, paymentId, attempt.current.revision, attempt.current.key)
+      attempt.current = undefined; setPending(undefined); read.refresh()
+    } catch (e) { setError(integrationError(e)) }
+    finally { lock.current = false; setBusy(false) }
+  }
   return (
     <div>
       {read.loading && <p role="status">Đang tải dữ liệu...</p>}
       {!!read.error && <p role="alert">{ledgerReadError(read.error)}</p>}
       {read.data && <LedgerContent data={read.data} />}
+      {error && <p role="alert">{error} Thử lại cùng yêu cầu để xác định kết quả, không tạo khoản thu mới.</p>}
+      {role === "manager" && read.data?.sandboxReconciliationEnabled === true && actor?.permissions.includes("payments:update") && read.data?.revision != null &&
+        read.data.coverageInventory?.payments.filter(p => p.provenance === "SANDBOX" && !p.linkedReceipt && !p.refundUnreconciled).map(p => (
+          <Button key={p.paymentId} disabled={busy || (!!pending && pending !== p.paymentId)} onClick={() => void reconcile(p.paymentId)}>
+            {pending === p.paymentId ? "Thử lại đối soát Sandbox" : "Đối soát VNPay Sandbox"}
+          </Button>
+        ))}
     </div>
   )
 }

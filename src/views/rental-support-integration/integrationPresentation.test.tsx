@@ -31,6 +31,12 @@ vi.mock("../../services/authApi", () => ({
 beforeEach(() => {
   state.actor = null
 })
+it("renders an authenticated Sandbox receipt as project collection, distinct from internal simulation", () => {
+  const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 2,
+    obligations: [], refunds: [], receipts: [{ id: ids.event, method: "VNPAY_SANDBOX", amount: 20, receivedAt: instant, simulated: false }] }} />)
+  expect(html).toContain("VNPay Sandbox đã đối soát trong dự án - không thu tiền thật")
+  expect(html).not.toContain("Chuyển khoản đã xác minh")
+})
 const unknown: LedgerView = {
   rentalId: ids.rental,
   completeness: "UNKNOWN",
