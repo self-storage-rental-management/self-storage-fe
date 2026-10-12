@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
-import { completeRefund, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
+import { completeRefund, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import { ReturnSummary } from '../views/return-api/ReturnApiPanel'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
@@ -27,6 +27,10 @@ describe('real Return transport and unknown settlement presentation', () => {
     const inspected: ApiReturn = { ...record, status: 'inspected' }
     expect(isApiReturn(inspected)).toBe(true)
     expect(renderToStaticMarkup(<ReturnSummary record={inspected} />)).toContain('Đã nghiệm thu')
+  })
+  it('accepts the backend return contract when no optional settlement blocker is present', () => {
+    const backendRecord = { ...record, settlementBlocker: undefined }
+    expect(isApiReturn(backendRecord)).toBe(true)
   })
   it('preserves null balances and displays unresolved money without a refund success claim', () => {
     expect(isApiReturn(record)).toBe(true)
@@ -69,6 +73,13 @@ describe('real Return transport and unknown settlement presentation', () => {
     try { await confirmReturn(ids.event, 'accepted', 'TEST'); throw new Error('Unexpected success') } catch (e) {
       expect(returnError(e)).toContain('chưa xác nhận thành công')
     }
+  })
+  it('sends customer settlement payment to the backend endpoint', async () => {
+    const fetch = respond({ data: { ...record, status: 'completed', settlementPaymentId: 'PAY-1' } })
+    state.actor = operationsActor('customer')
+    await paySettlement(ids.event, 'Chuyển khoản', 'Đã thanh toán tại quầy')
+    expect(fetch.mock.calls[0][0]).toContain(`/api/customer/returns/${ids.event}/pay-settlement`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ paymentMethod: 'Chuyển khoản', notes: 'Đã thanh toán tại quầy' })
   })
   it('sends inspection with explicit deductions and returned-access items', async () => {
     state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')

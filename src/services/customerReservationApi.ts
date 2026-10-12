@@ -266,6 +266,7 @@ export interface ReservationPaymentResult {
   paymentMethod?: string | null
   paidAt?: string | null
   initiatedByName?: string | null
+  createdAt?: string | null
 }
 
 export interface VnpayPaymentUrlResult {

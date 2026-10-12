@@ -10,9 +10,10 @@ import {
 import { listReturns, type ApiReturn } from "./returnApi"
 import { listSupportTickets } from "./supportApi"
 import type { SupportTicket } from "../types/supportApi"
+import { listUnitAssignmentCandidates, type UnitAssignmentCandidate } from "./unitAssignmentApi"
 
 export type StaffDailyOperationPriority = "high" | "medium" | "low"
-export type StaffDailyOperationPage = "checkin" | "return" | "support" | "tasks"
+export type StaffDailyOperationPage = "unit-assignments" | "checkin" | "return" | "support" | "tasks"
 
 export interface StaffDailyOperation {
   id: string
@@ -139,6 +140,17 @@ const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   page: "tasks",
 })
 
+const assignmentTask = (item: UnitAssignmentCandidate): StaffDailyOperation => ({
+  id: `assignment-${item.reservationId}`,
+  title: `Phân kho ${item.reservationCode}`,
+  customer: item.customerName,
+  time: item.confirmedAt || item.startDate,
+  dueAt: item.confirmedAt || item.startDate,
+  sla: "Đặt chỗ đã xác nhận, cần giữ gian kho",
+  priority: "high",
+  page: "unit-assignments",
+})
+
 /** Load Staff operations from the real API surface and normalize them for one daily list. */
 export async function loadStaffDailyOperations(
   date: string,
@@ -160,6 +172,7 @@ export async function loadStaffDailyOperations(
       page: 0,
       pageSize: 100,
     }),
+    listUnitAssignmentCandidates({ page: 0, pageSize: 100 }),
   ])
 
   const failedSources: string[] = []
@@ -178,6 +191,10 @@ export async function loadStaffDailyOperations(
   )
   const maintenance =
     read<Awaited<ReturnType<typeof listStaffMaintenanceTasks>>>(3, "bảo trì")
+  const assignments = read<Awaited<ReturnType<typeof listUnitAssignmentCandidates>>>(
+    4,
+    "phân kho",
+  )
 
   const tasks = [
     ...credentialAlerts
@@ -203,6 +220,9 @@ export async function loadStaffDailyOperations(
       .filter(isOpenMaintenance)
       .filter((item) => !item.dueAt || dayOf(item.dueAt) === date)
       .map(maintenanceTask),
+    ...(assignments?.data || [])
+      .filter((item) => !item.confirmedAt || dayOf(item.confirmedAt) === date)
+      .map(assignmentTask),
   ]
 
   return { tasks, failedSources }

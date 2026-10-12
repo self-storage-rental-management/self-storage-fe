@@ -43,7 +43,7 @@ function MetricValue({ metric, value }: { metric: Metric; value?: number | strin
     value={value ?? "Chưa xác minh"} icon={metric === "active-rentals" ? Icon.key : Icon.support} />
 }
 
-/** Keep the teammate Return/receipt card unchanged in demo mode. */
+/** Mở không gian chung cho hồ sơ thuê, gia hạn, trả kho và biên nhận. */
 export function CustomerRentalApiLink({ onOpen }: { onOpen: () => void }) {
   return <Card className="space-y-3 p-5">
     <h2 className="font-bold text-stone-900">Hồ sơ Thuê</h2>

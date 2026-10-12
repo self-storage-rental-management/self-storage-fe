@@ -57,6 +57,7 @@ export interface RenewalVnpayPaymentResponse {
   reconciliationRequired: boolean
   message: string
   paymentUrl: string | null
+  settlementStage?: "AWAITING_PAYMENT" | "VERIFIED_AWAITING_ALLOCATION" | "ALLOCATED_AWAITING_SIGNING" | "AWAITING_SIGNING" | "COMPLETED" | "RECONCILIATION_REQUIRED"
 }
 export interface RenewalApiQuote {
   id: string

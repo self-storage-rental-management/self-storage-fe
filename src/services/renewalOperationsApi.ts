@@ -63,6 +63,7 @@ export function isOperationState(
     nullable(r.expectedVersion, isVersion) &&
     [
       "UNKNOWN",
+      "AWAITING_PAYMENT_INTENT",
       "AWAITING_DEPOSIT",
       "SIGNING",
       "SIGNING_EXPIRY_PENDING",
@@ -72,6 +73,7 @@ export function isOperationState(
     ].includes(r.phase) &&
     [
       r.depositPaymentRef,
+      r.fullRentPaymentRef ?? null,
       r.appointmentRef,
       r.arrivalRef,
       r.confirmedExceptionRef,
@@ -80,6 +82,7 @@ export function isOperationState(
     ].every((v) => nullable(v, isUuid)) &&
     [
       r.depositPaidAt,
+      r.fullRentPaidAt ?? null,
       r.originalSigningDeadline,
       r.effectiveSigningDeadline,
       r.recoveryCutoff,
@@ -101,8 +104,8 @@ export function isOperationState(
       "COMPLETED",
     ].includes(r.phase) ||
       (isVersion(r.expectedVersion) &&
-        isUuid(r.depositPaymentRef) &&
-        isInstant(r.depositPaidAt) &&
+        ((isUuid(r.depositPaymentRef) && isInstant(r.depositPaidAt)) ||
+          (isUuid(r.fullRentPaymentRef) && isInstant(r.fullRentPaidAt))) &&
         isInstant(r.originalSigningDeadline) &&
         isInstant(r.effectiveSigningDeadline) &&
         isInstant(r.recoveryCutoff))) &&
@@ -124,6 +127,7 @@ export function isOperationEvent(
       nullable(e.actorId, isUuid) &&
       [
         "DEPOSIT",
+        "FULL_RENT_PAYMENT",
         "CASH",
         "APPOINTMENT",
         "ARRIVAL",
@@ -165,6 +169,9 @@ export function isOperationEvent(
           nullable(d.currency, (v) => typeof v === "string") &&
           nullable(d.paidAt, isInstant))
     )
+  if(e.kind === "FULL_RENT_PAYMENT")
+    return isUuid(d.paymentRef) && money(d.amount) && Number(d.amount)>0 && d.currency==="VND"
+      && isInstant(d.paidAt) && isInstant(d.paymentDeadline) && isUuid(d.receiptId)
   if (e.kind === "CASH")
     return (
       isUuid(d.reference) &&
@@ -247,7 +254,7 @@ export async function listRenewalOperationEvents(
   const suffix = rentalQuery({ page, size }, ["page", "size"], [])
   const allowed =
     category === "payments"
-      ? ["DEPOSIT", "CASH"]
+      ? ["DEPOSIT", "FULL_RENT_PAYMENT", "CASH"]
       : category === "refunds"
         ? ["REFUND"]
         : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION"]

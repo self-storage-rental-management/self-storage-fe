@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from "react"
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
-import { createRenewalVnpayPaymentIntent, getRenewalVnpayPayment } from "../../services/renewalApi"
-import type { RenewalVnpayPaymentResponse } from "../../types/renewalApi"
+import { useRenewalPayment } from "../../hooks/useRenewalPayment"
 import LedgerPanel from "../rental-support-integration/LedgerPanel"
 import type { RentalApiRole } from "../../types/rentalApi"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
@@ -19,67 +17,21 @@ export default function RenewalDetail({
   renewal: r,
   role,
   onAction,
+  onPaymentChange,
 }: {
   renewal: RenewalApiRecord
   role: RentalApiRole
   onAction: (action: RenewalApiAction) => void
+  onPaymentChange?: () => void
 }) {
   const { manager, copy, explain } = useManagerPresentation()
-  const [payment,setPayment]=useState<RenewalVnpayPaymentResponse|null>(null)
-  const [paymentBusy,setPaymentBusy]=useState(false)
-  const [paymentError,setPaymentError]=useState<string|null>(null)
-  const paymentKey=useRef<string|null>(null)
-
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
   const isManager = role === "manager"
-  const canOpenPayment=role==="customer"&&r.status==="accepted"
-  useEffect(()=>{
-    let current=true
-    if(role!=="customer"||(!r.approvedPaymentDeadline&&r.status!=="full_rent_paid")) {
-      setPayment(null)
-      return ()=>{current=false}
-    }
-    getRenewalVnpayPayment(r.id).then(value=>{
-      if(current) {
-        setPayment(value)
-        if(value.paymentStatus==="FAILED"||value.paymentStatus==="CANCELLED") {
-          paymentKey.current=null
-          try { sessionStorage.removeItem(`storagehub:renewal-payment:${r.id}:${r.acceptedRevision??"unknown"}`) } catch {}
-        }
-      }
-    }).catch(error=>{
-      if(!current)return
-      setPayment(null)
-      if(error instanceof Error&&"status" in error&&(error as Error&{status:number|null}).status===404)return
-      setPaymentError(error instanceof Error?error.message:"Không thể đọc trạng thái thanh toán gia hạn.")
-    })
-    return ()=>{current=false}
-  },[role,r.id,r.approvedPaymentDeadline,r.status])
-
-  const openRenewalPayment=async()=>{
-    if(paymentBusy)return
-    setPaymentBusy(true);setPaymentError(null)
-    try {
-      const keyName=`storagehub:renewal-payment:${r.id}:${r.acceptedRevision??"unknown"}`
-      let key=paymentKey.current
-      if(!key) {
-        try { key=sessionStorage.getItem(keyName) } catch { key=null }
-      }
-      if(!key)key=globalThis.crypto?.randomUUID?.()??`renewal-${r.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      paymentKey.current=key
-      try { sessionStorage.setItem(keyName,key) } catch {}
-      const result=await createRenewalVnpayPaymentIntent(r.id,key)
-      setPayment(result)
-      if(result.paymentStatus==="FAILED"||result.paymentStatus==="CANCELLED") {
-        paymentKey.current=null
-        try { sessionStorage.removeItem(keyName) } catch {}
-      }
-      if(result.paymentUrl)window.location.assign(result.paymentUrl)
-    } catch(error) {
-      setPaymentError(error instanceof Error?error.message:"Không thể mở thanh toán VNPay cho gia hạn.")
-    } finally { setPaymentBusy(false) }
-  }
+  const canOpenPayment = role === "customer" && r.status === "accepted" && r.acceptedRevision !== null
+  const { payment, busy: paymentBusy, error: paymentError, pay: openRenewalPayment } = useRenewalPayment(
+    r, role === "customer", onPaymentChange,
+  )
   const financialState = r.financialCheck.completeness
   const obligationRefs = r.financialCheck.blockingObligationRefs
   const obligationsState = obligationRefs === null
@@ -120,10 +72,6 @@ export default function RenewalDetail({
     role === "manager"
       ? []
       : [
-          {
-            action: "ACCEPT_REVISED_QUOTE",
-            label: "Lấy báo giá và xác nhận lại",
-          },
           { action: "CANCEL", label: "Hủy yêu cầu" },
         ]
   return (
@@ -206,7 +154,14 @@ export default function RenewalDetail({
       {role==="customer"&&payment&&(
         <section className={`space-y-1 rounded-lg border p-3 ${payment.reconciliationRequired?"border-amber-300 bg-amber-50":"border-stone-200 bg-stone-50"}`} aria-live="polite">
           <p className="font-semibold">Trạng thái thanh toán toàn kỳ: {({PENDING:"Đang chờ VNPay",PROCESSING:"Đang xử lý",PAID:payment.reconciliationRequired?"Đã nhận tiền, cần đối soát":"Đã ghi nhận thanh toán",NOT_RECEIVED:"Chưa xác nhận đã nhận tiền",FAILED:"Thanh toán thất bại",CANCELLED:"Giao dịch đã hủy"} as Record<string,string>)[payment.paymentStatus]}</p>
-          <p>{payment.message}</p>
+          <p>{payment.settlementStage ? ({
+            AWAITING_PAYMENT: "Chờ VNPay xác nhận thanh toán",
+            VERIFIED_AWAITING_ALLOCATION: "Đã xác minh tiền; đang chờ phân bổ vào khoản gia hạn",
+            ALLOCATED_AWAITING_SIGNING: "Đã phân bổ tiền; đang kiểm tra điều kiện ký hợp đồng",
+            AWAITING_SIGNING: "Đã thanh toán; cần hoàn tất ký hợp đồng để gia hạn có hiệu lực",
+            COMPLETED: "Gia hạn đã hoàn tất",
+            RECONCILIATION_REQUIRED: "Đã ghi nhận tiền; cần hỗ trợ đối soát trước khi tiếp tục",
+          }[payment.settlementStage]) : payment.message}</p>
           <p>Số tiền: {rentalMoney(payment.amount,payment.currency)}</p>
           {payment.paidAt&&<p>Thời điểm VNPay ghi nhận: {rentalDate(payment.paidAt)}</p>}
           {payment.paymentDeadline&&<p>Hạn thanh toán: {rentalDate(payment.paymentDeadline)}</p>}
@@ -245,7 +200,7 @@ export default function RenewalDetail({
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
           disabled={paymentBusy||payment?.paymentStatus==="PAID"}
-          onClick={()=>void openRenewalPayment()}
+          onClick={openRenewalPayment}
         >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":"Thanh toán toàn kỳ"}</Button>}
         {actions
           .filter((a) => r.allowedActions.includes(a.action))

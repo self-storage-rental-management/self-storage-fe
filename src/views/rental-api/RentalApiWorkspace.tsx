@@ -18,6 +18,7 @@ import RenewalDetail from "./RenewalDetail"
 import RenewalOperationsPanel from "./RenewalOperationsPanel"
 import RenewalDecisionModal from "./RenewalDecisionModal"
 import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal"
+import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   rentalDate,
   rentalLabels,
@@ -225,11 +226,12 @@ function WorkspaceData({
 
   const actor = getAuthenticatedActor()!
   const [rentalFilterDraft, setRentalFilterDraft] = useState(nq.rentalId || "")
-  const query = tab === "rental" ? rq : nq
+  const dataTab = tab === "renewal" ? "renewal" : "rental"
+  const query = dataTab === "rental" ? rq : nq
   const read = useRentalApiResource(
-    `${identity}:${tab}:${JSON.stringify(query)}`,
+    `${identity}:${dataTab}:${JSON.stringify(query)}`,
     async () =>
-      tab === "rental"
+      dataTab === "rental"
         ? { kind: "rental" as const, page: await listRentals(role, rq) }
         : { kind: "renewal" as const, page: await listRenewals(role, nq) },
   )
@@ -283,15 +285,15 @@ function WorkspaceData({
   useEffect(() => {
     const p = read.data?.page.pagination
     if (p && p.page > 0 && p.page >= p.totalPages) {
-      if (tab === "rental")
+      if (dataTab === "rental")
         setRq({ ...rq, page: Math.max(0, p.totalPages - 1) })
       else setNq({ ...nq, page: Math.max(0, p.totalPages - 1) })
     }
-  }, [read.data, tab, rq, nq, setRq, setNq])
+  }, [read.data, dataTab, rq, nq, setRq, setNq])
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold">
-        {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê của tôi"}
+        {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}
       </h1>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -311,7 +313,7 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
           onClick={() => setTab("rental")}
@@ -432,7 +434,7 @@ function WorkspaceData({
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {"contractEndDate" in row
-                        ? rentalPeriodText(row)
+                        ? rentalPeriodText(row, role === "manager")
                         : rentalDate(row.newEndDate)}
                     </td>
                     <td className="p-3">
@@ -448,7 +450,7 @@ function WorkspaceData({
                             ? "Đã xác nhận điều kiện"
                             : renewalLabels[row.status]
                       }
-                      {"dataWarnings" in row && row.dataWarnings.length > 0 && (
+                      {role === "manager" && "dataWarnings" in row && row.dataWarnings.length > 0 && (
                         <p className="text-amber-700">Có cảnh báo dữ liệu</p>
                       )}
                     </td>
@@ -588,22 +590,32 @@ function DetailModal({
         if (!operationLock.current) read.refresh()
       }} />
       {read.data?.kind === "rental" ? (
-        <RentalDetail
-          rental={read.data.record as RentalApiDetail}
-          onRequest={
-            role === "customer"
-              ? () => {
-                  onClose()
-                  onAction({ kind: "request", rentalId: detail.id })
-                }
-              : undefined
-          }
-        />
+        <>
+          <RentalDetail
+            rental={read.data.record as RentalApiDetail}
+            showTechnicalWarnings={role === "manager"}
+            onRequest={
+              role === "customer"
+                ? () => {
+                    onClose()
+                    onAction({ kind: "request", rentalId: detail.id })
+                  }
+                : undefined
+            }
+          />
+          {role === "customer" && <ReturnApiPanel
+            role="customer"
+            rentalId={detail.id}
+            rentalActive={(read.data.record as RentalApiDetail).status === "active"}
+            onChanged={onChanged}
+          />}
+        </>
       ) : read.data?.kind === "renewal" ? (
         <div>
           <RenewalDetail
             renewal={read.data.record as RenewalApiRecord}
             role={role}
+            onPaymentChange={read.refresh}
             onAction={(action) => {
               if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord
