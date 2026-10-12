@@ -87,6 +87,7 @@ export interface RentalBookingEvidence {
     amount: number
     processedAt: string | null
     verification: "SIMULATED" | "UNVERIFIED" | "VERIFIED" | "SANDBOX" | "DISPUTED" | "ATTEMPT"
+    projectRecognition?: { environment: string; enabled: boolean; eligibleForReconciliation: boolean; reason: string }
   }[]
   paymentsTruncated: boolean
 }

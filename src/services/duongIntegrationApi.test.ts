@@ -6,18 +6,55 @@ import {
   getNotificationAcknowledgement,
   coordinateRenewal,
   getRentalLedger,
+  reconcileSandboxPayment,
   isLedgerView,
   getIntegrationPolicy,
   getStoredIntegrationPolicy,
   getRenewalAssignment,
   publishIntegrationPolicy,
   uploadDuongEvidence,
+  renewalSignedContractEntityType,
   downloadDuongEvidence,
   integrationError,
   validPolicyInput,
   type RenewalPolicyInput,
 } from "./duongIntegrationApi"
 describe("ledger coverage inventory", () => {
+  it("uploads signed Renewal evidence using the published resource-bound purpose", async () => {
+    const id = "11111111-1111-4111-8111-111111111111"
+    const fileId = "22222222-2222-4222-8222-222222222222"
+    const data = { id: fileId, originalName: "signed.pdf", entityType: renewalSignedContractEntityType, entityId: id, status: "ACTIVE" }
+    const fetch = respond({ data })
+    expect(await uploadDuongEvidence(new File(["test signed fixture"], "signed.pdf"), renewalSignedContractEntityType, id)).toEqual(data)
+    const form = fetch.mock.calls[0][1].body as FormData
+    expect(form.get("entityType")).toBe("DUONG_RENEWAL_SIGNED_CONTRACT")
+    expect(form.get("entityId")).toBe(id)
+    await expect(uploadDuongEvidence(new File(["test"], "signed.pdf"), "DUONG_RENEWAL_SIGNED_RENEWAL", id)).rejects.toThrow()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it("validates additive Renewal deposit evidence against the same Rental obligation", () => {
+    const id = "11111111-1111-4111-8111-111111111111"
+    const other = "22222222-2222-4222-8222-222222222222"
+    const evidence = { renewalId: id, acceptedRevisionId: id, status: "MATCHED", obligationId: id }
+    const view = { rentalId: id, completeness: "PARTIAL", currency: "VND", revision: 1, reason: "Incomplete",
+      obligations: [{ id, renewalId: id, kind: "RENEWAL_DEPOSIT", amount: 20, dueAt: "2026-10-07T00:00:00Z", outstanding: 20 }], receipts: [], refunds: [],
+      coverageInventory: { rentalId: id, ledgerRevision: 1, completeness: "PARTIAL", gaps: [], payments: [], consistentThroughApproval: false, renewalDeposits: [evidence] } }
+    expect(isLedgerView(view)).toBe(true)
+    const withEvidence = (item: unknown) => ({ ...view, coverageInventory: { ...view.coverageInventory, renewalDeposits: [item] } })
+    expect(isLedgerView(withEvidence({ ...evidence, obligationId: other }))).toBe(false)
+    expect(isLedgerView(withEvidence({ ...evidence, renewalId: other }))).toBe(false)
+    expect(isLedgerView(withEvidence({ ...evidence, status: "COMPLETE" }))).toBe(false)
+    expect(isLedgerView(withEvidence({ ...evidence, status: "UNPOSTED_OR_INVALID", obligationId: null }))).toBe(true)
+    expect(isLedgerView(withEvidence({ ...evidence, status: "UNPOSTED_OR_INVALID" }))).toBe(false)
+  })
+  it("posts a resource-bound Sandbox reconciliation with the same caller key and no client amount", async () => {
+    const id = "11111111-1111-4111-8111-111111111111"
+    const fetch = respond({ data: { receiptId: id, ledgerRevision: 2, method: "VNPAY_SANDBOX" } })
+    await reconcileSandboxPayment(id, id, 1, "stable-key")
+    expect(fetch.mock.calls[0][0]).toContain(`/api/manager/rentals/${id}/sandbox-payments/${id}/reconciliation`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ expectedRevision: 1 })
+    expect(new Headers(fetch.mock.calls[0][1].headers).get("Idempotency-Key")).toBe("stable-key")
+  })
   it("requires matching rental/revision and never accepts approval certification from inventory", () => {
     const view = { rentalId: "11111111-1111-4111-8111-111111111111", completeness: "PARTIAL", currency: "VND", revision: 0,
       obligations: [], receipts: [], refunds: [], reason: "Incomplete", coverageInventory: {

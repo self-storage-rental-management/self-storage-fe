@@ -26,6 +26,7 @@ export interface SupportTicket {
   customerId: string
   facilityId: string | null
   assignedStaffId: string | null
+  assignedStaffName?: string | null
   status: SupportStatus
   subject: string
   description: string

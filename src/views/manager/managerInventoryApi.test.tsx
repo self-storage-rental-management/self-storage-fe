@@ -156,7 +156,7 @@ describe("Manager inventory reads existing DB endpoints without local mutation",
     expect(html).toContain("Hiển thị 2 trên 2 gian kho")
     expect(html).toContain("Phân bổ theo khu vực")
     expect(html).toContain("Loại gian kho tại cơ sở")
-    expect(html).toContain("Trạng thái bảo trì")
+    expect(html).not.toContain("Trạng thái bảo trì")
     expect(html).not.toContain("Hàng đợi bảo trì")
     expect(html).not.toContain("Năng lực khai thác hiện có")
     expect(html).not.toContain("Công suất theo loại gian kho")
@@ -270,7 +270,7 @@ describe("Manager inventory reads existing DB endpoints without local mutation",
 })
 
 describe("Manager inventory filters and truthful read states", () => {
-  it("filters actual IDs, string floors/zones/status/maintenance and accent-insensitive code; preserves source order", async () => {
+  it("filters actual IDs, string floors/zones/status and accent-insensitive code; preserves source order", async () => {
     transport([type(), type("type-b")], [
       unit("10"),
       unit("2", {
@@ -290,7 +290,7 @@ describe("Manager inventory filters and truthful read states", () => {
     expect(run({ floor: "Tầng lửng" })).toEqual(["2"])
     expect(run({ zone: "Khu B" })).toEqual(["2"])
     expect(run({ status: "allocated" })).toEqual(["1"])
-    expect(run({ maintenance: "maintenance" })).toEqual(["2"])
+    expect(run({ status: "maintenance" })).toEqual(["2"])
     expect(run({ query: "tang lung" })).toEqual(["2"])
     expect(run({ query: "no-match" })).toEqual([])
     expect(run({ sort: "code" })).toEqual(["1", "2", "10"])
