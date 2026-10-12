@@ -915,6 +915,10 @@ export default function StaffApp({
 
   const [credentialError, setCredentialError] = useState<string | null>(null)
 
+  const [apiDailyOperations, setApiDailyOperations] = useState<StaffDailyOperation[]>([])
+
+  const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
+
   const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
 
   const [inspectModal, setInspectModal] = useState(false)
@@ -1228,6 +1232,35 @@ export default function StaffApp({
       })
     return () => { active = false }
   }, [user.facilityId, page])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setApiDailyOperations([])
+      setApiDailyOperationsError(null)
+      return
+    }
+    const requestedDate = operationalTaskDateFilter || toDateInputValue(new Date().toISOString())
+    let active = true
+    void loadStaffDailyOperations(requestedDate, user.id, credentialAlerts)
+      .then(result => {
+        if (!active) return
+        setApiDailyOperations(result.tasks)
+        const failedSources = credentialError
+          ? [...result.failedSources, "quyền truy cập"]
+          : result.failedSources
+        setApiDailyOperationsError(
+          failedSources.length
+            ? `Chưa đồng bộ được dữ liệu: ${failedSources.join(', ')}.`
+            : null,
+        )
+      })
+      .catch(reason => {
+        if (!active) return
+        setApiDailyOperations([])
+        setApiDailyOperationsError(staffErrorMessage(reason, 'Không thể tải nhiệm vụ vận hành trong ngày.'))
+      })
+    return () => { active = false }
+  }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id])
 
   const refreshCredentialAlerts = () => {
     if (!isApiAuthenticated()) return
@@ -1812,7 +1845,7 @@ export default function StaffApp({
     setCheckinModal(true)
   }
 
-  const operationalTasks = [
+  const localOperationalTasks = [
     ...credentialAlerts.map(alert => ({
       id: `credential-${alert.action.toLowerCase()}-${alert.id}`,
       title: alert.action === 'ISSUE'
@@ -1969,6 +2002,10 @@ export default function StaffApp({
     })),
   ].sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
 
+  const operationalTasks = isApiAuthenticated()
+    ? apiDailyOperations
+    : localOperationalTasks
+
   const filteredOperationalTasks = operationalTasks
     .filter(
       (task) =>
@@ -2036,6 +2073,13 @@ export default function StaffApp({
   ])
 
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
+    if (isApiAuthenticated()) {
+      setPage(task.page)
+      if (task.id.startsWith("return-"))
+        showToast(`Đã mở danh sách hồ sơ trả kho cho ${task.customer}.`)
+      return
+    }
+
     if (task.id.startsWith("allocation-")) {
       const reservation = reservations.find(
         (item) => item.id === task.id.replace("allocation-", ""),
@@ -2093,7 +2137,9 @@ export default function StaffApp({
       showToast(`Đã mở nhiệm vụ theo dõi gia hạn cho ${task.customer}.`)
   }
 
-  const operationalCompletedCount =
+  const operationalCompletedCount = isApiAuthenticated()
+    ? 0
+    :
     reservations.filter((r) => r.status === "COMPLETED").length +
     checkins.filter((c) => c.status === "completed").length +
     returns.filter(
@@ -2104,17 +2150,17 @@ export default function StaffApp({
     ).length +
     facilityTickets.filter((ticket) => ticket.status === "resolved").length
 
-  const totalCount =
-    operationalTasks.length +
-    operationalCompletedCount +
-    assignedFacilityTasks.length
+  const totalCount = isApiAuthenticated()
+    ? operationalTasks.length
+    : operationalTasks.length + operationalCompletedCount + assignedFacilityTasks.length
 
-  const completedCount =
-    operationalCompletedCount +
-    assignedFacilityTasks.filter((task) => task.status === "completed").length
+  const completedCount = isApiAuthenticated()
+    ? 0
+    : operationalCompletedCount + assignedFacilityTasks.filter((task) => task.status === "completed").length
 
-  const remainingTaskCount =
-    operationalTasks.length + openAssignedFacilityTasks.length
+  const remainingTaskCount = isApiAuthenticated()
+    ? operationalTasks.length
+    : operationalTasks.length + openAssignedFacilityTasks.length
 
   const assignedTaskNotifications = openAssignedFacilityTasks.map((task) => ({
     id: `assigned-task-${task.id}`,
@@ -2648,6 +2694,11 @@ export default function StaffApp({
                 }
               </p>
             </div>
+            {apiDailyOperationsError && isApiAuthenticated() && (
+              <div className="border-b border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                {apiDailyOperationsError}
+              </div>
+            )}
             <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
               <Input
                 label="Ngày đến hạn"
