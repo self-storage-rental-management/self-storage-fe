@@ -19,6 +19,11 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
   const accepted = bookingDepositAccepted(payment)
   const isRemainingRental = payment.purpose === 'RENTAL_BALANCE'
   const gatewayPaidAt = formatGatewayPayDate(payment.gatewayPayDate)
+  const paymentMethod = isRemainingRental
+    ? payment.paymentMethod || 'Chưa có thông tin'
+    : payment.paymentMethod && payment.paymentMethod !== 'VNPAY'
+      ? `VNPay (${payment.paymentMethod})`
+      : 'VNPay'
   return <article className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-xs font-bold text-stone-500">{isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai cọc giữ chỗ' : 'Chi tiết giao dịch cần đối soát'}</p><p className="mt-1 text-sm font-bold">{reservationCode}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${accepted || isRemainingRental ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc' : 'Đơn chưa xác nhận'}</span></div>
     <dl className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
