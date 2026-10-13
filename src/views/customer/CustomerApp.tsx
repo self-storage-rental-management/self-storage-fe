@@ -86,12 +86,7 @@ const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) =>
   })
 }
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
-  const code = (sizeCode || '').toUpperCase()
-  if (code === 'S') return 'Xe đẩy tay / xe sàn nhỏ'
-  if (code === 'M') return 'Xe đẩy sàn phẳng'
-  if (code === 'L') return 'Xe nâng tay pallet'
-  if (code === 'XL') return 'Xe nâng điện dắt bộ'
-  if (!originalTrolley) return 'Xe đẩy tiêu chuẩn'
+  if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
   const t = originalTrolley.toLowerCase()
   if (t.includes('electric') || t.includes('walkie')) return 'Xe nâng điện dắt bộ'
   if (t.includes('platform')) return 'Xe đẩy sàn phẳng'
@@ -294,12 +289,17 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
   const isAvailable = availableCount > 0
   const usableCapacity = Math.round(unitType.volumeM3 * 0.75 * 10) / 10
   const sizeCode = storageSizeCode(unitType.name)
-  const amenities = customerUnitAmenities(sizeCode)
+  const amenities = apiSpec ? {
+    aisleWidthM: apiSpec.aisleWidthM ?? 0,
+    trolley: apiSpec.trolleyType || 'Chưa cập nhật',
+    smallBoxCapacity: apiSpec.smallBoxCapacity ?? 0,
+    largeBoxCapacity: apiSpec.largeBoxCapacity ?? 0,
+  } : customerUnitAmenities(sizeCode)
 
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
       <div className="relative h-44 overflow-hidden bg-stone-200">
-        <img src={getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <img src={apiSpec?.imageUrl || getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
           📍 {facility.name}
@@ -459,16 +459,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           .filter(unitType => unitType.facilityId === facility.id)
           .reduce((total, unitType) => total + (availabilityByUnitType[unitType.id] ?? unitType.availableCount ?? 0), 0),
         price: '',
-        climate: true,
-        security: '24/7',
-        image: customerFacilityImage(facility.code),
+        climate: Boolean(facility.climateControlled),
+        security: facility.securityDescription || '',
+        image: facility.imageUrl || customerFacilityImage(facility.code),
         units: backendUnitTypes.filter(unitType => unitType.facilityId === facility.id).length,
         occupied: 0,
         revenue: 0,
         growth: 0,
         manager: '',
         status: facility.status === 'maintenance' ? 'maintenance' : 'active',
-        accessHours: '24/7',
+        accessHours: facility.accessHours || 'Chưa cập nhật',
         timezone: 'Asia/Ho_Chi_Minh',
       }))
     : isApiAuthenticated() ? [] : sharedFacilities, [backendFacilities, backendUnitTypes, availabilityByUnitType, sharedFacilities])
@@ -493,7 +493,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             widthM: unitType.widthM,
             heightM: unitType.heightM,
           },
-          doorDimensions: { widthM: 1.1, heightM: 2.2 },
+          doorDimensions: { widthM: 0, heightM: 0 },
           volumeM3: unitType.volumeM3,
           maxLoadKg: unitType.maxLoadKg,
           allowedGoods: [],
@@ -501,7 +501,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           price: vndToLegacyBase(unitType.monthlyPrice),
           deposit: vndToLegacyBase(unitType.securityDepositAmount),
           rackCount: unitType.rackCount,
-          climate: true,
+          climate: Boolean(facility?.climateControlled),
           status: (unitType.availableCount ?? 0) > 0 ? 'available' : 'reserved',
           reservedPeriods: [],
           version: 1,
@@ -521,7 +521,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         pricePerM3: unitType.volumeM3 > 0 ? vndToLegacyBase(unitType.monthlyPrice) / unitType.volumeM3 : 0,
         monthlyPrice: vndToLegacyBase(unitType.monthlyPrice),
         maxLoadKg: unitType.maxLoadKg,
-        descriptionVi: '',
+        descriptionVi: unitType.description || '',
         descriptionEn: '',
       }))
     : isApiAuthenticated() ? [] : sharedUnitTypes, [backendUnitTypes, sharedUnitTypes])
@@ -561,7 +561,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       const backendSpec = backendUnitTypes.find(item => item.id === unit.id)
-      const amenities = isApiAuthenticated() ? undefined : customerUnitAmenities(sizeCode)
+      const amenities = backendSpec ? {
+        aisleWidthM: backendSpec.aisleWidthM ?? 0,
+        trolley: backendSpec.trolleyType || 'Chưa cập nhật',
+        smallBoxCapacity: backendSpec.smallBoxCapacity ?? 0,
+        largeBoxCapacity: backendSpec.largeBoxCapacity ?? 0,
+      } : customerUnitAmenities(sizeCode)
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
       const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
       const lengthM = unit.dimensions?.lengthM ?? backendSpec?.lengthM ?? 0
@@ -589,8 +594,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         aisleWidthM,
         smallBoxCapacity,
         largeBoxCapacity,
-        trolley: amenities?.trolley ?? customerTrolleyVi(sizeCode),
-        trolleyDetail: amenities?.trolley ?? customerTrolleyVi(sizeCode),
+        trolley: customerTrolleyVi(sizeCode, amenities?.trolley),
+        trolleyDetail: customerTrolleyVi(sizeCode, amenities?.trolley),
         dimensions: { lengthM, widthM, heightM },
         volumeM3,
         maxLoadKg,

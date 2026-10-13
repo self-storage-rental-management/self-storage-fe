@@ -1838,6 +1838,47 @@ export default function BusinessApp({
     )
   }
 
+  const handleOpenFacilityDetails = async (facility: Facility) => {
+    if (!isApiAuthenticated()) {
+      setSelectedFacility(facility)
+      setViewFacilityModal(true)
+      return
+    }
+    try {
+      const page = await listAccessibleUnitTypes(facility.id, 0, 100)
+      const specs: FacilityCustomUnitSpec[] = page.data.map((type) => ({
+        id: type.id,
+        sizeCode: type.code,
+        name: type.name,
+        lengthM: Number(type.lengthM),
+        widthM: Number(type.widthM),
+        heightM: Number(type.heightM),
+        laneWidthM: Number(type.aisleWidthM || 0),
+        maxLoadKg: Number(type.maxLoadKg),
+        monthlyPrice: Number(type.monthlyPrice),
+        count: Number(type.totalCount || 0),
+        frameCount: type.rackCount,
+        frameDimensions: {
+          lengthM: Number(type.rackLengthM),
+          widthM: Number(type.rackWidthM),
+          heightM: Number(type.rackHeightM),
+        },
+      }))
+      const totalUnits = specs.reduce((sum, spec) => sum + spec.count, 0)
+      setSelectedFacility({
+        ...facility,
+        units: totalUnits,
+        available: page.data.reduce((sum, type) => sum + Number(type.availableCount || 0), 0),
+        unitCustomSpecs: specs,
+        unitDistribution: Object.fromEntries(specs.map((spec) => [spec.sizeCode, spec.count])),
+        unitPrices: Object.fromEntries(specs.map((spec) => [spec.sizeCode, spec.monthlyPrice])),
+      })
+      setViewFacilityModal(true)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể tải thông tin kho của cơ sở.')
+    }
+  }
+
   const getEffectiveTier = (tier: PricingTierItem) => {
     if (!tier) {
       return {
@@ -3808,11 +3849,7 @@ export default function BusinessApp({
                           variant="outline"
                           size="sm"
                           className="w-full justify-center text-xs font-semibold"
-                          onClick={() => {
-                            setSelectedFacility(cleanF)
-
-                            setViewFacilityModal(true)
-                          }}
+                          onClick={() => void handleOpenFacilityDetails(cleanF)}
                         >
                           {lang === "vi" ? "Chi tiết" : "Details"}
                         </Button>
