@@ -1,79 +1,177 @@
 import { useState, type FormEvent } from 'react'
-import { Button, Card } from '../../components/ui'
+import { Badge, Button, Card, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
+import type { ManagerPaymentHistoryItem, ManagerPaymentHistoryStatus, ManagerPaymentHistoryType } from '../../types/managerPaymentHistory'
 import ApiReadState from '../rental-api/ApiReadState'
 import ApiPager from '../rental-api/ApiPager'
-import RentalDetail from '../rental-api/RentalDetail'
-import { rentalMoney } from '../rental-api/presentation'
-import { loadManagerRentalFinancial, loadManagerRentalPage, managerApiIdentity, requireManagerRead } from './managerD1D5Api'
+import { loadManagerPaymentHistory, managerApiIdentity, requireManagerRead } from './managerD1D5Api'
 import { managerDisplayError } from './managerPresentation'
 import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
 
-export default function ManagerFinancialApiPanel({ setPage }: { setPage: (page: string) => void }) {
-  let actor: ApiActor
-  try { actor = requireManagerRead(getAuthenticatedActor(), 'rentals:read') }
-  catch (error) { return <Card className="p-5" role="alert">{managerDisplayError(error)}</Card> }
-  if (!singleManagerFacility(actor)) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
-  return <ManagerFinancialSession key={managerApiIdentity(actor)} actor={actor} setPage={setPage} />
+const typeLabels: Record<ManagerPaymentHistoryType, string> = {
+  RESERVATION_DEPOSIT: 'Cọc giữ chỗ',
+  RENTAL_BALANCE: 'Thanh toán nhận kho',
+  MONTHLY_RENT: 'Tiền thuê',
+  RENEWAL: 'Gia hạn',
+  DAMAGE_FEE: 'Phí phát sinh',
+  OTHER: 'Khoản thu khác',
+  RETURN_REFUND: 'Hoàn cọc trả kho',
+  RETURN_SETTLEMENT: 'Quyết toán trả kho',
 }
 
-function ManagerFinancialSession({ actor, setPage }: { actor: ApiActor; setPage: (page: string) => void }) {
-  const [page, setPageIndex] = useState(0)
-  const [search, setSearch] = useState('')
+const statusLabels: Record<ManagerPaymentHistoryStatus, string> = {
+  PENDING: 'Chờ thanh toán',
+  PROCESSING: 'Đang xử lý',
+  PAID: 'Đã thanh toán',
+  NOT_RECEIVED: 'Chưa nhận được tiền',
+  FAILED: 'Thất bại',
+  CANCELLED: 'Đã hủy',
+  REFUNDED: 'Đã hoàn tiền',
+}
+
+const statusVariants: Record<ManagerPaymentHistoryStatus, string> = {
+  PENDING: 'warning',
+  PROCESSING: 'info',
+  PAID: 'success',
+  NOT_RECEIVED: 'warning',
+  FAILED: 'error',
+  CANCELLED: 'muted',
+  REFUNDED: 'purple',
+}
+
+function paymentMethodLabel(method: string | null) {
+  if (!method) return 'Chưa ghi nhận'
+  const normalized = method.toUpperCase()
+  if (normalized === 'VNPAY') return 'VNPay'
+  if (normalized === 'CASH') return 'Tiền mặt'
+  if (normalized === 'BANK_TRANSFER') return 'Chuyển khoản'
+  return method
+}
+
+function money(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(amount)
+  } catch {
+    return `${amount.toLocaleString('vi-VN')} ${currency}`
+  }
+}
+
+function dateTime(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? 'Chưa ghi nhận thời gian'
+    : date.toLocaleString('vi-VN', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+}
+
+export default function ManagerFinancialApiPanel() {
+  let actor: ApiActor
+  try { actor = requireManagerRead(getAuthenticatedActor(), 'payments:read') }
+  catch (error) { return <Card className="p-5" role="alert">{managerDisplayError(error)}</Card> }
+  const facilityId = singleManagerFacility(actor)
+  if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
+  return <ManagerPaymentHistorySession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} />
+}
+
+function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; facilityId: string }) {
+  const [page, setPage] = useState(0)
   const [draft, setDraft] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const identity = managerApiIdentity(actor)
-  const read = useRentalApiResource(`${identity}:financial-list:${page}:${search}`, () =>
-    loadManagerRentalPage(actor, { page, size: 10, facilityId: singleManagerFacility(actor), search, sort: 'createdAt,desc' }))
+  const read = useRentalApiResource(`${identity}:payment-history:${facilityId}:${page}:${search}`, () =>
+    loadManagerPaymentHistory(actor, { facilityId, page, size: 10, search }))
   const result = !read.loading && !read.error ? read.data : undefined
+
   function submit(event: FormEvent) {
     event.preventDefault()
-    setSelectedId(null)
-    setPageIndex(0)
+    setPage(0)
     setSearch(draft.trim())
   }
-  return <div className="space-y-5">
-    <h2 className="text-2xl font-bold text-stone-900">Thông tin tài chính hồ sơ thuê</h2>
-    <Card className="space-y-3 p-5">
-      <h3 className="font-semibold">Lịch sử thanh toán</h3>
-      <p role="status" className="text-sm text-amber-800">Lịch sử các lần thu và hoàn tiền chưa được kết nối. Bạn có thể xem thông tin tài chính của từng hồ sơ bên dưới.</p>
-      <Button variant="outline" onClick={() => setPage('overdue-cases')}>Xem hồ sơ quá hạn</Button>
-    </Card>
-    <Card className="p-5 space-y-4">
-      <form onSubmit={submit} className="flex flex-wrap items-end gap-3" aria-label="Tìm hồ sơ thuê">
-        <label className="min-w-0 flex-1 space-y-1">
-          <span className="block text-sm font-medium">Tìm kiếm hồ sơ thuê</span>
-          <input className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-            value={draft} onChange={event => setDraft(event.target.value)} maxLength={200}
-            placeholder="Mã hồ sơ, mã gian kho hoặc tên khách hàng" />
-        </label>
-        <Button type="submit">Tìm kiếm</Button>
-      </form>
-      <ApiReadState loading={read.loading} error={read.error} retry={read.refresh} />
-      {result && <>
-        {result.data.length === 0 && <p role="status" className="text-sm text-stone-500">Không có dữ liệu</p>}
-        <div className="grid gap-3 lg:grid-cols-2">
-          {result.data.map(record => <div key={record.id} className="min-w-0 rounded-lg border border-stone-200 p-4 space-y-2">
-            <p className="font-semibold break-words">{record.customer.fullName}</p>
-            <p className="text-sm text-stone-600 break-words">{record.facility.name} - Gian {record.storageUnit.code}</p>
-            <p className="text-xs text-stone-500 break-all">Mã hồ sơ thuê: {record.id}</p>
-            <p className="text-sm">Đơn giá đã áp dụng: {rentalMoney(record.monthlyPrice, record.currency)}/tháng</p>
-            <Button variant="outline" size="sm" aria-pressed={selectedId === record.id} onClick={() => setSelectedId(record.id)}>Xem thông tin tài chính</Button>
-          </div>)}
-        </div>
-        <ApiPager pagination={result.pagination} onPage={next => { setSelectedId(null); setPageIndex(next) }} />
-        {selectedId && <ManagerRentalFinancialDetail key={`${identity}:${selectedId}`} actor={actor} rentalId={selectedId} />}
-      </>}
-    </Card>
-  </div>
-}
 
-export function ManagerRentalFinancialDetail({ actor, rentalId }: { actor: ApiActor; rentalId: string }) {
-  const read = useRentalApiResource(`${managerApiIdentity(actor)}:financial-detail:${rentalId}`, () => loadManagerRentalFinancial(actor, rentalId))
-  const detail = !read.loading && !read.error ? read.data : undefined
-  return <section aria-label="Chi tiết tài chính hồ sơ thuê" className="space-y-3">
+  function clearSearch() {
+    setDraft('')
+    setSearch('')
+    setPage(0)
+  }
+
+  return <div className="mx-auto w-full max-w-[1600px] space-y-6">
+    <header className="space-y-1">
+      <h1 className="text-3xl font-bold tracking-tight text-stone-900">Lịch sử thanh toán</h1>
+      <p className="text-sm text-stone-500">Các khoản thu, thanh toán gia hạn và hoàn tiền đã được ghi nhận tại cơ sở.</p>
+    </header>
+
+    <Card className="p-5">
+      <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-end" aria-label="Tìm giao dịch thanh toán">
+        <label className="min-w-0 flex-1 space-y-1.5">
+          <span className="block text-sm font-semibold text-stone-700">Tìm giao dịch</span>
+          <input
+            className="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-stone-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            maxLength={200}
+            placeholder="Mã giao dịch hoặc tên khách hàng"
+          />
+        </label>
+        <div className="flex gap-2">
+          <Button type="submit" disabled={read.loading}>Tìm kiếm</Button>
+          {(draft || search) && <Button type="button" variant="outline" onClick={clearSearch}>Xóa tìm kiếm</Button>}
+        </div>
+      </form>
+    </Card>
+
     <ApiReadState loading={read.loading} error={read.error} retry={read.refresh} />
-    {detail && <RentalDetail rental={detail} />}
-  </section>
+
+    {result && <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-5 py-4">
+        <div>
+          <h2 className="font-semibold text-stone-900">Giao dịch</h2>
+          <p className="mt-0.5 text-xs text-stone-500">{result.pagination.totalItems.toLocaleString('vi-VN')} giao dịch</p>
+        </div>
+        {search && <p className="text-xs text-stone-500">Kết quả tìm kiếm: <span className="font-medium text-stone-700">{search}</span></p>}
+      </div>
+
+      <Table tableClassName="min-w-[1120px]">
+        <Thead><tr>
+          <Th>Mã giao dịch</Th>
+          <Th>Khách hàng</Th>
+          <Th>Loại giao dịch</Th>
+          <Th>Phương thức</Th>
+          <Th className="text-right">Số tiền</Th>
+          <Th className="text-right">Đã hoàn</Th>
+          <Th>Trạng thái</Th>
+          <Th>Thời gian</Th>
+        </tr></Thead>
+        <Tbody>
+          {result.data.map((item: ManagerPaymentHistoryItem) => <Tr key={item.id}>
+            <Td className="max-w-[230px]">
+              <code className="block break-all text-xs font-semibold text-stone-800" title={item.transactionReference}>{item.transactionReference}</code>
+            </Td>
+            <Td className="min-w-[150px] font-medium text-stone-900">{item.customerName}</Td>
+            <Td><Badge variant={item.type === 'RETURN_REFUND' ? 'warning' : 'info'}>{typeLabels[item.type]}</Badge></Td>
+            <Td className="whitespace-nowrap">{paymentMethodLabel(item.paymentMethod)}</Td>
+            <Td className={`whitespace-nowrap text-right font-semibold tabular-nums ${item.type === 'RETURN_REFUND' ? 'text-rose-700' : 'text-stone-900'}`}>
+              {item.type === 'RETURN_REFUND' ? `−${money(item.amount, item.currency)}` : money(item.amount, item.currency)}
+            </Td>
+            <Td className="whitespace-nowrap text-right tabular-nums">
+              {item.refundedAmount > 0 ? <span className="font-medium text-emerald-700">{money(item.refundedAmount, item.currency)}</span> : <span className="text-stone-400">-</span>}
+            </Td>
+            <Td><Badge variant={statusVariants[item.status]}>{statusLabels[item.status]}</Badge></Td>
+            <Td className="whitespace-nowrap text-sm text-stone-600">{dateTime(item.occurredAt)}</Td>
+          </Tr>)}
+          {result.data.length === 0 && <tr>
+            <td colSpan={8} className="px-5 py-14 text-center">
+              <p className="font-medium text-stone-700">Không tìm thấy giao dịch phù hợp</p>
+              <p className="mt-1 text-sm text-stone-500">Thử mã giao dịch hoặc tên khách hàng khác.</p>
+            </td>
+          </tr>}
+        </Tbody>
+      </Table>
+      <div className="border-t border-stone-200 px-5 py-2">
+        <ApiPager pagination={result.pagination} onPage={setPage} disabled={read.loading} />
+      </div>
+    </Card>}
+  </div>
 }

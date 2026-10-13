@@ -78,7 +78,7 @@ export default function RenewalCoordinationPanel({
         Xác minh sự cố cần quyền quản lý gia hạn tại cơ sở.
       </p>
     )
-  const terminal = ["completed", "cancelled", "rejected", "payment_expired"].includes(status || "") || state.expectedVersion === null
+  const terminal = status === "completed" || state.expectedVersion === null
   // Do not discard an uncertain command: replay must keep its original key/body.
   if (terminal && !command.busy && !command.uncertain) return null
   const inputClass =

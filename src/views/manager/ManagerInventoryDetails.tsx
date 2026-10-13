@@ -58,14 +58,21 @@ export function InventoryRentalSummary({
   } catch (error) {
     return <ReadFailure error={error} retry={read.refresh} />
   }
-  if (!rentals.length)
+  if (!rentals.length) {
+    const message =
+      unit.status === "occupied"
+        ? "Gian đang sử dụng nhưng chưa tìm thấy hồ sơ thuê chưa kết thúc."
+        : "Không có hồ sơ thuê chưa kết thúc."
     return (
-      <p role="status">
-        {unit.status === "occupied"
-          ? "Gian đang sử dụng nhưng chưa tìm thấy hồ sơ thuê chưa kết thúc."
-          : "Không có hồ sơ thuê chưa kết thúc."}
+      <p
+        role="status"
+        className="line-clamp-2 text-sm leading-5 text-stone-600"
+        title={message}
+      >
+        {message}
       </p>
     )
+  }
   return (
     <div className="space-y-2">
       {rentals.length > 1 && (

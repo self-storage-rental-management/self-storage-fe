@@ -24,7 +24,6 @@ export default function CustomerPaymentHistory() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
-  const [revision, setRevision] = useState(0)
   const [receipt, setReceipt] = useState<HistoryEntry | null>(null)
   useEffect(() => {
     let disposed = false
@@ -52,7 +51,7 @@ export default function CustomerPaymentHistory() {
     return () => {
       disposed = true
     }
-  }, [revision])
+  }, [])
   const totalPaid = (records: HistoryEntry[]) => {
     const paid = records.filter((entry) => entry.status === "PAID")
     return paid.some((entry) => entry.amount === null)
@@ -63,7 +62,7 @@ export default function CustomerPaymentHistory() {
     entry.reservationPayment && entry.category === "deposit"
       ? paymentRecordLabel(entry.reservationPayment)
       : entry.status === "PAID"
-        ? "Đã ghi nhận thanh toán"
+        ? "Đã xác nhận"
         : ["FAILED", "CANCELLED"].includes(entry.status)
           ? "Thanh toán không thành công"
           : "Chưa ghi nhận tiền"
@@ -71,15 +70,6 @@ export default function CustomerPaymentHistory() {
     <div className="fade-in space-y-4">
       <SectionHeader
         title="Lịch Sử Thanh Toán & Quyết Toán"
-        action={
-          <Button
-            variant="outline"
-            disabled={loading}
-            onClick={() => setRevision((value) => value + 1)}
-          >
-            Làm mới
-          </Button>
-        }
       />
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="p-4">
@@ -114,7 +104,7 @@ export default function CustomerPaymentHistory() {
           role="alert"
           className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900"
         >
-          {warning} Nhấn làm mới để thử lại.
+          {warning} Tải lại trang để thử lại.
         </p>
       ))}
       <Card>
@@ -143,7 +133,7 @@ export default function CustomerPaymentHistory() {
                 <Td>
                   <div className="space-y-2">
                     <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (entry.status === "PAID" ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
-                    {entry.status === "PAID" && <div><Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>{entry.reservationPayment ? "Xem biên lai" : "Xem giao dịch"}</Button></div>}
+                    {entry.status === "PAID" && <div><Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button></div>}
                   </div>
                 </Td>
               </Tr>

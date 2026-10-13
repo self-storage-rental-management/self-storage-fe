@@ -1,8 +1,8 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
+import RenewalRiskNotice from "./RenewalRiskNotice"
 import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { useRenewalPayment } from "../../hooks/useRenewalPayment"
-import LedgerPanel from "../rental-support-integration/LedgerPanel"
 import type { RentalApiRole } from "../../types/rentalApi"
 import type { ReactNode } from "react"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
@@ -78,10 +78,14 @@ export default function RenewalDetail({
     role === "manager"
       ? []
       : [
+          ...(r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION"
+            ? [{ action: "ACCEPT_REVISED_QUOTE" as const, label: "Lấy báo giá và xác nhận lại" }]
+            : []),
           { action: "CANCEL", label: "Hủy yêu cầu" },
         ]
   return (
     <Card className="p-4 space-y-3">
+      {r.status !== "completed" && <RenewalRiskNotice renewalId={r.id} role={role} revision={r.version} />}
       <p className="break-all">Mã gia hạn: {r.id}</p>
       <p className="break-all">Hồ sơ thuê: {r.rentalId}</p>
       <p>
@@ -99,7 +103,7 @@ export default function RenewalDetail({
         Thời điểm gửi: {rentalDate(r.createdAt)}
       </p>
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
-      {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason}</p>}
+      {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền cọc đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
       {isManager ? (
         <section className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3" aria-labelledby="renewal-monitoring">
           <div>
@@ -198,12 +202,14 @@ export default function RenewalDetail({
         <p className="rounded bg-amber-50 p-3">
           Hồ sơ gia hạn đã được duyệt. Trạng thái này chưa xác nhận đã thanh toán hoặc hoàn tất ký, ngày kết thúc thuê chưa thay đổi.</p>
       )}
-      <LedgerPanel key={`${r.id}:${r.version}`} role={role} id={r.rentalId} />
       {r.version === null && (
         <p className="text-amber-700">
           Hồ sơ chưa đủ thông tin để xử lý, hiện chỉ có thể xem.</p>
       )}
-      {!isManager && r.disabledReasons.length > 0 && <p role="status" className="text-amber-700">
+      {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
+        Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
+      </p>}
+      {!isManager && r.disabledReasons.length > 0 && r.reviewState !== "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Chưa đủ điều kiện xử lý. Vui lòng kiểm tra hồ sơ hoặc liên hệ quản lý.
       </p>}
       {appointmentSelection}

@@ -10,6 +10,7 @@ import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useRenewalCommand } from "../../hooks/useRenewalCommand"
 import type { RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
 import ApiReadState from "../rental-api/ApiReadState"
+import RenewalRiskNotice from "../rental-api/RenewalRiskNotice"
 import {
   rentalDate,
   rentalError,
@@ -87,6 +88,7 @@ export default function CustomerRenewalRequestModal({
       size="lg"
     >
       <div className="space-y-4">
+        <RenewalRiskNotice rentalId={rentalId} />
         <ApiReadState {...options} retry={options.refresh} />
         {options.data && (
           <label className="block">
