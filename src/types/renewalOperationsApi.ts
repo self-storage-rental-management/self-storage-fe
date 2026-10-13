@@ -63,9 +63,6 @@ export type RenewalExceptionAction = "APPROVE_RESCHEDULE_BEFORE_CUTOFF" | "REQUE
 type Version = { expectedVersion: number }
 type Evidence = { evidenceFileIds: string[] }
 export type RenewalOperationCommand = {
-  action: "deposit"
-  body: Version
-} | {
   action: "appointment" | "reschedule"
   body: Version & {
     appointmentAt: string

@@ -406,7 +406,6 @@ export default function RenewalOperationsPanel({
                     >
                       {copy(operationLabels[action])}
                     </Button>
-                    {action === "deposit" && <p className="mt-1 text-xs text-amber-800">Thanh toán thử nghiệm - không thu tiền thật.</p>}
                     {reason && (
                       <p className="mt-1 text-xs text-stone-500">{copy(reason)}</p>
                     )}
@@ -564,8 +563,6 @@ function OperationForm({
     )
       throw new Error("Vui lòng chọn sự cố trong danh sách.")
     switch (action) {
-      case "deposit":
-        return { action, body: base }
       case "appointment":
       case "reschedule":
         return {

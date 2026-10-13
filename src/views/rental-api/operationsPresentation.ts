@@ -10,7 +10,6 @@ import type {
 } from "../../types/renewalOperationsApi"
 
 export const operationLabels: Record<RenewalOperationAction, string> = {
-  deposit: "Thanh toán gia hạn (tác vụ cũ)",
   appointment: "Đề nghị lịch ký",
   reschedule: "Đổi lịch ký",
   confirmation: "Xác nhận đề xuất ngoại lệ",
@@ -45,12 +44,6 @@ export const sourceLabels: Record<string, string> = {
     "Khoản phải thanh toán và phân bổ tiền",
 }
 const sources: Record<RenewalOperationAction, string[]> = {
-  deposit: [
-    "BO_SIGNING_POLICY",
-    "SERVICE_CALENDAR",
-    "RENEWAL_ACCOUNTING",
-    "SHARED_HOLD_RETURN_RECOVERY",
-  ],
   appointment: ["SERVICE_CALENDAR", "SHARED_HOLD_RETURN_RECOVERY"],
   reschedule: ["SERVICE_CALENDAR", "SHARED_HOLD_RETURN_RECOVERY"],
   confirmation: [
@@ -89,7 +82,6 @@ export function operationBlockedReason(
   now = Date.now(),
 ) {
   const owner = [
-    "deposit",
     "appointment",
     "reschedule",
     "confirmation",
@@ -123,8 +115,6 @@ export function operationBlockedReason(
   )
   if (missing.length)
     return `Chưa đủ thông tin: ${missing.map((ref) => sourceLabels[ref] || "Thông tin xử lý gia hạn").join(", ")}.`
-  if (action === "deposit" && s.phase !== "AWAITING_DEPOSIT")
-    return "Không ở bước thanh toán theo điều khoản gia hạn cũ."
   if (
     ["appointment", "reschedule", "arrival", "cash", "completion"].includes(
       action,
