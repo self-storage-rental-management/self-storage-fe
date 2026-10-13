@@ -350,7 +350,7 @@ const commandFields: Record<RenewalOperationCommand["action"], readonly string[]
   confirmation: ["decisionRef", "expectedVersion"],
   arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion"],
   incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
-  cash: ["payableStatementRef", "receiptReference", "received", "expectedVersion"],
+  cash: ["payableStatementRef", "receiptReference", "receiptFileId", "received", "expectedVersion"],
   completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion"],
   exception: ["incidentId", "action", "appointmentAt", "revisedDeadline", "reason", "evidenceFileIds", "expectedVersion"],
   refund: ["incidentId", "decision", "reason", "evidenceFileIds", "expectedVersion"],
@@ -407,6 +407,7 @@ export async function sendRenewalOperation(
   )
     throw new Error("Quyết định hoàn tiền không hợp lệ.")
   if (command.action === "cash") {
+    if (!isUuid(command.body.receiptFileId)) throw new Error("Cần chứng từ thu tiền mặt.")
     validateText(command.body.receiptReference, true, 100)
     if (command.body.received !== true)
       throw new Error("Cần xác nhận đã nhận tiền thật.")
