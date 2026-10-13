@@ -171,7 +171,7 @@ export default function RenewalDetail({
       {terms ? (
         <section className="rounded border border-stone-200 p-3 space-y-2">
           <h4 className="font-semibold">Điều khoản khách hàng đã chấp nhận</h4>
-          <p>Gói: {terms.pricingPackageCode}, {terms.rentalMonths} tháng</p>
+          <p>Gói gia hạn: {terms.rentalMonths} tháng</p>
           <p>Kỳ gia hạn: {rentalDate(terms.extensionStartDate)} → {rentalDate(terms.newEndDate)}</p>
           <dl className="grid gap-2 sm:grid-cols-2">
             <div><dt>Đơn giá/tháng</dt><dd>{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>

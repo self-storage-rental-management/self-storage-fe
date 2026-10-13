@@ -322,7 +322,6 @@ export function validateEvidence(ids: string[]) {
     )
 }
 const routes = {
-  deposit: ["customer", "POST", "simulated-payment"],
   appointment: ["customer", "POST", "appointment"],
   reschedule: ["customer", "PATCH", "appointment"],
   confirmation: ["customer", "POST", "exception-confirmations"],
@@ -334,7 +333,6 @@ const routes = {
   refund: ["manager", "POST", "refund-decisions"],
 } as const
 const eventKinds = {
-  deposit: "DEPOSIT",
   appointment: "APPOINTMENT",
   reschedule: "APPOINTMENT",
   confirmation: "CONFIRMATION",
@@ -347,7 +345,6 @@ const eventKinds = {
 } as const
 // Match RenewalOperationCommands exactly; UI/actor/money fields must never reach strict BE DTOs.
 const commandFields: Record<RenewalOperationCommand["action"], readonly string[]> = {
-  deposit: ["expectedVersion"],
   appointment: ["appointmentAt", "reason", "expectedVersion"],
   reschedule: ["appointmentAt", "reason", "expectedVersion"],
   confirmation: ["decisionRef", "expectedVersion"],
