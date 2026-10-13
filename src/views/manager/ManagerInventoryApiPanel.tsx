@@ -40,6 +40,7 @@ import {
   type InventoryFilters,
   type InventoryUnit,
 } from "./managerInventoryApi"
+import { createManagerUnitType } from "../../services/managerUnitTypeApi"
 
 const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
@@ -109,6 +110,7 @@ function InventoryRead({
   identity: string
   facilityId: string
 }) {
+  const [createOpen, setCreateOpen] = useState(false)
   const read = useRentalApiResource(identity, () =>
     loadManagerInventory(facilityId),
   )
@@ -131,16 +133,69 @@ function InventoryRead({
       </Card>
     )
   return read.data ? (
-    <InventoryContent
-      inventory={read.data}
-      rentals={rentals}
-      identity={identity}
-    />
+    <>
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>Thêm loại kho thực tế</Button>
+      </div>
+      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} />
+      <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
+    </>
   ) : (
     <Card className="p-5" role="alert">
       Chưa xác minh được dữ liệu gian kho.
     </Card>
   )
+}
+
+function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
+  open: boolean
+  facilityId: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [form, setForm] = useState({
+    code: '', name: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
+    rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
+    physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  const field = (key: keyof typeof form, label: string, type = 'text') => (
+    <label className="block text-sm font-medium text-stone-700">{label}
+      <input className={`${inputClass} mt-1`} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
+    </label>
+  )
+  const submit = async () => {
+    setBusy(true); setError(undefined)
+    try {
+      await createManagerUnitType(facilityId, {
+        code: form.code.trim().toUpperCase(), name: form.name.trim(),
+        lengthM: Number(form.lengthM), widthM: Number(form.widthM), heightM: Number(form.heightM),
+        maxLoadKg: Number(form.maxLoadKg), rackCount: Number(form.rackCount),
+        rackLengthM: Number(form.rackLengthM), rackWidthM: Number(form.rackWidthM), rackHeightM: Number(form.rackHeightM),
+        physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
+        imageUrl: form.imageUrl.trim() || null,
+      })
+      onCreated()
+    } catch (cause) {
+      setError(managerDisplayError(cause))
+    } finally { setBusy(false) }
+  }
+  return <Modal open={open} onClose={onClose} title="Khai báo loại kho thực tế" size="lg">
+    <div className="space-y-4">
+      <p className="text-sm text-stone-600">Thông tin kỹ thuật do Manager khai báo. Sau khi lưu, loại kho chuyển sang chờ BO định giá và công bố.</p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}
+        {field('physicalUnitCount', 'Số gian vật lý', 'number')}
+        {field('lengthM', 'Chiều dài (m)', 'number')}{field('widthM', 'Chiều rộng (m)', 'number')}{field('heightM', 'Chiều cao (m)', 'number')}
+        {field('maxLoadKg', 'Tải trọng tối đa (kg)', 'number')}{field('rackCount', 'Số khung', 'number')}
+        {field('rackLengthM', 'Dài khung (m)', 'number')}{field('rackWidthM', 'Rộng khung (m)', 'number')}{field('rackHeightM', 'Cao khung (m)', 'number')}
+        {field('floor', 'Tầng')}{field('zone', 'Khu vực')}{field('imageUrl', 'URL ảnh loại kho')}
+      </div>
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
+      <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : 'Lưu và chờ BO định giá'}</Button></div>
+    </div>
+  </Modal>
 }
 
 export function InventoryContent({
