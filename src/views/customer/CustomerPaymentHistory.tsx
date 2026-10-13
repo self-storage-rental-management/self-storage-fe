@@ -7,6 +7,7 @@ import {
   type HistoryEntry,
 } from "../../services/customerPaymentHistory"
 import ReservationReceipt from "./ReservationReceipt"
+import RenewalReceipt from "./RenewalReceipt"
 import {
   paymentRecordLabel,
 } from "./paymentPresentation"
@@ -150,7 +151,7 @@ export default function CustomerPaymentHistory() {
         title="Chi tiết thanh toán"
       >
         {receipt &&
-          (receipt.reservationPayment ? (
+          (receipt.renewalId ? <RenewalReceipt key={`${receipt.renewalId}:${receipt.id}`} id={receipt.renewalId} paymentId={receipt.id} /> : receipt.reservationPayment ? (
             <ReservationReceipt
               payment={receipt.reservationPayment}
               reservationCode={receipt.reference}

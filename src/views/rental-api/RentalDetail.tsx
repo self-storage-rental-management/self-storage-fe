@@ -1,5 +1,6 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import RenewalRiskNotice from "./RenewalRiskNotice"
+import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Button, Card } from "../../components/ui"
 import type { RentalApiDetail } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses, bookingPaymentVerification } from "../../services/rentalBookingEvidence"
@@ -68,6 +69,7 @@ export default function RentalDetail({
           </div>
         </dl>
       </Card>
+      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role} id={rental.id} />
       <Card className="p-4">
         <h3 className="font-bold mb-3">Theo dõi quá hạn</h3>
         <dl className="grid gap-3 sm:grid-cols-2">

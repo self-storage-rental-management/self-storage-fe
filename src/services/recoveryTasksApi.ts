@@ -40,3 +40,14 @@ export async function getRecoveryTask(role: RecoveryAudience, id: string, facili
   return readRentalEnvelope<RecoveryTask>(await apiRequest(`${path(role)}/${id}`),
     value => isRecoveryTask(value) && value.id === id && value.facilityId === facilityId)
 }
+export async function listAllRecoveryTasks(role: RecoveryAudience, facilityId: string) {
+  const tasks: RecoveryTask[] = []
+  let page = 0
+  let totalPages = 1
+  do {
+    const result = await listRecoveryTasks(role,facilityId,page++)
+    tasks.push(...result.data)
+    totalPages = result.pagination.totalPages
+  } while (page < totalPages)
+  return [...new Map(tasks.map(task => [task.id,task])).values()]
+}
