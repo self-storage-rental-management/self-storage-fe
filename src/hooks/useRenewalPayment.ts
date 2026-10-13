@@ -29,7 +29,7 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
   const attempt=useRef<{scope:string,key:string}|null>(null)
   const refresh=useRef(onChange);refresh.current=onChange
   const epoch=useRef(0)
-  const lastStatus=useRef<string|null>(null)
+  const lastStatus=useRef<{scope:string,signature:string}|null>(null)
   const [payment,setPayment]=useState<RenewalVnpayPaymentResponse|null>(null)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState<string|null>(null)
@@ -43,7 +43,8 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
   useEffect(()=>{
     let active=true
     let reading=false
-    setPayment(null);setError(null);setAppointmentSelected(false);lastStatus.current=null
+    setPayment(null);setError(null);setAppointmentSelected(false)
+    if(lastStatus.current?.scope!==scope)lastStatus.current=null
     if(!enabled)return
     const read=async()=>{
       if(lock.current||reading)return
@@ -58,8 +59,9 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
         setPayment(result);setError(null)
         if(result.paymentStatus==="FAILED"||result.paymentStatus==="CANCELLED")forget()
         const signature=`${result.paymentStatus}:${result.settlementStage}:${result.reconciliationRequired}`
-        if(signature!==lastStatus.current&&(lastStatus.current!==null||result.paymentStatus==="PAID"))refresh.current?.()
-        lastStatus.current=signature
+        const previous=lastStatus.current?.signature
+        lastStatus.current={scope,signature}
+        if(signature!==previous&&(previous!==undefined||result.paymentStatus==="PAID"))refresh.current?.()
       } catch(e) {
         if(!active||currentScope.current!==scope||request!==epoch.current)return
         if(e instanceof ApiClientError&&e.status===404)return

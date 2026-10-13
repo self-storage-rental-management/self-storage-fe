@@ -10,7 +10,7 @@ export function supportAssigneeLabel(ticket: SupportTicket, role: SupportRole) {
   return ticket.assignedStaffName?.trim() || "Đã phân công (chưa có tên nhân viên)"
 }
 export const supportStatusLabels = {
-  open: "Chờ nhân viên tiếp nhận",
+  open: "Chờ tiếp nhận",
   in_progress: "Đang xử lý",
   waiting_customer: "Chờ khách hàng bổ sung",
   resolved: "Đã xử lý - chờ xác nhận",

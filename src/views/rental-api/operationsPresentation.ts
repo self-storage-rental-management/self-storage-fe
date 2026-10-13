@@ -15,7 +15,7 @@ export const operationLabels: Record<RenewalOperationAction, string> = {
   confirmation: "Xác nhận đề xuất ngoại lệ",
   arrival: "Ghi nhận khách đến",
   incident: "Báo sự cố tại cơ sở",
-  cash: "Ghi nhận thu tiền mặt",
+  cash: "Ghi nhận thanh toán còn lại",
   completion: "Hoàn tất ký gia hạn",
   exception: "Xem xét ngoại lệ",
   refund: "Xem xét hoàn tiền",
@@ -165,7 +165,7 @@ export function operationValidationError(error: unknown) {
 // datetime-local is explicitly a Vietnam local time, independent of the browser's timezone.
 export function vietnamLocalInstant(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))
-    throw new Error("Chọn ngày và giờ tại Việt Nam.")
+    throw new Error("Chọn ngày và giờ.")
   const instant = new Date(`${value}:00+07:00`)
   if (!Number.isFinite(instant.getTime()))
     throw new Error("Ngày/giờ không hợp lệ.")
