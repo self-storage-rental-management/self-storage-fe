@@ -4,6 +4,7 @@ import type { CustomerUnitType } from './customerReservationApi'
 export interface ManagerUnitTypeInput {
   code: string
   name: string
+  description?: string | null
   lengthM: number
   widthM: number
   heightM: number
@@ -12,6 +13,10 @@ export interface ManagerUnitTypeInput {
   rackLengthM: number
   rackWidthM: number
   rackHeightM: number
+  aisleWidthM: number
+  trolleyType: string
+  smallBoxCapacity: number
+  largeBoxCapacity: number
   imageUrl?: string | null
   physicalUnitCount: number
   floor?: string | null

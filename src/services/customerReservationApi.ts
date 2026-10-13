@@ -32,6 +32,7 @@ export interface CustomerFacility {
   id: string
   code: string
   name: string
+  description?: string | null
   address: string
   city: string
   phone?: string | null
@@ -63,7 +64,12 @@ export interface CustomerUnitType {
   rackLengthM: number
   rackWidthM: number
   rackHeightM: number
+  aisleWidthM?: number | null
+  trolleyType?: string | null
+  smallBoxCapacity?: number | null
+  largeBoxCapacity?: number | null
   status: UnitTypeStatus | 'draft' | 'awaiting_pricing'
+  totalCount?: number | null
   availableCount: number | null
   createdAt: string
   updatedAt: string
