@@ -28,6 +28,7 @@ export interface HistoryEntry {
   status: string
   method: string | null
   reservationPayment?: ReservationPaymentResult
+  renewalId?: string
 }
 export function reservationPaymentCategory(
   payment: ReservationPaymentResult,
@@ -159,6 +160,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               return {
                 id: String(cash ? data.paymentId || data.reference : data.paymentRef),
                 reference: `Gia hạn ${renewal.id}`,
+                renewalId: renewal.id,
                 category: cash ? "renewalSigning" : "renewal",
                 amount: typeof data.amount === "number" ? data.amount : null,
                 currency: "VND",

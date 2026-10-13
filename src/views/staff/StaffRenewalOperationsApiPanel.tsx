@@ -5,7 +5,6 @@ import { listRenewalAppointments } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { RenewalAppointmentQuery } from "../../types/renewalOperationsApi"
 import ApiPager from "../rental-api/ApiPager"
-import RecoveryTasksPanel from "../rental-api/RecoveryTasksPanel"
 import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
@@ -35,23 +34,10 @@ function StaffRenewalWorkspace() {
   return <StaffWorkspaceTabs key={identity} identity={identity} />
 }
 function StaffWorkspaceTabs({ identity }: { identity: string }) {
-  const actor = getAuthenticatedActor()!
-  const facilities = Object.entries(actor.facilityScopes).filter(([, scope]) => scope === "OPERATE" || scope === "MANAGE")
-  const [tab, setTab] = useState<"signing" | "recovery">("signing")
-  const [locked, setLocked] = useState(false)
-  const [facilityId, setFacilityId] = useState(facilities[0]?.[0] ?? "")
+  const [, setLocked] = useState(false)
   return <div className="space-y-4">
     <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
-    <div className="flex gap-2" aria-label="Danh sách công việc">
-      <Button disabled={locked} variant={tab === "signing" ? "primary" : "outline"} aria-pressed={tab === "signing"} onClick={() => setTab("signing")}>Lịch ký gia hạn</Button>
-      <Button disabled={locked} variant={tab === "recovery" ? "primary" : "outline"} aria-pressed={tab === "recovery"} onClick={() => setTab("recovery")}>Thu hồi kho</Button>
-    </div>
-    {tab === "signing" ? <StaffSession identity={identity} onLocked={setLocked} /> : <>
-      {facilities.length > 1 && <label className="block max-w-md">Cơ sở<select className={operationsInputClass} value={facilityId} onChange={event => setFacilityId(event.target.value)}>
-        {facilities.map(([id]) => <option key={id} value={id}>{actor.facilityNames?.[id] || id}</option>)}
-      </select></label>}
-      <RecoveryTasksPanel role="staff" facilityId={facilityId} />
-    </>}
+    <StaffSession identity={identity} onLocked={setLocked} />
   </div>
 }
 function StaffSession({ identity, onLocked }: { identity: string; onLocked: (value: boolean) => void }) {
