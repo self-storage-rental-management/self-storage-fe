@@ -4,7 +4,7 @@ import { ApiClientError } from '../../services/apiClient'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { getManagerReportSummary, listManagerReportActivities } from '../../services/managerReportingApi'
-import { formatVnd } from '../../i18n/currency'
+import { formatVndAmount } from '../../i18n/currency'
 import { Badge, Button, Card, Input, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import ManagerPagination from './ManagerPagination'
 import { managerApiIdentity } from './managerD1D5Api'
@@ -14,10 +14,10 @@ import { managerFacilityNotice, singleManagerFacility } from './managerFacilityU
 const colors = ['#10b981', '#3b82f6', '#e9a12c', '#57534e', '#ef4444', '#8b5cf6']
 
 function ReportMetric({ title, value, detail }: { title: string; value: string | number; detail?: string }) {
-  return <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
-    <p className="min-h-10 text-sm font-medium leading-5 text-stone-500">{title}</p>
-    <p className="mt-1 min-w-0 break-words text-xl font-bold leading-tight tabular-nums text-stone-900 sm:text-2xl">{value}</p>
-    {detail && <p className="mt-2 text-xs leading-4 text-stone-500">{detail}</p>}
+  return <Card className="flex min-h-[164px] min-w-0 flex-col overflow-hidden p-5 sm:p-6">
+    <p className="text-sm font-medium leading-5 text-stone-500">{title}</p>
+    <p className="mt-3 min-w-0 whitespace-nowrap text-[clamp(1.125rem,1.8vw,1.875rem)] font-bold leading-tight tracking-tight tabular-nums text-stone-900">{value}</p>
+    <p className="mt-auto min-h-8 pt-3 text-xs leading-5 text-stone-500">{detail}</p>
   </Card>
 }
 
@@ -29,7 +29,7 @@ function authorizedManager(): ApiActor {
   return actor
 }
 
-export default function ManagerReportsApiPanel() {
+export default function ManagerReportsApiPanel({ overview = false }: { overview?: boolean } = {}) {
   let actor: ApiActor
   try {
     actor = authorizedManager()
@@ -38,10 +38,10 @@ export default function ManagerReportsApiPanel() {
   }
   const facilityId = singleManagerFacility(actor)
   if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
-  return <ManagerReportsSession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} />
+  return <ManagerReportsSession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} overview={overview} />
 }
 
-function ManagerReportsSession({ actor, facilityId }: { actor: ApiActor; facilityId: string }) {
+function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActor; facilityId: string; overview: boolean }) {
   const identity = managerApiIdentity(actor)
   const summaryRead = useRentalApiResource(`${identity}:report-summary:${facilityId}`, async () => {
     const response = await getManagerReportSummary(facilityId)
@@ -66,15 +66,15 @@ function ManagerReportsSession({ actor, facilityId }: { actor: ApiActor; facilit
   }
 
   return <div className="fade-in mx-auto w-full max-w-[1600px] space-y-5">
-    <SectionHeader eyebrow="Phân tích vận hành" title="Báo cáo cơ sở" subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu báo cáo lấy trực tiếp từ API cơ sở.'} />
+    {!overview && <SectionHeader eyebrow="Quản lý cơ sở" title="Báo cáo cơ sở" subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ API cơ sở.'} />}
     {summaryRead.loading ? <Card className="p-5" role="status">Đang tải báo cáo cơ sở...</Card> : summaryRead.error ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(summaryRead.error)}</p><Button variant="outline" onClick={summaryRead.refresh}>Thử lại</Button></Card> : summary ? <>
-      <div className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} />
-        <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVnd(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
-        <ReportMetric title="Tiền đã thu, đã xác minh" value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVnd(summary.collectedRevenue)} detail="Chỉ tính khoản thu có đủ bằng chứng đối soát" />
-        <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} />
-        <ReportMetric title="Lượt nhận kho tháng này" value={summary.monthCheckinsCount} />
-        <ReportMetric title="Yêu cầu trả kho đang mở" value={summary.openReturnsCount} />
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />
+        <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
+        <ReportMetric title="Tiền đã thu" value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)} detail="Chỉ tính khoản thu đã được đối soát" />
+        <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} detail="Hồ sơ đã qua ngày hết hạn thuê" />
+        <ReportMetric title="Nhận kho trong tháng" value={summary.monthCheckinsCount} detail="Số lượt nhận kho trong tháng này" />
+        <ReportMetric title="Yêu cầu trả kho" value={summary.openReturnsCount} detail="Các yêu cầu đang chờ hoàn tất" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
@@ -97,7 +97,7 @@ function ManagerReportsSession({ actor, facilityId }: { actor: ApiActor; facilit
 
     <Card>
       <div className="space-y-3 border-b border-stone-200 p-4">
-        <div><h3 className="font-bold">Nhật ký hoạt động cơ sở</h3><p className="text-xs text-stone-500">Dữ liệu lấy từ nhật ký API của cơ sở.</p></div>
+        <h3 className="font-bold">Nhật ký hoạt động cơ sở</h3>
         <form onSubmit={submitSearch} className="flex flex-wrap items-end gap-2">
           <label className="min-w-[240px] flex-1 text-sm font-medium text-stone-700">Tìm hoạt động<Input value={draftSearch} onChange={event => setDraftSearch(event.target.value)} placeholder="Hành động, mã hồ sơ hoặc ghi chú" className="mt-1" /></label>
           <Button type="submit">Tìm kiếm</Button>
