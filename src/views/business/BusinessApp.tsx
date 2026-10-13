@@ -77,7 +77,7 @@ import {
   FacilityImageManager,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
-import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, publishBusinessFacilityApi, updateBusinessFacilityApi } from "../../services/facilityApi"
+import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi } from "../../services/facilityApi"
 import { listAccessibleUnitTypes } from "../../services/customerReservationApi"
 import type { CustomerUnitType } from "../../services/customerReservationApi"
 import { isApiAuthenticated } from "../../services/authApi"
@@ -97,11 +97,9 @@ const RUNTIME_FEES = DEMO_DATA_ENABLED ? FEES : []
 
 const facilityStatusLabel = (status: Facility['status']) => ({
   setup: 'Đang thiết lập',
-  ready_to_publish: 'Sẵn sàng công bố',
   active: 'Đang hoạt động',
   maintenance: 'Bảo trì',
   inactive: 'Ngừng hoạt động',
-  coming_soon: 'Sắp hoạt động',
 }[status])
 
 const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
@@ -1840,16 +1838,6 @@ export default function BusinessApp({
     )
   }
 
-  const handlePublishFacility = async (facilityId: string) => {
-    try {
-      const published = await publishBusinessFacilityApi(facilityId)
-      updateFacility(facilityId, { status: published.status === 'maintenance' ? 'maintenance' : 'active' }, user)
-      showToast('Đã công bố cơ sở và các loại kho đủ điều kiện cho Customer.')
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Cơ sở chưa đủ điều kiện công bố.')
-    }
-  }
-
   const getEffectiveTier = (tier: PricingTierItem) => {
     if (!tier) {
       return {
@@ -3164,6 +3152,7 @@ export default function BusinessApp({
           imageUrl: formFacImage || null,
           climateControlled: formFacClimate,
           securityDescription: formFacSecurity.trim() || null,
+          status: formFacStatus,
         })
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Không thể cập nhật cơ sở trên backend.')
@@ -3595,8 +3584,8 @@ export default function BusinessApp({
                             </Badge>
                           </div>
 
-                          {/* Hàng 2: Địa chỉ + Quản lý + Hotline + Giờ mở cửa */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600">
+                          {/* Hàng 2: Địa chỉ + Quản lý + Hotline cơ sở + Giờ mở cửa */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs text-slate-600">
                             <div className="flex items-start gap-1.5">
                               <span className="truncate" title={cleanF.address}>
                                 {cleanF.address} ·{" "}
@@ -3607,8 +3596,10 @@ export default function BusinessApp({
                               <span>
                                 Quản lý:{" "}
                                 <b className="text-slate-800">{cleanF.manager}</b>{" "}
-                                {cleanF.phone ? `(${cleanF.phone})` : ""}
                               </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span>Hotline cơ sở: <b className="text-slate-800">{cleanF.phone || "Chưa cập nhật"}</b></span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span
@@ -3705,7 +3696,7 @@ export default function BusinessApp({
                                 )}
                                 {s + m + l + xl === 0 && (
                                   <span className="text-slate-400 italic text-[11px]">
-                                    {f.units} kho tiêu chuẩn
+                                    Chưa khai báo loại kho
                                   </span>
                                 )}
                               </div>
@@ -3760,7 +3751,7 @@ export default function BusinessApp({
                                 {lang === "vi" ? "Cước cơ sở từ" : "Base Rate"}
                               </p>
                               <p className="font-bold text-emerald-800 text-sm">
-                                {f.price}/tháng
+                                {totalUnitsInFac > 0 ? `${f.price}/tháng` : "Chưa cấu hình"}
                               </p>
                               <p className="text-[10px] text-slate-500">
                                 Kỳ thuê từ 1 tháng
@@ -3833,16 +3824,6 @@ export default function BusinessApp({
                         >
                           {lang === "vi" ? "Chỉnh sửa" : "Edit"}
                         </Button>
-                        {isApiAuthenticated() && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="w-full justify-center text-xs font-semibold"
-                            onClick={() => void handlePublishFacility(cleanF.id)}
-                          >
-                            Công bố
-                          </Button>
-                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -7394,7 +7375,7 @@ export default function BusinessApp({
                         onChangeAccessHours={setFormFacAccessHours}
                         status={formFacStatus}
                         onChangeStatus={setFormFacStatus}
-                        statusReadOnly={isApiAuthenticated()}
+                        statusReadOnly={false}
                         lang={lang}
                       />
 
@@ -7648,6 +7629,11 @@ export default function BusinessApp({
                 10,
               ) / 10
 
+            const hasWarehouseInfo =
+              facilityUnits.length > 0 ||
+              (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
+              Object.values(selectedFacility.unitDistribution || {}).some((count) => (count || 0) > 0)
+
             return (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
                 {/* Ảnh kho bãi của cơ sở */}
@@ -7729,7 +7715,7 @@ export default function BusinessApp({
                 </div>
 
                 {/* Thông số kỹ thuật & Vận hành */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
                       Người quản lý:
@@ -7737,9 +7723,12 @@ export default function BusinessApp({
                     <b className="text-slate-800 block text-sm">
                       {selectedFacility.manager}
                     </b>
-                    <span className="text-slate-500">
-                      {selectedFacility.phone || "1900 6868"}
-                    </span>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
+                    <span className="text-slate-400 block mb-0.5">Hotline cơ sở:</span>
+                    <b className="text-slate-800 block text-sm">
+                      {selectedFacility.phone || "Chưa cập nhật"}
+                    </b>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
@@ -7761,7 +7750,7 @@ export default function BusinessApp({
                       {formatCurrency(getFacilityActualRevenue(selectedFacility))}
                     </b>
                     <span className="text-slate-500">
-                      {selectedFacility.price}/tháng từ
+                      {hasWarehouseInfo ? `${selectedFacility.price}/tháng từ` : "Chưa cấu hình giá"}
                     </span>
                   </div>
                   <div className="bg-amber-50/70 p-3 rounded-lg border border-amber-200/80">
@@ -7769,7 +7758,7 @@ export default function BusinessApp({
                       {lang === "vi" ? "Tải trọng sàn:" : "Floor Load Limit:"}
                     </span>
                     <b className="text-amber-950 block text-sm font-bold font-mono">
-                      {totalFacilityLoadTon} tấn
+                      {hasWarehouseInfo ? `${totalFacilityLoadTon} tấn` : "Chưa cấu hình"}
                     </b>
                     <span className="text-amber-700 font-medium text-[11px]">
                       {lang === "vi" ? "Thiết kế chịu tải" : "Max floor load"}
@@ -7782,13 +7771,11 @@ export default function BusinessApp({
                     <b className="text-slate-800 block text-xs">
                       {selectedFacility.accessHours || "06:00 - 22:00"}
                     </b>
-                    <span className="text-slate-500">
-                      Kho tự quản tiêu chuẩn
-                    </span>
                   </div>
                 </div>
 
                 {/* Bảng phân bổ các gian kho thuộc cơ sở (S, M, L, XL) */}
+                {hasWarehouseInfo ? (
                 <div className="border border-stone-200 rounded-xl overflow-hidden">
                   <div className="bg-stone-50 px-3 py-2 border-b border-stone-200 flex justify-between items-center text-xs">
                     <span className="font-bold text-slate-800">
@@ -7831,10 +7818,6 @@ export default function BusinessApp({
                               new Set<string>([
                                 ...Object.keys(selectedFacility.unitDistribution || {}),
                                 ...facilityUnits.map((u) => (u as any).size || (u.type === "Small" ? "S" : u.type === "Medium" ? "M" : u.type === "Large" ? "L" : u.type === "Extra Large" ? "XL" : (u as any).sizeCode || "S")),
-                                "S",
-                                "M",
-                                "L",
-                                "XL",
                               ]),
                             )
 
@@ -8013,6 +7996,14 @@ export default function BusinessApp({
                     </tfoot>
                   </table>
                 </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-center">
+                    <p className="font-semibold text-stone-700">Chưa có thông tin loại kho</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      Manager của cơ sở chưa khai báo loại kho và số lượng kho thực tế.
+                    </p>
+                  </div>
+                )}
 
                 {/* Khối chính sách đang áp dụng tại cơ sở này */}
                 {(() => {
