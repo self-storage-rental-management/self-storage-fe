@@ -240,8 +240,8 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
 export interface FacilityOperationsProps {
   accessHours: string
   onChangeAccessHours: (hours: string) => void
-  status: 'setup' | 'ready_to_publish' | 'active' | 'maintenance' | 'inactive' | 'coming_soon'
-  onChangeStatus: (status: 'setup' | 'ready_to_publish' | 'active' | 'maintenance' | 'inactive' | 'coming_soon') => void
+  status: 'setup' | 'active' | 'maintenance' | 'inactive'
+  onChangeStatus: (status: 'setup' | 'active' | 'maintenance' | 'inactive') => void
   statusReadOnly?: boolean
   lang?: 'vi' | 'en'
 }
@@ -279,10 +279,10 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
       <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
         {lang === 'vi' ? 'Thông số vận hành' : 'Operation Settings'}
       </h4>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
         {/* Khung giờ ra vào / Giờ mở cửa */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-stone-700">
+        <div>
+          <label className="block text-xs font-semibold text-stone-700 mb-1">
             {lang === 'vi' ? 'Khung giờ ra vào / Giờ mở cửa' : 'Access Hours'}
           </label>
 
@@ -296,11 +296,11 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
           />
 
           {/* Bộ chọn nhanh giờ mở - đóng cửa */}
-          <div className="flex items-center gap-1.5 text-[11px] text-stone-500">
-            <span>Chọn nhanh:</span>
+          <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-[11px] text-stone-500">
+            <span className="whitespace-nowrap">Chọn nhanh:</span>
             <input
               type="time"
-              className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-stone-50 text-stone-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="min-w-0 w-full border border-stone-200 rounded px-2 py-1 text-xs bg-stone-50 text-stone-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
               value={openTime}
               onChange={(e) => handleTimeChange(e.target.value, closeTime)}
               aria-label="Giờ mở cửa"
@@ -308,7 +308,7 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
             <span className="text-stone-400">đến</span>
             <input
               type="time"
-              className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-stone-50 text-stone-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="min-w-0 w-full border border-stone-200 rounded px-2 py-1 text-xs bg-stone-50 text-stone-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
               value={closeTime}
               onChange={(e) => handleTimeChange(openTime, e.target.value)}
               aria-label="Giờ đóng cửa"
@@ -328,19 +328,15 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
             onChange={(e) => onChangeStatus(e.target.value as FacilityOperationsProps['status'])}
           >
             <option value="setup">Đang thiết lập — chưa có loại kho/giá</option>
-            <option value="ready_to_publish">Sẵn sàng công bố</option>
             <option value="active">Đang hoạt động</option>
             <option value="maintenance">Bảo trì</option>
             <option value="inactive">Ngừng hoạt động</option>
-            <option value="coming_soon">Sắp hoạt động</option>
           </select>
           <p className="text-[10px] text-stone-500 mt-1">
             {status === 'setup' ? '● Cơ sở mới tạo, chưa được công bố cho Customer'
-              : status === 'ready_to_publish' ? '● Đã đủ cấu hình và đang chờ BO công bố'
-                : status === 'active' ? '● Cơ sở đã công bố và sẵn sàng nhận khách'
-                  : status === 'maintenance' ? '▲ Cơ sở đang tạm dừng vận hành / bảo dưỡng'
-                    : status === 'coming_soon' ? '● Cơ sở dự kiến sắp hoạt động'
-                      : '● Cơ sở đã ngừng hoạt động'}
+              : status === 'active' ? '● Cơ sở đã công bố và sẵn sàng nhận khách'
+                : status === 'maintenance' ? '▲ Cơ sở đang tạm dừng vận hành / bảo dưỡng'
+                  : '● Cơ sở đã ngừng hoạt động'}
           </p>
         </div>
       </div>

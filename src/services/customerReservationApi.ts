@@ -1,6 +1,6 @@
 import { apiDownload, apiRequest } from './apiClient'
 
-export type FacilityStatus = 'setup' | 'ready_to_publish' | 'active' | 'maintenance' | 'inactive' | 'coming_soon'
+export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
 export type ReservationStatus =
