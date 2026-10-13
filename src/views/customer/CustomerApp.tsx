@@ -64,8 +64,6 @@ type CustomerCatalogUnit = StorageUnit & {
   rackCount: number
   rackDimensions: string
   aisleWidthM: number
-  doorWidthM: number
-  doorHeightM: number
   smallBoxCapacity: number
   largeBoxCapacity: number
   trolley: string
@@ -77,6 +75,15 @@ type CustomerConfirmation = {
   confirmLabel: string
   tone?: 'danger' | 'primary'
   onConfirm: () => void
+}
+
+const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) => {
+  const seen = new Set<number>()
+  return packages.filter(pkg => {
+    if (seen.has(pkg.rentalMonths)) return false
+    seen.add(pkg.rentalMonths)
+    return true
+  })
 }
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
   const code = (sizeCode || '').toUpperCase()
@@ -554,7 +561,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       const backendSpec = backendUnitTypes.find(item => item.id === unit.id)
-      const amenities = customerUnitAmenities(sizeCode)
+      const amenities = isApiAuthenticated() ? undefined : customerUnitAmenities(sizeCode)
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
       const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
       const lengthM = unit.dimensions?.lengthM ?? backendSpec?.lengthM ?? 0
@@ -563,14 +570,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const areaM2 = unit.areaM2 || (lengthM * widthM)
       const volumeM3 = unit.volumeM3 || (lengthM * widthM * heightM)
       const aisleWidthM = amenities?.aisleWidthM ?? 0
-      const doorWidthM = unit.doorDimensions?.widthM ?? 0
-      const doorHeightM = unit.doorDimensions?.heightM ?? 0
       const maxLoadKg = unit.maxLoadKg || backendSpec?.maxLoadKg || 0
       const price = unit.price
 
       const rackCount = backendSpec?.rackCount ?? (unit as any).rackCount ?? 0
-      const smallBoxCapacity = amenities?.smallBoxCapacity ?? Math.floor(volumeM3 * 8)
-      const largeBoxCapacity = amenities?.largeBoxCapacity ?? Math.floor(volumeM3 * 2.5)
+      const smallBoxCapacity = amenities?.smallBoxCapacity ?? 0
+      const largeBoxCapacity = amenities?.largeBoxCapacity ?? 0
 
       return {
         ...unit,
@@ -582,23 +587,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           ? `${backendSpec.rackLengthM}×${backendSpec.rackWidthM}×${backendSpec.rackHeightM} m`
           : 'Chưa có dữ liệu',
         aisleWidthM,
-        doorWidthM,
-        doorHeightM,
         smallBoxCapacity,
         largeBoxCapacity,
         trolley: amenities?.trolley ?? customerTrolleyVi(sizeCode),
         trolleyDetail: amenities?.trolley ?? customerTrolleyVi(sizeCode),
         dimensions: { lengthM, widthM, heightM },
-        doorDimensions: { widthM: doorWidthM, heightM: doorHeightM },
         volumeM3,
         maxLoadKg,
         price,
-        deposit: unit.deposit || price,
+        deposit: backendSpec?.securityDepositAmount ?? unit.deposit ?? 0,
         rentalPackages: isApiAuthenticated()
           ? []
           : unit.rentalPackages || fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages || generateDefaultRentalPackages(fac?.id || unit.facilityId, sizeCode, price),
-        allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
-        prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+        allowedGoods: isApiAuthenticated() ? [] : (unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử']),
+        prohibitedGoods: isApiAuthenticated() ? [] : (unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống']),
       }
     })
   }, [units, facilities, backendUnitTypes])
@@ -868,10 +870,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     void listReservationRentalPackages(selectedTarget.facility.id, earliestCheckInDate)
       .then(packages => {
         if (cancelled) return
-        setBackendRentalPackages(packages)
-        const selected = packages.find(item => item.code === selectedPackageId)
-          || packages.find(item => item.rentalMonths === 3)
-          || packages[0]
+        const uniquePackages = uniqueRentalPackagesByDuration(packages)
+        setBackendRentalPackages(uniquePackages)
+        const selected = uniquePackages.find(item => item.code === selectedPackageId)
+          || uniquePackages.find(item => item.rentalMonths === 3)
+          || uniquePackages[0]
         if (selected) {
           setSelectedPackageId(selected.code)
           setRentalMonths(selected.rentalMonths)
@@ -2945,6 +2948,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           if (isApiAuthenticated() && backendSpec && selectedTarget) return <CustomerUnitDetails
             unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
             availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
+            rentalPackages={backendRentalPackages}
             onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
           const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 

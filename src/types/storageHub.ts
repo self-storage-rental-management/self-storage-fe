@@ -130,7 +130,7 @@ export interface Facility {
   growth: number
   manager: string
   phone?: string
-  status: 'active' | 'maintenance'
+  status: 'setup' | 'ready_to_publish' | 'active' | 'maintenance' | 'inactive' | 'coming_soon'
   accessHours: string
   timezone: string
   unitDistribution?: FacilityUnitDistribution
