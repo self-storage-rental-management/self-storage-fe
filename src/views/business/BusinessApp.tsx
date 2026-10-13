@@ -56,7 +56,7 @@ import {
   FEES,
 } from "../../data/demoDatabase"
 
-import { formatVnd } from "../../i18n/currency"
+import { formatVnd, formatVndAmount } from "../../i18n/currency"
 
 import { exportRevenueExcel } from "../../utils/excelExport"
 
@@ -398,6 +398,24 @@ export default function BusinessApp({
   // Local/demo data may use the facility code as its id. Keep the canonical
   // backend UUID by code so edit requests always target the persisted record.
   const [backendFacilityIdsByCode, setBackendFacilityIdsByCode] = useState<Record<string, string>>({})
+  const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null }>>({})
+  const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let mounted = true
+    const refresh = async () => {
+      try {
+        const facilities = await listAllFacilitiesApi()
+        if (mounted) setBackendFacilityStats(Object.fromEntries(facilities.map(facility => [facility.code.trim().toUpperCase(), {
+          total: facility.totalUnits ?? 0, occupied: facility.occupiedUnits ?? 0, price: facility.minimumMonthlyPrice ?? null,
+        }])))
+      } catch { /* Preserve the last successful snapshot while reconnecting. */ }
+    }
+    const timer = window.setInterval(() => void refresh(), 30000)
+    window.addEventListener('focus', refresh)
+    return () => { mounted = false; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -407,6 +425,11 @@ export default function BusinessApp({
         setBackendFacilityIdsByCode(Object.fromEntries(
           backendFacs.map((facility) => [facility.code.trim().toUpperCase(), facility.id]),
         ))
+        setBackendFacilityStats(Object.fromEntries(backendFacs.map(facility => [facility.code.trim().toUpperCase(), {
+          total: facility.totalUnits ?? 0,
+          occupied: facility.occupiedUnits ?? 0,
+          price: facility.minimumMonthlyPrice ?? null,
+        }])))
         backendFacs.forEach((bf) => {
           const cleanBf = sanitizeFacilityStrings(bf)
           const matching = facilitiesList.find(
@@ -479,6 +502,8 @@ export default function BusinessApp({
   const getFacilityOccupiedCount = useCallback(
     (fac: any) => {
       if (!fac) return 0
+      const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
+      if (stats) return stats.occupied
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
@@ -490,18 +515,20 @@ export default function BusinessApp({
       }
       return fac.occupied || 0
     },
-    [unitsList],
+    [unitsList, backendFacilityStats],
   )
 
   const getFacilityTotalUnits = useCallback(
     (fac: any) => {
       if (!fac) return 0
+      const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
+      if (stats) return stats.total
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
       return facUnits.length > 0 ? facUnits.length : fac.units || 0
     },
-    [unitsList],
+    [unitsList, backendFacilityStats],
   )
 
   const getFacilityAvailableCount = useCallback(
@@ -1846,6 +1873,9 @@ export default function BusinessApp({
     }
     try {
       const page = await listAccessibleUnitTypes(facility.id, 0, 100)
+      setBackendDetailCounts(Object.fromEntries(page.data.map(type => [type.code, {
+        total: type.totalCount ?? 0, occupied: type.occupiedCount ?? 0, available: type.availableCount ?? 0,
+      }])))
       const specs: FacilityCustomUnitSpec[] = page.data.map((type) => ({
         id: type.id,
         sizeCode: type.code,
@@ -1868,6 +1898,7 @@ export default function BusinessApp({
       setSelectedFacility({
         ...facility,
         units: totalUnits,
+        occupied: backendFacilityStats[(facility.code || '').trim().toUpperCase()]?.occupied ?? facility.occupied,
         available: page.data.reduce((sum, type) => sum + Number(type.availableCount || 0), 0),
         unitCustomSpecs: specs,
         unitDistribution: Object.fromEntries(specs.map((spec) => [spec.sizeCode, spec.count])),
@@ -3792,7 +3823,9 @@ export default function BusinessApp({
                                 {lang === "vi" ? "Cước cơ sở từ" : "Base Rate"}
                               </p>
                               <p className="font-bold text-emerald-800 text-sm">
-                                {totalUnitsInFac > 0 ? `${f.price}/tháng` : "Chưa cấu hình"}
+                                {backendFacilityStats[facCode.trim().toUpperCase()]?.price != null
+                                  ? `${formatVndAmount(backendFacilityStats[facCode.trim().toUpperCase()].price!)}/tháng`
+                                  : "Chưa cấu hình"}
                               </p>
                               <p className="text-[10px] text-slate-500">
                                 Kỳ thuê từ 1 tháng
@@ -7878,17 +7911,17 @@ export default function BusinessApp({
                           )
 
                           const totalSize =
-                            facilityUnits.length > 0
+                            backendDetailCounts[size]?.total ?? (facilityUnits.length > 0
                               ? unitsOfSize.length
-                              : (selectedFacility.unitDistribution?.[size] ?? customSpec?.count ?? 0)
+                              : (selectedFacility.unitDistribution?.[size] ?? customSpec?.count ?? 0))
 
-                          const occupiedSize = unitsOfSize.filter(
+                          const occupiedSize = backendDetailCounts[size]?.occupied ?? unitsOfSize.filter(
                             (u) => u.status === "occupied" || (u.status as string) === "rented",
                           ).length
 
                           const availableSize =
-                            unitsOfSize.filter((u) => u.status === "available").length ||
-                            Math.max(0, totalSize - occupiedSize)
+                            backendDetailCounts[size]?.available ?? (unitsOfSize.filter((u) => u.status === "available").length ||
+                            Math.max(0, totalSize - occupiedSize))
 
                           const loadKg =
                             customSpec?.maxLoadKg ??

@@ -41,6 +41,10 @@ export interface CustomerFacility {
   climateControlled?: boolean
   securityDescription?: string | null
   managerNames?: string[]
+  totalUnits?: number
+  availableUnits?: number
+  occupiedUnits?: number
+  minimumMonthlyPrice?: number | null
   status: FacilityStatus
   createdAt: string
   updatedAt: string
@@ -70,6 +74,7 @@ export interface CustomerUnitType {
   largeBoxCapacity?: number | null
   status: UnitTypeStatus | 'draft' | 'awaiting_pricing'
   totalCount?: number | null
+  occupiedCount?: number
   availableCount: number | null
   createdAt: string
   updatedAt: string
