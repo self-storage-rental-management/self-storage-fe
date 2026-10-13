@@ -41,7 +41,7 @@ export async function listAllFacilitiesApi(): Promise<CustomerFacility[]> {
 
 export async function updateBusinessFacilityApi(
   facilityId: string,
-  input: Pick<CreateFacilityInput, 'name' | 'address' | 'city' | 'phone' | 'accessHours' | 'imageUrl' | 'climateControlled' | 'securityDescription'>,
+  input: Pick<CreateFacilityInput, 'name' | 'address' | 'city' | 'phone' | 'accessHours' | 'imageUrl' | 'climateControlled' | 'securityDescription' | 'status'>,
 ): Promise<CustomerFacility> {
   const response = await apiRequest<{ data: CustomerFacility; correlationId: string }>(
     `/api/business/facilities/${encodeURIComponent(facilityId)}`,
