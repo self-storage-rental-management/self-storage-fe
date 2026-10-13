@@ -20,7 +20,6 @@ import type {
 } from "../../types/overdueApi"
 import ApiReadState from "../rental-api/ApiReadState"
 import ApiPager from "../rental-api/ApiPager"
-import RecoveryTasksPanel from "../rental-api/RecoveryTasksPanel"
 import { operationsInputClass } from "../rental-api/RenewalOperationsPanel"
 import { sourceLabels } from "../rental-api/operationsPresentation"
 import { managerDisplayText, managerDisplayError } from './managerPresentation'
@@ -148,15 +147,10 @@ export default function ManagerOverdueApiPanel() {
   return <OverdueWorkspace key={identity} identity={identity} facilityId={facilityId} />
 }
 function OverdueWorkspace({ identity, facilityId }: { identity: string; facilityId: string }) {
-  const [tab, setTab] = useState<"overdue" | "recovery">("overdue")
-  const [locked, setLocked] = useState(false)
+  const [, setLocked] = useState(false)
   return <div className="space-y-4">
     <h1 className="text-2xl font-bold">Theo dõi quá hạn</h1>
-    <div className="flex gap-2" aria-label="Danh sách theo dõi">
-      <Button disabled={locked} variant={tab === "overdue" ? "primary" : "outline"} aria-pressed={tab === "overdue"} onClick={() => setTab("overdue")}>Hồ sơ quá hạn</Button>
-      <Button disabled={locked} variant={tab === "recovery" ? "primary" : "outline"} aria-pressed={tab === "recovery"} onClick={() => setTab("recovery")}>Thu hồi kho</Button>
-    </div>
-    {tab === "overdue" ? <OverdueSession identity={identity} facilityId={facilityId} onLocked={setLocked} /> : <RecoveryTasksPanel role="manager" facilityId={facilityId} />}
+    <OverdueSession identity={identity} facilityId={facilityId} onLocked={setLocked} />
   </div>
 }
 function OverdueSession({ identity, facilityId, onLocked }: {
