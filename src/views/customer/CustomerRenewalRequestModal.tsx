@@ -104,7 +104,7 @@ export default function CustomerRenewalRequestModal({
               <option value="">Chọn gói gia hạn</option>
               {options.data.map((o) => (
                 <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
-                  {o.rentalMonths} tháng - {o.pricingPackageCode}
+                  {o.pricingPackageName?.trim() || `Gói thuê ${o.rentalMonths} tháng`}
                 </option>
               ))}
             </select>
