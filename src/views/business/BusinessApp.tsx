@@ -196,6 +196,8 @@ export interface PolicyItem {
   scopeType?: 'all' | 'specific'
 
   facilityIds?: string[]
+
+  category?: 'billing' | 'climate' | 'prohibited' | 'maintenance'
 }
 
 export interface DurationDiscountItem {
@@ -598,7 +600,10 @@ export default function BusinessApp({
   const [policyFacilityFilter, setPolicyFacilityFilter] = useState<string>('all')
   const [policyCategoryFilter, setPolicyCategoryFilter] = useState<'all' | 'billing' | 'climate' | 'prohibited' | 'maintenance'>('all')
 
+  const [policyFormCategory, setPolicyFormCategory] = useState<'billing' | 'climate' | 'prohibited' | 'maintenance'>('billing')
+
   const getPolicyCategory = (p: PolicyItem): 'billing' | 'climate' | 'prohibited' | 'maintenance' => {
+    if (p.category) return p.category
     const id = (p.id || '').toLowerCase()
     const name = (p.name || '').toLowerCase()
     if (id === 'pol-6' || id === 'pol-7' || name.includes('climate') || name.includes('độ ẩm') || name.includes('moisture')) return 'climate'
@@ -647,6 +652,8 @@ export default function BusinessApp({
     setPolicyFormName("")
 
     setPolicyFormValue("")
+
+    setPolicyFormCategory(policyCategoryFilter === 'all' ? 'billing' : policyCategoryFilter)
 
     setPolicyFormScopeType("all")
 
@@ -711,6 +718,8 @@ export default function BusinessApp({
 
       value: policyFormValue.trim(),
 
+      category: policyFormCategory,
+
       scope: computedScope,
 
       scopeType: policyFormScopeType,
@@ -724,9 +733,14 @@ export default function BusinessApp({
       lastUpdated: new Date().toLocaleDateString("vi-VN"),
     }
 
-    const next = [...policiesList, newPolicy]
+    const next = [newPolicy, ...policiesList]
 
     savePolicies(next)
+
+    // Tự động chuyển bộ lọc sang nhóm của chính sách mới (hoặc 'all') để chính sách vừa tạo hiển thị ngay trước mắt
+    if (policyCategoryFilter !== 'all' && policyCategoryFilter !== policyFormCategory) {
+      setPolicyCategoryFilter(policyFormCategory)
+    }
 
     // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
     const lowerName = newPolicy.name.toLowerCase()
@@ -771,6 +785,7 @@ export default function BusinessApp({
 
     setPolicyFormName(displayName)
     setPolicyFormValue(policy.value)
+    setPolicyFormCategory(policy.category || getPolicyCategory(policy))
 
     let detectedScopeType: 'all' | 'specific' = 'all'
     let detectedFacilityIds: string[] = []
@@ -847,6 +862,8 @@ export default function BusinessApp({
           name: policyFormName.trim() || p.name,
 
           value: policyFormValue.trim(),
+
+          category: policyFormCategory,
 
           scope: computedScope,
 
@@ -3731,8 +3748,8 @@ export default function BusinessApp({
             }
             subtitle={
               lang === "vi"
-                ? "Các điều khoản, gói kỳ hạn ưu đãi và quy chế thương mại áp dụng thống nhất toàn hệ thống"
-                : "Company-wide rental terms, duration packages, and conditions"
+                ? "Các điều khoản, quy chuẩn vận hành và quy chế thương mại áp dụng thống nhất toàn hệ thống"
+                : "Company-wide rental terms, operational rules, and commercial regulations"
             }
             action={
               <Button
@@ -3745,141 +3762,7 @@ export default function BusinessApp({
             }
           />
 
-          {/* ── KHỐI 1: GÓI THUÊ & MỨC GIẢM GIÁ THEO KỲ HẠN ── */}
-          <Card className="p-5 border border-stone-200/90 shadow-sm bg-white">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-slate-900 text-base">
-                    Gói Thuê & Mức Giảm Giá Kỳ Hạn
-                  </h3>
-                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    Áp dụng tự động trên hệ thống
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50 self-start sm:self-auto flex items-center gap-1.5 shrink-0"
-                onClick={handleOpenCreateDuration}
-              >
-                {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
-              </Button>
-            </div>
-
-            {/* Cards Tóm Tắt Nhanh Các Gói */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 my-4">
-              {durationDiscounts.map((item) => {
-                const isActive = item.status === "active"
-                const hasDiscount = item.discountPercent > 0
-                const hasRenewal = item.renewalDiscountPercent > 0
-                const isSpecific = item.scopeType === "specific"
-                const facCount = item.facilityIds?.length || 0
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${isActive
-                        ? hasDiscount || hasRenewal
-                          ? "border-emerald-200 bg-emerald-50/40 hover:border-emerald-300 shadow-2xs"
-                          : "border-stone-200 bg-stone-50/70"
-                        : "border-stone-200 bg-stone-100/80 opacity-60"
-                      }`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-1 mb-1.5">
-                        <span className="font-bold text-slate-900 text-sm truncate" title={item.title}>
-                          {item.label}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleDurationStatus(item.id)}
-                          title={isActive ? (lang === 'vi' ? "Bấm để tạm dừng gói này" : "Click to pause") : (lang === 'vi' ? "Bấm để kích hoạt lại" : "Click to activate")}
-                          className="cursor-pointer transition-transform hover:scale-105"
-                        >
-                          <Badge
-                            variant={
-                              !isActive
-                                ? "warning"
-                                : hasDiscount || hasRenewal
-                                  ? "success"
-                                  : "muted"
-                            }
-                          >
-                            {!isActive
-                              ? "Tạm dừng"
-                              : hasDiscount
-                                ? `Giảm ${item.discountPercent}%`
-                                : "Không giảm"}
-                          </Badge>
-                        </button>
-                      </div>
-
-                      {/* Huy hiệu phạm vi cơ sở áp dụng */}
-                      <div className="mb-2">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${isSpecific
-                              ? "bg-amber-50 text-amber-800 border border-amber-200"
-                              : "bg-blue-50 text-blue-800 border border-blue-200"
-                            }`}
-                        >
-                          {isSpecific ? `${facCount} cơ sở` : "Toàn hệ thống"}
-                        </span>
-                      </div>
-
-                      {/* Phân tách rõ ràng: Đặt mới vs Gia hạn */}
-                      <div className="space-y-1.5 py-2 px-2.5 rounded-lg bg-white/80 border border-stone-200/70 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-600 font-medium">Đặt mới:</span>
-                          <span className={`font-mono font-bold ${hasDiscount ? "text-emerald-700" : "text-slate-500"}`}>
-                            {hasDiscount ? `-${item.discountPercent}%` : "0% (Niêm yết)"}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
-                          <span className="text-[11px] text-slate-600 font-medium">Gia hạn:</span>
-                          <span className={`font-mono font-bold ${hasRenewal ? "text-blue-700" : "text-slate-500"}`}>
-                            {hasRenewal ? `-${item.renewalDiscountPercent}%` : "0% (Không giảm)"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <p className="text-[11px] text-slate-500 mt-2 line-clamp-3 leading-relaxed">
-                        {item.description}
-                      </p>
-                    </div>
-
-                    <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[100px]" title={item.appliesTo}>
-                        {item.appliesTo}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditDuration(item)}
-                          className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteDurationDiscount(item.id)}
-                          className="text-xs font-medium text-red-600 hover:text-red-800 underline cursor-pointer"
-                        >
-                          Xóa
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </Card>
-
-          {/* ── KHỐI 2: KHUNG QUY ĐỊNH VẬN HÀNH & PHÁP LÝ SỰ CỐ / ẨM MỐC ── */}
+          {/* ── KHỐI 1: KHUNG QUY ĐỊNH VẬN HÀNH & PHÁP LÝ SỰ CỐ / ẨM MỐC ── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="p-4 border-l-4 border-l-rose-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-rose-50/20">
               <div className="flex items-start gap-3">
@@ -3976,7 +3859,7 @@ export default function BusinessApp({
             </Card>
           </div>
 
-          {/* ── KHỐI 3: QUY ĐỊNH & CHÍNH SÁCH CHUNG ── */}
+          {/* ── KHỐI 2: QUY ĐỊNH & CHÍNH SÁCH CHUNG ── */}
           <Card className="p-5 border border-stone-200/90 shadow-sm bg-white space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
               <div>
@@ -4450,7 +4333,7 @@ export default function BusinessApp({
 
           {/* ── GÓI THUÊ & CHÍNH SÁCH GIẢM GIÁ THEO KỲ HẠN (3, 6, 12, 24 THÁNG) ── */}
           <Card className="p-5 border border-amber-200/80 bg-linear-to-b from-amber-50/20 to-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-slate-900 text-base">
@@ -4462,37 +4345,74 @@ export default function BusinessApp({
                     {lang === "vi" ? "Đồng bộ giá Customer" : "Live customer pricing"}
                   </Badge>
                 </div>
-                <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
                   {lang === "vi"
-                    ? "Hệ thống tự động áp dụng tỷ lệ chiết khấu giảm giá vào đơn giá khi khách hàng thuê theo gói 3 tháng, 6 tháng, 12 tháng hoặc 24 tháng. Bạn có thể nhấn 'Sửa' để cấu hình lại mức giảm."
-                    : "Automatic discounts applied to units when customers lease for 3, 6, 12, or 24 months."}
+                    ? "Hệ thống tự động áp dụng tỷ lệ chiết khấu giảm giá vào đơn giá khi khách hàng thuê hoặc gia hạn theo các gói kỳ hạn. Bạn có thể thêm gói mới, sửa hoặc tạm dừng/kích hoạt."
+                    : "Automatic discounts applied to units when customers lease or renew for 3, 6, 12, or 24 months."}
                 </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50 self-start sm:self-auto flex items-center gap-1.5 shrink-0"
+                onClick={handleOpenCreateDuration}
+              >
+                {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
+              </Button>
             </div>
 
             {/* Quick Cards Gói Thuê */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 my-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 my-4">
               {durationDiscounts.map((item) => {
                 const isActive = item.status === "active"
                 const hasDiscount = item.discountPercent > 0
+                const hasRenewal = item.renewalDiscountPercent > 0
+                const isSpecific = item.scopeType === "specific"
+                const facCount = item.facilityIds?.length || 0
+
                 return (
                   <div
                     key={item.id}
-                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${isActive
-                        ? hasDiscount
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+                      isActive
+                        ? hasDiscount || hasRenewal
                           ? "border-emerald-200 bg-white hover:border-emerald-400 shadow-2xs"
                           : "border-stone-200 bg-white"
                         : "border-stone-200 bg-stone-100 opacity-60"
-                      }`}
+                    }`}
                   >
                     <div>
                       <div className="flex items-center justify-between gap-1 mb-1.5">
-                        <span className="font-bold text-xs text-slate-900 truncate">
+                        <span className="font-bold text-xs text-slate-900 truncate" title={item.title}>
                           {item.label}
                         </span>
-                        <Badge variant={!isActive ? "warning" : hasDiscount ? "success" : "muted"}>
-                          {!isActive ? "Tạm dừng" : hasDiscount ? `-${item.discountPercent}%` : "0%"}
-                        </Badge>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDurationStatus(item.id)}
+                          title={isActive ? (lang === 'vi' ? "Bấm để tạm dừng gói này" : "Click to pause") : (lang === 'vi' ? "Bấm để kích hoạt lại" : "Click to activate")}
+                          className="cursor-pointer transition-transform hover:scale-105"
+                        >
+                          <Badge variant={!isActive ? "warning" : hasDiscount ? "success" : "muted"}>
+                            {!isActive
+                              ? "Tạm dừng"
+                              : hasDiscount
+                                ? `-${item.discountPercent}%`
+                                : "0%"}
+                          </Badge>
+                        </button>
+                      </div>
+
+                      {/* Huy hiệu phạm vi cơ sở áp dụng */}
+                      <div className="mb-2">
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            isSpecific
+                              ? "bg-amber-50 text-amber-800 border border-amber-200"
+                              : "bg-blue-50 text-blue-800 border border-blue-200"
+                          }`}
+                        >
+                          {isSpecific ? `${facCount} cơ sở` : "Toàn hệ thống"}
+                        </span>
                       </div>
 
                       {/* Phân tách rõ: Đặt mới vs Gia hạn */}
@@ -4505,8 +4425,8 @@ export default function BusinessApp({
                         </div>
                         <div className="flex items-center justify-between border-t border-stone-100 pt-1">
                           <span className="text-[10px] text-slate-500 font-medium">Gia hạn:</span>
-                          <span className={`font-mono font-bold text-xs ${item.renewalDiscountPercent > 0 ? "text-blue-700" : "text-slate-500"}`}>
-                            {item.renewalDiscountPercent > 0 ? `-${item.renewalDiscountPercent}%` : "0%"}
+                          <span className={`font-mono font-bold text-xs ${hasRenewal ? "text-blue-700" : "text-slate-500"}`}>
+                            {hasRenewal ? `-${item.renewalDiscountPercent}%` : "0%"}
                           </span>
                         </div>
                       </div>
@@ -4520,13 +4440,22 @@ export default function BusinessApp({
                       <span className="text-[10px] text-slate-400 truncate">
                         {item.months === "other" ? "Linh hoạt" : `${item.months} tháng`}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditDuration(item)}
-                        className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
-                      >
-                        {lang === "vi" ? "Sửa" : "Edit"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditDuration(item)}
+                          className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                        >
+                          {lang === "vi" ? "Sửa" : "Edit"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDurationDiscount(item.id)}
+                          className="text-xs font-medium text-red-600 hover:text-red-800 underline cursor-pointer"
+                        >
+                          {lang === "vi" ? "Xóa" : "Delete"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -6122,6 +6051,38 @@ export default function BusinessApp({
               onChange={(e) => setPolicyFormValue(e.target.value)}
             />
 
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-800 block">
+                {lang === "vi" ? "Nhóm chính sách" : "Policy Category"}
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { id: "billing", label: lang === "vi" ? "Thuê & Đặt cọc" : "Billing & Deposit" },
+                  { id: "climate", label: lang === "vi" ? "Độ ẩm & Kho mát (Climate SLA)" : "Climate SLA" },
+                  { id: "prohibited", label: lang === "vi" ? "Hàng cấm & Khử trùng" : "Prohibited & Sanitization" },
+                  { id: "maintenance", label: lang === "vi" ? "Sự cố & Di dời kho" : "Facility SLA & Relocation" },
+                ].map((cat) => (
+                  <label
+                    key={cat.id}
+                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
+                      policyFormCategory === cat.id
+                        ? "border-amber-500 bg-amber-50/70 font-semibold text-slate-900 ring-1 ring-amber-500 shadow-2xs"
+                        : "border-stone-200 bg-white hover:bg-stone-50 text-slate-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="editPolicyCategoryRadio"
+                      checked={policyFormCategory === cat.id}
+                      onChange={() => setPolicyFormCategory(cat.id as any)}
+                      className="text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>{cat.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-800 block">
                 {lang === "vi" ? "Phạm vi áp dụng chính sách" : "Policy Application Scope"}
@@ -6303,6 +6264,38 @@ export default function BusinessApp({
             value={policyFormValue}
             onChange={(e) => setPolicyFormValue(e.target.value)}
           />
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-800 block">
+              {lang === "vi" ? "Nhóm chính sách" : "Policy Category"}
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { id: "billing", label: lang === "vi" ? "Thuê & Đặt cọc" : "Billing & Deposit" },
+                { id: "climate", label: lang === "vi" ? "Độ ẩm & Kho mát (Climate SLA)" : "Climate SLA" },
+                { id: "prohibited", label: lang === "vi" ? "Hàng cấm & Khử trùng" : "Prohibited & Sanitization" },
+                { id: "maintenance", label: lang === "vi" ? "Sự cố & Di dời kho" : "Facility SLA & Relocation" },
+              ].map((cat) => (
+                <label
+                  key={cat.id}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
+                    policyFormCategory === cat.id
+                      ? "border-amber-500 bg-amber-50/70 font-semibold text-slate-900 ring-1 ring-amber-500 shadow-2xs"
+                      : "border-stone-200 bg-white hover:bg-stone-50 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="createPolicyCategoryRadio"
+                    checked={policyFormCategory === cat.id}
+                    onChange={() => setPolicyFormCategory(cat.id as any)}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>{cat.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-800 block">
