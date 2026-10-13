@@ -184,21 +184,37 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
       setError(managerDisplayError(cause))
     } finally { setBusy(false) }
   }
-  return <Modal open={open} onClose={onClose} title="Khai báo loại kho thực tế" size="lg">
-    <div className="space-y-4">
-      <p className="text-sm text-stone-600">Thông tin kỹ thuật do Manager khai báo. Sau khi lưu, loại kho chuyển sang chờ BO định giá và công bố.</p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}{field('description', 'Mô tả loại kho')}
-        {field('physicalUnitCount', 'Số gian vật lý', 'number')}
+  return <Modal open={open} onClose={onClose} title="Thêm loại kho thực tế" size="xl">
+    <div className="space-y-5">
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Thông tin loại kho</h3>
+        <div className="grid gap-4 sm:grid-cols-2">{field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}</div>
+        <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
+          <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
+        </label>
+        {field('imageUrl', 'URL ảnh loại kho')}
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Kích thước và tải trọng</h3>
+        <div className="grid gap-4 sm:grid-cols-3">
         {field('lengthM', 'Chiều dài (m)', 'number')}{field('widthM', 'Chiều rộng (m)', 'number')}{field('heightM', 'Chiều cao (m)', 'number')}
-        {field('maxLoadKg', 'Tải trọng tối đa (kg)', 'number')}{field('rackCount', 'Số khung', 'number')}
+        </div><div className="grid gap-4 sm:grid-cols-2">{field('maxLoadKg', 'Tải trọng tối đa (kg)', 'number')}{field('aisleWidthM', 'Chiều rộng lối đi (m)', 'number')}</div>
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Khung kệ và thiết bị hỗ trợ</h3>
+        <div className="grid gap-4 sm:grid-cols-2">{field('rackCount', 'Số khung kệ', 'number')}{field('trolleyType', 'Loại xe đẩy hỗ trợ')}</div>
+        <div className="grid gap-4 sm:grid-cols-3">
         {field('rackLengthM', 'Dài khung (m)', 'number')}{field('rackWidthM', 'Rộng khung (m)', 'number')}{field('rackHeightM', 'Cao khung (m)', 'number')}
-        {field('aisleWidthM', 'Chiều rộng lối đi (m)', 'number')}{field('trolleyType', 'Loại xe đẩy hỗ trợ')}
+        </div><div className="grid gap-4 sm:grid-cols-2">
         {field('smallBoxCapacity', 'Sức chứa thùng nhỏ', 'number')}{field('largeBoxCapacity', 'Sức chứa thùng lớn', 'number')}
-        {field('floor', 'Tầng')}{field('zone', 'Khu vực')}{field('imageUrl', 'URL ảnh loại kho')}
-      </div>
+        </div>
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Số lượng và vị trí gian kho</h3>
+        <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
+      </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : 'Lưu và chờ BO định giá'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
