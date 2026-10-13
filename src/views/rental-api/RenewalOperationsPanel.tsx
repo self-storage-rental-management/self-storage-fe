@@ -44,7 +44,7 @@ import { renewalSignedContractEntityType } from "../../services/duongIntegration
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
 const eventLabels: Record<string, string> = {
-  DEPOSIT: "Giao dịch gia hạn theo luồng cũ",
+  DEPOSIT: "Thanh toán cọc gia hạn",
   FULL_RENT_PAYMENT: "Thanh toán toàn kỳ bằng VNPay Sandbox",
   CASH: "Biên nhận tiền mặt",
   INCIDENT: "Sự cố cơ sở",
@@ -210,7 +210,8 @@ export function RenewalOperationsSummary({
       <p>
         Trạng thái: {copy(phaseLabels[s.phase])}
       </p>
-      {s.depositPaidAt && <p>Giao dịch theo hồ sơ cũ được ghi nhận lúc: {rentalDate(s.depositPaidAt)}</p>}
+      {s.depositPaidAt && <p>Cọc gia hạn được ghi nhận lúc: {rentalDate(s.depositPaidAt)}</p>}
+      {s.phase === "AWAITING_PAYMENT_INTENT" && s.appointmentRef && <p>Lịch dự kiến đã lưu. Thanh toán cọc để xác nhận; hệ thống kiểm tra lại chỗ trống khi mở VNPay.</p>}
       {s.fullRentPaidAt && <p>Thanh toán toàn kỳ được ghi nhận lúc: {rentalDate(s.fullRentPaidAt)}</p>}
       <p>
         Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}, Hạn ký hiệu
@@ -307,6 +308,7 @@ export default function RenewalOperationsPanel({
   status,
   onChanged,
   onLocked,
+  appointmentOnly = false,
 }: {
   id: string
   role: RenewalOperationsRole
@@ -315,6 +317,7 @@ export default function RenewalOperationsPanel({
   status?: string
   onChanged?: () => void
   onLocked?: (locked: boolean) => void
+  appointmentOnly?: boolean
 }) {
   const { manager, copy, errorText } = useManagerPresentation()
 
@@ -344,7 +347,7 @@ export default function RenewalOperationsPanel({
   }, [role])
   const actions: RenewalOperationAction[] =
     role === "customer"
-      ? ["appointment", "reschedule", "confirmation"]
+      ? appointmentOnly ? ["appointment", "reschedule"] : ["appointment", "reschedule", "confirmation"]
       : role === "staff"
         ? ["arrival", "incident", "cash", "completion"]
         : ["exception", "refund"]
@@ -362,7 +365,14 @@ export default function RenewalOperationsPanel({
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <>
-          <RenewalOperationsSummary state={read.data} />
+          {appointmentOnly ? (
+            <section className="space-y-2" aria-label="Chọn lịch ký gia hạn">
+              <h3 className="font-semibold">Lịch ký gia hạn</h3>
+              <p>{read.data.appointmentRef
+                ? `Lịch đã chọn: ${rentalDate(read.data.appointmentStart)} - ${rentalDate(read.data.appointmentEnd)}`
+                : "Chọn và lưu lịch ký trước khi thanh toán cọc."}</p>
+            </section>
+          ) : <RenewalOperationsSummary state={read.data} />}
           {role === "manager" && !selected && <RenewalCoordinationPanel
             key={`${identity}:${revision}`}
             state={read.data} facilityId={facilityId} status={status}
@@ -438,14 +448,14 @@ export default function RenewalOperationsPanel({
           }}
         />
       )}
-      <EventTimeline
+      {!appointmentOnly && <EventTimeline
         key={`${identity}:${revision}:payments`}
         identity={`${identity}:${revision}`}
         role={role}
         id={id}
         category="payments"
-      />
-      {role !== "staff" && (
+      />}
+      {!appointmentOnly && role !== "staff" && (
         <EventTimeline
           key={`${identity}:${revision}:refunds`}
           identity={`${identity}:${revision}`}
@@ -505,6 +515,7 @@ function OperationForm({
   const [exception, setException] = useState<RenewalExceptionAction>("REJECT")
   const [decision, setDecision] = useState<"APPROVE" | "REJECT">("REJECT")
   const [receipt, setReceipt] = useState("")
+  const [receiptFile, setReceiptFile] = useState("")
   const [signedFile, setSignedFile] = useState("")
   const [attested, setAttested] = useState(false)
   const [validation, setValidation] = useState<string>()
@@ -606,12 +617,14 @@ function OperationForm({
             "Cần bảng kê còn hiệu lực, số tiền lớn hơn 0 và xác nhận đã nhận đủ tiền mặt.",
           )
         validateText(receipt, true, 100)
+        if (!isUuid(receiptFile)) throw new Error("Cần chứng từ thu tiền mặt.")
         return {
           action,
           body: {
             ...base,
             payableStatementRef: statement.reference,
             receiptReference: receipt,
+            receiptFileId: receiptFile,
             received: true,
           },
         }
@@ -826,6 +839,9 @@ function OperationForm({
                 onChange={(e) => setReceipt(e.target.value)}
               />
             </label>
+            <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
+              disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
+              onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />
             <label>
               <input
                 type="checkbox"

@@ -195,7 +195,7 @@ describe("D3 real API transport", () => {
         body: {
           expectedVersion: 4,
           payableStatementRef: ids.statement,
-          receiptReference: "REAL-RECEIPT",
+          receiptReference: "REAL-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001",
           received: true,
         },
       },
@@ -300,7 +300,7 @@ describe("D3 real API transport", () => {
     },
   )
   it.each([
-    { action: "cash", body: { expectedVersion: null, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", received: true } },
+    { action: "cash", body: { expectedVersion: null, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001", received: true } },
     {
       action: "arrival",
       body: {
@@ -339,7 +339,7 @@ describe("D3 real API transport", () => {
       body: {
         expectedVersion: 4,
         payableStatementRef: ids.statement,
-        receiptReference: "x",
+        receiptReference: "x", receiptFileId: "00000000-0000-4000-8000-000000000001",
         received: false,
       },
     },
@@ -457,7 +457,7 @@ describe("D3 real API transport", () => {
     await expect(
       sendRenewalOperation(
         ids.renewal,
-        { action: "cash", body: { expectedVersion: 4, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", received: true } },
+        { action: "cash", body: { expectedVersion: 4, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001", received: true } },
         "key",
       ),
     ).rejects.toMatchObject({
@@ -493,7 +493,7 @@ describe("D3 real API transport", () => {
       await expect(
         sendRenewalOperation(
           ids.renewal,
-          { action: "cash", body: { expectedVersion: 4, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", received: true } },
+          { action: "cash", body: { expectedVersion: 4, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001", received: true } },
           "key",
         ),
       ).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
