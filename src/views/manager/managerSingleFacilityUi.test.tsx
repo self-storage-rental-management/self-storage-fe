@@ -56,7 +56,7 @@ vi.mock("../../services/overdueApi", async original => ({
   ...await original<typeof import("../../services/overdueApi")>(), listOverdueCases: (...args: unknown[]) => h.overdue(...args),
 }))
 vi.mock("./managerD1D5Api", async original => ({
-  ...await original<typeof import("./managerD1D5Api")>(), loadManagerRentalPage: (...args: unknown[]) => h.financial(...args),
+  ...await original<typeof import("./managerD1D5Api")>(), loadManagerPaymentHistory: (...args: unknown[]) => h.financial(...args),
 }))
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (identity: string, loader: () => Promise<unknown>) => {
@@ -96,7 +96,7 @@ const byText = (tree: Element, value: string) => nodes(tree).find(n => n.type ==
 const load = async () => { for (const fn of h.loaders) await fn() }
 
 beforeEach(() => {
-  h.actor = { ...manager, permissions: [...manager.permissions, "support:read"] }
+  h.actor = { ...manager, permissions: [...manager.permissions, "support:read", "payments:read"] }
   h.slots = []; h.cursor = 0; h.loaders = []
   for (const mock of [h.rental, h.renewal, h.support, h.queue, h.overdue, h.financial]) mock.mockReset().mockResolvedValue(page([]))
   h.summary.mockReset().mockResolvedValue({ counts: { open: 0, in_progress: 0, waiting_customer: 0, resolved: 0, closed: 0 }, unassignedOpen: 0 })
@@ -119,7 +119,7 @@ describe("single assigned Manager facility", () => {
     if (screen === "rentals") tree = invoke(render(() => RentalApiWorkspace({ role: "manager" })))
     else if (screen === "support") tree = render(() => SupportApiWorkspace({ role: "manager" }))
     else if (screen === "overdue") tree = render(() => ManagerOverdueApiPanel())
-    else if (screen === "financial") tree = render(() => ManagerFinancialApiPanel({ setPage: vi.fn() }))
+    else if (screen === "financial") tree = render(() => ManagerFinancialApiPanel())
     else if (screen === "inventory") tree = render(() => ManagerInventoryApiPanel())
     else tree = render(() => ManagerFacilityCatalog())
     expect(text(tree)).toContain("nhiều cơ sở")
@@ -224,7 +224,7 @@ describe("Support and overdue pagination", () => {
     expect(h.overdue).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, size: 10, facilityId: "f1", kind: "PAYMENT_DUE" }))
   })
   it("uses 10 records and an explicit scope on the financial list", async () => {
-    const outer = render(() => ManagerFinancialApiPanel({ setPage: vi.fn() }))
+    const outer = render(() => ManagerFinancialApiPanel())
     invoke(outer); await load()
     expect(h.financial).toHaveBeenLastCalledWith(h.actor, expect.objectContaining({ size: 10, facilityId: "f1" }))
   })

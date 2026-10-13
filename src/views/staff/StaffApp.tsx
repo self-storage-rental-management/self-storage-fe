@@ -810,7 +810,6 @@ export default function StaffApp({
   const hub = useStorageHub()
 
   const nav: NavItem[] = [
-    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
     {
       id: "dashboard",
 
@@ -882,6 +881,8 @@ export default function StaffApp({
 
       permission: "returns:read",
     },
+
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
 
     {
       id: "support",

@@ -157,7 +157,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               const data = event.data as Record<string, unknown>,
                 cash = event.kind === "CASH"
               return {
-                id: String(cash ? data.reference : data.paymentRef),
+                id: String(cash ? data.paymentId || data.reference : data.paymentRef),
                 reference: `Gia hạn ${renewal.id}`,
                 category: cash ? "renewalSigning" : "renewal",
                 amount: typeof data.amount === "number" ? data.amount : null,
@@ -167,10 +167,10 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 ),
                 updatedAt: event.occurredAt,
                 status:
-                  cash || data.outcome === "SUCCESS"
+                  cash || data.outcome === "SUCCESS" || (!data.outcome && !!data.paidAt)
                     ? "PAID"
                     : String(data.outcome),
-                method: cash ? "Tiền mặt tại cơ sở" : null,
+                method: cash ? data.paymentMethod === "BANK_TRANSFER" ? "Chuyển khoản" : "Tiền mặt tại cơ sở" : "VNPay",
               } satisfies HistoryEntry
             })
           }),

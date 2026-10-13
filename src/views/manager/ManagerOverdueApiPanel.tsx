@@ -20,6 +20,7 @@ import type {
 } from "../../types/overdueApi"
 import ApiReadState from "../rental-api/ApiReadState"
 import ApiPager from "../rental-api/ApiPager"
+import RecoveryTasksPanel from "../rental-api/RecoveryTasksPanel"
 import { operationsInputClass } from "../rental-api/RenewalOperationsPanel"
 import { sourceLabels } from "../rental-api/operationsPresentation"
 import { managerDisplayText, managerDisplayError } from './managerPresentation'
@@ -112,7 +113,7 @@ export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
       </p>
       <p className="whitespace-pre-wrap break-words">{e.content}</p>
       <p className="break-all">
-        Người ghi: {e.actorId}, Sự kiện: {e.id}
+        Người ghi: {e.actorId ?? "Hệ thống"}, Sự kiện: {e.id}
       </p>
       {e.externalRef && (
         <p className="break-all">Tham chiếu hệ thống nhận: {e.externalRef}</p>
@@ -144,11 +145,24 @@ export default function ManagerOverdueApiPanel() {
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
   const facilityId = singleManagerFacility(actor)
   if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
-  return <OverdueSession key={identity} identity={identity} facilityId={facilityId} />
+  return <OverdueWorkspace key={identity} identity={identity} facilityId={facilityId} />
 }
-function OverdueSession({ identity, facilityId }: {
+function OverdueWorkspace({ identity, facilityId }: { identity: string; facilityId: string }) {
+  const [tab, setTab] = useState<"overdue" | "recovery">("overdue")
+  const [locked, setLocked] = useState(false)
+  return <div className="space-y-4">
+    <h1 className="text-2xl font-bold">Theo dõi quá hạn</h1>
+    <div className="flex gap-2" aria-label="Danh sách theo dõi">
+      <Button disabled={locked} variant={tab === "overdue" ? "primary" : "outline"} aria-pressed={tab === "overdue"} onClick={() => setTab("overdue")}>Hồ sơ quá hạn</Button>
+      <Button disabled={locked} variant={tab === "recovery" ? "primary" : "outline"} aria-pressed={tab === "recovery"} onClick={() => setTab("recovery")}>Thu hồi kho</Button>
+    </div>
+    {tab === "overdue" ? <OverdueSession identity={identity} facilityId={facilityId} onLocked={setLocked} /> : <RecoveryTasksPanel role="manager" facilityId={facilityId} />}
+  </div>
+}
+function OverdueSession({ identity, facilityId, onLocked }: {
   identity: string
   facilityId: string
+  onLocked: (value: boolean) => void
 }) {
   const [query, setQuery] = useState<OverdueQuery>({
     page: 0,
@@ -170,7 +184,6 @@ function OverdueSession({ identity, facilityId }: {
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Theo dõi quá hạn</h1>
       <Card className="p-4">
         <div className="flex flex-wrap gap-3 items-end">
           <label>
@@ -308,7 +321,7 @@ function OverdueSession({ identity, facilityId }: {
             key={`${identity}:${selected}`}
             identity={identity}
             caseRef={selected}
-            onLocked={setLocked}
+            onLocked={value => { setLocked(value); onLocked(value) }}
             onChanged={read.refresh}
           />
         </Modal>
