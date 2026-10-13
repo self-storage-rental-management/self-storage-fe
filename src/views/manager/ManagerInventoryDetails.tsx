@@ -9,6 +9,8 @@ import {
   rentalPeriodText,
 } from "../rental-api/presentation"
 import { managerDisplayError } from "./managerPresentation"
+import RentalHandoverFiles from '../rental-api/RentalHandoverFiles'
+import InventoryRentalPayments from './InventoryRentalPayments'
 import type { InventoryUnit } from "./managerInventoryApi"
 import {
   currentInventoryRentals,
@@ -105,6 +107,10 @@ export function InventoryRentalSummary({
               {rentalDataWarning(warning.field)}
             </p>
           ))}
+          {detailed && <div className="mt-4 space-y-4">
+            <RentalHandoverFiles key={`contract:${r.id}`} role="manager" id={r.id} contractsOnly />
+            <InventoryRentalPayments key={`payments:${r.id}`} id={r.id} />
+          </div>}
         </div>
       ))}
     </div>
@@ -129,15 +135,15 @@ export function InventoryMaintenanceDetails({
   )
   return (
     <section className="space-y-3 border-t border-stone-200 pt-4">
-      <h3 className="font-bold">Nhiệm vụ bảo trì</h3>
+      <h3 className="font-bold">Trạng thái bảo trì</h3>
       {read.loading ? (
-        <p role="status">Đang tải nhiệm vụ bảo trì...</p>
+        <p role="status">Đang tải trạng thái bảo trì...</p>
       ) : read.error ? (
         <ReadFailure error={read.error} retry={read.refresh} />
       ) : !read.data ? (
-        <p role="status">Chưa xác minh được nhiệm vụ bảo trì.</p>
+        <p role="status">Không có dữ liệu</p>
       ) : read.data.length === 0 ? (
-        <p>Không có dữ liệu nhiệm vụ bảo trì.</p>
+        <p>Không có dữ liệu</p>
       ) : (
         <ul className="space-y-3">
           {read.data.map((t) => (
