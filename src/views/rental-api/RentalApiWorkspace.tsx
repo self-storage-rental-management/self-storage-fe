@@ -44,6 +44,7 @@ type Action = {
 const customerRenewalFilterStatuses = new Set([
   "pending",
   "accepted",
+  "deposit_paid",
   "full_rent_paid",
   "appointment_scheduled",
 ])
@@ -547,8 +548,10 @@ function DetailModal({
   const { manager, copy } = useManagerPresentation()
 
   const operationLock = useRef(false)
+  const [operationsLocked, setOperationsLocked] = useState(false)
   const setOperationLocked = useCallback((value: boolean) => {
     operationLock.current = value
+    setOperationsLocked(value)
   }, [])
   const [operationOwner, setOperationOwner] = useState<{
     facilityId: string
@@ -616,6 +619,19 @@ function DetailModal({
             renewal={read.data.record as RenewalApiRecord}
             role={role}
             onPaymentChange={read.refresh}
+            operationsLocked={operationsLocked}
+            appointmentSelection={role === "customer" && read.data.record.status === "accepted" ? (
+              <RenewalOperationsPanel
+                appointmentOnly
+                status={read.data.record.status}
+                id={detail.id}
+                role="customer"
+                facilityId={read.data.record.facility.id}
+                customerId={read.data.record.customer.id}
+                onLocked={setOperationLocked}
+                onChanged={() => { read.refresh(); onChanged() }}
+              />
+            ) : undefined}
             onAction={(action) => {
               if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord

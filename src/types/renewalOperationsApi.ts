@@ -85,6 +85,7 @@ export type RenewalOperationCommand = {
   body: Version & {
     payableStatementRef: string
     receiptReference: string
+    receiptFileId: string
     received: true
   }
 } | {
