@@ -592,7 +592,7 @@ function DetailModal({
         if (!operationLock.current) read.refresh()
       }} />
       {read.data?.kind === "rental" ? (
-        <>
+        <div className="space-y-4">
           <RentalDetail
             rental={read.data.record as RentalApiDetail}
             role={role}
@@ -612,7 +612,7 @@ function DetailModal({
             rentalActive={(read.data.record as RentalApiDetail).status === "active"}
             onChanged={onChanged}
           />}
-        </>
+        </div>
       ) : read.data?.kind === "renewal" ? (
         <div>
           <RenewalDetail

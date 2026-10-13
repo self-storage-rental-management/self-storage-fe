@@ -458,7 +458,7 @@ export function InventoryContent({
               </p>
             </div>
             <section className="space-y-2 border-t border-stone-200 pt-4">
-              <h3 className="font-bold">Hồ sơ thuê và người thuê</h3>
+              <h3 className="font-bold">Hồ sơ thuê</h3>
               <InventoryRentalSummary unit={selected} read={rentals} detailed />
             </section>
             <InventoryMaintenanceDetails
