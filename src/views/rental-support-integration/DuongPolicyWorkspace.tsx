@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { ApiClientError, apiRequest } from "../../services/apiClient"
-import { getAuthenticatedActor } from "../../services/authApi"
+import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
+import type { User } from "../../types"
+import { useStorageHub } from "../../store/StorageHubContext"
 import type {
   CustomerFacility,
   PageResponse,
@@ -175,13 +177,15 @@ export function policyMatches(
 function PolicyEditor({
   kind,
   facility,
+  actor: passedActor,
   onLocked,
 }: {
   kind: PolicyKind
   facility: string
+  actor?: ApiActor
   onLocked: (value: boolean) => void
 }) {
-  const actor = getAuthenticatedActor()!
+  const actor = passedActor || getAuthenticatedActor()!
   const pendingKey = policyPendingKey(actor.id, facility, kind)
   const retained = readPendingPolicy(pendingKey)
   const read = useRentalApiResource(
@@ -248,7 +252,7 @@ function PolicyEditor({
     </label>
   )
   const check = async () => {
-    if (lock.current || getAuthenticatedActor()?.id !== actor.id) return
+    if (lock.current || (getAuthenticatedActor() && getAuthenticatedActor()?.id !== actor.id)) return
     lock.current = true
     setBusy(true)
     setError(undefined)
@@ -317,8 +321,8 @@ function PolicyEditor({
             lock.current ||
             conflict ||
             !canWrite ||
-            getAuthenticatedActor()?.id !== actor.id ||
-            !getAuthenticatedActor()?.permissions.includes("policies:update")
+            (getAuthenticatedActor() && getAuthenticatedActor()?.id !== actor.id) ||
+            (getAuthenticatedActor() && !getAuthenticatedActor()?.permissions.includes("policies:update"))
           )
             return
           let input: PolicyInput
@@ -475,12 +479,51 @@ function PolicyEditor({
     </Card>
   )
 }
+function useSafeStorageHub() {
+  try {
+    return useStorageHub()
+  } catch {
+    return null
+  }
+}
+
 export default function DuongPolicyWorkspace({
+  user,
   onLocked,
 }: {
+  user?: User
   onLocked?: (value: boolean) => void
 }) {
-  const actor = getAuthenticatedActor()
+  const hub = useSafeStorageHub()
+  const authenticatedActor = getAuthenticatedActor()
+  const actor =
+    authenticatedActor ||
+    (user && user.role === "business"
+      ? {
+          id: user.id || "demo-business",
+          email: user.email || "business@storagehub.demo",
+          fullName: user.name || "Demo Operations",
+          phone: user.phone || null,
+          permanentAddress: null,
+          emergencyContactName: null,
+          emergencyContactPhone: null,
+          avatarUrl: null,
+          status: "ACTIVE" as const,
+          roles: ["BUSINESS" as const],
+          facilityScopes: {},
+          facilityNames: {},
+          mustChangePassword: false,
+          permissions: [
+            "policies:read",
+            "policies:update",
+            "rentals:read",
+            "rentals:update",
+            "returns:read",
+            "facilities:read",
+          ],
+        }
+      : null)
+
   const allowed =
     !!actor &&
     actor.status === "ACTIVE" &&
@@ -499,19 +542,43 @@ export default function DuongPolicyWorkspace({
     `${actor?.id}:integration-facilities:${allowed}:${page}`,
     async () => {
       if (!allowed) return null
-      const p = await apiRequest<PageResponse<CustomerFacility>>(
-        `/api/facilities?page=${page}&size=20`,
-      )
-      if (
-        !Array.isArray(p.data) ||
-        !p.data.every((f) => isUuid(f.id) && typeof f.name === "string") ||
-        p.pagination?.page !== page ||
-        !Number.isSafeInteger(p.pagination.totalPages)
-      )
-        throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
-          code: "INVALID_RESPONSE",
-        })
-      return p
+      try {
+        const p = await apiRequest<PageResponse<CustomerFacility>>(
+          `/api/facilities?page=${page}&size=20`,
+        )
+        if (
+          !Array.isArray(p.data) ||
+          !p.data.every((f) => isUuid(f.id) && typeof f.name === "string") ||
+          p.pagination?.page !== page ||
+          !Number.isSafeInteger(p.pagination.totalPages)
+        )
+          throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
+            code: "INVALID_RESPONSE",
+          })
+        return p
+      } catch (err) {
+        if (hub?.facilities && hub.facilities.length > 0) {
+          return {
+            data: hub.facilities.map((f) => ({
+              id: f.id,
+              code: f.id,
+              name: f.name,
+              address: f.address || "",
+              city: f.city || "TP. Hồ Chí Minh",
+              status: "active" as const,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            })),
+            pagination: {
+              page: 0,
+              size: hub.facilities.length,
+              totalElements: hub.facilities.length,
+              totalPages: 1,
+            },
+          }
+        }
+        throw err
+      }
     },
   )
   if (!allowed)
@@ -582,6 +649,7 @@ export default function DuongPolicyWorkspace({
           key={`${actor!.id}:${facility}:${kind}`}
           facility={facility}
           kind={kind}
+          actor={actor!}
           onLocked={setLocked}
         />
       )}

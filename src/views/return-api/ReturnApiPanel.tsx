@@ -141,7 +141,10 @@ function ReturnWorkspace({
   }
 
   const rows = read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? []
-  const readable = actor?.status === 'ACTIVE' && actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER')
+  const readable = actor?.status === 'ACTIVE' && (
+    actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
+    (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
+  )
   if (!readable) return null
 
   return (
