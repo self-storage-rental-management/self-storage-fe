@@ -3,11 +3,11 @@ import {
   loadCustomerPaymentHistory,
   reservationPaymentCategory,
   sortPaymentHistory,
+  latestPaymentRecords,
   type HistoryEntry,
 } from "./customerPaymentHistory"
 import {
-  listCustomerReservations,
-  listReservationPayments,
+  listCustomerPaymentHistory,
   type ReservationPaymentResult,
 } from "./customerReservationApi"
 import { listRenewals } from "./renewalApi"
@@ -15,8 +15,7 @@ import { listRenewalOperationEvents } from "./renewalOperationsApi"
 import { apiRequest } from "./apiClient"
 
 vi.mock("./customerReservationApi", () => ({
-  listCustomerReservations: vi.fn(),
-  listReservationPayments: vi.fn(),
+  listCustomerPaymentHistory: vi.fn(),
 }))
 vi.mock("./renewalApi", () => ({ listRenewals: vi.fn() }))
 vi.mock("./renewalOperationsApi", () => ({
@@ -65,12 +64,9 @@ const payment = (
 describe("Customer payment history", () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    vi.mocked(listCustomerReservations).mockResolvedValue(
-      page([{ id: "reservation", reservationCode: "RSV" }]) as never,
-    )
-    vi.mocked(listReservationPayments).mockResolvedValue([
-      payment("deposit", "RESERVATION_DEPOSIT", "2026-10-12T08:00:00Z"),
-    ])
+    vi.mocked(listCustomerPaymentHistory).mockResolvedValue(page([
+      { ...payment("deposit", "RESERVATION_DEPOSIT", "2026-10-12T08:00:00Z"), reservationCode: "RSV" },
+    ]) as never)
     vi.mocked(listRenewals).mockResolvedValue(page([]) as never)
     vi.mocked(apiRequest).mockResolvedValue(page([]))
   })
@@ -161,7 +157,7 @@ describe("Customer payment history", () => {
     const result = await loadCustomerPaymentHistory()
     expect(result.entries.map((e) => e.id)).toEqual(["deposit"])
     expect(result.warnings).toEqual([
-      "Chưa tải được lịch sử thanh toán gia hạn.",
+      "Chưa tải được đầy đủ danh sách gia hạn.",
     ])
   })
   it("refuses return records belonging to another customer", async () => {
@@ -179,6 +175,38 @@ describe("Customer payment history", () => {
     )
     const result = await loadCustomerPaymentHistory()
     expect(result.entries.map((e) => e.id)).toEqual(["deposit"])
+    expect(result.warnings).toHaveLength(1)
+  })
+  it("keeps the newest update of the same transaction even if old events arrive last", () => {
+    const newest = { id: 'same', timestamp: '2026-10-12T08:00:00Z', updatedAt: '2026-10-13T08:00:00Z', status: 'PAID' } as HistoryEntry
+    const old = { ...newest, updatedAt: '2026-10-12T08:00:00Z', status: 'NOT_RECEIVED' }
+    expect(latestPaymentRecords([newest, old])).toEqual([newest])
+    expect(latestPaymentRecords([old, newest])).toEqual([newest])
+  })
+  it("keeps loaded pages when a later payment history page fails", async () => {
+    vi.mocked(listCustomerPaymentHistory).mockResolvedValueOnce(page([
+      payment('deposit', 'RESERVATION_DEPOSIT', '2026-10-12T08:00:00Z'),
+    ], 0, 2) as never).mockRejectedValueOnce(new Error('unavailable'))
+    const result = await loadCustomerPaymentHistory()
+    expect(result.entries.map(e => e.id)).toEqual(['deposit'])
+    expect(result.warnings).toEqual(['Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho.'])
+  })
+  it("keeps payments for other renewals when one renewal fails to load", async () => {
+    vi.mocked(listRenewals).mockResolvedValue(page([{ id: 'failed' }, { id: 'loaded' }]) as never)
+    vi.mocked(listRenewalOperationEvents).mockImplementation(async (_role, id) => {
+      if (id === 'failed') throw new Error('unavailable')
+      return page([{ kind: 'DEPOSIT', occurredAt: '2026-10-13T08:00:00Z', data: { paymentRef: 'renewal-payment', outcome: 'SUCCESS', amount: 200, paidAt: '2026-10-13T08:00:00Z' } }]) as never
+    })
+    const result = await loadCustomerPaymentHistory()
+    expect(result.entries.map(e => e.id)).toEqual(['renewal-payment', 'deposit'])
+    expect(result.warnings).toEqual(['Chưa tải được đầy đủ thanh toán của đơn gia hạn failed.'])
+  })
+  it("still loads renewal payments when the reservation history source fails", async () => {
+    vi.mocked(listCustomerPaymentHistory).mockRejectedValue(new Error('unavailable'))
+    vi.mocked(listRenewals).mockResolvedValue(page([{ id: 'renewal' }]) as never)
+    vi.mocked(listRenewalOperationEvents).mockResolvedValue(page([{ kind: 'CASH', occurredAt: '2026-10-13T08:00:00Z', data: { reference: 'cash', amount: 200, receivedAt: '2026-10-13T08:00:00Z' } }]) as never)
+    const result = await loadCustomerPaymentHistory()
+    expect(result.entries.map(e => e.id)).toEqual(['cash'])
     expect(result.warnings).toHaveLength(1)
   })
 })
