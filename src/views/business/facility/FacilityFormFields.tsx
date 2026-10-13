@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { Select } from '../../../components/ui'
+
+const VIETNAM_PROVINCES_AND_CITIES = [
+  'An Giang', 'Bắc Ninh', 'Cà Mau', 'Cao Bằng', 'Cần Thơ', 'Đà Nẵng',
+  'Đắk Lắk', 'Điện Biên', 'Đồng Nai', 'Đồng Tháp', 'Gia Lai', 'Hà Nội',
+  'Hà Tĩnh', 'Hải Phòng', 'Hồ Chí Minh', 'Huế', 'Hưng Yên', 'Khánh Hòa',
+  'Lai Châu', 'Lâm Đồng', 'Lạng Sơn', 'Lào Cai', 'Nghệ An', 'Ninh Bình',
+  'Phú Thọ', 'Quảng Ngãi', 'Quảng Ninh', 'Quảng Trị', 'Sơn La', 'Tây Ninh',
+  'Thái Nguyên', 'Thanh Hóa', 'Tuyên Quang', 'Vĩnh Long',
+] as const
 
 export const WAREHOUSE_PHOTO_PRESETS = [
   {
@@ -38,15 +46,11 @@ export interface FacilityGeneralInfoProps {
   onChangeName: (name: string) => void
   address: string
   onChangeAddress: (addr: string) => void
-  manager: string
-  onChangeManager: (mgr: string) => void
   phone: string
   onChangePhone: (phone: string) => void
   existingFacilities: { id: string; code?: string }[]
   currentFacilityId?: string
   initialCode?: string
-  onResetCode?: () => void
-  isAutoCode?: boolean
   lang?: 'vi' | 'en'
 }
 
@@ -60,17 +64,15 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   onChangeName,
   address,
   onChangeAddress,
-  manager,
-  onChangeManager,
   phone,
   onChangePhone,
   existingFacilities,
   currentFacilityId,
   initialCode,
-  onResetCode,
-  isAutoCode = false,
   lang = 'vi',
 }) => {
+  const [isCityListOpen, setIsCityListOpen] = useState(false)
+
   // Validate duplicate code
   const isDuplicate = existingFacilities.some(
     (f) =>
@@ -93,30 +95,12 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Mã cơ sở */}
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-semibold text-stone-700">
-              {lang === 'vi' ? 'Mã cơ sở / Mã kho *' : 'Facility Code *'}
-            </label>
-            <div className="flex items-center gap-1.5">
-              {!isEditing && isAutoCode && (
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  Tự động
-                </span>
-              )}
-              {onResetCode && (
-                <button
-                  type="button"
-                  onClick={onResetCode}
-                  className="text-[10px] text-amber-700 hover:text-amber-800 font-semibold underline cursor-pointer"
-                  title="Gợi ý lại mã cơ sở chuẩn theo Tỉnh/TP"
-                >
-                  Đặt lại
-                </button>
-              )}
-            </div>
-          </div>
+          <label className="block text-xs font-semibold text-stone-700 mb-1">
+            {lang === 'vi' ? 'Mã cơ sở *' : 'Facility Code *'}
+          </label>
           <input
             type="text"
+            disabled={isEditing}
             className={`w-full border rounded-lg px-3 py-2 text-sm font-bold uppercase bg-white focus:outline-none focus:ring-1 ${
               isDuplicate || !code.trim()
                 ? 'border-red-400 bg-red-50/40 text-red-900 focus:ring-red-500'
@@ -137,44 +121,75 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
               </svg>
               <span>Mã cơ sở thay đổi có thể ảnh hưởng đến mã gian kho dạng MãCơSở-Size-001.</span>
             </p>
-          ) : (
-            <p className="text-[11px] text-stone-400 mt-0.5">
-              Quy chuẩn: Tỉnh/TP - Số thứ tự (VD: HN-F02)
-            </p>
-          )}
+          ) : null}
         </div>
 
         {/* Tỉnh / Thành phố */}
-        <div>
+        <div className="relative">
           <label className="block text-xs font-semibold text-stone-700 mb-1">
             {lang === 'vi' ? 'Tỉnh / Thành phố *' : 'City / Province *'}
           </label>
-          <Select
-            value={city}
-            onChange={(e) => onChangeCity(e.target.value)}
-          >
-            <option value="Hà Nội">Hà Nội</option>
-            <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
-            <option value="Bình Dương">Bình Dương</option>
-            <option value="Đà Nẵng">Đà Nẵng</option>
-            <option value="Cần Thơ">Cần Thơ</option>
-            <option value="Hải Phòng">Hải Phòng</option>
-            <option value="Đồng Nai">Đồng Nai</option>
-            <option value="Vũng Tàu">Vũng Tàu</option>
-            <option value="Nha Trang">Nha Trang</option>
-          </Select>
+          <div className="relative">
+            <input
+              type="text"
+              className="w-full border border-stone-300 rounded-lg pl-3 pr-10 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+              value={city}
+              onChange={(e) => onChangeCity(e.target.value)}
+              onFocus={() => setIsCityListOpen(true)}
+              onBlur={() => setIsCityListOpen(false)}
+              placeholder={lang === 'vi' ? 'Nhập hoặc chọn tỉnh/thành phố' : 'Enter or select a city/province'}
+              role="combobox"
+              aria-expanded={isCityListOpen}
+              aria-controls="vietnam-provinces-and-cities"
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-stone-600 hover:text-amber-700"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setIsCityListOpen((open) => !open)}
+              aria-label={lang === 'vi' ? 'Mở danh sách tỉnh thành' : 'Open city and province list'}
+            >
+              <svg className={`w-4 h-4 transition-transform ${isCityListOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          {isCityListOpen && (
+            <div
+              id="vietnam-provinces-and-cities"
+              role="listbox"
+              className="absolute z-30 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg border border-stone-200 bg-white py-1 shadow-xl"
+            >
+              {VIETNAM_PROVINCES_AND_CITIES.map((province) => (
+                <button
+                  key={province}
+                  type="button"
+                  role="option"
+                  aria-selected={city === province}
+                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-amber-50 ${city === province ? 'bg-amber-50 font-semibold text-amber-900' : 'text-stone-800'}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    onChangeCity(province)
+                    setIsCityListOpen(false)
+                  }}
+                >
+                  {province}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tên cơ sở */}
       <div>
         <label className="block text-xs font-semibold text-stone-700 mb-1">
-          {lang === 'vi' ? 'Tên cơ sở / Chi nhánh kho *' : 'Facility Name *'}
+          {lang === 'vi' ? 'Tên cơ sở *' : 'Facility Name *'}
         </label>
         <input
           type="text"
           className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold"
-          placeholder="VD: Kho Việt – Cơ sở Hà Nội..."
+          placeholder="VD: Kho Việt Đà Nẵng..."
           value={name}
           onChange={(e) => onChangeName(e.target.value)}
         />
@@ -194,21 +209,8 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
         />
       </div>
 
-      {/* Quản lý & Hotline */}
+      {/* Hotline. Manager is assigned by Admin through the account facility scope. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1">
-            {lang === 'vi' ? 'Người quản lý chi nhánh' : 'Facility Manager'}
-          </label>
-          <input
-            type="text"
-            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-            placeholder="VD: Trần Văn Quản Lý..."
-            value={manager}
-            onChange={(e) => onChangeManager(e.target.value)}
-          />
-        </div>
-
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
             {lang === 'vi' ? 'Hotline liên hệ' : 'Phone / Hotline'}
@@ -238,8 +240,9 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
 export interface FacilityOperationsProps {
   accessHours: string
   onChangeAccessHours: (hours: string) => void
-  status: 'active' | 'maintenance'
-  onChangeStatus: (status: 'active' | 'maintenance') => void
+  status: 'setup' | 'ready_to_publish' | 'active' | 'maintenance' | 'inactive' | 'coming_soon'
+  onChangeStatus: (status: 'setup' | 'ready_to_publish' | 'active' | 'maintenance' | 'inactive' | 'coming_soon') => void
+  statusReadOnly?: boolean
   lang?: 'vi' | 'en'
 }
 
@@ -248,6 +251,7 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
   onChangeAccessHours,
   status,
   onChangeStatus,
+  statusReadOnly = false,
   lang = 'vi',
 }) => {
   const is24_7 = accessHours.includes('24/7')
@@ -320,13 +324,23 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
           <select
             className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
             value={status}
-            onChange={(e) => onChangeStatus(e.target.value as 'active' | 'maintenance')}
+            disabled={statusReadOnly}
+            onChange={(e) => onChangeStatus(e.target.value as FacilityOperationsProps['status'])}
           >
+            <option value="setup">Đang thiết lập — chưa có loại kho/giá</option>
+            <option value="ready_to_publish">Sẵn sàng công bố</option>
             <option value="active">Đang hoạt động</option>
             <option value="maintenance">Bảo trì</option>
+            <option value="inactive">Ngừng hoạt động</option>
+            <option value="coming_soon">Sắp hoạt động</option>
           </select>
           <p className="text-[10px] text-stone-500 mt-1">
-            {status === 'active' ? '● Cơ sở sẵn sàng đón khách và lưu trữ' : '▲ Cơ sở đang tạm dừng vận hành / bảo dưỡng'}
+            {status === 'setup' ? '● Cơ sở mới tạo, chưa được công bố cho Customer'
+              : status === 'ready_to_publish' ? '● Đã đủ cấu hình và đang chờ BO công bố'
+                : status === 'active' ? '● Cơ sở đã công bố và sẵn sàng nhận khách'
+                  : status === 'maintenance' ? '▲ Cơ sở đang tạm dừng vận hành / bảo dưỡng'
+                    : status === 'coming_soon' ? '● Cơ sở dự kiến sắp hoạt động'
+                      : '● Cơ sở đã ngừng hoạt động'}
           </p>
         </div>
       </div>
