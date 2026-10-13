@@ -154,8 +154,9 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
   onCreated: () => void
 }) {
   const [form, setForm] = useState({
-    code: '', name: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
+    code: '', name: '', description: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
     rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
+    aisleWidthM: '1.8', trolleyType: 'Xe đẩy tay / xe sàn nhỏ', smallBoxCapacity: '336', largeBoxCapacity: '200',
     physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
   })
   const [busy, setBusy] = useState(false)
@@ -169,10 +170,12 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
     setBusy(true); setError(undefined)
     try {
       await createManagerUnitType(facilityId, {
-        code: form.code.trim().toUpperCase(), name: form.name.trim(),
+        code: form.code.trim().toUpperCase(), name: form.name.trim(), description: form.description.trim() || null,
         lengthM: Number(form.lengthM), widthM: Number(form.widthM), heightM: Number(form.heightM),
         maxLoadKg: Number(form.maxLoadKg), rackCount: Number(form.rackCount),
         rackLengthM: Number(form.rackLengthM), rackWidthM: Number(form.rackWidthM), rackHeightM: Number(form.rackHeightM),
+        aisleWidthM: Number(form.aisleWidthM), trolleyType: form.trolleyType.trim(),
+        smallBoxCapacity: Number(form.smallBoxCapacity), largeBoxCapacity: Number(form.largeBoxCapacity),
         physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
         imageUrl: form.imageUrl.trim() || null,
       })
@@ -185,11 +188,13 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
     <div className="space-y-4">
       <p className="text-sm text-stone-600">Thông tin kỹ thuật do Manager khai báo. Sau khi lưu, loại kho chuyển sang chờ BO định giá và công bố.</p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}
+        {field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}{field('description', 'Mô tả loại kho')}
         {field('physicalUnitCount', 'Số gian vật lý', 'number')}
         {field('lengthM', 'Chiều dài (m)', 'number')}{field('widthM', 'Chiều rộng (m)', 'number')}{field('heightM', 'Chiều cao (m)', 'number')}
         {field('maxLoadKg', 'Tải trọng tối đa (kg)', 'number')}{field('rackCount', 'Số khung', 'number')}
         {field('rackLengthM', 'Dài khung (m)', 'number')}{field('rackWidthM', 'Rộng khung (m)', 'number')}{field('rackHeightM', 'Cao khung (m)', 'number')}
+        {field('aisleWidthM', 'Chiều rộng lối đi (m)', 'number')}{field('trolleyType', 'Loại xe đẩy hỗ trợ')}
+        {field('smallBoxCapacity', 'Sức chứa thùng nhỏ', 'number')}{field('largeBoxCapacity', 'Sức chứa thùng lớn', 'number')}
         {field('floor', 'Tầng')}{field('zone', 'Khu vực')}{field('imageUrl', 'URL ảnh loại kho')}
       </div>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
