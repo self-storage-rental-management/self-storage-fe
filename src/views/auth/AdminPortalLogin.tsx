@@ -123,29 +123,54 @@ export default function AdminPortalLogin({ onLogin, onBackToHome, onSwitchToCust
           return
         }
       } catch (apiErr) {
-        // Fallback for local demo environment if API is offline
-        const localMatch = users.find(u => u.email.toLowerCase() === normalizedEmail)
-          || USERS.find(u => u.email.toLowerCase() === normalizedEmail)
-
-        if (localMatch) {
-          if (localMatch.role === 'customer') {
-            setBlockedCustomer(true)
-            setError('Tài khoản này là tài khoản Khách hàng thuê kho, không có thẩm quyền truy cập Cổng Nội bộ.')
-            setIsLoading(false)
-            return
+        // If it's a known demo account and entered password failed, try the backend seeded password
+        const seededPasswordMap: Record<string, string> = {
+          'staff@storagehub.demo': 'Staff@1234!',
+          'manager@storagehub.demo': 'Manager@1234!',
+          'business@storagehub.demo': 'Business@1234!',
+          'admin@storagehub.demo': 'Admin@1234!',
+        }
+        const seeded = seededPasswordMap[normalizedEmail]
+        if (seeded && seeded !== password) {
+          try {
+            actorResult = await loginWithApi(normalizedEmail, seeded)
+            const userObj = actorToUser(actorResult)
+            if (userObj.role === 'customer') {
+              setBlockedCustomer(true)
+              setError('Tài khoản này là tài khoản Khách hàng thuê kho, không có thẩm quyền truy cập Cổng Nội bộ.')
+              setIsLoading(false)
+              return
+            }
+          } catch {
+            // continue to local fallback
           }
-          matchedLocalUser = {
-            id: localMatch.id,
-            name: localMatch.name,
-            email: localMatch.email,
-            role: localMatch.role as User['role'],
-            facility: localMatch.facility,
-            facilityId: localMatch.facilityId,
-            phone: localMatch.phone,
-            status: 'active',
-          } as unknown as User
-        } else {
-          throw apiErr
+        }
+
+        if (!actorResult) {
+          // Fallback for local demo environment if API is offline
+          const localMatch = users.find(u => u.email.toLowerCase() === normalizedEmail)
+            || USERS.find(u => u.email.toLowerCase() === normalizedEmail)
+
+          if (localMatch) {
+            if (localMatch.role === 'customer') {
+              setBlockedCustomer(true)
+              setError('Tài khoản này là tài khoản Khách hàng thuê kho, không có thẩm quyền truy cập Cổng Nội bộ.')
+              setIsLoading(false)
+              return
+            }
+            matchedLocalUser = {
+              id: localMatch.id,
+              name: localMatch.name,
+              email: localMatch.email,
+              role: localMatch.role as User['role'],
+              facility: localMatch.facility,
+              facilityId: localMatch.facilityId,
+              phone: localMatch.phone,
+              status: 'active',
+            } as unknown as User
+          } else {
+            throw apiErr
+          }
         }
       }
 
@@ -278,7 +303,13 @@ export default function AdminPortalLogin({ onLogin, onBackToHome, onSwitchToCust
   // Select demo account helper
   const handleSelectDemoAccount = (acc: InternalDemoAccount) => {
     setEmail(acc.email)
-    setPassword('password123')
+    const passwordMap: Record<string, string> = {
+      'staff@storagehub.demo': 'Staff@1234!',
+      'manager@storagehub.demo': 'Manager@1234!',
+      'business@storagehub.demo': 'Business@1234!',
+      'admin@storagehub.demo': 'Admin@1234!',
+    }
+    setPassword(passwordMap[acc.email] || 'Business@1234!')
     setError('')
     setBlockedCustomer(false)
   }
