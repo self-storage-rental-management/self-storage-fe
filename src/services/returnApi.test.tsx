@@ -136,4 +136,20 @@ describe('real Return transport and unknown settlement presentation', () => {
     await expect(listReturns('staff')).rejects.toThrow('quyền')
     expect(fetch).not.toHaveBeenCalled()
   })
+  it('allows business role to view returns across all facilities without facility scope limit', async () => {
+    state.actor = {
+      ...operationsActor('manager'),
+      roles: ['BUSINESS'],
+      permissions: ['returns:read', 'rentals:update'],
+      facilityScopes: {},
+    }
+    respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
+    const page = await listReturns('manager')
+    expect(page.data).toHaveLength(1)
+    expect(page.data[0].id).toBe(record.id)
+
+    respond({ data: record })
+    const detail = await getReturn('manager', ids.event)
+    expect(detail.id).toBe(record.id)
+  })
 })

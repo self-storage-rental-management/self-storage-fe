@@ -60,7 +60,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   ),
   business: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
-    'rentals:read', 'payments:read', 'reports:read', 'support:read', 'policies:read', 'policies:update'
+    'rentals:read', 'returns:read', 'returns:process', 'rentals:update', 'payments:read', 'reports:read', 'support:read', 'policies:read', 'policies:update'
   ),
   admin: makePermissions('users:manage', 'roles:manage', 'settings:manage', 'audit_logs:read'),
 }
@@ -89,6 +89,9 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   normalized.manager['policies:read'] = true
   normalized.business['policies:read'] = true
   normalized.business['policies:update'] = true
+  normalized.business['returns:read'] = true
+  normalized.business['returns:process'] = true
+  normalized.business['rentals:update'] = true
   normalized.business['settings:manage'] = false
   normalized.business['payments:collect'] = false
   normalized.business['reservations:approve'] = false
