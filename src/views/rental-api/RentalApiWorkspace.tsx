@@ -104,13 +104,13 @@ function Pager({
   )
 }
 
-export default function RentalApiWorkspace({ role }: { role: RentalApiRole }) {
+export default function RentalApiWorkspace({ role, focusStorageUnitId }: { role: RentalApiRole; focusStorageUnitId?: string }) {
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  return <WorkspaceSession key={identity} role={role} />
+  return <WorkspaceSession key={identity} role={role} focusStorageUnitId={focusStorageUnitId} />
 }
 
-function WorkspaceSession({ role }: { role: RentalApiRole }) {
+function WorkspaceSession({ role, focusStorageUnitId }: { role: RentalApiRole; focusStorageUnitId?: string }) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -156,6 +156,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
     return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
   return (
     <WorkspaceData
+      focusStorageUnitId={focusStorageUnitId}
       key={identity}
       role={role}
       identity={identity}
@@ -183,6 +184,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
 }
 
 function WorkspaceData({
+  focusStorageUnitId,
   role,
   identity,
   tab,
@@ -198,6 +200,7 @@ function WorkspaceData({
   action,
   setAction,
 }: {
+  focusStorageUnitId?: string
   role: RentalApiRole
   identity: string
   tab: "rental" | "renewal"
@@ -226,6 +229,21 @@ function WorkspaceData({
         ? { kind: "rental" as const, page: await listRentals(role, rq) }
         : { kind: "renewal" as const, page: await listRenewals(role, nq) },
   )
+  useEffect(() => {
+    if (!focusStorageUnitId || role !== 'customer' || tab !== 'rental' || read.loading || read.data?.kind !== 'rental') return
+    const row = read.data.page.data.find(item => item.storageUnit.id === focusStorageUnitId && item.status === 'active')
+    if (!row) {
+      const pagination = read.data.page.pagination
+      if (pagination.page + 1 < pagination.totalPages) setRq({ ...rq, page: pagination.page + 1 })
+      return
+    }
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(`rental-api-record-${row.id}`)
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.focus({ preventScroll: true })
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [focusStorageUnitId, role, tab, read.loading, read.data])
   const counts = useRentalApiResource(
     `${identity}:${query.facilityId}:counts`,
     async () => {
@@ -428,7 +446,7 @@ function WorkspaceData({
               </thead>
               <tbody>
                 {read.data.page.data.map((row) => (
-                  <tr key={row.id} className="border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40">
+                  <tr key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1} className={`border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40 ${focusStorageUnitId && row.storageUnit.id === focusStorageUnitId && row.status === 'active' ? 'outline outline-2 outline-amber-400 bg-amber-50' : ''}`}>
                     <td className="p-3 align-middle">
                       <code
                         className="block break-all rounded-md border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs leading-5 tracking-tight text-stone-700"
