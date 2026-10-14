@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RenewalOperationsPanel from "./RenewalOperationsPanel"
+import RenewalDepositSettlementPanel from "./RenewalDepositSettlementPanel"
 import RentalApiWorkspace from "./RentalApiWorkspace"
 import ApiReadState from "./ApiReadState"
 import RenewalDetail from "./RenewalDetail"
@@ -16,7 +17,7 @@ import { apiPage, ids, operationEvent, operationsActor, signingState } from "../
 const h = vi.hoisted(() => ({
   slots: [] as any[], cursor: 0, effects: [] as (() => void)[],
   actor: undefined as any, state: undefined as any, proposal: undefined as any,
-  operationLoading: false, detail: undefined as any, staffPage: undefined as any,
+  operationLoading: false, detail: undefined as any, staffPage: undefined as any, settlement: undefined as any,
   refresh: vi.fn(), send: vi.fn(), upload: vi.fn(), download: vi.fn(),
 }))
 vi.mock("react", async original => ({
@@ -40,13 +41,16 @@ vi.mock("react", async original => ({
 vi.mock("../manager/managerPresentation", () => ({ useManagerPresentation: () => ({ manager: false, copy: (s: string) => s, errorText: () => "Lỗi thử nghiệm" }) }))
 vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => h.actor }))
 vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: (key: string) => {
+  if (key.includes(":deposit-settlement:")) return { data: h.settlement, loading: false, refresh: h.refresh }
   if (key.endsWith(":proposal")) return { ...h.proposal, refresh: h.refresh }
   if (key.includes(":renewal:")) return { data: h.detail, loading: false, refresh: h.refresh }
   if (key.includes(':"size":20') || key.includes('{"page":0,"size":20}')) return { data: h.staffPage, loading: false, refresh: h.refresh }
-  if (/:(statement|incidents:|coordination:|assignment:|counts|rental:)/.test(key)) return { loading: false, refresh: h.refresh }
+  if (key.includes(":coordination:")) return { data: apiPage([{ ...operationEvent, kind: "INCIDENT" }]), loading: false, refresh: h.refresh }
+  if (/:(statement|incidents:|assignment:|counts|rental:)/.test(key)) return { loading: false, refresh: h.refresh }
   return { data: h.operationLoading ? undefined : h.state, loading: h.operationLoading, refresh: h.refresh }
 } }))
 vi.mock("../../services/renewalOperationsApi", async original => ({ ...await original<typeof import("../../services/renewalOperationsApi")>(), sendRenewalOperation: (...args: unknown[]) => h.send(...args) }))
+vi.mock("../../services/renewalDepositSettlementApi", async original => ({ ...await original<typeof import("../../services/renewalDepositSettlementApi")>(), executeDepositRefund: (...args: unknown[]) => h.send(...args) }))
 vi.mock("../../services/duongIntegrationApi", async original => ({
   ...await original<typeof import("../../services/duongIntegrationApi")>(),
   uploadDuongEvidence: (...args: unknown[]) => h.upload(...args),
@@ -75,8 +79,54 @@ beforeEach(() => {
   h.actor = operationsActor("customer")
   h.state = { ...signingState, pendingExceptionRef: ids.file }
   h.proposal = { loading: false, error: new ApiClientError("proposal unavailable", { status: 503 }) }
-  h.operationLoading = false; h.detail = undefined; h.staffPage = undefined
+  h.operationLoading = false; h.detail = undefined; h.staffPage = undefined; h.settlement = undefined
   h.refresh.mockReset(); h.send.mockReset(); h.upload.mockReset(); h.download.mockReset()
+})
+
+describe("Deposit refund command safety", () => {
+  function approved() {
+    h.actor = { ...operationsActor("manager"), permissions: ["rentals:read", "rentals:update", "payments:collect"] }
+    h.settlement = { renewalId: ids.renewal, expectedVersion: 4, status: "REFUND_APPROVED", amount: 40, refundedAmount: 0, currency: "VND", environment: "SANDBOX", refundId: ids.event, signingDeadline: signingState.effectiveSigningDeadline, checkedAt: operationEvent.occurredAt }
+  }
+  function ready(panel: () => ReactElement<any> | null) {
+    const tree = panel()
+    nodes(tree).find(n => n.type === "input" && n.props.type !== "checkbox")!.props.onChange({ target: { value: "sandbox-refund-proof" } })
+    find(tree,EvidenceUpload).props.onChange([ids.file])
+    nodes(tree).find(n => n.type === "input" && n.props.type === "checkbox")!.props.onChange({ target: { checked: true } })
+  }
+  it("unlocks immediately after a known denial and sends no client amount", async () => {
+    approved()
+    const slots: any[] = [], onLocked = vi.fn()
+    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "manager", revision: 4, onLocked, onChanged: vi.fn() }),slots)
+    ready(panel)
+    h.send.mockRejectedValueOnce(new ApiClientError("denied",{ status: 400 }))
+    const click = button(panel(),"Xác nhận đã hoàn cọc").props.onClick
+    click(); click()
+    expect(onLocked).toHaveBeenLastCalledWith(true)
+    await settle()
+    expect(h.send).toHaveBeenCalledOnce()
+    expect(h.send.mock.calls[0][1]).not.toHaveProperty("amount")
+    expect(onLocked).toHaveBeenLastCalledWith(false)
+  })
+  it("retains the original refund body and key after uncertain results", async () => {
+    approved()
+    const slots: any[] = [], onLocked = vi.fn()
+    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "manager", revision: 4, onLocked, onChanged: vi.fn() }),slots)
+    ready(panel)
+    h.send.mockRejectedValueOnce(new ApiClientError("unknown",{ status: 503 }))
+    button(panel(),"Xác nhận đã hoàn cọc").props.onClick()
+    await settle()
+    const original = h.send.mock.calls[0]
+    expect(onLocked).toHaveBeenLastCalledWith(true)
+    h.settlement = { ...h.settlement, expectedVersion: 9 }
+    const tree = panel()
+    expect(find(tree,"fieldset").props.disabled).toBe(true)
+    h.send.mockResolvedValueOnce({ event: operationEvent })
+    button(tree,"Thử lại cùng yêu cầu").props.onClick()
+    await settle()
+    expect(h.send.mock.calls[1]).toEqual(original)
+    expect(onLocked).toHaveBeenLastCalledWith(false)
+  })
 })
 
 describe("Evidence download request safety", () => {
@@ -107,7 +157,6 @@ describe("D3 form identity and original retry request", () => {
     const parentLock = vi.fn(), slots: any[] = []
     const panel = () => render(() => RenewalOperationsPanel({ id: ids.renewal, role: "customer", customerId: ids.customer, onLocked: parentLock }), slots)
     let tree = panel()
-    const reload = button(tree, "Tải lại tiến độ")
     const proposalRetry = nodes(tree).filter(n => n.type === ApiReadState)[1]
     const open = button(tree, "Đổi lịch ký")
     expect(open.props.disabled).toBe(false)
@@ -116,14 +165,16 @@ describe("D3 form identity and original retry request", () => {
     let fields = invoke(original, formSlots)
     const delayedMountEffects = [...h.effects]
     find(fields, "textarea").props.onChange({ target: { value: "Lý do đổi lịch" } })
-    nodes(fields).find(n => n.type === "input" && n.props.type === "datetime-local")!.props.onChange({ target: { value: "2026-10-11T09:00" } })
+    const picker = nodes(fields).find(n => typeof n.type === "function" && n.type.name === "RenewalAppointmentPicker")!
+    picker.props.onChange("2026-10-11T09:00")
+    picker.props.onReadyChange(true)
     fields = invoke(original, formSlots, true)
     const cancel = button(fields, "Đóng biểu mẫu")
     h.send.mockRejectedValueOnce(new ApiClientError("Uncertain result", { status: 503 }))
     button(fields, "Gửi yêu cầu").props.onClick()
     delayedMountEffects.forEach(effect => effect())
     // Stale closures must already be guarded before effects/React rerender.
-    proposalRetry.props.retry(); reload.props.onClick(); cancel.props.onClick(); open.props.onClick()
+    proposalRetry.props.retry(); cancel.props.onClick(); open.props.onClick()
     expect(h.refresh).not.toHaveBeenCalled()
     expect(parentLock).toHaveBeenLastCalledWith(true)
     await settle()
@@ -172,8 +223,10 @@ describe("D3 form identity and original retry request", () => {
     }
     let fields = invoke(selected, slots)
     if (kind === "coordination") {
-      find(fields, "input").props.onChange({ target: { value: ids.staff } })
-      find(fields, "textarea").props.onChange({ target: { value: "Phân công nhân viên" } })
+      const selects = nodes(fields).filter(n => n.type === "select")
+      selects[0].props.onChange({ target: { value: ids.event } })
+      selects[1].props.onChange({ target: { value: "true" } })
+      find(fields, "textarea").props.onChange({ target: { value: "Đã xác minh sự cố" } })
       fields = invoke(selected, slots)
     }
     h.send.mockRejectedValue(new ApiClientError("known rejection", { status: 400 }))
@@ -202,8 +255,9 @@ describe("D3 upload synchronously protects its owning modal", () => {
     let close: ReturnType<typeof vi.fn> | undefined, action: ReturnType<typeof vi.fn> | undefined
     if (role === "staff") {
       h.staffPage = apiPage([h.state])
-      const session = StaffPanel() as ReactElement<any>, workspace = invoke(session)
-      owner = () => invoke(workspace, ownerSlots)
+      const session = StaffPanel() as ReactElement<any>, workspace = invoke(session), tabs = invoke(workspace)
+      const staffSession = nodes(tabs).find(n => typeof n.type === "function" && n.type.name === "StaffSession")!
+      owner = () => invoke(staffSession, ownerSlots)
       button(owner(), "Xử lý").props.onClick()
       panelElement = find(owner(), RenewalOperationsPanel)
     } else {
@@ -220,8 +274,6 @@ describe("D3 upload synchronously protects its owning modal", () => {
     let child: ReactElement<any>, childSlots: any[] = []
     if (role === "manager") {
       child = find(panel(), RenewalCoordinationPanel)
-      const initial = invoke(child, childSlots)
-      nodes(initial).find(n => n.type === "select" && n.props.value === "assignment")!.props.onChange({ target: { value: "fault" } })
     } else {
       const tree = panel()
       button(tree, role === "staff" ? "Ghi nhận khách đến" : "Đổi lịch ký").props.onClick()
@@ -251,7 +303,6 @@ describe("D3 upload synchronously protects its owning modal", () => {
     delayedMountEffects.forEach(effect => effect())
     modal.props.onClose()
     if (role === "staff") {
-      button(before, "Tải lại").props.onClick()
       find(before, "select").props.onChange({ target: { value: "other" } })
       expect(find(owner(), Modal)).toBeDefined()
     } else {

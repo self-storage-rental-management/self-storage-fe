@@ -42,6 +42,7 @@ export interface RenewalApiRecord {
 }
 export interface RenewalApiOption {
   pricingPackageCode: string
+  pricingPackageName?: string | null
   rentalMonths: number
 }
 export interface RenewalVnpayPaymentResponse {
