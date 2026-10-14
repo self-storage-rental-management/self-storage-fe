@@ -65,8 +65,6 @@ type CustomerCatalogUnit = StorageUnit & {
   rackCount: number
   rackDimensions: string
   aisleWidthM: number
-  doorWidthM: number
-  doorHeightM: number
   smallBoxCapacity: number
   largeBoxCapacity: number
   trolley: string
@@ -79,13 +77,17 @@ type CustomerConfirmation = {
   tone?: 'danger' | 'primary'
   onConfirm: () => void
 }
+
+const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) => {
+  const seen = new Set<number>()
+  return packages.filter(pkg => {
+    if (seen.has(pkg.rentalMonths)) return false
+    seen.add(pkg.rentalMonths)
+    return true
+  })
+}
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
-  const code = (sizeCode || '').toUpperCase()
-  if (code === 'S') return 'Xe đẩy tay / xe sàn nhỏ'
-  if (code === 'M') return 'Xe đẩy sàn phẳng'
-  if (code === 'L') return 'Xe nâng tay pallet'
-  if (code === 'XL') return 'Xe nâng điện dắt bộ'
-  if (!originalTrolley) return 'Xe đẩy tiêu chuẩn'
+  if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
   const t = originalTrolley.toLowerCase()
   if (t.includes('electric') || t.includes('walkie')) return 'Xe nâng điện dắt bộ'
   if (t.includes('platform')) return 'Xe đẩy sàn phẳng'
@@ -289,12 +291,17 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
   const isAvailable = availableCount > 0
   const usableCapacity = Math.round(unitType.volumeM3 * 0.75 * 10) / 10
   const sizeCode = storageSizeCode(unitType.name)
-  const amenities = customerUnitAmenities(sizeCode)
+  const amenities = apiSpec ? {
+    aisleWidthM: apiSpec.aisleWidthM ?? 0,
+    trolley: apiSpec.trolleyType || 'Chưa cập nhật',
+    smallBoxCapacity: apiSpec.smallBoxCapacity ?? 0,
+    largeBoxCapacity: apiSpec.largeBoxCapacity ?? 0,
+  } : customerUnitAmenities(sizeCode)
 
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
       <div className="relative h-44 overflow-hidden bg-stone-200">
-        <img src={getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <img src={apiSpec?.imageUrl || getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
           📍 {facility.name}
@@ -453,16 +460,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           .filter(unitType => unitType.facilityId === facility.id)
           .reduce((total, unitType) => total + (availabilityByUnitType[unitType.id] ?? unitType.availableCount ?? 0), 0),
         price: '',
-        climate: true,
-        security: '24/7',
-        image: customerFacilityImage(facility.code),
+        climate: Boolean(facility.climateControlled),
+        security: facility.securityDescription || '',
+        image: facility.imageUrl || customerFacilityImage(facility.code),
         units: backendUnitTypes.filter(unitType => unitType.facilityId === facility.id).length,
         occupied: 0,
         revenue: 0,
         growth: 0,
         manager: '',
         status: facility.status === 'maintenance' ? 'maintenance' : 'active',
-        accessHours: '24/7',
+        accessHours: facility.accessHours || 'Chưa cập nhật',
         timezone: 'Asia/Ho_Chi_Minh',
       }))
     : isApiAuthenticated() ? [] : sharedFacilities, [backendFacilities, backendUnitTypes, availabilityByUnitType, sharedFacilities])
@@ -487,7 +494,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             widthM: unitType.widthM,
             heightM: unitType.heightM,
           },
-          doorDimensions: { widthM: 1.1, heightM: 2.2 },
+          doorDimensions: { widthM: 0, heightM: 0 },
           volumeM3: unitType.volumeM3,
           maxLoadKg: unitType.maxLoadKg,
           allowedGoods: [],
@@ -495,7 +502,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           price: vndToLegacyBase(unitType.monthlyPrice),
           deposit: vndToLegacyBase(unitType.securityDepositAmount),
           rackCount: unitType.rackCount,
-          climate: true,
+          climate: Boolean(facility?.climateControlled),
           status: (unitType.availableCount ?? 0) > 0 ? 'available' : 'reserved',
           reservedPeriods: [],
           version: 1,
@@ -515,7 +522,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         pricePerM3: unitType.volumeM3 > 0 ? vndToLegacyBase(unitType.monthlyPrice) / unitType.volumeM3 : 0,
         monthlyPrice: vndToLegacyBase(unitType.monthlyPrice),
         maxLoadKg: unitType.maxLoadKg,
-        descriptionVi: '',
+        descriptionVi: unitType.description || '',
         descriptionEn: '',
       }))
     : isApiAuthenticated() ? [] : sharedUnitTypes, [backendUnitTypes, sharedUnitTypes])
@@ -555,7 +562,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       const backendSpec = backendUnitTypes.find(item => item.id === unit.id)
-      const amenities = customerUnitAmenities(sizeCode)
+      const amenities = backendSpec ? {
+        aisleWidthM: backendSpec.aisleWidthM ?? 0,
+        trolley: backendSpec.trolleyType || 'Chưa cập nhật',
+        smallBoxCapacity: backendSpec.smallBoxCapacity ?? 0,
+        largeBoxCapacity: backendSpec.largeBoxCapacity ?? 0,
+      } : customerUnitAmenities(sizeCode)
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
       const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
       const lengthM = unit.dimensions?.lengthM ?? backendSpec?.lengthM ?? 0
@@ -564,14 +576,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const areaM2 = unit.areaM2 || (lengthM * widthM)
       const volumeM3 = unit.volumeM3 || (lengthM * widthM * heightM)
       const aisleWidthM = amenities?.aisleWidthM ?? 0
-      const doorWidthM = unit.doorDimensions?.widthM ?? 0
-      const doorHeightM = unit.doorDimensions?.heightM ?? 0
       const maxLoadKg = unit.maxLoadKg || backendSpec?.maxLoadKg || 0
       const price = unit.price
 
       const rackCount = backendSpec?.rackCount ?? (unit as any).rackCount ?? 0
-      const smallBoxCapacity = amenities?.smallBoxCapacity ?? Math.floor(volumeM3 * 8)
-      const largeBoxCapacity = amenities?.largeBoxCapacity ?? Math.floor(volumeM3 * 2.5)
+      const smallBoxCapacity = amenities?.smallBoxCapacity ?? 0
+      const largeBoxCapacity = amenities?.largeBoxCapacity ?? 0
 
       return {
         ...unit,
@@ -583,23 +593,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           ? `${backendSpec.rackLengthM}×${backendSpec.rackWidthM}×${backendSpec.rackHeightM} m`
           : 'Chưa có dữ liệu',
         aisleWidthM,
-        doorWidthM,
-        doorHeightM,
         smallBoxCapacity,
         largeBoxCapacity,
-        trolley: amenities?.trolley ?? customerTrolleyVi(sizeCode),
-        trolleyDetail: amenities?.trolley ?? customerTrolleyVi(sizeCode),
+        trolley: customerTrolleyVi(sizeCode, amenities?.trolley),
+        trolleyDetail: customerTrolleyVi(sizeCode, amenities?.trolley),
         dimensions: { lengthM, widthM, heightM },
-        doorDimensions: { widthM: doorWidthM, heightM: doorHeightM },
         volumeM3,
         maxLoadKg,
         price,
-        deposit: unit.deposit || price,
+        deposit: backendSpec?.securityDepositAmount ?? unit.deposit ?? 0,
         rentalPackages: isApiAuthenticated()
           ? []
           : unit.rentalPackages || fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages || generateDefaultRentalPackages(fac?.id || unit.facilityId, sizeCode, price),
-        allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
-        prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+        allowedGoods: isApiAuthenticated() ? [] : (unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử']),
+        prohibitedGoods: isApiAuthenticated() ? [] : (unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống']),
       }
     })
   }, [units, facilities, backendUnitTypes])
@@ -864,10 +871,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     void listReservationRentalPackages(selectedTarget.facility.id, earliestCheckInDate)
       .then(packages => {
         if (cancelled) return
-        setBackendRentalPackages(packages)
-        const selected = packages.find(item => item.code === selectedPackageId)
-          || packages.find(item => item.rentalMonths === 3)
-          || packages[0]
+        const uniquePackages = uniqueRentalPackagesByDuration(packages)
+        setBackendRentalPackages(uniquePackages)
+        const selected = uniquePackages.find(item => item.code === selectedPackageId)
+          || uniquePackages.find(item => item.rentalMonths === 3)
+          || uniquePackages[0]
         if (selected) {
           setSelectedPackageId(selected.code)
           setRentalMonths(selected.rentalMonths)
@@ -2941,6 +2949,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           if (isApiAuthenticated() && backendSpec && selectedTarget) return <CustomerUnitDetails
             unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
             availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
+            rentalPackages={backendRentalPackages}
             onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
           const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 

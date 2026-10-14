@@ -56,12 +56,12 @@ import {
   FEES,
 } from "../../data/demoDatabase"
 
-import { formatVnd } from "../../i18n/currency"
+import { formatVnd, formatVndAmount } from "../../i18n/currency"
 
 import { exportRevenueExcel } from "../../utils/excelExport"
 
 import { useStorageHub, sanitizeFacilityStrings } from "../../store/StorageHubContext"
-import type { FacilityCustomUnitSpec } from "../../types/storageHub"
+import type { Facility, FacilityCustomUnitSpec } from "../../types/storageHub"
 
 import ProfileView from "../ProfileView"
 import {
@@ -77,7 +77,16 @@ import {
   FacilityImageManager,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
-import { createFacilityApi, listAllFacilitiesApi } from "../../services/facilityApi"
+import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi } from "../../services/facilityApi"
+import { listAccessibleUnitTypes } from "../../services/customerReservationApi"
+import type { CustomerUnitType } from "../../services/customerReservationApi"
+import { isApiAuthenticated } from "../../services/authApi"
+import {
+  createBusinessPackagePolicy,
+  deactivateBusinessPackagePolicy,
+  listBusinessPackagePolicies,
+  updateBusinessPackagePolicy,
+} from "../../services/businessPolicyApi"
 
 const RUNTIME_REVENUE_DATA = DEMO_DATA_ENABLED ? REVENUE_DATA : []
 const RUNTIME_REVENUE_BREAKDOWN = DEMO_DATA_ENABLED ? REVENUE_BREAKDOWN : []
@@ -85,6 +94,13 @@ const RUNTIME_CONVERSION_DATA = DEMO_DATA_ENABLED ? CONVERSION_DATA : []
 const RUNTIME_PRICING_TIERS = DEMO_DATA_ENABLED ? PRICING_TIERS : []
 const RUNTIME_DISCOUNTS = DEMO_DATA_ENABLED ? DISCOUNTS : []
 const RUNTIME_FEES = DEMO_DATA_ENABLED ? FEES : []
+
+const facilityStatusLabel = (status: Facility['status']) => ({
+  setup: 'Đang thiết lập',
+  active: 'Đang hoạt động',
+  maintenance: 'Bảo trì',
+  inactive: 'Ngừng hoạt động',
+}[status])
 
 const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
   {
@@ -209,6 +225,7 @@ export interface DurationDiscountItem {
   status: 'active' | 'inactive'
   scopeType?: 'all' | 'specific'
   facilityIds?: string[]
+  backendPolicyIds?: Record<string, string>
 }
 
 export const DEFAULT_DURATION_DISCOUNTS: DurationDiscountItem[] = [
@@ -378,11 +395,41 @@ export default function BusinessApp({
     updateBusinessConfig,
   } = hub
 
+  // Local/demo data may use the facility code as its id. Keep the canonical
+  // backend UUID by code so edit requests always target the persisted record.
+  const [backendFacilityIdsByCode, setBackendFacilityIdsByCode] = useState<Record<string, string>>({})
+  const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null }>>({})
+  const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let mounted = true
+    const refresh = async () => {
+      try {
+        const facilities = await listAllFacilitiesApi()
+        if (mounted) setBackendFacilityStats(Object.fromEntries(facilities.map(facility => [facility.code.trim().toUpperCase(), {
+          total: facility.totalUnits ?? 0, occupied: facility.occupiedUnits ?? 0, price: facility.minimumMonthlyPrice ?? null,
+        }])))
+      } catch { /* Preserve the last successful snapshot while reconnecting. */ }
+    }
+    const timer = window.setInterval(() => void refresh(), 30000)
+    window.addEventListener('focus', refresh)
+    return () => { mounted = false; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [])
+
   useEffect(() => {
     let isMounted = true
     listAllFacilitiesApi()
       .then((backendFacs) => {
         if (!isMounted || !Array.isArray(backendFacs)) return
+        setBackendFacilityIdsByCode(Object.fromEntries(
+          backendFacs.map((facility) => [facility.code.trim().toUpperCase(), facility.id]),
+        ))
+        setBackendFacilityStats(Object.fromEntries(backendFacs.map(facility => [facility.code.trim().toUpperCase(), {
+          total: facility.totalUnits ?? 0,
+          occupied: facility.occupiedUnits ?? 0,
+          price: facility.minimumMonthlyPrice ?? null,
+        }])))
         backendFacs.forEach((bf) => {
           const cleanBf = sanitizeFacilityStrings(bf)
           const matching = facilitiesList.find(
@@ -396,9 +443,15 @@ export default function BusinessApp({
                 name: cleanBf.name,
                 address: cleanBf.address,
                 city: cleanBf.city,
-                status: cleanBf.status === "maintenance" ? "maintenance" : "active",
-                units: 20,
-                available: 20,
+                phone: cleanBf.phone || '',
+                accessHours: cleanBf.accessHours || '',
+                image: cleanBf.imageUrl || '',
+                climate: Boolean(cleanBf.climateControlled),
+                security: cleanBf.securityDescription || '',
+                manager: cleanBf.managerNames?.join(', ') || 'Chưa phân công',
+                status: cleanBf.status,
+                units: 0,
+                available: 0,
                 occupied: 0,
               },
               user,
@@ -406,12 +459,36 @@ export default function BusinessApp({
           } else if (
             matching.name !== cleanBf.name ||
             matching.address !== cleanBf.address ||
-            matching.city !== cleanBf.city
+            matching.city !== cleanBf.city ||
+            matching.status !== cleanBf.status ||
+            matching.manager !== (cleanBf.managerNames?.join(', ') || 'Chưa phân công') ||
+            (cleanBf.status === 'setup' && matching.units !== 0)
           ) {
             updateFacility(matching.id, {
               name: cleanBf.name,
               address: cleanBf.address,
               city: cleanBf.city,
+              phone: cleanBf.phone || '',
+              accessHours: cleanBf.accessHours || '',
+              image: cleanBf.imageUrl || '',
+              climate: Boolean(cleanBf.climateControlled),
+              security: cleanBf.securityDescription || '',
+              manager: cleanBf.managerNames?.join(', ') || 'Chưa phân công',
+              status: cleanBf.status,
+              ...(cleanBf.status === 'setup' ? {
+                units: 0,
+                available: 0,
+                occupied: 0,
+                unitDistribution: {},
+                unitPrices: {},
+                unitLoadLimits: {},
+                unitDimensions: {},
+                unitLaneWidths: {},
+                unitFrameCounts: {},
+                unitFrameDimensions: {},
+                unitCustomSpecs: [],
+                totalDesignLoadTon: 0,
+              } : {}),
             })
           }
         })
@@ -425,6 +502,8 @@ export default function BusinessApp({
   const getFacilityOccupiedCount = useCallback(
     (fac: any) => {
       if (!fac) return 0
+      const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
+      if (stats) return stats.occupied
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
@@ -436,18 +515,20 @@ export default function BusinessApp({
       }
       return fac.occupied || 0
     },
-    [unitsList],
+    [unitsList, backendFacilityStats],
   )
 
   const getFacilityTotalUnits = useCallback(
     (fac: any) => {
       if (!fac) return 0
+      const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
+      if (stats) return stats.total
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
       return facUnits.length > 0 ? facUnits.length : fac.units || 0
     },
-    [unitsList],
+    [unitsList, backendFacilityStats],
   )
 
   const getFacilityAvailableCount = useCallback(
@@ -773,7 +854,7 @@ export default function BusinessApp({
     } else if (policy.facilityIds && policy.facilityIds.length > 0) {
       detectedScopeType = 'specific'
       detectedFacilityIds = policy.facilityIds
-    } else {
+    } else if (!isApiAuthenticated()) {
       const s = (policy.scope || '').trim().toLowerCase()
       if (s && !['all facilities', 'toàn bộ cơ sở', 'all', 'toàn bộ'].includes(s)) {
         detectedScopeType = 'specific'
@@ -965,6 +1046,36 @@ export default function BusinessApp({
     return DEFAULT_DURATION_DISCOUNTS
   })
 
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let cancelled = false
+    void listBusinessPackagePolicies().then(policies => {
+      if (cancelled) return
+      const grouped = new Map<string, DurationDiscountItem>()
+      policies.forEach(policy => {
+        const key = `${policy.code}:${policy.rentalMonths}:${policy.discountRate}:${policy.effectiveFrom}:${policy.effectiveTo ?? ''}`
+        const current = grouped.get(key)
+        const facilityIds = [...(current?.facilityIds ?? []), policy.facilityId]
+        grouped.set(key, {
+          id: current?.id ?? `api-${policy.code}-${policy.rentalMonths}`,
+          months: policy.rentalMonths,
+          title: policy.name,
+          label: `${policy.rentalMonths} tháng`,
+          discountPercent: Number(policy.discountRate) * 100,
+          renewalDiscountPercent: 0,
+          description: `${policy.name} · phiên bản ${policy.policyVersion}`,
+          appliesTo: 'Đặt mới',
+          status: policy.active ? 'active' : 'inactive',
+          scopeType: 'specific',
+          facilityIds,
+          backendPolicyIds: { ...(current?.backendPolicyIds ?? {}), [policy.facilityId]: policy.id },
+        })
+      })
+      setDurationDiscounts([...grouped.values()])
+    }).catch(error => showToast(error instanceof Error ? error.message : 'Không thể tải gói thuê từ backend.'))
+    return () => { cancelled = true }
+  }, [])
+
   // ── QUẢN LÝ GÓI THUÊ & CHIẾT KHẤU KỲ HẠN ──
   const [createDurationModal, setCreateDurationModal] = useState(false)
   const [formCreateDurationTitle, setFormCreateDurationTitle] = useState("")
@@ -1004,7 +1115,7 @@ export default function BusinessApp({
     setCreateDurationModal(true)
   }
 
-  const handleSaveNewDurationDiscount = () => {
+  const handleSaveNewDurationDiscount = async () => {
     const rawMonths = formCreateDurationMonths
     const parsedMonths = typeof rawMonths === 'number' ? rawMonths : parseInt(String(rawMonths), 10)
     const validMonths = !isNaN(parsedMonths) && parsedMonths > 0 ? parsedMonths : 'other'
@@ -1031,6 +1142,35 @@ export default function BusinessApp({
       facilityIds: formCreateDurationScopeType === 'specific' ? formCreateDurationFacilityIds : [],
     }
 
+    if (isApiAuthenticated()) {
+      const targetFacilityIds = formCreateDurationScopeType === 'specific'
+        ? formCreateDurationFacilityIds
+        : facilitiesList.map(facility => facility.id)
+      if (!targetFacilityIds.length) {
+        showToast('Chưa có cơ sở để áp dụng gói thuê.')
+        return
+      }
+      try {
+        const effectiveFrom = new Date().toISOString().slice(0, 10)
+        const created = await Promise.all(targetFacilityIds.map(facilityId => createBusinessPackagePolicy({
+          facilityId,
+          code: `PKG-${validMonths}M-${Date.now().toString().slice(-6)}`,
+          name: title,
+          rentalMonths: typeof validMonths === 'number' ? validMonths : 1,
+          discountRate: newPkg.discountPercent / 100,
+          policyVersion: `v${Date.now()}`,
+          active: newPkg.status === 'active',
+          effectiveFrom,
+          effectiveTo: null,
+        })))
+        newPkg.facilityIds = targetFacilityIds
+        newPkg.scopeType = 'specific'
+        newPkg.backendPolicyIds = Object.fromEntries(created.map(policy => [policy.facilityId, policy.id]))
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Không thể tạo gói thuê.')
+        return
+      }
+    }
     const next = [...durationDiscounts, newPkg]
     setDurationDiscounts(next)
     localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
@@ -1052,7 +1192,7 @@ export default function BusinessApp({
     setEditDurationModal(true)
   }
 
-  const handleSaveDurationDiscount = () => {
+  const handleSaveDurationDiscount = async () => {
     if (!selectedDurationItem) return
 
     if (formDurationScopeType === 'specific' && formDurationFacilityIds.length === 0) {
@@ -1060,6 +1200,25 @@ export default function BusinessApp({
       return
     }
 
+    if (isApiAuthenticated() && selectedDurationItem.backendPolicyIds) {
+      try {
+        const effectiveFrom = new Date().toISOString().slice(0, 10)
+        await Promise.all(Object.entries(selectedDurationItem.backendPolicyIds).map(([facilityId, id]) => updateBusinessPackagePolicy(id, {
+          facilityId,
+          code: selectedDurationItem.id.replace(/^api-/, '').slice(0, 30),
+          name: formDurationTitle.trim() || selectedDurationItem.title,
+          rentalMonths: typeof selectedDurationItem.months === 'number' ? selectedDurationItem.months : 1,
+          discountRate: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)) / 100,
+          policyVersion: `v${Date.now()}`,
+          active: formDurationStatus === 'active',
+          effectiveFrom,
+          effectiveTo: null,
+        })))
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Không thể cập nhật gói thuê.')
+        return
+      }
+    }
     const next = durationDiscounts.map((d) => {
       if (d.id === selectedDurationItem.id) {
         return {
@@ -1087,11 +1246,19 @@ export default function BusinessApp({
     )
   }
 
-  const handleDeleteDurationDiscount = (id: string) => {
+  const handleDeleteDurationDiscount = async (id: string) => {
     const item = durationDiscounts.find((d) => d.id === id)
     if (!item) return
 
     if (window.confirm(lang === 'vi' ? `Bạn có chắc muốn xóa gói "${item.title}"?` : `Delete package "${item.title}"?`)) {
+      if (isApiAuthenticated() && item.backendPolicyIds) {
+        try {
+          await Promise.all(Object.values(item.backendPolicyIds).map(policyId => deactivateBusinessPackagePolicy(policyId)))
+        } catch (error) {
+          showToast(error instanceof Error ? error.message : 'Không thể ngừng gói thuê.')
+          return
+        }
+      }
       const next = durationDiscounts.filter((d) => d.id !== id)
       setDurationDiscounts(next)
       localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
@@ -1559,6 +1726,9 @@ export default function BusinessApp({
 
   const [facilityPriceModalOpen, setFacilityPriceModalOpen] = useState(false)
   const [editingPriceFacility, setEditingPriceFacility] = useState<any | null>(null)
+  const [backendPricingUnitTypes, setBackendPricingUnitTypes] = useState<CustomerUnitType[]>([])
+  const [backendPricingValues, setBackendPricingValues] = useState<Record<string, { monthlyPrice: number; securityDepositAmount: number }>>({})
+  const [backendPricingLoading, setBackendPricingLoading] = useState(false)
   const [facilityPricesForm, setFacilityPricesForm] = useState<{ S: number; M: number; L: number; XL: number }>({
     S: 5500000,
     M: 9500000,
@@ -1572,7 +1742,7 @@ export default function BusinessApp({
     XL: 1.0,
   })
 
-  const handleOpenFacilityPriceModal = (fac: any) => {
+  const handleOpenFacilityPriceModal = async (fac: any) => {
     setEditingPriceFacility(fac)
     const currentOverrides = facilityPricingOverrides[fac.id] || {}
     setFacilityPricesForm({
@@ -1588,11 +1758,54 @@ export default function BusinessApp({
       XL: currentOverrides["tier-4"]?.highDemandMultiplier ?? 1.0,
     })
     setFacilityPriceModalOpen(true)
+    if (isApiAuthenticated()) {
+      setBackendPricingLoading(true)
+      try {
+        const page = await listAccessibleUnitTypes(fac.id, 0, 100)
+        setBackendPricingUnitTypes(page.data)
+        setBackendPricingValues(Object.fromEntries(page.data.map(unitType => [unitType.id, {
+          monthlyPrice: Number(unitType.monthlyPrice) || 0,
+          securityDepositAmount: Number(unitType.securityDepositAmount) || 0,
+        }])))
+      } catch (error) {
+        setBackendPricingUnitTypes([])
+        setBackendPricingValues({})
+        showToast(error instanceof Error ? error.message : 'Không thể tải danh sách loại kho của cơ sở.')
+      } finally {
+        setBackendPricingLoading(false)
+      }
+    }
   }
 
-  const handleSaveFacilityPrices = () => {
+  const handleSaveFacilityPrices = async () => {
     if (!editingPriceFacility) return
     const facId = editingPriceFacility.id
+    if (isApiAuthenticated()) {
+      if (!backendPricingUnitTypes.length) {
+        showToast('Manager chưa khai báo loại kho thực tế cho cơ sở này.')
+        return
+      }
+      const invalid = backendPricingUnitTypes.some(unitType => {
+        const value = backendPricingValues[unitType.id]
+        return !value || value.monthlyPrice <= 0 || value.securityDepositAmount < 0
+      })
+      if (invalid) {
+        showToast('Giá thuê phải lớn hơn 0 và tiền đảm bảo không được âm.')
+        return
+      }
+      try {
+        await Promise.all(backendPricingUnitTypes.map(unitType =>
+          priceBusinessUnitTypeApi(unitType.id, backendPricingValues[unitType.id])))
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Không thể lưu biểu giá lên backend.')
+        return
+      }
+    }
+    if (isApiAuthenticated()) {
+      setFacilityPriceModalOpen(false)
+      showToast(`Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"!`)
+      return
+    }
     const nextOverrides = {
       ...facilityPricingOverrides,
       [facId]: {
@@ -1650,6 +1863,51 @@ export default function BusinessApp({
         ? `Đã khôi phục giá mặc định cho "${editingPriceFacility.name}"!`
         : `Reset pricing for ${editingPriceFacility.name}!`,
     )
+  }
+
+  const handleOpenFacilityDetails = async (facility: Facility) => {
+    if (!isApiAuthenticated()) {
+      setSelectedFacility(facility)
+      setViewFacilityModal(true)
+      return
+    }
+    try {
+      const page = await listAccessibleUnitTypes(facility.id, 0, 100)
+      setBackendDetailCounts(Object.fromEntries(page.data.map(type => [type.code, {
+        total: type.totalCount ?? 0, occupied: type.occupiedCount ?? 0, available: type.availableCount ?? 0,
+      }])))
+      const specs: FacilityCustomUnitSpec[] = page.data.map((type) => ({
+        id: type.id,
+        sizeCode: type.code,
+        name: type.name,
+        lengthM: Number(type.lengthM),
+        widthM: Number(type.widthM),
+        heightM: Number(type.heightM),
+        laneWidthM: Number(type.aisleWidthM || 0),
+        maxLoadKg: Number(type.maxLoadKg),
+        monthlyPrice: Number(type.monthlyPrice),
+        count: Number(type.totalCount || 0),
+        frameCount: type.rackCount,
+        frameDimensions: {
+          lengthM: Number(type.rackLengthM),
+          widthM: Number(type.rackWidthM),
+          heightM: Number(type.rackHeightM),
+        },
+      }))
+      const totalUnits = specs.reduce((sum, spec) => sum + spec.count, 0)
+      setSelectedFacility({
+        ...facility,
+        units: totalUnits,
+        occupied: backendFacilityStats[(facility.code || '').trim().toUpperCase()]?.occupied ?? facility.occupied,
+        available: page.data.reduce((sum, type) => sum + Number(type.availableCount || 0), 0),
+        unitCustomSpecs: specs,
+        unitDistribution: Object.fromEntries(specs.map((spec) => [spec.sizeCode, spec.count])),
+        unitPrices: Object.fromEntries(specs.map((spec) => [spec.sizeCode, spec.monthlyPrice])),
+      })
+      setViewFacilityModal(true)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể tải thông tin kho của cơ sở.')
+    }
   }
 
   const getEffectiveTier = (tier: PricingTierItem) => {
@@ -1999,7 +2257,7 @@ export default function BusinessApp({
     "06:00 - 22:00 hàng ngày",
   )
 
-  const [formFacStatus, setFormFacStatus] = useState<"active" | "maintenance">(
+  const [formFacStatus, setFormFacStatus] = useState<Facility['status']>(
     "active",
   )
 
@@ -2194,79 +2452,15 @@ export default function BusinessApp({
     }
   }
 
-  // Tự động gợi ý mã cơ sở chuẩn theo tỉnh/thành phố
-
-  const suggestFacilityCode = (cityName: string) => {
-    let prefix = "FAC"
-
-    const lower = cityName.toLowerCase()
-
-    if (lower.includes("hà nội") || lower.includes("ha noi")) prefix = "HN"
-    else if (
-      lower.includes("hồ chí minh") ||
-      lower.includes("hcm") ||
-      lower.includes("sài gòn") ||
-      lower.includes("q1") ||
-      lower.includes("quận")
-    )
-      prefix = "HCM"
-    else if (lower.includes("bình dương") || lower.includes("binh duong"))
-      prefix = "BD"
-    else if (lower.includes("đà nẵng") || lower.includes("da nang"))
-      prefix = "DN"
-    else if (lower.includes("hải phòng") || lower.includes("hai phong"))
-      prefix = "HP"
-    else if (lower.includes("cần thơ") || lower.includes("can tho"))
-      prefix = "CT"
-    else if (lower.includes("đồng nai") || lower.includes("dong nai"))
-      prefix = "DNAI"
-    else {
-      prefix =
-        cityName
-          .trim()
-          .split(/\s+/)
-          .map((w) => w[0])
-          .join("")
-          .toUpperCase() || "FAC"
-    }
-
-    const regex = new RegExp(`^${prefix}-F?(\\d+)`, "i")
-
-    const existingNums = facilitiesList
-
-      .map((f) => (f.code || f.id || "").toUpperCase())
-
-      .map((c) => {
-        const m = c.match(regex)
-
-        return m ? parseInt(m[1], 10) : 0
-      })
-
-      .filter((n) => n > 0)
-
-    const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 1
-
-    return `${prefix}-F${String(nextNum).padStart(2, "0")}`
-  }
-
-  // Mở modal thêm cơ sở mới với dữ liệu mẫu trực quan
+  // Mở modal thêm cơ sở mới với thông tin nhận diện để trống cho BO khai báo.
 
   const handleOpenCreateFacility = () => {
-    const defaultCity = "Hà Nội"
-
-    const autoCode = suggestFacilityCode(defaultCity)
-
-    setFormFacCode(autoCode)
-
-    setFormFacName("Kho Việt – Cơ sở Hà Nội")
-
-    setFormFacAddress("Số 123 Cầu Giấy, Phường Quan Hoa, Quận Cầu Giấy")
-
-    setFormFacCity(defaultCity)
-
-    setFormFacManager("Trần Văn Quản Lý")
-
-    setFormFacPhone("024 3822 9999")
+    setFormFacCode("")
+    setFormFacName("")
+    setFormFacAddress("")
+    setFormFacCity("")
+    setFormFacManager("")
+    setFormFacPhone("")
 
     setFormFacUnitS(0)
 
@@ -2312,19 +2506,19 @@ export default function BusinessApp({
 
     setFormFacAccessHours("06:00 - 22:00 hàng ngày")
 
-    setFormFacStatus("active")
+    setFormFacStatus(isApiAuthenticated() ? "setup" : "active")
 
-    const defaultSpecs = DEFAULT_FACILITY_UNIT_SPECS.map((s) => ({
+    const defaultSpecs = (isApiAuthenticated() ? [] : DEFAULT_FACILITY_UNIT_SPECS).map((s) => ({
       ...s,
       count: 5,
       rentalPackages: generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice),
     }))
     setFormFacUnitSpecs(defaultSpecs)
-    setFormFacUnits(20)
-    setFormFacUnitS(5)
-    setFormFacUnitM(5)
-    setFormFacUnitL(5)
-    setFormFacUnitXL(5)
+    setFormFacUnits(isApiAuthenticated() ? 0 : 20)
+    setFormFacUnitS(isApiAuthenticated() ? 0 : 5)
+    setFormFacUnitM(isApiAuthenticated() ? 0 : 5)
+    setFormFacUnitL(isApiAuthenticated() ? 0 : 5)
+    setFormFacUnitXL(isApiAuthenticated() ? 0 : 5)
 
     setCreateFacilityModal(true)
   }
@@ -2384,7 +2578,7 @@ export default function BusinessApp({
 
     const totalCalculatedUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
-    if (totalCalculatedUnits <= 0) {
+    if (!isApiAuthenticated() && totalCalculatedUnits <= 0) {
       showToast(
         lang === "vi"
           ? "Vui lòng chỉ định ít nhất 1 gian kho cho cơ sở!"
@@ -2439,30 +2633,28 @@ export default function BusinessApp({
     const pXL = newUnitPrices.XL || 22500000
 
     let backendFacilityId: string | undefined
+    let backendFacilityStatus: Facility['status'] | undefined
     try {
-      const unitSpecsPayload = formFacUnitSpecs.map((s) => ({
-        sizeCode: s.sizeCode,
-        name: s.name,
-        count: s.count,
-        monthlyPrice: s.monthlyPrice,
-        lengthM: s.lengthM,
-        widthM: s.widthM,
-        heightM: s.heightM,
-        maxLoadKg: s.maxLoadKg,
-      }))
-
       const apiRes = await createFacilityApi({
         code,
         name: formFacName.trim(),
         address: formFacAddress.trim(),
         city: formFacCity.trim(),
-        status: formFacStatus,
-        unitSpecs: unitSpecsPayload,
+        phone: formFacPhone.trim() || null,
+        accessHours: formFacAccessHours.trim() || null,
+        imageUrl: formFacImage || null,
+        climateControlled: formFacClimate,
+        securityDescription: formFacSecurity.trim() || null,
       })
       if (apiRes?.id) {
         backendFacilityId = apiRes.id
+        backendFacilityStatus = apiRes.status
       }
     } catch (err) {
+      if (isApiAuthenticated()) {
+        showToast(err instanceof Error ? err.message : 'Không thể tạo cơ sở trên backend.')
+        return
+      }
       console.warn("Backend create facility API failed/offline:", err)
     }
 
@@ -2477,13 +2669,13 @@ export default function BusinessApp({
 
         city: formFacCity.trim(),
 
-        manager: formFacManager.trim() || "Quản lý cơ sở",
+        manager: isApiAuthenticated() ? "Chưa phân công" : (formFacManager.trim() || "Quản lý cơ sở"),
 
         phone: formFacPhone.trim() || "1900 6868",
 
-        units: totalCalculatedUnits,
+        units: isApiAuthenticated() ? 0 : totalCalculatedUnits,
 
-        unitDistribution,
+        unitDistribution: isApiAuthenticated() ? {} : unitDistribution,
 
         price: (() => {
           const parsed = parseInt(formFacPrice.replace(/\D/g, ""), 10)
@@ -2492,21 +2684,21 @@ export default function BusinessApp({
             : `${Math.round(minPrice).toLocaleString("vi-VN")}đ`
         })(),
 
-        unitPrices: newUnitPrices,
+        unitPrices: isApiAuthenticated() ? {} : newUnitPrices,
 
-        unitLoadLimits,
+        unitLoadLimits: isApiAuthenticated() ? {} : unitLoadLimits,
 
-        unitDimensions,
+        unitDimensions: isApiAuthenticated() ? {} : unitDimensions,
 
-        unitLaneWidths,
+        unitLaneWidths: isApiAuthenticated() ? {} : unitLaneWidths,
 
-        unitFrameCounts,
+        unitFrameCounts: isApiAuthenticated() ? {} : unitFrameCounts,
 
-        unitFrameDimensions,
+        unitFrameDimensions: isApiAuthenticated() ? {} : unitFrameDimensions,
 
-        unitCustomSpecs: formFacUnitSpecs,
+        unitCustomSpecs: isApiAuthenticated() ? [] : formFacUnitSpecs,
 
-        totalDesignLoadTon,
+        totalDesignLoadTon: isApiAuthenticated() ? 0 : totalDesignLoadTon,
 
         image: formFacImage || WAREHOUSE_PHOTO_PRESETS[0].url,
 
@@ -2516,11 +2708,11 @@ export default function BusinessApp({
 
         accessHours: formFacAccessHours,
 
-        status: formFacStatus,
+        status: backendFacilityStatus || (isApiAuthenticated() ? "setup" : formFacStatus),
 
         occupied: 0,
 
-        available: totalCalculatedUnits,
+        available: isApiAuthenticated() ? 0 : totalCalculatedUnits,
 
         revenue: 0,
 
@@ -2530,7 +2722,7 @@ export default function BusinessApp({
     )
 
     // Đồng bộ vào facilityPricingOverrides
-    const nextOverrides = {
+    const nextOverrides = isApiAuthenticated() ? facilityPricingOverrides : {
       ...facilityPricingOverrides,
       [created.id]: {
         "tier-1": { basePrice: pS, highDemandMultiplier: 1.15 },
@@ -2539,25 +2731,26 @@ export default function BusinessApp({
         "tier-4": { basePrice: pXL, highDemandMultiplier: 1.15 },
       },
     }
-    setFacilityPricingOverrides(nextOverrides)
-    try {
-      localStorage.setItem(
-        "storagehub:facility-pricing",
-        JSON.stringify(nextOverrides),
-      )
-    } catch { }
+    if (!isApiAuthenticated()) {
+      setFacilityPricingOverrides(nextOverrides)
+      try {
+        localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+      } catch { }
+    }
 
     setCreateFacilityModal(false)
 
     const breakdownStr =
-      formFacUnitSpecs
+      (isApiAuthenticated() ? [] : formFacUnitSpecs)
         .filter((s) => s.count > 0)
         .map((s) => `${s.sizeCode}: ${s.count}`)
         .join(" · ") || `Tổng: ${created.units} kho`
 
     showToast(
       lang === "vi"
-        ? `Đã thêm cơ sở "${created.name}" (${created.code}) với ${created.units} gian kho (${breakdownStr})!`
+        ? isApiAuthenticated()
+          ? `Đã thêm cơ sở "${created.name}" (${created.code}) ở trạng thái đang thiết lập.`
+          : `Đã thêm cơ sở "${created.name}" (${created.code}) với ${created.units} gian kho (${breakdownStr})!`
         : `Facility "${created.name}" created successfully!`,
     )
   }
@@ -2855,7 +3048,7 @@ export default function BusinessApp({
     setEditFacilityModal(true)
   }
 
-  const handleUpdateFacility = () => {
+  const handleUpdateFacility = async () => {
     if (!selectedFacility) return
 
     const code = formFacCode.trim().toUpperCase()
@@ -2907,7 +3100,7 @@ export default function BusinessApp({
 
     const totalCalculatedUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
-    if (totalCalculatedUnits <= 0) {
+    if (!isApiAuthenticated() && totalCalculatedUnits <= 0) {
       showToast(
         lang === "vi"
           ? "Vui lòng chỉ định ít nhất 1 gian kho cho cơ sở!"
@@ -3008,6 +3201,37 @@ export default function BusinessApp({
     const pL = updatedUnitPrices.L || 15000000
     const pXL = updatedUnitPrices.XL || 22500000
 
+    if (isApiAuthenticated()) {
+      try {
+        let backendFacilityId = backendFacilityIdsByCode[code] || selectedFacility.id
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(backendFacilityId)) {
+          const backendFacilities = await listAllFacilitiesApi()
+          const persistedFacility = backendFacilities.find(
+            (facility) => facility.code.trim().toUpperCase() === code,
+          )
+          if (!persistedFacility) {
+            throw new Error(`Không tìm thấy cơ sở "${code}" trên backend. Vui lòng tải lại trang.`)
+          }
+          backendFacilityId = persistedFacility.id
+          setBackendFacilityIdsByCode((current) => ({ ...current, [code]: persistedFacility.id }))
+        }
+        await updateBusinessFacilityApi(backendFacilityId, {
+          name: formFacName.trim(),
+          address: formFacAddress.trim(),
+          city: formFacCity.trim(),
+          phone: formFacPhone.trim() || null,
+          accessHours: formFacAccessHours.trim() || null,
+          imageUrl: formFacImage || null,
+          climateControlled: formFacClimate,
+          securityDescription: formFacSecurity.trim() || null,
+          status: formFacStatus,
+        })
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Không thể cập nhật cơ sở trên backend.')
+        return
+      }
+    }
+
     updateFacility(
       selectedFacility.id,
       {
@@ -3019,31 +3243,31 @@ export default function BusinessApp({
 
         city: formFacCity.trim(),
 
-        manager: formFacManager.trim(),
+        manager: isApiAuthenticated() ? selectedFacility.manager : formFacManager.trim(),
 
         phone: formFacPhone.trim(),
 
-        units: totalCalculatedUnits,
+        units: isApiAuthenticated() ? selectedFacility.units : totalCalculatedUnits,
 
-        unitDistribution,
+        unitDistribution: isApiAuthenticated() ? selectedFacility.unitDistribution : unitDistribution,
 
         price: finalPriceStr,
 
-        unitPrices: updatedUnitPrices,
+        unitPrices: isApiAuthenticated() ? selectedFacility.unitPrices : updatedUnitPrices,
 
-        unitLoadLimits,
+        unitLoadLimits: isApiAuthenticated() ? selectedFacility.unitLoadLimits : unitLoadLimits,
 
-        unitDimensions,
+        unitDimensions: isApiAuthenticated() ? selectedFacility.unitDimensions : unitDimensions,
 
-        unitLaneWidths,
+        unitLaneWidths: isApiAuthenticated() ? selectedFacility.unitLaneWidths : unitLaneWidths,
 
-        unitFrameCounts,
+        unitFrameCounts: isApiAuthenticated() ? selectedFacility.unitFrameCounts : unitFrameCounts,
 
-        unitFrameDimensions,
+        unitFrameDimensions: isApiAuthenticated() ? selectedFacility.unitFrameDimensions : unitFrameDimensions,
 
-        unitCustomSpecs: formFacUnitSpecs,
+        unitCustomSpecs: isApiAuthenticated() ? selectedFacility.unitCustomSpecs : formFacUnitSpecs,
 
-        totalDesignLoadTon,
+        totalDesignLoadTon: isApiAuthenticated() ? selectedFacility.totalDesignLoadTon : totalDesignLoadTon,
 
         image: formFacImage,
 
@@ -3059,7 +3283,7 @@ export default function BusinessApp({
     )
 
     // Cập nhật facilityPricingOverrides để tab Bảng giá cũng đồng bộ
-    const nextOverrides = {
+    const nextOverrides = isApiAuthenticated() ? facilityPricingOverrides : {
       ...facilityPricingOverrides,
       [selectedFacility.id]: {
         ...facilityPricingOverrides[selectedFacility.id],
@@ -3069,13 +3293,12 @@ export default function BusinessApp({
         "tier-4": { basePrice: pXL, highDemandMultiplier: 1.15 },
       },
     }
-    setFacilityPricingOverrides(nextOverrides)
-    try {
-      localStorage.setItem(
-        "storagehub:facility-pricing",
-        JSON.stringify(nextOverrides),
-      )
-    } catch { }
+    if (!isApiAuthenticated()) {
+      setFacilityPricingOverrides(nextOverrides)
+      try {
+        localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+      } catch { }
+    }
 
     // Cập nhật giá từng kho trong unitsList qua updateUnit
     unitsList
@@ -3429,18 +3652,12 @@ export default function BusinessApp({
                                 cleanF.status === "active" ? "success" : "warning"
                               }
                             >
-                              {cleanF.status === "active"
-                                ? lang === "vi"
-                                  ? "Đang hoạt động"
-                                  : "Active"
-                                : lang === "vi"
-                                  ? "Bảo trì"
-                                  : "Maintenance"}
+                              {facilityStatusLabel(cleanF.status)}
                             </Badge>
                           </div>
 
-                          {/* Hàng 2: Địa chỉ + Quản lý + Hotline + Giờ mở cửa */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600">
+                          {/* Hàng 2: Địa chỉ + Quản lý + Hotline cơ sở + Giờ mở cửa */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs text-slate-600">
                             <div className="flex items-start gap-1.5">
                               <span className="truncate" title={cleanF.address}>
                                 {cleanF.address} ·{" "}
@@ -3451,8 +3668,10 @@ export default function BusinessApp({
                               <span>
                                 Quản lý:{" "}
                                 <b className="text-slate-800">{cleanF.manager}</b>{" "}
-                                {cleanF.phone ? `(${cleanF.phone})` : ""}
                               </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span>Hotline cơ sở: <b className="text-slate-800">{cleanF.phone || "Chưa cập nhật"}</b></span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span
@@ -3549,7 +3768,7 @@ export default function BusinessApp({
                                 )}
                                 {s + m + l + xl === 0 && (
                                   <span className="text-slate-400 italic text-[11px]">
-                                    {f.units} kho tiêu chuẩn
+                                    Chưa khai báo loại kho
                                   </span>
                                 )}
                               </div>
@@ -3604,7 +3823,9 @@ export default function BusinessApp({
                                 {lang === "vi" ? "Cước cơ sở từ" : "Base Rate"}
                               </p>
                               <p className="font-bold text-emerald-800 text-sm">
-                                {f.price}/tháng
+                                {backendFacilityStats[facCode.trim().toUpperCase()]?.price != null
+                                  ? `${formatVndAmount(backendFacilityStats[facCode.trim().toUpperCase()].price!)}/tháng`
+                                  : "Chưa cấu hình"}
                               </p>
                               <p className="text-[10px] text-slate-500">
                                 Kỳ thuê từ 1 tháng
@@ -3661,11 +3882,7 @@ export default function BusinessApp({
                           variant="outline"
                           size="sm"
                           className="w-full justify-center text-xs font-semibold"
-                          onClick={() => {
-                            setSelectedFacility(cleanF)
-
-                            setViewFacilityModal(true)
-                          }}
+                          onClick={() => void handleOpenFacilityDetails(cleanF)}
                         >
                           {lang === "vi" ? "Chi tiết" : "Details"}
                         </Button>
@@ -5778,7 +5995,27 @@ export default function BusinessApp({
               Thiết lập đơn giá cước thuê theo tháng cho từng loại kho tại cơ sở này. Đơn giá sẽ tự động được áp dụng vào các gói thuê (3, 6, 12, 24 tháng) theo tỷ lệ chiết khấu của hệ thống.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {isApiAuthenticated() ? (
+              <div className="space-y-3">
+                {backendPricingLoading && <p className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">Đang tải danh sách loại kho Manager đã khai báo...</p>}
+                {!backendPricingLoading && backendPricingUnitTypes.length === 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Manager chưa khai báo loại kho thực tế. BO chỉ có thể định giá sau khi danh sách này tồn tại.</p>}
+                {!backendPricingLoading && backendPricingUnitTypes.map(unitType => {
+                  const value = backendPricingValues[unitType.id] || { monthlyPrice: 0, securityDepositAmount: 0 }
+                  return <div key={unitType.id} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-2xs sm:grid-cols-[1fr_190px_190px] sm:items-end">
+                    <div>
+                      <div className="flex items-center gap-2"><span className="rounded bg-amber-100 px-2 py-0.5 font-mono text-xs font-bold text-amber-900">{unitType.code}</span><b className="text-sm text-slate-900">{unitType.name}</b></div>
+                      <p className="mt-2 text-xs text-slate-500">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m · tải tối đa {unitType.maxLoadKg.toLocaleString('vi-VN')} kg · {unitType.availableCount ?? 0} gian khả dụng</p>
+                    </div>
+                    <label className="text-[11px] font-semibold text-slate-700">Giá thuê (VNĐ/tháng)
+                      <input type="number" min={1} step={50000} value={value.monthlyPrice} onChange={e => setBackendPricingValues(prev => ({ ...prev, [unitType.id]: { ...value, monthlyPrice: Number(e.target.value) || 0 } }))} className="mt-1 w-full rounded-lg border border-stone-300 px-2.5 py-2 font-mono text-xs font-bold" />
+                    </label>
+                    <label className="text-[11px] font-semibold text-slate-700">Tiền đảm bảo (VNĐ)
+                      <input type="number" min={0} step={50000} value={value.securityDepositAmount} onChange={e => setBackendPricingValues(prev => ({ ...prev, [unitType.id]: { ...value, securityDepositAmount: Number(e.target.value) || 0 } }))} className="mt-1 w-full rounded-lg border border-stone-300 px-2.5 py-2 font-mono text-xs font-bold" />
+                    </label>
+                  </div>
+                })}
+              </div>
+            ) : <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {(['S', 'M', 'L', 'XL'] as const).map((sz) => {
                 const spec = UNIT_SPECS[sz]
                 const val = facilityPricesForm[sz]
@@ -5835,17 +6072,17 @@ export default function BusinessApp({
                   </div>
                 )
               })}
-            </div>
+            </div>}
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
-              <Button
+              {!isApiAuthenticated() && <Button
                 variant="ghost"
                 size="sm"
                 className="text-stone-500 hover:text-red-700"
                 onClick={handleResetFacilityPrices}
               >
                 Khôi phục giá chuẩn hệ thống
-              </Button>
+              </Button>}
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setFacilityPriceModalOpen(false)}>
                   Hủy
@@ -6972,7 +7209,6 @@ export default function BusinessApp({
           if (formFacName.trim() !== (orig.name || "").trim()) return true
           if (formFacAddress.trim() !== (orig.address || "").trim()) return true
           if (formFacCity.trim() !== (orig.city || "").trim()) return true
-          if (formFacManager.trim() !== (orig.manager || "").trim()) return true
           if (formFacPhone.trim() !== (orig.phone || "").trim()) return true
           if (formFacAccessHours.trim() !== (orig.accessHours || "").trim()) return true
           if (formFacStatus !== orig.status) return true
@@ -7027,25 +7263,14 @@ export default function BusinessApp({
                   code={formFacCode}
                   onChangeCode={setFormFacCode}
                   city={formFacCity}
-                  onChangeCity={(newCity) => {
-                    setFormFacCity(newCity)
-                    const autoCode = suggestFacilityCode(newCity)
-                    setFormFacCode(autoCode)
-                    if (formFacName.includes("Cơ sở")) {
-                      setFormFacName(`Kho Việt – Cơ sở ${newCity}`)
-                    }
-                  }}
+                  onChangeCity={setFormFacCity}
                   name={formFacName}
                   onChangeName={setFormFacName}
                   address={formFacAddress}
                   onChangeAddress={setFormFacAddress}
-                  manager={formFacManager}
-                  onChangeManager={setFormFacManager}
                   phone={formFacPhone}
                   onChangePhone={setFormFacPhone}
                   existingFacilities={facilitiesList}
-                  onResetCode={() => setFormFacCode(suggestFacilityCode(formFacCity))}
-                  isAutoCode={true}
                   lang={lang}
                 />
 
@@ -7056,8 +7281,7 @@ export default function BusinessApp({
                   lang={lang}
                 />
 
-                {/* Quy mô & phân bổ kho */}
-                <UnitAllocationTable
+                {!isApiAuthenticated() && <UnitAllocationTable
                   specs={formFacUnitSpecs}
                   onChangeSpecs={handleSyncUnitSpecs}
                   isEditing={false}
@@ -7065,7 +7289,7 @@ export default function BusinessApp({
                   lang={lang}
                   onValidationChange={(_hasErrors, errors) => setCreateValidationErrors(errors)}
                   highlightSpecCode={highlightSpecCode}
-                />
+                />}
 
                 {/* Thông số vận hành */}
                 <FacilityOperations
@@ -7073,20 +7297,21 @@ export default function BusinessApp({
                   onChangeAccessHours={setFormFacAccessHours}
                   status={formFacStatus}
                   onChangeStatus={setFormFacStatus}
+                  statusReadOnly={isApiAuthenticated()}
                   lang={lang}
                 />
 
                 {/* Sticky footer */}
                 <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
                   <div className="text-xs text-stone-500">
-                    {formFacUnits <= 0 ? (
+                    {!isApiAuthenticated() && formFacUnits <= 0 ? (
                       <span className="text-red-600 font-semibold flex items-center gap-1">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                         Cần ít nhất 1 loại kho có số lượng &gt; 0
                       </span>
-                    ) : createValidationErrors.length > 0 ? (
+                    ) : !isApiAuthenticated() && createValidationErrors.length > 0 ? (
                       <span className="text-red-600 font-semibold flex items-center gap-1">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -7110,8 +7335,8 @@ export default function BusinessApp({
                         !formFacName.trim() ||
                         !formFacCode.trim() ||
                         !formFacAddress.trim() ||
-                        formFacUnits <= 0 ||
-                        createValidationErrors.length > 0 ||
+                        (!isApiAuthenticated() && formFacUnits <= 0) ||
+                        (!isApiAuthenticated() && createValidationErrors.length > 0) ||
                         facilitiesList.some(
                           (f) => (f.code || f.id).toUpperCase() === formFacCode.trim().toUpperCase()
                         )
@@ -7187,8 +7412,6 @@ export default function BusinessApp({
                         onChangeName={setFormFacName}
                         address={formFacAddress}
                         onChangeAddress={setFormFacAddress}
-                        manager={formFacManager}
-                        onChangeManager={setFormFacManager}
                         phone={formFacPhone}
                         onChangePhone={setFormFacPhone}
                         existingFacilities={facilitiesList}
@@ -7204,8 +7427,7 @@ export default function BusinessApp({
                         lang={lang}
                       />
 
-                      {/* Quy mô & phân bổ kho */}
-                      <UnitAllocationTable
+                      {!isApiAuthenticated() && <UnitAllocationTable
                         specs={formFacUnitSpecs}
                         onChangeSpecs={handleSyncUnitSpecs}
                         isEditing={true}
@@ -7215,7 +7437,7 @@ export default function BusinessApp({
                         lang={lang}
                         onValidationChange={(_hasErrors, errors) => setEditValidationErrors(errors)}
                         highlightSpecCode={highlightSpecCode}
-                      />
+                      />}
 
                       {/* Thông số vận hành */}
                       <FacilityOperations
@@ -7223,20 +7445,21 @@ export default function BusinessApp({
                         onChangeAccessHours={setFormFacAccessHours}
                         status={formFacStatus}
                         onChangeStatus={setFormFacStatus}
+                        statusReadOnly={false}
                         lang={lang}
                       />
 
                       {/* Sticky footer */}
                       <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
                         <div className="text-xs text-stone-500">
-                          {formFacUnits <= 0 ? (
+                          {!isApiAuthenticated() && formFacUnits <= 0 ? (
                             <span className="text-red-600 font-semibold flex items-center gap-1">
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                               </svg>
                               Cần ít nhất 1 loại kho có số lượng &gt; 0
                             </span>
-                          ) : editValidationErrors.length > 0 ? (
+                          ) : !isApiAuthenticated() && editValidationErrors.length > 0 ? (
                             <span className="text-red-600 font-semibold flex items-center gap-1">
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -7269,9 +7492,9 @@ export default function BusinessApp({
                               !formFacName.trim() ||
                               !formFacCode.trim() ||
                               !formFacAddress.trim() ||
-                              formFacUnits <= 0 ||
+                              (!isApiAuthenticated() && formFacUnits <= 0) ||
                               hasDuplicateCode ||
-                              editValidationErrors.length > 0
+                              (!isApiAuthenticated() && editValidationErrors.length > 0)
                             }
                             onClick={handleUpdateFacility}
                           >
@@ -7285,7 +7508,7 @@ export default function BusinessApp({
             </Modal>
 
             {/* Modal Thêm Loại Kho Mới Vào Cơ Sở */}
-            <AddUnitSpecModal
+            {!isApiAuthenticated() && <AddUnitSpecModal
               open={showAddUnitSpecModal}
               onClose={() => setShowAddUnitSpecModal(false)}
               onConfirm={(newSpec) => {
@@ -7299,7 +7522,7 @@ export default function BusinessApp({
               }}
               existingSpecs={formFacUnitSpecs}
               lang={lang}
-            />
+            />}
 
             {/* Modal Xác Nhận Rời Đi Khi Có Unsaved Changes */}
             {showConfirmCloseEdit && (
@@ -7476,6 +7699,11 @@ export default function BusinessApp({
                 10,
               ) / 10
 
+            const hasWarehouseInfo =
+              facilityUnits.length > 0 ||
+              (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
+              Object.values(selectedFacility.unitDistribution || {}).some((count) => (count || 0) > 0)
+
             return (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
                 {/* Ảnh kho bãi của cơ sở */}
@@ -7551,19 +7779,13 @@ export default function BusinessApp({
                           : "warning"
                       }
                     >
-                      {selectedFacility.status === "active"
-                        ? lang === "vi"
-                          ? "Đang hoạt động"
-                          : "Active"
-                        : lang === "vi"
-                          ? "Bảo trì"
-                          : "Maintenance"}
+                      {facilityStatusLabel(selectedFacility.status)}
                     </Badge>
                   </div>
                 </div>
 
                 {/* Thông số kỹ thuật & Vận hành */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
                       Người quản lý:
@@ -7571,9 +7793,12 @@ export default function BusinessApp({
                     <b className="text-slate-800 block text-sm">
                       {selectedFacility.manager}
                     </b>
-                    <span className="text-slate-500">
-                      {selectedFacility.phone || "1900 6868"}
-                    </span>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
+                    <span className="text-slate-400 block mb-0.5">Hotline cơ sở:</span>
+                    <b className="text-slate-800 block text-sm">
+                      {selectedFacility.phone || "Chưa cập nhật"}
+                    </b>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
@@ -7595,7 +7820,7 @@ export default function BusinessApp({
                       {formatCurrency(getFacilityActualRevenue(selectedFacility))}
                     </b>
                     <span className="text-slate-500">
-                      {selectedFacility.price}/tháng từ
+                      {hasWarehouseInfo ? `${selectedFacility.price}/tháng từ` : "Chưa cấu hình giá"}
                     </span>
                   </div>
                   <div className="bg-amber-50/70 p-3 rounded-lg border border-amber-200/80">
@@ -7603,7 +7828,7 @@ export default function BusinessApp({
                       {lang === "vi" ? "Tải trọng sàn:" : "Floor Load Limit:"}
                     </span>
                     <b className="text-amber-950 block text-sm font-bold font-mono">
-                      {totalFacilityLoadTon} tấn
+                      {hasWarehouseInfo ? `${totalFacilityLoadTon} tấn` : "Chưa cấu hình"}
                     </b>
                     <span className="text-amber-700 font-medium text-[11px]">
                       {lang === "vi" ? "Thiết kế chịu tải" : "Max floor load"}
@@ -7616,13 +7841,11 @@ export default function BusinessApp({
                     <b className="text-slate-800 block text-xs">
                       {selectedFacility.accessHours || "06:00 - 22:00"}
                     </b>
-                    <span className="text-slate-500">
-                      Kho tự quản tiêu chuẩn
-                    </span>
                   </div>
                 </div>
 
                 {/* Bảng phân bổ các gian kho thuộc cơ sở (S, M, L, XL) */}
+                {hasWarehouseInfo ? (
                 <div className="border border-stone-200 rounded-xl overflow-hidden">
                   <div className="bg-stone-50 px-3 py-2 border-b border-stone-200 flex justify-between items-center text-xs">
                     <span className="font-bold text-slate-800">
@@ -7665,10 +7888,6 @@ export default function BusinessApp({
                               new Set<string>([
                                 ...Object.keys(selectedFacility.unitDistribution || {}),
                                 ...facilityUnits.map((u) => (u as any).size || (u.type === "Small" ? "S" : u.type === "Medium" ? "M" : u.type === "Large" ? "L" : u.type === "Extra Large" ? "XL" : (u as any).sizeCode || "S")),
-                                "S",
-                                "M",
-                                "L",
-                                "XL",
                               ]),
                             )
 
@@ -7692,17 +7911,17 @@ export default function BusinessApp({
                           )
 
                           const totalSize =
-                            facilityUnits.length > 0
+                            backendDetailCounts[size]?.total ?? (facilityUnits.length > 0
                               ? unitsOfSize.length
-                              : (selectedFacility.unitDistribution?.[size] ?? customSpec?.count ?? 0)
+                              : (selectedFacility.unitDistribution?.[size] ?? customSpec?.count ?? 0))
 
-                          const occupiedSize = unitsOfSize.filter(
+                          const occupiedSize = backendDetailCounts[size]?.occupied ?? unitsOfSize.filter(
                             (u) => u.status === "occupied" || (u.status as string) === "rented",
                           ).length
 
                           const availableSize =
-                            unitsOfSize.filter((u) => u.status === "available").length ||
-                            Math.max(0, totalSize - occupiedSize)
+                            backendDetailCounts[size]?.available ?? (unitsOfSize.filter((u) => u.status === "available").length ||
+                            Math.max(0, totalSize - occupiedSize))
 
                           const loadKg =
                             customSpec?.maxLoadKg ??
@@ -7847,6 +8066,14 @@ export default function BusinessApp({
                     </tfoot>
                   </table>
                 </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-center">
+                    <p className="font-semibold text-stone-700">Chưa có thông tin loại kho</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      Manager của cơ sở chưa khai báo loại kho và số lượng kho thực tế.
+                    </p>
+                  </div>
+                )}
 
                 {/* Khối chính sách đang áp dụng tại cơ sở này */}
                 {(() => {
