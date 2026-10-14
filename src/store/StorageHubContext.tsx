@@ -1268,6 +1268,8 @@ interface StorageHubContextValue extends StorageHubState {
   confirmReturnSettlement: (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => void
   payReturnBalance: (returnId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string) => void
   completeReturnRefund: (returnId: string, staffUser: User, transactionReference: string) => void
+  assignReturnInspection: (returnId: string, staffId: string, scheduledDate: string, notes: string, manager: User) => void
+  completeReturnCase: (returnId: string, manager: User, notes?: string) => void
   reviewReturnDispute: (
     returnId: string,
     manager: User,
@@ -5321,11 +5323,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const now = new Date()
     const paymentId = `PAY-RET-BAL-${Date.now().toString().slice(-8)}`
     const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId: rental.id, type: 'DAMAGE_FEE', amount: amountDue, paymentMethod, transactionReference: transactionReference.trim(), status: 'PAID', paidAt: now.toISOString(), recordedBy: customer.id, description: `Thanh toán phần quyết toán trả kho vượt tiền đảm bảo: ${formatVnd(amountDue)}` }
+    const isMaintNeeded = returnCase.proposedUnitStatus === 'maintenance' || state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed')
     setState(prev => ({
       ...prev,
       payments: [payment, ...prev.payments],
+      units: prev.units.map(u => u.id === returnCase.unitId ? { ...u, status: isMaintNeeded ? 'maintenance' : 'available', currentRentalId: undefined } : u),
       rentals: prev.rentals.map(item => item.id === rental.id ? { ...item, status: 'completed', checkedOutAt: now.toISOString(), accessRevokedAt: item.accessRevokedAt || now.toISOString(), gateCode: '' } : item),
       returns: prev.returns.map(item => item.id === returnId ? { ...item, status: 'completed', settlementPaymentId: paymentId, settlementPaidAt: now.toISOString(), completedAt: now.toISOString() } : item),
+      accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === rental.id ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
       activities: [{ id: `act-${Date.now()}`, action: 'RETURN_BALANCE_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'payment', entityId: paymentId, notes: `Khách đã thanh toán thêm ${formatVnd(amountDue)} do quyết toán trả kho vượt tiền đảm bảo. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
@@ -5341,15 +5346,51 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (staffUser.role === 'manager' && state.payments.some(item => item.transactionReference?.trim().toLocaleLowerCase() === transactionReference.trim().toLocaleLowerCase())) {
       throw new Error('Mã giao dịch hoàn cọc đã được sử dụng.')
     }
-    const refundPayment = state.payments.find(item => item.rentalId === returnCase.rentalId && item.type === 'REFUND' && item.status === 'PENDING')
-    if (!refundPayment) throw new Error('Không tìm thấy lệnh hoàn cọc đang chờ xử lý.')
+    const existingRefundPayment = state.payments.find(item => item.rentalId === returnCase.rentalId && item.type === 'REFUND' && item.status === 'PENDING')
+    const refundPaymentId = existingRefundPayment?.id || `RF-${Date.now().toString().slice(-8)}`
     const now = new Date()
+    const isMaintenanceNeeded = returnCase.proposedUnitStatus === 'maintenance' || state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed')
+
+    const newRefundPayment: StoragePayment = existingRefundPayment ? {
+      ...existingRefundPayment,
+      status: 'PAID',
+      transactionReference: transactionReference.trim(),
+      paidAt: now.toISOString(),
+      receivedBy: staffUser.id,
+      recordedBy: staffUser.id
+    } : {
+      id: refundPaymentId,
+      reservationId: returnCase.rentalId,
+      rentalId: returnCase.rentalId,
+      type: 'REFUND',
+      amount: returnCase.netRefundAmount,
+      paymentMethod: 'BANK_TRANSFER',
+      transactionReference: transactionReference.trim(),
+      status: 'PAID',
+      paidAt: now.toISOString(),
+      receivedBy: staffUser.id,
+      recordedBy: staffUser.id
+    }
+
     setState(prev => ({
       ...prev,
-      payments: prev.payments.map(item => item.id === refundPayment.id ? { ...item, status: 'PAID', transactionReference: transactionReference.trim(), paidAt: now.toISOString(), receivedBy: staffUser.id, recordedBy: staffUser.id } : item),
-      rentals: prev.rentals.map(item => item.id === returnCase.rentalId ? { ...item, status: 'completed', checkedOutAt: now.toISOString() } : item),
-      returns: prev.returns.map(item => item.id === returnId ? { ...item, status: 'completed', completedAt: now.toISOString(), refundTransaction: { id: refundPayment.id, type: 'refund', amount: item.netRefundAmount, status: 'paid', recordedAt: now.toISOString() } } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_REFUND_COMPLETED', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `Đã chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
+      payments: existingRefundPayment
+        ? prev.payments.map(item => item.id === existingRefundPayment.id ? newRefundPayment : item)
+        : (returnCase.netRefundAmount > 0 ? [newRefundPayment, ...prev.payments] : prev.payments),
+      units: prev.units.map(u => u.id === returnCase.unitId ? {
+        ...u,
+        status: isMaintenanceNeeded ? 'maintenance' : 'available',
+        currentRentalId: undefined
+      } : u),
+      rentals: prev.rentals.map(item => item.id === returnCase.rentalId ? { ...item, status: 'completed', checkedOutAt: now.toISOString(), gateCode: '' } : item),
+      returns: prev.returns.map(item => item.id === returnId ? {
+        ...item,
+        status: 'completed',
+        completedAt: now.toISOString(),
+        refundTransaction: { id: refundPaymentId, type: 'refund', amount: item.netRefundAmount, status: 'paid', recordedAt: now.toISOString() }
+      } : item),
+      accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === returnCase.rentalId ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_REFUND_COMPLETED', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `Đã hoàn tất hoàn cọc ${formatVnd(returnCase.netRefundAmount)}. Mã GD: ${transactionReference.trim()}. Gian kho ${returnCase.unitId} chuyển sang ${isMaintenanceNeeded ? 'BẢO TRÌ' : 'AVAILABLE'}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -5431,6 +5472,105 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         afterState: settlement ? { ...settlement, ...recalculated, preset } : undefined,
         evidence: returnCase.evidence,
         notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.',
+        timestamp: now.toISOString()
+      }, ...prev.activities]
+    }))
+  }
+
+  const assignReturnInspection = (returnId: string, staffId: string, scheduledDate: string, notes: string, manager: User) => {
+    assertPermission(manager, 'returns:process')
+    const returnCase = state.returns.find(r => r.id === returnId)
+    if (!returnCase) throw new Error('Không tìm thấy hồ sơ trả kho.')
+    assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
+    const assignedStaff = state.users.find(u => u.id === staffId)
+    if (!assignedStaff) throw new Error('Không tìm thấy nhân viên được chọn.')
+    const now = new Date()
+
+    const task: FacilityTask = {
+      id: `TSK-${Date.now().toString().slice(-7)}`,
+      facilityId: returnCase.facilityId,
+      facilityName: returnCase.facilityName,
+      type: 'return',
+      title: `Nghiệm thu trả kho gian ${returnCase.unitId} - ${returnCase.customerName}`,
+      referenceId: returnCase.id,
+      assignedStaffId: staffId,
+      assignedStaffName: assignedStaff.name,
+      assignedAt: now.toISOString(),
+      dueAt: scheduledDate,
+      priority: 'high',
+      status: 'open',
+      notes: notes?.trim() || `Kiểm tra hiện trạng gian kho, thu hồi chìa khóa/thẻ từ, kiểm tra ẩm mốc/hư hại kết cấu.`,
+      createdAt: now.toISOString()
+    }
+
+    setState(prev => ({
+      ...prev,
+      returns: prev.returns.map(r => r.id === returnId ? {
+        ...r,
+        status: r.status === 'requested' ? 'scheduled' : r.status,
+        staffId,
+        scheduledDate
+      } : r),
+      rentals: prev.rentals.map(rental => rental.id === returnCase.rentalId ? {
+        ...rental,
+        status: rental.status === 'return_requested' ? 'return_inspection' : rental.status
+      } : rental),
+      staffTasks: [task, ...prev.staffTasks],
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'RETURN_INSPECTION_ASSIGNED',
+        actorId: manager.id,
+        actorName: manager.name,
+        actorRole: manager.role,
+        facilityId: returnCase.facilityId,
+        entityType: 'return',
+        entityId: returnId,
+        notes: `Manager phân công ${assignedStaff.name} nghiệm thu trả kho gian ${returnCase.unitId} vào ngày ${scheduledDate}.`,
+        timestamp: now.toISOString()
+      }, ...prev.activities]
+    }))
+  }
+
+  const completeReturnCase = (returnId: string, manager: User, notes?: string) => {
+    assertPermission(manager, 'returns:process')
+    const returnCase = state.returns.find(r => r.id === returnId)
+    if (!returnCase) throw new Error('Không tìm thấy hồ sơ trả kho.')
+    assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
+    const rental = state.rentals.find(r => r.id === returnCase.rentalId)
+    const unit = state.units.find(u => u.id === returnCase.unitId)
+    const now = new Date()
+    const isMaintenanceNeeded = returnCase.proposedUnitStatus === 'maintenance' || (returnCase.damageClassification && returnCase.damageClassification !== 'no_damage') || state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed')
+
+    setState(prev => ({
+      ...prev,
+      units: prev.units.map(u => u.id === returnCase.unitId ? {
+        ...u,
+        status: isMaintenanceNeeded ? 'maintenance' : 'available',
+        currentRentalId: undefined
+      } : u),
+      rentals: prev.rentals.map(item => item.id === returnCase.rentalId ? {
+        ...item,
+        status: 'completed',
+        checkedOutAt: now.toISOString(),
+        gateCode: ''
+      } : item),
+      returns: prev.returns.map(item => item.id === returnId ? {
+        ...item,
+        status: 'completed',
+        completedAt: now.toISOString(),
+        staffNotes: notes?.trim() ? `${item.staffNotes ? item.staffNotes + '\n' : ''}[Quản lý nghiệm thu đóng hồ sơ]: ${notes.trim()}` : item.staffNotes
+      } : item),
+      accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === returnCase.rentalId ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'RETURN_COMPLETED',
+        actorId: manager.id,
+        actorName: manager.name,
+        actorRole: manager.role,
+        facilityId: returnCase.facilityId,
+        entityType: 'return',
+        entityId: returnId,
+        notes: `Manager xác nhận hoàn tất hồ sơ trả kho ${returnId}. Gian kho ${returnCase.unitId} chuyển sang ${isMaintenanceNeeded ? 'BẢO TRÌ' : 'AVAILABLE'}.`,
         timestamp: now.toISOString()
       }, ...prev.activities]
     }))
@@ -5635,6 +5775,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     confirmReturnSettlement,
     payReturnBalance,
     completeReturnRefund,
+    assignReturnInspection,
+    completeReturnCase,
     reviewReturnDispute,
     createMaintenanceTask,
     completeMaintenanceTask,
