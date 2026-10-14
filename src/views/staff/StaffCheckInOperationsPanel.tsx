@@ -115,6 +115,30 @@ function ComparisonBadge({ matches }: { matches: boolean | null }) {
   )
 }
 
+type MeasurementComparisonKey = "packageCount" | "weight" | "volume" | "dimensions"
+
+const emptyMeasurementChecks = (): Record<MeasurementComparisonKey, boolean> => ({
+  packageCount: false,
+  weight: false,
+  volume: false,
+  dimensions: false,
+})
+
+function formatVolume(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return ""
+  return value.toFixed(9).replace(/0+$/, "").replace(/\.$/, "")
+}
+
+function formatInputNumber(value: number | null | undefined) {
+  return value == null || !Number.isFinite(Number(value)) ? "" : String(value)
+}
+
+function volumeFromDimensions(length: string, width: string, height: string) {
+  const dimensions = [length, width, height].map(Number)
+  if (dimensions.some((value) => !Number.isFinite(value) || value <= 0)) return ""
+  return formatVolume((dimensions[0] * dimensions[1] * dimensions[2]) / 1_000_000)
+}
+
 export default function StaffCheckInOperationsPanel({
   showToast,
 }: {
@@ -168,6 +192,8 @@ export default function StaffCheckInOperationsPanel({
 
   const [varianceReason, setVarianceReason] = useState("")
 
+  const [measurementChecks, setMeasurementChecks] = useState(emptyMeasurementChecks)
+
   const [initialCondition, setInitialCondition] = useState(
     "Gian kho sạch, khóa và đèn hoạt động bình thường",
   )
@@ -184,6 +210,8 @@ export default function StaffCheckInOperationsPanel({
 
   const [contractFile, setContractFile] = useState<File | null>(null)
 
+  const [paymentEvidenceFile, setPaymentEvidenceFile] = useState<File | null>(null)
+
   const [evidenceReferences, setEvidenceReferences] = useState<string[]>([])
 
   const [handedOverItems, setHandedOverItems] = useState(
@@ -198,9 +226,9 @@ export default function StaffCheckInOperationsPanel({
 
   const [credentialSecret, setCredentialSecret] = useState("")
 
-  const [paymentMethod, setPaymentMethod] = useState("CASH")
+  const [lockCondition, setLockCondition] = useState("Mới, hoạt động tốt")
 
-  const [paymentReference, setPaymentReference] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState("CASH")
 
   const [noShowTarget, setNoShowTarget] = useState<CheckInCase | null>(null)
 
@@ -282,6 +310,15 @@ export default function StaffCheckInOperationsPanel({
     [checklist],
   )
 
+  useEffect(() => {
+    const measurementVerified = Object.values(measurementChecks).every(Boolean)
+    setChecklist((previous) =>
+      previous.measurementVerified === measurementVerified
+        ? previous
+        : { ...previous, measurementVerified },
+    )
+  }, [measurementChecks])
+
   const checkInComparison = useMemo(() => {
     if (!handoverTarget) return null
 
@@ -319,7 +356,7 @@ export default function StaffCheckInOperationsPanel({
       Number(widthCm),
       Number(heightCm),
     ]
-    const dimensionMatches = actualDimensions.every((value) => Number.isFinite(value))
+    const dimensionMatches = actualDimensions.every((value) => Number.isFinite(value) && value > 0)
       ? dimensionsMatch(actualDimensions, declaredDimensions)
       : null
 
@@ -336,6 +373,7 @@ export default function StaffCheckInOperationsPanel({
       declaredDimensions,
       actualDimensions,
       dimensionMatches,
+      declaredDimensionsAvailable: declaredDimensions.every((value) => value != null),
       hasVariance: [packageCountMatches, weightMatches, volumeMatches, dimensionMatches].some(
         (matches) => matches === false,
       ),
@@ -404,7 +442,12 @@ export default function StaffCheckInOperationsPanel({
       !allChecksComplete ||
       !contractFile ||
       !credentialReference.trim() ||
-      (dueAtCheckIn > 0 && !paymentReference.trim())
+      (dueAtCheckIn > 0 && !paymentEvidenceFile) ||
+      !Number.isFinite(Number(lengthCm)) ||
+      !Number.isFinite(Number(widthCm)) ||
+      !Number.isFinite(Number(heightCm)) ||
+      !Number.isFinite(Number(weightKg)) ||
+      !Number.isFinite(Number(volumeM3))
     ) return
 
     setSubmitting(true)
@@ -432,6 +475,16 @@ export default function StaffCheckInOperationsPanel({
         uploadedEvidence.push(asset.id)
       }
 
+      let paymentEvidenceFileId: string | undefined
+      if (dueAtCheckIn > 0 && paymentEvidenceFile) {
+        const paymentAsset = await uploadCheckInEvidence(
+          handoverTarget.checkInId,
+          paymentEvidenceFile,
+        )
+        paymentEvidenceFileId = paymentAsset.id
+        uploadedEvidence.push(paymentAsset.id)
+      }
+
       if (evidenceFiles.length) {
         setEvidenceReferences(uploadedEvidence)
 
@@ -442,7 +495,7 @@ export default function StaffCheckInOperationsPanel({
         await recordCheckInRemainingPayment(handoverTarget.checkInId, {
           amount: dueAtCheckIn,
           paymentMethod,
-          transactionReference: paymentReference.trim(),
+          paymentEvidenceFileId: paymentEvidenceFileId!,
           note: "Ghi nhận tại bước bàn giao và nhận kho",
         })
       }
@@ -451,7 +504,9 @@ export default function StaffCheckInOperationsPanel({
         type: credentialType,
         reference: credentialReference.trim(),
         secret: credentialSecret.trim() || undefined,
-        note: "Cấp trong bước bàn giao & nhận kho",
+        note: credentialType === "LOCK"
+          ? `Bàn giao ổ khóa: ${lockCondition.trim() || "Chưa ghi nhận tình trạng"}`
+          : "Cấp trong bước bàn giao & nhận kho",
       })
 
       await completeCheckIn(handoverTarget.checkInId, {
@@ -483,15 +538,19 @@ export default function StaffCheckInOperationsPanel({
 
         evidenceReferences: uploadedEvidence,
 
-        handedOverItems: handedOverItems
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
+        handedOverItems: [
+          ...handedOverItems.split(",").map((value) => value.trim()).filter(Boolean),
+          ...(credentialType === "LOCK"
+            ? [`Ổ khóa ${credentialReference.trim()} · ${lockCondition.trim() || "Chưa ghi nhận tình trạng"}`]
+            : []),
+        ],
 
         notes: handoverNotes.trim(),
       })
 
       setContractFile(null)
+
+      setPaymentEvidenceFile(null)
 
       showToast(
         `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Đang chờ khách hàng xác nhận nhận kho.`,
@@ -612,6 +671,8 @@ export default function StaffCheckInOperationsPanel({
 
     setContractFile(null)
 
+    setPaymentEvidenceFile(null)
+
     setEvidenceReferences([])
 
     setCredentialType("PIN")
@@ -620,15 +681,25 @@ export default function StaffCheckInOperationsPanel({
 
     setCredentialSecret("")
 
+    setLockCondition("Mới, hoạt động tốt")
+
     setPaymentMethod("CASH")
 
-    setPaymentReference("")
+    setHandedOverItems("Mã truy cập, biên nhận bàn giao")
 
-    setWeightKg(String(item.declaredGoodsWeightKg || ""))
+    setLengthCm(formatInputNumber(item.declaredGoodsLengthCm))
 
-    setVolumeM3(String(item.declaredGoodsVolumeM3 || ""))
+    setWidthCm(formatInputNumber(item.declaredGoodsWidthCm))
+
+    setHeightCm(formatInputNumber(item.declaredGoodsHeightCm))
+
+    setWeightKg(formatInputNumber(item.declaredGoodsWeightKg))
+
+    setVolumeM3(formatInputNumber(item.declaredGoodsVolumeM3))
 
     setPackageCount(String(item.declaredPackageCount ?? 1))
+
+    setMeasurementChecks(emptyMeasurementChecks())
 
     setVarianceAccepted(false)
 
@@ -919,6 +990,22 @@ export default function StaffCheckInOperationsPanel({
                 <p className="font-semibold">{handoverTarget.customerPhone || "Chưa cập nhật"}</p>
               </div>
             </div>
+            <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
+              {([
+                ["identityVerified", "Đã đối chiếu giấy tờ tùy thân"],
+                ["reservationMatched", "Đơn đặt giữ kho, cơ sở và gian kho trùng khớp"],
+              ] as Array<[keyof CheckInChecklist, string]>).map(([key, label]) => (
+                <label key={key} className="flex items-start gap-2 font-medium text-stone-800">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={checklist[key]}
+                    onChange={(event) => setChecklist((previous) => ({ ...previous, [key]: event.target.checked }))}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
               Lịch nhận kho do khách hàng đặt: <b>{formatStaffDateTime(handoverTarget.appointmentAt || handoverTarget.scheduledAt)}</b>.
               Nhân viên không thể thay đổi lịch. Nếu khách đến sớm, nhân viên vẫn có thể đối chiếu và bàn giao ngay.
@@ -940,21 +1027,33 @@ export default function StaffCheckInOperationsPanel({
                 type="number"
                 min="0.01"
                 value={lengthCm}
-                onChange={(event) => setLengthCm(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value
+                  setLengthCm(next)
+                  setVolumeM3(volumeFromDimensions(next, widthCm, heightCm))
+                }}
               />
               <Input
                 label="Rộng thực tế (cm)"
                 type="number"
                 min="0.01"
                 value={widthCm}
-                onChange={(event) => setWidthCm(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value
+                  setWidthCm(next)
+                  setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm))
+                }}
               />
               <Input
                 label="Cao thực tế (cm)"
                 type="number"
                 min="0.01"
                 value={heightCm}
-                onChange={(event) => setHeightCm(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value
+                  setHeightCm(next)
+                  setVolumeM3(volumeFromDimensions(lengthCm, widthCm, next))
+                }}
               />
               <Input
                 label="Khối lượng (kg)"
@@ -968,7 +1067,8 @@ export default function StaffCheckInOperationsPanel({
                 type="number"
                 min="0.000001"
                 value={volumeM3}
-                onChange={(event) => setVolumeM3(event.target.value)}
+                readOnly
+                className="bg-stone-50"
               />
               <Input
                 label="Số kiện"
@@ -988,7 +1088,7 @@ export default function StaffCheckInOperationsPanel({
                     được nhân viên ghi nhận lý do.
                   </p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-md border border-indigo-100 bg-white p-3">
                     <div className="font-semibold">Số kiện</div>
                     <div className="mt-1 text-xs text-stone-600">
@@ -1004,6 +1104,15 @@ export default function StaffCheckInOperationsPanel({
                     <div className="mt-2">
                       <ComparisonBadge matches={checkInComparison.packageCountMatches} />
                     </div>
+                    <label className="mt-3 flex items-start gap-2 text-xs font-medium text-indigo-950">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={measurementChecks.packageCount}
+                        onChange={(event) => setMeasurementChecks((previous) => ({ ...previous, packageCount: event.target.checked }))}
+                      />
+                      Đã đối chiếu số kiện
+                    </label>
                   </div>
                   <div className="rounded-md border border-indigo-100 bg-white p-3">
                     <div className="font-semibold">Khối lượng</div>
@@ -1018,6 +1127,15 @@ export default function StaffCheckInOperationsPanel({
                     <div className="mt-2">
                       <ComparisonBadge matches={checkInComparison.weightMatches} />
                     </div>
+                    <label className="mt-3 flex items-start gap-2 text-xs font-medium text-indigo-950">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={measurementChecks.weight}
+                        onChange={(event) => setMeasurementChecks((previous) => ({ ...previous, weight: event.target.checked }))}
+                      />
+                      Đã đối chiếu khối lượng
+                    </label>
                   </div>
                   <div className="rounded-md border border-indigo-100 bg-white p-3">
                     <div className="font-semibold">Thể tích</div>
@@ -1032,6 +1150,40 @@ export default function StaffCheckInOperationsPanel({
                     <div className="mt-2">
                       <ComparisonBadge matches={checkInComparison.volumeMatches} />
                     </div>
+                    <label className="mt-3 flex items-start gap-2 text-xs font-medium text-indigo-950">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={measurementChecks.volume}
+                        onChange={(event) => setMeasurementChecks((previous) => ({ ...previous, volume: event.target.checked }))}
+                      />
+                      Đã đối chiếu thể tích
+                    </label>
+                  </div>
+                  <div className="rounded-md border border-indigo-100 bg-white p-3">
+                    <div className="font-semibold">Kích thước</div>
+                    <div className="mt-1 text-xs text-stone-600">
+                      Khách khai báo: {checkInComparison.declaredDimensionsAvailable
+                        ? `${checkInComparison.declaredDimensions.join(" × ")} cm`
+                        : "Chưa có dữ liệu"}
+                    </div>
+                    <div className="text-xs text-stone-600">
+                      Thực tế: {checkInComparison.actualDimensions.every((value) => Number.isFinite(value) && value > 0)
+                        ? `${checkInComparison.actualDimensions.join(" × ")} cm`
+                        : "Chưa nhập"}
+                    </div>
+                    <div className="mt-2">
+                      <ComparisonBadge matches={checkInComparison.dimensionMatches} />
+                    </div>
+                    <label className="mt-3 flex items-start gap-2 text-xs font-medium text-indigo-950">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={measurementChecks.dimensions}
+                        onChange={(event) => setMeasurementChecks((previous) => ({ ...previous, dimensions: event.target.checked }))}
+                      />
+                      Đã đối chiếu kích thước
+                    </label>
                   </div>
                 </div>
               </div>
@@ -1074,15 +1226,40 @@ export default function StaffCheckInOperationsPanel({
                     <option value="CASH">Tiền mặt</option>
                     <option value="BANK_TRANSFER">Chuyển khoản</option>
                   </Select>
-                  <Input
-                    label="Mã giao dịch hoặc số phiếu thu"
-                    value={paymentReference}
-                    maxLength={40}
-                    onChange={(event) => setPaymentReference(event.target.value)}
-                    placeholder="Ví dụ: PT-20261012-001"
-                  />
+                  <label className="block text-sm font-medium text-stone-700">
+                    Ảnh biên lai / bằng chứng giao dịch (bắt buộc)
+                    <input
+                      className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      onChange={(event) => setPaymentEvidenceFile(event.target.files?.[0] || null)}
+                    />
+                    <span className="mt-1 block text-xs font-normal text-stone-500">
+                      {paymentEvidenceFile ? `Đã chọn: ${paymentEvidenceFile.name}` : "Chưa chọn ảnh hoặc PDF biên lai."}
+                    </span>
+                  </label>
                 </div>
+                <label className="flex items-start gap-2 text-sm font-medium text-emerald-950">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={checklist.paymentVerified}
+                    onChange={(event) => setChecklist((previous) => ({ ...previous, paymentVerified: event.target.checked }))}
+                  />
+                  Đã đối chiếu số tiền và bằng chứng giao dịch với khách hàng
+                </label>
               </div>
+            )}
+            {(handoverTarget.dueAtCheckIn ?? 0) <= 0 && (
+              <label className="flex items-start gap-2 text-sm font-medium text-emerald-950">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={checklist.paymentVerified}
+                  onChange={(event) => setChecklist((previous) => ({ ...previous, paymentVerified: event.target.checked }))}
+                />
+                Đã đối chiếu và xác nhận đơn không còn khoản cần thu trước bàn giao
+              </label>
             )}
             <Input
               label="Loại hàng"
@@ -1099,6 +1276,26 @@ export default function StaffCheckInOperationsPanel({
               value={goodsCondition}
               onChange={(event) => setGoodsCondition(event.target.value)}
             />
+            <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
+              <label className="flex items-start gap-2 font-medium text-stone-800">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={checklist.unitWalkthrough}
+                  onChange={(event) => setChecklist((previous) => ({ ...previous, unitWalkthrough: event.target.checked }))}
+                />
+                Đã kiểm tra trực tiếp gian kho với khách hàng
+              </label>
+              <label className="flex items-start gap-2 font-medium text-stone-800">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={checklist.conditionRecorded}
+                  onChange={(event) => setChecklist((previous) => ({ ...previous, conditionRecorded: event.target.checked }))}
+                />
+                Đã ghi nhận hiện trạng gian kho và hàng hóa
+              </label>
+            </div>
             <label className="block text-sm font-medium text-stone-700">
               Văn bản hợp đồng đã ký (bắt buộc)
               <input
@@ -1112,19 +1309,46 @@ export default function StaffCheckInOperationsPanel({
                 {contractFile ? ` Đã chọn: ${contractFile.name}` : " Chưa chọn tệp."}
               </span>
             </label>
+            <label className="flex items-start gap-2 text-sm font-medium text-stone-800">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={checklist.contractVerified}
+                onChange={(event) => setChecklist((previous) => ({ ...previous, contractVerified: event.target.checked }))}
+              />
+              Đã kiểm tra hợp đồng đã ký với khách hàng
+            </label>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
-              <p className="font-semibold text-amber-950">Cấp quyền truy cập cho khách hàng</p>
-              <p className="text-xs text-amber-900">Nhân viên cấp mã truy cập, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận thời điểm cấp. Mã truy cập gốc không được lưu.</p>
+              <p className="font-semibold text-amber-950">Bàn giao quyền truy cập và ổ khóa</p>
+              <p className="text-xs text-amber-900">Nhân viên ghi nhận mã truy cập, thẻ, chìa khóa hoặc ổ khóa tại thời điểm bàn giao. Mã truy cập gốc không được lưu.</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Select label="Loại quyền truy cập" value={credentialType} onChange={event => setCredentialType(event.target.value as AccessCredentialType)}>
+                <Select label="Loại bàn giao" value={credentialType} onChange={event => {
+                  const nextType = event.target.value as AccessCredentialType
+                  setCredentialType(nextType)
+                  if (nextType === "LOCK") {
+                    setHandedOverItems((previous) => previous.includes("Ổ khóa")
+                      ? previous
+                      : [previous.trim(), "Ổ khóa"].filter(Boolean).join(", "))
+                  }
+                }}>
                   <option value="PIN">Mã truy cập</option>
                   <option value="CARD">Thẻ ra vào</option>
                   <option value="KEY">Chìa khóa</option>
                   <option value="LOCK">Khóa / ổ khóa</option>
                 </Select>
-                <Input label="Mã tham chiếu / số seri" value={credentialReference} onChange={event => setCredentialReference(event.target.value)} placeholder="Ví dụ: PIN-2048 hoặc CARD-018" />
+                <Input label={credentialType === "LOCK" ? "Mã / số seri ổ khóa" : "Mã tham chiếu / số seri"} value={credentialReference} onChange={event => setCredentialReference(event.target.value)} placeholder={credentialType === "LOCK" ? "Ví dụ: LOCK-018" : "Ví dụ: PIN-2048 hoặc CARD-018"} />
                 {credentialType === "PIN" && <Input label="Mã truy cập (tùy chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
+                {credentialType === "LOCK" && <Input label="Tình trạng ổ khóa" value={lockCondition} onChange={event => setLockCondition(event.target.value)} placeholder="Ví dụ: Mới, đủ chìa, hoạt động tốt" />}
               </div>
+              <label className="flex items-start gap-2 text-sm font-medium text-amber-950">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={checklist.accessHandedOver}
+                  onChange={(event) => setChecklist((previous) => ({ ...previous, accessHandedOver: event.target.checked }))}
+                />
+                Đã bàn giao và kiểm tra quyền truy cập / ổ khóa với khách hàng
+              </label>
             </div>
             <label className="block text-sm font-medium text-stone-700">
               Bằng chứng bàn giao (ảnh hoặc PDF)
@@ -1152,24 +1376,6 @@ export default function StaffCheckInOperationsPanel({
               value={handedOverItems}
               onChange={(event) => setHandedOverItems(event.target.value)}
             />
-            <div className="grid gap-2 rounded-lg border border-stone-200 p-3 sm:grid-cols-2">
-              {checklistLabels.map(([key, label]) => (
-                <label key={key} className="flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={checklist[key]}
-                    onChange={(event) =>
-                      setChecklist((previous) => ({
-                        ...previous,
-                        [key]: event.target.checked,
-                      }))
-                    }
-                  />{" "}
-                  {label}
-                </label>
-              ))}
-            </div>
             <Input
               label="Ghi chú bàn giao"
               value={handoverNotes}
@@ -1194,7 +1400,7 @@ export default function StaffCheckInOperationsPanel({
                   !contractFile ||
                   !credentialReference.trim() ||
                   ((handoverTarget.dueAtCheckIn ?? 0) > 0 &&
-                    !paymentReference.trim()) ||
+                    !paymentEvidenceFile) ||
                   !initialCondition.trim() ||
                   !goodsCondition.trim() ||
                   !handedOverItems.trim() ||
