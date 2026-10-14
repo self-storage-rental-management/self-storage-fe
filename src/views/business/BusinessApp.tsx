@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
+import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
 
 import {
@@ -648,42 +649,12 @@ export default function BusinessApp({
   const [policiesList, setPoliciesList] = useState<PolicyItem[]>(() => {
     try {
       const stored = localStorage.getItem("storagehub:policies")
-
-      if (stored) {
+      if (stored !== null) {
         const parsed = JSON.parse(stored)
-
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((item: PolicyItem) => {
-            const name = (item.name || "").trim().toLowerCase()
-            const desc = (item.description || "").trim().toLowerCase()
-            const scope = (item.scope || "").trim().toLowerCase()
-            if (name.includes("trốn thuế") || desc === "abc" || name === "test") return false
-            if ((name === "thời gian gia hạn" || name === "thoi gian gia han") && (desc === "abc" || !desc)) return false
-            if (scope.includes("vũng tàu") && (desc === "abc" || name === "test" || !name)) return false
-            return true
-          })
-
-          const defaultList = (DEMO_DATA_ENABLED ? POLICIES : []).map(p => ({ ...p, description: p.description || "" }))
-          const existingIds = new Set(valid.map((v: PolicyItem) => v.id))
-          const missingDefaults = defaultList.filter(d => !existingIds.has(d.id))
-
-          return [
-            ...valid.map((item: PolicyItem) => {
-              const def = (DEMO_DATA_ENABLED ? POLICIES : []).find(p => p.id === item.id)
-              if (def && (!item.description || item.value === '650.000 ₫ / month' || item.value === '5 days' || item.name === 'Grace Period' || item.name === 'Thời gian gia hạn nợ')) {
-                return { ...item, name: def.name, value: def.value, description: item.description || def.description }
-              }
-              return item
-            }),
-            ...missingDefaults
-          ]
-        }
+        if (Array.isArray(parsed)) return parsed
       }
-    } catch {
-      // fallback
-    }
-
-    return (DEMO_DATA_ENABLED ? POLICIES : []).map((p) => ({ ...p, description: p.description || "" }))
+    } catch { /* Backend remains authoritative for signed-in BO. */ }
+    return isApiAuthenticated() ? [] : (DEMO_DATA_ENABLED ? POLICIES : []).map(policy => ({ ...policy, description: policy.description || "" }))
   })
 
   const [policyModal, setPolicyModal] = useState(false)
@@ -747,13 +718,56 @@ export default function BusinessApp({
 
   const [policyFormDesc, setPolicyFormDesc] = useState("")
 
-  const savePolicies = (next: PolicyItem[]) => {
-    setPoliciesList(next)
-
-    localStorage.setItem("storagehub:policies", JSON.stringify(next))
+  const [policyCatalogVersion, setPolicyCatalogVersion] = useState(-1)
+  const [policyCatalogReady, setPolicyCatalogReady] = useState(!isApiAuthenticated())
+  const [policyCatalogBusy, setPolicyCatalogBusy] = useState(false)
+  const [policyCatalogError, setPolicyCatalogError] = useState('')
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let disposed = false
+    void listFacilityContentPolicies().then(catalog => {
+      if (disposed) return
+      setPolicyCatalogVersion(catalog.version)
+      if (catalog.version >= 0) setPoliciesList(catalog.policies)
+      setPolicyCatalogReady(true)
+    }).catch(error => { if (!disposed) setPolicyCatalogError(error instanceof Error ? error.message : 'Không tải được chính sách từ hệ thống.') })
+    return () => { disposed = true }
+  }, [user.id])
+  const savePolicies = async (next: PolicyItem[]) => {
+    if (policyCatalogBusy) return false
+    if (isApiAuthenticated() && !policyCatalogReady) {
+      showToast('Chưa tải được chính sách từ hệ thống. Vui lòng tải lại trang trước khi lưu.')
+      return false
+    }
+    setPolicyCatalogBusy(true); setPolicyCatalogError('')
+    try {
+      if (isApiAuthenticated()) {
+        const persisted = await listAllFacilitiesApi()
+        const policies: FacilityContentPolicy[] = next.map(policy => {
+          const scopeType = policy.scopeType || (/toàn|all/i.test(policy.scope) ? 'all' : 'specific')
+          const selected = policy.facilityIds?.length ? policy.facilityIds : facilitiesList.filter(f =>
+            [f.id, f.code, f.name].some(text => text && text.toLowerCase() === policy.scope.toLowerCase())).map(f => f.id)
+          const facilityIds = scopeType === 'all' ? [] : resolveBusinessFacilityIds('specific', selected, facilitiesList, persisted)
+          if (scopeType === 'specific' && !facilityIds.length) throw new Error(`Chính sách “${policy.name}” chưa xác định được cơ sở. Vui lòng chỉnh phạm vi áp dụng.`)
+          return { ...policy, scopeType, facilityIds, category: policy.category || 'billing', description: policy.description || '', lastUpdated: policy.lastUpdated || '' }
+        })
+        const saved = await saveFacilityContentPolicies(policyCatalogVersion, policies)
+        setPolicyCatalogVersion(saved.version)
+        setPoliciesList(saved.policies)
+      } else {
+        setPoliciesList(next)
+        localStorage.setItem("storagehub:policies", JSON.stringify(next))
+      }
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Không lưu được chính sách.'
+      setPolicyCatalogError(message); showToast(message)
+      return false
+    } finally { setPolicyCatalogBusy(false) }
   }
 
   const handleOpenCreatePolicy = () => {
+    setPolicyCatalogError('')
     setPolicyFormName("")
 
     setPolicyFormValue("")
@@ -771,7 +785,7 @@ export default function BusinessApp({
     setCreatePolicyModal(true)
   }
 
-  const handleSaveNewPolicy = () => {
+  const handleSaveNewPolicy = async () => {
     if (!policyFormName.trim()) {
       showToast(
         lang === "vi"
@@ -840,26 +854,14 @@ export default function BusinessApp({
 
     const next = [newPolicy, ...policiesList]
 
-    savePolicies(next)
+    if (!await savePolicies(next)) return
 
     // Tự động chuyển bộ lọc sang nhóm của chính sách mới (hoặc 'all') để chính sách vừa tạo hiển thị ngay trước mắt
     if (policyCategoryFilter !== 'all' && policyCategoryFilter !== policyFormCategory) {
       setPolicyCategoryFilter(policyFormCategory)
     }
 
-    // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
-    const lowerName = newPolicy.name.toLowerCase()
-    if (lowerName.includes("grace") || lowerName.includes("gia hạn") || lowerName.includes("ân hạn")) {
-      const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
-      if (!isNaN(num) && num > 0) {
-        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
-      }
-    } else if (lowerName.includes("late") || lowerName.includes("trễ")) {
-      const num = parseInt(newPolicy.value.replace(/\D/g, ""), 10)
-      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch { }
-    } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
-      try { updateBusinessConfig({ defaultDepositRatio: 0.4 }, user) } catch { }
-    }
+    // Chính sách nội dung không tự suy diễn điều khoản tính tiền từ tên/chuỗi mô tả.
 
     setCreatePolicyModal(false)
 
@@ -871,6 +873,7 @@ export default function BusinessApp({
   }
 
   const handleOpenEditPolicy = (policy: PolicyItem) => {
+    setPolicyCatalogError('')
     setSelectedPolicy(policy)
 
     const displayName =
@@ -922,7 +925,7 @@ export default function BusinessApp({
     setPolicyModal(true)
   }
 
-  const handleUpdatePolicy = () => {
+  const handleUpdatePolicy = async () => {
     if (!selectedPolicy) return
 
     if (!policyFormValue.trim()) {
@@ -983,21 +986,9 @@ export default function BusinessApp({
         : p,
     )
 
-    savePolicies(next)
+    if (!await savePolicies(next)) return
 
-    // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
-    const lowerName = (policyFormName || selectedPolicy.name).toLowerCase()
-    if (lowerName.includes("grace") || lowerName.includes("gia hạn") || lowerName.includes("ân hạn")) {
-      const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
-      if (!isNaN(num) && num > 0) {
-        try { updateBusinessConfig({ gracePeriodDays: num }, user) } catch { }
-      }
-    } else if (lowerName.includes("late") || lowerName.includes("trễ")) {
-      const num = parseInt(policyFormValue.replace(/\D/g, ""), 10)
-      try { updateBusinessConfig({ lateFeeAmount: !isNaN(num) && num > 0 ? num : 650000 }, user) } catch { }
-    } else if (lowerName.includes("deposit") || lowerName.includes("đặt cọc")) {
-      try { updateBusinessConfig({ defaultDepositRatio: 0.4 }, user) } catch { }
-    }
+    // Chính sách nội dung không tự suy diễn điều khoản tính tiền từ tên/chuỗi mô tả.
 
     setPolicyModal(false)
 
@@ -1011,7 +1002,7 @@ export default function BusinessApp({
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ kind: 'package' | 'policy'; id: string; title: string } | null>(null)
   const [deleteConfirmationBusy, setDeleteConfirmationBusy] = useState(false)
   const [deleteConfirmationError, setDeleteConfirmationError] = useState('')
-  const handleDeletePolicy = (policyId: string, confirmed = false) => {
+  const handleDeletePolicy = async (policyId: string, confirmed = false) => {
     const target = policiesList.find((p) => p.id === policyId)
 
     if (!target) return
@@ -1024,7 +1015,7 @@ export default function BusinessApp({
     {
       const next = policiesList.filter((p) => p.id !== policyId)
 
-      savePolicies(next)
+      if (!await savePolicies(next)) return false
 
       showToast(
         lang === "vi"
@@ -3960,6 +3951,12 @@ export default function BusinessApp({
       {/* ── RENTAL POLICIES ───────────────────────────────────── */}
       {page === "policies" && (
         <div className="fade-in space-y-6">
+          {policyCatalogError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{policyCatalogError}</p>}
+          {isApiAuthenticated() && !policyCatalogReady && !policyCatalogError && <p role="status">Đang tải chính sách từ hệ thống…</p>}
+          {isApiAuthenticated() && policyCatalogReady && policyCatalogVersion === -1 && policiesList.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+            <p>Các chính sách hiện có mới lưu trên trình duyệt, chưa hiển thị cho Customer. Kiểm tra nội dung và phạm vi trước khi lưu lên hệ thống.</p>
+            <Button className="mt-3" disabled={policyCatalogBusy} onClick={async () => { if (await savePolicies(policiesList)) showToast('Đã lưu chính sách vào hệ thống.') }}>{policyCatalogBusy ? 'Đang lưu…' : 'Lưu các chính sách hiện có lên hệ thống'}</Button>
+          </div>}
           <SectionHeader
             title={
               lang === "vi"
@@ -6070,13 +6067,14 @@ export default function BusinessApp({
       {/* ── MODAL: CHỈNH SỬA CHÍNH SÁCH ─────────────────────── */}
       <Modal
         open={policyModal}
-        onClose={() => setPolicyModal(false)}
+        onClose={() => { if (!policyCatalogBusy) setPolicyModal(false) }}
         title={
           lang === "vi" ? "Chỉnh Sửa Chính Sách Thương Mại" : "Edit Policy"
         }
       >
         {selectedPolicy && (
           <div className="space-y-4">
+            {policyCatalogError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{policyCatalogError}</p>}
             <Input
               label={lang === "vi" ? "Tên chính sách" : "Policy Name"}
               value={policyFormName}
@@ -6264,7 +6262,7 @@ export default function BusinessApp({
               <Button variant="outline" onClick={() => setPolicyModal(false)}>
                 {lang === "vi" ? "Hủy" : "Cancel"}
               </Button>
-              <Button variant="primary" onClick={handleUpdatePolicy}>
+              <Button variant="primary" disabled={policyCatalogBusy || (isApiAuthenticated() && !policyCatalogReady)} onClick={handleUpdatePolicy}>
                 {lang === "vi" ? "Cập nhật chính sách" : "Update Policy"}
               </Button>
             </div>
@@ -6481,7 +6479,7 @@ export default function BusinessApp({
             >
               {lang === "vi" ? "Hủy" : "Cancel"}
             </Button>
-            <Button variant="primary" onClick={handleSaveNewPolicy}>
+            <Button variant="primary" disabled={policyCatalogBusy || (isApiAuthenticated() && !policyCatalogReady)} onClick={handleSaveNewPolicy}>
               {lang === "vi" ? "Lưu Chính Sách" : "Save Policy"}
             </Button>
           </div>
@@ -7472,7 +7470,7 @@ export default function BusinessApp({
               try {
                 const result = deleteConfirmation.kind === 'package'
                   ? await handleDeleteDurationDiscount(deleteConfirmation.id, true)
-                  : handleDeletePolicy(deleteConfirmation.id, true)
+                  : await handleDeletePolicy(deleteConfirmation.id, true)
                 if (result !== false) setDeleteConfirmation(null)
               } catch (error) {
                 setDeleteConfirmationError(error instanceof Error ? error.message : 'Không thể xóa. Vui lòng thử lại.')

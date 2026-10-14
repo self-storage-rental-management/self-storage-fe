@@ -5,7 +5,7 @@ import { getAuthenticatedActor } from "../../services/authApi"
 import { isUuid } from "../../services/renewalOperationsApi"
 import { rentalDate, rentalMoney } from "./presentation"
 
-interface Risk {
+export interface Risk {
   rentalId: string; renewalId: string | null; checkedAt: string; completeness: "COMPLETE" | "UNKNOWN"
   overdueDays: number | null; severity: "NONE" | "WARNING" | "SERIOUS" | "URGENT" | "RENEWAL_CLOSED" | "UNKNOWN"
   signingDeadline: string | null; repossessionDeadline: string | null; repossessionStartsAt: string | null
