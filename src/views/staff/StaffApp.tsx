@@ -810,7 +810,6 @@ export default function StaffApp({
   const hub = useStorageHub()
 
   const nav: NavItem[] = [
-    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
     {
       id: "dashboard",
 
@@ -833,30 +832,6 @@ export default function StaffApp({
       group: "Ca làm việc",
 
       permission: "dashboard:read",
-    },
-
-    {
-      id: "reservations",
-
-      label: "Duyệt yêu cầu đặt kho",
-
-      icon: Icon.calendar,
-
-      group: "Vận hành",
-
-      permission: "reservations:approve",
-    },
-
-    {
-      id: "unit-assignments",
-
-      label: "Phân kho đặt chỗ",
-
-      icon: Icon.box,
-
-      group: "Vận hành",
-
-      permission: "storage_units:assign",
     },
 
     {
