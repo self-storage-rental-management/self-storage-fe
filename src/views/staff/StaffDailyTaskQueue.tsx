@@ -112,7 +112,6 @@ function compareQueueRows(left: QueueRow, right: QueueRow, sort: StaffTaskSort) 
 export default function StaffDailyTaskQueue({
   assignedTasks,
   operationalTasks,
-  operationalError,
   dateFilter,
   priorityFilter,
   sort,
@@ -126,7 +125,6 @@ export default function StaffDailyTaskQueue({
 }: {
   assignedTasks: FacilityTask[]
   operationalTasks: StaffDailyOperation[]
-  operationalError: string | null
   dateFilter: string
   priorityFilter: string
   sort: StaffTaskSort
@@ -257,7 +255,7 @@ export default function StaffDailyTaskQueue({
           <div>
             <h3 className="font-bold text-stone-900">Danh sách nhiệm vụ cần xử lý</h3>
             <p className="mt-1 text-xs text-stone-500">
-              Bảo trì, nhiệm vụ quản lý giao và hồ sơ vận hành được gom chung; quá hạn và ưu tiên cao nằm trên cùng.
+              Bảo trì, nhiệm vụ quản lý giao và hồ sơ vận hành được gom chung, quá hạn và ưu tiên cao nằm trên cùng.
             </p>
           </div>
           <Button variant="outline" size="sm" disabled={maintenanceRead.loading} onClick={() => maintenanceRead.refresh()}>
@@ -278,7 +276,6 @@ export default function StaffDailyTaskQueue({
           <option value="due-asc">Đến hạn trước</option>
         </Select>
       </div>
-      {operationalError && <div className="border-b border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{operationalError}</div>}
       {Boolean(maintenanceRead.error) && <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-800">{staffErrorMessage(maintenanceRead.error, "Không thể tải nhiệm vụ bảo trì.")}</div>}
       <Table>
         <Thead>
