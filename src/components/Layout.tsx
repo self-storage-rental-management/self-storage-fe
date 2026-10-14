@@ -162,6 +162,7 @@ export default function Layout({
 
   // Chuẩn hóa nhãn điều hướng theo tiếng Việt cho toàn bộ cổng
   const getNavLabel = (item: NavItem) => {
+    if (item.id === 'dashboard' && item.label === 'Tổng quan') return item.label
     const navItemTranslations: Record<string, string> = {
       'overview': 'Tổng Quan',
       'browse-facilities': 'Tìm Cơ Sở Kho',

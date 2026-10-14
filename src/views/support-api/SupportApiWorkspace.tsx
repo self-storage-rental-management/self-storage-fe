@@ -5,7 +5,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useSupportCommand } from "../../hooks/useSupportCommand"
 import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
-import { getSupportSummary, listSupportQueue, listSupportTickets } from "../../services/supportApi"
+import { listSupportQueue, listSupportTickets } from "../../services/supportApi"
 import { supportStatuses } from "../../types/supportApi"
 import type {
   SupportQuery,
@@ -16,7 +16,6 @@ import ApiPager from "../rental-api/ApiPager"
 import { rentalDate } from "../rental-api/presentation"
 import SupportCreateForm from "./SupportCreateForm"
 import SupportReadState from "./SupportReadState"
-import SupportStaffPicker from "./SupportStaffPicker"
 import SupportTicketDetail from "./SupportTicketDetail"
 import {
   canReadSupport,
@@ -69,7 +68,7 @@ function SupportSession({
   identity: string
   onLocked?: (locked: boolean) => void
 }) {
-  const { manager, copy, errorText } = useManagerPresentation()
+  const { copy, errorText } = useManagerPresentation()
 
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const [query, setQuery] = useState<SupportQuery>({
@@ -95,14 +94,9 @@ function SupportSession({
       data: [], pagination: { page: 0, pageSize: 20, totalItems: 0, totalPages: 0, sort: "createdAt,desc" }, correlationId: null,
     }),
   )
-  const summary = useRentalApiResource(
-    `${identity}:summary:${facilityId ?? ""}`,
-    () => role === "manager" && facilityId ? getSupportSummary(facilityId) : Promise.resolve(undefined),
-  )
   const command = useSupportCommand(`${actor.id}:support:${role}`, () => {
     read.refresh()
     queueRead.refresh()
-    summary.refresh()
     setRevision((n) => n + 1)
     setCreation(undefined)
   })
@@ -124,7 +118,6 @@ function SupportSession({
     command.clearError()
     read.refresh()
     queueRead.refresh()
-    summary.refresh()
     setRevision((n) => n + 1)
   }
   const change = (patch: SupportQuery) => {
@@ -180,13 +173,7 @@ function SupportSession({
           </Button>
         )}
       </div>
-      {!selected && !creation && commandNotice}
-      {role === "manager" && summary.data && (
-        <Card className="flex flex-wrap gap-4 p-4 text-sm" aria-label="Thống kê hỗ trợ tại cơ sở">
-          <span>Chưa tiếp nhận: {summary.data.unassignedOpen}</span>
-          {supportStatuses.map((status) => <span key={status}>{supportStatusLabels[status]}: {summary.data!.counts[status]}</span>)}
-        </Card>
-      )}
+      {role !== "manager" && !selected && !creation && commandNotice}
 
       <Card className="space-y-3 p-4">
         <form
@@ -266,38 +253,36 @@ function SupportSession({
           </div>
 
         </form>
-        {role === "manager" &&
-          query.facilityId &&
-          actor.facilityScopes[query.facilityId] === "MANAGE" &&
-          actor.permissions.includes("support:update") && (
-            <div className="max-w-xl">
-              <SupportStaffPicker
-                key={query.facilityId}
-                facilityId={query.facilityId}
-                value={query.staffId ?? ""}
-                onChange={(staffId) =>
-                  change({ staffId: staffId || undefined })
-                }
-                disabled={locked}
-              />
-            </div>
-          )}
       </Card>
       {role === "staff" && staffView === "queue" ? <>
         <SupportReadState {...queueRead} retry={reload} />
         {queueRead.data && <>
-          <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
-            {queueRead.data.data.map((item) => <Card key={item.id} className="space-y-3 p-4">
-              <h2 className="break-words font-semibold">{item.subject}</h2>
-              <p className="text-sm">Cơ sở: {actor.facilityNames?.[item.facilityId] ?? item.facilityId}</p>
-              <p className="text-sm">Tạo lúc: {rentalDate(item.createdAt)}</p>
-              <Button disabled={locked || command.conflict} onClick={async () => {
-                const succeeded = await command.run({ kind: "command", role: "staff", id: item.id,
-                  command: { kind: "claim", expectedVersion: item.version } })
-                if (succeeded) { setStaffView("assigned"); setSelected(item.id) }
-              }}>Nhận xử lý</Button>
-            </Card>)}
-          </div>
+          {queueRead.data.data.length > 0 && <Card className="overflow-x-auto p-0">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="border-b bg-stone-50 text-stone-600">
+                <tr>
+                  <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-200">
+                {queueRead.data.data.map((item) => <tr key={item.id}>
+                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}</td>
+                  <td className="px-4 py-3">{actor.facilityNames?.[item.facilityId] ?? item.facilityId}</td>
+                  <td className="whitespace-nowrap px-4 py-3">{rentalDate(item.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <Button disabled={locked || command.conflict} onClick={async () => {
+                      const succeeded = await command.run({ kind: "command", role: "staff", id: item.id,
+                        command: { kind: "claim", expectedVersion: item.version } })
+                      if (succeeded) { setStaffView("assigned"); setSelected(item.id) }
+                    }}>Nhận xử lý</Button>
+                  </td>
+                </tr>)}
+              </tbody>
+            </table>
+          </Card>}
           {queueRead.data.data.length === 0 && <Card className="p-5 text-sm">Không có yêu cầu chờ tiếp nhận</Card>}
           <ApiPager pagination={queueRead.data.pagination} disabled={locked} onPage={setQueuePage} />
         </>}
@@ -314,51 +299,39 @@ function SupportSession({
       {read.data &&
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <>
-            <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
-              {read.data.data.map((t) => (
-                <Card key={t.id} className="min-w-0 space-y-3 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h2 className="min-w-0 break-words font-semibold">
-                      {t.subject}
-                    </h2>
-                    <Badge
-                      variant={
-                        t.status === "closed" || t.status === "resolved"
-                          ? "success"
-                          : "warning"
-                      }
-                    >
+            {read.data.data.length > 0 && <Card className="overflow-x-auto p-0">
+              <table className="w-full min-w-[1000px] text-left text-sm">
+                <thead className="border-b bg-stone-50 text-stone-600">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Mã yêu cầu</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Nhân viên phụ trách</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-200">
+                  {read.data.data.map((t) => <tr key={t.id}>
+                    <td className="max-w-xs break-words px-4 py-3 font-semibold">{t.subject}</td>
+                    <td className="px-4 py-3"><Badge variant={t.status === "closed" || t.status === "resolved" ? "success" : "warning"}>
                       {t.status === "open"
-                        ? t.assignedStaffId
-                          ? "Chờ nhân viên nhận"
-                          : "Chờ nhân viên tiếp nhận"
+                        ? "Chờ tiếp nhận"
                         : supportStatusLabels[t.status]}
-                    </Badge>
-                  </div>
-                  <p className="break-all text-xs text-stone-500">Mã yêu cầu: {t.id}</p>
-                  <p className="break-all text-sm">
-                    Cơ sở:{" "}
-                    {actor.facilityNames?.[t.facilityId ?? ""] ??
-                      t.facilityId ??
-                      "Chưa có thông tin"}
-                  </p>
-                  <p className="break-all text-sm">
-                    Nhân viên phụ trách: {supportAssigneeLabel(t, role)}
-                  </p>
-                  <p className="text-sm">Tạo lúc: {rentalDate(t.createdAt)}</p>
-                  <Button
-                    variant="outline"
-                    disabled={locked}
-                    onClick={() => {
+                    </Badge></td>
+                    <td className="max-w-[150px] break-all px-4 py-3 text-xs text-stone-500">{t.id}</td>
+                    <td className="px-4 py-3">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
+                    <td className="px-4 py-3">{supportAssigneeLabel(t, role)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{rentalDate(t.createdAt)}</td>
+                    <td className="px-4 py-3"><Button variant="outline" disabled={locked} onClick={() => {
                       setSelected(t.id)
                       command.clearError()
-                    }}
-                  >
-                    Chi tiết
-                  </Button>
-                </Card>
-              ))}
-            </div>
+                    }}>Chi tiết</Button></td>
+                  </tr>)}
+                </tbody>
+              </table>
+            </Card>}
             {read.data.data.length === 0 && (
               <Card className="p-5 text-sm text-stone-500">
                 Không có dữ liệu</Card>

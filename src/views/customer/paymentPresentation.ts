@@ -11,7 +11,7 @@ export function bookingDepositAccepted(payment: ReservationPaymentResult): boole
 }
 
 export function paymentRecordLabel(payment: ReservationPaymentResult): string {
-  if (bookingDepositAccepted(payment)) return 'Cọc đã được đơn xác nhận'
+  if (bookingDepositAccepted(payment)) return 'Đã xác nhận'
   if (payment.paymentStatus === 'PAID') return ['CANCELLED', 'REJECTED'].includes(payment.reservationStatus)
     ? 'Giao dịch đã ghi nhận. Vui lòng kiểm tra trạng thái đơn'
     : 'Giao dịch đã ghi nhận. Đơn chưa xác nhận và cần được đối soát'

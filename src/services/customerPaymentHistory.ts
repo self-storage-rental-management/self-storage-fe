@@ -28,6 +28,7 @@ export interface HistoryEntry {
   status: string
   method: string | null
   reservationPayment?: ReservationPaymentResult
+  renewalId?: string
 }
 export function reservationPaymentCategory(
   payment: ReservationPaymentResult,
@@ -157,8 +158,9 @@ export async function loadCustomerPaymentHistory(): Promise<{
               const data = event.data as Record<string, unknown>,
                 cash = event.kind === "CASH"
               return {
-                id: String(cash ? data.reference : data.paymentRef),
+                id: String(cash ? data.paymentId || data.reference : data.paymentRef),
                 reference: `Gia hạn ${renewal.id}`,
+                renewalId: renewal.id,
                 category: cash ? "renewalSigning" : "renewal",
                 amount: typeof data.amount === "number" ? data.amount : null,
                 currency: "VND",
@@ -167,10 +169,10 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 ),
                 updatedAt: event.occurredAt,
                 status:
-                  cash || data.outcome === "SUCCESS"
+                  cash || data.outcome === "SUCCESS" || (!data.outcome && !!data.paidAt)
                     ? "PAID"
                     : String(data.outcome),
-                method: cash ? "Tiền mặt tại cơ sở" : null,
+                method: cash ? data.paymentMethod === "BANK_TRANSFER" ? "Chuyển khoản" : "Tiền mặt tại cơ sở" : "VNPay",
               } satisfies HistoryEntry
             })
           }),

@@ -1,17 +1,16 @@
 import { Button } from '../../components/ui'
 import { formatVndAmount } from '../../i18n/currency'
-import type { CustomerUnitType } from '../../services/customerReservationApi'
+import type { CustomerUnitType, ReservationRentalPackage } from '../../services/customerReservationApi'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
-import { customerUnitAmenities } from './customerPresentation'
+import ReferenceBoxCapacity from './ReferenceBoxCapacity'
 
-export default function CustomerUnitDetails({ unitType: t, facilityName, facilityCode, address, availableCount, onReserve, onClose }: {
-  unitType: CustomerUnitType; facilityName: string; facilityCode?: string; address?: string; availableCount: number; onReserve: () => void; onClose: () => void
+export default function CustomerUnitDetails({ unitType: t, facilityName, facilityCode, address, availableCount, rentalPackages = [], onReserve, onClose }: {
+  unitType: CustomerUnitType; facilityName: string; facilityCode?: string; address?: string; availableCount: number; rentalPackages?: ReservationRentalPackage[]; onReserve: () => void; onClose: () => void
 }) {
   const size = t.code.match(/(?:^|[-_])(XL|S|M|L)(?:$|[-_])/i)?.[1]?.toUpperCase() || t.name.match(/\b(XL|S|M|L)\b/i)?.[1]?.toUpperCase()
     || ({ small: 'S', medium: 'M', large: 'L', 'extra large': 'XL' } as Record<string, string>)[t.name.toLowerCase()]
   facilityName = customerFacilityName(facilityCode || '', facilityName)
   address = customerFacilityAddress(facilityCode || '', facilityName, address || '')
-  const layout = customerUnitAmenities(size)
   const overdueFeePerDay = t.monthlyPrice / 30 * 0.5
   const overdueExampleDays = 4
   return <div className="space-y-5">
@@ -22,29 +21,21 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       ['Diện tích', `${t.areaM2} m²`], ['Kích thước kho (D × R × C)', `${t.lengthM} × ${t.widthM} × ${t.heightM} m`],
       ['Thể tích kho', `${t.volumeM3} m³`], ['Số khung kệ', `${t.rackCount} khung`],
       ['Kích thước khung (D × R × C)', `${t.rackLengthM} × ${t.rackWidthM} × ${t.rackHeightM} m`],
+      ['Chiều rộng lối đi', t.aisleWidthM ? `${t.aisleWidthM} m` : 'Chưa cập nhật'],
+      ['Xe đẩy hỗ trợ', t.trolleyType || 'Chưa cập nhật'],
       ['Tải trọng tối đa', `${t.maxLoadKg.toLocaleString('vi-VN')} kg`],
       ['Giá thuê mỗi tháng', formatVndAmount(t.monthlyPrice)],
       ['Tiền cọc đảm bảo', formatVndAmount(t.securityDepositAmount)],
-      ...(layout ? [
-        ['Chiều rộng lối đi', `${layout.aisleWidthM.toLocaleString('vi-VN')} m`],
-        ['Thiết bị xe đẩy', layout.trolley],
-      ] : []),
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
-    {layout && <section className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
-      <h4 className="font-bold text-stone-900">Bố trí và sức chứa kho</h4>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <article className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold text-amber-900">Mẫu thùng nhỏ 50 × 40 × 40 cm</p><p className="mt-2 text-2xl font-extrabold text-stone-950">{layout.smallBoxCapacity.toLocaleString('vi-VN')} <span className="text-sm font-normal text-stone-600">thùng</span></p></article>
-        <article className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold text-amber-900">Mẫu thùng lớn 70 × 50 × 50 cm</p><p className="mt-2 text-2xl font-extrabold text-stone-950">{layout.largeBoxCapacity.toLocaleString('vi-VN')} <span className="text-sm font-normal text-stone-600">thùng</span></p></article>
-      </div>
-      <p className="mt-3 text-xs leading-5 text-stone-500">Số thùng chỉ dùng để tham khảo cách bố trí. Kết quả phù hợp chính thức được kiểm tra từ kích thước, số lượng và cân nặng bạn khai báo.</p>
-    </section>}
+    <ReferenceBoxCapacity unitType={t} />
     <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, cọc giữ chỗ, cọc đảm bảo và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>
       <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, cọc giữ chỗ 40%, tiền thuê còn lại và tiền đảm bảo kho.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {[[3, 3], [6, 5], [12, 8]].map(([months, discount]) => <article key={months} className="rounded-xl border border-emerald-200 bg-white p-4 text-sm"><b>Thuê {months} tháng</b><p className="mt-1 font-semibold text-emerald-700">Giảm {discount}% tiền thuê</p></article>)}
+        {rentalPackages.map(item => <article key={item.code} className="rounded-xl border border-emerald-200 bg-white p-4 text-sm"><b>{item.name || `Thuê ${item.rentalMonths} tháng`}</b><p className="mt-1 font-semibold text-emerald-700">Giảm {Math.round(item.discountRate * 100)}% tiền thuê</p></article>)}
       </div>
+      {rentalPackages.length === 0 && <p className="mt-3 rounded-lg bg-white p-3 text-sm text-stone-600">Gói thuê đang hiệu lực sẽ được tải từ cơ sở khi bạn bắt đầu đặt kho.</p>}
       <p className="mt-3 text-xs leading-5 text-stone-600">Mức áp dụng và số tiền cuối cùng được xác nhận trên báo giá của đơn. Không cộng ưu đãi hai lần.</p>
     </section>
     <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5">

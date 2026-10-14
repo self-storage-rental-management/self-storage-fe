@@ -147,7 +147,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
       ),
     ).not.toBeNull()
   })
-  it("Staff still needs backend specialized assignment source; no Check-in permission fallback", () => {
+  it("Staff needs verified facility permissions; no Check-in permission fallback", () => {
     const actor = {
       ...operationsActor("staff"),
       permissions: ["checkins:process"],
@@ -159,7 +159,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         "arrival",
         actor,
       ),
-    ).toContain("phân công")
+    ).toContain("Quyền nhân viên tại cơ sở")
   })
   it("Customer cannot blindly confirm an exception from ref alone", () => {
     expect(
@@ -179,7 +179,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         state={{ ...operationState, missingSources: ["RENEWAL_ACCOUNTING"] }}
       />,
     )
-    expect(html).toContain("Chờ thanh toán toàn kỳ")
+    expect(html).toContain("Chờ thanh toán cọc")
     expect(html).toContain("Thanh toán và phân bổ tiền gia hạn")
     expect(html).toContain("Chưa đủ thông tin để xử lý")
     expect(html).not.toContain("không dùng dữ liệu demo")

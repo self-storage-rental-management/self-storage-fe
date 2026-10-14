@@ -30,7 +30,7 @@ export interface OverdueFollowUp {
   caseRef: string
   type: "NOTE" | "REMINDER" | "RECOVERY_HANDOFF"
   content: string
-  actorId: string
+  actorId: string | null
   recordedAt: string
   externalRef: string | null
   policyRef: string | null

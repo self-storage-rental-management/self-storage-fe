@@ -66,8 +66,6 @@ type CustomerCatalogUnit = StorageUnit & {
   rackCount: number
   rackDimensions: string
   aisleWidthM: number
-  doorWidthM: number
-  doorHeightM: number
   smallBoxCapacity: number
   largeBoxCapacity: number
   trolley: string
@@ -80,13 +78,17 @@ type CustomerConfirmation = {
   tone?: 'danger' | 'primary'
   onConfirm: () => void
 }
+
+const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) => {
+  const seen = new Set<number>()
+  return packages.filter(pkg => {
+    if (seen.has(pkg.rentalMonths)) return false
+    seen.add(pkg.rentalMonths)
+    return true
+  })
+}
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
-  const code = (sizeCode || '').toUpperCase()
-  if (code === 'S') return 'Xe đẩy tay / xe sàn nhỏ'
-  if (code === 'M') return 'Xe đẩy sàn phẳng'
-  if (code === 'L') return 'Xe nâng tay pallet'
-  if (code === 'XL') return 'Xe nâng điện dắt bộ'
-  if (!originalTrolley) return 'Xe đẩy tiêu chuẩn'
+  if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
   const t = originalTrolley.toLowerCase()
   if (t.includes('electric') || t.includes('walkie')) return 'Xe nâng điện dắt bộ'
   if (t.includes('platform')) return 'Xe đẩy sàn phẳng'
@@ -290,15 +292,20 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
   const isAvailable = availableCount > 0
   const usableCapacity = Math.round(unitType.volumeM3 * 0.75 * 10) / 10
   const sizeCode = storageSizeCode(unitType.name)
-  const amenities = customerUnitAmenities(sizeCode)
+  const amenities = apiSpec ? {
+    aisleWidthM: apiSpec.aisleWidthM ?? 0,
+    trolley: apiSpec.trolleyType || 'Chưa cập nhật',
+    smallBoxCapacity: apiSpec.smallBoxCapacity ?? 0,
+    largeBoxCapacity: apiSpec.largeBoxCapacity ?? 0,
+  } : customerUnitAmenities(sizeCode)
 
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
       <div className="relative h-44 overflow-hidden bg-stone-200">
-        <img src={getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <img src={apiSpec?.imageUrl || getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
-          📍 {facility.name}
+           {facility.name}
         </span>
         <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Kho size {sizeCode}</span>
       </div>
@@ -454,16 +461,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           .filter(unitType => unitType.facilityId === facility.id)
           .reduce((total, unitType) => total + (availabilityByUnitType[unitType.id] ?? unitType.availableCount ?? 0), 0),
         price: '',
-        climate: true,
-        security: '24/7',
-        image: customerFacilityImage(facility.code),
+        climate: Boolean(facility.climateControlled),
+        security: facility.securityDescription || '',
+        image: facility.imageUrl || customerFacilityImage(facility.code),
         units: backendUnitTypes.filter(unitType => unitType.facilityId === facility.id).length,
         occupied: 0,
         revenue: 0,
         growth: 0,
         manager: '',
         status: facility.status === 'maintenance' ? 'maintenance' : 'active',
-        accessHours: '24/7',
+        accessHours: facility.accessHours || 'Chưa cập nhật',
         timezone: 'Asia/Ho_Chi_Minh',
       }))
     : isApiAuthenticated() ? [] : sharedFacilities, [backendFacilities, backendUnitTypes, availabilityByUnitType, sharedFacilities])
@@ -488,7 +495,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             widthM: unitType.widthM,
             heightM: unitType.heightM,
           },
-          doorDimensions: { widthM: 1.1, heightM: 2.2 },
+          doorDimensions: { widthM: 0, heightM: 0 },
           volumeM3: unitType.volumeM3,
           maxLoadKg: unitType.maxLoadKg,
           allowedGoods: [],
@@ -496,7 +503,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           price: vndToLegacyBase(unitType.monthlyPrice),
           deposit: vndToLegacyBase(unitType.securityDepositAmount),
           rackCount: unitType.rackCount,
-          climate: true,
+          climate: Boolean(facility?.climateControlled),
           status: (unitType.availableCount ?? 0) > 0 ? 'available' : 'reserved',
           reservedPeriods: [],
           version: 1,
@@ -516,7 +523,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         pricePerM3: unitType.volumeM3 > 0 ? vndToLegacyBase(unitType.monthlyPrice) / unitType.volumeM3 : 0,
         monthlyPrice: vndToLegacyBase(unitType.monthlyPrice),
         maxLoadKg: unitType.maxLoadKg,
-        descriptionVi: '',
+        descriptionVi: unitType.description || '',
         descriptionEn: '',
       }))
     : isApiAuthenticated() ? [] : sharedUnitTypes, [backendUnitTypes, sharedUnitTypes])
@@ -556,7 +563,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       const backendSpec = backendUnitTypes.find(item => item.id === unit.id)
-      const amenities = customerUnitAmenities(sizeCode)
+      const amenities = backendSpec ? {
+        aisleWidthM: backendSpec.aisleWidthM ?? 0,
+        trolley: backendSpec.trolleyType || 'Chưa cập nhật',
+        smallBoxCapacity: backendSpec.smallBoxCapacity ?? 0,
+        largeBoxCapacity: backendSpec.largeBoxCapacity ?? 0,
+      } : customerUnitAmenities(sizeCode)
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
       const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
       const lengthM = unit.dimensions?.lengthM ?? backendSpec?.lengthM ?? 0
@@ -565,14 +577,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const areaM2 = unit.areaM2 || (lengthM * widthM)
       const volumeM3 = unit.volumeM3 || (lengthM * widthM * heightM)
       const aisleWidthM = amenities?.aisleWidthM ?? 0
-      const doorWidthM = unit.doorDimensions?.widthM ?? 0
-      const doorHeightM = unit.doorDimensions?.heightM ?? 0
       const maxLoadKg = unit.maxLoadKg || backendSpec?.maxLoadKg || 0
       const price = unit.price
 
       const rackCount = backendSpec?.rackCount ?? (unit as any).rackCount ?? 0
-      const smallBoxCapacity = amenities?.smallBoxCapacity ?? Math.floor(volumeM3 * 8)
-      const largeBoxCapacity = amenities?.largeBoxCapacity ?? Math.floor(volumeM3 * 2.5)
+      const smallBoxCapacity = amenities?.smallBoxCapacity ?? 0
+      const largeBoxCapacity = amenities?.largeBoxCapacity ?? 0
 
       return {
         ...unit,
@@ -584,23 +594,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           ? `${backendSpec.rackLengthM}×${backendSpec.rackWidthM}×${backendSpec.rackHeightM} m`
           : 'Chưa có dữ liệu',
         aisleWidthM,
-        doorWidthM,
-        doorHeightM,
         smallBoxCapacity,
         largeBoxCapacity,
-        trolley: amenities?.trolley ?? customerTrolleyVi(sizeCode),
-        trolleyDetail: amenities?.trolley ?? customerTrolleyVi(sizeCode),
+        trolley: customerTrolleyVi(sizeCode, amenities?.trolley),
+        trolleyDetail: customerTrolleyVi(sizeCode, amenities?.trolley),
         dimensions: { lengthM, widthM, heightM },
-        doorDimensions: { widthM: doorWidthM, heightM: doorHeightM },
         volumeM3,
         maxLoadKg,
         price,
-        deposit: unit.deposit || price,
+        deposit: backendSpec?.securityDepositAmount ?? unit.deposit ?? 0,
         rentalPackages: isApiAuthenticated()
           ? []
           : unit.rentalPackages || fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages || generateDefaultRentalPackages(fac?.id || unit.facilityId, sizeCode, price),
-        allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
-        prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+        allowedGoods: isApiAuthenticated() ? [] : (unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử']),
+        prohibitedGoods: isApiAuthenticated() ? [] : (unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống']),
       }
     })
   }, [units, facilities, backendUnitTypes])
@@ -865,10 +872,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     void listReservationRentalPackages(selectedTarget.facility.id, earliestCheckInDate)
       .then(packages => {
         if (cancelled) return
-        setBackendRentalPackages(packages)
-        const selected = packages.find(item => item.code === selectedPackageId)
-          || packages.find(item => item.rentalMonths === 3)
-          || packages[0]
+        const uniquePackages = uniqueRentalPackagesByDuration(packages)
+        setBackendRentalPackages(uniquePackages)
+        const selected = uniquePackages.find(item => item.code === selectedPackageId)
+          || uniquePackages.find(item => item.rentalMonths === 3)
+          || uniquePackages[0]
         if (selected) {
           setSelectedPackageId(selected.code)
           setRentalMonths(selected.rentalMonths)
@@ -2298,7 +2306,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         </div>
                       )}
                       {linkedRentalEnded && <div className="inactive-record-alert rounded-lg border border-red-300 bg-red-100 px-3 py-2 text-right text-xs text-red-800"><p className="font-bold">{'Hồ sơ giữ kho đã hết hiệu lực'}</p><p className="mt-0.5">{'Hợp đồng đã hoàn tất trả kho. Mã ra vào đã bị thu hồi.'}</p></div>}
-                      {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử.') } } })}><span aria-hidden="true">🗑</span> {'Xóa lịch sử'}</Button>}
+                      {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử.') } } })}> {'Xóa lịch sử'}</Button>}
                     </div>
                   </div>
                 </Card>
@@ -2501,7 +2509,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <Badge variant="warning">{'Đã gửi yêu cầu trả kho'}</Badge>
                         )}
                         {rental.status === 'completed' && (
-                          <><span className="inactive-record-alert rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-xs font-bold text-red-800">{'Hồ sơ hết hiệu lực · Mã ra vào đã thu hồi'}</span><Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hồ sơ thuê', message: 'Xóa hồ sơ thuê này khỏi danh sách của bạn? Dữ liệu đối soát vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveRentalHistory(rental.id, user); showToast('Đã xóa lịch sử hồ sơ thuê khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hồ sơ thuê.') } } })}><span aria-hidden="true">🗑</span> {'Xóa lịch sử'}</Button></>
+                          <><span className="inactive-record-alert rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-xs font-bold text-red-800">{'Hồ sơ hết hiệu lực · Mã ra vào đã thu hồi'}</span><Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hồ sơ thuê', message: 'Xóa hồ sơ thuê này khỏi danh sách của bạn? Dữ liệu đối soát vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveRentalHistory(rental.id, user); showToast('Đã xóa lịch sử hồ sơ thuê khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hồ sơ thuê.') } } })}> {'Xóa lịch sử'}</Button></>
                         )}
                       </div>
                     </div>
@@ -2521,10 +2529,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       const overdueDays = Math.abs(remainingDays)
                       const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
                       const currentLateFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
-                      return <div className="border-t border-red-300 bg-red-50 px-5 py-4 text-xs text-red-900"><p className="font-bold">⚠ {`Hợp đồng đã quá hạn ${overdueDays} ngày`}</p><p className="mt-1">{`Hợp đồng đã hết hạn ngày ${rental.endDate}. Phí muộn tạm tính hiện tại: ${overdueDays} ngày × ${formatVnd(lateFeePerDay)} = ${formatVnd(currentLateFee)}. ${unfinishedRenewal ? 'Yêu cầu gia hạn vẫn chưa có hiệu lực. Bạn phải đến cơ sở ký tiếp hợp đồng để hoàn tất.' : 'Bạn vẫn có thể gửi yêu cầu gia hạn.'} Phí cuối cùng được tính đến ngày thanh toán hoặc ngày ký hợp đồng gia hạn, tùy ngày nào muộn hơn.`}</p></div>
+                      return <div className="border-t border-red-300 bg-red-50 px-5 py-4 text-xs text-red-900"><p className="font-bold"> {`Hợp đồng đã quá hạn ${overdueDays} ngày`}</p><p className="mt-1">{`Hợp đồng đã hết hạn ngày ${rental.endDate}. Phí muộn tạm tính hiện tại: ${overdueDays} ngày × ${formatVnd(lateFeePerDay)} = ${formatVnd(currentLateFee)}. ${unfinishedRenewal ? 'Yêu cầu gia hạn vẫn chưa có hiệu lực. Bạn phải đến cơ sở ký tiếp hợp đồng để hoàn tất.' : 'Bạn vẫn có thể gửi yêu cầu gia hạn.'} Phí cuối cùng được tính đến ngày thanh toán hoặc ngày ký hợp đồng gia hạn, tùy ngày nào muộn hơn.`}</p></div>
                     }
                     if (remainingDays > reminderWindow) return null
-                    return <div className="border-t border-amber-200 bg-amber-50 px-5 py-4 text-xs text-amber-950"><p className="font-bold">⚠ {'Hợp đồng sắp hết hạn'}</p><p className="mt-1">{`Còn ${remainingDays} ngày đến ${rental.endDate}. ${unfinishedRenewal ? 'Yêu cầu gia hạn chưa thành công. Hãy đến cơ sở ký tiếp hợp đồng và hoàn tất thanh toán.' : 'Vui lòng gửi yêu cầu gia hạn nếu bạn muốn tiếp tục thuê kho.'}`}</p></div>
+                    return <div className="border-t border-amber-200 bg-amber-50 px-5 py-4 text-xs text-amber-950"><p className="font-bold"> {'Hợp đồng sắp hết hạn'}</p><p className="mt-1">{`Còn ${remainingDays} ngày đến ${rental.endDate}. ${unfinishedRenewal ? 'Yêu cầu gia hạn chưa thành công. Hãy đến cơ sở ký tiếp hợp đồng và hoàn tất thanh toán.' : 'Vui lòng gửi yêu cầu gia hạn nếu bạn muốn tiếp tục thuê kho.'}`}</p></div>
                   })()}
                   {rental.receiptConfirmedAt && <div className="border-t border-emerald-100 bg-emerald-50 px-5 py-3 text-xs font-semibold text-emerald-800">✓ {`Đã xác nhận nhận kho lúc ${new Date(rental.receiptConfirmedAt).toLocaleString('vi-VN')}`}</div>}
                   {(() => {
@@ -2651,7 +2659,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <div className="flex items-center justify-between gap-3"><div><p className="font-bold">{c.contractNumber}</p>{c.contractType === 'RENEWAL' && <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">{'Hợp đồng gia hạn'}</p>}</div><span className="rounded border border-black px-2 py-0.5 text-xs font-semibold">{c.status}</span></div>
             <p>{'Ngày ký'}: {c.signedAt}</p><p>{'Hiệu lực'}: {c.startDate} – {c.endDate}</p>
             <p className="truncate text-stone-600">{c.scannedFileName}</p>
-            <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hợp đồng.') } } })}><span aria-hidden="true">🗑</span> {'Xóa lịch sử'}</Button>}</div>
+            <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hợp đồng.') } } })}> {'Xóa lịch sử'}</Button>}</div>
           </div>
         </Card>})}</div> : <Card className="p-4 text-sm text-stone-500">{'Chưa có hợp đồng giấy đã ký. Hợp đồng sẽ xuất hiện sau khi nhân viên lưu bản scan.'}</Card>}
       </div>}
@@ -2942,6 +2950,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           if (isApiAuthenticated() && backendSpec && selectedTarget) return <CustomerUnitDetails
             unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
             availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
+            rentalPackages={backendRentalPackages}
             onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
           const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 
@@ -3006,9 +3015,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                       <p className="text-xs font-bold text-stone-700 mb-2">Xe đẩy hỗ trợ tại cơ sở</p>
                       <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-900 text-white text-lg">
-                          🛒
-                        </div>
                         <div>
                           <p className="font-bold text-stone-950 text-sm">{customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)}</p>
                         </div>
@@ -3048,7 +3054,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                          <span>🏷️</span>
+
                           <span>Gói thuê ưu đãi cho loại kho này</span>
                         </p>
                         <p className="mt-0.5 text-xs text-emerald-950">
@@ -3376,7 +3382,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
                   </div>
 
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>🎁</span><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 40% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng tiền thuê và tiền đảm bảo kho</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
+                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 40% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng tiền thuê và tiền đảm bảo kho</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
 
                     <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Mã OTP có hiệu lực 10 phút. Thời hạn thanh toán bắt đầu sau khi xác minh hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được xét duyệt trong tối đa một ngày làm việc. Sau khi duyệt có 6 giờ để thanh toán.' : 'Sau khi xác minh email, bạn có 6 giờ để thanh toán cọc 40% theo báo giá.'}</li><li>Quản lý cơ sở có tối đa một ngày làm việc để phân kho. Khách hàng chọn lịch nhận kho trong thời hạn 7 ngày từ thời điểm kho có thể sẵn sàng.</li></ul></div>
                 </div>
@@ -3462,7 +3468,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {evaluatedPolicyBenefits.some(b => b.isDiscount) && (
                     <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950">
                       <p className="font-bold flex items-center gap-1.5 text-emerald-900">
-                        <span>🎁</span>
+
                         <span>Chính sách ưu đãi cơ sở được áp dụng:</span>
                       </p>
                       <div className="mt-2 space-y-1 pl-4">

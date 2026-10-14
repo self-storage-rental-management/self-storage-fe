@@ -10,6 +10,7 @@ import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useRenewalCommand } from "../../hooks/useRenewalCommand"
 import type { RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
 import ApiReadState from "../rental-api/ApiReadState"
+import RenewalRiskNotice from "../rental-api/RenewalRiskNotice"
 import {
   rentalDate,
   rentalError,
@@ -87,6 +88,7 @@ export default function CustomerRenewalRequestModal({
       size="lg"
     >
       <div className="space-y-4">
+        <RenewalRiskNotice rentalId={rentalId} />
         <ApiReadState {...options} retry={options.refresh} />
         {options.data && (
           <label className="block">
@@ -104,7 +106,7 @@ export default function CustomerRenewalRequestModal({
               <option value="">Chọn gói gia hạn</option>
               {options.data.map((o) => (
                 <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
-                  {o.rentalMonths} tháng - {o.pricingPackageCode}
+                  {o.pricingPackageName?.trim() || `Gói thuê ${o.rentalMonths} tháng`}
                 </option>
               ))}
             </select>
@@ -134,9 +136,10 @@ export default function CustomerRenewalRequestModal({
               {rentalMoney(quote.totalAfterDiscount, quote.currency)}
             </p>
             <p>
-              Số tiền cần thanh toán cho toàn bộ kỳ gia hạn:{" "}
-              {rentalMoney(quote.totalAfterDiscount, quote.currency)}
+              Cọc gia hạn trả trước:{" "}
+              {rentalMoney(quote.renewalDepositAmount, quote.currency)}
             </p>
+            <p>Tiền thuê còn lại khi ký: {rentalMoney(quote.remainingRentalAmount, quote.currency)}</p>
             <p>Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}</p>
             {expired && !command.uncertain && (
               <p role="alert" className="text-red-700">

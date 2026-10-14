@@ -107,7 +107,6 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
     <SectionHeader
       eyebrow="Vận hành nhận kho"
       title="Phân kho cho đặt chỗ"
-      subtitle="Chọn gian kho còn trống, cùng cơ sở và đúng loại kho cho đơn đã thanh toán cọc và đang chờ phân gian."
     />
 
     <Card className="p-4">
