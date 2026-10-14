@@ -3293,7 +3293,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {rentalPackagesLoading && <option value="">Đang tải gói thuê…</option>}
                   {!rentalPackagesLoading && backendRentalPackages.length === 0 && <option value="">Không có gói thuê khả dụng</option>}
                   {backendRentalPackages.map(pkg => <option key={pkg.code} value={pkg.code}>
-                    {pkg.name} — {pkg.rentalMonths} tháng{pkg.discountRate > 0 ? ` · giảm ${Math.round(pkg.discountRate * 100)}%` : ''}
+                    {pkg.rentalMonths} tháng - giảm {Math.round(pkg.discountRate * 100)}%
                   </option>)}
                 </> : selectedUnitActivePackages.length > 0 ? (
                   selectedUnitActivePackages.map(pkg => (
