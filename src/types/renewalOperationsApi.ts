@@ -1,13 +1,15 @@
 import type { RentalApiPage } from "./rentalApi"
 
 export type RenewalOperationsRole = "customer" | "manager" | "staff"
-export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED"
+export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_PAYMENT_INTENT" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED"
 export interface RenewalOperationState {
   renewalId: string
   expectedVersion: number | null
   phase: RenewalOperationsPhase
   depositPaymentRef: string | null
   depositPaidAt: string | null
+  fullRentPaymentRef: string | null
+  fullRentPaidAt: string | null
   originalSigningDeadline: string | null
   effectiveSigningDeadline: string | null
   recoveryCutoff: string | null
@@ -23,7 +25,7 @@ export interface RenewalOperationState {
 }
 export interface RenewalOperationEvent {
   id: string
-  kind: "DEPOSIT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY"
+  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "REFUND_EXECUTION"
   occurredAt: string
   actorId: string | null
   data: unknown
@@ -56,14 +58,14 @@ export interface RenewalPayableStatement {
   amount: number
   currency: "VND"
   requiredObligations: string[]
+  remainingRentalAmount?: number
+  overdueFee?: number
+  unpostedOverdueFee?: number
 }
 export type RenewalExceptionAction = "APPROVE_RESCHEDULE_BEFORE_CUTOFF" | "REQUEST_POST_CUTOFF_REVIEW" | "REJECT"
 type Version = { expectedVersion: number }
 type Evidence = { evidenceFileIds: string[] }
 export type RenewalOperationCommand = {
-  action: "deposit"
-  body: Version
-} | {
   action: "appointment" | "reschedule"
   body: Version & {
     appointmentAt: string
@@ -86,6 +88,8 @@ export type RenewalOperationCommand = {
   body: Version & {
     payableStatementRef: string
     receiptReference: string
+    receiptFileId: string
+    paymentMethod?: "CASH" | "BANK_TRANSFER"
     received: true
   }
 } | {
