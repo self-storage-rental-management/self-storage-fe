@@ -132,6 +132,7 @@ export async function getRenewalOptions(rentalId: string) {
       data.every(
         (o) =>
           typeof o?.pricingPackageCode === "string" &&
+            (o.pricingPackageName === undefined || o.pricingPackageName === null || typeof o.pricingPackageName === "string") &&
           Number.isInteger(o.rentalMonths) &&
           o.rentalMonths > 0,
       ),

@@ -40,6 +40,7 @@ import {
   type InventoryFilters,
   type InventoryUnit,
 } from "./managerInventoryApi"
+import { createManagerUnitType } from "../../services/managerUnitTypeApi"
 
 const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
@@ -109,6 +110,7 @@ function InventoryRead({
   identity: string
   facilityId: string
 }) {
+  const [createOpen, setCreateOpen] = useState(false)
   const read = useRentalApiResource(identity, () =>
     loadManagerInventory(facilityId),
   )
@@ -131,16 +133,90 @@ function InventoryRead({
       </Card>
     )
   return read.data ? (
-    <InventoryContent
-      inventory={read.data}
-      rentals={rentals}
-      identity={identity}
-    />
+    <>
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>Thêm loại kho thực tế</Button>
+      </div>
+      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} />
+      <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
+    </>
   ) : (
     <Card className="p-5" role="alert">
       Chưa xác minh được dữ liệu gian kho.
     </Card>
   )
+}
+
+function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
+  open: boolean
+  facilityId: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [form, setForm] = useState({
+    code: '', name: '', description: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
+    rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
+    aisleWidthM: '1.8', trolleyType: 'Xe đẩy tay / xe sàn nhỏ', smallBoxCapacity: '336', largeBoxCapacity: '200',
+    physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  const field = (key: keyof typeof form, label: string, type = 'text') => (
+    <label className="block text-sm font-medium text-stone-700">{label}
+      <input className={`${inputClass} mt-1`} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
+    </label>
+  )
+  const submit = async () => {
+    setBusy(true); setError(undefined)
+    try {
+      await createManagerUnitType(facilityId, {
+        code: form.code.trim().toUpperCase(), name: form.name.trim(), description: form.description.trim() || null,
+        lengthM: Number(form.lengthM), widthM: Number(form.widthM), heightM: Number(form.heightM),
+        maxLoadKg: Number(form.maxLoadKg), rackCount: Number(form.rackCount),
+        rackLengthM: Number(form.rackLengthM), rackWidthM: Number(form.rackWidthM), rackHeightM: Number(form.rackHeightM),
+        aisleWidthM: Number(form.aisleWidthM), trolleyType: form.trolleyType.trim(),
+        smallBoxCapacity: Number(form.smallBoxCapacity), largeBoxCapacity: Number(form.largeBoxCapacity),
+        physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
+        imageUrl: form.imageUrl.trim() || null,
+      })
+      onCreated()
+    } catch (cause) {
+      setError(managerDisplayError(cause))
+    } finally { setBusy(false) }
+  }
+  return <Modal open={open} onClose={onClose} title="Thêm loại kho thực tế" size="xl">
+    <div className="space-y-5">
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Thông tin loại kho</h3>
+        <div className="grid gap-4 sm:grid-cols-2">{field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}</div>
+        <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
+          <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
+        </label>
+        {field('imageUrl', 'URL ảnh loại kho')}
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Kích thước và tải trọng</h3>
+        <div className="grid gap-4 sm:grid-cols-3">
+        {field('lengthM', 'Chiều dài (m)', 'number')}{field('widthM', 'Chiều rộng (m)', 'number')}{field('heightM', 'Chiều cao (m)', 'number')}
+        </div><div className="grid gap-4 sm:grid-cols-2">{field('maxLoadKg', 'Tải trọng tối đa (kg)', 'number')}{field('aisleWidthM', 'Chiều rộng lối đi (m)', 'number')}</div>
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Khung kệ và thiết bị hỗ trợ</h3>
+        <div className="grid gap-4 sm:grid-cols-2">{field('rackCount', 'Số khung kệ', 'number')}{field('trolleyType', 'Loại xe đẩy hỗ trợ')}</div>
+        <div className="grid gap-4 sm:grid-cols-3">
+        {field('rackLengthM', 'Dài khung (m)', 'number')}{field('rackWidthM', 'Rộng khung (m)', 'number')}{field('rackHeightM', 'Cao khung (m)', 'number')}
+        </div><div className="grid gap-4 sm:grid-cols-2">
+        {field('smallBoxCapacity', 'Sức chứa thùng nhỏ', 'number')}{field('largeBoxCapacity', 'Sức chứa thùng lớn', 'number')}
+        </div>
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Số lượng và vị trí gian kho</h3>
+        <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
+      </section>
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : 'Thêm loại kho'}</Button></div>
+    </div>
+  </Modal>
 }
 
 export function InventoryContent({
@@ -285,64 +361,66 @@ export function InventoryContent({
         </div>
       </Card>
       <Card>
-        <Table>
+        <Table tableClassName="min-w-[980px] table-fixed">
+          <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[19%]" />
+            <col className="w-[15%]" />
+            <col className="w-[15%]" />
+            <col className="w-[15%]" />
+            <col className="w-[12%]" />
+          </colgroup>
           <Thead>
             <tr>
-              <Th>Gian kho</Th>
-              <Th>Loại / Kích thước</Th>
-              <Th>Vị trí</Th>
-              <Th>Trạng thái</Th>
-              <Th>Hồ sơ thuê</Th>
-              <Th>Giá niêm yết</Th>
-              <Th>Khả dụng</Th>
-              <Th>Thao tác</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Gian kho</Th>
+              <Th className="text-left align-middle">Loại gian kho</Th>
+              <Th className="text-left align-middle">Vị trí</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Trạng thái</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Giá niêm yết</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
             {pagination.items.map((u) => (
-              <Tr key={u.id}>
-                <Td>
-                  <p className="font-mono font-bold">{u.code}</p>
+              <Tr key={u.id} className="odd:bg-white even:bg-stone-50/50">
+                <Td className="align-middle">
+                  <p className="break-all font-mono text-sm font-bold leading-5">{u.code}</p>
                 </Td>
-                <Td>
-                  <p className="font-semibold">{typeLabel(u)}</p>
-                  <p className="text-xs text-stone-500">
-                    {measure(u.definition.areaM2, "m²")},{" "}
-                    {measure(u.definition.volumeM3, "m³")}
-                  </p>
-                  <p className="text-xs text-stone-500">
-                    Tải trọng: {measure(u.definition.maxLoadKg, "kg")}
-                  </p>
+                <Td className="align-middle">
+                  <p className="font-semibold leading-5">{typeLabel(u)}</p>
                 </Td>
-                <Td>
-                  <p>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
-                  <p>{location(u.zone)}</p>
+                <Td className="align-middle">
+                  <div className="space-y-1">
+                    <p>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
+                    <p className="text-sm text-stone-500">{location(u.zone)}</p>
+                  </div>
                 </Td>
-                <Td>
+                <Td className="align-middle">
                   <Badge variant={variants[u.status]}>
                     {statusLabels[u.status]}
                   </Badge>
                 </Td>
-                <Td>
-                  <InventoryRentalSummary unit={u} read={rentals} />
+                <Td className="align-middle">
+                  {u.definition.monthlyPrice === null ? (
+                    <p className="text-sm text-stone-500">{missing}</p>
+                  ) : (
+                    <div className="whitespace-nowrap">
+                      <p className="font-semibold text-stone-800">
+                        {formatVndAmount(u.definition.monthlyPrice)}
+                      </p>
+                      <p className="text-xs text-stone-500">/tháng</p>
+                    </div>
+                  )}
                 </Td>
-                <Td>
-                  {u.definition.monthlyPrice === null
-                    ? missing
-                    : `${formatVndAmount(u.definition.monthlyPrice)}/tháng`}
-                </Td>
-                <Td>
-                  <p className="text-xs text-stone-500">
-                    {missing}
-                  </p>
-                </Td>
-                <Td>
+                <Td className="align-middle">
                   <Button
                     size="sm"
                     variant="outline"
+                    className="whitespace-nowrap"
                     onClick={() => setSelectedId(u.id)}
                   >
-                    Xem chi tiết
+                    Chi tiết
                   </Button>
                 </Td>
               </Tr>
@@ -350,7 +428,7 @@ export function InventoryContent({
             {visible.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={6}
                   className="p-10 text-center text-sm text-stone-500"
                 >
                   {units.length === 0
@@ -456,7 +534,7 @@ export function InventoryContent({
               </p>
             </div>
             <section className="space-y-2 border-t border-stone-200 pt-4">
-              <h3 className="font-bold">Hồ sơ thuê và người thuê</h3>
+              <h3 className="font-bold">Hồ sơ thuê</h3>
               <InventoryRentalSummary unit={selected} read={rentals} detailed />
             </section>
             <InventoryMaintenanceDetails
