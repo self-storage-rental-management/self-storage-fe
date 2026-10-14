@@ -257,26 +257,8 @@ export default function Layout({
     return roleLabel
   }
 
-  const notificationCandidates = [
-    { page: 'payments', vi: 'Có hóa đơn mới cần kiểm tra', timeVi: '5 phút trước' },
-    { page: 'reservations', vi: 'Đơn đặt giữ kho đã được cập nhật', timeVi: '20 phút trước' },
-    { page: 'overdue', vi: 'Có tài khoản quá hạn cần xử lý', timeVi: '30 phút trước' },
-    { page: 'tasks', vi: 'Nhiệm vụ trong ca làm việc vừa thay đổi', timeVi: '1 giờ trước' },
-    { page: 'activity', vi: 'Nhật ký hệ thống có hoạt động mới', timeVi: '2 giờ trước' },
-    { page: 'support', vi: 'Yêu cầu hỗ trợ có phản hồi mới', timeVi: '2 giờ trước' },
-    { page: 'units', vi: 'Trạng thái gian kho vừa được cập nhật', timeVi: '3 giờ trước' },
-  ]
-  const fallbackNotifications: LayoutNotification[] = notificationCandidates
-    .filter(item => visibleNavItems.some(nav => nav.id === item.page))
-    .slice(0, 3)
-    .map(item => ({
-      id: `${roleLabel}-${item.page}`,
-      title: item.vi,
-      message: item.timeVi,
-      page: item.page
-    }))
   const notifications = [
-    ...(suppliedNotifications ?? fallbackNotifications),
+    ...(suppliedNotifications ?? []),
     ...(additionalNotifications ?? [])
   ]
   const isNotificationRead = (item: LayoutNotification) => Boolean(item.isRead || readNotificationIds.includes(item.id))
