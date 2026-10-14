@@ -294,7 +294,32 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
           <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
         </label>
-        {field('imageUrl', 'URL ảnh loại kho')}
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-stone-700">Hình ảnh loại kho / sơ đồ bố trí
+            <input type="url" placeholder="Dán đường dẫn ảnh https://…" value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl} disabled={busy}
+              onChange={event => setForm(current => ({ ...current, imageUrl: event.target.value }))}
+              className="mt-1 w-full rounded-lg border border-stone-300 p-3" />
+          </label>
+          <label className="block text-sm text-stone-600">Hoặc chọn ảnh từ máy (JPG, PNG, WebP; tối đa 2 MB)
+            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} className="mt-2 block w-full text-sm" onChange={event => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (!file) return
+              if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+                setError('Vui lòng chọn ảnh JPG, PNG hoặc WebP không quá 2 MB.')
+                return
+              }
+              const reader = new FileReader()
+              reader.onload = () => { setForm(current => ({ ...current, imageUrl: String(reader.result) })); setError('') }
+              reader.onerror = () => setError('Không đọc được ảnh. Vui lòng chọn lại.')
+              reader.readAsDataURL(file)
+            }} />
+          </label>
+          {form.imageUrl && <div className="flex flex-col gap-2">
+            <img src={form.imageUrl} alt="Ảnh loại kho xem trước" className="max-h-64 w-full rounded-lg border border-stone-200 bg-stone-50 object-contain" />
+            <Button variant="outline" disabled={busy} onClick={() => setForm(current => ({ ...current, imageUrl: '' }))}>Bỏ ảnh</Button>
+          </div>}
+        </div>
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Kích thước và tải trọng</h3>

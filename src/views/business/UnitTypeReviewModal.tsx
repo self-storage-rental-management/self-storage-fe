@@ -65,7 +65,7 @@ export default function UnitTypeReviewModal({ open, requestId, onClose }: {
                   return <div key={side} className={`min-w-0 rounded-lg p-3 ${side === 'before' ? 'bg-stone-50' : 'bg-amber-50'}`}>
                     <p className="mb-2 text-xs text-slate-500">{side === 'before' ? 'Trước thay đổi' : 'Manager đề xuất'}</p>
                     {key === 'imageUrl' && value && <img src={String(value)} alt={side === 'before' ? 'Ảnh cũ' : 'Ảnh đề xuất'} className="mb-2 h-40 w-full rounded object-cover" />}
-                    <p className="whitespace-pre-wrap break-all text-sm">{value == null || value === '' ? 'Chưa khai báo' : String(value)}</p>
+                    <p className="whitespace-pre-wrap break-all text-sm">{value == null || value === '' ? 'Chưa khai báo' : key === 'imageUrl' && String(value).startsWith('data:') ? 'Ảnh tải từ máy' : String(value)}</p>
                   </div>
                 })}
               </div>
