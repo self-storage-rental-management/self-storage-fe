@@ -93,11 +93,11 @@ export function useSupportCommand(scope: string, onSuccess: () => void) {
   const conflict =
     error instanceof ApiClientError && error.status === 409 && !attempt.uncertain
   const run = async (submission: SupportSubmission) => {
-    if (lock.current || conflict) return
+    if (lock.current || conflict) return false
     const previous = attempt.pending
     if (previous && previous.signature !== JSON.stringify(submission)) {
       setError(new Error("Cần thử lại yêu cầu trước để xác định kết quả."))
-      return
+      return false
     }
     lock.current = true
     setBusy(true)
@@ -122,6 +122,7 @@ export function useSupportCommand(scope: string, onSuccess: () => void) {
       setBusy(false)
     }
     if (succeeded) onSuccess()
+    return succeeded
   }
   return {
     run,

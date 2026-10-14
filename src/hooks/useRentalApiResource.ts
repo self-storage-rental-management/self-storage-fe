@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 export function useRentalApiResource<T>(
   identity: string,
   load: () => Promise<T>,
+  { retainDataOnRefresh = false }: { retainDataOnRefresh?: boolean } = {},
 ) {
   const loader = useRef(load)
   loader.current = load
@@ -17,7 +18,9 @@ export function useRentalApiResource<T>(
   }>({ identity, loading: true })
   useEffect(() => {
     let current = true
-    setState({ identity, loading: true })
+    setState(previous => retainDataOnRefresh && previous.identity === identity
+      ? { identity, data: previous.data, loading: true }
+      : { identity, loading: true })
     loader.current().then(
       (data) => {
         if (current) setState({ identity, data, loading: false })
@@ -29,7 +32,7 @@ export function useRentalApiResource<T>(
     return () => {
       current = false
     }
-  }, [identity, tick])
+  }, [identity, tick, retainDataOnRefresh])
   const refresh = useCallback(() => setTick((value) => value + 1), [])
   return {
     ...(state.identity === identity
