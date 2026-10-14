@@ -3501,12 +3501,9 @@ export default function BusinessApp({
     0,
   )
 
-  const totalUnits =
-    unitsList.length || facilitiesList.reduce((s, f) => s + (f.units || 0), 0)
+  const totalUnits = facilitiesList.reduce((sum, facility) => sum + getFacilityTotalUnits(facility), 0)
 
-  const totalOccupied =
-    unitsList.filter((u) => u.status === "occupied").length ||
-    facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)
+  const totalOccupied = facilitiesList.reduce((sum, facility) => sum + getFacilityOccupiedCount(facility), 0)
 
   return (
     <Layout
