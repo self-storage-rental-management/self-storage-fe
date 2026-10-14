@@ -54,58 +54,6 @@ describe("D3 operation prerequisites and truthful UI", () => {
       ).toBe(false)
     },
   )
-  it("only Customer can initiate deposit, and it must belong to that Customer", () => {
-    expect(
-      operationBlockedReason(
-        operationState,
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toBeNull()
-    expect(
-      operationBlockedReason(
-        operationState,
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.staff,
-      ),
-    ).not.toBeNull()
-    expect(
-      operationBlockedReason(
-        operationState,
-        "manager",
-        "deposit",
-        operationsActor("manager"),
-      ),
-    ).not.toBeNull()
-  })
-  it("blocks only the needed missing sources, not unrelated refund port", () => {
-    expect(
-      operationBlockedReason(
-        { ...operationState, missingSources: ["REFUND_ENTITLEMENT_EXECUTION"] },
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toBeNull()
-    expect(
-      operationBlockedReason(
-        { ...operationState, missingSources: ["RENEWAL_ACCOUNTING"] },
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toContain("Chưa đủ thông tin")
-  })
   it("does not invent legacy version or allow Manager completion", () => {
     expect(
       operationBlockedReason(
@@ -199,7 +147,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
       ),
     ).not.toBeNull()
   })
-  it("Staff still needs backend specialized assignment source; no Check-in permission fallback", () => {
+  it("Staff needs verified facility permissions; no Check-in permission fallback", () => {
     const actor = {
       ...operationsActor("staff"),
       permissions: ["checkins:process"],
@@ -211,7 +159,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         "arrival",
         actor,
       ),
-    ).toContain("phân công")
+    ).toContain("Quyền nhân viên tại cơ sở")
   })
   it("Customer cannot blindly confirm an exception from ref alone", () => {
     expect(

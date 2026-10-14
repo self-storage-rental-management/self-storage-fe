@@ -1,4 +1,6 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
+import RenewalRiskNotice from "./RenewalRiskNotice"
+import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Button, Card } from "../../components/ui"
 import type { RentalApiDetail } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses, bookingPaymentVerification } from "../../services/rentalBookingEvidence"
@@ -6,10 +8,12 @@ import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, ren
 export default function RentalDetail({
   rental,
   onRequest,
+  role = "customer",
   showTechnicalWarnings = true,
 }: {
   rental: RentalApiDetail
   onRequest?: () => void
+  role?: "customer" | "manager"
   showTechnicalWarnings?: boolean
 }) {
   const { copy } = useManagerPresentation()
@@ -19,6 +23,7 @@ export default function RentalDetail({
   const agreed = evidence?.agreedAmounts
   return (
     <div className="space-y-4">
+      {rental.status === "active" && <RenewalRiskNotice rentalId={rental.id} role={role} />}
       <Card className="p-4">
         <h3 className="font-bold mb-3">Hồ sơ thuê</h3>
         <dl className="grid gap-3 sm:grid-cols-2">
@@ -45,6 +50,10 @@ export default function RentalDetail({
             <dd>{copy(rentalLabels[rental.status])}</dd>
           </div>
           <div>
+            <dt className="font-bold">Đơn giá/tháng</dt>
+            <dd>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>
+          </div>
+          <div>
             <dt className="font-bold">{showTechnicalWarnings && rental.dateSemantics?.completeness !== "COMPLETE" ? "Ngày thuê đang lưu" : "Thời hạn sử dụng"}</dt>
             <dd>
               {rentalPeriodText(rental, showTechnicalWarnings)}
@@ -60,6 +69,7 @@ export default function RentalDetail({
           </div>
         </dl>
       </Card>
+      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role} id={rental.id} />
       <Card className="p-4">
         <h3 className="font-bold mb-3">Theo dõi quá hạn</h3>
         <dl className="grid gap-3 sm:grid-cols-2">

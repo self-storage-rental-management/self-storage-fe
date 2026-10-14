@@ -5,7 +5,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useSupportCommand } from "../../hooks/useSupportCommand"
 import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
-import { listSupportTickets } from "../../services/supportApi"
+import { listSupportQueue, listSupportTickets } from "../../services/supportApi"
 import { supportStatuses } from "../../types/supportApi"
 import type {
   SupportQuery,
@@ -16,7 +16,6 @@ import ApiPager from "../rental-api/ApiPager"
 import { rentalDate } from "../rental-api/presentation"
 import SupportCreateForm from "./SupportCreateForm"
 import SupportReadState from "./SupportReadState"
-import SupportStaffPicker from "./SupportStaffPicker"
 import SupportTicketDetail from "./SupportTicketDetail"
 import {
   canReadSupport,
@@ -69,7 +68,7 @@ function SupportSession({
   identity: string
   onLocked?: (locked: boolean) => void
 }) {
-  const { manager, copy, errorText } = useManagerPresentation()
+  const { copy, errorText } = useManagerPresentation()
 
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const [query, setQuery] = useState<SupportQuery>({
@@ -82,12 +81,22 @@ function SupportSession({
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
   const [revision, setRevision] = useState(0)
+  const [staffView, setStaffView] = useState<"queue" | "assigned">("queue")
+  const [queuePage, setQueuePage] = useState(0)
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
     () => listSupportTickets(role, query),
   )
+  const queueQuery: SupportQuery = { page: queuePage, size: query.size, search: query.search, sort: query.sort }
+  const queueRead = useRentalApiResource(
+    `${identity}:queue:${JSON.stringify(queueQuery)}`,
+    () => role === "staff" ? listSupportQueue(queueQuery) : Promise.resolve({
+      data: [], pagination: { page: 0, pageSize: 20, totalItems: 0, totalPages: 0, sort: "createdAt,desc" }, correlationId: null,
+    }),
+  )
   const command = useSupportCommand(`${actor.id}:support:${role}`, () => {
     read.refresh()
+    queueRead.refresh()
     setRevision((n) => n + 1)
     setCreation(undefined)
   })
@@ -108,11 +117,13 @@ function SupportSession({
     if (command.locked || uploadLock.current) return
     command.clearError()
     read.refresh()
+    queueRead.refresh()
     setRevision((n) => n + 1)
   }
   const change = (patch: SupportQuery) => {
     if (command.locked || uploadLock.current) return
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
+    setQueuePage(0)
     setSelected(undefined)
   }
   const commandNotice = (
@@ -128,11 +139,6 @@ function SupportSession({
           className="space-y-2 rounded border border-red-200 bg-red-50 p-3 text-sm"
         >
           <p>{errorText(command.error, supportError)}</p>
-          {!locked && !manager && (
-            <Button variant="outline" onClick={reload}>
-              Tải lại hồ sơ trước khi thao tác tiếp
-            </Button>
-          )}
         </div>
       )}
       {command.uncertain && (
@@ -167,7 +173,8 @@ function SupportSession({
           </Button>
         )}
       </div>
-      {!selected && !creation && commandNotice}
+      {role !== "manager" && !selected && !creation && commandNotice}
+
       <Card className="space-y-3 p-4">
         <form
           className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
@@ -186,7 +193,7 @@ function SupportSession({
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
-          <label className="block text-sm">
+          {(role !== "staff" || staffView === "assigned") && <label className="block text-sm">
             Trạng thái
             <select
               className={supportInputClass}
@@ -206,7 +213,7 @@ function SupportSession({
                 </option>
               ))}
             </select>
-          </label>
+          </label>}
           <label className="block text-sm">
             Sắp xếp
             <select
@@ -221,17 +228,16 @@ function SupportSession({
               <option value="subject,asc">Tiêu đề A-Z</option>
             </select>
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={`flex items-center gap-2 flex-wrap sm:flex-nowrap sm:col-span-2 ${
+              role !== "staff" || staffView === "assigned"
+                ? "lg:col-span-2"
+                : "lg:col-span-3"
+            }`}
+          >
             <Button type="submit" disabled={locked}>
               Tìm kiếm
             </Button>
-            {!manager && (<Button
-              variant="outline"
-              disabled={locked}
-              onClick={reload}
-            >
-              Tải lại
-            </Button>)}
             <Button
               type="button"
               variant="ghost"
@@ -239,67 +245,48 @@ function SupportSession({
               onClick={() => {
                 setSearch("")
                 setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
+                setQueuePage(0)
               }}
             >
               Xóa bộ lọc
             </Button>
           </div>
-          {role !== "manager" && <label className="block text-sm">
-            Số yêu cầu / trang
-            <select
-              className={supportInputClass}
-              disabled={locked}
-              value={query.size}
-              onChange={(e) => change({ size: Number(e.target.value) })}
-            >
-              {[10, 20, 50].map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>}
-          {role === "manager" && (
-            <label className="block text-sm">
-              Cơ sở được cấp quyền
-              <select
-                className={supportInputClass}
-                disabled={locked}
-                value={query.facilityId ?? ""}
-                onChange={(e) =>
-                  change({
-                    facilityId: e.target.value || undefined,
-                    staffId: undefined,
-                  })
-                }
-              >
-                <option value="">Tất cả cơ sở trong phạm vi</option>
-                {Object.keys(actor.facilityScopes).map((id) => (
-                  <option key={id} value={id}>
-                    {actor.facilityNames?.[id] ?? id}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+
         </form>
-        {role === "manager" &&
-          query.facilityId &&
-          actor.facilityScopes[query.facilityId] === "MANAGE" &&
-          actor.permissions.includes("support:update") && (
-            <div className="max-w-xl">
-              <SupportStaffPicker
-                key={query.facilityId}
-                facilityId={query.facilityId}
-                value={query.staffId ?? ""}
-                onChange={(staffId) =>
-                  change({ staffId: staffId || undefined })
-                }
-                disabled={locked}
-              />
-            </div>
-          )}
       </Card>
+      {role === "staff" && staffView === "queue" ? <>
+        <SupportReadState {...queueRead} retry={reload} />
+        {queueRead.data && <>
+          {queueRead.data.data.length > 0 && <Card className="overflow-x-auto p-0">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="border-b bg-stone-50 text-stone-600">
+                <tr>
+                  <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-200">
+                {queueRead.data.data.map((item) => <tr key={item.id}>
+                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}</td>
+                  <td className="px-4 py-3">{actor.facilityNames?.[item.facilityId] ?? item.facilityId}</td>
+                  <td className="whitespace-nowrap px-4 py-3">{rentalDate(item.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <Button disabled={locked || command.conflict} onClick={async () => {
+                      const succeeded = await command.run({ kind: "command", role: "staff", id: item.id,
+                        command: { kind: "claim", expectedVersion: item.version } })
+                      if (succeeded) { setStaffView("assigned"); setSelected(item.id) }
+                    }}>Nhận xử lý</Button>
+                  </td>
+                </tr>)}
+              </tbody>
+            </table>
+          </Card>}
+          {queueRead.data.data.length === 0 && <Card className="p-5 text-sm">Không có yêu cầu chờ tiếp nhận</Card>}
+          <ApiPager pagination={queueRead.data.pagination} disabled={locked} onPage={setQueuePage} />
+        </>}
+      </> : <>
       <SupportReadState {...read} retry={reload} />
       {read.data &&
         !read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
@@ -312,51 +299,39 @@ function SupportSession({
       {read.data &&
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <>
-            <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
-              {read.data.data.map((t) => (
-                <Card key={t.id} className="min-w-0 space-y-3 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h2 className="min-w-0 break-words font-semibold">
-                      {t.subject}
-                    </h2>
-                    <Badge
-                      variant={
-                        t.status === "closed" || t.status === "resolved"
-                          ? "success"
-                          : "warning"
-                      }
-                    >
+            {read.data.data.length > 0 && <Card className="overflow-x-auto p-0">
+              <table className="w-full min-w-[1000px] text-left text-sm">
+                <thead className="border-b bg-stone-50 text-stone-600">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Mã yêu cầu</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Nhân viên phụ trách</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-200">
+                  {read.data.data.map((t) => <tr key={t.id}>
+                    <td className="max-w-xs break-words px-4 py-3 font-semibold">{t.subject}</td>
+                    <td className="px-4 py-3"><Badge variant={t.status === "closed" || t.status === "resolved" ? "success" : "warning"}>
                       {t.status === "open"
-                        ? t.assignedStaffId
-                          ? "Chờ nhân viên nhận"
-                          : "Chờ quản lý phân công"
+                        ? "Chờ tiếp nhận"
                         : supportStatusLabels[t.status]}
-                    </Badge>
-                  </div>
-                  <p className="break-all text-xs text-stone-500">Mã yêu cầu: {t.id}</p>
-                  <p className="break-all text-sm">
-                    Cơ sở:{" "}
-                    {actor.facilityNames?.[t.facilityId ?? ""] ??
-                      t.facilityId ??
-                      "Chưa có thông tin"}
-                  </p>
-                  <p className="break-all text-sm">
-                    Nhân viên phụ trách: {supportAssigneeLabel(t, role)}
-                  </p>
-                  <p className="text-sm">Tạo lúc: {rentalDate(t.createdAt)}</p>
-                  <Button
-                    variant="outline"
-                    disabled={locked}
-                    onClick={() => {
+                    </Badge></td>
+                    <td className="max-w-[150px] break-all px-4 py-3 text-xs text-stone-500">{t.id}</td>
+                    <td className="px-4 py-3">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
+                    <td className="px-4 py-3">{supportAssigneeLabel(t, role)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{rentalDate(t.createdAt)}</td>
+                    <td className="px-4 py-3"><Button variant="outline" disabled={locked} onClick={() => {
                       setSelected(t.id)
                       command.clearError()
-                    }}
-                  >
-                    Chi tiết
-                  </Button>
-                </Card>
-              ))}
-            </div>
+                    }}>Chi tiết</Button></td>
+                  </tr>)}
+                </tbody>
+              </table>
+            </Card>}
             {read.data.data.length === 0 && (
               <Card className="p-5 text-sm text-stone-500">
                 Không có dữ liệu</Card>
@@ -368,6 +343,7 @@ function SupportSession({
             />
           </>
         )}
+      </>}
       {selected && (
         <Modal
           open

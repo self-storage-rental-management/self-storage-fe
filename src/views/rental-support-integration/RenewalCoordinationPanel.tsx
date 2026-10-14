@@ -3,7 +3,6 @@ import { Button, Card } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import {
   coordinateRenewal,
-  getRenewalAssignment,
   integrationError,
   type RenewalCoordination,
   type RenewalAssignmentView,
@@ -47,9 +46,7 @@ export default function RenewalCoordinationPanel({
   onLocked: (locked: boolean) => void
   onChanged: (event?: RenewalOperationEvent) => void
 }) {
-  const [action, setAction] = useState<"assignment" | "fault">("assignment"),
-    [staff, setStaff] = useState(""),
-    [reason, setReason] = useState(""),
+  const [reason, setReason] = useState(""),
     [incident, setIncident] = useState(""),
     [verdict, setVerdict] = useState(""),
     [files, setFiles] = useState<string[]>([]),
@@ -70,39 +67,25 @@ export default function RenewalCoordinationPanel({
     onLocked(uploadLock.current || command.isLocked())
   }, [locked, onLocked])
   const incidents = useRentalApiResource(
-    `${actor?.id}:${state.renewalId}:${state.expectedVersion}:coordination:${action}:${page}`,
-    () =>
-      action === "fault"
-        ? listRenewalOperationEvents(
-            "manager",
-            state.renewalId,
-            "facility-incidents",
-            page,
-          )
-        : Promise.resolve(null),
-  )
-  const assignment = useRentalApiResource(
-    `${actor?.id}:${state.renewalId}:${state.expectedVersion}:assignment:${canCoordinateRenewal(facilityId)}`,
-    () => canCoordinateRenewal(facilityId) ? getRenewalAssignment(state.renewalId) : Promise.resolve(null),
+    `${actor?.id}:${state.renewalId}:${state.expectedVersion}:coordination:fault:${page}:${canCoordinateRenewal(facilityId)}`,
+    () => canCoordinateRenewal(facilityId)
+      ? listRenewalOperationEvents("manager", state.renewalId, "facility-incidents", page)
+      : Promise.resolve(null),
   )
   if (!canCoordinateRenewal(facilityId))
     return (
       <p className="text-sm text-stone-500">
-        Phân công và xác minh sự cố cần quyền quản lý gia hạn tại cơ sở.
+        Xác minh sự cố cần quyền quản lý gia hạn tại cơ sở.
       </p>
     )
-  const terminal = ["completed", "cancelled", "rejected", "payment_expired"].includes(status || "") || state.expectedVersion === null
+  const terminal = status === "completed" || state.expectedVersion === null
   // Do not discard an uncertain command: replay must keep its original key/body.
   if (terminal && !command.busy && !command.uncertain) return null
-  const assignmentAllowed = status === "approved" && state.arrivalRef === null
   const inputClass =
     "mt-1 block w-full rounded border border-stone-300 px-3 py-2"
   return (
     <Card className="p-4 space-y-3 text-sm">
-      <h4 className="font-semibold">Điều phối gia hạn</h4>
-      {assignment.loading && <p role="status">Đang tải phân công...</p>}
-      {!!assignment.error && <p role="alert">{integrationError(assignment.error)}</p>}
-      {assignment.data && <RenewalAssignmentSummary assignment={assignment.data} expectedVersion={state.expectedVersion} />}
+      <h4 className="font-semibold">Xác minh lỗi cơ sở</h4>
       <form
         className="space-y-3"
         onSubmit={(e) => {
@@ -118,31 +101,21 @@ export default function RenewalCoordinationPanel({
             if (
               !reason.trim() ||
               reason.length > 2000 ||
-              (action === "assignment"
-                ? !assignmentAllowed || !isUuid(staff)
-                : !incidents.data?.data.some(
-                    (e) => e.id === incident && e.kind === "INCIDENT",
-                  ) || !["true", "false"].includes(verdict))
+              !incidents.data?.data.some(
+                (e) => e.id === incident && e.kind === "INCIDENT",
+              ) || !["true", "false"].includes(verdict)
             ) {
               setValidation("Vui lòng chọn hồ sơ phù hợp và nhập đủ thông tin.")
               return
             }
-            payload.current =
-              action === "assignment"
-                ? {
-                    kind: action,
-                    assignedStaffId: staff,
-                    reason: reason.trim(),
-                    expectedVersion: state.expectedVersion!,
-                  }
-                : {
-                    kind: action,
-                    incidentId: incident,
-                    facilityFault: verdict === "true",
-                    evidenceFileIds: files,
-                    reason: reason.trim(),
-                    expectedVersion: state.expectedVersion!,
-                  }
+            payload.current = {
+              kind: "fault",
+              incidentId: incident,
+              facilityFault: verdict === "true",
+              evidenceFileIds: files,
+              reason: reason.trim(),
+              expectedVersion: state.expectedVersion!,
+            }
           }
           const body = payload.current
           let event: RenewalOperationEvent | undefined
@@ -170,48 +143,8 @@ export default function RenewalCoordinationPanel({
         }}
       >
         <fieldset disabled={terminal || locked || command.conflict} className="space-y-3">
-          <label className="block">
-            Thao tác
-            <select
-              className={inputClass}
-              value={action}
-              onChange={(e) => {
-                setAction(e.target.value as "assignment" | "fault")
-                setFiles([])
-                setIncident("")
-                setPage(0)
-                payload.current = undefined
-              }}
-            >
-              <option value="assignment">Phân công nhân viên</option>
-              <option value="fault">Xác minh lỗi cơ sở</option>
-            </select>
-          </label>
-          {action === "assignment" ? (
-            <>
-              <label className="block">
-                Mã nhân viên phụ trách
-                <input
-                  className={inputClass}
-                  value={staff}
-                  onChange={(e) => {
-                    setStaff(e.target.value)
-                    payload.current = undefined
-                  }}
-                  required
-                />
-              </label>
-              {!assignmentAllowed && (
-                <p role="status">
-                  Chỉ phân công khi yêu cầu đã được duyệt và chưa ghi nhận khách
-                  đến.
-                </p>
-              )}
-            </>
-          ) : (
-            <>
               {incidents.loading && <p role="status">Đang tải sự cố...</p>}
-              {incidents.error && (
+              {!!incidents.error && (
                 <p role="alert">{integrationError(incidents.error)}</p>
               )}
               <label className="block">
@@ -272,8 +205,6 @@ export default function RenewalCoordinationPanel({
                 }}
                 onBusy={uploadBusy}
               />
-            </>
-          )}
           <label className="block">
             Lý do
             <textarea
@@ -303,14 +234,12 @@ export default function RenewalCoordinationPanel({
             command.busy ||
             uploading ||
             command.conflict ||
-            (!command.uncertain && (terminal || (action === "assignment" && !assignmentAllowed)))
+            (!command.uncertain && terminal)
           }
         >
           {command.uncertain
             ? "Thử lại cùng yêu cầu"
-            : action === "assignment"
-              ? "Ghi nhận phân công"
-              : "Ghi nhận kết luận"}
+            : "Ghi nhận kết luận"}
         </Button>
         {command.conflict && (
           <Button type="button" variant="outline" onClick={() => onChanged()}>

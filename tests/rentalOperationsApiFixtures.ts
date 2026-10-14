@@ -30,6 +30,8 @@ export const operationState: RenewalOperationState = {
   phase: "AWAITING_DEPOSIT",
   depositPaymentRef: null,
   depositPaidAt: null,
+  fullRentPaymentRef: null,
+  fullRentPaidAt: null,
   originalSigningDeadline: null,
   effectiveSigningDeadline: null,
   recoveryCutoff: null,
