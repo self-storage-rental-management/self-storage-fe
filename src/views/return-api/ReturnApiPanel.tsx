@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Card, Input, Select } from '../../components/ui'
+import { Button, Card, Input, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalMoney } from '../rental-api/presentation'
@@ -177,36 +177,67 @@ function ReturnWorkspace({
   if (!readable) return null
 
   return (
-    <Card className="space-y-3 p-4">
-      <h3 className="font-bold">Trả kho & quyết toán</h3>
+    <div className="space-y-4">
       {role === 'customer' && rentalId && rentalActive && (
-        <form onSubmit={(event) => { event.preventDefault(); void run(() => requestReturn(rentalId, date, notes)) }} className="space-y-2">
+        <Card className="space-y-2 p-4">
+          <h3 className="font-bold">Trả kho & quyết toán</h3>
+          <form onSubmit={(event) => { event.preventDefault(); void run(() => requestReturn(rentalId, date, notes)) }} className="space-y-2">
           <label className="block">Ngày trả kho<input type="date" required value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} className="block rounded border p-2" /></label>
           <label className="block">Lý do / ghi chú<textarea value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="block w-full rounded border p-2" /></label>
           <Button type="submit" disabled={busy || !date || read.loading}>Gửi yêu cầu trả kho</Button>
-        </form>
+          </form>
+        </Card>
       )}
-      {read.loading && <p role="status">Đang tải hồ sơ trả kho...</p>}
-      {!!read.error && <p role="alert">{returnError(read.error)}</p>}
-      {feedback && <p role="status">{feedback}</p>}
-      {role !== 'customer' && <div className="grid gap-3 rounded border border-stone-200 bg-stone-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Input label="Tìm mã, khách hàng hoặc gian kho" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} />
-        <Select label="Trạng thái" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as ApiReturn['status'] | 'all'); setPage(0) }}>
-          {returnStatusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </Select>
-        <Input label="Ngày trả kho" type="date" value={scheduledDateFilter} onChange={(event) => { setScheduledDateFilter(event.target.value); setPage(0) }} />
-        <Select label="Sắp xếp" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(0) }}>
-          <option value="date-asc">Ngày trả kho sớm trước</option>
-          <option value="date-desc">Ngày trả kho muộn trước</option>
-          <option value="customer">Tên khách hàng A–Z</option>
-        </Select>
-      </div>}
-      {role !== 'customer' && <p className="text-xs text-stone-500">Hiển thị {rows.length} hồ sơ phù hợp bộ lọc.</p>}
-      {rows.map((record) => <div key={record.id} className="rounded border p-3"><ReturnSummary record={record} /><Button variant="outline" disabled={busy} onClick={() => setSelected(record.id)}>Xem và xử lý hồ sơ</Button></div>)}
-      {!read.loading && !rows.length && <p className="rounded border border-dashed p-5 text-center text-sm text-stone-500">Không có hồ sơ trả kho phù hợp bộ lọc.</p>}
-      {!rentalId && rows.length > 0 && <div className="flex gap-2"><Button disabled={busy || page === 0} onClick={() => { setSelected(null); setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { setSelected(null); setPage((value) => value + 1) }}>Trang sau</Button></div>}
+      {role !== 'customer' && <Card className="p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Input label="Tìm mã, khách hàng hoặc gian kho" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} />
+          <Select label="Trạng thái" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as ApiReturn['status'] | 'all'); setPage(0) }}>
+            {returnStatusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </Select>
+          <Input label="Ngày trả kho" type="date" value={scheduledDateFilter} onChange={(event) => { setScheduledDateFilter(event.target.value); setPage(0) }} />
+          <Select label="Sắp xếp" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(0) }}>
+            <option value="date-asc">Ngày trả kho sớm trước</option>
+            <option value="date-desc">Ngày trả kho muộn trước</option>
+            <option value="customer">Tên khách hàng A–Z</option>
+          </Select>
+        </div>
+      </Card>}
+      <Card>
+        {read.loading && <p role="status" className="p-4 text-sm text-stone-500">Đang tải hồ sơ trả kho...</p>}
+        {!!read.error && <p role="alert" className="p-4 text-sm text-red-700">{returnError(read.error)}</p>}
+        {feedback && <p role="status" className="border-b border-stone-200 p-4 text-sm text-stone-600">{feedback}</p>}
+        {role !== 'customer' && <p className="border-b border-stone-200 px-4 py-3 text-xs text-stone-500">Hiển thị {rows.length} hồ sơ phù hợp bộ lọc.</p>}
+        <Table>
+          <Thead>
+            <tr>
+              <Th>Mã trả kho</Th>
+              <Th>Khách hàng</Th>
+              <Th>Gian kho</Th>
+              <Th>Ngày trả kho</Th>
+              <Th>Trạng thái</Th>
+              <Th>Quyết toán</Th>
+              <Th />
+            </tr>
+          </Thead>
+          <Tbody>
+            {rows.map((record) => (
+              <Tr key={record.id}>
+                <Td><span className="font-mono text-xs text-stone-500">{record.id}</span></Td>
+                <Td><p className="font-semibold text-stone-900">{record.customerName}</p><p className="text-xs text-stone-500">{record.facilityName}</p></Td>
+                <Td className="font-medium">{record.unitNumber}</Td>
+                <Td className="text-sm">{record.scheduledDate}</Td>
+                <Td><span className="rounded-full bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">{labels[record.status]}</span></Td>
+                <Td className="text-sm">{record.settlementBlocker ? 'Cần bổ sung chứng cứ' : record.amountDueFromCustomer && record.amountDueFromCustomer > 0 ? 'Còn khoản phải thu' : 'Đang đối chiếu'}</Td>
+                <Td className="text-right"><Button variant="outline" size="sm" disabled={busy} onClick={() => setSelected(record.id)}>Xem và xử lý</Button></Td>
+              </Tr>
+            ))}
+            {!read.loading && !rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có hồ sơ trả kho phù hợp bộ lọc.</td></tr>}
+          </Tbody>
+        </Table>
+        {!rentalId && rows.length > 0 && <div className="flex items-center justify-end gap-3 border-t border-stone-200 p-3 text-sm"><Button variant="outline" size="sm" disabled={busy || page === 0} onClick={() => { setSelected(null); setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button variant="outline" size="sm" disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { setSelected(null); setPage((value) => value + 1) }}>Trang sau</Button></div>}
+      </Card>
       {selected && <ReturnActions key={selected} role={role} id={selected} run={run} busy={busy} />}
-    </Card>
+    </div>
   )
 }
 
