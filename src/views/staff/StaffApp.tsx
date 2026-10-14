@@ -35,7 +35,7 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
-import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
+import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import UnitAssignmentPanel from "../UnitAssignmentPanel"
@@ -836,30 +836,6 @@ export default function StaffApp({
     },
 
     {
-      id: "reservations",
-
-      label: "Duyệt yêu cầu đặt kho",
-
-      icon: Icon.calendar,
-
-      group: "Vận hành",
-
-      permission: "reservations:approve",
-    },
-
-    {
-      id: "unit-assignments",
-
-      label: "Phân kho đặt chỗ",
-
-      icon: Icon.box,
-
-      group: "Vận hành",
-
-      permission: "storage_units:assign",
-    },
-
-    {
       id: "checkin",
 
       label: "Nhận kho & bàn giao",
@@ -991,7 +967,7 @@ export default function StaffApp({
     useState("all")
 
   const [operationalTaskSort, setOperationalTaskSort] =
-    useState<StaffTaskSort>("due-asc")
+    useState<StaffTaskSort>("priority")
 
   const [taskCompletionTarget, setTaskCompletionTarget] =
     useState<FacilityTask | null>(null)
@@ -2627,6 +2603,7 @@ export default function StaffApp({
               onPageChange={setOperationalTasksPage}
             />
           </Card>
+          </div>}
 
           <Modal
             open={Boolean(taskCompletionTarget)}
