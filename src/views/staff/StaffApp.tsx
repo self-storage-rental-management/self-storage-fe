@@ -33,6 +33,7 @@ import StaffSupportPanel from "./StaffSupportPanel"
 import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
@@ -2607,7 +2608,6 @@ export default function StaffApp({
               onPageChange={setOperationalTasksPage}
             />
           </Card>
-          </div>}
 
           <Modal
             open={Boolean(taskCompletionTarget)}
