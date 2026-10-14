@@ -25,7 +25,7 @@ import { reservationProgress } from './reservationPresentation'
 import { requestReturn as requestReturnApi } from '../../services/returnApi'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
-import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from '../../domain/reservationCheckInPolicy'
+import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_HOURS, MANAGER_ASSIGNMENT_WORKING_HOURS, CHECK_IN_WINDOW_DAYS, CHECK_IN_OPENING_HOUR, CHECK_IN_CLOSING_HOUR } from '../../domain/reservationCheckInPolicy'
 import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
@@ -728,6 +728,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [unitSearch, setUnitSearch] = useState('')
   const [reservationFacilityFilter, setReservationFacilityFilter] = useState('all')
   const [receiptRentalTarget, setReceiptRentalTarget] = useState<string>()
+  const [rentalMenuVisit, setRentalMenuVisit] = useState(0)
   const [paymentHistoryFilter, setPaymentHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
@@ -1171,6 +1172,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const handleLayoutNavigate = (nextPage: string) => {
+    notificationRevealTimers.current.forEach(timer => window.clearTimeout(timer))
+    notificationRevealTimers.current = []
+    setFocusedNotificationTarget(null)
+    setReceiptRentalTarget(undefined)
+    if (nextPage === 'rental-records') setRentalMenuVisit(visit => visit + 1)
     if (nextPage === page) return
     if (bookOpen) {
       resetReservationDraft()
@@ -1407,6 +1413,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const totalCombinedDiscount = Math.min(grossTermValue, Math.round((promotionDiscount + facilityPolicyDiscount) * 100) / 100)
 
   const handleNotificationClick = (notification: LayoutNotification) => {
+    setReceiptRentalTarget(undefined)
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.slice('api-notification-'.length)
       void markNotificationRead(notificationId).then(updated => {
@@ -1434,6 +1441,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const scrollTimer = window.setTimeout(() => {
       const target = document.getElementById(`customer-record-${targetId}`)
         || document.getElementById(`customer-reservation-${targetId}`)
+        || document.getElementById(`rental-api-record-${targetId}`)
       const scrollContainer = target?.closest('[data-layout-scroll-container]') as HTMLElement | null
       if (!target || !scrollContainer) return
       const targetRect = target.getBoundingClientRect()
@@ -1751,13 +1759,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2.5 sm:gap-3">
                 {[
-                  ['30', 'Phút tạm giữ suất kho trực tuyến'],
-                  ['12', 'Giờ thanh toán tiền cọc giữ kho'],
-                  ['14', 'Ngày tối đa để nhận kho']
-                ].map(([value, label]) => (
-                  <div key={value} className="flex sm:flex-col lg:flex-row items-center sm:items-start lg:items-center gap-3 sm:gap-1 lg:gap-3 rounded-2xl border border-white/15 bg-white/[.06] p-3.5 sm:p-4 backdrop-blur">
-                    <p className="text-2xl sm:text-3xl font-bold text-amber-400 sm:text-white shrink-0">{value}</p>
-                    <p className="text-xs leading-4 sm:leading-5 text-white/75">{label}</p>
+                  [String(PAYMENT_WINDOW_HOURS), 'giờ', 'Hoàn tất cọc, giữ chỗ an tâm', 'Tính từ khi mở thanh toán.'],
+                  [String(Math.ceil(MANAGER_ASSIGNMENT_WORKING_HOURS / (CHECK_IN_CLOSING_HOUR - CHECK_IN_OPENING_HOUR))), 'ngày làm việc', 'Quản lý bố trí gian kho', ''],
+                  [String(CHECK_IN_WINDOW_DAYS), 'ngày', 'Chủ động lịch đến nhận kho', 'Tính từ thời điểm kho có thể sẵn sàng.']
+                ].map(([value, unit, label, note]) => (
+                  <div key={label} className="grid min-h-[104px] grid-cols-[96px_minmax(0,1fr)] items-center gap-4 rounded-2xl border border-white/10 bg-white/[.06] px-4 py-4 backdrop-blur sm:grid-cols-1 lg:grid-cols-[96px_minmax(0,1fr)]">
+                    <div className="flex min-h-[64px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/[.08] px-2 py-2 text-center"><p className="text-3xl font-bold leading-none tabular-nums text-white">{value}</p><p className="mt-2 whitespace-nowrap text-[11px] font-medium leading-4 text-white/65">{unit}</p></div>
+                    <div className="min-w-0"><p className="text-sm font-semibold leading-5 text-white">{label}</p>{note && <p className="mt-1.5 text-xs leading-4 text-white/55">{note}</p>}</div>
                   </div>
                 ))}
               </div>
@@ -1773,13 +1781,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Account summary">
             {isApiAuthenticated() ? <CustomerApiMetric metric="active-rentals" /> : <StatCard title={'Hồ sơ thuê đang hoạt động'} value={activeRentals.length} icon={Icon.key} iconBg="bg-blue-50 text-blue-700" />}
-            <StatCard title={'Đơn đặt giữ kho'} value={visibleMyHolds.length} icon={Icon.calendar} iconBg="bg-amber-50 text-amber-700" />
-            <StatCard title={'Kho đang giữ chờ hoàn tất'} value={visibleMyHolds.filter(h => !['CANCELLED', 'EXPIRED', 'COMPLETED', 'checked_in', 'rejected'].includes(h.status)).length} icon={Icon.clock} iconBg="bg-stone-100 text-black" />
+            {isApiAuthenticated() ? <CustomerApiMetric metric="reservations" /> : <StatCard title={'Đơn đặt giữ kho'} value={visibleMyHolds.length} icon={Icon.calendar} iconBg="bg-amber-50 text-amber-700" />}
+            {isApiAuthenticated() ? <CustomerApiMetric metric="returning-rentals" /> : <StatCard title={'Kho đang yêu cầu trả'} value={activeRentals.filter(rental => rental.status === 'return_requested').length} icon={Icon.clock} iconBg="bg-stone-100 text-black" />}
             {isApiAuthenticated() ? <CustomerApiMetric metric="open-support" /> : <StatCard title={'Yêu cầu hỗ trợ đang mở'} value={tickets.filter(t => t.status === 'open').length} icon={Icon.support} />}
           </section>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
-            {isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo('rental-records')} /> : (
+            {isApiAuthenticated() ? <CustomerRentalApiLink onOpen={(storageUnitId) => { setReceiptRentalTarget(storageUnitId); navigateTo('rental-records') }} /> : (
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
                 <div>
@@ -1851,7 +1859,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <small className="text-stone-500 group-hover:text-white">{'Cọc giữ chỗ 40% theo báo giá trong 6 giờ'}</small>
                   </span>
                 </button>
-                <button onClick={() => setTicketOpen(true)} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
+                <button onClick={() => navigateTo('support')} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
                   <span className="text-amber-700 group-hover:text-white">{Icon.support}</span>
                   <span>
                     <b className="block text-sm">{'3. Hỗ trợ kỹ thuật & Mở cổng'}</b>
@@ -1957,7 +1965,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 ? (`Kho còn trống tại ${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.name ?? selectedFacility.name}`)
                 : ('Kho còn trống')}
               subtitle={selectedFacility
-                ? `${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address} · Chọn loại kho phù hợp. Quản lý cơ sở sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.`
+                ? (CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address)
                 : undefined}
               action={
                 <div className="flex flex-wrap items-center gap-2">
@@ -1984,7 +1992,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
 
             {/* List Facilities with their 3-4 Unit Sizes */}
-            {isApiAuthenticated() && <p className="text-xs text-stone-500">Số kho trống theo kỳ thuê: <b>{availabilityPeriod.startDate} → {availabilityPeriod.endDate}</b>. Đơn đang giữ chỗ cũng được trừ vào suất trống.</p>}
             <div className="space-y-8">
               {displayedFacilities.map(facility => {
                 const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
@@ -2344,7 +2351,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} focusStorageUnitId={receiptRentalTarget} />}
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`} focusStorageUnitId={receiptRentalTarget} />}
       {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <section className="space-y-4">

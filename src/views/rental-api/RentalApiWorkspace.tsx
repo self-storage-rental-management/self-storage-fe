@@ -1,7 +1,7 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
-import { RentalDeadlineBanner, rentalDeadlineState } from "./RentalDeadlineNotice"
+import { RentalDeadlineBanner, rentalDeadlineState, rentalDaysUntilDeadline } from "./RentalDeadlineNotice"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { getRental, listRentals } from "../../services/rentalApi"
@@ -22,6 +22,7 @@ import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   rentalDate,
+  rentalMoney,
   rentalLabels,
   rentalPeriodText,
   renewalLabels,
@@ -29,6 +30,7 @@ import {
 
 const inputClass =
   "rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+const customerRentalColumns = 'grid grid-cols-[minmax(165px,1.3fr)_minmax(145px,1fr)_minmax(135px,0.9fr)_minmax(135px,0.9fr)_minmax(125px,0.8fr)_minmax(315px,1.4fr)]'
 type Detail = {
   kind: "rental" | "renewal"
   id: string
@@ -233,7 +235,7 @@ function WorkspaceData({
   )
   useEffect(() => {
     if (!focusStorageUnitId || role !== 'customer' || tab !== 'rental' || read.loading || read.data?.kind !== 'rental') return
-    const row = read.data.page.data.find(item => item.storageUnit.id === focusStorageUnitId && item.status === 'active')
+    const row = read.data.page.data.find(item => item.storageUnit.id === focusStorageUnitId && item.status !== 'completed')
     if (!row) {
       const pagination = read.data.page.pagination
       if (pagination.page + 1 < pagination.totalPages) setRq({ ...rq, page: pagination.page + 1 })
@@ -303,9 +305,11 @@ function WorkspaceData({
   }, [read.data, dataTab, rq, nq, setRq, setNq])
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">
-        {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}
-      </h1>
+      <div className="rounded-2xl border border-stone-200 bg-white px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
+        <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           "Tổng hồ sơ",
@@ -313,9 +317,9 @@ function WorkspaceData({
           "Hết hạn trong 30 ngày",
           "Yêu cầu gia hạn",
         ].map((label, i) => (
-          <Card className="rounded-xl p-5" key={label}>
+          <Card className={`rounded-xl border-t-4 p-4 ${['border-t-stone-700', 'border-t-emerald-500', 'border-t-amber-500', 'border-t-blue-500'][i]}`} key={label}>
             <p className="text-xs font-medium text-stone-500">{label}</p>
-            <p className="mt-2 text-3xl font-bold tracking-tight text-stone-900">
+            <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
               {counts.loading ? "…" : (counts.data?.[i] ?? copy("—"))}
             </p>
           </Card>
@@ -324,7 +328,7 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex w-fit flex-wrap gap-2 rounded-xl border border-stone-200 bg-white p-1.5">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
           onClick={() => setTab("rental")}
@@ -420,8 +424,39 @@ function WorkspaceData({
       </Card>
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
-        <Card>
-          <div className="overflow-x-auto">
+        <Card className="overflow-hidden rounded-2xl">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3"><h2 className="font-bold text-stone-900">{tab === 'rental' ? 'Danh sách hồ sơ thuê' : 'Danh sách yêu cầu gia hạn'}</h2><span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">{read.data.page.pagination.totalItems} hồ sơ</span></div>
+          {role === 'customer' && read.data.kind === 'rental' ? <div className="overflow-x-auto bg-stone-50/60 p-4">
+            <div className="min-w-[1050px] space-y-2">
+            <div className={`${customerRentalColumns} border-l-4 border-transparent px-1 text-xs font-semibold text-stone-500`}>
+              {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className="px-3 py-2">{label}</div>)}
+            </div>
+            {read.data.page.data.map(row => {
+              const days = rentalDaysUntilDeadline(row)
+              const focused = focusStorageUnitId === row.storageUnit.id && row.status !== 'completed'
+              return <article key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1}
+                className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 border-l-4 bg-white shadow-sm transition hover:border-l-amber-500 hover:shadow-md focus-within:border-l-amber-500 ${focused ? 'border-l-amber-500 outline outline-2 outline-amber-400' : 'border-l-stone-200'}`}>
+                <div className={`${customerRentalColumns} items-center divide-x divide-stone-100 px-1 py-2`}>
+                    <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
+                    <div className="min-w-0 px-3"><span className="break-all font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
+                    <div className="flex flex-wrap gap-1.5 px-3">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-700' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(rentalLabels[row.status])}</span>
+                      {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days < 0 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
+                    </div>
+                  <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
+                  <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
+                  <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>Chi tiết hồ sơ</Button>
+                    <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                    <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' })}>Trả kho</Button>
+                  </div>
+                </div>
+                {rentalDeadlineState(row) && <div className="px-4 pb-4"><RentalDeadlineBanner rental={row} role={role} /></div>}
+              </article>
+            })}
+            {read.data.page.data.length === 0 && <p className="col-span-full p-6 text-center text-sm text-stone-500">Không có hồ sơ thuê phù hợp với bộ lọc.</p>}
+            </div>
+          </div> : <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] table-fixed text-left text-sm">
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>
@@ -435,7 +470,7 @@ function WorkspaceData({
                 <tr>
                   {[
                     "Mã hồ sơ",
-                    "Khách hàng",
+                    role === 'customer' ? 'Trạng thái' : 'Khách hàng',
                     "Gian kho / Loại",
                     "Thời hạn",
                     "Thao tác",
@@ -449,7 +484,7 @@ function WorkspaceData({
               <tbody>
                 {read.data.page.data.map((row) => (
                   <Fragment key={row.id}>
-                  <tr key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1} className={`border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40 ${focusStorageUnitId && row.storageUnit.id === focusStorageUnitId && row.status === 'active' ? 'outline outline-2 outline-amber-400 bg-amber-50' : ''}`}>
+                  <tr key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1} className={`border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40 ${focusStorageUnitId && row.storageUnit.id === focusStorageUnitId && row.status !== 'completed' ? 'outline outline-2 outline-amber-400 bg-amber-50' : ''}`}>
                     <td className="p-3 align-middle">
                       <code
                         className="block break-all rounded-md border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs leading-5 tracking-tight text-stone-700"
@@ -459,7 +494,7 @@ function WorkspaceData({
                       </code>
                     </td>
                     <td className="p-3 align-middle">
-                      <p className="font-semibold text-stone-900">{row.customer.fullName}</p>
+                      {role === 'customer' ? <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}</span> : <p className="font-semibold text-stone-900">{row.customer.fullName}</p>}
                     </td>
                     <td className="p-3 align-middle">
                       <p className="font-mono text-sm font-semibold text-stone-800">{row.storageUnit.code}</p>
@@ -472,9 +507,9 @@ function WorkspaceData({
                       <p className="text-sm leading-6">{"contractEndDate" in row
                         ? rentalPeriodText(row, role === "manager")
                         : rentalDate(row.newEndDate)}</p>
-                      <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>
+                      {role === 'manager' && <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>
                         {copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}
-                      </span>
+                      </span>}
                     </td>
                     <td className="p-3 align-middle text-right">
                       <div className="flex flex-wrap justify-end gap-2">
@@ -512,7 +547,7 @@ function WorkspaceData({
                 )}
               </tbody>
             </table>
-          </div>
+          </div>}
           <Pager
             fixedSize
             {...{
