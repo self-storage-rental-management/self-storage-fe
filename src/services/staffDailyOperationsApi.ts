@@ -13,9 +13,10 @@ import type { SupportTicket } from "../types/supportApi"
 import { listUnitAssignmentCandidates, type UnitAssignmentCandidate } from "./unitAssignmentApi"
 import { getAuthenticatedActor } from "./authApi"
 import { listAllRecoveryTasks, type RecoveryTask } from "./recoveryTasksApi"
+import { ApiClientError } from "./apiClient"
 
 export type StaffDailyOperationPriority = "high" | "medium" | "low"
-export type StaffDailyOperationPage = "unit-assignments" | "checkin" | "return" | "support" | "tasks"
+export type StaffDailyOperationPage = "unit-assignments" | "reservations" | "checkin" | "return" | "support" | "tasks"
 
 export interface StaffDailyOperation {
   id: string
@@ -123,10 +124,10 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
   return {
     id: `support-${item.id}`,
     title: `Xử lý hỗ trợ ${item.subject}`,
-    customer: item.subject,
+    customer: item.customerName?.trim() || "Chưa có tên khách hàng",
     time: item.assignedAt || item.createdAt,
     dueAt,
-    sla: "Ticket hỗ trợ được phân công",
+    sla: "Yêu cầu hỗ trợ được phân công",
     priority: priorityFromSupport(item.sla?.priority),
     page: "support",
   }
@@ -186,7 +187,14 @@ export async function loadStaffDailyOperations(
   const read = <T>(index: number, source: string): T | null => {
     const result = results[index]
     if (result.status === "fulfilled") return result.value as T
-    failedSources.push(source)
+    const error = result.reason
+    const detail = error instanceof ApiClientError
+      ? error.code === "INVALID_RESPONSE" ? "phản hồi không hợp lệ"
+        : error.status === 403 ? "không có quyền truy cập"
+          : error.status === 404 ? "API chưa sẵn sàng"
+            : error.status && error.status >= 500 ? "lỗi máy chủ" : null
+      : null
+    failedSources.push(detail ? `${source} (${detail})` : source)
     return null
   }
 
