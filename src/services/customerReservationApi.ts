@@ -1,6 +1,6 @@
 import { apiDownload, apiRequest } from './apiClient'
 
-export type FacilityStatus = 'active' | 'maintenance' | 'inactive' | 'coming_soon'
+export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
 export type ReservationStatus =
@@ -32,8 +32,19 @@ export interface CustomerFacility {
   id: string
   code: string
   name: string
+  description?: string | null
   address: string
   city: string
+  phone?: string | null
+  accessHours?: string | null
+  imageUrl?: string | null
+  climateControlled?: boolean
+  securityDescription?: string | null
+  managerNames?: string[]
+  totalUnits?: number
+  availableUnits?: number
+  occupiedUnits?: number
+  minimumMonthlyPrice?: number | null
   status: FacilityStatus
   createdAt: string
   updatedAt: string
@@ -57,7 +68,13 @@ export interface CustomerUnitType {
   rackLengthM: number
   rackWidthM: number
   rackHeightM: number
-  status: UnitTypeStatus
+  aisleWidthM?: number | null
+  trolleyType?: string | null
+  smallBoxCapacity?: number | null
+  largeBoxCapacity?: number | null
+  status: UnitTypeStatus | 'draft' | 'awaiting_pricing'
+  totalCount?: number | null
+  occupiedCount?: number
   availableCount: number | null
   createdAt: string
   updatedAt: string
@@ -423,6 +440,13 @@ export async function listCustomerUnitTypes(facilityId: string, options: {
     size: options.size ?? 50,
   })
   return apiRequest<PageResponse<CustomerUnitType>>(`/api/facilities/${facilityId}/unit-types${suffix}`)
+}
+
+/** Back-office catalog view. Unlike the customer query, this includes types waiting for pricing. */
+export async function listAccessibleUnitTypes(facilityId: string, page = 0, size = 100) {
+  return apiRequest<PageResponse<CustomerUnitType>>(
+    `/api/facilities/${facilityId}/unit-types${query({ page, size })}`,
+  )
 }
 
 export async function getAvailability(input: Omit<ReservationSelectionInput, 'goodsCondition' | 'goodsItems'>) {

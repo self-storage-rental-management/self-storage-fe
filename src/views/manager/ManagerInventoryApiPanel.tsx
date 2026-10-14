@@ -40,6 +40,7 @@ import {
   type InventoryFilters,
   type InventoryUnit,
 } from "./managerInventoryApi"
+import { createManagerUnitType } from "../../services/managerUnitTypeApi"
 
 const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
@@ -109,6 +110,7 @@ function InventoryRead({
   identity: string
   facilityId: string
 }) {
+  const [createOpen, setCreateOpen] = useState(false)
   const read = useRentalApiResource(identity, () =>
     loadManagerInventory(facilityId),
   )
@@ -131,16 +133,90 @@ function InventoryRead({
       </Card>
     )
   return read.data ? (
-    <InventoryContent
-      inventory={read.data}
-      rentals={rentals}
-      identity={identity}
-    />
+    <>
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>Thêm loại kho thực tế</Button>
+      </div>
+      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} />
+      <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
+    </>
   ) : (
     <Card className="p-5" role="alert">
       Chưa xác minh được dữ liệu gian kho.
     </Card>
   )
+}
+
+function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
+  open: boolean
+  facilityId: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [form, setForm] = useState({
+    code: '', name: '', description: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
+    rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
+    aisleWidthM: '1.8', trolleyType: 'Xe đẩy tay / xe sàn nhỏ', smallBoxCapacity: '336', largeBoxCapacity: '200',
+    physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  const field = (key: keyof typeof form, label: string, type = 'text') => (
+    <label className="block text-sm font-medium text-stone-700">{label}
+      <input className={`${inputClass} mt-1`} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
+    </label>
+  )
+  const submit = async () => {
+    setBusy(true); setError(undefined)
+    try {
+      await createManagerUnitType(facilityId, {
+        code: form.code.trim().toUpperCase(), name: form.name.trim(), description: form.description.trim() || null,
+        lengthM: Number(form.lengthM), widthM: Number(form.widthM), heightM: Number(form.heightM),
+        maxLoadKg: Number(form.maxLoadKg), rackCount: Number(form.rackCount),
+        rackLengthM: Number(form.rackLengthM), rackWidthM: Number(form.rackWidthM), rackHeightM: Number(form.rackHeightM),
+        aisleWidthM: Number(form.aisleWidthM), trolleyType: form.trolleyType.trim(),
+        smallBoxCapacity: Number(form.smallBoxCapacity), largeBoxCapacity: Number(form.largeBoxCapacity),
+        physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
+        imageUrl: form.imageUrl.trim() || null,
+      })
+      onCreated()
+    } catch (cause) {
+      setError(managerDisplayError(cause))
+    } finally { setBusy(false) }
+  }
+  return <Modal open={open} onClose={onClose} title="Thêm loại kho thực tế" size="xl">
+    <div className="space-y-5">
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Thông tin loại kho</h3>
+        <div className="grid gap-4 sm:grid-cols-2">{field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}</div>
+        <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
+          <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
+        </label>
+        {field('imageUrl', 'URL ảnh loại kho')}
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Kích thước và tải trọng</h3>
+        <div className="grid gap-4 sm:grid-cols-3">
+        {field('lengthM', 'Chiều dài (m)', 'number')}{field('widthM', 'Chiều rộng (m)', 'number')}{field('heightM', 'Chiều cao (m)', 'number')}
+        </div><div className="grid gap-4 sm:grid-cols-2">{field('maxLoadKg', 'Tải trọng tối đa (kg)', 'number')}{field('aisleWidthM', 'Chiều rộng lối đi (m)', 'number')}</div>
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Khung kệ và thiết bị hỗ trợ</h3>
+        <div className="grid gap-4 sm:grid-cols-2">{field('rackCount', 'Số khung kệ', 'number')}{field('trolleyType', 'Loại xe đẩy hỗ trợ')}</div>
+        <div className="grid gap-4 sm:grid-cols-3">
+        {field('rackLengthM', 'Dài khung (m)', 'number')}{field('rackWidthM', 'Rộng khung (m)', 'number')}{field('rackHeightM', 'Cao khung (m)', 'number')}
+        </div><div className="grid gap-4 sm:grid-cols-2">
+        {field('smallBoxCapacity', 'Sức chứa thùng nhỏ', 'number')}{field('largeBoxCapacity', 'Sức chứa thùng lớn', 'number')}
+        </div>
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
+        <h3 className="font-semibold text-stone-900">Số lượng và vị trí gian kho</h3>
+        <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
+      </section>
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : 'Thêm loại kho'}</Button></div>
+    </div>
+  </Modal>
 }
 
 export function InventoryContent({
