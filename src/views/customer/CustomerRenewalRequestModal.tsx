@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Button, Modal } from "../../components/ui"
 import {
   getRenewalOptions,
@@ -118,49 +118,56 @@ export default function CustomerRenewalRequestModal({
         {quoteBusy ? <p role="status">Đang lấy báo giá…</p> : null}
         {quoteError ? <p role="alert">{rentalError(quoteError)}</p> : null}
         {quote && (
-          <div className="rounded-lg border p-4 space-y-2">
-            <p>
-              Kỳ gia hạn: {rentalDate(quote.extensionStartDate)} →{" "}
-              {rentalDate(quote.newEndDate)}
-            </p>
-            <p>
-              Đơn giá / tháng: {rentalMoney(quote.monthlyPrice, quote.currency)}
-            </p>
-            <p>Tạm tính: {rentalMoney(quote.subtotal, quote.currency)}</p>
-            <p>
-              Giảm giá: {rentalMoney(quote.discountAmount, quote.currency)} (tỷ
-              lệ {quote.discountRate})
-            </p>
-            <p>
-              Tổng sau giảm:{" "}
-              {rentalMoney(quote.totalAfterDiscount, quote.currency)}
-            </p>
-            <p>
-              Cọc gia hạn trả trước:{" "}
-              {rentalMoney(quote.renewalDepositAmount, quote.currency)}
-            </p>
-            <p>Tiền thuê còn lại khi ký: {rentalMoney(quote.remainingRentalAmount, quote.currency)}</p>
-            <p>Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}</p>
+          <>
+          <section aria-label="Chi tiết báo giá gia hạn" className="rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            <div className="space-y-3">
+              <div className="space-y-2 border-b border-dashed border-slate-200 pb-3">
+                <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
+                <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
+              </div>
+              <div className="space-y-2 border-b border-dashed border-slate-200 pb-3">
+                <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
+                {quote.discountAmount > 0 && (
+                  <QuoteLine
+                    label="Giảm giá"
+                    value={`- ${rentalMoney(quote.discountAmount, quote.currency)} (${Math.round(quote.discountRate * 100)}%)`}
+                    valueClassName="text-emerald-700"
+                  />
+                )}
+                <QuoteLine label="Tổng sau giảm" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
+              </div>
+              <div className="space-y-2">
+                <QuoteLine label="Cọc gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} valueClassName="text-amber-800" emphasis />
+                <QuoteLine label="Tiền thuê còn lại khi ký" value={rentalMoney(quote.remainingRentalAmount, quote.currency)} />
+              </div>
+            </div>
+          </section>
+          <p className="flex items-center gap-1.5 text-xs text-stone-500">
+            <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" strokeWidth="1.7"/><path d="M12 7v5l3 2" strokeWidth="1.7" strokeLinecap="round"/></svg>
+            Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}
+          </p>
             {expired && !command.uncertain && (
               <p role="alert" className="text-red-700">
                 Báo giá đã hết hạn, vui lòng chọn lại gói gia hạn để cập nhật báo giá.
               </p>
             )}
-            <label className="flex gap-2">
+            <label className="flex items-start gap-2 text-sm text-stone-700">
               <input
                 type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-amber-600"
                 checked={confirmed}
                 disabled={locked}
                 onChange={(e) => setConfirmed(e.target.checked)}
               />
               Tôi xác nhận kỳ thuê, giá và điều khoản trên.
             </label>
-          </div>
+          </>
         )}
         <label className="block">
           Ghi chú
           <textarea
             className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+            rows={2}
             maxLength={2000}
             value={note}
             disabled={locked}
@@ -184,6 +191,7 @@ export default function CustomerRenewalRequestModal({
             (!command.uncertain && expired) ||
             (revision !== undefined && revision.version === null)
           }
+          className="disabled:bg-stone-200 disabled:text-stone-500 disabled:opacity-100 sm:min-w-44"
           onClick={() => {
             if (!quote) return
             const snapshot = {
@@ -222,5 +230,26 @@ export default function CustomerRenewalRequestModal({
         ) : null}
       </div>
     </Modal>
+  )
+}
+
+function QuoteLine({
+  label,
+  value,
+  emphasis = false,
+  valueClassName = "",
+}: {
+  label: string
+  value: ReactNode
+  emphasis?: boolean
+  valueClassName?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 text-sm sm:text-[15px]">
+      <span className="text-slate-600">{label}</span>
+      <span className={`text-right text-slate-900 ${emphasis ? "text-base font-semibold" : "font-medium"} ${valueClassName}`}>
+        {value}
+      </span>
+    </div>
   )
 }
