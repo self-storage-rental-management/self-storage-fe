@@ -36,6 +36,7 @@ import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
+import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import UnitAssignmentPanel from "../UnitAssignmentPanel"
 import {
@@ -43,6 +44,10 @@ import {
   revokeAccessCredential,
   type CredentialAlert,
 } from "../../services/checkInApi"
+import {
+  loadStaffDailyOperations,
+  type StaffDailyOperation,
+} from "../../services/staffDailyOperationsApi"
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
@@ -78,10 +83,6 @@ import { useStorageHub } from "../../store/StorageHubContext"
 
 import { isFacilityVisible } from "../../domain/managerRules"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
-import {
-  loadStaffDailyOperations,
-  type StaffDailyOperation,
-} from "../../services/staffDailyOperationsApi"
 
 import StaffPagination, { paginateStaffItems } from "./StaffPagination"
 import {
@@ -810,7 +811,6 @@ export default function StaffApp({
   const hub = useStorageHub()
 
   const nav: NavItem[] = [
-    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
     {
       id: "dashboard",
 
@@ -882,6 +882,8 @@ export default function StaffApp({
 
       permission: "returns:read",
     },
+
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
 
     {
       id: "support",
@@ -990,6 +992,7 @@ export default function StaffApp({
 
   const [operationalTaskDateFilter, setOperationalTaskDateFilter] =
     useState("")
+  const [selectedRecoveryTask, setSelectedRecoveryTask] = useState<{ id: string; facilityId: string } | null>(null)
 
   const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
     useState("all")
@@ -2026,7 +2029,7 @@ export default function StaffApp({
   const filteredOperationalTasks = operationalTasks
     .filter(
       (task) =>
-        (!operationalTaskDateFilter ||
+        (!!(task as StaffDailyOperation).recoveryTask || !operationalTaskDateFilter ||
           toDateInputValue(task.dueAt) === operationalTaskDateFilter) &&
         (operationalTaskPriorityFilter === "all" ||
           task.priority === operationalTaskPriorityFilter),
@@ -2091,6 +2094,12 @@ export default function StaffApp({
 
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
     if (isApiAuthenticated()) {
+      const recovery = (task as StaffDailyOperation).recoveryTask
+      if (recovery) {
+        setPage('tasks')
+        setSelectedRecoveryTask(recovery)
+        return
+      }
       setPage(task.page)
       if (task.id.startsWith("assignment-"))
         showToast(`Đã mở danh sách đặt chỗ chờ phân kho cho ${task.customer}.`)
@@ -2519,6 +2528,9 @@ export default function StaffApp({
           </div>
 
           {isApiAuthenticated() && <StaffMaintenanceOperationsPanel showToast={showToast} />}
+          {selectedRecoveryTask && <Modal open title="Chi tiết nhiệm vụ thu hồi" onClose={() => setSelectedRecoveryTask(null)}>
+            <RecoveryTaskDetail key={selectedRecoveryTask.id} role="staff" id={selectedRecoveryTask.id} facilityId={selectedRecoveryTask.facilityId} />
+          </Modal>}
 
           <Card className="mb-6">
             <div className="border-b border-stone-200 p-4">
@@ -2768,7 +2780,7 @@ export default function StaffApp({
                       <b>{task.title}</b>
                     </Td>
                     <Td>{task.customer}</Td>
-                    <Td className="text-xs">{task.time}</Td>
+                    <Td className="text-xs">{'recoveryTask' in task && task.recoveryTask ? new Date(task.time).toLocaleString('vi-VN') : task.time}</Td>
                     <Td className="text-xs font-semibold text-amber-700">
                       {task.sla}
                     </Td>

@@ -12,6 +12,8 @@ import ManagerPagination from './ManagerPagination'
 import { formatManagerDate, formatManagerDateTime, formatManagerMoney, matchesManagerSearch, normalizeManagerMoney, paginateManagerItems } from './managerList'
 import useManagerSoftDelete from './useManagerSoftDelete'
 
+import { exportManagerFacilityExcel } from '../../utils/excelExport'
+
 interface Props {
   user: User
   units: StorageUnit[]
@@ -90,6 +92,52 @@ export default function ManagerReportsPanel({ user, units, reservations, rentals
     setActivityTo('')
     setActivitySort('newest')
   }
+
+  const handleExportExcel = () => {
+    const facilityName = ('facility' in user && typeof user.facility === 'string' && user.facility) || user.facilityId || 'Cơ sở hiện tại'
+    exportManagerFacilityExcel({
+      facilityName,
+      metrics: {
+        occupancyRate: occupancy,
+        totalUnits: facilityUnits.length,
+        occupiedUnits: occupied,
+        availableUnits: facilityUnits.filter(u => u.status === 'available').length,
+        maintenanceUnits: facilityUnits.filter(u => u.status === 'maintenance').length,
+        monthlyRevenue: monthlyRecurring,
+        collectedRevenue: collected,
+        overdueRentalsCount: overdueRentals.length,
+        openReturnsCount: openReturns,
+      },
+      units: facilityUnits.map(unit => ({
+        code: unit.code || unit.id,
+        type: unit.type,
+        floor: unit.floor,
+        zone: unit.zone,
+        status: unit.status,
+        price: unit.price,
+        availability: unit.status === 'available' ? 'Sẵn sàng cho thuê' : 'Đang sử dụng / bảo trì',
+      })),
+      returns: facilityReturns.map(r => ({
+        id: r.id,
+        unitId: r.unitId,
+        customerName: r.customerName,
+        scheduledDate: r.scheduledDate,
+        status: r.status,
+        damageClassification: r.damageClassification,
+        notes: r.staffNotes || r.customerDecisionNote,
+      })),
+      activities: visibleActivities.map(a => ({
+        timestamp: a.timestamp,
+        action: a.action,
+        actorName: a.actorName,
+        actorRole: a.actorRole,
+        entityType: a.entityType,
+        entityId: a.entityId,
+        notes: a.notes,
+      })),
+    })
+  }
+
   const selectedReturn = selectedActivity?.entityType === 'return' ? facilityReturns.find(item => item.id === selectedActivity.entityId) : undefined
   const selectedCheckin = selectedActivity?.entityType === 'checkin' ? facilityCheckins.find(item => item.id === selectedActivity.entityId) : undefined
   const selectedPayment = selectedActivity?.entityType === 'payment' ? facilityPayments.find(item => item.id === selectedActivity.entityId) : undefined
@@ -97,7 +145,16 @@ export default function ManagerReportsPanel({ user, units, reservations, rentals
   const selectedEvidence = selectedActivity ? activityEvidence(selectedActivity) : []
 
   return <div className="fade-in space-y-5">
-    <SectionHeader eyebrow={'Phân tích vận hành'} title="Báo cáo cơ sở" subtitle={'Số liệu được tính trực tiếp từ tồn kho, hồ sơ thuê và thanh toán hiện tại.'} />
+    <SectionHeader
+      eyebrow={'Quản lý cơ sở'}
+      title="Báo cáo & Tổng quan cơ sở"
+      subtitle={'Số liệu được tính trực tiếp từ tồn kho, hồ sơ thuê, trả kho và nhật ký hoạt động.'}
+      action={
+        <Button variant="outline" onClick={handleExportExcel}>
+          <span className="flex items-center gap-2">📊 Xuất báo cáo Excel</span>
+        </Button>
+      }
+    />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6"><StatCard title={'Tỷ lệ lấp đầy'} value={`${occupancy}%`} icon={Icon.chart} /><StatCard title={'Doanh thu định kỳ'} value={formatVnd(monthlyRecurring)} icon={Icon.dollar} /><StatCard title={'Đã thu thực tế'} value={formatVnd(collected)} icon={Icon.credit} /><StatCard title={'Tài khoản quá hạn'} value={overdueRentals.length} icon={Icon.alert} /><StatCard title={'Nhận kho tháng này'} value={monthCheckins} icon={Icon.truck} /><StatCard title={'Hồ sơ trả đang mở'} value={openReturns} icon={Icon.refresh} /></div>
     <div className="grid gap-4 lg:grid-cols-2"><Card className="p-5"><h3 className="mb-4 font-bold">{'Phân bổ trạng thái gian kho'}</h3><ResponsiveContainer width="100%" height={240}><PieChart><Pie data={unitStatusData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{unitStatusData.map((entry, index) => <Cell key={entry.name} fill={colors[index]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className="grid grid-cols-2 gap-2 text-xs">{unitStatusData.map((entry, index) => <div key={entry.name} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors[index] }} /><span className="flex-1 text-stone-500">{entry.name}</span><b>{entry.value}</b></div>)}</div></Card><Card className="p-5"><h3 className="mb-4 font-bold">{'Công suất theo loại kho'}</h3><ResponsiveContainer width="100%" height={270}><BarChart data={typeData}><CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" /><XAxis dataKey="type" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="units" fill="#d6d3d1" name="Tổng số" radius={[4, 4, 0, 0]} /><Bar dataKey="occupied" fill="#e9a12c" name="Đang sử dụng" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></Card></div>
     <Card><div className="border-b border-stone-200 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold">Nhật ký hoạt động cơ sở</h3><p className="text-xs text-stone-500">Bao gồm thay đổi trạng thái, bằng chứng và dữ liệu trước/sau nếu nghiệp vụ có ghi nhận.</p>{hiddenActivityCount > 0 && <p className="mt-1 text-xs text-stone-500">{hiddenActivityCount} bản ghi đã được ẩn khỏi giao diện, dữ liệu gốc vẫn được giữ lại.</p>}</div><div className="flex gap-2">{hiddenActivityCount > 0 && <Button size="sm" variant="outline" onClick={() => activityHistory.restoreAll()}>Khôi phục tất cả</Button>}<Button size="sm" variant="ghost" onClick={clearActivityFilters}>Xóa bộ lọc</Button></div></div><div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6"><Input value={activityQuery} onChange={event => setActivityQuery(event.target.value)} placeholder="Tìm hành động, mã hồ sơ, người thực hiện…" /><Select value={activityType} onChange={event => setActivityType(event.target.value)}><option value="all">Tất cả đối tượng</option>{Array.from(new Set(facilityActivities.map(item => item.entityType))).map(type => <option key={type} value={type}>{managerEntityLabel(type, 'vi')}</option>)}</Select><Select value={activityRole} onChange={event => setActivityRole(event.target.value)}><option value="all">Tất cả vai trò</option>{Array.from(new Set(facilityActivities.map(item => item.actorRole))).sort().map(role => <option key={role} value={role}>{managerDisplayText(role)}</option>)}</Select><Input aria-label="Từ ngày" type="date" value={activityFrom} onChange={event => setActivityFrom(event.target.value)} /><Input aria-label="Đến ngày" type="date" value={activityTo} onChange={event => setActivityTo(event.target.value)} /><Select value={activitySort} onChange={event => setActivitySort(event.target.value)}><option value="newest">Mới nhất trước</option><option value="oldest">Cũ nhất trước</option></Select></div></div><Table><Thead><tr><Th>{'Thời gian'}</Th><Th>{'Hành động'}</Th><Th>{'Đối tượng'}</Th><Th>{'Người thực hiện'}</Th><Th>{'Dấu vết'}</Th><Th>{'Ghi chú'}</Th><Th /></tr></Thead><Tbody>{activityPagination.items.map(activity => { const evidence = activityEvidence(activity); return <Tr key={activity.id}><Td className="whitespace-nowrap text-xs">{formatManagerDateTime(activity.timestamp)}</Td><Td className="font-mono text-xs font-bold">{managerActivityLabel(activity.action, 'vi')}</Td><Td>{managerEntityLabel(activity.entityType, 'vi')}, {activity.entityId}</Td><Td>{activity.actorName}<p className="text-xs text-stone-400">{managerDisplayText(activity.actorRole)}</p></Td><Td><div className="flex flex-wrap gap-1">{activity.beforeState && <Badge variant="muted">Trước</Badge>}{activity.afterState && <Badge variant="info">Sau</Badge>}{Boolean(evidence.length) && <Badge variant="success">{evidence.length} bằng chứng</Badge>}{activity.correlationId && <Badge variant="warning">Mã đối chiếu</Badge>}{!activity.beforeState && !activity.afterState && !evidence.length && !activity.correlationId && "-"}</div></Td><Td className="max-w-lg text-xs text-stone-500">{activity.notes || "-"}</Td><Td className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setSelectedActivity(activity)}>Chi tiết</Button><Button size="sm" variant="danger" onClick={() => setDeleteActivity(activity)}>Xóa</Button></div></Td></Tr>})}{!visibleActivities.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có hoạt động phù hợp.</td></tr>}</Tbody></Table><ManagerPagination {...activityPagination} pageSize={activityPageSize} onPageChange={setActivityPage} onPageSizeChange={setActivityPageSize} /></Card>
