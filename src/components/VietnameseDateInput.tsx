@@ -10,8 +10,8 @@ export function parseVietnameseDate(value: string): string {
   const date = new Date(`${iso}T12:00:00`)
   return date.getFullYear() === Number(match[3]) && date.getMonth() + 1 === Number(match[2]) && date.getDate() === Number(match[1]) ? iso : ''
 }
-export default function VietnameseDateInput({ value, onChange, min, max }: {
-  value: string; onChange: (value: string) => void; min?: string; max?: string
+export default function VietnameseDateInput({ value, onChange, min, max, label = 'Ngày nhận kho mong muốn' }: {
+  value: string; onChange: (value: string) => void; min?: string; max?: string; label?: string
 }) {
   const id = useId()
   const pickerRef = useRef<HTMLInputElement>(null)
@@ -22,7 +22,7 @@ export default function VietnameseDateInput({ value, onChange, min, max }: {
     published.current = value
   }, [value])
   return <label htmlFor={id} className="block text-sm font-medium text-stone-700">
-    Ngày nhận kho mong muốn
+    {label}
       <div className="relative mt-1">
         <input id={id} type="text" inputMode="numeric" placeholder="DD/MM/YYYY" maxLength={10}
           value={draft} className="w-full rounded-lg border border-stone-300 bg-white py-2.5 pl-3 pr-12 text-sm font-normal focus:ring-2 focus:ring-amber-400"
