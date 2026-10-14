@@ -46,7 +46,7 @@ export default function RenewalRiskNotice({ rentalId,renewalId,role="customer",r
     <p>Hồ sơ được tiếp nhận thu hồi lúc {rentalDate(r.repossessionStartedAt??null)}.</p>
     <p>Gia hạn theo luồng thông thường đã bị khóa. Vui lòng liên hệ cơ sở để xử lý hợp đồng, tài sản và tiền cọc.</p>
   </section>
-  if(read.error||!r||r.completeness==="UNKNOWN")return <p role="status" className="rounded bg-amber-50 p-3 text-sm text-amber-900">Chưa xác minh được mốc quá hạn và thu hồi của hồ sơ.</p>
+  if(read.error||!r||r.completeness==="UNKNOWN")return null
   if(r.severity==="NONE")return null
   return <section role="status" className={`rounded-lg border p-3 text-sm space-y-1 ${["URGENT","RENEWAL_CLOSED"].includes(r.severity)?"border-red-200 bg-red-50 text-red-900":"border-amber-200 bg-amber-50 text-amber-900"}`}>
     <p className="font-semibold">{r.severity==="RENEWAL_CLOSED"?"Đã hết hạn gia hạn theo luồng thông thường":r.severity==="URGENT"?"Hạn cuối hoàn tất gia hạn hôm nay":r.severity==="SERIOUS"?"Sắp đến hạn thu hồi kho":"Hợp đồng đã quá hạn"}</p>

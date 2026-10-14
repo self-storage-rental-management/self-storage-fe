@@ -1,9 +1,11 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
+import { useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
-import { Button, Card } from "../../components/ui"
+import { Button, Card, Modal } from "../../components/ui"
+import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail } from "../../types/rentalApi"
-import { bookingPaymentPurposes, bookingPaymentStatuses, bookingPaymentVerification } from "../../services/rentalBookingEvidence"
+import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning, rentalPeriodText } from "./presentation"
 export default function RentalDetail({
   rental,
@@ -17,16 +19,26 @@ export default function RentalDetail({
   showTechnicalWarnings?: boolean
 }) {
   const { copy } = useManagerPresentation()
+  const [section, setSection] = useState<'documents' | 'payments'>('documents')
+  const [receiptPayment, setReceiptPayment] = useState<string>()
 
   const f = rental.financialSummary
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 [&_dt]:text-xs [&_dt]:font-normal [&_dt]:text-stone-500 [&_dd]:mt-1.5 [&_dd]:break-words [&_dd]:text-sm [&_dd]:font-medium [&_dd]:leading-relaxed [&_dd]:text-stone-900">
+      <div className="flex flex-wrap gap-2">
+        <Button variant={section === 'documents' ? 'primary' : 'outline'} onClick={() => setSection('documents')}>Hồ sơ & tài liệu</Button>
+        <Button variant={section === 'payments' ? 'primary' : 'outline'} onClick={() => setSection('payments')}>Thỏa thuận & giao dịch</Button>
+      </div>
+      <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
       {rental.status === "active" && <RenewalRiskNotice rentalId={rental.id} role={role} />}
-      <Card className="p-4">
-        <h3 className="font-bold mb-3">Hồ sơ thuê</h3>
-        <dl className="grid gap-3 sm:grid-cols-2">
+      <Card className="overflow-hidden rounded-xl p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
+          <h3 className="text-base font-bold">Thông tin hồ sơ thuê</h3>
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{copy(rentalLabels[rental.status])}</span>
+        </div>
+        <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-lg [&>div]:bg-stone-50 [&>div]:p-3">
           <div>
             <dt className="font-bold">Mã hồ sơ thuê</dt>
             <dd className="break-all font-semibold">{rental.id}</dd>
@@ -63,16 +75,16 @@ export default function RentalDetail({
             <dt className="font-bold">Trạng thái truy cập</dt>
             <dd>
               {rental.access.completeness === "UNKNOWN"
-                ? unknown
+                ? 'Chưa có thông tin quyền ra vào kho'
                 : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || unknown}
             </dd>
           </div>
         </dl>
       </Card>
       <RentalHandoverFiles key={`${role}:${rental.id}`} role={role} id={rental.id} />
-      <Card className="p-4">
-        <h3 className="font-bold mb-3">Theo dõi quá hạn</h3>
-        <dl className="grid gap-3 sm:grid-cols-2">
+      {role === 'manager' && <Card className="rounded-xl p-5">
+        <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Theo dõi thanh toán và quá hạn</h3>
+        <dl className="grid gap-4 sm:grid-cols-2 [&>div]:rounded-lg [&>div]:bg-stone-50 [&>div]:p-3">
           <div>
             <dt className="font-bold">Tình trạng tài chính</dt>
             <dd>{f.completeness === "UNKNOWN" ? unknown :
@@ -102,7 +114,7 @@ export default function RentalDetail({
             </dd>
           </div>
         </dl>
-      </Card>
+      </Card>}
       {onRequest && (
         <Card className="p-4 space-y-3">
           <h3 className="font-bold">Gia hạn</h3>
@@ -116,20 +128,22 @@ export default function RentalDetail({
           )}
         </Card>
       )}
+      </div>
+      <div className={section === 'payments' ? 'space-y-5' : 'hidden'}>
       {evidence && (
-        <Card className="p-4">
-          <h3 className="font-bold mb-3">Thỏa thuận ban đầu</h3>
+        <Card className="rounded-xl p-5">
+          <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Thỏa thuận ban đầu</h3>
           {agreed ? (
-            <dl className="grid gap-3 sm:grid-cols-2">
+            <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-stone-200 [&>div]:bg-stone-50 [&>div]:p-4">
               {([
-                ["Tiền thuê theo thỏa thuận", agreed.netRentalAmount],
-                ["Tiền đặt chỗ theo thỏa thuận", agreed.reservationDepositAmount],
-                ["Cọc bảo đảm theo thỏa thuận", agreed.securityDepositAmount],
-                ["Tiền thuê còn lại sau khoản đặt chỗ", agreed.remainingRentalAmount],
-                ["Khoản phải thanh toán khi nhận kho", agreed.dueAtCheckIn],
-                ["Tổng tiền thuê và cọc ban đầu", agreed.totalInitialObligation],
+                ["Tiền thuê toàn kỳ", agreed.netRentalAmount],
+                ["Cọc giữ chỗ (trừ vào tiền thuê)", agreed.reservationDepositAmount],
+                ["Tiền thuê còn lại sau cọc giữ chỗ", agreed.remainingRentalAmount],
+                ["Cọc bảo đảm kho", agreed.securityDepositAmount],
+                ["Thanh toán khi nhận kho (tiền thuê còn lại + cọc bảo đảm)", agreed.dueAtCheckIn],
+                ["Tổng tiền thuê + cọc bảo đảm (không cộng cọc giữ chỗ lần nữa)", agreed.totalInitialObligation],
               ] as const).map(([label, amount]) => (
-                <div key={label}><dt className="font-bold">{label}</dt><dd>{rentalMoney(amount, evidence.currency)}</dd></div>
+                <div key={label} className={label.startsWith('Tổng') ? '!border-emerald-200 !bg-emerald-50' : label.startsWith('Thanh toán') ? '!border-amber-200 !bg-amber-50' : ''}><dt>{label}</dt><dd className="!mt-2 !text-lg !font-bold">{rentalMoney(amount, evidence.currency)}</dd></div>
               ))}
             </dl>
           ) : <p>Không có dữ liệu</p>}
@@ -138,15 +152,11 @@ export default function RentalDetail({
           {evidence.payments.length === 0 ? <p>Không có dữ liệu</p> : (
             <ul className="space-y-3">
               {evidence.payments.map(payment => (
-                <li key={payment.id} className="border-t pt-3">
-                  <p><strong>{bookingPaymentPurposes[payment.purpose]}:</strong> {rentalMoney(payment.amount, evidence.currency)}</p>
-                  <p><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
-                  <p role="status">{bookingPaymentVerification[payment.verification]}</p>
-                  {payment.projectRecognition && <p role="status">
-                    {payment.projectRecognition.eligibleForReconciliation
-                      ? "Chứng cứ VNPay Sandbox hợp lệ để đối soát trong dự án; chưa xác nhận phân bổ vào sổ công nợ."
-                      : "Giao dịch chưa đủ điều kiện đối soát theo chính sách VNPay Sandbox của dự án."}
-                  </p>}
+                <li key={payment.id} className="rounded-xl border border-stone-200 p-4">
+                  <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
+                  <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
+                  <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
+                  {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
                 </li>
               ))}
             </ul>
@@ -154,6 +164,11 @@ export default function RentalDetail({
           {evidence.paymentsTruncated && <p role="status" className="mt-3">Chỉ hiển thị 20 giao dịch gần nhất, chưa phải toàn bộ lịch sử.</p>}
         </Card>
       )}
+      {!evidence && <p className="rounded-xl border border-stone-200 p-4 text-sm text-stone-500">Chưa có dữ liệu thỏa thuận và giao dịch của đơn đặt chỗ.</p>}
+      </div>
+      {receiptPayment && rental.reservationId && <Modal open onClose={() => setReceiptPayment(undefined)} title="Biên lai thanh toán" size="lg">
+        <BookingTransactionReceipt reservationId={rental.reservationId} paymentId={receiptPayment} />
+      </Modal>}
       {showTechnicalWarnings && rental.dataWarnings.length > 0 && (
         <div role="status" className="rounded-lg bg-amber-50 p-4">
           <h4 className="font-semibold">Cần kiểm tra dữ liệu</h4>

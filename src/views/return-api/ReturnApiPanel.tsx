@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card } from '../../components/ui'
+import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalMoney } from '../rental-api/presentation'
@@ -12,6 +13,7 @@ import {
   listReturns,
   paySettlement,
   requestReturn,
+  updateReturnRequest,
   reviewDispute,
   returnError,
   uploadReturnEvidence,
@@ -102,7 +104,13 @@ function ReturnWorkspace({
 }) {
   const actor = getAuthenticatedActor()
   const [page, setPage] = useState(0)
-  const read = useRentalApiResource(`${identity}:${page}`, () => listReturns(role, page))
+  const read = useRentalApiResource(`${identity}:${page}`, async () => {
+    if (!rentalId) return listReturns(role, page)
+    const first = await listReturns(role, 0, 100)
+    const data = [...first.data]
+    for (let next = 1; next < first.pagination.totalPages; next++) data.push(...(await listReturns(role, next, 100)).data)
+    return { ...first, data }
+  })
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
@@ -116,6 +124,7 @@ function ReturnWorkspace({
   const [feedback, setFeedback] = useState('')
   const [date, setDate] = useState('')
   const [notes, setNotes] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
 
   async function run(work: () => Promise<ApiReturn>) {
     if (lock.current) return
@@ -126,6 +135,7 @@ function ReturnWorkspace({
       const result = await work()
       if (!mounted.current || getAuthenticatedActor()?.id !== actor?.id) return
       setSelected(result.id)
+      setEditing(null)
       read.refresh()
       onChanged?.()
       setFeedback('Máy chủ đã ghi nhận thao tác. Đang tải lại hồ sơ.')
@@ -148,19 +158,21 @@ function ReturnWorkspace({
   if (!readable) return null
 
   return (
-    <Card className="space-y-3 p-4">
-      <h3 className="font-bold">Trả kho & quyết toán</h3>
-      {role === 'customer' && rentalId && rentalActive && (
-        <form onSubmit={(event) => { event.preventDefault(); void run(() => requestReturn(rentalId, date, notes)) }} className="space-y-2">
-          <label className="block">Ngày trả kho<input type="date" required value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} className="block rounded border p-2" /></label>
-          <label className="block">Lý do / ghi chú<textarea value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="block w-full rounded border p-2" /></label>
-          <Button type="submit" disabled={busy || !date || read.loading}>Gửi yêu cầu trả kho</Button>
+    <Card className="space-y-4 rounded-xl p-5">
+      <h3 className="border-b border-stone-200 pb-3 text-base font-bold">Trả kho & quyết toán</h3>
+      {role === 'customer' && rentalId && ((rentalActive && !rows.some(record => record.status !== 'completed')) || editing) && (
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes)) }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <VietnameseDateInput label="Ngày trả kho" value={date} onChange={setDate} />
+          <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
+          <Button type="submit" disabled={busy || !date || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
+          {editing && <Button variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
         </form>
       )}
       {read.loading && <p role="status">Đang tải hồ sơ trả kho...</p>}
       {!!read.error && <p role="alert">{returnError(read.error)}</p>}
       {feedback && <p role="status">{feedback}</p>}
-      {rows.map((record) => <div key={record.id} className="rounded border p-3"><ReturnSummary record={record} /><Button variant="outline" disabled={busy} onClick={() => setSelected(record.id)}>Xem và xử lý hồ sơ</Button></div>)}
+      {rows.map((record) => <div key={record.id} className="rounded border p-3"><ReturnSummary record={record} />{record.customerNotes && <p className="my-2 text-sm">Lý do: {record.customerNotes}</p>}<div className="mt-3 flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setSelected(record.id)}>Xem và xử lý hồ sơ</Button>
+        {role === 'customer' && record.status === 'requested' && <Button variant="outline" disabled={busy} onClick={() => { setEditing(record.id); setDate(record.scheduledDate); setNotes(record.customerNotes || '') }}>Chỉnh sửa yêu cầu</Button>}</div></div>)}
       {!rentalId && rows.length > 0 && <div className="flex gap-2"><Button disabled={busy || page === 0} onClick={() => { setSelected(null); setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { setSelected(null); setPage((value) => value + 1) }}>Trang sau</Button></div>}
       {selected && <ReturnActions key={selected} role={role} id={selected} run={run} busy={busy} />}
     </Card>
