@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { ManagerPresentationProvider } from './managerPresentation'
 import './managerTypography.css'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
@@ -39,6 +40,21 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     ...(isApiAuthenticated() ? [{ id: 'support-api', label: "Hỗ trợ khách hàng", icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
+  const [apiNotifications, setApiNotifications] = useState<ApiNotification[]>([])
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const result = await listNotifications()
+        if (!cancelled) setApiNotifications(result.data)
+      } catch { /* Keep the latest successful response on transient failures. */ }
+    }
+    void refresh()
+    const timer = window.setInterval(refresh, 15000)
+    window.addEventListener('focus', refresh)
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [user.id])
   const [toast, setToast] = useState<string | null>(null)
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
   const [inventoryRentalId, setInventoryRentalId] = useState<string | undefined>()
@@ -92,9 +108,19 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       if (isFacilityTaskOverdue(task)) notifications.push({ id: `manager-task-overdue-${task.id}-${task.dueAt}`, date: task.dueAt, title: 'Nhiệm vụ đã quá hạn', message: `${task.title} · ${task.assignedStaffName || 'Chưa phân công'}`, page: 'staff-tasks', targetId: task.id })
       return notifications
     })
-  const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
+  const managerNotifications = [...apiNotifications.map(item => ({
+    id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead,
+    page: item.type === 'SYSTEM' ? 'inventory' : item.type === 'SUPPORT' ? 'support-api' : item.type === 'PAYMENT' ? 'payments' : 'rentals',
+  })), ...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
 
-  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={managerNotifications} canAccess={permission => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
+  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={managerNotifications} onNotificationClick={item => {
+    setPage(item.page || 'inventory')
+    const notification = apiNotifications.find(n => n.id === item.id)
+    if (notification) {
+      showToast(notification.content)
+      void markNotificationRead(item.id).then(saved => setApiNotifications(current => current.map(n => n.id === saved.id ? saved : n))).catch(() => {})
+    }
+  }} canAccess={permission => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && (isApiAuthenticated() ? <ManagerDashboardApiPanel setPage={setPage} /> : <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />)}
     {page === 'inventory' && <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} showToast={showToast} />}
     {page === 'unit-assignments' && <ManagerUnitAssignmentPanel showToast={showToast} />}

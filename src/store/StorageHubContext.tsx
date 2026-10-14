@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, type Context, type ReactNode } from 'react'
 import type {
   Facility,
   StorageUnit,
@@ -212,10 +212,10 @@ function nextCalendarDay(value: string): string {
 }
 
 function assertFacilityManager(user: User, facilityId: string, facilityName: string) {
-  if (user.role !== 'manager' && user.role !== 'admin') {
-    throw new Error('Chỉ Facility Manager được thực hiện thao tác này.')
+  if (user.role !== 'manager' && user.role !== 'admin' && user.role !== 'business') {
+    throw new Error('Chỉ Facility Manager hoặc Ban Điều Hành được thực hiện thao tác này.')
   }
-  if (user.role === 'admin' || isManagerFacilityVisible(user, facilityId, facilityName)) return
+  if (user.role === 'admin' || user.role === 'business' || isManagerFacilityVisible(user, facilityId, facilityName)) return
   throw new Error('Bạn không có quyền thao tác dữ liệu của cơ sở khác.')
 }
 
@@ -1324,7 +1324,14 @@ interface StorageHubContextValue extends StorageHubState {
   deleteUnit: (unitId: string, actor: User) => { success: boolean; reason?: string }
 }
 
-const StorageHubContext = createContext<StorageHubContextValue | null>(null)
+// Keep provider and consumers on the same context during Vite hot updates.
+const StorageHubContext: Context<StorageHubContextValue | null> =
+  import.meta.hot?.data.storageHubContext ?? createContext<StorageHubContextValue | null>(null)
+if (import.meta.hot) {
+  import.meta.hot.dispose(data => {
+    data.storageHubContext = StorageHubContext
+  })
+}
 
 const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
 
@@ -3218,9 +3225,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 8. Return & Checkout: Separate Refund Calculation vs Unit Condition
   const requestReturn = (rentalId: string, scheduledDate: string, customer: User, reason?: string): ReturnCase => {
-    assertPermission(customer, 'returns:process')
     const rental = state.rentals.find(r => r.id === rentalId)
     if (!rental || rental.status !== 'active') throw new Error('Chỉ hợp đồng đang hoạt động mới được gửi yêu cầu trả kho.')
+    if (customer.role === 'customer' && customer.id !== rental.customerId) {
+      throw new Error('Khách hàng chỉ có thể yêu cầu trả kho cho hợp đồng của chính mình.')
+    }
     const requestedReturnDate = toValidDate(scheduledDate)
     requestedReturnDate.setHours(0, 0, 0, 0)
     const today = new Date()
@@ -5243,7 +5252,6 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const confirmReturnSettlement = (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => {
-    assertPermission(customer, 'returns:process')
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.customerId !== customer.id) throw new Error('Không tìm thấy hồ sơ trả kho thuộc tài khoản này.')
     if (returnCase.status !== 'awaiting_customer_confirmation') throw new Error('Hồ sơ chưa sẵn sàng để xác nhận quyết toán.')
@@ -5353,7 +5361,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     preset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement',
     facilityCompensationAmount?: number
   ) => {
-    assertPermission(manager, 'returns:process')
+    if (manager.role !== 'business') {
+      assertPermission(manager, 'returns:process')
+    }
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
     assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)

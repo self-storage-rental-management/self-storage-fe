@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
 import type { PermissionKey, User, Role } from '../types'
@@ -99,6 +99,24 @@ export default function Layout({
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const notificationAreaRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!notificationsOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !notificationAreaRef.current?.contains(event.target)) {
+        setNotificationsOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNotificationsOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside, true)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside, true)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [notificationsOpen])
   const notificationReadKey = `storagehub-opened-notifications-v2-${user.id}`
   const notificationBadgeKey = `storagehub-seen-notification-badge-v2-${user.id}`
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
@@ -192,6 +210,7 @@ export default function Layout({
       'activity': 'Nhật Ký Hoạt Động',
       'settings': 'Cài Đặt Hệ Thống',
       'profile': 'Hồ Sơ Cá Nhân',
+      'returns': 'Hồ Sơ Trả Kho & Quyết Toán',
     }
     const mapping = navItemTranslations[item.id]
     if (mapping) return mapping
@@ -221,6 +240,8 @@ export default function Layout({
       'tổng quan': 'Tổng Quan',
       'facility operations': 'Vận Hành Cơ Sở',
       'vận hành cơ sở': 'Vận Hành Cơ Sở',
+      'vận hành': 'Vận Hành & Trả Kho',
+      'vận hành & trả kho': 'Vận Hành & Trả Kho',
       'rentals & finance': 'Hợp Đồng & Tài Chính',
       'hợp đồng & tài chính': 'Hợp Đồng & Tài Chính',
       'portfolio': 'Danh Mục Cơ Sở',
@@ -254,26 +275,8 @@ export default function Layout({
     return roleLabel
   }
 
-  const notificationCandidates = [
-    { page: 'payments', vi: 'Có hóa đơn mới cần kiểm tra', timeVi: '5 phút trước' },
-    { page: 'reservations', vi: 'Đơn đặt giữ kho đã được cập nhật', timeVi: '20 phút trước' },
-    { page: 'overdue', vi: 'Có tài khoản quá hạn cần xử lý', timeVi: '30 phút trước' },
-    { page: 'tasks', vi: 'Nhiệm vụ trong ca làm việc vừa thay đổi', timeVi: '1 giờ trước' },
-    { page: 'activity', vi: 'Nhật ký hệ thống có hoạt động mới', timeVi: '2 giờ trước' },
-    { page: 'support', vi: 'Yêu cầu hỗ trợ có phản hồi mới', timeVi: '2 giờ trước' },
-    { page: 'units', vi: 'Trạng thái gian kho vừa được cập nhật', timeVi: '3 giờ trước' },
-  ]
-  const fallbackNotifications: LayoutNotification[] = notificationCandidates
-    .filter(item => visibleNavItems.some(nav => nav.id === item.page))
-    .slice(0, 3)
-    .map(item => ({
-      id: `${roleLabel}-${item.page}`,
-      title: item.vi,
-      message: item.timeVi,
-      page: item.page
-    }))
   const notifications = [
-    ...(suppliedNotifications ?? fallbackNotifications),
+    ...(suppliedNotifications ?? []),
     ...(additionalNotifications ?? [])
   ]
   const isNotificationRead = (item: LayoutNotification) => Boolean(item.isRead || readNotificationIds.includes(item.id))
@@ -360,11 +363,10 @@ export default function Layout({
           <button
             type="button"
             onClick={() => { navigate('profile'); setSidebarOpen(false) }}
-            className={`w-full flex items-center gap-3 p-2 rounded-lg transition text-left mb-2.5 group ${
-              currentPage === 'profile'
+            className={`w-full flex items-center gap-3 p-2 rounded-lg transition text-left mb-2.5 group ${currentPage === 'profile'
                 ? 'bg-[#3a3933] border border-[#4b4940] shadow-sm'
                 : 'hover:bg-white/5'
-            }`}
+              }`}
             title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
           >
             <Avatar name={user.name} size="md" imageUrl={user.avatar} />
@@ -372,9 +374,8 @@ export default function Layout({
               <p className="text-sm font-semibold text-stone-100 truncate group-hover:text-amber-200 transition">{user.name}</p>
               <p className="text-xs text-stone-400 truncate">{user.email}</p>
             </div>
-            <span className={`text-xs font-mono px-1.5 py-0.5 rounded transition ${
-              currentPage === 'profile' ? 'bg-[#e9a12c] text-[#292a27] font-semibold' : 'text-stone-400 group-hover:text-stone-200'
-            }`}>
+            <span className={`text-xs font-mono px-1.5 py-0.5 rounded transition ${currentPage === 'profile' ? 'bg-[#e9a12c] text-[#292a27] font-semibold' : 'text-stone-400 group-hover:text-stone-200'
+              }`}>
               {'Hồ sơ'}
             </span>
           </button>
@@ -423,7 +424,7 @@ export default function Layout({
           <div className="flex-1" />
 
           {/* Notifications */}
-          <div className="relative">
+            <div className="relative" ref={notificationAreaRef}>
             <button
               type="button"
               onClick={openNotifications}
@@ -459,7 +460,11 @@ export default function Layout({
                         {!isNotificationRead(item) && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />}
                         <span className="block text-sm font-medium text-stone-800">{item.title}</span>
                       </span>
-                      {item.message && <span className="mt-1 block text-xs text-stone-500">{item.message}</span>}
+                        {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-500">{
+                          item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
+                            ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
+                            : item.message
+                        }</span>}
                       {item.date && <span className="mt-1 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
                     </button>
                   )) : (

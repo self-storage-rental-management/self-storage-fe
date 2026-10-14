@@ -81,7 +81,7 @@ export default function CustomerSupportChatbot({
         id: 'msg-welcome',
         sender: 'bot',
         time: now,
-        text: `Xin chào ${user.name}! Mình là Trợ lý ảo StorageHub 🤖 Mình có thể giải đáp tức thì các thắc mắc về mã PIN, hợp đồng, thanh toán, hoặc tự động kết nối bạn với nhân viên phụ trách cơ sở.`
+        text: `Xin chào ${user.name}! Mình là Trợ lý ảo StorageHub  Mình có thể giải đáp tức thì các thắc mắc về mã PIN, hợp đồng, thanh toán, hoặc tự động kết nối bạn với nhân viên phụ trách cơ sở.`
       }]
     })
   }, [isOpen, user.name])
@@ -129,7 +129,7 @@ export default function CustomerSupportChatbot({
         } else {
           // If match is not solvable by bot (e.g. gate stuck, leak), automatically suggest escalation
           setTimeout(() => {
-            addMessage('bot', '⚠️ Sự cố này cần nhân viên kỹ thuật tại cơ sở can thiệp. Bạn có muốn chuyển ngay cho nhân viên trực ca không?')
+            addMessage('bot', ' Sự cố này cần nhân viên kỹ thuật tại cơ sở can thiệp. Bạn có muốn chuyển ngay cho nhân viên trực ca không?')
             setShowPostActions(true)
           }, 350)
         }
@@ -152,7 +152,7 @@ export default function CustomerSupportChatbot({
     // Requirement 1: If user clicks "Hỏi vấn đề khác" >= 2 times without reaching "Đã xong"
     if (nextCount >= 2) {
       setShowLoopBreakerPrompt(true)
-      addMessage('bot', '💡 Trợ lý AI nhận thấy bạn đang gặp nhiều thắc mắc liên tiếp nhưng có thể các câu trả lời tự động chưa giải quyết được triệt để. Bạn có muốn chuyển thẳng cho nhân viên hỗ trợ trực tiếp của cơ sở luôn không?')
+      addMessage('bot', ' Trợ lý AI nhận thấy bạn đang gặp nhiều thắc mắc liên tiếp nhưng có thể các câu trả lời tự động chưa giải quyết được triệt để. Bạn có muốn chuyển thẳng cho nhân viên hỗ trợ trực tiếp của cơ sở luôn không?')
       return
     }
 
@@ -164,7 +164,7 @@ export default function CustomerSupportChatbot({
     setShowPostActions(false)
     setShowLoopBreakerPrompt(false)
     setUnresolvedCount(0)
-    addMessage('bot', 'Tuyệt vời! Rất vui vì đã giúp được bạn 🙌 Nếu sau này cần gì thêm, cứ quay lại đây nhé.')
+    addMessage('bot', 'Tuyệt vời! Rất vui vì đã giúp được bạn  Nếu sau này cần gì thêm, cứ quay lại đây nhé.')
     setShowFeedbackStep(true)
   }
 
@@ -180,9 +180,9 @@ export default function CustomerSupportChatbot({
     })
 
     if (rating === 'helpful') {
-      addMessage('bot', '🌟 Cảm ơn bạn đã đánh giá! Phản hồi tích cực của bạn giúp trợ lý StorageHub hoàn thiện hơn mỗi ngày.')
+      addMessage('bot', ' Cảm ơn bạn đã đánh giá! Phản hồi tích cực của bạn giúp trợ lý StorageHub hoàn thiện hơn mỗi ngày.')
     } else {
-      addMessage('bot', '🙏 Cảm ơn bạn đã góp ý. Trợ lý đã ghi nhận để cải tiến chất lượng câu trả lời. Nếu vẫn cần hỗ trợ tại chỗ, bạn hãy bấm chuyển cho nhân viên bất cứ lúc nào.')
+      addMessage('bot', ' Cảm ơn bạn đã góp ý. Trợ lý đã ghi nhận để cải tiến chất lượng câu trả lời. Nếu vẫn cần hỗ trợ tại chỗ, bạn hãy bấm chuyển cho nhân viên bất cứ lúc nào.')
       setShowPostActions(true)
     }
   }
@@ -210,7 +210,7 @@ export default function CustomerSupportChatbot({
     const aiSummaryText = `Khách hỏi: "${questionSubject}". Trợ lý AI đã hướng dẫn nhưng khách cần hỗ trợ chuyên sâu.` +
       ` Tự động phân loại: [${category} - Mức độ: ${assignment.priority.toUpperCase()}].` +
       (assignment.isAllOffline
-        ? ` 🚨 Tất cả nhân viên quầy đang offline. Phiếu được đánh dấu khẩn cấp để quản lý ca trực tiếp nhận.`
+        ? `  Tất cả nhân viên quầy đang offline. Phiếu được đánh dấu khẩn cấp để quản lý ca trực tiếp nhận.`
         : ` Đã điều phối cho ${assignment.assignedStaffName} (ETA: ${assignment.estimatedWaitLabel}).`)
 
     try {
@@ -247,7 +247,7 @@ export default function CustomerSupportChatbot({
       if (assignment.isAllOffline && assignment.isUrgent) {
         addMessage(
           'bot',
-          `🚨 ĐÃ ĐÁNH DẤU PHIẾU KHẨN CẤP\n\n` +
+          ` ĐÃ ĐÁNH DẤU PHIẾU KHẨN CẤP\n\n` +
           `• Mã phiếu: ${ticketId}\n` +
           `• Gian kho: ${selectedUnit} (${selectedFacility})\n` +
           `• Trạng thái: Tất cả nhân viên quầy hiện đang ngoài giờ trực. Phiếu đã được đánh dấu KHẨN CẤP và chuyển vào hàng đợi quản lý ca trực (${assignment.emergencyManagerName}).\n` +
@@ -257,7 +257,7 @@ export default function CustomerSupportChatbot({
       } else if (assignment.isAllOffline) {
         addMessage(
           'bot',
-          `🌙 Ngoài giờ hỗ trợ trực tiếp của quầy (08:00 - 20:00).\n\n` +
+          ` Ngoài giờ hỗ trợ trực tiếp của quầy (08:00 - 20:00).\n\n` +
           `Yêu cầu ${ticketId} của bạn đã được lưu vào đầu hàng đợi của ca sáng mai (08:00). Bạn có thể theo dõi và bổ sung thông tin ngay trong phiếu hỗ trợ.`,
           { isEscalationNotice: true }
         )
@@ -265,7 +265,7 @@ export default function CustomerSupportChatbot({
         // Requirement 2: Specific estimated wait time
         addMessage(
           'bot',
-          `✅ Đã chuyển thành công yêu cầu ${ticketId} cho nhân viên hỗ trợ!\n\n` +
+          ` Đã chuyển thành công yêu cầu ${ticketId} cho nhân viên hỗ trợ!\n\n` +
           `• Nhân viên tiếp nhận: ${assignment.assignedStaffName} (Đang trực tuyến)\n` +
           `• Cơ sở & Gian kho: ${selectedFacility} · ${selectedUnit}\n` +
           `• ⏱️ Thời gian phản hồi dự kiến: ${assignment.estimatedWaitLabel}\n` +
@@ -316,9 +316,6 @@ export default function CustomerSupportChatbot({
           {/* Header */}
           <div className="flex items-center justify-between border-b border-stone-800 bg-[#181b22] px-4 py-3.5 text-white">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-600 font-bold text-white shadow-inner text-sm">
-                🤖
-              </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold tracking-tight text-white">Trợ lý StorageHub</h3>
@@ -340,7 +337,7 @@ export default function CustomerSupportChatbot({
           {/* Context Banner: Customer's mapped facility & unit */}
           <div className="flex items-center justify-between border-b border-stone-200 bg-[#f4f1ea] px-3.5 py-2 text-xs text-stone-700">
             <div className="flex items-center gap-1.5 truncate">
-              <span className="text-amber-700 font-bold">📍 Kho:</span>
+              <span className="text-amber-700 font-bold"> Kho:</span>
               <span className="font-semibold text-stone-900 truncate">
                 {selectedUnit} · {selectedFacility}
               </span>
@@ -392,7 +389,7 @@ export default function CustomerSupportChatbot({
                     <p className="whitespace-pre-line">{msg.text}</p>
                     {msg.faqItem?.actionHint && (
                       <div className="mt-2 pt-1.5 border-t border-stone-100 flex items-center gap-1 text-[11px] font-semibold text-amber-700">
-                        <span>👉 Gợi ý: {msg.faqItem.actionHint}</span>
+                        <span> Gợi ý: {msg.faqItem.actionHint}</span>
                       </div>
                     )}
                   </div>
@@ -405,7 +402,7 @@ export default function CustomerSupportChatbot({
             {showLoopBreakerPrompt && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 space-y-2 shadow-sm animate-fade-in">
                 <p className="font-semibold text-amber-900 flex items-center gap-1.5">
-                  <span>⚡ Gợi ý từ hệ thống:</span>
+                  <span> Gợi ý từ hệ thống:</span>
                 </p>
                 <p className="text-[11.5px] leading-relaxed">
                   Bạn đã hỏi một số vấn đề liên tiếp. Để không mất thời gian của bạn, bạn có thể kết nối ngay với nhân viên trực tiếp của cơ sở {selectedFacility}:
@@ -416,7 +413,7 @@ export default function CustomerSupportChatbot({
                     onClick={handleEscalate}
                     className="w-full rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700 transition"
                   >
-                    ⚡ Chuyển ngay cho nhân viên hỗ trợ
+                     Chuyển ngay cho nhân viên hỗ trợ
                   </button>
                   <button
                     type="button"
@@ -445,14 +442,14 @@ export default function CustomerSupportChatbot({
                     onClick={() => handleFeedbackRate('helpful')}
                     className="flex-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 font-bold text-emerald-800 hover:bg-emerald-100 transition flex items-center justify-center gap-1.5"
                   >
-                    <span>👍</span> Hữu ích
+                     Hữu ích
                   </button>
                   <button
                     type="button"
                     onClick={() => handleFeedbackRate('unhelpful')}
                     className="flex-1 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 font-bold text-stone-700 hover:bg-stone-100 transition flex items-center justify-center gap-1.5"
                   >
-                    <span>👎</span> Chưa hài lòng
+                     Chưa hài lòng
                   </button>
                 </div>
               </div>
