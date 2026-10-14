@@ -52,6 +52,7 @@ export interface CustomerFacility {
 }
 
 export interface CustomerUnitType {
+  description?: string | null
   id: string
   facilityId: string
   code: string

@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
+import UnitTypeReviewModal from "./UnitTypeReviewModal"
 
 import {
   XAxis,
@@ -402,8 +403,11 @@ export default function BusinessApp({
   const [backendFacilityIdsByCode, setBackendFacilityIdsByCode] = useState<Record<string, string>>({})
   const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null; revenue: number }>>({})
   const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
+  const [facilityDetailTypes, setFacilityDetailTypes] = useState<CustomerUnitType[]>([])
   const [facilityDataError, setFacilityDataError] = useState<string>()
   const [businessNotifications, setBusinessNotifications] = useState<ApiNotification[]>([])
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reviewRequestId, setReviewRequestId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -1944,6 +1948,7 @@ export default function BusinessApp({
     }
     try {
       const page = await listAccessibleUnitTypes(facility.id, 0, 100)
+      setFacilityDetailTypes(page.data)
       setBackendDetailCounts(Object.fromEntries(page.data.map(type => [type.code, {
         total: type.totalCount ?? 0, occupied: type.occupiedCount ?? 0, available: type.availableCount ?? 0,
       }])))
@@ -3555,7 +3560,18 @@ export default function BusinessApp({
       user={user}
       notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
       onNotificationClick={item => {
-        setPage(item.page || 'facilities')
+        const notification = businessNotifications.find(n => n.id === item.id)
+        if (notification?.title === 'Yêu cầu duyệt thay đổi loại kho' && notification.relatedEntityId) {
+          setPage('facilities')
+          setReviewRequestId(notification.relatedEntityId)
+          setReviewOpen(true)
+        } else if (notification?.title === 'Manager cập nhật ảnh hoặc thông tin loại kho' || notification?.title === 'Loại kho cần BO duyệt lại') {
+          setPage('facilities')
+          setReviewRequestId(null)
+          setReviewOpen(true)
+        } else {
+          setPage('facilities')
+        }
         void markNotificationRead(item.id).then(saved => setBusinessNotifications(current => current.map(n => n.id === saved.id ? saved : n))).catch(() => {})
       }}
       navItems={NAV}
@@ -3570,6 +3586,9 @@ export default function BusinessApp({
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={() => { setReviewRequestId(null); setReviewOpen(true) }}>Duyệt thay đổi loại kho</Button>
+          </div>
           <SectionHeader
             title={lang === "vi" ? "Quản Lý Cơ Sở" : "Facility Management"}
             subtitle={
@@ -7475,6 +7494,7 @@ export default function BusinessApp({
         )}
       </Modal>
 
+      <UnitTypeReviewModal open={reviewOpen} requestId={reviewRequestId} onClose={() => setReviewOpen(false)} />
       {/* 4. Modal Chi Tiết Cơ Sở & Danh Mục Gian Kho Quy Hoạch */}
       <Modal
         open={viewFacilityModal}
@@ -7519,7 +7539,7 @@ export default function BusinessApp({
             const hasWarehouseInfo =
               facilityUnits.length > 0 ||
               (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
-              Object.values(selectedFacility.unitDistribution || {}).some((count) => (count || 0) > 0)
+              Object.values(selectedFacility.unitDistribution || {}).some((count) => Number(count || 0) > 0)
 
             return (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
@@ -7661,234 +7681,73 @@ export default function BusinessApp({
                   </div>
                 </div>
 
-                {/* Bảng phân bổ các gian kho thuộc cơ sở (S, M, L, XL) */}
-                {hasWarehouseInfo ? (
-                <div className="border border-stone-200 rounded-xl overflow-hidden">
-                  <div className="bg-stone-50 px-3 py-2 border-b border-stone-200 flex justify-between items-center text-xs">
-                    <span className="font-bold text-slate-800">
-                      Danh Mục Gian Kho Thuộc Cơ Sở (
-                      {facilityUnits.length || selectedFacility.units} kho quy
-                      hoạch)
-                    </span>
-                    <span className="text-slate-500 font-mono text-[11px]">
-                      Chuẩn S, M, L, XL
-                    </span>
+                {/* Thông số thực tế của từng loại kho, lấy trực tiếp từ API Manager. */}
+                {facilityDetailTypes.length > 0 ? (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold">Loại kho thuộc cơ sở</h3>
+                    {facilityDetailTypes.map(type => {
+                      const missing = "Chưa khai báo"
+                      const measure = (value: number | null | undefined, unit: string) =>
+                        value == null ? missing : `${Number(value).toLocaleString("vi-VN")} ${unit}`
+                      const dimensions = (length: number, width: number, height: number) =>
+                        [length, width, height].some(value => value == null) ? missing : `${length} × ${width} × ${height} m`
+                      const groups = [
+                        { title: "Kích thước và tải trọng", fields: [
+                          ["Kích thước kho (D × R × C)", dimensions(type.lengthM, type.widthM, type.heightM)],
+                          ["Diện tích", measure(type.areaM2, "m²")],
+                          ["Thể tích", measure(type.volumeM3, "m³")],
+                          ["Tải trọng tối đa", measure(type.maxLoadKg, "kg")],
+                        ]},
+                        { title: "Khung kệ và thiết bị hỗ trợ", fields: [
+                          ["Số khung kệ", measure(type.rackCount, "khung")],
+                          ["Kích thước khung (D × R × C)", dimensions(type.rackLengthM, type.rackWidthM, type.rackHeightM)],
+                          ["Chiều rộng lối đi", measure(type.aisleWidthM, "m")],
+                          ["Xe đẩy hỗ trợ", type.trolleyType || missing],
+                          ["Sức chứa thùng nhỏ", measure(type.smallBoxCapacity, "thùng")],
+                          ["Sức chứa thùng lớn", measure(type.largeBoxCapacity, "thùng")],
+                        ]},
+                        { title: "Số lượng và giá thuê", fields: [
+                          ["Tổng số gian", measure(type.totalCount, "gian")],
+                          ["Đang sử dụng", measure(type.occupiedCount, "gian")],
+                          ["Còn trống", measure(type.availableCount, "gian")],
+                          ["Giá thuê mỗi tháng", Number(type.monthlyPrice) > 0 ? formatCurrency(type.monthlyPrice) : "Chờ BO định giá"],
+                          ["Tiền cọc đảm bảo", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
+                          ["Trạng thái loại kho", ({ active: "Đã công bố", awaiting_pricing: "Chờ BO định giá / duyệt", draft: "Đang thiết lập", inactive: "Ngừng hoạt động" } as Record<string, string>)[type.status] || type.status],
+                        ]},
+                      ]
+                      return (
+                        <article key={type.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+                          <div className="flex flex-col gap-4 border-b border-stone-200 bg-stone-50 p-4 sm:flex-row">
+                            {type.imageUrl && <img src={type.imageUrl} alt={type.name} className="h-28 w-full rounded-lg object-cover sm:w-40" />}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-slate-500 break-words">{type.code}</p>
+                              <h4 className="mt-1 text-base font-semibold break-words">{type.name}</h4>
+                              <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-600">{type.description || "Chưa có mô tả"}</p>
+                              {type.imageUrl && <a href={type.imageUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-xs text-amber-700 underline">Xem ảnh gốc</a>}
+                            </div>
+                          </div>
+                          <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
+                            {groups.map((group, groupIndex) => (
+                              <section key={group.title} className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 ${groupIndex === 2 ? 'lg:col-span-2' : ''}`}>
+                                <h5 className="border-b border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-slate-800">{group.title}</h5>
+                                <dl className={groupIndex === 2 ? "grid gap-px bg-stone-200 sm:grid-cols-2 lg:grid-cols-3" : "divide-y divide-stone-100 px-4"}>
+                                  {group.fields.map(([label, value]) => (
+                                    <div key={label} className={groupIndex === 2 ? "min-w-0 bg-white px-4 py-3" : "grid grid-cols-1 gap-1 py-3 text-sm sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] sm:gap-3"}>
+                                      <dt className={groupIndex === 2 ? "mb-1 text-xs text-slate-500" : "text-slate-500"}>{label}</dt>
+                                      <dd className={`min-w-0 whitespace-pre-wrap break-words font-medium ${groupIndex === 2 ? 'text-base text-slate-900' : 'text-sm text-slate-800'}`}>{value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </section>
+                            ))}
+                          </div>
+                        </article>
+                      )
+                    })}
                   </div>
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-stone-100 text-slate-700 font-semibold border-b border-stone-200">
-                      <tr>
-                        <th className="p-2.5">Phân loại</th>
-                        <th className="p-2.5">Kích thước kho</th>
-                        <th className="p-2.5">Thể tích</th>
-                        <th className="p-2.5 text-center font-bold text-amber-900 bg-amber-50/50">Tải trọng (kg)</th>
-                        <th className="p-2.5 text-blue-900 bg-blue-50/40">Kích thước khung</th>
-                        <th className="p-2.5 text-center text-blue-900 bg-blue-50/40">Số khung</th>
-                        <th className="p-2.5 hidden md:table-cell">Lối xe / Xe đẩy</th>
-                        <th className="p-2.5">Số lượng</th>
-                        <th className="p-2.5">Đang thuê</th>
-                        <th className="p-2.5">Còn trống</th>
-                        <th className="p-2.5">Đơn giá / tháng</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {(() => {
-                        const customSpecs =
-                          selectedFacility.unitCustomSpecs &&
-                          Array.isArray(selectedFacility.unitCustomSpecs) &&
-                          selectedFacility.unitCustomSpecs.length > 0
-                            ? selectedFacility.unitCustomSpecs
-                            : null
-
-                        const allSizes: string[] = customSpecs
-                          ? customSpecs.map((cs: FacilityCustomUnitSpec) => cs.sizeCode)
-                          : Array.from(
-                              new Set<string>([
-                                ...Object.keys(selectedFacility.unitDistribution || {}),
-                                ...facilityUnits.map((u) => (u as any).size || (u.type === "Small" ? "S" : u.type === "Medium" ? "M" : u.type === "Large" ? "L" : u.type === "Extra Large" ? "XL" : (u as any).sizeCode || "S")),
-                              ]),
-                            )
-
-                        return allSizes.map((size: string) => {
-                          const customSpec = customSpecs?.find((cs: FacilityCustomUnitSpec) => cs.sizeCode === size)
-                          const stdSpec = UNIT_SPECS[size as keyof typeof UNIT_SPECS]
-
-                          const unitsOfSize = facilityUnits.filter(
-                            (u) =>
-                              ((u as any).size ||
-                                (u as any).sizeCode ||
-                                (u.type === "Small"
-                                  ? "S"
-                                  : u.type === "Medium"
-                                    ? "M"
-                                    : u.type === "Large"
-                                      ? "L"
-                                      : u.type === "Extra Large"
-                                        ? "XL"
-                                        : String(u.type))) === size,
-                          )
-
-                          const totalSize =
-                            backendDetailCounts[size]?.total ?? (facilityUnits.length > 0
-                              ? unitsOfSize.length
-                              : (selectedFacility.unitDistribution?.[size] ?? customSpec?.count ?? 0))
-
-                          const occupiedSize = backendDetailCounts[size]?.occupied ?? unitsOfSize.filter(
-                            (u) => u.status === "occupied" || (u.status as string) === "rented",
-                          ).length
-
-                          const availableSize =
-                            backendDetailCounts[size]?.available ?? (unitsOfSize.filter((u) => u.status === "available").length ||
-                            Math.max(0, totalSize - occupiedSize))
-
-                          const loadKg =
-                            customSpec?.maxLoadKg ??
-                            selectedFacility.unitLoadLimits?.[size] ??
-                            (unitsOfSize[0]?.maxLoadKg ??
-                              (stdSpec?.maxLoadKg ??
-                                (size === "S" ? 1000 : size === "M" ? 1600 : size === "L" ? 2800 : 4000)))
-
-                          const lengthM =
-                            customSpec?.lengthM ??
-                            selectedFacility.unitDimensions?.[size]?.lengthM ??
-                            stdSpec?.lengthM ??
-                            8
-                          const widthM =
-                            customSpec?.widthM ??
-                            selectedFacility.unitDimensions?.[size]?.widthM ??
-                            stdSpec?.widthM ??
-                            10
-                          const heightM =
-                            customSpec?.heightM ??
-                            (selectedFacility.unitDimensions?.[size] as any)?.heightM ??
-                            stdSpec?.heightM ??
-                            5
-                          const dimensionsStr = `${lengthM} × ${widthM} × ${heightM} m`
-                          const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
-
-                          // Frame info
-                          const frameCount =
-                            customSpec?.frameCount ??
-                            selectedFacility.unitFrameCounts?.[size] ??
-                            stdSpec?.frameCount ??
-                            0
-                          const rawFrameDims =
-                            customSpec?.frameDimensions ??
-                            selectedFacility.unitFrameDimensions?.[size] ??
-                            (stdSpec?.frameDimensions
-                              ? {
-                                  lengthM: stdSpec.frameDimensions.lengthM ?? stdSpec.frameDimensions.depthM,
-                                  widthM: stdSpec.frameDimensions.widthM,
-                                  heightM: stdSpec.frameDimensions.heightM,
-                                }
-                              : undefined)
-
-                          const frameDimStr = rawFrameDims
-                            ? `${rawFrameDims.lengthM ?? (rawFrameDims as any).depthM} × ${rawFrameDims.widthM} × ${rawFrameDims.heightM} m`
-                            : "-"
-
-                          const laneWidth =
-                            customSpec?.laneWidthM ??
-                            selectedFacility.unitLaneWidths?.[size] ??
-                            stdSpec?.vehicleLaneWidthM ??
-                            4
-
-                          const cartText = stdSpec?.cartEquipment ?? "Xe đẩy tiêu chuẩn"
-                          const displayName = customSpec?.name ?? (stdSpec?.name || `Kho ${size}`)
-                          const badgeClass =
-                            customSpec?.badgeClass ||
-                            (size === "S"
-                              ? "bg-sky-50 text-sky-700 border-sky-200"
-                              : size === "M"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : size === "L"
-                                  ? "bg-purple-50 text-purple-700 border-purple-200"
-                                  : size === "XL"
-                                    ? "bg-amber-50 text-amber-800 border-amber-200"
-                                    : "bg-rose-50 text-rose-800 border-rose-200")
-
-                          return (
-                            <tr key={size} className="hover:bg-amber-50/50">
-                              <td className="p-2.5">
-                                <span
-                                  className={`inline-block px-2 py-0.5 rounded font-mono text-xs font-bold border ${badgeClass}`}
-                                >
-                                  {size} · {displayName}
-                                </span>
-                              </td>
-                              <td className="p-2.5 font-medium text-slate-700 font-mono">
-                                {dimensionsStr}
-                              </td>
-                              <td className="p-2.5 text-slate-600 font-mono">
-                                {volumeM3} m³
-                              </td>
-                              <td className="p-2.5 text-center font-bold text-stone-800 bg-amber-50/20 font-mono">
-                                {loadKg.toLocaleString("vi-VN")} kg
-                              </td>
-                              <td className="p-2.5 font-mono text-blue-900 font-semibold bg-blue-50/30">
-                                {frameDimStr}
-                              </td>
-                              <td className="p-2.5 text-center font-mono font-bold text-blue-950 bg-blue-50/30">
-                                {frameCount} khung
-                              </td>
-                              <td className="p-2.5 hidden md:table-cell text-slate-600">
-                                <div>{cartText}</div>
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  lối xe {laneWidth} m · cao {heightM} m
-                                </div>
-                              </td>
-                              <td className="p-2.5 font-bold text-slate-800 font-mono">
-                                {totalSize} kho
-                              </td>
-                              <td className="p-2.5 text-blue-700 font-semibold font-mono">
-                                {occupiedSize} kho
-                              </td>
-                              <td className="p-2.5 text-emerald-700 font-semibold font-mono">
-                                {availableSize} kho
-                              </td>
-                              <td className="p-2.5 font-mono font-bold text-emerald-800">
-                                {getFacilitySizePriceFormatted(selectedFacility, size)}
-                              </td>
-                            </tr>
-                          )
-                        })
-                      })()}
-                    </tbody>
-                    <tfoot className="bg-stone-50 border-t border-stone-200 font-semibold text-slate-800">
-                      <tr>
-                        <td colSpan={3} className="p-2.5 font-bold">
-                          {lang === "vi" ? "Tổng cộng" : "Total"}
-                        </td>
-                        <td className="p-2.5 text-center font-bold text-amber-900 bg-amber-50/40 font-mono">
-                          {totalFacilityLoadTon} tấn
-                        </td>
-                        <td colSpan={3} className="hidden md:table-cell"></td>
-                        <td className="p-2.5 font-bold text-amber-800">
-                          {selectedFacility.units} kho
-                        </td>
-                        <td className="p-2.5 text-blue-700 font-bold">
-                          {selectedFacility.occupied || 0} kho
-                        </td>
-                        <td className="p-2.5 text-emerald-700 font-bold">
-                          {Math.max(
-                            0,
-                            (selectedFacility.units || 0) -
-                            (selectedFacility.occupied || 0),
-                          )}{" "}
-                          kho
-                        </td>
-                        <td className="p-2.5 font-mono font-bold text-emerald-800">
-                          {selectedFacility.price}/tháng từ
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-center">
                     <p className="font-semibold text-stone-700">Chưa có thông tin loại kho</p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      Manager của cơ sở chưa khai báo loại kho và số lượng kho thực tế.
-                    </p>
                   </div>
                 )}
 
