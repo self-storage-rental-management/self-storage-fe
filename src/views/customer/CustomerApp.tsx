@@ -4,6 +4,7 @@ import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, Section
 import { formatVnd, vndToLegacyBase } from '../../i18n/currency'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import CustomerUnitDetails from './CustomerUnitDetails'
+import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import type { User } from '../../types'
 import type { TicketItem } from '../../types/support'
@@ -25,6 +26,7 @@ import { requestReturn as requestReturnApi } from '../../services/returnApi'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from '../../domain/reservationCheckInPolicy'
+import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
@@ -725,6 +727,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [searchFacility, setSearchFacility] = useState('')
   const [unitSearch, setUnitSearch] = useState('')
   const [reservationFacilityFilter, setReservationFacilityFilter] = useState('all')
+  const [receiptRentalTarget, setReceiptRentalTarget] = useState<string>()
+  const [paymentHistoryFilter, setPaymentHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
   const [rentalTypeFilter, setRentalTypeFilter] = useState('all')
@@ -769,7 +773,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Goods declaration form in Booking Modal
   const [goodsItems, setGoodsItems] = useState<GoodsDeclarationItem[]>([createGoodsDeclarationItem('goods-1')])
-  const [goodsCondition, setGoodsCondition] = useState('6 kiện nguyên vẹn, bao gói cẩn thận')
+  const [goodsCondition, setGoodsCondition] = useState('')
   const [moveInDate, setMoveInDate] = useState(availabilityPeriod.startDate)
   const [bookingAppointmentTime, setBookingAppointmentTime] = useState('09:00')
   const [bookingStartedAt, setBookingStartedAt] = useState(() => Date.now())
@@ -796,7 +800,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [backendUnitTypes, availabilityPeriod, availabilityRevision])
   const resetBookingForm = () => {
     setGoodsItems([createGoodsDeclarationItem('goods-1')])
-    setGoodsCondition('6 kiện nguyên vẹn, bao gói cẩn thận')
+    setGoodsCondition('')
     setMoveInDate(availabilityPeriod.startDate)
     setBookingAppointmentTime('09:00')
     setRentalMonths(3)
@@ -841,9 +845,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const latestCheckInDate = policyDateInput(checkInWindow.deadlineAt)
   const latestCheckInTime = policyTimeInput(checkInWindow.deadlineAt)
   const previousReviewRequirement = useRef(hasOtherGoods)
+  const previousBookingStart = useRef<number | null>(null)
 
   useEffect(() => {
     if (!bookOpen) return
+    if (previousReviewRequirement.current === hasOtherGoods && previousBookingStart.current === bookingStartedAt) return
+    previousBookingStart.current = bookingStartedAt
     const selectedAt = moveInDate && bookingAppointmentTime
       ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`)
       : null
@@ -972,7 +979,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Data scoping for Customer (P1.4)
   const myHolds = holds.filter(h => h.customerId === user.id || h.customerName === user.name || h.customerEmail === user.email)
-  const visibleMyHolds = myHolds.filter(hold => !hold.customerArchivedAt)
+  const visibleMyHolds = myHolds.filter(hold => !hold.customerArchivedAt && !['completed', 'COMPLETED'].includes(hold.status))
   const myRentals = rentals.filter(r => r.customerId === user.id || r.customerName === user.name || r.customerEmail === user.email)
   const visibleMyRentals = myRentals.filter(rental => !rental.customerArchivedAt && rental.status !== 'completed')
   const visibleMyContracts = contracts.filter(contract => !contract.customerArchivedAt && (
@@ -1022,7 +1029,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
   })
-  const filteredBackendReservations = backendReservations.filter(reservation => {
+  const pendingHandoverReservations = backendReservations.filter(reservation => reservation.status !== 'COMPLETED')
+  const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
@@ -1065,7 +1073,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       date: notification.createdAt,
       title: notification.title,
       message: notification.content,
-      page: notification.type === 'RETURN' || notification.type === 'CHECKIN' ? 'rental-records'
+      page: notification.title === 'Biên bản bàn giao đang chờ xác nhận' ? 'reservations'
+        : notification.type === 'RETURN' || notification.type === 'CHECKIN' ? 'rental-records'
         : notification.type === 'SUPPORT' ? 'support'
           : notification.type === 'SYSTEM' ? 'overview' : 'reservations',
       targetId: notification.relatedEntityId || undefined,
@@ -1405,6 +1414,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }).catch(() => undefined)
     }
     navigateTo(notification.page)
+    if (notification.page === 'reservations') {
+      setReservationFacilityFilter('all')
+      setReservationSizeFilter('all')
+    }
     if (notification.id.startsWith('ticket-')) {
       setSupportTab('All')
       setSupportSearch('')
@@ -1420,6 +1433,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
     const scrollTimer = window.setTimeout(() => {
       const target = document.getElementById(`customer-record-${targetId}`)
+        || document.getElementById(`customer-reservation-${targetId}`)
       const scrollContainer = target?.closest('[data-layout-scroll-container]') as HTMLElement | null
       if (!target || !scrollContainer) return
       const targetRect = target.getBoundingClientRect()
@@ -1483,7 +1497,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Vui lòng nhập cân nặng mỗi kiện cho tất cả mẫu hàng.'
     if (goodsWeightNumber > selectedUnit.maxLoadKg) errors.weightLimit = `${'Tổng cân nặng vượt tải trọng sàn'} (${selectedUnit.maxLoadKg} kg).`
     if (!requestedAt || !isCheckInAppointmentAllowed(requestedAt, checkInWindow)) errors.moveInDate = `Lịch nhận kho phải từ ${formatPolicyDateTime(checkInWindow.availableAt)} đến ${formatPolicyDateTime(checkInWindow.deadlineAt)}, trong giờ làm việc từ 08:00 đến 17:00 và theo khung 30 phút.`
-    if (!bookingAppointmentTime) errors.appointmentTime = 'Vui lòng chọn khung giờ nhận kho.'
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(moveInDate) || !requestedAt || Number.isNaN(requestedAt.getTime()) || policyDateInput(requestedAt) !== moveInDate) errors.moveInDate = 'Vui lòng nhập ngày hợp lệ theo định dạng DD/MM/YYYY.'
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(bookingAppointmentTime)) errors.appointmentTime = 'Vui lòng nhập giờ hợp lệ theo định dạng HH:mm (24 giờ).'
+    else if (!withinFacilityHours(bookingAppointmentTime, selectedTarget?.facility.accessHours)) errors.appointmentTime = `Giờ nhận kho nằm ngoài giờ hoạt động của cơ sở: ${selectedTarget?.facility.accessHours}. Vui lòng chọn giờ khác.`
     setBookingErrors(errors)
     if (Object.keys(errors).length) {
       showToast('Vui lòng kiểm tra lại các thông tin được đánh dấu.')
@@ -2051,7 +2067,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <Select label="Lọc theo kích thước kho" value={reservationSizeFilter} onChange={event => setReservationSizeFilter(event.target.value)}><option value="all">Tất cả kích thước</option><option value="S">Kho nhỏ (S)</option><option value="M">Kho vừa (M)</option><option value="L">Kho lớn (L)</option><option value="XL">Kho rất lớn (XL)</option></Select>
               <Button variant="outline" disabled={reservationFacilityFilter === 'all' && reservationSizeFilter === 'all'} onClick={() => { setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button>
             </div>
-            <p className="mt-3 text-xs text-stone-500">Hiển thị {isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length}/{isApiAuthenticated() ? backendReservations.length : visibleMyHolds.length} đơn đặt giữ kho.</p>
+            <p className="mt-3 text-xs text-stone-500">Hiển thị {isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length}/{isApiAuthenticated() ? pendingHandoverReservations.length : visibleMyHolds.length} đơn đặt giữ kho.</p>
           </Card>
 
           {isApiAuthenticated() ? (
@@ -2064,8 +2080,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 onVerify={() => { setBackendOtpReservation(reservation); setBackendOtpCode(''); setBackendOtpMessage(null) }}
                 onCancel={() => cancelBackendReservation(reservation)}
                 onRefresh={refreshBackendReservations}
+                onReceiptConfirmed={reservationId => {
+                  setReceiptRentalTarget(reservationId)
+                  navigateTo('rental-records')
+                }}
               />)}
-              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{backendReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Chưa có đơn đặt giữ kho nào'}</h2><p className="mt-1 text-sm text-stone-500">{backendReservations.length ? 'Hãy chọn lại cơ sở hoặc kích thước kho.' : 'Đơn đặt giữ kho của bạn sẽ hiển thị tại đây.'}</p></Card>}
+              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{pendingHandoverReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Không có đơn đặt giữ kho đang chờ bàn giao'}</h2><p className="mt-1 text-sm text-stone-500">{pendingHandoverReservations.length ? 'Hãy chọn lại cơ sở hoặc kích thước kho.' : 'Kho đã bàn giao được theo dõi trong Hồ sơ thuê.'}</p></Card>}
             </div>
           ) : filteredReservationHolds.length ? (
             <div className="grid gap-4">
@@ -2324,7 +2344,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />}
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} focusStorageUnitId={receiptRentalTarget} />}
       {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <section className="space-y-4">
@@ -2678,6 +2698,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <Card className="p-4"><p className="text-xs text-stone-500">{'Gia hạn chờ thanh toán'}</p><p className="mt-1 text-2xl font-extrabold text-amber-700">{renewals.filter(r => r.customerId === user.id && r.status === 'approved').length}</p></Card>
           </div>
 
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc lịch sử thanh toán">
+            <Button variant={paymentHistoryFilter === 'all' ? 'primary' : 'outline'} onClick={() => setPaymentHistoryFilter('all')}>Tất cả</Button>
+            <Button variant={paymentHistoryFilter === 'payments' ? 'primary' : 'outline'} onClick={() => setPaymentHistoryFilter('payments')}>Lịch sử thanh toán</Button>
+            <Button variant={paymentHistoryFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setPaymentHistoryFilter('settlement')}>Quyết toán</Button>
+          </div>
           <Card>
             <Table>
               <Thead>
@@ -2691,7 +2716,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </tr>
               </Thead>
               <Tbody>
-                {myPayments.map(payment => {
+                {myPayments.filter(payment => paymentHistoryFilter === 'all' || (paymentHistoryFilter === 'settlement' ? ['DAMAGE_FEE', 'REFUND'].includes(payment.type) : !['DAMAGE_FEE', 'REFUND'].includes(payment.type))).map(payment => {
                   const rental = myRentals.find(r => r.id === payment.rentalId)
                   const hold = myHolds.find(h => h.id === payment.reservationId)
                   const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Cọc giữ chỗ 40%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
@@ -3337,8 +3362,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
               {schedulePolicyMessage && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950">{schedulePolicyMessage}</div>}
               <div className="grid gap-3 sm:grid-cols-2">
-                <div><Input label="Ngày nhận kho mong muốn" type="date" value={moveInDate} min={earliestCheckInDate} max={latestCheckInDate} onChange={e => { setMoveInDate(e.target.value); setSchedulePolicyMessage(null) }} />{bookingErrors.moveInDate && <p className="mt-1 text-xs text-red-700">{bookingErrors.moveInDate}</p>}</div>
-                <div><Input label="Giờ nhận kho mong muốn" type="time" min={moveInDate === earliestCheckInDate ? earliestCheckInTime : '08:00'} max={moveInDate === latestCheckInDate ? latestCheckInTime : '17:00'} step="1800" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
+                <div><VietnameseDateInput value={moveInDate} min={earliestCheckInDate} max={latestCheckInDate} onChange={value => { setMoveInDate(value); setSchedulePolicyMessage(null) }} />{bookingErrors.moveInDate && <p className="mt-1 text-xs text-red-700">{bookingErrors.moveInDate}</p>}</div>
+                <div><Input label="Giờ nhận kho mong muốn" type="time" step="1800" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
               </div>
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
                 <b>Ngày bắt đầu tính kỳ thuê:</b> {earliestCheckInDate}. Kỳ thuê bắt đầu từ ngày kho sẵn sàng sớm nhất, không phụ thuộc việc bạn chọn đến muộn hơn trong cửa sổ 7 ngày.

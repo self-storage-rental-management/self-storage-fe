@@ -26,6 +26,11 @@ export default function CustomerPaymentHistory() {
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [receipt, setReceipt] = useState<HistoryEntry | null>(null)
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
+  const visibleEntries = entries.filter(entry => {
+    const settlement = entry.category === 'damage' || ['REFUND', 'DAMAGE_FEE'].includes(entry.reservationPayment?.purpose || '')
+    return historyFilter === 'all' || (historyFilter === 'settlement' ? settlement : !settlement)
+  })
   useEffect(() => {
     let disposed = false
     setLoading(true)
@@ -63,9 +68,9 @@ export default function CustomerPaymentHistory() {
     entry.reservationPayment && entry.category === "deposit"
       ? paymentRecordLabel(entry.reservationPayment)
       : entry.status === "PAID"
-        ? "Đã xác nhận"
+        ? "Thanh toán thành công"
         : ["FAILED", "CANCELLED"].includes(entry.status)
-          ? "Thanh toán không thành công"
+          ? "Thanh toán thất bại"
           : "Chưa ghi nhận tiền"
   return (
     <div className="fade-in space-y-4">
@@ -108,6 +113,11 @@ export default function CustomerPaymentHistory() {
           {warning} Tải lại trang để thử lại.
         </p>
       ))}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc giao dịch">
+        <Button variant={historyFilter === 'all' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('all')}>Tất cả</Button>
+        <Button variant={historyFilter === 'payments' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('payments')}>Lịch sử thanh toán</Button>
+        <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>
+      </div>
       <Card>
         <Table>
           <Thead>
@@ -118,10 +128,11 @@ export default function CustomerPaymentHistory() {
               <Th>Phương Thức</Th>
               <Th>Số Tiền</Th>
               <Th>Trạng Thái</Th>
+              <Th>Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
-            {entries.map((entry) => (
+            {visibleEntries.map((entry) => (
               <Tr key={entry.id}>
                 <Td>
                   <span className="break-all text-xs text-stone-600">{entry.reservationPayment?.transactionReference || entry.id}</span>
@@ -134,13 +145,13 @@ export default function CustomerPaymentHistory() {
                 <Td>
                   <div className="space-y-2">
                     <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (entry.status === "PAID" ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
-                    {entry.status === "PAID" && <div><Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button></div>}
                   </div>
                 </Td>
+                <Td>{entry.status === "PAID" && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</Td>
               </Tr>
             ))}
-            {!loading && !error && !entries.length && (
-              <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">Chưa có giao dịch nào.</p></td></tr>
+            {!loading && !error && !visibleEntries.length && (
+              <tr><td colSpan={7}><p className="py-6 text-center text-sm text-stone-500">Chưa có giao dịch trong nhóm đã chọn.</p></td></tr>
             )}
           </Tbody>
         </Table>

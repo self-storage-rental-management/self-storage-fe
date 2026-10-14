@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import ManagerWarehouseImageField from "./ManagerWarehouseImageField"
 import {
   Badge,
   Button,
@@ -182,6 +183,10 @@ function InventoryRead({
             {viewingType.imageUrl && <img src={viewingType.imageUrl} alt={viewingType.name} className="h-32 w-full rounded-lg object-cover sm:w-44" />}
             <div className="min-w-0"><h3 className="font-semibold">{viewingType.code} · {viewingType.name}</h3><p className="mt-2 whitespace-pre-wrap break-words text-stone-600">{viewingType.description || 'Chưa có mô tả'}</p></div>
           </div>
+          {viewingType.detailImageUrl && <figure className="rounded-xl border border-stone-200 p-4">
+            <figcaption className="mb-2 text-sm font-semibold">Ảnh chi tiết / sơ đồ bố trí</figcaption>
+            <img src={viewingType.detailImageUrl} alt={`Sơ đồ ${viewingType.name}`} className="max-h-72 w-full object-contain" />
+          </figure>}
           {(() => {
             const fields = [
               ['Kích thước kho (D × R × C)', `${viewingType.lengthM} × ${viewingType.widthM} × ${viewingType.heightM} m`],
@@ -255,11 +260,12 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     code: '', name: '', description: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
     rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
     aisleWidthM: '1.8', trolleyType: 'Xe đẩy tay / xe sàn nhỏ', smallBoxCapacity: '336', largeBoxCapacity: '200',
-    physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
+    physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '', detailImageUrl: initial?.detailImageUrl || '',
     ...(initial ? Object.fromEntries(Object.entries(initial).filter(([key]) => ['code', 'name', 'description', 'lengthM', 'widthM', 'heightM', 'maxLoadKg', 'rackCount', 'rackLengthM', 'rackWidthM', 'rackHeightM', 'aisleWidthM', 'trolleyType', 'smallBoxCapacity', 'largeBoxCapacity', 'floor', 'zone', 'imageUrl'].includes(key)).map(([key, value]) => [key, value == null ? '' : String(value)])) : {}),
     ...(initial ? { physicalUnitCount: String(initial.totalCount ?? 0) } : {}),
   })
   const [busy, setBusy] = useState(false)
+  const [imageReading, setImageReading] = useState(false)
   const [error, setError] = useState<string>()
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
@@ -267,6 +273,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     </label>
   )
   const submit = async () => {
+    if (imageReading) return
     setBusy(true); setError(undefined)
     try {
       const input = {
@@ -278,6 +285,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         smallBoxCapacity: Number(form.smallBoxCapacity), largeBoxCapacity: Number(form.largeBoxCapacity),
         physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
         imageUrl: form.imageUrl.trim() || null,
+        detailImageUrl: form.detailImageUrl.trim() || null,
       }
       if (initial) await updateManagerUnitType(initial.id, input)
       else await createManagerUnitType(facilityId, input)
@@ -294,31 +302,11 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
           <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
         </label>
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-stone-700">Hình ảnh loại kho / sơ đồ bố trí
-            <input type="url" placeholder="Dán đường dẫn ảnh https://…" value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl} disabled={busy}
-              onChange={event => setForm(current => ({ ...current, imageUrl: event.target.value }))}
-              className="mt-1 w-full rounded-lg border border-stone-300 p-3" />
-          </label>
-          <label className="block text-sm text-stone-600">Hoặc chọn ảnh từ máy (JPG, PNG, WebP; tối đa 2 MB)
-            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} className="mt-2 block w-full text-sm" onChange={event => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (!file) return
-              if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
-                setError('Vui lòng chọn ảnh JPG, PNG hoặc WebP không quá 2 MB.')
-                return
-              }
-              const reader = new FileReader()
-              reader.onload = () => { setForm(current => ({ ...current, imageUrl: String(reader.result) })); setError('') }
-              reader.onerror = () => setError('Không đọc được ảnh. Vui lòng chọn lại.')
-              reader.readAsDataURL(file)
-            }} />
-          </label>
-          {form.imageUrl && <div className="flex flex-col gap-2">
-            <img src={form.imageUrl} alt="Ảnh loại kho xem trước" className="max-h-64 w-full rounded-lg border border-stone-200 bg-stone-50 object-contain" />
-            <Button variant="outline" disabled={busy} onClick={() => setForm(current => ({ ...current, imageUrl: '' }))}>Bỏ ảnh</Button>
-          </div>}
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <ManagerWarehouseImageField label="Ảnh tổng quan kho" value={form.imageUrl} disabled={busy || imageReading}
+            onChange={value => setForm(current => ({ ...current, imageUrl: value }))} onReading={setImageReading} onError={setError} />
+          <ManagerWarehouseImageField label="Ảnh chi tiết / sơ đồ bố trí" value={form.detailImageUrl} disabled={busy || imageReading}
+            onChange={value => setForm(current => ({ ...current, detailImageUrl: value }))} onReading={setImageReading} onError={setError} />
         </div>
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
@@ -341,7 +329,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }

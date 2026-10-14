@@ -7713,6 +7713,10 @@ export default function BusinessApp({
                               {type.imageUrl && <a href={type.imageUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-xs text-amber-700 underline">Xem ảnh gốc</a>}
                             </div>
                           </div>
+                          {type.detailImageUrl && <figure className="border-b border-stone-200 p-4">
+                            <figcaption className="mb-2 text-sm font-semibold">Ảnh chi tiết / sơ đồ bố trí</figcaption>
+                            <img src={type.detailImageUrl} alt={`Sơ đồ ${type.name}`} className="max-h-72 w-full rounded-lg object-contain" />
+                          </figure>}
                           <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
                             {groups.map((group, groupIndex) => (
                               <section key={group.title} className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 ${groupIndex === 2 ? 'lg:col-span-2' : ''}`}>
