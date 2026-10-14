@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, type Context, type ReactNode } from 'react'
 import type {
   Facility,
   StorageUnit,
@@ -1324,7 +1324,14 @@ interface StorageHubContextValue extends StorageHubState {
   deleteUnit: (unitId: string, actor: User) => { success: boolean; reason?: string }
 }
 
-const StorageHubContext = createContext<StorageHubContextValue | null>(null)
+// Keep provider and consumers on the same context during Vite hot updates.
+const StorageHubContext: Context<StorageHubContextValue | null> =
+  import.meta.hot?.data.storageHubContext ?? createContext<StorageHubContextValue | null>(null)
+if (import.meta.hot) {
+  import.meta.hot.dispose(data => {
+    data.storageHubContext = StorageHubContext
+  })
+}
 
 const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
 
