@@ -15,7 +15,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
   const overdueExampleDays = 4
   return <div className="space-y-5">
     <div className="rounded-2xl bg-[#292a27] p-5 text-white"><p className="text-xs text-amber-300">{facilityName}</p><h3 className="mt-1 text-2xl font-bold">{size ? `Kho cỡ ${size}` : 'Loại kho lưu trữ'}</h3><p className="mt-2 text-sm">{address}</p><p className="mt-2 text-xl font-bold">{formatVndAmount(t.monthlyPrice)} / tháng</p></div>
-    {size && <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"><img src={`/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`} alt={`Sơ đồ bố trí kho cỡ ${size}`} className="max-h-[520px] w-full object-contain" /><figcaption className="border-t border-stone-100 p-3 text-center text-xs text-stone-500">Sơ đồ bố trí kho cỡ {size}. Đối chiếu thông số chi tiết bên dưới.</figcaption></figure>}
+    {t.imageUrl ? <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"><img src={t.imageUrl} alt={`Hình ảnh ${t.name}`} className="max-h-[520px] w-full object-contain" /></figure> : <p className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-sm text-stone-500">Chưa có hình ảnh loại kho.</p>}
     <h4 className="text-lg font-bold">1. Thông tin kho chi tiết</h4>
     <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 text-sm">{[
       ['Diện tích', `${t.areaM2} m²`], ['Kích thước kho (D × R × C)', `${t.lengthM} × ${t.widthM} × ${t.heightM} m`],
