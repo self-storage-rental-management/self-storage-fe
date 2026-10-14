@@ -35,7 +35,7 @@ describe('real Return transport and unknown settlement presentation', () => {
   it('preserves null balances and displays unresolved money without a refund success claim', () => {
     expect(isApiReturn(record)).toBe(true)
     const html = renderToStaticMarkup(<ReturnSummary record={record} />)
-    expect(html).toContain('Chưa có dữ liệu xác thực')
+    expect(html).toContain('Chưa xác định')
     expect(html).toContain('chưa được xác nhận thanh toán/hoàn tiền thành công')
     expect(html).not.toContain('FIN_06')
     expect(html).not.toContain('Khoản hoàn tiền: 0')
