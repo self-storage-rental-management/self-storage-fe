@@ -139,3 +139,154 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
   XLSX.writeFile(wb, fileName)
   return fileName
 }
+
+export interface ManagerFacilityExportOptions {
+  facilityName: string
+  metrics: {
+    occupancyRate: number | string
+    totalUnits: number
+    occupiedUnits: number
+    availableUnits: number
+    maintenanceUnits: number
+    monthlyRevenue?: number | string
+    collectedRevenue?: number | string
+    overdueRentalsCount?: number
+    monthCheckinsCount?: number
+    openReturnsCount?: number
+  }
+  units?: Array<{
+    code: string
+    type: string
+    floor: number | string
+    zone: string
+    status: string
+    price: number | string
+    availability?: string
+  }>
+  returns?: Array<{
+    id: string
+    unitId: string
+    customerName: string
+    scheduledDate: string
+    status: string
+    damageClassification?: string
+    notes?: string
+  }>
+  activities?: Array<{
+    timestamp: string
+    action: string
+    actorName: string
+    actorRole: string
+    entityType: string
+    entityId: string
+    notes?: string
+  }>
+}
+
+/**
+ * Xuất file Excel báo cáo vận hành cơ sở gồm các sheet:
+ * Sheet 1: Chỉ số tổng quan & KPIs
+ * Sheet 2: Danh sách gian kho
+ * Sheet 3: Hồ sơ trả kho & nghiệm thu
+ * Sheet 4: Nhật ký hoạt động
+ */
+export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions): string {
+  const wb = XLSX.utils.book_new()
+  const todayStr = new Date().toLocaleDateString('vi-VN')
+  const facilityName = options.facilityName || 'Cơ sở lưu trữ'
+  const m = options.metrics
+
+  // 1. Sheet Tổng quan
+  const sheetSummary: (string | number)[][] = [
+    ['BÁO CÁO HOẠT ĐỘNG VẬN HÀNH CƠ SỞ KHO'],
+    [`Cơ sở: ${facilityName}`, '', `Ngày xuất báo cáo: ${todayStr}`],
+    [],
+    ['CHỈ SỐ VẬN HÀNH', 'GIÁ TRỊ', 'ĐƠN VỊ / MÔ TẢ'],
+    ['Tỷ lệ lấp đầy', typeof m.occupancyRate === 'number' ? `${m.occupancyRate}%` : m.occupancyRate, 'Tỷ lệ gian kho đang có khách thuê'],
+    ['Tổng số gian kho', m.totalUnits, 'Tổng quy mô cơ sở'],
+    ['Gian kho đang sử dụng', m.occupiedUnits, 'Số gian có hợp đồng thuê hoạt động'],
+    ['Gian kho còn trống', m.availableUnits, 'Khả dụng cho khách thuê mới'],
+    ['Gian kho đang bảo trì', m.maintenanceUnits, 'Đang sửa chữa / nghiệm thu hiện trường'],
+    ['Doanh thu định kỳ/tháng', m.monthlyRevenue ?? '—', 'Tổng giá trị hợp đồng active'],
+    ['Tiền đã thu', m.collectedRevenue ?? '—', 'Đã đối soát ghi nhận'],
+    ['Hồ sơ thuê quá hạn', m.overdueRentalsCount ?? 0, 'Cần nhắc nợ hoặc xử lý'],
+    ['Lượt nhận kho trong tháng', m.monthCheckinsCount ?? 0, 'Check-in thành công'],
+    ['Yêu cầu trả kho chờ xử lý', m.openReturnsCount ?? 0, 'Đang chờ nghiệm thu / hoàn tất']
+  ]
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(sheetSummary)
+  wsSummary['!cols'] = [{ wch: 30 }, { wch: 22 }, { wch: 45 }]
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Chỉ số tổng quan')
+
+  // 2. Sheet Danh sách gian kho
+  if (options.units && options.units.length > 0) {
+    const sheetUnits: (string | number)[][] = [
+      ['DANH SÁCH GIAN KHO TẠI CƠ SỞ', '', '', '', '', '', `Xuất ngày: ${todayStr}`],
+      ['Mã gian', 'Loại kho', 'Tầng', 'Khu vực', 'Trạng thái', 'Giá thuê/tháng', 'Khả dụng thực tế']
+    ]
+    options.units.forEach(u => {
+      sheetUnits.push([
+        u.code,
+        u.type,
+        typeof u.floor === 'number' ? `Tầng ${u.floor}` : u.floor,
+        u.zone,
+        u.status,
+        u.price,
+        u.availability || '—'
+      ])
+    })
+    const wsUnits = XLSX.utils.aoa_to_sheet(sheetUnits)
+    wsUnits['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 20 }, { wch: 28 }]
+    XLSX.utils.book_append_sheet(wb, wsUnits, 'Danh sách gian kho')
+  }
+
+  // 3. Sheet Hồ sơ trả kho
+  if (options.returns && options.returns.length > 0) {
+    const sheetReturns: (string | number)[][] = [
+      ['DANH SÁCH YÊU CẦU TRẢ KHO & NGHIỆM THU', '', '', '', '', '', `Xuất ngày: ${todayStr}`],
+      ['Mã hồ sơ', 'Gian kho', 'Khách hàng', 'Ngày hẹn trả', 'Trạng thái', 'Phân loại hư hại', 'Ghi chú hiện trường']
+    ]
+    options.returns.forEach(r => {
+      sheetReturns.push([
+        r.id,
+        r.unitId,
+        r.customerName,
+        r.scheduledDate,
+        r.status,
+        r.damageClassification || 'Chưa kiểm tra',
+        r.notes || '—'
+      ])
+    })
+    const wsReturns = XLSX.utils.aoa_to_sheet(sheetReturns)
+    wsReturns['!cols'] = [{ wch: 16 }, { wch: 15 }, { wch: 25 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 40 }]
+    XLSX.utils.book_append_sheet(wb, wsReturns, 'Hồ sơ trả kho')
+  }
+
+  // 4. Sheet Hoạt động gần đây
+  if (options.activities && options.activities.length > 0) {
+    const sheetActivities: (string | number)[][] = [
+      ['NHẬT KÝ HOẠT ĐỘNG CƠ SỞ', '', '', '', '', '', `Xuất ngày: ${todayStr}`],
+      ['Thời gian', 'Hành động', 'Người thực hiện', 'Vai trò', 'Loại đối tượng', 'Mã đối tượng', 'Ghi chú']
+    ]
+    options.activities.forEach(a => {
+      sheetActivities.push([
+        a.timestamp,
+        a.action,
+        a.actorName,
+        a.actorRole,
+        a.entityType,
+        a.entityId,
+        a.notes || '—'
+      ])
+    })
+    const wsActivities = XLSX.utils.aoa_to_sheet(sheetActivities)
+    wsActivities['!cols'] = [{ wch: 22 }, { wch: 25 }, { wch: 22 }, { wch: 15 }, { wch: 16 }, { wch: 20 }, { wch: 45 }]
+    XLSX.utils.book_append_sheet(wb, wsActivities, 'Nhật ký hoạt động')
+  }
+
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const safeFacName = facilityName.replace(/[^a-zA-Z0-9_\u00C0-\u024F\u1E00-\u1EFF]/g, '_')
+  const fileName = `Bao_Cao_Co_So_${safeFacName}_${dateStr}.xlsx`
+  XLSX.writeFile(wb, fileName)
+  return fileName
+}

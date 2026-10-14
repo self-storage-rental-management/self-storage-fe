@@ -55,7 +55,7 @@ export const renewal: RenewalApiRecord = {
     blockingObligationRefs: null,
     hasUnresolvedDispute: null,
   },
-  allowedActions: ["REJECT", "CANCEL", "ACCEPT_REVISED_QUOTE"],
+  allowedActions: ["CANCEL", "ACCEPT_REVISED_QUOTE"],
   disabledReasons: ["DEFERRED_SOURCE: financial"],
 }
 export const quote: RenewalApiQuote = {

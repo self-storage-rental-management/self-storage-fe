@@ -9,7 +9,6 @@ import { getRental, listRentals } from "./rentalApi"
 import { listCustomerRentals } from "./customerRentalApi"
 import {
   cancelRenewal,
-  decideRenewal,
   getRenewal,
   getRenewalOptions,
   listRenewals,
@@ -52,8 +51,6 @@ describe("D1/D2 wire contracts", () => {
   it("does not confirm a mutation returning another rental/renewal", async () => {
     response({ data: { ...renewal, rentalId: "another-rental" } })
     await expect(submitRenewal("r1", "q1", "", "key")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
-    response({ data: { ...renewal, id: "another-renewal" } })
-    await expect(decideRenewal("n1", "REJECT", "Reason", 2, "key")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
   })
   it.each([{ monthlyPrice: -1 }, { currency: "USD" }])("rejects invalid Rental price semantics %j", async fields => {
     response(page([{ ...rental, ...fields }]))
@@ -225,22 +222,6 @@ describe("D1/D2 wire contracts", () => {
       expectedVersion: 2,
     })
   })
-  it.each(["APPROVE", "REJECT"] as const)(
-    "sends Manager %s without extending Rental",
-    async (decision) => {
-      const fetch = response({ data: renewal })
-      await decideRenewal("n1", decision, "reason", 2, "key-3")
-      expect(fetch).toHaveBeenCalledTimes(1)
-      expect(fetch.mock.calls[0][0]).toMatch(
-        /\/api\/manager\/renewals\/n1\/decision$/,
-      )
-      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
-        decision,
-        reason: "reason",
-        expectedVersion: 2,
-      })
-    },
-  )
   it("cancel is pending workflow command, not a refund/delete", async () => {
     const fetch = response({ data: renewal })
     await cancelRenewal("n1", "reason", 2, "key-4")
@@ -255,8 +236,7 @@ describe("D1/D2 wire contracts", () => {
       reviseRenewal("n1", "q1", "", null as unknown as number, "key"),
     ).toThrow()
   })
-  it("enforces reject/cancel reason and 2000 character bound", async () => {
-    expect(() => decideRenewal("n1", "REJECT", "", 2, "key")).toThrow()
+  it("enforces cancel reason and 2000 character bound", async () => {
     expect(() => cancelRenewal("n1", "", 2, "key")).toThrow()
     expect(() => submitRenewal("r1", "q1", "x".repeat(2001), "key")).toThrow()
   })
@@ -284,7 +264,7 @@ describe("D1/D2 wire contracts", () => {
       )
       .mockResolvedValueOnce(json({ data: renewal }))
     vi.stubGlobal("fetch", fetch)
-    await decideRenewal("n1", "REJECT", "reason", 2, "stable-key")
+    await cancelRenewal("n1", "reason", 2, "stable-key")
     const first = fetch.mock.calls[0][1]
     const replay = fetch.mock.calls[2][1]
     expect(first.body).toBe(replay.body)

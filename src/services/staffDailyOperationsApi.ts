@@ -11,6 +11,8 @@ import { listReturns, type ApiReturn } from "./returnApi"
 import { listSupportTickets } from "./supportApi"
 import type { SupportTicket } from "../types/supportApi"
 import { listUnitAssignmentCandidates, type UnitAssignmentCandidate } from "./unitAssignmentApi"
+import { getAuthenticatedActor } from "./authApi"
+import { listAllRecoveryTasks, type RecoveryTask } from "./recoveryTasksApi"
 
 export type StaffDailyOperationPriority = "high" | "medium" | "low"
 export type StaffDailyOperationPage = "unit-assignments" | "checkin" | "return" | "support" | "tasks"
@@ -24,6 +26,7 @@ export interface StaffDailyOperation {
   sla: string
   priority: StaffDailyOperationPriority
   page: StaffDailyOperationPage
+  recoveryTask?: Pick<RecoveryTask, "id" | "facilityId">
 }
 
 export interface StaffDailyOperationsResult {
@@ -158,6 +161,9 @@ export async function loadStaffDailyOperations(
   credentialAlerts: CredentialAlert[] = [],
 ): Promise<StaffDailyOperationsResult> {
   const { from, to } = dayRange(date)
+  const actor = getAuthenticatedActor()
+  const recoveryScopes = actor?.id === actorId && actor.status === 'ACTIVE' && actor.roles.includes('STAFF') && actor.permissions.includes('rentals:read')
+    ? Object.entries(actor.facilityScopes).filter(([,scope]) => ['READ','OPERATE','MANAGE'].includes(scope)).map(([id]) => id) : []
   const results = await Promise.allSettled([
     listCheckIns({
       page: 0,
@@ -173,6 +179,7 @@ export async function loadStaffDailyOperations(
       pageSize: 100,
     }),
     listUnitAssignmentCandidates({ page: 0, pageSize: 100 }),
+    Promise.allSettled(recoveryScopes.map(id => listAllRecoveryTasks('staff',id))),
   ])
 
   const failedSources: string[] = []
@@ -196,7 +203,15 @@ export async function loadStaffDailyOperations(
     "phân kho",
   )
 
+  const recoveryResults = read<PromiseSettledResult<RecoveryTask[]>[]>(5, "thu hồi kho") || []
+  if (recoveryResults.some(result => result.status === 'rejected')) failedSources.push('thu hồi kho')
+  const recoveryTasks = recoveryResults.flatMap(result => result.status === 'fulfilled' ? result.value : [])
   const tasks = [
+    ...recoveryTasks.filter(task => task.status !== 'CLOSED').map((task): StaffDailyOperation => ({
+      id: `recovery-${task.id}`,title: `Thu hồi kho - ${task.storageUnitCode}`,customer: task.customerName,
+      time: task.receivedAt,dueAt: '',sla: task.status === 'IN_PROGRESS' ? 'Đang xử lý thu hồi' : 'Chờ xử lý thu hồi',
+      priority: 'high',page: 'tasks',recoveryTask: { id: task.id,facilityId: task.facilityId },
+    })),
     ...credentialAlerts
       .filter((item) => !item.dueAt || dayOf(item.dueAt) === date)
       .map(credentialTask),
