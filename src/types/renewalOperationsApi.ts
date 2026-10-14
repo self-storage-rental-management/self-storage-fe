@@ -25,7 +25,7 @@ export interface RenewalOperationState {
 }
 export interface RenewalOperationEvent {
   id: string
-  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY"
+  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "REFUND_EXECUTION"
   occurredAt: string
   actorId: string | null
   data: unknown
@@ -58,14 +58,14 @@ export interface RenewalPayableStatement {
   amount: number
   currency: "VND"
   requiredObligations: string[]
+  remainingRentalAmount?: number
+  overdueFee?: number
+  unpostedOverdueFee?: number
 }
 export type RenewalExceptionAction = "APPROVE_RESCHEDULE_BEFORE_CUTOFF" | "REQUEST_POST_CUTOFF_REVIEW" | "REJECT"
 type Version = { expectedVersion: number }
 type Evidence = { evidenceFileIds: string[] }
 export type RenewalOperationCommand = {
-  action: "deposit"
-  body: Version
-} | {
   action: "appointment" | "reschedule"
   body: Version & {
     appointmentAt: string
@@ -88,6 +88,8 @@ export type RenewalOperationCommand = {
   body: Version & {
     payableStatementRef: string
     receiptReference: string
+    receiptFileId: string
+    paymentMethod?: "CASH" | "BANK_TRANSFER"
     received: true
   }
 } | {

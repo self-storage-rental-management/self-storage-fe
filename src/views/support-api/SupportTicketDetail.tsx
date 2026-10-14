@@ -163,16 +163,7 @@ export default function SupportTicketDetail({
             identity={identity}
             locked={command.locked}
           />
-          {role === "manager" ? <details className="rounded-lg border border-stone-200 p-3">
-            <summary className="cursor-pointer font-medium">Điều phối ngoại lệ</summary>
-            <SupportActionForm
-              key={`${id}:${t.version}`}
-              role={role}
-              ticket={t}
-              command={command}
-              onUploadBusy={onUploadBusy}
-            />
-          </details> : <SupportActionForm
+          {role !== "manager" && <SupportActionForm
             key={`${id}:${t.version}`}
             role={role}
             ticket={t}

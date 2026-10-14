@@ -221,56 +221,23 @@ export async function coordinateRenewal(
   requireId(id)
   validateMutation(command.expectedVersion, key)
   validateText(command.reason)
-  if (command.kind !== "assignment" && command.kind !== "fault")
-    throw new Error("Thao tác không được hỗ trợ.")
-  fields(
-    command,
-    command.kind === "assignment"
-      ? ["kind", "assignedStaffId", "reason", "expectedVersion"]
-      : [
-          "kind",
-          "incidentId",
-          "facilityFault",
-          "reason",
-          "evidenceFileIds",
-          "expectedVersion",
-        ],
-  )
-  if (command.kind === "assignment") requireId(command.assignedStaffId)
-  else {
-    requireId(command.incidentId)
-    validateEvidence(command.evidenceFileIds)
-    if (typeof command.facilityFault !== "boolean")
-      throw new Error("Cần chọn kết luận xác minh.")
-  }
+  // Historical assignment payloads cannot be submitted through the current client.
+  if (command.kind !== "fault") throw new Error("Staff assignment is no longer supported for Renewal.")
+  fields(command, ["kind", "incidentId", "facilityFault", "reason", "evidenceFileIds", "expectedVersion"])
+  requireId(command.incidentId)
+  validateEvidence(command.evidenceFileIds)
+  if (typeof command.facilityFault !== "boolean") throw new Error("A fault verdict is required.")
   const { kind, ...body } = command
   const result = readRentalEnvelope<RenewalOperationResult>(
-    await apiRequest(
-      `/api/manager/renewals/${id}/${
-        kind === "assignment" ? "staff-assignment" : "facility-fault-reviews"
-      }`,
-      {
-        method: "POST",
-        headers: { "Idempotency-Key": key },
-        body: JSON.stringify(body),
-      },
-    ),
-    (v) => {
-      if (
-        !object(v) ||
-        !isOperationState(v.state) ||
-        v.state.renewalId !== id ||
-        !isOperationEvent(v.event) ||
-        v.event.kind !==
-          (kind === "assignment" ? "STAFF_ASSIGNMENT" : "FAULT_REVIEW")
-      )
-        return false
-      const d = v.event.data as RecordValue
-      return command.kind === "assignment"
-        ? d.renewalId === id && d.staffId === command.assignedStaffId
-        : d.incidentId === command.incidentId &&
-            d.facilityFault === command.facilityFault
-    },
+    await apiRequest('/api/manager/renewals/' + id + '/facility-fault-reviews', {
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+      body: JSON.stringify(body),
+    }),
+    (v) => object(v) && isOperationState(v.state) && v.state.renewalId === id
+      && isOperationEvent(v.event) && v.event.kind === "FAULT_REVIEW"
+      && (v.event.data as RecordValue).incidentId === command.incidentId
+      && (v.event.data as RecordValue).facilityFault === command.facilityFault,
   )
   if (
     !isVersion(result.state.expectedVersion) ||
@@ -499,7 +466,7 @@ export async function uploadDuongEvidence(
   entityId?: string,
 ) {
   if (
-    !/^DUONG_(SUPPORT_(PUBLIC|INTERNAL)|RENEWAL_(ARRIVAL|INCIDENT|SIGNED_CONTRACT|EXCEPTION|FAULT_REVIEW|REFUND))$/.test(
+    !/^DUONG_(SUPPORT_(PUBLIC|INTERNAL)|RENEWAL_(ARRIVAL|INCIDENT|SIGNED_CONTRACT|CASH_RECEIPT|EXCEPTION|FAULT_REVIEW|REFUND))$/.test(
       entityType,
     )
   )
