@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
+import BusinessReturnsPanel from "./BusinessReturnsPanel"
 
 import {
   XAxis,
@@ -211,6 +212,8 @@ export interface PolicyItem {
   scopeType?: 'all' | 'specific'
 
   facilityIds?: string[]
+
+  category?: 'billing' | 'climate' | 'prohibited' | 'maintenance'
 }
 
 export interface DurationDiscountItem {
@@ -601,6 +604,13 @@ export default function BusinessApp({
     // { id: 'discounts', label: 'Khuyến mãi & Voucher', icon: Icon.tag, group: 'Thương mại', permission: 'policies:read' },
 
     {
+      id: "returns",
+      label: "Hồ sơ trả kho & quyết toán",
+      icon: null,
+      group: "Vận hành",
+    },
+
+    {
       id: "revenue",
       label: "Báo cáo doanh thu",
       icon: Icon.chart,
@@ -676,7 +686,10 @@ export default function BusinessApp({
   const [policyFacilityFilter, setPolicyFacilityFilter] = useState<string>('all')
   const [policyCategoryFilter, setPolicyCategoryFilter] = useState<'all' | 'billing' | 'climate' | 'prohibited' | 'maintenance'>('all')
 
+  const [policyFormCategory, setPolicyFormCategory] = useState<'billing' | 'climate' | 'prohibited' | 'maintenance'>('billing')
+
   const getPolicyCategory = (p: PolicyItem): 'billing' | 'climate' | 'prohibited' | 'maintenance' => {
+    if (p.category) return p.category
     const id = (p.id || '').toLowerCase()
     const name = (p.name || '').toLowerCase()
     if (id === 'pol-6' || id === 'pol-7' || name.includes('climate') || name.includes('độ ẩm') || name.includes('moisture')) return 'climate'
@@ -725,6 +738,8 @@ export default function BusinessApp({
     setPolicyFormName("")
 
     setPolicyFormValue("")
+
+    setPolicyFormCategory(policyCategoryFilter === 'all' ? 'billing' : policyCategoryFilter)
 
     setPolicyFormScopeType("all")
 
@@ -789,6 +804,8 @@ export default function BusinessApp({
 
       value: policyFormValue.trim(),
 
+      category: policyFormCategory,
+
       scope: computedScope,
 
       scopeType: policyFormScopeType,
@@ -802,9 +819,14 @@ export default function BusinessApp({
       lastUpdated: new Date().toLocaleDateString("vi-VN"),
     }
 
-    const next = [...policiesList, newPolicy]
+    const next = [newPolicy, ...policiesList]
 
     savePolicies(next)
+
+    // Tự động chuyển bộ lọc sang nhóm của chính sách mới (hoặc 'all') để chính sách vừa tạo hiển thị ngay trước mắt
+    if (policyCategoryFilter !== 'all' && policyCategoryFilter !== policyFormCategory) {
+      setPolicyCategoryFilter(policyFormCategory)
+    }
 
     // Đồng bộ cấu hình vận hành hệ thống nếu chính sách liên quan
     const lowerName = newPolicy.name.toLowerCase()
@@ -849,6 +871,7 @@ export default function BusinessApp({
 
     setPolicyFormName(displayName)
     setPolicyFormValue(policy.value)
+    setPolicyFormCategory(policy.category || getPolicyCategory(policy))
 
     let detectedScopeType: 'all' | 'specific' = 'all'
     let detectedFacilityIds: string[] = []
@@ -925,6 +948,8 @@ export default function BusinessApp({
           name: policyFormName.trim() || p.name,
 
           value: policyFormValue.trim(),
+
+          category: policyFormCategory,
 
           scope: computedScope,
 
@@ -1696,7 +1721,7 @@ export default function BusinessApp({
         const parsed = JSON.parse(stored)
         if (Array.isArray(parsed) && parsed.length > 0) return parsed
       }
-    } catch {}
+    } catch { }
     return RUNTIME_PRICING_TIERS
   })
 
@@ -1849,7 +1874,7 @@ export default function BusinessApp({
     setFacilityPricingOverrides(nextOverrides)
     try {
       localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
-    } catch {}
+    } catch { }
 
     const sizes: Array<"S" | "M" | "L" | "XL"> = ["S", "M", "L", "XL"]
     sizes.forEach((sz) => {
@@ -1863,13 +1888,13 @@ export default function BusinessApp({
       uList.forEach((u) => {
         try {
           updateUnit(u.id, { price: p }, user)
-        } catch {}
+        } catch { }
       })
     })
 
     try {
       updateFacility(facId, { price: `${formatCurrency(facilityPricesForm.S)}` }, user)
-    } catch {}
+    } catch { }
 
     setFacilityPriceModalOpen(false)
     showToast(
@@ -1887,7 +1912,7 @@ export default function BusinessApp({
     setFacilityPricingOverrides(nextOverrides)
     try {
       localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
-    } catch {}
+    } catch { }
     setFacilityPriceModalOpen(false)
     showToast(
       lang === "vi"
@@ -3512,11 +3537,24 @@ export default function BusinessApp({
       currentPage={page}
       onNavigate={next => { if (!integrationLocked) setPage(next) }}
       onLogout={() => { if (!integrationLocked) onLogout() }}
-      canAccess={(permission) => (hub?.can ? hub.can(user, permission) : true)}
+      canAccess={(permission) => (permission === "returns:read" || permission === "rentals:update" ? true : hub?.can ? hub.can(user, permission) : true)}
       roleLabel={"Giám Đốc Thương Mại"}
       roleColor="bg-amber-100 text-amber-700"
     >
-      {page === "rental-source-policies" && <DuongPolicyWorkspace onLocked={setIntegrationLocked} />}
+      {page === "rental-source-policies" && <DuongPolicyWorkspace user={user} onLocked={setIntegrationLocked} />}
+      {page === "returns" && (
+        <div className="fade-in space-y-5">
+          <SectionHeader
+            title={lang === "vi" ? "Hồ Sơ Trả Kho & Quyết Toán" : "Return & Settlement Management"}
+            subtitle={
+              lang === "vi"
+                ? "Theo dõi, giám sát và thẩm định hồ sơ nghiệm thu trả kho toàn hệ thống"
+                : "Monitor, supervise, and resolve warehouse return cases and deposit settlements across all facilities"
+            }
+          />
+          <BusinessReturnsPanel user={user} />
+        </div>
+      )}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
@@ -3702,235 +3740,105 @@ export default function BusinessApp({
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                       <div className="flex-1 min-w-0 space-y-3">
                         {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
-                          <div className="flex flex-wrap items-center gap-3">
-                            <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
-                              {facCode}
-                            </span>
-                            <h3 className="font-bold text-slate-900 text-lg leading-snug">
-                              {cleanF.name}
-                            </h3>
-                            <Badge
-                              variant={
-                                cleanF.status === "active" ? "success" : "warning"
-                              }
-                            >
-                              {facilityStatusLabel(cleanF.status)}
-                            </Badge>
-                          </div>
-
-                          {/* Hàng 2: Địa chỉ + Quản lý + Hotline cơ sở + Giờ mở cửa */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs text-slate-600">
-                            <div className="flex items-start gap-1.5">
-                              <span className="truncate" title={cleanF.address}>
-                                {cleanF.address} ·{" "}
-                                <b className="text-slate-800">{cleanF.city}</b>
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span>
-                                Quản lý:{" "}
-                                <b className="text-slate-800">{cleanF.manager}</b>{" "}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span>Hotline cơ sở: <b className="text-slate-800">{cleanF.phone || "Chưa cập nhật"}</b></span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className="truncate"
-                                title={cleanF.accessHours || "06:00 - 22:00"}
-                              >
-                                {cleanF.accessHours || "06:00 - 22:00 hàng ngày"}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Hàng 2.5: Cơ cấu quy mô gian kho (S, M, L, XL) */}
-                          {(() => {
-                            const facUnits = unitsList.filter(
-                              (u) =>
-                                u.facilityId === f.id || u.facilityId === f.code,
-                            )
-
-                            const s =
-                              f.unitDistribution?.S ??
-                              facUnits.filter(
-                                (u) =>
-                                  ((u as any).size ||
-                                    (u.type === "Small" ? "S" : "")) === "S",
-                              ).length
-
-                            const m =
-                              f.unitDistribution?.M ??
-                              facUnits.filter(
-                                (u) =>
-                                  ((u as any).size ||
-                                    (u.type === "Medium" ? "M" : "")) === "M",
-                              ).length
-
-                            const l =
-                              f.unitDistribution?.L ??
-                              facUnits.filter(
-                                (u) =>
-                                  ((u as any).size ||
-                                    (u.type === "Large" ? "L" : "")) === "L",
-                              ).length
-
-                            const xl =
-                              f.unitDistribution?.XL ??
-                              facUnits.filter(
-                                (u) =>
-                                  ((u as any).size ||
-                                    (u.type === "Extra Large" ? "XL" : "")) ===
-                                  "XL",
-                              ).length
-
-                            const totalLoad =
-                              f.totalDesignLoadTon ??
-                              Math.round(
-                                ((s * (f.unitLoadLimits?.S ?? 1000)) +
-                                  (m * (f.unitLoadLimits?.M ?? 1600)) +
-                                  (l * (f.unitLoadLimits?.L ?? 2800)) +
-                                  (xl * (f.unitLoadLimits?.XL ?? 4000))) /
-                                1000 *
-                                10,
-                              ) / 10
-
-                            return (
-                              <div className="flex items-center gap-1.5 flex-wrap text-xs pt-0.5">
-                                <span className="text-slate-400 font-medium text-[11px]">
-                                  {lang === "vi"
-                                    ? "Quy mô chi tiết:"
-                                    : "Unit sizes:"}
-                                </span>
-                                {s > 0 && (
-                                  <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-mono text-[11px] font-semibold">
-                                    {s} Kho Nhỏ (S)
-                                  </span>
-                                )}
-                                {m > 0 && (
-                                  <span className="px-2 py-0.5 rounded bg-green-50 text-green-800 border border-green-200 font-mono text-[11px] font-semibold">
-                                    {m} Kho Vừa (M)
-                                  </span>
-                                )}
-                                {l > 0 && (
-                                  <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-mono text-[11px] font-semibold">
-                                    {l} Kho Lớn (L)
-                                  </span>
-                                )}
-                                {xl > 0 && (
-                                  <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 font-mono text-[11px] font-semibold">
-                                    {xl} Kho Rất Lớn (XL)
-                                  </span>
-                                )}
-                                {totalLoad > 0 && (
-                                  <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200 font-mono text-[11px] font-semibold">
-                                    Tải trọng sàn: {totalLoad} tấn
-                                  </span>
-                                )}
-                                {s + m + l + xl === 0 && (
-                                  <span className="text-slate-400 italic text-[11px]">
-                                    Chưa khai báo loại kho
-                                  </span>
-                                )}
-                              </div>
-                            )
-                          })()}
-
-                          {/* Hàng 3: Thước đo vận hành (Lấp đầy, Doanh thu, Đơn giá từ) */}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
-                            <div>
-                              <p className="text-[11px] text-slate-500 font-medium">
-                                {lang === "vi" ? "Tỷ lệ lấp đầy" : "Occupancy"}
-                              </p>
-                              <p className="font-bold text-slate-900 text-sm">
-                                {occupiedInFac}/{totalUnitsInFac} kho{" "}
-                                <span className="text-slate-500 font-normal text-xs">
-                                  ({occupancyRate}%)
-                                </span>
-                              </p>
-                              <ProgressBar
-                                value={occupiedInFac}
-                                max={totalUnitsInFac || 1}
-                                color={
-                                  occupancyRate >= 80
-                                    ? "bg-emerald-500"
-                                    : occupancyRate >= 40
-                                      ? "bg-blue-500"
-                                      : "bg-amber-500"
-                                }
-                              />
-                            </div>
-
-                            <div>
-                              <p className="text-[11px] text-slate-500 font-medium">
-                                {lang === "vi"
-                                  ? "Doanh thu tháng (MTD)"
-                                  : "Revenue MTD"}
-                              </p>
-                              <p className="font-bold text-slate-900 text-sm">
-                                {isApiAuthenticated() ? formatVndAmount(getFacilityActualRevenue(f)) : formatCurrency(getFacilityActualRevenue(f))}
-                              </p>
-                              {getFacilityActualRevenue(f) === 0 && <p className="text-[10px] text-emerald-700 font-semibold">Chưa phát sinh doanh thu</p>}
-                            </div>
-
-                            <div>
-                              <p className="text-[11px] text-slate-500 font-medium">
-                                {lang === "vi" ? "Cước cơ sở từ" : "Base Rate"}
-                              </p>
-                              <p className="font-bold text-emerald-800 text-sm">
-                                {backendFacilityStats[facCode.trim().toUpperCase()]?.price != null
-                                  ? `${formatVndAmount(backendFacilityStats[facCode.trim().toUpperCase()].price!)}/tháng`
-                                  : "Chưa cấu hình"}
-                              </p>
-                              <p className="text-[10px] text-slate-500">
-                                Kỳ thuê từ 1 tháng
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Hàng 2.8: Chính sách đang áp dụng */}
-                          {(() => {
-                            const activePoliciesForFac = policiesList.filter((p) => {
-                              if (p.scopeType === "all") return true
-                              if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
-                                return p.facilityIds.includes(f.id) || (f.code && p.facilityIds.includes(f.code))
-                              }
-                              const s = (p.scope || "").trim().toLowerCase()
-                              if (["all facilities", "toàn bộ cơ sở", "all", "toàn bộ"].includes(s)) return true
-                              return s.includes(f.name.toLowerCase()) || f.name.toLowerCase().includes(s)
-                            })
-                            const specificCount = activePoliciesForFac.filter(
-                              (p) => p.scopeType === "specific" || (p.facilityIds && p.facilityIds.length > 0),
-                            ).length
-
-                            return (
-                              <div className="flex items-center justify-between pt-1">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setPolicyFacilityFilter(cleanF.id)
-                                    setPage("policies")
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition cursor-pointer"
-                                  title={lang === "vi" ? "Xem và quản lý các chính sách của cơ sở này" : "View and manage policies for this facility"}
-                                >
-                                  <span>
-                                    {lang === "vi"
-                                      ? `${activePoliciesForFac.length} chính sách áp dụng`
-                                      : `${activePoliciesForFac.length} policies`}
-                                  </span>
-                                  {specificCount > 0 && (
-                                    <span className="bg-amber-200/90 text-amber-950 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                                      {specificCount} {lang === "vi" ? "riêng" : "custom"}
-                                    </span>
-                                  )}
-                                  <span className="text-amber-700 text-[11px] font-bold">→</span>
-                                </button>
-                              </div>
-                            )
-                          })()}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
+                            {facCode}
+                          </span>
+                          <h3 className="font-bold text-slate-900 text-lg leading-snug">
+                            {cleanF.name}
+                          </h3>
+                          <Badge
+                            variant={
+                              cleanF.status === "active" ? "success" : "warning"
+                            }
+                          >
+                            {cleanF.status === "active"
+                              ? lang === "vi"
+                                ? "Đang hoạt động"
+                                : "Active"
+                              : lang === "vi"
+                                ? "Bảo trì"
+                                : "Maintenance"}
+                          </Badge>
                         </div>
+
+                        {/* Thông tin cơ sở */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs text-slate-600">
+                          <div>{cleanF.address} · <b>{cleanF.city}</b></div>
+                          <div>Quản lý: <b>{cleanF.manager}</b></div>
+                          <div>Hotline: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
+                          <div>Giờ mở cửa: <b>{cleanF.accessHours || "06:00 - 22:00 hàng ngày"}</b></div>
+                        </div>
+                        {/* Cơ cấu gian kho */}
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {(["S", "M", "L", "XL"] as const).map(size => {
+                            const count = cleanF.unitDistribution?.[size] ?? unitsList.filter(u =>
+                              (u.facilityId === f.id || u.facilityId === f.code) &&
+                              ((u as any).sizeCode || (u as any).size || ({ Small: "S", Medium: "M", Large: "L", "Extra Large": "XL" } as Record<string, string>)[String(u.type)]) === size
+                            ).length
+                            return count > 0 ? <span key={size} className="rounded border border-stone-200 bg-stone-50 px-2 py-1">{size}: {count} kho</span> : null
+                          })}
+                        </div>
+                        {/* Chỉ số vận hành */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
+                          <div>
+                            <p className="text-xs text-slate-500">Tỷ lệ lấp đầy</p>
+                            <p className="font-bold">{occupiedInFac}/{totalUnitsInFac} kho ({occupancyRate}%)</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">Doanh thu tháng (MTD)</p>
+                            <p className="font-bold">{isApiAuthenticated() ? formatVndAmount(getFacilityActualRevenue(f)) : formatCurrency(getFacilityActualRevenue(f))}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">Cước cơ sở từ</p>
+                            <p className="font-bold">{backendFacilityStats[facCode.trim().toUpperCase()]?.price != null
+                              ? `${formatVndAmount(backendFacilityStats[facCode.trim().toUpperCase()].price!)}/tháng`
+                              : "Chưa cấu hình"}</p>
+                          </div>
+                        </div>
+
+                        {/* Hàng 2.8: Chính sách đang áp dụng */}
+                        {(() => {
+                          const activePoliciesForFac = policiesList.filter((p) => {
+                            if (p.scopeType === "all") return true
+                            if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
+                              return p.facilityIds.includes(f.id) || (f.code && p.facilityIds.includes(f.code))
+                            }
+                            const s = (p.scope || "").trim().toLowerCase()
+                            if (["all facilities", "toàn bộ cơ sở", "all", "toàn bộ"].includes(s)) return true
+                            return s.includes(f.name.toLowerCase()) || f.name.toLowerCase().includes(s)
+                          })
+                          const specificCount = activePoliciesForFac.filter(
+                            (p) => p.scopeType === "specific" || (p.facilityIds && p.facilityIds.length > 0),
+                          ).length
+
+                          return (
+                            <div className="flex items-center justify-between pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPolicyFacilityFilter(cleanF.id)
+                                  setPage("policies")
+                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50/80 text-amber-900 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition cursor-pointer"
+                                title={lang === "vi" ? "Xem và quản lý các chính sách của cơ sở này" : "View and manage policies for this facility"}
+                              >
+                                <span>
+                                  {lang === "vi"
+                                    ? `${activePoliciesForFac.length} chính sách áp dụng`
+                                    : `${activePoliciesForFac.length} policies`}
+                                </span>
+                                {specificCount > 0 && (
+                                  <span className="bg-amber-200/90 text-amber-950 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                                    {specificCount} {lang === "vi" ? "riêng" : "custom"}
+                                  </span>
+                                )}
+                                <span className="text-amber-700 text-[11px] font-bold">→</span>
+                              </button>
+                            </div>
+                          )
+                        })()}
+                      </div>
 
                       {/* Các nút hành động */}
                       <div className="flex lg:flex-col items-center justify-end gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
@@ -3983,8 +3891,8 @@ export default function BusinessApp({
             }
             subtitle={
               lang === "vi"
-                ? "Các điều khoản, gói kỳ hạn ưu đãi và quy chế thương mại áp dụng thống nhất toàn hệ thống"
-                : "Company-wide rental terms, duration packages, and conditions"
+                ? "Các điều khoản, quy chuẩn vận hành và quy chế thương mại áp dụng thống nhất toàn hệ thống"
+                : "Company-wide rental terms, operational rules, and commercial regulations"
             }
             action={
               <Button
@@ -4152,8 +4060,7 @@ export default function BusinessApp({
             </div>
           </Card>
 
-          {/* ── KHỐI 2: KHUNG QUY ĐỊNH VẬN HÀNH & PHÁP LÝ SỰ CỐ / ẨM MỐC ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ── KHỐI 2: KHUNG QUY ĐỊNH VẬN HÀNH & PHÁP LÝ SỰ CỐ / ẨM MỐC ── */}          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="p-4 border-l-4 border-l-rose-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-rose-50/20">
               <div className="flex items-start gap-3">
                 <span
@@ -4249,7 +4156,7 @@ export default function BusinessApp({
             </Card>
           </div>
 
-          {/* ── KHỐI 3: QUY ĐỊNH & CHÍNH SÁCH CHUNG ── */}
+          {/* ── KHỐI 2: QUY ĐỊNH & CHÍNH SÁCH CHUNG ── */}
           <Card className="p-5 border border-stone-200/90 shadow-sm bg-white space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
               <div>
@@ -4310,11 +4217,10 @@ export default function BusinessApp({
                   key={tab.id}
                   type="button"
                   onClick={() => setPolicyCategoryFilter(tab.id as any)}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
-                    policyCategoryFilter === tab.id
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${policyCategoryFilter === tab.id
                       ? "bg-amber-800 text-white shadow-2xs"
                       : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                  }`}
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -4586,7 +4492,6 @@ export default function BusinessApp({
               </Card>
             })}
           </div>
-
           <Card className="p-5">
             <h3 className="font-semibold text-slate-800 mb-4">
               {lang === "vi" ? "Biểu Phí Dịch Vụ Quy Định" : "Fee Schedule"}
@@ -5788,12 +5693,11 @@ export default function BusinessApp({
                   <div key={sz} className="p-3.5 rounded-xl border border-stone-200 bg-white space-y-2.5 shadow-2xs">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded font-mono text-xs font-bold ${
-                          sz === 'S' ? 'bg-blue-100 text-blue-900' :
-                          sz === 'M' ? 'bg-green-100 text-green-900' :
-                          sz === 'L' ? 'bg-purple-100 text-purple-900' :
-                          'bg-amber-100 text-amber-900'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded font-mono text-xs font-bold ${sz === 'S' ? 'bg-blue-100 text-blue-900' :
+                            sz === 'M' ? 'bg-green-100 text-green-900' :
+                              sz === 'L' ? 'bg-purple-100 text-purple-900' :
+                                'bg-amber-100 text-amber-900'
+                          }`}>
                           {sz}
                         </span>
                         <div>
@@ -6108,17 +6012,48 @@ export default function BusinessApp({
               onChange={(e) => setPolicyFormValue(e.target.value)}
             />
 
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-800 block">
+                {lang === "vi" ? "Nhóm chính sách" : "Policy Category"}
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { id: "billing", label: lang === "vi" ? "Thuê & Đặt cọc" : "Billing & Deposit" },
+                  { id: "climate", label: lang === "vi" ? "Độ ẩm & Kho mát (Climate SLA)" : "Climate SLA" },
+                  { id: "prohibited", label: lang === "vi" ? "Hàng cấm & Khử trùng" : "Prohibited & Sanitization" },
+                  { id: "maintenance", label: lang === "vi" ? "Sự cố & Di dời kho" : "Facility SLA & Relocation" },
+                ].map((cat) => (
+                  <label
+                    key={cat.id}
+                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
+                      policyFormCategory === cat.id
+                        ? "border-amber-500 bg-amber-50/70 font-semibold text-slate-900 ring-1 ring-amber-500 shadow-2xs"
+                        : "border-stone-200 bg-white hover:bg-stone-50 text-slate-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="editPolicyCategoryRadio"
+                      checked={policyFormCategory === cat.id}
+                      onChange={() => setPolicyFormCategory(cat.id as any)}
+                      className="text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>{cat.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-800 block">
                 {lang === "vi" ? "Phạm vi áp dụng chính sách" : "Policy Application Scope"}
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <label
-                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                    policyFormScopeType === "all"
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${policyFormScopeType === "all"
                       ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
                       : "border-stone-200 bg-white hover:bg-stone-50"
-                  }`}
+                    }`}
                 >
                   <input
                     type="radio"
@@ -6140,11 +6075,10 @@ export default function BusinessApp({
                 </label>
 
                 <label
-                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                    policyFormScopeType === "specific"
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${policyFormScopeType === "specific"
                       ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
                       : "border-stone-200 bg-white hover:bg-stone-50"
-                  }`}
+                    }`}
                 >
                   <input
                     type="radio"
@@ -6199,11 +6133,10 @@ export default function BusinessApp({
                       return (
                         <label
                           key={f.id}
-                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
-                            isChecked
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${isChecked
                               ? "border-amber-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-amber-300"
                               : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
-                          }`}
+                            }`}
                         >
                           <input
                             type="checkbox"
@@ -6293,17 +6226,48 @@ export default function BusinessApp({
             onChange={(e) => setPolicyFormValue(e.target.value)}
           />
 
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-800 block">
+              {lang === "vi" ? "Nhóm chính sách" : "Policy Category"}
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { id: "billing", label: lang === "vi" ? "Thuê & Đặt cọc" : "Billing & Deposit" },
+                { id: "climate", label: lang === "vi" ? "Độ ẩm & Kho mát (Climate SLA)" : "Climate SLA" },
+                { id: "prohibited", label: lang === "vi" ? "Hàng cấm & Khử trùng" : "Prohibited & Sanitization" },
+                { id: "maintenance", label: lang === "vi" ? "Sự cố & Di dời kho" : "Facility SLA & Relocation" },
+              ].map((cat) => (
+                <label
+                  key={cat.id}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
+                    policyFormCategory === cat.id
+                      ? "border-amber-500 bg-amber-50/70 font-semibold text-slate-900 ring-1 ring-amber-500 shadow-2xs"
+                      : "border-stone-200 bg-white hover:bg-stone-50 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="createPolicyCategoryRadio"
+                    checked={policyFormCategory === cat.id}
+                    onChange={() => setPolicyFormCategory(cat.id as any)}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>{cat.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-800 block">
               {lang === "vi" ? "Phạm vi áp dụng chính sách" : "Policy Application Scope"}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <label
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                  policyFormScopeType === "all"
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${policyFormScopeType === "all"
                     ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
                     : "border-stone-200 bg-white hover:bg-stone-50"
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -6325,11 +6289,10 @@ export default function BusinessApp({
               </label>
 
               <label
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                  policyFormScopeType === "specific"
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${policyFormScopeType === "specific"
                     ? "border-amber-500 bg-amber-50/60 ring-1 ring-amber-500"
                     : "border-stone-200 bg-white hover:bg-stone-50"
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -6384,11 +6347,10 @@ export default function BusinessApp({
                     return (
                       <label
                         key={f.id}
-                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
-                          isChecked
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${isChecked
                             ? "border-amber-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-amber-300"
                             : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
-                        }`}
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -6544,11 +6506,10 @@ export default function BusinessApp({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label
-                className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
-                  formCreateDurationScopeType === "all"
+                className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${formCreateDurationScopeType === "all"
                     ? "border-emerald-300 bg-emerald-50/50 font-semibold text-slate-900 ring-1 ring-emerald-300"
                     : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -6570,11 +6531,10 @@ export default function BusinessApp({
               </label>
 
               <label
-                className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
-                  formCreateDurationScopeType === "specific"
+                className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${formCreateDurationScopeType === "specific"
                     ? "border-emerald-300 bg-emerald-50/50 font-semibold text-slate-900 ring-1 ring-emerald-300"
                     : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -6629,11 +6589,10 @@ export default function BusinessApp({
                     return (
                       <label
                         key={f.id}
-                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
-                          isChecked
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${isChecked
                             ? "border-emerald-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-emerald-300"
                             : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
-                        }`}
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -6774,11 +6733,10 @@ export default function BusinessApp({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label
-                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
-                    formDurationScopeType === "all"
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${formDurationScopeType === "all"
                       ? "border-amber-300 bg-amber-50/50 font-semibold text-slate-900 ring-1 ring-amber-300"
                       : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
-                  }`}
+                    }`}
                 >
                   <input
                     type="radio"
@@ -6798,11 +6756,10 @@ export default function BusinessApp({
                 </label>
 
                 <label
-                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
-                    formDurationScopeType === "specific"
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${formDurationScopeType === "specific"
                       ? "border-amber-300 bg-amber-50/50 font-semibold text-slate-900 ring-1 ring-amber-300"
                       : "border-stone-200 bg-white hover:bg-stone-50 text-slate-600"
-                  }`}
+                    }`}
                 >
                   <input
                     type="radio"
@@ -6853,11 +6810,10 @@ export default function BusinessApp({
                       return (
                         <label
                           key={f.id}
-                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
-                            isChecked
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${isChecked
                               ? "border-amber-300 bg-white shadow-2xs font-medium text-slate-900 ring-1 ring-amber-300"
                               : "border-stone-200 bg-white/70 text-slate-600 hover:bg-white"
-                          }`}
+                            }`}
                         >
                           <input
                             type="checkbox"
@@ -7641,8 +7597,8 @@ export default function BusinessApp({
                       {(() => {
                         const customSpecs =
                           selectedFacility.unitCustomSpecs &&
-                          Array.isArray(selectedFacility.unitCustomSpecs) &&
-                          selectedFacility.unitCustomSpecs.length > 0
+                            Array.isArray(selectedFacility.unitCustomSpecs) &&
+                            selectedFacility.unitCustomSpecs.length > 0
                             ? selectedFacility.unitCustomSpecs
                             : null
 
@@ -7654,7 +7610,6 @@ export default function BusinessApp({
                                 ...facilityUnits.map((u) => (u as any).size || (u.type === "Small" ? "S" : u.type === "Medium" ? "M" : u.type === "Large" ? "L" : u.type === "Extra Large" ? "XL" : (u as any).sizeCode || "S")),
                               ]),
                             )
-
                         return allSizes.map((size: string) => {
                           const customSpec = customSpecs?.find((cs: FacilityCustomUnitSpec) => cs.sizeCode === size)
                           const stdSpec = UNIT_SPECS[size as keyof typeof UNIT_SPECS]
@@ -7723,10 +7678,10 @@ export default function BusinessApp({
                             selectedFacility.unitFrameDimensions?.[size] ??
                             (stdSpec?.frameDimensions
                               ? {
-                                  lengthM: stdSpec.frameDimensions.lengthM ?? stdSpec.frameDimensions.depthM,
-                                  widthM: stdSpec.frameDimensions.widthM,
-                                  heightM: stdSpec.frameDimensions.heightM,
-                                }
+                                lengthM: stdSpec.frameDimensions.lengthM ?? stdSpec.frameDimensions.depthM,
+                                widthM: stdSpec.frameDimensions.widthM,
+                                heightM: stdSpec.frameDimensions.heightM,
+                              }
                               : undefined)
 
                           const frameDimStr = rawFrameDims
@@ -7900,11 +7855,10 @@ export default function BusinessApp({
                                   {pol.name}
                                 </span>
                                 <span
-                                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
-                                    isGlobal
+                                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${isGlobal
                                       ? "bg-blue-50 text-blue-800 border border-blue-200"
                                       : "bg-amber-50 text-amber-900 border border-amber-200"
-                                  }`}
+                                    }`}
                                 >
                                   {isGlobal
                                     ? lang === "vi"
