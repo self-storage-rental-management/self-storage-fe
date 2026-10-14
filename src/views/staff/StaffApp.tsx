@@ -35,7 +35,7 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
-import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
+import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import UnitAssignmentPanel from "../UnitAssignmentPanel"
@@ -974,7 +974,7 @@ export default function StaffApp({
     useState("all")
 
   const [operationalTaskSort, setOperationalTaskSort] =
-    useState<StaffTaskSort>("due-asc")
+    useState<StaffTaskSort>("priority")
 
   const [taskCompletionTarget, setTaskCompletionTarget] =
     useState<FacilityTask | null>(null)
@@ -1996,7 +1996,7 @@ export default function StaffApp({
 
       page: "tasks",
     })),
-  ].sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
+  ].sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc")) as StaffDailyOperation[]
 
   const operationalTasks = isApiAuthenticated()
     ? apiDailyOperations
@@ -2503,11 +2503,31 @@ export default function StaffApp({
             />
           </div>
 
-          {isApiAuthenticated() && <StaffMaintenanceOperationsPanel showToast={showToast} />}
           {selectedRecoveryTask && <Modal open title="Chi tiết nhiệm vụ thu hồi" onClose={() => setSelectedRecoveryTask(null)}>
             <RecoveryTaskDetail key={selectedRecoveryTask.id} role="staff" id={selectedRecoveryTask.id} facilityId={selectedRecoveryTask.facilityId} />
           </Modal>}
 
+          <StaffDailyTaskQueue
+            assignedTasks={assignedFacilityTasks}
+            operationalTasks={operationalTasks}
+            operationalError={apiDailyOperationsError && isApiAuthenticated() ? apiDailyOperationsError : null}
+            dateFilter={operationalTaskDateFilter}
+            priorityFilter={operationalTaskPriorityFilter}
+            sort={operationalTaskSort}
+            onDateFilterChange={setOperationalTaskDateFilter}
+            onPriorityFilterChange={setOperationalTaskPriorityFilter}
+            onSortChange={setOperationalTaskSort}
+            onAssignedStatus={updateAssignedTaskStatus}
+            onOpenAssignedCompletion={(task) => {
+              setTaskCompletionTarget(task)
+              setTaskResultReport(task.resultReport || "")
+              setTaskEvidenceText((task.evidence || []).join("\n"))
+            }}
+            onOpenOperational={openOperationalTask}
+            showToast={showToast}
+          />
+
+          {false && <div>
           <Card className="mb-6">
             <div className="border-b border-stone-200 p-4">
               <h3 className="font-bold text-stone-900">
@@ -2798,6 +2818,7 @@ export default function StaffApp({
               onPageChange={setOperationalTasksPage}
             />
           </Card>
+          </div>}
 
           <Modal
             open={Boolean(taskCompletionTarget)}
