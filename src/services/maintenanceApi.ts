@@ -16,8 +16,8 @@ export interface MaintenanceTaskApi {
   reason: string
   priority: MaintenanceTaskPriority
   damageClassification: string | null
-  reportedById: string
-  reportedByName: string
+  reportedById: string | null
+  reportedByName: string | null
   assignedStaffId: string | null
   assignedStaffName: string | null
   status: MaintenanceTaskStatus
@@ -58,7 +58,7 @@ function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
     ['low', 'medium', 'high'].includes(String(value.priority)) &&
     ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&
     isNullableText(value.returnCaseId) && isNullableText(value.damageClassification) &&
-    isUuidLike(value.reportedById) && isText(value.reportedByName) &&
+    isNullableText(value.reportedById) && isNullableText(value.reportedByName) &&
     isNullableText(value.assignedStaffId) && isNullableText(value.assignedStaffName) &&
     (value.dueAt === null || typeof value.dueAt === 'string') &&
     (value.startedAt === null || isInstant(value.startedAt)) &&
