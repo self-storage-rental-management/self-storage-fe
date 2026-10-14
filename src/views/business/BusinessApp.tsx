@@ -69,6 +69,7 @@ import {
   validateVehicleLaneWidth,
 } from "../../domain/facilityRules"
 import { generateDefaultRentalPackages } from "../../domain/packageRules"
+import { resolveBusinessFacilityIds } from "../../domain/businessFacilityIds"
 import { UnitAllocationTable } from "./facility/UnitAllocationTable"
 import { AddUnitSpecModal } from "./facility/AddUnitSpecModal"
 import {
@@ -81,6 +82,7 @@ import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, upda
 import { listAccessibleUnitTypes } from "../../services/customerReservationApi"
 import type { CustomerUnitType } from "../../services/customerReservationApi"
 import { isApiAuthenticated } from "../../services/authApi"
+import { listNotifications, markNotificationRead, type ApiNotification } from "../../services/notificationApi"
 import {
   createBusinessPackagePolicy,
   deactivateBusinessPackagePolicy,
@@ -401,6 +403,19 @@ export default function BusinessApp({
   const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null; revenue: number }>>({})
   const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
   const [facilityDataError, setFacilityDataError] = useState<string>()
+  const [businessNotifications, setBusinessNotifications] = useState<ApiNotification[]>([])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let mounted = true
+    const refresh = async () => {
+      try { const response = await listNotifications(); if (mounted) setBusinessNotifications(response.data) }
+      catch { /* A failed refresh must not invent notifications. */ }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 30000)
+    return () => { mounted = false; window.clearInterval(timer) }
+  }, [user.id])
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -1097,6 +1112,13 @@ export default function BusinessApp({
   const [formCreateDurationStatus, setFormCreateDurationStatus] = useState<'active' | 'inactive'>('active')
 
   const [editDurationModal, setEditDurationModal] = useState(false)
+  const [packageFormError, setPackageFormError] = useState<string>()
+  const [facilityEditError, setFacilityEditError] = useState<string>()
+
+  const resolvePackageFacilities = async (scope: 'all' | 'specific', selectedIds: string[]) => {
+    const persisted = await listAllFacilitiesApi()
+    return resolveBusinessFacilityIds(scope, selectedIds, facilitiesList, persisted)
+  }
   const [selectedDurationItem, setSelectedDurationItem] = useState<DurationDiscountItem | null>(null)
   const [formDurationTitle, setFormDurationTitle] = useState("")
   const [formDurationLabel, setFormDurationLabel] = useState("")
@@ -1109,6 +1131,7 @@ export default function BusinessApp({
   const [formDurationStatus, setFormDurationStatus] = useState<'active' | 'inactive'>('active')
 
   const handleOpenCreateDuration = () => {
+    setPackageFormError(undefined)
     setFormCreateDurationTitle("")
     setFormCreateDurationLabel("")
     setFormCreateDurationMonths(9)
@@ -1123,6 +1146,7 @@ export default function BusinessApp({
   }
 
   const handleSaveNewDurationDiscount = async () => {
+    setPackageFormError(undefined)
     const rawMonths = formCreateDurationMonths
     const parsedMonths = typeof rawMonths === 'number' ? rawMonths : parseInt(String(rawMonths), 10)
     const validMonths = !isNaN(parsedMonths) && parsedMonths > 0 ? parsedMonths : 'other'
@@ -1150,14 +1174,9 @@ export default function BusinessApp({
     }
 
     if (isApiAuthenticated()) {
-      const targetFacilityIds = formCreateDurationScopeType === 'specific'
-        ? formCreateDurationFacilityIds
-        : facilitiesList.map(facility => facility.id)
-      if (!targetFacilityIds.length) {
-        showToast('Chưa có cơ sở để áp dụng gói thuê.')
-        return
-      }
       try {
+        const targetFacilityIds = await resolvePackageFacilities(formCreateDurationScopeType, formCreateDurationFacilityIds)
+        if (!targetFacilityIds.length) throw new Error('Chưa có cơ sở để áp dụng gói thuê.')
         const effectiveFrom = new Date().toISOString().slice(0, 10)
         const created = await Promise.all(targetFacilityIds.map(facilityId => createBusinessPackagePolicy({
           facilityId,
@@ -1174,6 +1193,7 @@ export default function BusinessApp({
         newPkg.scopeType = 'specific'
         newPkg.backendPolicyIds = Object.fromEntries(created.map(policy => [policy.facilityId, policy.id]))
       } catch (error) {
+        setPackageFormError(error instanceof Error ? error.message : 'Không thể tạo gói thuê.')
         showToast(error instanceof Error ? error.message : 'Không thể tạo gói thuê.')
         return
       }
@@ -1186,6 +1206,7 @@ export default function BusinessApp({
   }
 
   const handleOpenEditDuration = (item: DurationDiscountItem) => {
+    setPackageFormError(undefined)
     setSelectedDurationItem(item)
     setFormDurationTitle(item.title)
     setFormDurationLabel(item.label)
@@ -1201,18 +1222,28 @@ export default function BusinessApp({
 
   const handleSaveDurationDiscount = async () => {
     if (!selectedDurationItem) return
+    setPackageFormError(undefined)
 
     if (formDurationScopeType === 'specific' && formDurationFacilityIds.length === 0) {
       showToast(lang === 'vi' ? 'Vui lòng chọn ít nhất 1 cơ sở áp dụng gói thuê này!' : 'Please select at least one facility!')
       return
     }
 
-    if (isApiAuthenticated() && selectedDurationItem.backendPolicyIds) {
+    let savedPolicyIds = selectedDurationItem.backendPolicyIds
+    let savedFacilityIds = formDurationFacilityIds
+    if (isApiAuthenticated()) {
       try {
+        const targetIds = await resolvePackageFacilities(formDurationScopeType, formDurationFacilityIds)
+        if (!targetIds.length) throw new Error('Chưa chọn cơ sở áp dụng.')
+        const currentPolicies = await listBusinessPackagePolicies()
+        const saved = []
         const effectiveFrom = new Date().toISOString().slice(0, 10)
-        await Promise.all(Object.entries(selectedDurationItem.backendPolicyIds).map(([facilityId, id]) => updateBusinessPackagePolicy(id, {
+        for (const facilityId of targetIds) {
+          const id = selectedDurationItem.backendPolicyIds?.[facilityId]
+          const existing = currentPolicies.find(p => p.id === id)
+          const input = {
           facilityId,
-          code: selectedDurationItem.id.replace(/^api-/, '').slice(0, 30),
+          code: existing?.code || selectedDurationItem.id.replace(/^api-/, '').slice(0, 30),
           name: formDurationTitle.trim() || selectedDurationItem.title,
           rentalMonths: typeof selectedDurationItem.months === 'number' ? selectedDurationItem.months : 1,
           discountRate: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)) / 100,
@@ -1220,8 +1251,16 @@ export default function BusinessApp({
           active: formDurationStatus === 'active',
           effectiveFrom,
           effectiveTo: null,
-        })))
+          }
+          saved.push(existing ? await updateBusinessPackagePolicy(existing.id, input) : await createBusinessPackagePolicy(input))
+        }
+        for (const [facilityId, id] of Object.entries(selectedDurationItem.backendPolicyIds || {})) {
+          if (!targetIds.includes(facilityId)) await deactivateBusinessPackagePolicy(id)
+        }
+        savedPolicyIds = Object.fromEntries(saved.map(p => [p.facilityId, p.id]))
+        savedFacilityIds = targetIds
       } catch (error) {
+        setPackageFormError(error instanceof Error ? error.message : 'Không thể cập nhật gói thuê.')
         showToast(error instanceof Error ? error.message : 'Không thể cập nhật gói thuê.')
         return
       }
@@ -1236,7 +1275,8 @@ export default function BusinessApp({
           renewalDiscountPercent: Math.max(0, Math.min(100, Number(formDurationRenewalPercent) || 0)),
           appliesTo: formDurationAppliesTo,
           scopeType: formDurationScopeType,
-          facilityIds: formDurationScopeType === 'specific' ? formDurationFacilityIds : [],
+          facilityIds: isApiAuthenticated() ? savedFacilityIds : formDurationScopeType === 'specific' ? formDurationFacilityIds : [],
+          backendPolicyIds: savedPolicyIds,
           description: formDurationDesc.trim() || d.description,
           status: formDurationStatus,
         }
@@ -2787,6 +2827,7 @@ export default function BusinessApp({
   }
 
   const handleOpenEditFacility = (f: any) => {
+    setFacilityEditError(undefined)
     setSelectedFacility(f)
 
     setFormFacCode(f.code || f.id)
@@ -3081,6 +3122,7 @@ export default function BusinessApp({
 
   const handleUpdateFacility = async () => {
     if (!selectedFacility) return
+    setFacilityEditError(undefined)
 
     if (isApiAuthenticated()) {
       try {
@@ -3099,7 +3141,10 @@ export default function BusinessApp({
         })
         setEditFacilityModal(false)
         showToast('Đã lưu thông tin cơ sở.')
-      } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể lưu thông tin cơ sở.') }
+      } catch (error) {
+        setFacilityEditError(error instanceof Error ? error.message : 'Không thể lưu thông tin cơ sở.')
+        showToast(error instanceof Error ? error.message : 'Không thể lưu thông tin cơ sở.')
+      }
       return
     }
 
@@ -3508,6 +3553,11 @@ export default function BusinessApp({
   return (
     <Layout
       user={user}
+      notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
+      onNotificationClick={item => {
+        setPage(item.page || 'facilities')
+        void markNotificationRead(item.id).then(saved => setBusinessNotifications(current => current.map(n => n.id === saved.id ? saved : n))).catch(() => {})
+      }}
       navItems={NAV}
       currentPage={page}
       onNavigate={next => { if (!integrationLocked) setPage(next) }}
@@ -5669,7 +5719,7 @@ export default function BusinessApp({
 
       {/* ── TOAST MESSAGE ──────────────────────────────────────── */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#292a27] text-white px-5 py-3 rounded-lg shadow-2xl border border-amber-500/50 flex items-center gap-3 fade-in">
+        <div role="status" className="fixed bottom-6 right-6 z-[100] bg-[#292a27] text-white px-5 py-3 rounded-lg shadow-2xl border border-amber-500/50 flex items-center gap-3 fade-in">
           <span className="w-2.5 h-2.5 rounded-full bg-[#e9a12c] animate-ping" />
           <p className="text-sm font-medium">{toast}</p>
         </div>
@@ -6455,6 +6505,7 @@ export default function BusinessApp({
         onClose={() => setCreateDurationModal(false)}
         title={lang === "vi" ? "Thêm Gói Thuê Mới" : "Add New Rental Package"}
       >
+        {packageFormError && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{packageFormError}</p>}
         <div className="space-y-4">
           <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950 space-y-1">
             <p className="font-bold text-sm text-slate-900">
@@ -6695,6 +6746,7 @@ export default function BusinessApp({
             : "Chỉnh Sửa Gói Thuê"
         }
       >
+        {packageFormError && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{packageFormError}</p>}
         {selectedDurationItem && (
           <div className="space-y-4">
             <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-1">
@@ -7020,6 +7072,7 @@ export default function BusinessApp({
               size="full"
               className="max-w-[95vw] xl:max-w-6xl 2xl:max-w-7xl"
             >
+              {facilityEditError && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{facilityEditError}</p>}
               <div className="space-y-4">
                 {/* Thông tin cơ sở */}
                 <FacilityGeneralInfo
