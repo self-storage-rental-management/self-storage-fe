@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Card, Input, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { Button } from '../../components/ui'
+import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
-import { rentalMoney } from '../rental-api/presentation'
+import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import {
   completeRefund,
   confirmReturn,
   feeKeys,
-  getReturn,
   inspectReturn,
   listReturns,
   paySettlement,
   requestReturn,
+  updateReturnRequest,
   reviewDispute,
   returnError,
   uploadReturnEvidence,
@@ -46,29 +47,23 @@ const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
 
 export function ReturnSummary({ record }: { record: ApiReturn }) {
   return (
-    <div className="space-y-2">
-      <h4 className="font-semibold">
-        {record.unitNumber} · {labels[record.status]}
-      </h4>
-      <p>
-        {record.facilityName} · Ngày trả: {record.scheduledDate}
-      </p>
-      <p>Cọc theo hợp đồng: {rentalMoney(record.depositAmount, 'VND')}</p>
-      <p>Phí đã ghi nhận: {rentalMoney(record.totalDeductions, 'VND')}</p>
-      <p>Khoản hoàn tiền: {rentalMoney(record.netRefundAmount, 'VND')}</p>
-      <p>Khách cần đóng thêm: {rentalMoney(record.amountDueFromCustomer, 'VND')}</p>
-      {record.evidencePhotos && (
-        <p>Bằng chứng nghiệm thu: {record.evidencePhotos.length} tệp</p>
-      )}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div><h4 className="text-lg font-bold text-stone-900">{record.unitNumber}</h4><p className="mt-1 text-sm text-stone-500">{record.facilityName}</p></div>
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{labels[record.status]}</span>
+      </div>
+      <p className="text-sm text-stone-600">Ngày dự kiến trả: <strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {([
+          ['Cọc theo hợp đồng', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
+          ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
+        ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
+      </div>
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
           Chưa đủ chứng cứ về số cọc đang giữ, tiền đã thu hoặc tiền hoàn đã
           chuyển. Hồ sơ chưa được xác nhận thanh toán/hoàn tiền thành công.
         </p>
-      )}
-      {record.inspectionNotes && <p>Nghiệm thu: {record.inspectionNotes}</p>}
-      {record.managerResolutionNote && (
-        <p>Kết quả xem xét: {record.managerResolutionNote}</p>
       )}
     </div>
   )
@@ -114,8 +109,13 @@ function ReturnWorkspace({
 }) {
   const actor = getAuthenticatedActor()
   const [page, setPage] = useState(0)
-  const read = useRentalApiResource(`${identity}:${page}`, () => listReturns(role, page, 100))
-  const [selected, setSelected] = useState<string | null>(null)
+  const read = useRentalApiResource(`${identity}:${page}`, async () => {
+    if (!rentalId) return listReturns(role, page)
+    const first = await listReturns(role, 0, 100)
+    const data = [...first.data]
+    for (let next = 1; next < first.pagination.totalPages; next++) data.push(...(await listReturns(role, next, 100)).data)
+    return { ...first, data }
+  }, { retainDataOnRefresh: true })
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const mounted = useRef(true)
@@ -128,10 +128,7 @@ function ReturnWorkspace({
   const [feedback, setFeedback] = useState('')
   const [date, setDate] = useState('')
   const [notes, setNotes] = useState('')
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ApiReturn['status'] | 'all'>('all')
-  const [scheduledDateFilter, setScheduledDateFilter] = useState('')
-  const [sort, setSort] = useState<'date-asc' | 'date-desc' | 'customer'>('date-asc')
+  const [editing, setEditing] = useState<string | null>(null)
 
   async function run(work: () => Promise<ApiReturn>) {
     if (lock.current) return
@@ -139,12 +136,11 @@ function ReturnWorkspace({
     setBusy(true)
     setFeedback('')
     try {
-      const result = await work()
+      await work()
       if (!mounted.current || getAuthenticatedActor()?.id !== actor?.id) return
-      setSelected(result.id)
+      setEditing(null)
       read.refresh()
       onChanged?.()
-      setFeedback('Máy chủ đã ghi nhận thao tác. Đang tải lại hồ sơ.')
     } catch (error) {
       if (mounted.current) {
         setFeedback(returnError(error))
@@ -177,74 +173,34 @@ function ReturnWorkspace({
   if (!readable) return null
 
   return (
-    <div className="space-y-4">
-      {role === 'customer' && rentalId && rentalActive && (
-        <Card className="space-y-2 p-4">
-          <h3 className="font-bold">Trả kho & quyết toán</h3>
-          <form onSubmit={(event) => { event.preventDefault(); void run(() => requestReturn(rentalId, date, notes)) }} className="space-y-2">
-          <label className="block">Ngày trả kho<input type="date" required value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} className="block rounded border p-2" /></label>
-          <label className="block">Lý do / ghi chú<textarea value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="block w-full rounded border p-2" /></label>
-          <Button type="submit" disabled={busy || !date || read.loading}>Gửi yêu cầu trả kho</Button>
-          </form>
-        </Card>
+    <div className={rentalId ? 'space-y-4' : 'space-y-4 rounded-xl border border-stone-200 bg-white p-5'}>
+      {!rentalId && <h3 className="border-b border-stone-200 pb-3 text-base font-bold">Trả kho & quyết toán</h3>}
+      {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed')) || editing) && (
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes)) }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <VietnameseDateInput label="Ngày trả kho" value={date} onChange={setDate} />
+          <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" disabled={busy || !date || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
+            {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
+          </div>
+        </form>
       )}
-      {role !== 'customer' && <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Input label="Tìm mã, khách hàng hoặc gian kho" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} />
-          <Select label="Trạng thái" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as ApiReturn['status'] | 'all'); setPage(0) }}>
-            {returnStatusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </Select>
-          <Input label="Ngày trả kho" type="date" value={scheduledDateFilter} onChange={(event) => { setScheduledDateFilter(event.target.value); setPage(0) }} />
-          <Select label="Sắp xếp" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(0) }}>
-            <option value="date-asc">Ngày trả kho sớm trước</option>
-            <option value="date-desc">Ngày trả kho muộn trước</option>
-            <option value="customer">Tên khách hàng A–Z</option>
-          </Select>
-        </div>
-      </Card>}
-      <Card>
-        {read.loading && <p role="status" className="p-4 text-sm text-stone-500">Đang tải hồ sơ trả kho...</p>}
-        {!!read.error && <p role="alert" className="p-4 text-sm text-red-700">{returnError(read.error)}</p>}
-        {feedback && <p role="status" className="border-b border-stone-200 p-4 text-sm text-stone-600">{feedback}</p>}
-        {role !== 'customer' && <p className="border-b border-stone-200 px-4 py-3 text-xs text-stone-500">Hiển thị {rows.length} hồ sơ phù hợp bộ lọc.</p>}
-        <Table>
-          <Thead>
-            <tr>
-              <Th>Mã trả kho</Th>
-              <Th>Khách hàng</Th>
-              <Th>Gian kho</Th>
-              <Th>Ngày trả kho</Th>
-              <Th>Trạng thái</Th>
-              <Th>Quyết toán</Th>
-              <Th />
-            </tr>
-          </Thead>
-          <Tbody>
-            {rows.map((record) => (
-              <Tr key={record.id}>
-                <Td><span className="font-mono text-xs text-stone-500">{record.id}</span></Td>
-                <Td><p className="font-semibold text-stone-900">{record.customerName}</p><p className="text-xs text-stone-500">{record.facilityName}</p></Td>
-                <Td className="font-medium">{record.unitNumber}</Td>
-                <Td className="text-sm">{record.scheduledDate}</Td>
-                <Td><span className="rounded-full bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">{labels[record.status]}</span></Td>
-                <Td className="text-sm">{record.settlementBlocker ? 'Cần bổ sung chứng cứ' : record.amountDueFromCustomer && record.amountDueFromCustomer > 0 ? 'Còn khoản phải thu' : 'Đang đối chiếu'}</Td>
-                <Td className="text-right"><Button variant="outline" size="sm" disabled={busy} onClick={() => setSelected(record.id)}>Xem và xử lý</Button></Td>
-              </Tr>
-            ))}
-            {!read.loading && !rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có hồ sơ trả kho phù hợp bộ lọc.</td></tr>}
-          </Tbody>
-        </Table>
-        {!rentalId && rows.length > 0 && <div className="flex items-center justify-end gap-3 border-t border-stone-200 p-3 text-sm"><Button variant="outline" size="sm" disabled={busy || page === 0} onClick={() => { setSelected(null); setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button variant="outline" size="sm" disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { setSelected(null); setPage((value) => value + 1) }}>Trang sau</Button></div>}
-      </Card>
-      {selected && <ReturnActions key={selected} role={role} id={selected} run={run} busy={busy} />}
+      {read.loading && !read.data && <p role="status">Đang tải hồ sơ trả kho...</p>}
+      {!!read.error && <p role="alert">{returnError(read.error)}</p>}
+      {feedback && <p role="status">{feedback}</p>}
+      {!read.loading && !read.error && rows.length === 0 && <p className="rounded-xl bg-stone-50 p-5 text-center text-sm text-stone-500">Chưa có yêu cầu trả kho.</p>}
+      {rows.map((record) => <div key={record.id} className="rounded-xl border border-stone-200 bg-white p-4">
+        <ReturnActions role={role} record={record} run={run} busy={busy || read.loading} />
+        {role === 'customer' && record.status === 'requested' && editing !== record.id && <div className="mt-3 flex justify-end border-t border-stone-100 pt-3"><Button type="button" variant="outline" disabled={busy || read.loading} onClick={() => { setEditing(record.id); setDate(record.scheduledDate); setNotes(record.customerNotes || '') }}>Chỉnh sửa yêu cầu</Button></div>}
+      </div>)}
+      {!rentalId && rows.length > 0 && <div className="flex gap-2"><Button disabled={busy || page === 0} onClick={() => setPage((value) => value - 1)}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => setPage((value) => value + 1)}>Trang sau</Button></div>}
     </div>
   )
 }
 
-function ReturnActions({ role, id, run, busy }: { role: ReturnRole; id: string; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean }) {
-  const detail = useRentalApiResource(`${role}:${id}:${busy}`, () => getReturn(role, id))
+function ReturnActions({ role, record, run, busy }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean }) {
+  const id = record.id
   const actor = getAuthenticatedActor()
-  const record = detail.data
   const [note, setNote] = useState('')
   const [fees, setFees] = useState<ReturnFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
   const [inventory, setInventory] = useState<InspectionInput['inventoryMatch']>('match')
@@ -266,10 +222,6 @@ function ReturnActions({ role, id, run, busy }: { role: ReturnRole; id: string; 
     }
   }, [record])
 
-  if (detail.loading) return <p role="status">Đang tải chi tiết...</p>
-  if (detail.error) return <p role="alert">{returnError(detail.error)}</p>
-  if (!record) return null
-
   const write = role === 'customer' || !!actor?.permissions.includes(role === 'manager' ? 'rentals:update' : 'returns:process')
   const canInspect = write && role === 'staff' && ['requested', 'scheduled'].includes(record.status)
   const canReview = write && role === 'manager' && record.status === 'disputed'
@@ -285,8 +237,34 @@ function ReturnActions({ role, id, run, busy }: { role: ReturnRole; id: string; 
   }
 
   return (
-    <section className="space-y-3 rounded border p-3" aria-label="Xử lý trả kho">
+    <section className="space-y-4" aria-label="Xử lý trả kho">
       <ReturnSummary record={record} />
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="font-semibold">Bước tiếp theo</p>
+        <p className="mt-1">{{ requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Quản lý cơ sở đang xem xét khiếu nại và các khoản phí.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-stone-200 p-4">
+          <h4 className="mb-3 font-semibold text-stone-900">Thông tin trả kho & nghiệm thu</h4>
+          <dl className="space-y-3 text-sm">
+            {([
+              ['Khách hàng', record.customerName], ['Lý do trả kho', record.customerNotes || 'Chưa ghi nhận'],
+              ['Ghi chú nghiệm thu', record.inspectionNotes || 'Chưa ghi nhận'],
+              ['Kết quả xem xét', record.managerResolutionNote || 'Chưa có'],
+              ['Khách xác nhận quyết toán', record.customerConfirmed ? 'Đã xác nhận' : 'Chưa xác nhận'],
+              ['Hiện trạng kho đề xuất', record.proposedUnitStatus === 'available' ? 'Sẵn sàng' : record.proposedUnitStatus === 'maintenance' ? 'Cần bảo trì' : 'Chưa ghi nhận'],
+              ['Bằng chứng nghiệm thu', `${record.evidencePhotos?.length ?? 0} tệp`],
+            ] as const).map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words font-medium text-stone-800">{value}</dd></div>)}
+          </dl>
+        </div>
+        <div className="rounded-xl border border-stone-200 p-4">
+          <h4 className="mb-3 font-semibold text-stone-900">Chi tiết các khoản phí</h4>
+          <dl className="divide-y divide-stone-100 text-sm">
+            {feeKeys.map((key, index) => <div key={key} className="flex justify-between gap-3 py-2"><dt className="text-stone-500">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]}</dt><dd className="shrink-0 font-medium">{rentalMoney(record[key], 'VND')}</dd></div>)}
+            <div className="flex justify-between gap-3 py-3 font-bold"><dt>Tổng phí ghi nhận</dt><dd>{rentalMoney(record.totalDeductions, 'VND')}</dd></div>
+          </dl>
+        </div>
+      </div>
       {(canInspect || canReview || (role === 'customer' && record.status === 'awaiting_customer_confirmation')) && <label className="block">Ghi chú / lý do<textarea className="block w-full rounded border p-2" disabled={busy} value={note} maxLength={2000} onChange={(event) => setNote(event.target.value)} /></label>}
       {(canInspect || canReview) && <form onSubmit={(event) => { event.preventDefault(); void run(canInspect ? submitInspection : () => reviewDispute(id, { ...fees, resolutionNote: note, proposedUnitStatus: unit })) }} className="space-y-2">
         {feeKeys.map((key, index) => <label key={key} className="block">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]} (VND)<input type="number" min="0" step="0.01" required disabled={busy} value={Number.isNaN(fees[key]) ? '' : fees[key]} onChange={(event) => setFees((current) => ({ ...current, [key]: event.target.value === '' ? NaN : Number(event.target.value) }))} className="block rounded border p-2" /></label>)}

@@ -38,9 +38,11 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [receipt, setReceipt] = useState<HistoryEntry | null>(null)
-  const [search, setSearch] = useState("")
-  const [category, setCategory] = useState("all")
-  const [month, setMonth] = useState("")
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
+  const visibleEntries = entries.filter(entry => {
+    const settlement = entry.category === 'damage' || ['REFUND', 'DAMAGE_FEE'].includes(entry.reservationPayment?.purpose || '')
+    return historyFilter === 'all' || (historyFilter === 'settlement' ? settlement : !settlement)
+  })
   useEffect(() => {
     let disposed = false
     setLoading(true)
@@ -78,9 +80,9 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
     entry.reservationPayment && entry.category === "deposit"
       ? paymentRecordLabel(entry.reservationPayment)
       : entry.status === "PAID"
-        ? "Đã xác nhận"
+        ? "Thanh toán thành công"
         : ["FAILED", "CANCELLED"].includes(entry.status)
-          ? "Thanh toán không thành công"
+          ? "Thanh toán thất bại"
           : "Chưa ghi nhận tiền"
   const filteredEntries = entries.filter((entry) => {
     const term = search.trim().toLocaleLowerCase("vi-VN")
@@ -137,19 +139,11 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
           {warning} Tải lại trang để thử lại.
         </p>
       ))}
-      <Card className="grid gap-3 p-4 sm:grid-cols-3">
-        <label className="block text-sm text-stone-600">Tìm mã giao dịch
-          <input className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900" type="search" placeholder="Nhập mã giao dịch..." value={search} onChange={(event) => setSearch(event.target.value)} />
-        </label>
-        <label className="block text-sm text-stone-600">Loại giao dịch
-          <select className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900" value={category} onChange={(event) => setCategory(event.target.value)}>
-            <option value="all">Tất cả</option><option value="deposit">Đặt cọc và nhận kho</option><option value="renewal">Gia hạn</option><option value="settlement">Quyết toán</option>
-          </select>
-        </label>
-        <label className="block text-sm text-stone-600">Tháng / năm
-          <input className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900" type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-        </label>
-      </Card>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc giao dịch">
+        <Button variant={historyFilter === 'all' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('all')}>Tất cả</Button>
+        <Button variant={historyFilter === 'payments' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('payments')}>Lịch sử thanh toán</Button>
+        <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>
+      </div>
       <Card>
         <Table tableClassName="min-w-[1000px]">
           <Thead>
@@ -160,11 +154,11 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
               <Th>Phương Thức</Th>
               <Th className="text-right">Số Tiền</Th>
               <Th>Trạng Thái</Th>
-              <Th>Thao Tác</Th>
+              <Th>Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
-            {filteredEntries.map((entry) => (
+            {visibleEntries.map((entry) => (
               <Tr key={entry.id}>
                 <Td>
                   <ShortCode value={entry.reservationPayment?.transactionReference || entry.id} />
@@ -179,13 +173,15 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                 <Td><span className="whitespace-nowrap text-xs text-stone-500">{entry.method || "—"}</span></Td>
                 <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b></Td>
                 <Td>
-                  <span className={"inline-flex whitespace-nowrap rounded px-2.5 py-1 text-xs font-semibold " + (entry.status === "PAID" ? "bg-green-100 text-green-700" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                  <div className="space-y-2">
+                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (entry.status === "PAID" ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                  </div>
                 </Td>
-                <Td>{entry.status === "PAID" && <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</Td>
+                <Td>{entry.status === "PAID" && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</Td>
               </Tr>
             ))}
-            {!loading && !error && !filteredEntries.length && (
-              <tr><td colSpan={7}><p className="py-6 text-center text-sm text-stone-500">{entries.length ? "Không có giao dịch phù hợp." : "Chưa có giao dịch nào."}</p></td></tr>
+            {!loading && !error && !visibleEntries.length && (
+              <tr><td colSpan={7}><p className="py-6 text-center text-sm text-stone-500">Chưa có giao dịch trong nhóm đã chọn.</p></td></tr>
             )}
           </Tbody>
         </Table>

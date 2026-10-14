@@ -1,4 +1,4 @@
 import RentalApiWorkspace from "../rental-api/RentalApiWorkspace"
-export default function CustomerRentalsApiPanel({ initialRentalId }: { initialRentalId?: string }) {
-  return <RentalApiWorkspace role="customer" initialRentalId={initialRentalId} />
+export default function CustomerRentalsApiPanel({ focusStorageUnitId }: { focusStorageUnitId?: string }) {
+  return <RentalApiWorkspace role="customer" focusStorageUnitId={focusStorageUnitId} />
 }
