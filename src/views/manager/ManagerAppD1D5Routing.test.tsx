@@ -23,7 +23,7 @@ describe('Manager D1-D5 routing isolation', () => {
   it.each(['dashboard', 'payments'])('uses only API %s in authenticated mode and never passes business Context props', page => {
     state.page = page
     const html = render()
-    expect(html).toContain(page === 'dashboard' ? 'API dashboard setPage' : 'API financial setPage')
+    expect(html).toContain(page === 'dashboard' ? 'API dashboard setPage' : 'API financial')
     expect(html).not.toContain('Legacy')
     for (const prop of ['rentals,', 'payments,', 'config,', 'applyRentalLateFee', 'setRentalOverlock', 'sendDelinquencyReminder']) expect(html).not.toContain(prop)
   })
@@ -31,9 +31,9 @@ describe('Manager D1-D5 routing isolation', () => {
     state.page = page; state.api = false
     expect(render()).toContain(page === 'dashboard' ? 'Legacy dashboard' : 'Legacy payments')
   })
-  it('uses the existing D1 read permission for API finance without granting payment commands', () => {
+  it('uses the payment history read permission without granting payment commands', () => {
     render()
-    expect(state.nav.find(item => item.id === 'payments')).toMatchObject({ label: 'Thông tin tài chính', permission: 'rentals:read' })
+    expect(state.nav.find(item => item.id === 'payments')).toMatchObject({ label: 'Lịch sử thanh toán', permission: 'payments:read' })
     state.api = false; render()
     expect(state.nav.find(item => item.id === 'payments')).toMatchObject({ permission: 'payments:collect' })
   })

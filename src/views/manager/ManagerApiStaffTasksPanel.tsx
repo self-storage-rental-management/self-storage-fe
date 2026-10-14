@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { getAuthenticatedActor } from '../../services/authApi'
 import { managerDisplayError } from './managerPresentation'
 import ManagerActionNotice from './ManagerActionNotice'
+import { listAllRecoveryTasks, type RecoveryTask } from '../../services/recoveryTasksApi'
+import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/RecoveryTaskDetail'
+import { rentalDate } from '../rental-api/presentation'
+import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
 import {
   assignMaintenanceTask,
   createMaintenanceTask,
@@ -15,7 +20,6 @@ import {
 } from '../../services/maintenanceApi'
 
 interface Props {
-  facilityId: string
   showToast: (message: string) => void
 }
 
@@ -39,12 +43,19 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
   return 'warning'
 }
 
-export default function ManagerApiStaffTasksPanel({ facilityId, showToast }: Props) {
+export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
+  const actor = getAuthenticatedActor()
+  const facilityId = singleManagerFacility(actor)
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
+  const [recoveryTasks, setRecoveryTasks] = useState<RecoveryTask[]>([])
+  const [recoveryError, setRecoveryError] = useState<unknown>(null)
+  const [selectedRecovery, setSelectedRecovery] = useState<RecoveryTask | null>(null)
   const [units, setUnits] = useState<MaintenanceStorageUnit[]>([])
   const [staff, setStaff] = useState<MaintenanceStaffOption[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<unknown>(null)
+  const [taskError, setTaskError] = useState<unknown>(null)
+  const [unitReadFailed, setUnitReadFailed] = useState(false)
+  const [staffReadFailed, setStaffReadFailed] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [reason, setReason] = useState('')
@@ -56,27 +67,42 @@ export default function ManagerApiStaffTasksPanel({ facilityId, showToast }: Pro
 
   const reload = useCallback(async () => {
     if (!facilityId) {
-      setError(new Error('Tài khoản quản lý chưa được gán cơ sở.'))
+      setTaskError(new Error(managerFacilityNotice(actor)))
       setLoading(false)
       return
     }
     setLoading(true)
-    setError(null)
-    try {
-      const [taskPage, unitPage, staffOptions] = await Promise.all([
-        listManagerMaintenanceTasks(facilityId),
-        listFacilityStorageUnits(facilityId),
-        listMaintenanceStaff(facilityId),
-      ])
-      setTasks(taskPage.data)
-      setUnits(unitPage.data.filter(unit => ['available', 'maintenance'].includes(unit.status)))
-      setStaff(staffOptions)
-    } catch (nextError) {
-      setError(nextError)
-    } finally {
-      setLoading(false)
+    setTaskError(null)
+    setRecoveryError(null)
+    setUnitReadFailed(false)
+    setStaffReadFailed(false)
+    const results = await Promise.allSettled([
+      listManagerMaintenanceTasks(facilityId),
+      listFacilityStorageUnits(facilityId),
+      listMaintenanceStaff(facilityId),
+      listAllRecoveryTasks('manager',facilityId),
+    ])
+    const [taskResult, unitResult, staffResult, recoveryResult] = results
+    if (recoveryResult.status === 'fulfilled') setRecoveryTasks(recoveryResult.value)
+    else { setRecoveryTasks([]);setRecoveryError(recoveryResult.reason) }
+    if (taskResult.status === 'fulfilled') setTasks(taskResult.value.data)
+    else {
+      setTasks([])
+      setTaskError(taskResult.reason)
     }
-  }, [facilityId])
+    if (unitResult.status === 'fulfilled') {
+      setUnits(unitResult.value.data.filter(unit => ['available', 'maintenance'].includes(unit.status)))
+    } else {
+      setUnits([])
+      setUnitReadFailed(true)
+    }
+    if (staffResult.status === 'fulfilled') setStaff(staffResult.value)
+    else {
+      setStaff([])
+      setStaffReadFailed(true)
+    }
+    setLoading(false)
+  }, [actor, facilityId])
 
   useEffect(() => {
     void reload()
@@ -131,29 +157,40 @@ export default function ManagerApiStaffTasksPanel({ facilityId, showToast }: Pro
       <SectionHeader
         eyebrow="Điều phối ca làm việc"
         title="Nhân viên & Nhiệm vụ"
-        subtitle="Tạo và giao nhiệm vụ bảo trì bằng dữ liệu thật từ cơ sở đang được cấp quyền."
-        action={<Button disabled={loading || !units.length || !staff.length} onClick={() => setModalOpen(true)}>Tạo nhiệm vụ</Button>}
+        subtitle="Theo dõi công việc bảo trì và thu hồi kho tại cơ sở."
+        action={<Button disabled={loading || !facilityId || unitReadFailed || staffReadFailed || !units.length || !staff.length} onClick={() => setModalOpen(true)}>Tạo nhiệm vụ</Button>}
       />
 
-      {error && <ManagerActionNotice tone="warning">{managerDisplayError(error)} <Button size="sm" variant="outline" onClick={() => void reload()}>Tải lại</Button></ManagerActionNotice>}
-      {!error && !loading && !staff.length && <ManagerActionNotice tone="info">Chưa có Staff ACTIVE với phạm vi OPERATE/MANAGE tại cơ sở này.</ManagerActionNotice>}
-      {!error && !loading && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
+      {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có Staff ACTIVE với phạm vi OPERATE/MANAGE tại cơ sở này.</ManagerActionNotice>}
+      {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
+      {!loading && (unitReadFailed || staffReadFailed) && <p className="text-xs text-stone-500">Chưa tải được danh sách kho hoặc nhân viên để tạo nhiệm vụ. Dữ liệu nhiệm vụ vẫn được tải riêng.</p>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Card className="p-4"><p className="text-sm text-stone-500">Tổng nhiệm vụ</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : tasks.length}</p></Card>
-        <Card className="p-4"><p className="text-sm text-stone-500">Đang xử lý</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : openTasks.length}</p></Card>
-        <Card className="col-span-2 p-4 lg:col-span-1"><p className="text-sm text-stone-500">Nhân viên đủ điều kiện</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : staff.length}</p></Card>
+        <Card className="p-4"><p className="text-sm text-stone-500">Tổng nhiệm vụ</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : taskError || recoveryError ? '-' : tasks.length + recoveryTasks.length}</p></Card>
+        <Card className="p-4"><p className="text-sm text-stone-500">Đang xử lý</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : taskError || recoveryError ? '-' : openTasks.length + recoveryTasks.filter(task => task.status !== 'CLOSED').length}</p></Card>
+        <Card className="col-span-2 p-4 lg:col-span-1"><p className="text-sm text-stone-500">Nhân viên đủ điều kiện</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : staffReadFailed ? '—' : staff.length}</p></Card>
       </div>
 
       <Card className="overflow-x-auto">
         <Table>
-          <Thead><tr><Th>Nhiệm vụ</Th><Th>Gian kho</Th><Th>Người phụ trách</Th><Th>Hạn</Th><Th>Trạng thái</Th></tr></Thead>
+          <Thead><tr><Th>Nhiệm vụ</Th><Th>Loại</Th><Th>Gian kho</Th><Th>Người phụ trách</Th><Th>Thời gian</Th><Th>Trạng thái</Th><Th>Thao tác</Th></tr></Thead>
           <Tbody>
-            {loading && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-stone-500">Đang tải dữ liệu nhiệm vụ…</td></tr>}
-            {!loading && !tasks.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-stone-500">Chưa có nhiệm vụ tại cơ sở này.</td></tr>}
+            {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Đang tải dữ liệu nhiệm vụ…</td></tr>}
+            {!loading && Boolean(taskError || recoveryError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được đầy đủ nhiệm vụ. {managerDisplayError(taskError || recoveryError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
+            {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Chưa có nhiệm vụ tại cơ sở này.</td></tr>}
+            {!loading && recoveryTasks.map(task => <Tr key={`recovery-${task.id}`}>
+              <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa hoàn tất gia hạn.' : task.reason}</p></Td>
+              <Td><Badge variant="warning">Thu hồi kho</Badge></Td>
+              <Td>{task.storageUnitCode}</Td>
+              <Td><span className="text-sm text-stone-500">Cơ sở tiếp nhận</span></Td>
+              <Td><p className="text-xs text-stone-500">Tiếp nhận lúc</p>{rentalDate(task.receivedAt)}</Td>
+              <Td><Badge variant={task.status === 'CLOSED' ? 'muted' : task.status === 'IN_PROGRESS' ? 'info' : 'warning'}>{recoveryStatusLabels[task.status]}</Badge></Td>
+              <Td><Button size="sm" variant="outline" onClick={() => setSelectedRecovery(task)}>Chi tiết</Button></Td>
+            </Tr>)}
             {!loading && tasks.map(task => (
               <Tr key={task.id}>
                 <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="text-xs text-stone-500">{task.id} · {taskPriorityLabel[task.priority]}</p><p className="mt-1 text-xs text-stone-500">{task.reason}</p></Td>
+                <Td><Badge variant="muted">Bảo trì</Badge></Td>
                 <Td>{task.unitCode}</Td>
                 <Td>
                   {task.status === 'completed' || task.status === 'cancelled'
@@ -162,12 +199,16 @@ export default function ManagerApiStaffTasksPanel({ facilityId, showToast }: Pro
                 </Td>
                 <Td>{task.dueAt || 'Chưa đặt hạn'}</Td>
                 <Td><Badge variant={statusVariant(task.status)}>{taskStatusLabel[task.status]}</Badge></Td>
+                <Td><span className="text-stone-400">-</span></Td>
               </Tr>
             ))}
           </Tbody>
         </Table>
       </Card>
 
+      {selectedRecovery && <Modal open title="Chi tiết nhiệm vụ thu hồi" onClose={() => setSelectedRecovery(null)}>
+        <RecoveryTaskDetail key={selectedRecovery.id} role="manager" id={selectedRecovery.id} facilityId={selectedRecovery.facilityId} />
+      </Modal>}
       <Modal open={modalOpen} onClose={() => !saving && setModalOpen(false)} title="Tạo nhiệm vụ bảo trì">
         <div className="space-y-4">
           <Input label="Tiêu đề" value={title} onChange={event => setTitle(event.target.value)} maxLength={255} />

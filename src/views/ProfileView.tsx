@@ -8,6 +8,7 @@ import { listCustomerRentals, type CustomerRental } from '../services/customerRe
 import { listManagerMaintenanceTasks, listStaffMaintenanceTasks, type MaintenanceTask } from '../services/maintenanceApi'
 import { getManagerReportSummary, type ManagerReportSummary } from '../services/managerReportingApi'
 import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
+import StaffMaintenanceOperationsPanel from './staff/StaffMaintenanceOperationsPanel'
 
 interface ProfileViewProps {
   user: User
@@ -958,6 +959,7 @@ setSavingProfile(true)
               </>
             )}
           </Card>
+          {apiMode && <div className="xl:col-span-2"><StaffMaintenanceOperationsPanel showToast={showToast} /></div>}
         </div>
       )
     }

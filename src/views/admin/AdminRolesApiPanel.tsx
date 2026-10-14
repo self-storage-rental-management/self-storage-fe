@@ -14,14 +14,14 @@ type PermissionModule = 'Kho bãi & vận hành' | 'Hợp đồng & dịch vụ'
 const INTERNAL_ROLE_CODES: InternalRoleCode[] = ['ADMIN', 'MANAGER', 'STAFF', 'BUSINESS']
 const MODULES: PermissionModule[] = ['Kho bãi & vận hành', 'Hợp đồng & dịch vụ', 'Tài chính & báo cáo', 'Hỗ trợ & quản trị']
 const MANAGER_REQUIRED = new Set(['reservations:approve', 'policies:update', 'staff_tasks:update', 'reports:read'])
-const STAFF_RESTRICTED = new Set(['reservations:approve', 'payments:collect', 'policies:update', 'staff_tasks:update'])
+const STAFF_RESTRICTED = new Set(['payments:collect', 'policies:update', 'staff_tasks:update'])
 const BUSINESS_RESTRICTED = new Set(['policies:update', 'settings:manage', 'payments:collect', 'reservations:approve'])
 
 const roleKey = (code: InternalRoleCode) => code.toLowerCase() as Role
 const roleDescription: Record<InternalRoleCode, string> = {
   ADMIN: 'Quản trị tài khoản, vai trò, cài đặt và kiểm toán.',
   MANAGER: 'Phê duyệt, điều phối vận hành, chính sách và báo cáo.',
-  STAFF: 'Thực thi bàn giao, trả kho và hỗ trợ khách hàng.',
+  STAFF: 'Rà soát đặt chỗ, phân kho, check-in và bàn giao cho khách hàng.',
   BUSINESS: 'Theo dõi cơ hội, hợp đồng và thông tin thương mại.',
 }
 

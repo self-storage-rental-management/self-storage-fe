@@ -31,6 +31,7 @@ vi.mock("../../hooks/useRentalApiResource", () => ({
     refresh: vi.fn(),
     data: state.loading || state.error ? undefined
       : key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } }
+      : key.includes(":summary:") ? { counts: { open: 0, in_progress: 0, resolved: 0, closed: 0 }, unassignedOpen: 0 }
       : state.mode === "rental" ? key.endsWith(":counts") ? [0, 0, 0, 0] : { kind: "rental", page: page([]) }
       : state.mode === "options" ? []
       : state.mode === "operations" ? /:(payments|refunds|facility-incidents):/.test(key) ? page([]) : key.endsWith(":proposal") ? null : operationState
@@ -47,20 +48,24 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-function verifyEmptyOnlyAfterSuccess(view: ReactElement) {
-  expect(renderToStaticMarkup(view)).toContain("Không có dữ liệu")
+function verifyLoadingAndErrors(view: ReactElement, emptyText = "Không có dữ liệu") {
   state.loading = true
   let html = renderToStaticMarkup(view)
   expect(html).toContain("Đang tải")
-  expect(html).not.toContain("Không có dữ liệu")
+  expect(html).not.toContain(emptyText)
   state.loading = false
   for (const status of [null, 401, 403, 409, 500] as const) {
     state.error = new ApiClientError("Private internal detail", { status })
     html = renderToStaticMarkup(view)
     expect(html).toContain('role="alert"')
-    expect(html).not.toContain("Không có dữ liệu")
+    expect(html).not.toContain(emptyText)
     expect(html).not.toContain("Private internal detail")
   }
+}
+
+function verifyEmptyOnlyAfterSuccess(view: ReactElement, emptyText = "Không có dữ liệu") {
+  expect(renderToStaticMarkup(view)).toContain(emptyText)
+  verifyLoadingAndErrors(view, emptyText)
 }
 
 describe("Dương verified empty-data presentation", () => {
@@ -78,13 +83,18 @@ describe("Dương verified empty-data presentation", () => {
     state.actor = operationsActor("staff")
     verifyEmptyOnlyAfterSuccess(<StaffRenewalOperationsApiPanel />)
   })
-  it.each(["customer", "staff", "manager"] as const)("D3 %s empty event history", role => {
+  it.each(["customer", "staff", "manager"] as const)("D3 %s hides verified empty event history and preserves loading/errors", role => {
     state.actor = operationsActor(role); state.mode = "operations"
-    verifyEmptyOnlyAfterSuccess(<RenewalOperationsPanel id={ids.renewal} role={role} customerId={ids.customer} facilityId={ids.facility} />)
+    const view = <RenewalOperationsPanel id={ids.renewal} role={role} customerId={ids.customer} facilityId={ids.facility} />
+    const html = renderToStaticMarkup(view)
+    expect(html).not.toContain("Lịch sử thanh toán gia hạn")
+    expect(html).not.toContain("Lịch sử quyết định hoàn tiền")
+    expect(html).not.toContain("Sự cố &amp; xem xét ngoại lệ")
+    verifyLoadingAndErrors(view)
   })
   it.each(["customer", "staff", "manager"] as const)("D5 %s empty ticket list", role => {
     state.actor = supportActor(role)
-    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />)
+    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />, role === "staff" ? "Không có yêu cầu chờ tiếp nhận" : "Không có dữ liệu")
   })
   it("D5 Customer empty available records", () => {
     state.actor = supportActor("customer")

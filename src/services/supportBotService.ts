@@ -50,7 +50,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Cách gia hạn hợp đồng thuê kho',
     category: 'Hợp đồng',
     keywords: ['gia hạn', 'thêm tháng', 'kéo dài', 'tiếp tục thuê', 'hợp đồng', 'renew', 'extension'],
-    answer: 'Bạn vào mục "Hồ sơ thuê của tôi", chọn hợp đồng cần gia hạn và bấm nút "Gia hạn". Lưu ý nên gửi yêu cầu trước ngày kết thúc ít nhất 3 ngày và thanh toán cọc 40% kỳ mới để giữ nguyên đơn giá ưu đãi.',
+    answer: 'Bạn vào mục "Hồ sơ thuê của tôi", chọn yêu cầu gia hạn đã được xác nhận và bấm "Thanh toán toàn kỳ" khi hệ thống mở thanh toán. Renewal mới không thu cọc riêng; khách thanh toán một lần toàn bộ tiền thuê sau giảm giá qua VNPay Sandbox. Nếu chưa thấy nút thanh toán, hệ thống chưa xác nhận đủ điều kiện tài chính, hạn xử lý và giữ chỗ.',
     solved: true,
     actionHint: 'Vào Hồ sơ thuê → Gia hạn'
   },

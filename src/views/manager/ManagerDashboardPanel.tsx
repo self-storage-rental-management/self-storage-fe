@@ -271,7 +271,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
     },
     {
       rank: 9,
-      label: "Yêu cầu gia hạn chờ duyệt",
+      label: "Yêu cầu gia hạn cần theo dõi",
       count: pendingRenewals.length,
       detail: "Cần xem xét thời hạn mới",
       page: "rentals",

@@ -98,10 +98,18 @@ export function StatCard({ title, value, delta, deltaPositive }: StatCardProps) 
 
 // ─── Table ───────────────────────────────────────────────────────────────────
 
-export function Table({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Table({
+  children,
+  className = '',
+  tableClassName = '',
+}: {
+  children: ReactNode
+  className?: string
+  tableClassName?: string
+}) {
   return (
     <div className={`overflow-x-auto ${className}`}>
-      <table className="w-full text-sm text-left">{children}</table>
+      <table className={`w-full text-sm text-left ${tableClassName}`}>{children}</table>
     </div>
   )
 }

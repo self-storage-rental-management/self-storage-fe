@@ -340,7 +340,7 @@ export default function StaffReservationReviews({
       <div className="border-t border-stone-300 pt-6">
         <SectionHeader
           title="Danh sách kho đang được giữ"
-          subtitle={`Có ${activeTotalItems} đơn đang hoạt động tại cơ sở của bạn. Mặc định ưu tiên lịch check-in gần nhất.`}
+          subtitle={`Có ${activeTotalItems} đơn đang hoạt động tại cơ sở của bạn. Mặc định ưu tiên lịch nhận kho gần nhất.`}
         />
       </div>
       <Card className="p-4">
@@ -367,7 +367,7 @@ export default function StaffReservationReviews({
             </div>
             <div className="text-right">
               <Badge variant="info">{activeStatusLabels[row.status] || row.status}</Badge>
-              <p className="mt-2 text-xs text-stone-600">Check-in: <b>{row.appointmentAt ? formatStaffDateTime(row.appointmentAt) : "Chưa chọn lịch"}</b></p>
+              <p className="mt-2 text-xs text-stone-600">Lịch nhận kho: <b>{row.appointmentAt ? formatStaffDateTime(row.appointmentAt) : "Chưa chọn lịch"}</b></p>
               <p className="text-xs text-stone-500">Kỳ thuê: {formatStaffDate(row.startDate)} → {formatStaffDate(row.endDate)}</p>
             </div>
           </div>

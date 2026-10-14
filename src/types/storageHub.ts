@@ -17,6 +17,7 @@ export type HoldStatus =
   | ReservationStatus
   | 'awaiting_deposit'
   | 'deposit_paid'
+  | 'full_rent_paid'
   | 'contract_signed'
   | 'fully_paid'
   | 'unit_assigned'
@@ -504,7 +505,7 @@ export interface RenewalRecord {
   newEndDate: string
   renewalMonths: number
   renewalFee: number
-  status: 'pending' | 'approved' | 'deposit_paid' | 'appointment_scheduled' | 'payment_processing' | 'payment_failed' | 'payment_expired' | 'rejected' | 'cancelled' | 'completed'
+  status: 'pending' | 'approved' | 'deposit_paid' | 'full_rent_paid' | 'appointment_scheduled' | 'payment_processing' | 'payment_failed' | 'payment_expired' | 'rejected' | 'cancelled' | 'completed'
   requestedAt: string
   updatedAt?: string
   cancelledAt?: string

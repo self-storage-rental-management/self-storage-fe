@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
-import { completeCheckIn, downloadCheckInEvidence, listCheckIns, markCheckInNoShow, rejectCheckIn, scheduleCheckIn, uploadCheckInEvidence } from './checkInApi'
+import { completeCheckIn, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, uploadCheckInEvidence } from './checkInApi'
 
 const responseCase = {
   checkInId: 'checkin-1',
@@ -149,5 +149,30 @@ describe('checkInApi', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/api/files/asset-1')
     expect(result.fileName).toBe('handover.png')
     expect(result.contentType).toBe('image/png')
+  })
+
+  it('lists active staff credentials and reissues one against the active rental', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [{ id: 'credential-1', status: 'ACTIVE', rentalId: 'rental-1' }],
+        pagination: { page: 0, pageSize: 100, totalItems: 1, totalPages: 1, sort: 'issuedAt: DESC' },
+        correlationId: 'c-1',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { id: 'credential-2', status: 'ACTIVE', rentalId: 'rental-1' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const listed = await listStaffAccessCredentials({ status: 'ACTIVE', pageSize: 100 })
+    expect(listed.data[0].rentalId).toBe('rental-1')
+    await reissueAccessCredential('rental-1', {
+      credentialId: 'credential-1',
+      identityVerified: true,
+      verificationMethod: 'ID_DOCUMENT',
+      reason: 'Khách báo mất chìa khóa',
+      reference: 'KEY-NEW-001',
+    })
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/staff/access-credentials?page=0&pageSize=100&status=ACTIVE')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/staff/rentals/rental-1/credentials/reissue')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ credentialId: 'credential-1', identityVerified: true, reference: 'KEY-NEW-001' })
   })
 })
