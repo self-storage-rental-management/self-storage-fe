@@ -14,9 +14,10 @@ interface Props {
   showToast: (message: string) => void
   statusBadge: (status: string) => React.ReactNode
   onNavigate: (page: string) => void
+  onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
 }
 
-export default function ManagerMovesPanel({ user, showToast, statusBadge, onNavigate }: Props) {
+export default function ManagerMovesPanel({ user, showToast, statusBadge, onNavigate, onCreateMaintenanceWork }: Props) {
   const hub = useStorageHub()
   const hasDispute = hub.returns.some(item => item.status === 'disputed' && isManagerFacilityVisible(user, item.facilityId, item.facilityName))
   const [tab, setTab] = useState<'move-ins' | 'move-outs' | 'exceptions' | 'credentials'>(() => hasDispute ? 'move-outs' : 'move-ins')
@@ -25,7 +26,7 @@ export default function ManagerMovesPanel({ user, showToast, statusBadge, onNavi
   const activeLabel = tab === 'move-ins' ? labels[0] : tab === 'move-outs' ? labels[1] : tab === 'credentials' && isApiAuthenticated() ? labels[2] : labels[labels.length - 1]
   return <div className="space-y-5">
     <Tabs tabs={labels} active={activeLabel} onChange={value => setTab(value === labels[0] ? 'move-ins' : value === labels[1] ? 'move-outs' : isApiAuthenticated() && value === labels[2] ? 'credentials' : 'exceptions')} />
-    {tab === 'move-ins' ? <ManagerCheckinsPanel user={user} sb={statusBadge} /> : tab === 'move-outs' ? <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} /> : tab === 'credentials' && isApiAuthenticated() ? <ManagerAccessCredentialsPanel facilityId={user.facilityId} /> : <ManagerExceptionsPanel user={user} onOpen={destination => {
+    {tab === 'move-ins' ? <ManagerCheckinsPanel user={user} sb={statusBadge} /> : tab === 'move-outs' ? <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} onCreateMaintenanceWork={onCreateMaintenanceWork} /> : tab === 'credentials' && isApiAuthenticated() ? <ManagerAccessCredentialsPanel facilityId={user.facilityId} /> : <ManagerExceptionsPanel user={user} onOpen={destination => {
       if (destination === 'move-ins' || destination === 'move-outs') setTab(destination)
       else onNavigate(destination)
     }} />}

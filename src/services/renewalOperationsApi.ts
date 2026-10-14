@@ -63,6 +63,7 @@ export function isOperationState(
     nullable(r.expectedVersion, isVersion) &&
     [
       "UNKNOWN",
+      "AWAITING_PAYMENT_INTENT",
       "AWAITING_DEPOSIT",
       "SIGNING",
       "SIGNING_EXPIRY_PENDING",
@@ -72,6 +73,7 @@ export function isOperationState(
     ].includes(r.phase) &&
     [
       r.depositPaymentRef,
+      r.fullRentPaymentRef ?? null,
       r.appointmentRef,
       r.arrivalRef,
       r.confirmedExceptionRef,
@@ -80,6 +82,7 @@ export function isOperationState(
     ].every((v) => nullable(v, isUuid)) &&
     [
       r.depositPaidAt,
+      r.fullRentPaidAt ?? null,
       r.originalSigningDeadline,
       r.effectiveSigningDeadline,
       r.recoveryCutoff,
@@ -101,8 +104,8 @@ export function isOperationState(
       "COMPLETED",
     ].includes(r.phase) ||
       (isVersion(r.expectedVersion) &&
-        isUuid(r.depositPaymentRef) &&
-        isInstant(r.depositPaidAt) &&
+        ((isUuid(r.depositPaymentRef) && isInstant(r.depositPaidAt)) ||
+          (isUuid(r.fullRentPaymentRef) && isInstant(r.fullRentPaidAt))) &&
         isInstant(r.originalSigningDeadline) &&
         isInstant(r.effectiveSigningDeadline) &&
         isInstant(r.recoveryCutoff))) &&
@@ -124,6 +127,7 @@ export function isOperationEvent(
       nullable(e.actorId, isUuid) &&
       [
         "DEPOSIT",
+        "FULL_RENT_PAYMENT",
         "CASH",
         "APPOINTMENT",
         "ARRIVAL",
@@ -133,6 +137,8 @@ export function isOperationEvent(
         "EXCEPTION",
         "CONFIRMATION",
         "REFUND",
+        "DEPOSIT_DISPOSITION",
+        "REFUND_EXECUTION",
         "COMPLETION",
         "EXPIRY",
       ].includes(e.kind) &&
@@ -154,6 +160,17 @@ export function isOperationEvent(
       Number(d.workflowRevision) >= 0
   const money = (v: unknown) =>
     typeof v === "number" && Number.isFinite(v) && v >= 0
+  if (e.kind === "DEPOSIT_DISPOSITION") return ["FORFEITED", "REVIEW_REQUIRED", "REFUND_ELIGIBLE"].includes(String(d.status))
+    && money(d.amount) && Number(d.amount) > 0 && d.currency === "VND" && isUuid(d.paymentId)
+    && ["SANDBOX", "PRODUCTION"].includes(String(d.environment))
+  if (e.kind === "REFUND_EXECUTION") return isUuid(d.reference) && isUuid(d.renewalId)
+    && money(d.amount) && Number(d.amount) > 0 && d.currency === "VND" && isInstant(d.executedAt)
+    && ["SANDBOX", "PRODUCTION"].includes(String(d.environment))
+  if (e.kind === "DEPOSIT" && d.renewalId === undefined)
+    // Earlier verified VNPay events are resource-bound by the authenticated endpoint.
+    return isUuid(d.paymentRef) && money(d.amount) && Number(d.amount) > 0
+      && d.currency === "VND" && isInstant(d.paidAt) && isInstant(d.paymentDeadline)
+      && isUuid(d.receiptId) && (d.outcome === undefined || d.outcome === "SUCCESS")
   if (e.kind === "DEPOSIT")
     return (
       isUuid(d.paymentRef) &&
@@ -165,6 +182,9 @@ export function isOperationEvent(
           nullable(d.currency, (v) => typeof v === "string") &&
           nullable(d.paidAt, isInstant))
     )
+  if(e.kind === "FULL_RENT_PAYMENT")
+    return isUuid(d.paymentRef) && money(d.amount) && Number(d.amount)>0 && d.currency==="VND"
+      && isInstant(d.paidAt) && isInstant(d.paymentDeadline) && isUuid(d.receiptId)
   if (e.kind === "CASH")
     return (
       isUuid(d.reference) &&
@@ -247,9 +267,9 @@ export async function listRenewalOperationEvents(
   const suffix = rentalQuery({ page, size }, ["page", "size"], [])
   const allowed =
     category === "payments"
-      ? ["DEPOSIT", "CASH"]
+      ? ["DEPOSIT", "FULL_RENT_PAYMENT", "CASH"]
       : category === "refunds"
-        ? ["REFUND"]
+        ? ["REFUND", "DEPOSIT_DISPOSITION", "REFUND_EXECUTION"]
         : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION"]
   return readRentalPage<RenewalOperationEvent>(
     await apiRequest(`${path(role, id)}/${category}${suffix}`),
@@ -257,8 +277,21 @@ export async function listRenewalOperationEvents(
       isOperationEvent(v) && allowed.includes(v.kind) && linkedEvent(v, id),
   )
 }
+export async function listAllRenewalPaymentEvents(role: RenewalOperationsRole, id: string) {
+  const first = await listRenewalOperationEvents(role, id, "payments", 0, 100)
+  const events = [...first.data]
+  const totalPages = first.pagination.totalPages
+  if (!Number.isInteger(totalPages) || totalPages > 1000)
+    throw new Error("Số trang lịch sử thanh toán không hợp lệ.")
+  for (let page = 1; page < totalPages; page++) {
+    const next = await listRenewalOperationEvents(role, id, "payments", page, 100)
+    events.push(...next.data)
+  }
+  return { ...first, data: events }
+}
 function linkedEvent(event: RenewalOperationEvent, id: string) {
   const d = event.data as Record<string, unknown>
+  if (event.kind === "DEPOSIT" && d.renewalId === undefined) return true // Validated historical VNPay shape, read from this resource's endpoint.
   if (["DEPOSIT", "CASH"].includes(event.kind)) return d.renewalId === id
   if (event.kind === "REFUND" && d.reservation)
     return (d.reservation as Record<string, unknown>).renewalId === id
@@ -283,8 +316,40 @@ export async function getRenewalPayableStatement(id: string) {
         Array.isArray(s.requiredObligations) &&
         s.requiredObligations.length > 0 &&
         s.requiredObligations.every(isUuid) &&
-        new Set(s.requiredObligations).size === s.requiredObligations.length
+        new Set(s.requiredObligations).size === s.requiredObligations.length &&
+        (s.remainingRentalAmount === undefined && s.overdueFee === undefined && s.unpostedOverdueFee === undefined ||
+          [s.remainingRentalAmount,s.overdueFee,s.unpostedOverdueFee].every(v => typeof v === "number" && Number.isFinite(v) && v >= 0)
+          && s.remainingRentalAmount! + s.overdueFee! === s.amount && s.unpostedOverdueFee! <= s.overdueFee!)
       )
+    },
+  )
+}
+
+export interface RenewalSigningSlots {
+  renewalId: string
+  expectedVersion: number
+  checkedAt: string
+  date: string
+  sourceCoverage: "VERIFIED" | "LOCAL_DEMO"
+  availableAt: string
+  deadlineAt: string
+  slots: { reference: string; start: string; end: string }[]
+}
+
+export async function getRenewalSigningSlots(id: string, date: string) {
+  if (!isUuid(id) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Ngày ký không hợp lệ.")
+  return readRentalEnvelope<RenewalSigningSlots>(
+    await apiRequest(`${path("customer", id)}/signing-slots?date=${encodeURIComponent(date)}`),
+    (value) => {
+      const v = value as RenewalSigningSlots | null
+      return !!v && v.renewalId === id && v.date === date && isVersion(v.expectedVersion)
+        && isInstant(v.checkedAt) && isInstant(v.availableAt) && isInstant(v.deadlineAt)
+        && ["VERIFIED", "LOCAL_DEMO"].includes(v.sourceCoverage) && Array.isArray(v.slots)
+        && v.slots.every(slot => typeof slot.reference === "string" && !!slot.reference
+          && isInstant(slot.start) && isInstant(slot.end)
+          && Date.parse(slot.start) < Date.parse(slot.end)
+          && Date.parse(slot.start) >= Date.parse(v.availableAt)
+          && Date.parse(slot.start) <= Date.parse(v.deadlineAt))
     },
   )
 }
@@ -315,7 +380,6 @@ export function validateEvidence(ids: string[]) {
     )
 }
 const routes = {
-  deposit: ["customer", "POST", "simulated-payment"],
   appointment: ["customer", "POST", "appointment"],
   reschedule: ["customer", "PATCH", "appointment"],
   confirmation: ["customer", "POST", "exception-confirmations"],
@@ -327,7 +391,6 @@ const routes = {
   refund: ["manager", "POST", "refund-decisions"],
 } as const
 const eventKinds = {
-  deposit: "DEPOSIT",
   appointment: "APPOINTMENT",
   reschedule: "APPOINTMENT",
   confirmation: "CONFIRMATION",
@@ -340,13 +403,12 @@ const eventKinds = {
 } as const
 // Match RenewalOperationCommands exactly; UI/actor/money fields must never reach strict BE DTOs.
 const commandFields: Record<RenewalOperationCommand["action"], readonly string[]> = {
-  deposit: ["expectedVersion"],
   appointment: ["appointmentAt", "reason", "expectedVersion"],
   reschedule: ["appointmentAt", "reason", "expectedVersion"],
   confirmation: ["decisionRef", "expectedVersion"],
   arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion"],
   incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
-  cash: ["payableStatementRef", "receiptReference", "received", "expectedVersion"],
+  cash: ["payableStatementRef", "receiptReference", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
   completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion"],
   exception: ["incidentId", "action", "appointmentAt", "revisedDeadline", "reason", "evidenceFileIds", "expectedVersion"],
   refund: ["incidentId", "decision", "reason", "evidenceFileIds", "expectedVersion"],
@@ -403,6 +465,8 @@ export async function sendRenewalOperation(
   )
     throw new Error("Quyết định hoàn tiền không hợp lệ.")
   if (command.action === "cash") {
+    if (command.body.paymentMethod && !["CASH", "BANK_TRANSFER"].includes(command.body.paymentMethod)) throw new Error("Phương thức thanh toán không hợp lệ.")
+    if (!isUuid(command.body.receiptFileId)) throw new Error("Cần chứng từ thu tiền mặt.")
     validateText(command.body.receiptReference, true, 100)
     if (command.body.received !== true)
       throw new Error("Cần xác nhận đã nhận tiền thật.")

@@ -19,8 +19,6 @@ interface Props {
   units: StorageUnit[]
   unitTypes: UnitType[]
   assignUnitToHold: (reservationId: string, unitId: string, manager: User) => void
-  approveRenewal: (renewalId: string, manager: User) => void
-  rejectRenewal: (renewalId: string, manager: User, reason: string) => void
   showToast: (message: string) => void
 }
 
@@ -52,7 +50,7 @@ const billingStatusFor = (rental: RentalRecord) => {
 
 const normalizeRentalMessage = (message: string) => message.replace(/hợp đồng/gi, 'hồ sơ thuê')
 
-export default function ManagerRentalsPanel({ user, rentals, renewals, reservations, units, unitTypes, assignUnitToHold, approveRenewal, rejectRenewal, showToast }: Props) {
+export default function ManagerRentalsPanel({ user, rentals, renewals, reservations, units, unitTypes, assignUnitToHold, showToast }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [paymentFilter, setPaymentFilter] = useState('all')
@@ -104,15 +102,15 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
   const allPendingRenewals = facilityRenewals.filter(renewal => renewal.status === 'pending')
   const pendingRenewals = allPendingRenewals.filter(renewal => matchesManagerSearch(renewalQuery, [renewal.id, renewal.rentalId, renewal.customerId, renewal.customerName, renewal.unitId]))
     .sort((left, right) => managerDateValue(left.requestedAt) - managerDateValue(right.requestedAt))
-  const renewalApprovalBlock = (renewal: RenewalRecord) => {
+  const renewalPaymentReadinessBlock = (renewal: RenewalRecord) => {
     const rental = facilityRentals.find(item => item.id === renewal.rentalId)
     if (!rental) return 'Không tìm thấy hồ sơ thuê tương ứng.'
     if (rental.status !== 'active') {
       return ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
-        ? "Hồ sơ thuê đang có yêu cầu trả kho hoặc đang tất toán, không thể duyệt gia hạn."
+        ? "Hồ sơ thuê đang có yêu cầu trả kho hoặc đang tất toán, không thể gia hạn."
         : 'Hồ sơ thuê không còn hiệu lực để gia hạn.'
     }
-    if (isManagerRentalOverdue(rental)) return "Hồ sơ thuê đang có khoản quá hạn, cần xử lý công nợ trước khi duyệt gia hạn."
+    if (isManagerRentalOverdue(rental)) return "Hồ sơ thuê đang có khoản quá hạn; hệ thống chưa thể mở thanh toán gia hạn."
     if (renewal.oldEndDate !== rental.endDate) return "Thời hạn hồ sơ thuê đã thay đổi, khách hàng cần cập nhật lại yêu cầu."
     if (managerDateValue(renewal.newEndDate) <= managerDateValue(renewal.oldEndDate)) return 'Ngày kết thúc mới không hợp lệ.'
     const conflicted = unitHasAllocationConflict(renewal.unitId, renewal.oldEndDate, renewal.newEndDate, renewal.id, reservations, rentals.filter(item => item.id !== rental.id))
@@ -180,33 +178,15 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
     }
   }
 
-  const decideRenewal = (renewal: RenewalRecord, approved: boolean) => {
-    if (approved) {
-      const blockedReason = renewalApprovalBlock(renewal)
-      if (blockedReason) return showToast(blockedReason)
-    }
-    try {
-      if (approved) approveRenewal(renewal.id, user)
-      else {
-        const reason = window.prompt('Nhập lý do từ chối gia hạn:')
-        if (!reason?.trim()) return
-        rejectRenewal(renewal.id, user, reason)
-      }
-      showToast(approved ? ('Đã duyệt yêu cầu gia hạn.') : ('Đã từ chối yêu cầu gia hạn.'))
-    } catch (error) {
-      showToast(managerDisplayError(error))
-    }
-  }
-
   return <div className="fade-in space-y-5">
     <SectionHeader eyebrow="Vận hành thuê kho" title="Hồ sơ thuê & Gia hạn" subtitle="Theo dõi hồ sơ thuê, thời hạn, thanh toán và xử lý yêu cầu gia hạn tại cơ sở." />
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><StatCard title={'Tổng hồ sơ'} value={facilityRentals.length} icon={Icon.policy} /><StatCard title={'Đang hiệu lực'} value={facilityRentals.filter(rental => rental.status === 'active').length} icon={Icon.check} /><StatCard title={'Sắp hết hạn 30 ngày'} value={facilityRentals.filter(rental => { const days = (managerDateValue(rental.endDate) - Date.now()) / 86_400_000; return rental.status === 'active' && days >= 0 && days <= 30 }).length} icon={Icon.clock} /><StatCard title={'Chờ duyệt gia hạn'} value={allPendingRenewals.length} icon={Icon.refresh} /></div>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><StatCard title={'Tổng hồ sơ'} value={facilityRentals.length} icon={Icon.policy} /><StatCard title={'Đang hiệu lực'} value={facilityRentals.filter(rental => rental.status === 'active').length} icon={Icon.check} /><StatCard title={'Sắp hết hạn 30 ngày'} value={facilityRentals.filter(rental => { const days = (managerDateValue(rental.endDate) - Date.now()) / 86_400_000; return rental.status === 'active' && days >= 0 && days <= 30 }).length} icon={Icon.clock} /><StatCard title={'Yêu cầu gia hạn cần theo dõi'} value={allPendingRenewals.length} icon={Icon.refresh} /></div>
 
-    <ManagerActionNotice tone={allPendingRenewals.length ? 'warning' : 'info'}>{allPendingRenewals.length ? `${allPendingRenewals.length} yêu cầu gia hạn đang chờ quản lý cơ sở duyệt hoặc từ chối.` : "Chưa có yêu cầu gia hạn ở trạng thái chờ duyệt. quản lý cơ sở chỉ thao tác sau khi khách hàng gửi yêu cầu gia hạn."}</ManagerActionNotice>
+    <ManagerActionNotice tone={allPendingRenewals.length ? 'warning' : 'info'}>{allPendingRenewals.length ? `${allPendingRenewals.length} yêu cầu gia hạn đang được theo dõi; hệ thống tự kiểm tra điều kiện thanh toán.` : "Chưa có yêu cầu gia hạn cần theo dõi."}</ManagerActionNotice>
 
-    {allPendingRenewals.length > 0 && <Card className="border-amber-200"><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Yêu cầu gia hạn chờ duyệt</h3><p className="text-xs text-stone-500">Yêu cầu chờ lâu nhất được đưa lên trước. Duyệt chỉ mở bước thanh toán, chưa kéo dài thời hạn thuê ngay.</p><div className="mt-3"><Input value={renewalQuery} onChange={event => setRenewalQuery(event.target.value)} placeholder="Tìm mã gia hạn, hồ sơ thuê, khách hàng hoặc gian kho…" /></div></div><div className="space-y-3 p-4">{renewalPagination.items.map(renewal => {
-      const blockedReason = renewalApprovalBlock(renewal)
-      return <div key={renewal.id} className="flex flex-col gap-3 rounded-lg border border-stone-200 p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{renewal.customerName}, <span className="font-mono">{renewal.unitId}</span></p><p className="text-xs text-stone-500">{formatManagerDate(renewal.oldEndDate)} → {formatManagerDate(renewal.newEndDate)}, {renewal.renewalMonths} tháng, {formatKnownMoney(normalizeManagerMoney(renewal.renewalFee))}</p>{blockedReason && <p className="mt-1 text-xs font-medium text-red-700">{blockedReason}</p>}</div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => decideRenewal(renewal, false)}>Từ chối</Button><Button size="sm" disabled={Boolean(blockedReason)} onClick={() => decideRenewal(renewal, true)}>Duyệt</Button></div></div>
+    {allPendingRenewals.length > 0 && <Card className="border-stone-200"><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Theo dõi yêu cầu gia hạn</h3><p className="text-xs text-stone-500">Manager xem trạng thái và thông tin hồ sơ. Việc mở thanh toán do hệ thống kiểm tra, không chờ Manager duyệt.</p><div className="mt-3"><Input value={renewalQuery} onChange={event => setRenewalQuery(event.target.value)} placeholder="Tìm mã gia hạn, hồ sơ thuê, khách hàng hoặc gian kho…" /></div></div><div className="space-y-3 p-4">{renewalPagination.items.map(renewal => {
+      const blockedReason = renewalPaymentReadinessBlock(renewal)
+      return <div key={renewal.id} className="flex flex-col gap-3 rounded-lg border border-stone-200 p-3"><div><p className="font-semibold">{renewal.customerName}, <span className="font-mono">{renewal.unitId}</span></p><p className="text-xs text-stone-500">{formatManagerDate(renewal.oldEndDate)} → {formatManagerDate(renewal.newEndDate)}, {renewal.renewalMonths} tháng, {formatKnownMoney(normalizeManagerMoney(renewal.renewalFee))}</p>{blockedReason && <p className="mt-1 text-xs font-medium text-amber-700">Chưa sẵn sàng thanh toán: {blockedReason}</p>}</div></div>
     })}{!pendingRenewals.length && <p className="py-6 text-center text-sm text-stone-500">Không có yêu cầu gia hạn phù hợp từ khóa.</p>}</div><ManagerPagination {...renewalPagination} pageSize={renewalPageSize} onPageChange={setRenewalPage} onPageSizeChange={setRenewalPageSize} /></Card>}
 
     <Card><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Đặt chỗ chờ phân gian</h3><p className="text-xs text-stone-500">Các đặt chỗ đã xác nhận nhưng chưa được phân gian kho vật lý.</p><div className="mt-3"><Input value={reservationQuery} onChange={event => setReservationQuery(event.target.value)} placeholder="Tìm mã đặt chỗ, khách hàng hoặc loại gian…" /></div></div><Table><Thead><tr><Th>Mã đặt chỗ</Th><Th>Khách hàng</Th><Th>Loại gian</Th><Th>Thời gian</Th><Th>Thanh toán</Th><Th>Trạng thái</Th><Th /></tr></Thead><Tbody>{reservationPagination.items.map(reservation => <Tr key={reservation.id}><Td className="font-mono text-xs font-bold">{reservation.id}</Td><Td><p className="font-semibold">{reservation.customerName}</p><p className="text-xs text-stone-400">{reservation.customerEmail}</p></Td><Td><p>{managerUnitTypeLabel(reservation.unitTypeName, 'vi')}</p><p className="text-xs text-stone-500">Chưa phân gian vật lý</p></Td><Td><p>{formatManagerDate(reservation.startDate)}</p><p className="text-xs text-stone-400">→ {formatManagerDate(reservation.endDate)}</p></Td><Td><Badge variant="success">{managerStatusLabel(reservation.payment.status, 'vi')}</Badge></Td><Td><Badge variant="info">{managerStatusLabel(reservation.status, 'vi')}</Badge></Td><Td className="text-right"><Button size="sm" variant="outline" onClick={() => openAssignment(reservation)}>Phân gian</Button></Td></Tr>)}{!waitingAssignmentReservations.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Không có đặt chỗ đang chờ phân gian.</td></tr>}</Tbody></Table><ManagerPagination {...reservationPagination} pageSize={reservationPageSize} onPageChange={setReservationPage} onPageSizeChange={setReservationPageSize} /></Card>
@@ -253,15 +233,15 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
             : hasActiveCredential || selectedRental.gateCode
               ? 'Đang hoạt động'
               : 'Chưa xác định'
-        const renewalBlock = latestRenewal?.status === 'pending' ? renewalApprovalBlock(latestRenewal) : ''
+        const renewalBlock = latestRenewal?.status === 'pending' ? renewalPaymentReadinessBlock(latestRenewal) : ''
         const renewalActionReason = !latestRenewal
           ? "khách hàng chưa gửi yêu cầu gia hạn. Không có thao tác duyệt hoặc từ chối."
           : latestRenewal.status === 'pending' && renewalBlock
             ? renewalBlock
             : latestRenewal.status === 'pending'
-              ? "Yêu cầu đang chờ quản lý cơ sở duyệt hoặc từ chối tại danh sách phía trên. Duyệt không tự động kéo dài thời hạn thuê."
-              : ['approved', 'deposit_paid', 'payment_processing', 'appointment_scheduled'].includes(latestRenewal.status)
-                ? "quản lý cơ sở đã duyệt, thời hạn chỉ được cập nhật sau khi khách hàng hoàn tất nghĩa vụ thanh toán của luồng gia hạn."
+              ? "Yêu cầu đang được theo dõi; hệ thống tự kiểm tra điều kiện mở thanh toán."
+              : ['approved', 'deposit_paid', 'full_rent_paid', 'payment_processing', 'appointment_scheduled'].includes(latestRenewal.status)
+                ? "Hệ thống đã mở bước thanh toán; thời hạn chỉ được cập nhật sau khi khách hàng hoàn tất các nghĩa vụ của luồng gia hạn."
                 : latestRenewal.status === 'completed'
                   ? 'Gia hạn đã hoàn tất và thời hạn thuê đã được cập nhật.'
                   : `Yêu cầu đang ở trạng thái ${managerStatusLabel(latestRenewal.status, 'vi')}, quản lý cơ sở không có thao tác tiếp theo ở trạng thái này.`

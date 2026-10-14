@@ -1,10 +1,11 @@
-import { type NavItem } from "../../components/Layout"
+// Customer Rental and Renewal share the existing rental-records page.
+export const CUSTOMER_RENTAL_API_PAGE = "rental-records"
 
-// Hồ sơ thuê API dùng chung một mục điều hướng với các thao tác trả kho và biên nhận.
-export const CUSTOMER_RENTAL_API_PAGE = "rental-renewals"
-
-export function customerRentalApiNav(apiAuthenticated: boolean): NavItem[] {
-  // Giữ hàm để các liên kết cũ không bị lỗi, nhưng không tạo mục thứ hai trên thanh điều hướng.
-  void apiAuthenticated
-  return []
+export function resolveCustomerInitialPage(search: string, fallbackPage: string): string {
+  const params = new URLSearchParams(search)
+  if (params.get("vnpayReturn") === "true") {
+    if (params.get("reservationId")) return "reservations"
+    if (params.get("renewalId")) return CUSTOMER_RENTAL_API_PAGE
+  }
+  return params.get("page") === "rental-renewals" ? CUSTOMER_RENTAL_API_PAGE : fallbackPage
 }

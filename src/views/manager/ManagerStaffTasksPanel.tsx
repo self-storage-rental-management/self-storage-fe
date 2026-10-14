@@ -70,7 +70,7 @@ const deriveTaskProgress = (task: FacilityTask, activities: ActivityRecord[]) =>
 }
 
 export default function ManagerStaffTasksPanel({ user, facilityId, facilityName, tasks, createFacilityTask, updateFacilityTask, initialDraft, onDraftConsumed, showToast }: Props) {
-  const { users, activities, facilities, checkins, returns, maintenanceTasks, tickets } = useStorageHub()
+  const { users, activities, facilities, checkins, returns, maintenanceTasks, tickets, units, updateUnitStatus } = useStorageHub()
   const [modalOpen, setModalOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [type, setType] = useState<FacilityTask['type']>('general')
@@ -79,6 +79,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
   const [staffId, setStaffId] = useState('')
   const [notes, setNotes] = useState('')
   const [referenceId, setReferenceId] = useState('')
+  const [typeFilter, setTypeFilter] = useState<'all' | FacilityTask['type']>('all')
   const [statusFilter, setStatusFilter] = useState<TaskFilter>('all')
   const [staffFilter, setStaffFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('')
@@ -166,6 +167,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
   const overdueTasks = facilityTasks.filter(task => isFacilityTaskOverdue(task, today))
   const filteredTasks = displayedTasks
     .filter(task => {
+      if (typeFilter !== 'all' && task.type !== typeFilter) return false
       if (statusFilter === 'unassigned') return !task.assignedStaffId && task.status !== 'cancelled'
       if (statusFilter === 'overdue') return isFacilityTaskOverdue(task, today)
       if (statusFilter !== 'all' && task.status !== statusFilter) return false
@@ -183,10 +185,26 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     })
   const pagination = paginateManagerItems(filteredTasks, page, pageSize)
 
-  useEffect(() => setPage(1), [statusFilter, staffFilter, dateFilter, priorityFilter, query, sortBy, pageSize])
+  useEffect(() => setPage(1), [typeFilter, statusFilter, staffFilter, dateFilter, priorityFilter, query, sortBy, pageSize])
   const detailTask = detailTaskId ? facilityTasks.find(task => task.id === detailTaskId) : undefined
   const detailProgress = detailTask ? deriveTaskProgress(detailTask, activities) : undefined
   const cancelTask = cancelTaskId ? facilityTasks.find(task => task.id === cancelTaskId) : undefined
+
+  const handleAcceptMaintenance = (task: FacilityTask) => {
+    const targetUnit = units.find(u => u.id === task.referenceId || u.code === task.referenceId)
+      || (task.referenceId ? units.find(u => maintenanceTasks.some(m => m.id === task.referenceId && m.unitId === u.id)) : undefined)
+
+    if (targetUnit) {
+      try {
+        updateUnitStatus(targetUnit.id, 'available', user, `Nghiệm thu bảo trì hoàn tất từ nhiệm vụ ${task.id} (${task.title})`)
+        showToast(`Đã nghiệm thu bảo trì thành công! Gian kho ${targetUnit.code || targetUnit.id} đã trở về trạng thái Sẵn sàng cho thuê (Available).`)
+      } catch (err) {
+        showToast(managerDisplayError(err))
+      }
+    } else {
+      showToast(`Đã ghi nhận nghiệm thu hoàn tất cho nhiệm vụ ${task.id}.`)
+    }
+  }
 
   const run = (action: () => void, success: string) => {
     try {
@@ -267,6 +285,26 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
 
     <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">nhân viên, {'shift' in member && typeof member.shift === 'string' ? member.shift : "-"}</p><p className="mt-2 text-xs text-stone-600">{member.email}, {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
 
+    <div className="flex flex-wrap items-center gap-2">
+      {[
+        { id: 'all', label: 'Tất cả nhiệm vụ' },
+        { id: 'maintenance', label: '🛠️ Bảo trì hiện trường' },
+        { id: 'return', label: '📦 Nghiệm thu trả kho' },
+        { id: 'checkin', label: '🚚 Nhận kho' },
+        { id: 'support', label: '💬 Hỗ trợ' },
+        { id: 'general', label: '📋 Khác' },
+      ].map(t => (
+        <Button
+          key={t.id}
+          size="sm"
+          variant={typeFilter === t.id ? 'primary' : 'outline'}
+          onClick={() => setTypeFilter(t.id as any)}
+        >
+          {t.label}
+        </Button>
+      ))}
+    </div>
+
     <Card className="p-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
       <Input label="Tìm kiếm" value={query} onChange={event => setQuery(event.target.value)} placeholder="Nhiệm vụ, mã hồ sơ, nhân viên…" />
       <Select label="Trạng thái" value={statusFilter} onChange={event => setStatusFilter(event.target.value as TaskFilter)}><option value="all">Tất cả</option><option value="unassigned">Chưa phân công</option><option value="open">Chờ nhận</option><option value="in_progress">Đang thực hiện</option><option value="completed">Đã hoàn thành</option><option value="overdue">Quá hạn</option><option value="cancelled">Đã hủy</option></Select>
@@ -281,14 +319,35 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
         const displayedAssignee = task.assignedStaffName || task.lastAssignedStaffName
         const canReassign = canManagerReassignFacilityTask(task)
         const progress = deriveTaskProgress(task, activities)
+        const isCompletedMaintenance = task.type === 'maintenance' && task.status === 'completed'
         return <Tr key={task.id}>
-          <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="text-xs text-stone-400">{task.id}{task.referenceId ? `, ${task.referenceId}` : ''}</p><p className="mt-1 text-xs text-stone-500">{managerTaskTypeLabel(task.type, 'vi')}</p></Td>
+          <Td>
+            <p className="font-semibold text-stone-900">{task.title}</p>
+            <p className="text-xs text-stone-400">{task.id}{task.referenceId ? `, ${task.referenceId}` : ''}</p>
+            <div className="mt-1 flex items-center gap-1.5">
+              <Badge variant={task.type === 'maintenance' ? 'warning' : task.type === 'return' ? 'purple' : 'muted'}>
+                {managerTaskTypeLabel(task.type, 'vi')}
+              </Badge>
+              {task.referenceId && <span className="font-mono text-[11px] text-stone-500">Mã: {task.referenceId}</span>}
+            </div>
+          </Td>
           <Td>{task.status === 'cancelled' ? <div><p className="font-medium">{displayedAssignee || "-"}</p><p className="text-xs text-red-600">Đã ngừng phân công</p></div> : <Select disabled={!canReassign} value={task.assignedStaffId || ''} onChange={event => reassignTask(task, event.target.value)}><option value="" disabled>Chọn nhân viên để giao</option>{task.assignedStaffId && !staff.some(member => member.id === task.assignedStaffId) && <option value={task.assignedStaffId}>{task.assignedStaffName || task.assignedStaffId}</option>}{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>}</Td>
           <Td className="min-w-44 text-xs"><p>Giao: <b>{managerDateLabel(progress.assignedAt, 'vi', true)}</b></p><p className="mt-1">Nhận: <b>{managerDateLabel(progress.startedAt, 'vi', true)}</b></p><p className="mt-1">Hoàn thành: <b>{managerDateLabel(progress.completedAt, 'vi', true)}</b></p></Td>
           <Td><p className={isFacilityTaskOverdue(task, today) ? 'font-semibold text-red-700' : 'text-stone-700'}>{managerDateLabel(task.dueAt, 'vi')}</p><div className="mt-2"><Badge variant={task.priority === 'high' ? 'error' : task.priority === 'medium' ? 'warning' : 'info'}>{managerPriorityLabel(task.priority, 'vi')}</Badge></div></Td>
           <Td className="max-w-52 text-xs"><p className="line-clamp-2">{progress.resultReport || 'Chưa có báo cáo kết quả'}</p><p className="mt-1 text-stone-500">{progress.evidence.length ? `${progress.evidence.length} minh chứng` : 'Chưa có minh chứng'}</p>{progress.unableReason && <p className="mt-1 font-semibold text-red-700">Không thể thực hiện: {progress.unableReason}</p>}</Td>
           <Td><Badge variant={taskStatusVariant(task)}>{isFacilityTaskOverdue(task, today) ? `Quá hạn, ${managerStatusLabel(task.status, 'vi')}` : managerStatusLabel(task.status, 'vi')}</Badge></Td>
-          <Td className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setDetailTaskId(task.id)}>Chi tiết</Button>{canManagerCancelFacilityTask(task) && <Button size="sm" variant="danger" onClick={() => { setCancelTaskId(task.id); setCancellationReason('') }}>Hủy</Button>}{['completed', 'cancelled'].includes(task.status) && <Button size="sm" variant="danger" onClick={() => setDeleteTaskId(task.id)}>Xóa</Button>}</div></Td>
+          <Td className="text-right">
+            <div className="flex justify-end gap-2">
+              {isCompletedMaintenance && (
+                <Button size="sm" variant="primary" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAcceptMaintenance(task)}>
+                  ✅ Nghiệm thu kho
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setDetailTaskId(task.id)}>Chi tiết</Button>
+              {canManagerCancelFacilityTask(task) && <Button size="sm" variant="danger" onClick={() => { setCancelTaskId(task.id); setCancellationReason('') }}>Hủy</Button>}
+              {['completed', 'cancelled'].includes(task.status) && <Button size="sm" variant="danger" onClick={() => setDeleteTaskId(task.id)}>Xóa</Button>}
+            </div>
+          </Td>
         </Tr>
       })}
       {!filteredTasks.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có nhiệm vụ phù hợp bộ lọc.</td></tr>}

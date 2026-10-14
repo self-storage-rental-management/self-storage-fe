@@ -6,7 +6,7 @@ export interface PublicFacilitySummary {
   name: string
   address: string
   city: string
-  status: 'active' | 'maintenance' | 'inactive' | 'coming_soon'
+  status: 'active' | 'maintenance' | 'inactive'
   totalUnits: number
   availableUnits: number
   startingMonthlyPrice: number | null
