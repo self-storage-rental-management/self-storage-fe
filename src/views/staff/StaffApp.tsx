@@ -3696,10 +3696,10 @@ export default function StaffApp({
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-6 right-4 left-4 sm:left-auto sm:max-w-md z-[100] bg-white text-stone-800 p-4 rounded-xl shadow-2xl border border-stone-200 flex items-start gap-3 fade-in"
+          className="fixed bottom-6 right-4 left-4 sm:left-auto sm:max-w-md z-[100] bg-[#292a27] text-white p-4 rounded-xl shadow-2xl border border-stone-700 flex items-start gap-3 fade-in"
         >
           <span
-            className="rounded-full bg-blue-50 px-2 py-1 font-bold text-blue-700"
+            className="rounded-full bg-white/10 px-2 py-1 font-bold text-white"
             aria-hidden="true"
           >
             i
@@ -3711,7 +3711,7 @@ export default function StaffApp({
           <button
             type="button"
             aria-label="Đóng thông báo"
-            className="px-2 text-stone-500"
+            className="px-2 text-stone-300 hover:text-white"
             onClick={() => setToast(null)}
           >
             ×
