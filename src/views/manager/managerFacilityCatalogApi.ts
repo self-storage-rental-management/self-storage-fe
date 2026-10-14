@@ -13,7 +13,7 @@ export interface FacilityCatalogType {
   volumeM3: number | null
   maxLoadKg: number | null
   monthlyPrice: number | null
-  status: 'active' | 'inactive'
+  status: 'draft' | 'awaiting_pricing' | 'active' | 'inactive'
 }
 
 const unitStatuses = ['available', 'reserved', 'occupied', 'maintenance', 'held', 'assigned'] as const
@@ -77,7 +77,7 @@ export async function loadManagerFacilityCatalog(facilityId: string): Promise<Fa
 
 export function isFacilityCatalogType(value: unknown, facilityId: string): value is FacilityCatalogType {
   return record(value) && text(value.id) && value.facilityId === facilityId && text(value.code) && text(value.name)
-    && ['active', 'inactive'].includes(String(value.status))
+    && ['draft', 'awaiting_pricing', 'active', 'inactive'].includes(String(value.status))
     && ['lengthM', 'widthM', 'heightM', 'areaM2', 'volumeM3', 'maxLoadKg', 'monthlyPrice'].every(field => measure(value[field]))
 }
 

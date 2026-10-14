@@ -2,6 +2,7 @@ import { Button } from '../../components/ui'
 import { formatVndAmount } from '../../i18n/currency'
 import type { CustomerUnitType, ReservationRentalPackage } from '../../services/customerReservationApi'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
+import ReferenceBoxCapacity from './ReferenceBoxCapacity'
 
 export default function CustomerUnitDetails({ unitType: t, facilityName, facilityCode, address, availableCount, rentalPackages = [], onReserve, onClose }: {
   unitType: CustomerUnitType; facilityName: string; facilityCode?: string; address?: string; availableCount: number; rentalPackages?: ReservationRentalPackage[]; onReserve: () => void; onClose: () => void
@@ -14,7 +15,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
   const overdueExampleDays = 4
   return <div className="space-y-5">
     <div className="rounded-2xl bg-[#292a27] p-5 text-white"><p className="text-xs text-amber-300">{facilityName}</p><h3 className="mt-1 text-2xl font-bold">{size ? `Kho cỡ ${size}` : 'Loại kho lưu trữ'}</h3><p className="mt-2 text-sm">{address}</p><p className="mt-2 text-xl font-bold">{formatVndAmount(t.monthlyPrice)} / tháng</p></div>
-    {size && <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"><img src={`/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`} alt={`Sơ đồ bố trí kho cỡ ${size}`} className="max-h-[520px] w-full object-contain" /><figcaption className="border-t border-stone-100 p-3 text-center text-xs text-stone-500">Sơ đồ bố trí kho cỡ {size}. Đối chiếu thông số chi tiết bên dưới.</figcaption></figure>}
+    {t.imageUrl ? <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"><img src={t.imageUrl} alt={`Hình ảnh ${t.name}`} className="max-h-[520px] w-full object-contain" /></figure> : <p className="rounded-xl border border-dashed border-stone-200 p-5 text-center text-sm text-stone-500">Chưa có hình ảnh loại kho.</p>}
     <h4 className="text-lg font-bold">1. Thông tin kho chi tiết</h4>
     <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 text-sm">{[
       ['Diện tích', `${t.areaM2} m²`], ['Kích thước kho (D × R × C)', `${t.lengthM} × ${t.widthM} × ${t.heightM} m`],
@@ -22,12 +23,11 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       ['Kích thước khung (D × R × C)', `${t.rackLengthM} × ${t.rackWidthM} × ${t.rackHeightM} m`],
       ['Chiều rộng lối đi', t.aisleWidthM ? `${t.aisleWidthM} m` : 'Chưa cập nhật'],
       ['Xe đẩy hỗ trợ', t.trolleyType || 'Chưa cập nhật'],
-      ['Sức chứa thùng nhỏ', t.smallBoxCapacity != null ? `${t.smallBoxCapacity} thùng` : 'Chưa cập nhật'],
-      ['Sức chứa thùng lớn', t.largeBoxCapacity != null ? `${t.largeBoxCapacity} thùng` : 'Chưa cập nhật'],
       ['Tải trọng tối đa', `${t.maxLoadKg.toLocaleString('vi-VN')} kg`],
       ['Giá thuê mỗi tháng', formatVndAmount(t.monthlyPrice)],
       ['Tiền cọc đảm bảo', formatVndAmount(t.securityDepositAmount)],
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
+    <ReferenceBoxCapacity unitType={t} />
     <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, cọc giữ chỗ, cọc đảm bảo và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>

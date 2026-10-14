@@ -25,6 +25,10 @@ export interface ManagerUnitTypeInput {
 
 type Envelope<T> = { data: T; correlationId: string }
 
+export async function deleteManagerUnitType(unitTypeId: string) {
+  return apiRequest(`/api/manager/unit-types/${encodeURIComponent(unitTypeId)}`, { method: 'DELETE' })
+}
+
 export async function createManagerUnitType(facilityId: string, input: ManagerUnitTypeInput) {
   const response = await apiRequest<Envelope<CustomerUnitType>>(
     `/api/manager/facilities/${encodeURIComponent(facilityId)}/unit-types`,

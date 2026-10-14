@@ -94,13 +94,16 @@ export function managerDisplayExplanation(value: string): string {
 
 export function managerDisplayError(error: unknown): string {
   if (error instanceof ApiClientError) {
+    if (error.code === 'FEATURE_DISABLED') return 'Chức năng này chưa được bật trên hệ thống.'
+    if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu phản hồi chưa đúng định dạng. Vui lòng tải lại; nếu vẫn lỗi, cần kiểm tra Backend.'
     if (error.code === 'DEFERRED_SOURCE' || error.message.includes('DEFERRED_SOURCE'))
       return 'Chưa đủ dữ liệu hoặc chính sách để thực hiện thao tác này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 403) return 'Bạn không có quyền xử lý hồ sơ này.'
     if (error.status === 404) return 'Không tìm thấy hồ sơ trong phạm vi cơ sở được phép truy cập.'
     if (error.status === 409) return 'Hồ sơ đã thay đổi hoặc chưa đủ điều kiện xử lý. Hãy mở lại hồ sơ trước khi tiếp tục.'
-    if (error.status === null || error.status >= 500) return 'Chưa nhận được kết quả từ hệ thống. Vui lòng kiểm tra kết nối.'
+    if (error.status != null && error.status >= 500) return 'Hệ thống gặp lỗi khi tải hoặc xử lý dữ liệu. Vui lòng thử lại.'
+    if (error.status === null) return 'Không kết nối được hệ thống hoặc yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'
     return 'Không thể thực hiện yêu cầu. Vui lòng kiểm tra thông tin và điều kiện xử lý.'
   }
   return error instanceof Error && /[À-ỹ]/u.test(error.message)
