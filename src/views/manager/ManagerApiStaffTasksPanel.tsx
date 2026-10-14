@@ -21,6 +21,8 @@ import {
 
 interface Props {
   showToast: (message: string) => void
+  initialUnit?: { unitId: string; unitCode: string } | null
+  onInitialUnitConsumed?: () => void
 }
 
 const taskStatusLabel: Record<MaintenanceTaskApi['status'], string> = {
@@ -43,7 +45,7 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
   return 'warning'
 }
 
-export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
+export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed }: Props) {
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
@@ -107,6 +109,18 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(() => {
+    if (!initialUnit || loading || unitReadFailed || staffReadFailed) return
+    if (units.some(unit => unit.id === initialUnit.unitId) && staff.length) {
+      setStorageUnitId(initialUnit.unitId)
+      setTitle(`Bảo trì ${initialUnit.unitCode}`)
+      setModalOpen(true)
+    } else {
+      showToast('Gian kho chưa đủ điều kiện tạo nhiệm vụ bảo trì hoặc chưa có nhân viên phù hợp.')
+    }
+    onInitialUnitConsumed?.()
+  }, [initialUnit, loading, unitReadFailed, staffReadFailed, units, staff])
 
   const openTasks = useMemo(() => tasks.filter(task => !['completed', 'cancelled'].includes(task.status)), [tasks])
 

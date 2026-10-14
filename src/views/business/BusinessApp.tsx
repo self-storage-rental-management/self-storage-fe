@@ -7702,7 +7702,7 @@ export default function BusinessApp({
             const hasWarehouseInfo =
               facilityUnits.length > 0 ||
               (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
-              Object.values(selectedFacility.unitDistribution || {}).some((count) => (count || 0) > 0)
+              Object.values(selectedFacility.unitDistribution || {}).some((count) => typeof count === 'number' && count > 0)
 
             return (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">

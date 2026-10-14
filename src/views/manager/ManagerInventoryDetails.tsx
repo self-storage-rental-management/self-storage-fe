@@ -63,15 +63,15 @@ export function InventoryRentalSummary({
   if (!rentals.length) {
     const message =
       unit.status === "occupied"
-        ? "Gian đang sử dụng nhưng chưa tìm thấy hồ sơ thuê chưa kết thúc."
-        : "Không có hồ sơ thuê chưa kết thúc."
+        ? "Gian kho đang ở trạng thái sử dụng nhưng không có hồ sơ thuê nào đang hiệu lực."
+        : "Không có hồ sơ thuê đang hiệu lực."
     return (
       <p
-        role="status"
-        className="line-clamp-2 text-sm leading-5 text-stone-600"
+        role={unit.status === "occupied" ? "alert" : "status"}
+        className={unit.status === "occupied" ? "rounded-lg border border-amber-500 bg-amber-100 px-3 py-2 text-sm leading-5 text-amber-800" : "text-sm leading-5 text-stone-600"}
         title={message}
       >
-        {message}
+        {unit.status === "occupied" && <span aria-hidden="true" className="mr-1">⚠️</span>}{message}
       </p>
     )
   }
@@ -141,9 +141,11 @@ export function InventoryMaintenanceDetails({
       ) : read.error ? (
         <ReadFailure error={read.error} retry={read.refresh} />
       ) : !read.data ? (
-        <p role="status">Không có dữ liệu</p>
+        <p role="status">Chưa xác minh được trạng thái bảo trì.</p>
       ) : read.data.length === 0 ? (
-        <p>Không có dữ liệu</p>
+        unit.status === "maintenance"
+          ? <p role="alert" className="text-amber-800">⚠️ Gian kho đang bảo trì nhưng chưa có nhiệm vụ bảo trì được ghi nhận.</p>
+          : <p className="text-green-700">✓ Bình thường — Không có lịch sử hoặc yêu cầu bảo trì đang mở.</p>
       ) : (
         <ul className="space-y-3">
           {read.data.map((t) => (
