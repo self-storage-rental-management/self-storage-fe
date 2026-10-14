@@ -1,16 +1,14 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { Button } from "../../components/ui"
 import { rentalError } from "./presentation"
 export default function ApiReadState({
   loading,
   error,
-  retry,
 }: {
   loading: boolean
   error?: unknown
   retry: () => void
 }) {
-  const { manager, copy, errorText } = useManagerPresentation()
+  const { errorText } = useManagerPresentation()
 
   if (loading)
     return (
@@ -25,9 +23,6 @@ export default function ApiReadState({
       className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3"
     >
       <p>{errorText(error, rentalError)}</p>
-      {!manager && (<Button variant="outline" onClick={retry}>
-        Tải lại
-      </Button>)}
     </div>
   )
 }

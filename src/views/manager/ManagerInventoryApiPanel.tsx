@@ -361,64 +361,66 @@ export function InventoryContent({
         </div>
       </Card>
       <Card>
-        <Table>
+        <Table tableClassName="min-w-[980px] table-fixed">
+          <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[19%]" />
+            <col className="w-[15%]" />
+            <col className="w-[15%]" />
+            <col className="w-[15%]" />
+            <col className="w-[12%]" />
+          </colgroup>
           <Thead>
             <tr>
-              <Th>Gian kho</Th>
-              <Th>Loại / Kích thước</Th>
-              <Th>Vị trí</Th>
-              <Th>Trạng thái</Th>
-              <Th>Hồ sơ thuê</Th>
-              <Th>Giá niêm yết</Th>
-              <Th>Khả dụng</Th>
-              <Th>Thao tác</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Gian kho</Th>
+              <Th className="text-left align-middle">Loại gian kho</Th>
+              <Th className="text-left align-middle">Vị trí</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Trạng thái</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Giá niêm yết</Th>
+              <Th className="whitespace-nowrap text-left align-middle">Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
             {pagination.items.map((u) => (
-              <Tr key={u.id}>
-                <Td>
-                  <p className="font-mono font-bold">{u.code}</p>
+              <Tr key={u.id} className="odd:bg-white even:bg-stone-50/50">
+                <Td className="align-middle">
+                  <p className="break-all font-mono text-sm font-bold leading-5">{u.code}</p>
                 </Td>
-                <Td>
-                  <p className="font-semibold">{typeLabel(u)}</p>
-                  <p className="text-xs text-stone-500">
-                    {measure(u.definition.areaM2, "m²")},{" "}
-                    {measure(u.definition.volumeM3, "m³")}
-                  </p>
-                  <p className="text-xs text-stone-500">
-                    Tải trọng: {measure(u.definition.maxLoadKg, "kg")}
-                  </p>
+                <Td className="align-middle">
+                  <p className="font-semibold leading-5">{typeLabel(u)}</p>
                 </Td>
-                <Td>
-                  <p>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
-                  <p>{location(u.zone)}</p>
+                <Td className="align-middle">
+                  <div className="space-y-1">
+                    <p>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
+                    <p className="text-sm text-stone-500">{location(u.zone)}</p>
+                  </div>
                 </Td>
-                <Td>
+                <Td className="align-middle">
                   <Badge variant={variants[u.status]}>
                     {statusLabels[u.status]}
                   </Badge>
                 </Td>
-                <Td>
-                  <InventoryRentalSummary unit={u} read={rentals} />
+                <Td className="align-middle">
+                  {u.definition.monthlyPrice === null ? (
+                    <p className="text-sm text-stone-500">{missing}</p>
+                  ) : (
+                    <div className="whitespace-nowrap">
+                      <p className="font-semibold text-stone-800">
+                        {formatVndAmount(u.definition.monthlyPrice)}
+                      </p>
+                      <p className="text-xs text-stone-500">/tháng</p>
+                    </div>
+                  )}
                 </Td>
-                <Td>
-                  {u.definition.monthlyPrice === null
-                    ? missing
-                    : `${formatVndAmount(u.definition.monthlyPrice)}/tháng`}
-                </Td>
-                <Td>
-                  <p className="text-xs text-stone-500">
-                    {missing}
-                  </p>
-                </Td>
-                <Td>
+                <Td className="align-middle">
                   <Button
                     size="sm"
                     variant="outline"
+                    className="whitespace-nowrap"
                     onClick={() => setSelectedId(u.id)}
                   >
-                    Xem chi tiết
+                    Chi tiết
                   </Button>
                 </Td>
               </Tr>
@@ -426,7 +428,7 @@ export function InventoryContent({
             {visible.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={6}
                   className="p-10 text-center text-sm text-stone-500"
                 >
                   {units.length === 0
@@ -532,7 +534,7 @@ export function InventoryContent({
               </p>
             </div>
             <section className="space-y-2 border-t border-stone-200 pt-4">
-              <h3 className="font-bold">Hồ sơ thuê và người thuê</h3>
+              <h3 className="font-bold">Hồ sơ thuê</h3>
               <InventoryRentalSummary unit={selected} read={rentals} detailed />
             </section>
             <InventoryMaintenanceDetails

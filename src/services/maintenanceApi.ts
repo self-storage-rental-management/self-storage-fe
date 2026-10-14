@@ -79,20 +79,27 @@ export type MaintenanceTask = MaintenanceTaskApi
 interface MaintenanceTaskFilters {
   facilityId?: string
   assignedStaffId?: string
+  status?: MaintenanceTaskStatus
+  q?: string
   page?: number
   pageSize?: number
 }
 
-async function listMaintenanceTasks(filters: MaintenanceTaskFilters = {}) {
+async function listMaintenanceTasks(
+  filters: MaintenanceTaskFilters = {},
+  endpoint = '/api/staff/maintenance-tasks',
+) {
   const params = new URLSearchParams({
     page: String(filters.page ?? 0),
     pageSize: String(filters.pageSize ?? 100),
   })
   if (filters.facilityId) params.set('facilityId', filters.facilityId)
   if (filters.assignedStaffId) params.set('assignedStaffId', filters.assignedStaffId)
+  if (filters.status) params.set('status', filters.status)
+  if (filters.q) params.set('q', filters.q)
 
   return readRentalPage<MaintenanceTaskApi>(
-    await apiRequest(`/api/staff/maintenance-tasks?${params.toString()}`),
+    await apiRequest(`${endpoint}?${params.toString()}`),
     isMaintenanceTask,
     filters.page ?? 0,
   )
@@ -103,7 +110,7 @@ export function listManagerMaintenanceTasks(filters: MaintenanceTaskFilters): Re
 export function listManagerMaintenanceTasks(facilityIdOrFilters: string | MaintenanceTaskFilters) {
   return listMaintenanceTasks(typeof facilityIdOrFilters === 'string'
     ? { facilityId: facilityIdOrFilters }
-    : facilityIdOrFilters)
+    : facilityIdOrFilters, '/api/manager/maintenance-tasks')
 }
 
 export function listStaffMaintenanceTasks(filters: MaintenanceTaskFilters = {}) {
@@ -136,7 +143,7 @@ export async function createMaintenanceTask(body: {
   dueAt: string
 }) {
   return readRentalEnvelope<MaintenanceTaskApi>(
-    await apiRequest('/api/staff/maintenance-tasks', {
+    await apiRequest('/api/manager/maintenance-tasks', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -146,10 +153,67 @@ export async function createMaintenanceTask(body: {
 
 export async function assignMaintenanceTask(taskId: string, assignedStaffId: string) {
   return readRentalEnvelope<MaintenanceTaskApi>(
-    await apiRequest(`/api/staff/maintenance-tasks/${encodeURIComponent(taskId)}/assign`, {
-      method: 'POST',
+    await apiRequest(`/api/manager/maintenance-tasks/${encodeURIComponent(taskId)}/assign`, {
+      method: 'PATCH',
       body: JSON.stringify({ assignedStaffId }),
     }),
     isMaintenanceTask,
   )
+}
+
+export interface CompleteMaintenanceTaskRequest {
+  resultReport: string
+  evidencePhotos: string[]
+  makeUnitAvailable: boolean
+}
+
+export interface MaintenanceEvidenceAsset {
+  id: string
+  originalName: string
+  contentType: string
+  sizeBytes: number
+}
+
+function readMaintenanceEvidenceAsset(value: unknown): MaintenanceEvidenceAsset {
+  if (!isRecord(value) || !isRecord(value.data) || !isUuidLike(value.data.id) ||
+    !isText(value.data.originalName) || !isText(value.data.contentType) ||
+    typeof value.data.sizeBytes !== 'number' || !Number.isFinite(value.data.sizeBytes)) {
+    throw new Error('Backend trả về tệp bằng chứng bảo trì không hợp lệ.')
+  }
+  return {
+    id: value.data.id,
+    originalName: value.data.originalName,
+    contentType: value.data.contentType,
+    sizeBytes: value.data.sizeBytes,
+  }
+}
+
+export async function startMaintenanceTask(taskId: string) {
+  return readRentalEnvelope<MaintenanceTaskApi>(
+    await apiRequest(`/api/staff/maintenance-tasks/${encodeURIComponent(taskId)}/start`, {
+      method: 'POST',
+    }),
+    isMaintenanceTask,
+  )
+}
+
+export async function completeMaintenanceTask(taskId: string, request: CompleteMaintenanceTaskRequest) {
+  if (!request.resultReport.trim()) throw new Error('Nhập báo cáo kết quả bảo trì.')
+  if (request.resultReport.length > 4000) throw new Error('Báo cáo kết quả không được vượt quá 4000 ký tự.')
+  return readRentalEnvelope<MaintenanceTaskApi>(
+    await apiRequest(`/api/staff/maintenance-tasks/${encodeURIComponent(taskId)}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    }),
+    isMaintenanceTask,
+  )
+}
+
+export async function uploadMaintenanceEvidence(taskId: string, file: File) {
+  if (!file || file.size <= 0) throw new Error('Tệp ảnh bảo trì không được để trống.')
+  const form = new FormData()
+  form.set('file', file)
+  form.set('entityType', 'MAINTENANCE_TASK')
+  form.set('entityId', taskId)
+  return readMaintenanceEvidenceAsset(await apiRequest('/api/files', { method: 'POST', body: form }))
 }

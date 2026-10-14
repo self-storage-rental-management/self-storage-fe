@@ -1,14 +1,11 @@
-import { Icon, type NavItem } from "../../components/Layout"
+// Customer Rental and Renewal share the existing rental-records page.
+export const CUSTOMER_RENTAL_API_PAGE = "rental-records"
 
-// D1–D4 is additive: never replace the team's rental-records/Return UI.
-export const CUSTOMER_RENTAL_API_PAGE = "rental-renewals"
-
-export function customerRentalApiNav(apiAuthenticated: boolean): NavItem[] {
-  return apiAuthenticated ? [{
-    id: CUSTOMER_RENTAL_API_PAGE,
-    label: "Hồ sơ thuê & Gia hạn",
-    icon: Icon.calendar,
-    group: "Kho của tôi",
-    permission: "rentals:read",
-  }] : []
+export function resolveCustomerInitialPage(search: string, fallbackPage: string): string {
+  const params = new URLSearchParams(search)
+  if (params.get("vnpayReturn") === "true") {
+    if (params.get("reservationId")) return "reservations"
+    if (params.get("renewalId")) return CUSTOMER_RENTAL_API_PAGE
+  }
+  return params.get("page") === "rental-renewals" ? CUSTOMER_RENTAL_API_PAGE : fallbackPage
 }

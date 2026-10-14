@@ -4,6 +4,8 @@ import { getRental, listRentals } from '../../services/rentalApi'
 import { listRenewals } from '../../services/renewalApi'
 import { listOverdueCases } from '../../services/overdueApi'
 import { listSupportTickets } from '../../services/supportApi'
+import { listManagerPaymentHistory } from '../../services/managerPaymentHistoryApi'
+import type { ManagerPaymentHistoryQuery } from '../../types/managerPaymentHistory'
 import type { RentalApiQuery } from '../../types/rentalApi'
 
 export type ManagerApiMetric = 'rentals' | 'active-rentals' | 'pending-renewals' | 'open-support' | 'payment-overdue' | 'term-overdue'
@@ -17,7 +19,7 @@ export function managerApiIdentity(actor: ApiActor) {
   return JSON.stringify([actor.id, actor.status, actor.roles, actor.permissions, actor.facilityScopes])
 }
 
-export function requireManagerRead(actor: ApiActor | null, permission: 'rentals:read' | 'support:read') {
+export function requireManagerRead(actor: ApiActor | null, permission: 'rentals:read' | 'payments:read' | 'support:read') {
   if (!actor || actor.status !== 'ACTIVE' || !actor.roles.includes('MANAGER') ||
     !actor.permissions.includes(permission) || !Object.values(actor.facilityScopes).some(level => ['READ', 'OPERATE', 'MANAGE'].includes(level))) {
     throw new ApiClientError('Bạn chưa có quyền xem dữ liệu tại cơ sở này.', { status: 403, code: 'FORBIDDEN' })
@@ -81,4 +83,10 @@ export async function loadManagerRentalFinancial(actor: ApiActor, rentalId: stri
   const detail = await getRental('manager', rentalId)
   requireVisible(actor, detail.facility.id)
   return detail
+}
+
+export async function loadManagerPaymentHistory(actor: ApiActor, query: ManagerPaymentHistoryQuery) {
+  requireManagerRead(actor, 'payments:read')
+  requireVisible(actor, query.facilityId)
+  return listManagerPaymentHistory(query)
 }

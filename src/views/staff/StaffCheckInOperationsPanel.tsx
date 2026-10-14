@@ -80,6 +80,19 @@ function hasMaterialVariance(
   )
 }
 
+function dimensionsMatch(
+  actual: [number, number, number],
+  declared: [number | null, number | null, number | null],
+) {
+  if (declared.some((value) => value == null || !Number.isFinite(value))) return null
+  const actualSorted = [...actual].sort((left, right) => left - right)
+  const declaredSorted = [...declared].sort((left, right) => Number(left) - Number(right))
+  return actualSorted.every((value, index) =>
+    Math.abs(value - Number(declaredSorted[index])) <=
+    Math.max(Math.abs(Number(declaredSorted[index])) * 0.05, 0.5),
+  )
+}
+
 function localDateBoundary(date: string, nextDay = false) {
   if (!date) return undefined
 
@@ -296,6 +309,19 @@ export default function StaffCheckInOperationsPanel({
           0.0001,
         )
       : null
+    const declaredDimensions: [number | null, number | null, number | null] = [
+      handoverTarget.declaredGoodsLengthCm,
+      handoverTarget.declaredGoodsWidthCm,
+      handoverTarget.declaredGoodsHeightCm,
+    ]
+    const actualDimensions: [number, number, number] = [
+      Number(lengthCm),
+      Number(widthCm),
+      Number(heightCm),
+    ]
+    const dimensionMatches = actualDimensions.every((value) => Number.isFinite(value))
+      ? dimensionsMatch(actualDimensions, declaredDimensions)
+      : null
 
     return {
       declaredPackageCount,
@@ -307,11 +333,14 @@ export default function StaffCheckInOperationsPanel({
       declaredVolume: handoverTarget.declaredGoodsVolumeM3,
       actualVolume,
       volumeMatches,
-      hasVariance: [packageCountMatches, weightMatches, volumeMatches].some(
+      declaredDimensions,
+      actualDimensions,
+      dimensionMatches,
+      hasVariance: [packageCountMatches, weightMatches, volumeMatches, dimensionMatches].some(
         (matches) => matches === false,
       ),
     }
-  }, [handoverTarget, packageCount, volumeM3, weightKg])
+  }, [handoverTarget, heightCm, lengthCm, packageCount, volumeM3, weightKg, widthCm])
 
   const measurementVariance = checkInComparison?.hasVariance ?? false
 
@@ -653,7 +682,7 @@ export default function StaffCheckInOperationsPanel({
     <div className="fade-in space-y-5">
       <SectionHeader
         title="Nhận kho & bàn giao"
-        subtitle="Đối chiếu hàng hóa và hoàn tất bàn giao theo lịch hẹn do khách hàng đặt."
+        subtitle="Đối chiếu hàng hóa và hoàn tất bàn giao theo lịch hẹn do khách hàng đặt. Đơn đã bàn giao được lưu lịch sử và chỉ hiện khi lọc trạng thái ‘Đã bàn giao’."
       />
       <Card className="p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.7fr)_minmax(180px,1fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
@@ -1010,7 +1039,9 @@ export default function StaffCheckInOperationsPanel({
             {measurementVariance && (
               <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                 <b>
-                  Phát hiện số kiện hoặc số đo thực tế chênh lệch so với khai báo.
+                  Phát hiện số kiện, kích thước hoặc số đo thực tế chênh lệch so
+                  với khai báo. Hãy xác nhận lý do, hoặc từ chối nhận kho nếu
+                  hàng hóa không đạt yêu cầu.
                 </b>
                 <label className="flex gap-2">
                   <input
@@ -1035,7 +1066,7 @@ export default function StaffCheckInOperationsPanel({
                 <div>
                   <b>Thanh toán phần còn lại khi nhận kho</b>
                   <p className="mt-1 text-xs text-emerald-800">
-                    Số tiền cần thu: {Number(handoverTarget.dueAtCheckIn).toLocaleString("vi-VN")} VND. Biên lai sẽ được hiển thị trong tài khoản khách hàng.
+                    Số tiền cần thu: {Number(handoverTarget.dueAtCheckIn).toLocaleString("vi-VN")} đồng. Biên lai sẽ được hiển thị trong tài khoản khách hàng.
                   </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1083,16 +1114,16 @@ export default function StaffCheckInOperationsPanel({
             </label>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
               <p className="font-semibold text-amber-950">Cấp quyền truy cập cho khách hàng</p>
-              <p className="text-xs text-amber-900">Nhân viên cấp PIN, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận <code>issuedAt</code>. PIN thô không được lưu.</p>
+              <p className="text-xs text-amber-900">Nhân viên cấp mã truy cập, thẻ, chìa khóa hoặc khóa tại thời điểm bàn giao. Hệ thống ghi nhận thời điểm cấp. Mã truy cập gốc không được lưu.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select label="Loại quyền truy cập" value={credentialType} onChange={event => setCredentialType(event.target.value as AccessCredentialType)}>
-                  <option value="PIN">Mã PIN / mã truy cập</option>
+                  <option value="PIN">Mã truy cập</option>
                   <option value="CARD">Thẻ ra vào</option>
                   <option value="KEY">Chìa khóa</option>
                   <option value="LOCK">Khóa / ổ khóa</option>
                 </Select>
                 <Input label="Mã tham chiếu / số seri" value={credentialReference} onChange={event => setCredentialReference(event.target.value)} placeholder="Ví dụ: PIN-2048 hoặc CARD-018" />
-                {credentialType === "PIN" && <Input label="PIN (tùy chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
+                {credentialType === "PIN" && <Input label="Mã truy cập (tùy chọn, không hiển thị lại)" type="password" value={credentialSecret} onChange={event => setCredentialSecret(event.target.value)} autoComplete="off" />}
               </div>
             </div>
             <label className="block text-sm font-medium text-stone-700">
@@ -1155,6 +1186,7 @@ export default function StaffCheckInOperationsPanel({
               <Button variant="outline" onClick={() => setHandoverTarget(null)}>
                 Đóng
               </Button>
+
               <Button
                 disabled={
                   submitting ||

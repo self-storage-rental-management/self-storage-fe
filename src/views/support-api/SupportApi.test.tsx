@@ -40,6 +40,11 @@ beforeEach(() => {
 })
 
 describe("D5 role and lifecycle boundaries", () => {
+  it("labels an unassigned Customer ticket as awaiting Staff reception", () => {
+    const html = renderToStaticMarkup(<SupportTicketSummary ticket={supportTicket} role="customer" />)
+    expect(html).toContain("Chờ nhân viên tiếp nhận")
+    expect(html).not.toContain("Chờ quản lý phân công")
+  })
   it("shows the authoritative assignee name to Manager and Staff while Customer remains generic", () => {
     const ticket = { ...supportActive, assignedStaffName: "Nhân viên kiểm thử" }
     for (const role of ["manager", "staff"] as const) {

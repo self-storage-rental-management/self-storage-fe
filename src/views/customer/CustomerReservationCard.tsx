@@ -7,6 +7,7 @@ import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
 import ReservationReceipt from './ReservationReceipt'
+import { paymentMethodLabel } from './paymentLabels'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateTimeInput } from '../../domain/reservationCheckInPolicy'
 
 const GOODS_CATEGORY_LABELS: Record<string, string> = {
@@ -39,7 +40,7 @@ function localDateTimeInput(value?: string | null) {
 
 function formatDisplayDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replaceAll('-', '/')
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replace(/-/g, '/')
 }
 
 interface Props {
@@ -246,7 +247,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           </div>
             {remainingPayment && <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
-              <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} qua {remainingPayment.paymentMethod || 'phương thức tại quầy'}.</p>
+              <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
               <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai</Button>
             </div>}
         </div>
