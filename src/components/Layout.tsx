@@ -210,6 +210,7 @@ export default function Layout({
       'activity': 'Nhật Ký Hoạt Động',
       'settings': 'Cài Đặt Hệ Thống',
       'profile': 'Hồ Sơ Cá Nhân',
+      'returns': 'Hồ Sơ Trả Kho & Quyết Toán',
     }
     const mapping = navItemTranslations[item.id]
     if (mapping) return mapping
@@ -239,6 +240,8 @@ export default function Layout({
       'tổng quan': 'Tổng Quan',
       'facility operations': 'Vận Hành Cơ Sở',
       'vận hành cơ sở': 'Vận Hành Cơ Sở',
+      'vận hành': 'Vận Hành & Trả Kho',
+      'vận hành & trả kho': 'Vận Hành & Trả Kho',
       'rentals & finance': 'Hợp Đồng & Tài Chính',
       'hợp đồng & tài chính': 'Hợp Đồng & Tài Chính',
       'portfolio': 'Danh Mục Cơ Sở',
@@ -360,11 +363,10 @@ export default function Layout({
           <button
             type="button"
             onClick={() => { navigate('profile'); setSidebarOpen(false) }}
-            className={`w-full flex items-center gap-3 p-2 rounded-lg transition text-left mb-2.5 group ${
-              currentPage === 'profile'
+            className={`w-full flex items-center gap-3 p-2 rounded-lg transition text-left mb-2.5 group ${currentPage === 'profile'
                 ? 'bg-[#3a3933] border border-[#4b4940] shadow-sm'
                 : 'hover:bg-white/5'
-            }`}
+              }`}
             title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
           >
             <Avatar name={user.name} size="md" imageUrl={user.avatar} />
@@ -372,9 +374,8 @@ export default function Layout({
               <p className="text-sm font-semibold text-stone-100 truncate group-hover:text-amber-200 transition">{user.name}</p>
               <p className="text-xs text-stone-400 truncate">{user.email}</p>
             </div>
-            <span className={`text-xs font-mono px-1.5 py-0.5 rounded transition ${
-              currentPage === 'profile' ? 'bg-[#e9a12c] text-[#292a27] font-semibold' : 'text-stone-400 group-hover:text-stone-200'
-            }`}>
+            <span className={`text-xs font-mono px-1.5 py-0.5 rounded transition ${currentPage === 'profile' ? 'bg-[#e9a12c] text-[#292a27] font-semibold' : 'text-stone-400 group-hover:text-stone-200'
+              }`}>
               {'Hồ sơ'}
             </span>
           </button>

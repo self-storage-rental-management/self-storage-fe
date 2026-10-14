@@ -21,6 +21,7 @@ import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authA
 import { ApiClientError } from '../../services/apiClient'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { reservationProgress } from './reservationPresentation'
+import { requestReturn as requestReturnApi } from '../../services/returnApi'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from '../../domain/reservationCheckInPolicy'
@@ -3912,8 +3913,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <Button
                 variant="danger"
                 disabled={!returnTargetDate || Boolean(parseCustomerDate(activeRentalForReturn.endDate) && new Date(`${returnTargetDate}T00:00:00`).getTime() > parseCustomerDate(activeRentalForReturn.endDate)!.getTime())}
-                onClick={() => {
+                onClick={async () => {
                   try {
+                    if (isApiAuthenticated()) {
+                      await requestReturnApi(activeRentalForReturn.id, returnTargetDate, returnReason || '')
+                    }
                     requestReturn(activeRentalForReturn.id, returnTargetDate, user, returnReason)
                     setReturnModalOpen(false)
                     showToast('Yêu cầu trả kho đã được tiếp nhận. Nhân viên sẽ chuẩn bị biên bản nghiệm thu!')
