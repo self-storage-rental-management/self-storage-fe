@@ -29,9 +29,13 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     ['depositAmount', 'netRefundAmount', 'amountDueFromCustomer'].every(k => v[k] === null || money(v[k])) &&
     ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string')
 }
+function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string) {
+  if (a.roles.includes('BUSINESS') || a.roles.includes('ADMIN')) return true
+  return !!a.facilityScopes[facilityId]
+}
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER'))
+  if (!a || a.status !== 'ACTIVE' || !a.roles.some(r => r === role.toUpperCase() || (role === 'manager' && (r === 'BUSINESS' || r === 'ADMIN'))))
     throw new ApiClientError('Bạn không có quyền truy cập hồ sơ trả kho.', { status: 403 })
   if (role !== 'customer' && !a.permissions.includes(write ? role === 'manager' ? 'rentals:update' : 'returns:process' : 'returns:read'))
     throw new ApiClientError('Bạn chưa có quyền xử lý hồ sơ trả kho.', { status: 403 })
@@ -40,13 +44,13 @@ function actor(role: ReturnRole, write = false) {
 function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string) {
   const a = actor(role)
   return readRentalEnvelope<ApiReturn>(value, v => isApiReturn(v) && (!id || v.id === id) && (!rentalId || v.rentalId === rentalId) &&
-    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || !!a.facilityScopes[v.facilityId]))
+    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || facilityAllowed(a, v.facilityId)))
 }
 export async function listReturns(role: ReturnRole, page = 0, pageSize = 20) {
   const a = actor(role)
   if (!Number.isSafeInteger(page) || page < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new Error('Trang không hợp lệ.')
   return readRentalPage<ApiReturn>(await apiRequest(`/api/${role}/returns?page=${page}&pageSize=${pageSize}`),
-    v => isApiReturn(v) && (role === 'customer' ? v.customerId === a.id : !!a.facilityScopes[v.facilityId]), page)
+    v => isApiReturn(v) && (role === 'customer' ? v.customerId === a.id : facilityAllowed(a, v.facilityId)), page)
 }
 export async function getReturn(role: ReturnRole, id: string) {
   actor(role); if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
