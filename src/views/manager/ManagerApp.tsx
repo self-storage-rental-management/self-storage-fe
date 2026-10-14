@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ManagerPresentationProvider } from './managerPresentation'
 import './managerTypography.css'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
@@ -24,6 +24,7 @@ import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
+import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
@@ -41,6 +42,29 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'reports:read' }
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
+  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let cancelled = false
+    const loadNotifications = async () => {
+      try {
+        const result = await listNotifications(0, 50)
+        if (!cancelled) setBackendNotifications(result.data)
+      } catch {
+        // Manager operations remain available if notifications are temporarily unavailable.
+      }
+    }
+    void loadNotifications()
+    const refreshNotifications = () => void loadNotifications()
+    window.addEventListener('storagehub:notifications-refresh', refreshNotifications)
+    const timer = window.setInterval(refreshNotifications, 10_000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storagehub:notifications-refresh', refreshNotifications)
+      window.clearInterval(timer)
+    }
+  }, [])
   const [toast, setToast] = useState<string | null>(null)
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
   const showToast = (message: string) => {
@@ -90,8 +114,35 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       return notifications
     })
   const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
+  const managerNotificationPage = (type: ApiNotification['type']) => {
+    if (type === 'CHECKIN' || type === 'RETURN') return 'moves'
+    if (type === 'RESERVATION') return 'unit-assignments'
+    if (type === 'PAYMENT' || type === 'OVERDUE') return type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
+    if (type === 'SUPPORT') return 'support-api'
+    return 'dashboard'
+  }
+  const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
+    id: `api-notification-${notification.id}`,
+    title: notification.title,
+    message: notification.content,
+    date: notification.createdAt,
+    page: managerNotificationPage(notification.type),
+    targetId: notification.relatedEntityId ?? undefined,
+    isRead: notification.isRead,
+  }))
 
-  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={managerNotifications} canAccess={permission => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
+  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} onNotificationClick={(notification) => {
+    if (notification.id.startsWith('api-notification-')) {
+      const notificationId = notification.id.replace('api-notification-', '')
+      setPage(notification.page)
+      setBackendNotifications(current => current.map(item =>
+        item.id === notificationId ? { ...item, isRead: true } : item
+      ))
+      void markNotificationRead(notificationId).catch(() => undefined)
+      return
+    }
+    setPage(notification.page)
+  }} canAccess={permission => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && (isApiAuthenticated() ? <ManagerDashboardApiPanel setPage={setPage} /> : <ManagerDashboardPanel user={user} setPage={setPage} />)}
     {page === 'inventory' && <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} showToast={showToast} />}
     {page === 'unit-assignments' && <ManagerUnitAssignmentPanel showToast={showToast} />}
