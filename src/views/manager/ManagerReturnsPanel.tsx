@@ -5,6 +5,7 @@ import { formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
+import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import {
   calculateManagerReturnSettlement,
   canManagerAssignStaff,
@@ -33,7 +34,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     createFacilityTask,
     updateUnitStatus,
     reviewReturnDispute,
-    completeReturnRefund
+    completeReturnRefund,
+    payments
   } = useStorageHub()
 
   const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
@@ -56,6 +58,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [refundTxnRef, setRefundTxnRef] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<ReturnCase | null>(null)
   const returnHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-returns`)
+
+  // Settlement document modal state (invoice, receipt, payment history)
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [settlementTarget, setSettlementTarget] = useState<ReturnCase | null>(null)
 
   // Assign staff for inspection state
   const [assignModalOpen, setAssignModalOpen] = useState(false)
@@ -600,6 +606,18 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           {'Biên bản'}
                         </Button>
 
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                          onClick={() => {
+                            setSettlementTarget(ret)
+                            setSettlementModalOpen(true)
+                          }}
+                        >
+                          {'🧾 Quyết toán'}
+                        </Button>
+
                         {(ret.status === 'requested' || ret.status === 'scheduled') && (
                           <Button
                             size="sm"
@@ -876,7 +894,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
             {getReturnActionReason(selectedReturn) && <ManagerActionNotice tone={selectedReturn.status === 'completed' ? 'success' : 'info'}>{getReturnActionReason(selectedReturn)}</ManagerActionNotice>}
 
-            <div className="flex justify-end gap-2 pt-2 border-t">
+            <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
+              <Button
+                variant="outline"
+                className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                onClick={() => {
+                  setSettlementTarget(selectedReturn)
+                  setSettlementModalOpen(true)
+                }}
+              >
+                🧾 Xem hóa đơn & biên lai
+              </Button>
               {(selectedReturn.status === 'requested' || selectedReturn.status === 'scheduled') && (
                 <Button
                   variant="primary"
@@ -1264,6 +1292,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
           </div>
         )}
       </Modal>
+
+      <ReturnSettlementModal
+        open={settlementModalOpen}
+        onClose={() => setSettlementModalOpen(false)}
+        returnCase={settlementTarget}
+        payments={payments}
+        role="manager"
+      />
     </div>
   )
 }

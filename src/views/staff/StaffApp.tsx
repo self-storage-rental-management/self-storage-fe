@@ -51,6 +51,7 @@ import {
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
+import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 
@@ -930,6 +931,9 @@ export default function StaffApp({
   const [selectedReturn, setSelectedReturn] = useState<StaffReturn | null>(null)
 
   const [returnDetailsOnly, setReturnDetailsOnly] = useState(false)
+
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [settlementTarget, setSettlementTarget] = useState<ReturnCase | null>(null)
 
   const [selectedCheckin, setSelectedCheckin] = useState<StaffCheckin | null>(
     null,
@@ -3410,6 +3414,18 @@ export default function StaffApp({
                           {"Chi tiết"}
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50 ml-1.5"
+                        onClick={() => {
+                          const hubReturn = hub.returns.find(item => item.id === r.id) || (r as unknown as ReturnCase)
+                          setSettlementTarget(hubReturn)
+                          setSettlementModalOpen(true)
+                        }}
+                      >
+                        {"🧾 Quyết toán"}
+                      </Button>
                     </Td>
                   </Tr>
                 ))}
@@ -4234,7 +4250,20 @@ export default function StaffApp({
                 </div>
               </div>
             )}
-            <div className="flex gap-2 justify-end pt-2">
+            <div className="flex flex-wrap gap-2 justify-end pt-2">
+              {selectedReturn && (
+                <Button
+                  variant="outline"
+                  className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                  onClick={() => {
+                    const hubReturn = hub.returns.find(item => item.id === selectedReturn.id) || (selectedReturn as unknown as ReturnCase)
+                    setSettlementTarget(hubReturn)
+                    setSettlementModalOpen(true)
+                  }}
+                >
+                  🧾 Xem hóa đơn & biên lai
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setInspectModal(false)}>
                 {returnDetailsOnly ? "Đóng" : "Hủy"}
               </Button>
@@ -5244,6 +5273,14 @@ export default function StaffApp({
           </div>
         )}
       </Modal>
+
+      <ReturnSettlementModal
+        open={settlementModalOpen}
+        onClose={() => setSettlementModalOpen(false)}
+        returnCase={settlementTarget}
+        payments={hub.payments}
+        role="staff"
+      />
     </Layout>
   )
 }
