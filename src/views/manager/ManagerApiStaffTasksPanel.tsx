@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
+import { ApiClientError } from '../../services/apiClient'
 import { managerDisplayError } from './managerPresentation'
 import ManagerActionNotice from './ManagerActionNotice'
 import { listAllRecoveryTasks, type RecoveryTask } from '../../services/recoveryTasksApi'
@@ -49,6 +50,7 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
   const [recoveryTasks, setRecoveryTasks] = useState<RecoveryTask[]>([])
   const [recoveryError, setRecoveryError] = useState<unknown>(null)
+  const [recoveryDisabled, setRecoveryDisabled] = useState(false)
   const [selectedRecovery, setSelectedRecovery] = useState<RecoveryTask | null>(null)
   const [units, setUnits] = useState<MaintenanceStorageUnit[]>([])
   const [staff, setStaff] = useState<MaintenanceStaffOption[]>([])
@@ -74,6 +76,7 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
     setLoading(true)
     setTaskError(null)
     setRecoveryError(null)
+    setRecoveryDisabled(false)
     setUnitReadFailed(false)
     setStaffReadFailed(false)
     const results = await Promise.allSettled([
@@ -84,7 +87,11 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
     ])
     const [taskResult, unitResult, staffResult, recoveryResult] = results
     if (recoveryResult.status === 'fulfilled') setRecoveryTasks(recoveryResult.value)
-    else { setRecoveryTasks([]);setRecoveryError(recoveryResult.reason) }
+    else {
+      setRecoveryTasks([])
+      if (recoveryResult.reason instanceof ApiClientError && recoveryResult.reason.code === 'FEATURE_DISABLED') setRecoveryDisabled(true)
+      else setRecoveryError(recoveryResult.reason)
+    }
     if (taskResult.status === 'fulfilled') setTasks(taskResult.value.data)
     else {
       setTasks([])
@@ -161,7 +168,7 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
         action={<Button disabled={loading || !facilityId || unitReadFailed || staffReadFailed || !units.length || !staff.length} onClick={() => setModalOpen(true)}>Tạo nhiệm vụ</Button>}
       />
 
-      {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có Staff ACTIVE với phạm vi OPERATE/MANAGE tại cơ sở này.</ManagerActionNotice>}
+      {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
       {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
       {!loading && (unitReadFailed || staffReadFailed) && <p className="text-xs text-stone-500">Chưa tải được danh sách kho hoặc nhân viên để tạo nhiệm vụ. Dữ liệu nhiệm vụ vẫn được tải riêng.</p>}
 
@@ -176,8 +183,10 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
           <Thead><tr><Th>Nhiệm vụ</Th><Th>Loại</Th><Th>Gian kho</Th><Th>Người phụ trách</Th><Th>Thời gian</Th><Th>Trạng thái</Th><Th>Thao tác</Th></tr></Thead>
           <Tbody>
             {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Đang tải dữ liệu nhiệm vụ…</td></tr>}
-            {!loading && Boolean(taskError || recoveryError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được đầy đủ nhiệm vụ. {managerDisplayError(taskError || recoveryError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
-            {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Chưa có nhiệm vụ tại cơ sở này.</td></tr>}
+            {!loading && Boolean(taskError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ bảo trì. {managerDisplayError(taskError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
+            {!loading && Boolean(recoveryError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ thu hồi kho. {managerDisplayError(recoveryError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
+            {!loading && recoveryDisabled && <tr><td colSpan={7} className="px-4 py-3 text-center text-sm text-stone-500">Chức năng nhiệm vụ thu hồi kho chưa được bật.</td></tr>}
+            {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">{recoveryDisabled ? 'Chưa có nhiệm vụ bảo trì tại cơ sở này.' : 'Chưa có nhiệm vụ tại cơ sở này.'}</td></tr>}
             {!loading && recoveryTasks.map(task => <Tr key={`recovery-${task.id}`}>
               <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa hoàn tất gia hạn.' : task.reason}</p></Td>
               <Td><Badge variant="warning">Thu hồi kho</Badge></Td>

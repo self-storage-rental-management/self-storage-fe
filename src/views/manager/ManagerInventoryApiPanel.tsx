@@ -40,7 +40,8 @@ import {
   type InventoryFilters,
   type InventoryUnit,
 } from "./managerInventoryApi"
-import { createManagerUnitType } from "../../services/managerUnitTypeApi"
+import { createManagerUnitType, updateManagerUnitType, deleteManagerUnitType } from "../../services/managerUnitTypeApi"
+import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
 
 const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
@@ -111,6 +112,10 @@ function InventoryRead({
   facilityId: string
 }) {
   const [createOpen, setCreateOpen] = useState(false)
+  const [editingType, setEditingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
+  const [deletingType, setDeletingType] = useState<{ id: string; name: string }>()
+  const [actionError, setActionError] = useState<string>()
+  const [actionBusy, setActionBusy] = useState(false)
   const read = useRentalApiResource(identity, () =>
     loadManagerInventory(facilityId),
   )
@@ -137,8 +142,41 @@ function InventoryRead({
       <div className="flex justify-end">
         <Button variant="primary" onClick={() => setCreateOpen(true)}>Thêm loại kho thực tế</Button>
       </div>
+      {actionError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
+      <Card className="p-4 space-y-3">
+        <h3 className="font-bold">Quản lý loại kho thực tế</h3>
+        {read.data.catalog.map(type => <div key={type.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3">
+          <div><b>{type.code} · {type.name}</b><p className="text-xs text-stone-500">{type.total} gian kho</p></div>
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={actionBusy} onClick={async () => {
+              setActionBusy(true); setActionError(undefined)
+              try {
+                const response = await listAccessibleUnitTypes(facilityId)
+                const detail = response.data.find(item => item.id === type.id)
+                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
+                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
+                setEditingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
+              } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
+            }}>Chỉnh sửa</Button>
+            <Button variant="outline" disabled={actionBusy} onClick={() => { setActionError(undefined); setDeletingType(type) }}>Xóa loại kho</Button>
+          </div>
+        </div>)}
+        {read.data.catalog.length === 0 && <p className="text-sm text-stone-500">Chưa có loại kho thực tế.</p>}
+      </Card>
       <InventoryContent inventory={read.data} rentals={rentals} identity={identity} />
       <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
+      {editingType && <CreateUnitTypeModal key={editingType.id} open facilityId={facilityId} initial={editingType} onClose={() => setEditingType(undefined)} onCreated={() => { setEditingType(undefined); read.refresh() }} />}
+      <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Xóa loại kho">
+        <div className="space-y-4"><p>Xóa loại kho <b>{deletingType?.name}</b> và các gian trống thuộc loại này? Loại kho có đơn đặt hoặc hồ sơ liên quan không được xóa.</p>
+          {actionError && <p role="alert" className="text-sm text-red-700">{actionError}</p>}
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={actionBusy} onClick={() => setDeletingType(undefined)}>Hủy</Button><Button disabled={actionBusy} onClick={async () => {
+            if (!deletingType) return
+            setActionBusy(true); setActionError(undefined)
+            try { await deleteManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh() }
+            catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
+          }}>{actionBusy ? 'Đang xóa...' : 'Xác nhận xóa'}</Button></div>
+        </div>
+      </Modal>
     </>
   ) : (
     <Card className="p-5" role="alert">
@@ -147,29 +185,32 @@ function InventoryRead({
   )
 }
 
-function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
+function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: {
   open: boolean
   facilityId: string
   onClose: () => void
   onCreated: () => void
+  initial?: CustomerUnitType & { floor?: string; zone?: string }
 }) {
   const [form, setForm] = useState({
     code: '', name: '', description: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
     rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
     aisleWidthM: '1.8', trolleyType: 'Xe đẩy tay / xe sàn nhỏ', smallBoxCapacity: '336', largeBoxCapacity: '200',
     physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
+    ...(initial ? Object.fromEntries(Object.entries(initial).filter(([key]) => ['code', 'name', 'description', 'lengthM', 'widthM', 'heightM', 'maxLoadKg', 'rackCount', 'rackLengthM', 'rackWidthM', 'rackHeightM', 'aisleWidthM', 'trolleyType', 'smallBoxCapacity', 'largeBoxCapacity', 'floor', 'zone', 'imageUrl'].includes(key)).map(([key, value]) => [key, value == null ? '' : String(value)])) : {}),
+    ...(initial ? { physicalUnitCount: String(initial.totalCount ?? 0) } : {}),
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
-      <input className={`${inputClass} mt-1`} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
+      <input className={`${inputClass} mt-1 disabled:bg-stone-100`} disabled={busy || (!!initial && ['code', 'physicalUnitCount', 'floor', 'zone'].includes(key))} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
     </label>
   )
   const submit = async () => {
     setBusy(true); setError(undefined)
     try {
-      await createManagerUnitType(facilityId, {
+      const input = {
         code: form.code.trim().toUpperCase(), name: form.name.trim(), description: form.description.trim() || null,
         lengthM: Number(form.lengthM), widthM: Number(form.widthM), heightM: Number(form.heightM),
         maxLoadKg: Number(form.maxLoadKg), rackCount: Number(form.rackCount),
@@ -178,13 +219,15 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
         smallBoxCapacity: Number(form.smallBoxCapacity), largeBoxCapacity: Number(form.largeBoxCapacity),
         physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
         imageUrl: form.imageUrl.trim() || null,
-      })
+      }
+      if (initial) await updateManagerUnitType(initial.id, input)
+      else await createManagerUnitType(facilityId, input)
       onCreated()
     } catch (cause) {
       setError(managerDisplayError(cause))
     } finally { setBusy(false) }
   }
-  return <Modal open={open} onClose={onClose} title="Thêm loại kho thực tế" size="xl">
+  return <Modal open={open} onClose={() => { if (!busy) onClose() }} title={initial ? 'Chỉnh sửa loại kho thực tế' : 'Thêm loại kho thực tế'} size="xl">
     <div className="space-y-5">
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Thông tin loại kho</h3>
@@ -214,7 +257,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
         <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
@@ -402,8 +445,8 @@ export function InventoryContent({
                   </Badge>
                 </Td>
                 <Td className="align-middle">
-                  {u.definition.monthlyPrice === null ? (
-                    <p className="text-sm text-stone-500">{missing}</p>
+                  {u.definition.monthlyPrice == null || u.definition.monthlyPrice <= 0 ? (
+                    <p className="text-sm text-stone-500">Chờ BO định giá</p>
                   ) : (
                     <div className="whitespace-nowrap">
                       <p className="font-semibold text-stone-800">
@@ -527,8 +570,8 @@ export function InventoryContent({
               <p>
                 Giá niêm yết:{" "}
                 <b>
-                  {selected.definition.monthlyPrice === null
-                    ? missing
+                  {selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0
+                    ? 'Chờ BO định giá'
                     : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`}
                 </b>
               </p>
