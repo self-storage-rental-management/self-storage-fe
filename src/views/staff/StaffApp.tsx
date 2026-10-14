@@ -2510,7 +2510,6 @@ export default function StaffApp({
           <StaffDailyTaskQueue
             assignedTasks={assignedFacilityTasks}
             operationalTasks={operationalTasks}
-            operationalError={apiDailyOperationsError && isApiAuthenticated() ? apiDailyOperationsError : null}
             dateFilter={operationalTaskDateFilter}
             priorityFilter={operationalTaskPriorityFilter}
             sort={operationalTaskSort}
