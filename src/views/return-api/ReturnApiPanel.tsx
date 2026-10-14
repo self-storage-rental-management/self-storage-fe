@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Card } from '../../components/ui'
+import { Button, Card, Input, Select } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalMoney } from '../rental-api/presentation'
@@ -31,6 +31,18 @@ const labels: Record<ApiReturn['status'], string> = {
   refund_pending: 'Chờ hoàn cọc',
   completed: 'Đã hoàn tất',
 }
+
+const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
+  ['all', 'Tất cả trạng thái'],
+  ['requested', 'Đã yêu cầu trả kho'],
+  ['scheduled', 'Đã hẹn nghiệm thu'],
+  ['inspected', 'Đã nghiệm thu'],
+  ['awaiting_customer_confirmation', 'Chờ khách xác nhận'],
+  ['disputed', 'Đang xem xét khiếu nại'],
+  ['payment_due', 'Chờ thanh toán quyết toán'],
+  ['refund_pending', 'Chờ hoàn cọc'],
+  ['completed', 'Đã hoàn tất'],
+]
 
 export function ReturnSummary({ record }: { record: ApiReturn }) {
   return (
@@ -102,7 +114,7 @@ function ReturnWorkspace({
 }) {
   const actor = getAuthenticatedActor()
   const [page, setPage] = useState(0)
-  const read = useRentalApiResource(`${identity}:${page}`, () => listReturns(role, page))
+  const read = useRentalApiResource(`${identity}:${page}`, () => listReturns(role, page, 100))
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
@@ -116,6 +128,10 @@ function ReturnWorkspace({
   const [feedback, setFeedback] = useState('')
   const [date, setDate] = useState('')
   const [notes, setNotes] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<ApiReturn['status'] | 'all'>('all')
+  const [scheduledDateFilter, setScheduledDateFilter] = useState('')
+  const [sort, setSort] = useState<'date-asc' | 'date-desc' | 'customer'>('date-asc')
 
   async function run(work: () => Promise<ApiReturn>) {
     if (lock.current) return
@@ -140,7 +156,20 @@ function ReturnWorkspace({
     }
   }
 
-  const rows = read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? []
+  const rows = (read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? [])
+    .filter((item) => statusFilter === 'all' || item.status === statusFilter)
+    .filter((item) => !scheduledDateFilter || item.scheduledDate === scheduledDateFilter)
+    .filter((item) => {
+      const query = search.trim().toLocaleLowerCase('vi')
+      if (!query) return true
+      return [item.id, item.customerName, item.unitNumber, item.facilityName]
+        .some((value) => value.toLocaleLowerCase('vi').includes(query))
+    })
+    .sort((left, right) => {
+      if (sort === 'customer') return left.customerName.localeCompare(right.customerName, 'vi')
+      const difference = left.scheduledDate.localeCompare(right.scheduledDate)
+      return sort === 'date-desc' ? -difference : difference
+    })
   const readable = actor?.status === 'ACTIVE' && (
     actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
@@ -160,7 +189,21 @@ function ReturnWorkspace({
       {read.loading && <p role="status">Đang tải hồ sơ trả kho...</p>}
       {!!read.error && <p role="alert">{returnError(read.error)}</p>}
       {feedback && <p role="status">{feedback}</p>}
+      {role !== 'customer' && <div className="grid gap-3 rounded border border-stone-200 bg-stone-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Input label="Tìm mã, khách hàng hoặc gian kho" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} />
+        <Select label="Trạng thái" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as ApiReturn['status'] | 'all'); setPage(0) }}>
+          {returnStatusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </Select>
+        <Input label="Ngày trả kho" type="date" value={scheduledDateFilter} onChange={(event) => { setScheduledDateFilter(event.target.value); setPage(0) }} />
+        <Select label="Sắp xếp" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(0) }}>
+          <option value="date-asc">Ngày trả kho sớm trước</option>
+          <option value="date-desc">Ngày trả kho muộn trước</option>
+          <option value="customer">Tên khách hàng A–Z</option>
+        </Select>
+      </div>}
+      {role !== 'customer' && <p className="text-xs text-stone-500">Hiển thị {rows.length} hồ sơ phù hợp bộ lọc.</p>}
       {rows.map((record) => <div key={record.id} className="rounded border p-3"><ReturnSummary record={record} /><Button variant="outline" disabled={busy} onClick={() => setSelected(record.id)}>Xem và xử lý hồ sơ</Button></div>)}
+      {!read.loading && !rows.length && <p className="rounded border border-dashed p-5 text-center text-sm text-stone-500">Không có hồ sơ trả kho phù hợp bộ lọc.</p>}
       {!rentalId && rows.length > 0 && <div className="flex gap-2"><Button disabled={busy || page === 0} onClick={() => { setSelected(null); setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { setSelected(null); setPage((value) => value + 1) }}>Trang sau</Button></div>}
       {selected && <ReturnActions key={selected} role={role} id={selected} run={run} busy={busy} />}
     </Card>
