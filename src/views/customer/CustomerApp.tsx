@@ -7,7 +7,7 @@ import CustomerUnitDetails from './CustomerUnitDetails'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import type { User } from '../../types'
 import type { TicketItem } from '../../types/support'
-import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage } from '../../types/storageHub'
+import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage, ReturnCase } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
@@ -526,7 +526,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         pricePerM3: unitType.volumeM3 > 0 ? vndToLegacyBase(unitType.monthlyPrice) / unitType.volumeM3 : 0,
         monthlyPrice: vndToLegacyBase(unitType.monthlyPrice),
         maxLoadKg: unitType.maxLoadKg,
-        descriptionVi: unitType.description || '',
+        descriptionVi: ('description' in unitType ? String((unitType as Record<string, unknown>).description || '') : ''),
         descriptionEn: '',
       }))
     : isApiAuthenticated() ? [] : sharedUnitTypes, [backendUnitTypes, sharedUnitTypes])
