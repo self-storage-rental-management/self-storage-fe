@@ -8,7 +8,7 @@ import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import type { User } from '../../types'
 import type { TicketItem } from '../../types/support'
-import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage } from '../../types/storageHub'
+import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage, ReturnCase } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
@@ -23,6 +23,7 @@ import { ApiClientError } from '../../services/apiClient'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { reservationProgress } from './reservationPresentation'
 import { requestReturn as requestReturnApi } from '../../services/returnApi'
+import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_HOURS, MANAGER_ASSIGNMENT_WORKING_HOURS, CHECK_IN_WINDOW_DAYS, CHECK_IN_OPENING_HOUR, CHECK_IN_CLOSING_HOUR } from '../../domain/reservationCheckInPolicy'
@@ -449,6 +450,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [backendOtpBusy, setBackendOtpBusy] = useState(false)
   const [backendOtpMessage, setBackendOtpMessage] = useState<string | null>(null)
   const [backendOtpNextResendAt, setBackendOtpNextResendAt] = useState<Record<string, number>>({})
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [selectedSettlementReturn, setSelectedSettlementReturn] = useState<ReturnCase | null>(null)
   const reservationIdempotencyKey = useRef<string | null>(null)
 
   const facilities: Facility[] = useMemo(() => backendFacilities.length
@@ -525,7 +528,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         pricePerM3: unitType.volumeM3 > 0 ? vndToLegacyBase(unitType.monthlyPrice) / unitType.volumeM3 : 0,
         monthlyPrice: vndToLegacyBase(unitType.monthlyPrice),
         maxLoadKg: unitType.maxLoadKg,
-        descriptionVi: unitType.description || '',
+        descriptionVi: ('description' in unitType ? String((unitType as Record<string, unknown>).description || '') : ''),
         descriptionEn: '',
       }))
     : isApiAuthenticated() ? [] : sharedUnitTypes, [backendUnitTypes, sharedUnitTypes])
@@ -2624,7 +2627,30 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     if (!returnCase) return null
                     const totalDeductions = (returnCase.damageFee || 0) + (returnCase.cleaningFee || 0) + (returnCase.lostItemFee || 0) + (returnCase.overdueFee || 0) + (returnCase.outstandingFee || 0)
                     return <div className="border-t border-stone-200 bg-stone-50 px-5 py-4 text-xs">
-                      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-stone-950">{'Nghiệm thu và quyết toán trả kho'}</p><p className="mt-1 text-stone-500">{returnCase.id} · {badgeFor(returnCase.status)}</p></div>{returnCase.refundTransaction && <span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">{'Đã hoàn cọc'} {formatVnd(returnCase.refundTransaction.amount)}</span>}</div>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-stone-950">{'Nghiệm thu và quyết toán trả kho'}</p>
+                          <p className="mt-1 text-stone-500">{returnCase.id} · {badgeFor(returnCase.status)}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                            onClick={() => {
+                              setSelectedSettlementReturn(returnCase)
+                              setSettlementModalOpen(true)
+                            }}
+                          >
+                            🧾 Xem hóa đơn & biên lai quyết toán
+                          </Button>
+                          {returnCase.refundTransaction && (
+                            <span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">
+                              {'Đã hoàn cọc'} {formatVnd(returnCase.refundTransaction.amount)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                       {['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(returnCase.status) && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Hiện trạng ban đầu'}</p><p className="mt-1 font-semibold">{returnCase.initialConditionSnapshot}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Kết quả nghiệm thu'}</p><p className="mt-1 font-semibold">{returnCase.damageClassification || '—'} · {returnCase.staffNotes || '—'}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{`Phí quá hạn (${returnCase.overdueDays || 0} ngày)`}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.overdueFee || 0)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Cọc được hoàn'}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(returnCase.netRefundAmount)}</p></div><div className={`rounded-lg p-3 ${(returnCase.amountDueFromCustomer || 0) > 0 ? 'bg-red-100' : 'bg-white'}`}><p className="text-stone-500">{'Khách phải đóng thêm'}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.amountDueFromCustomer || 0)}</p></div></div>}
                       {returnCase.structuralInspection && (
                         <div className="mt-2.5 rounded-lg border border-stone-200 bg-white p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
@@ -4270,6 +4296,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         onOpenTicketList={() => setPage('support')}
         showToast={showToast}
       />}
+
+      <ReturnSettlementModal
+        open={settlementModalOpen}
+        onClose={() => setSettlementModalOpen(false)}
+        returnCase={selectedSettlementReturn}
+        payments={payments}
+        role="customer"
+      />
       </div>
     </Layout>
   )
