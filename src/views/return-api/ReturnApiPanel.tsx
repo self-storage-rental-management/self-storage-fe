@@ -33,6 +33,18 @@ const labels: Record<ApiReturn['status'], string> = {
   completed: 'Đã hoàn tất',
 }
 
+const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
+  ['all', 'Tất cả trạng thái'],
+  ['requested', 'Đã yêu cầu trả kho'],
+  ['scheduled', 'Đã hẹn nghiệm thu'],
+  ['inspected', 'Đã nghiệm thu'],
+  ['awaiting_customer_confirmation', 'Chờ khách xác nhận'],
+  ['disputed', 'Đang xem xét khiếu nại'],
+  ['payment_due', 'Chờ thanh toán quyết toán'],
+  ['refund_pending', 'Chờ hoàn cọc'],
+  ['completed', 'Đã hoàn tất'],
+]
+
 export function ReturnSummary({ record }: { record: ApiReturn }) {
   return (
     <div className="space-y-3">
@@ -140,7 +152,20 @@ function ReturnWorkspace({
     }
   }
 
-  const rows = read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? []
+  const rows = (read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? [])
+    .filter((item) => statusFilter === 'all' || item.status === statusFilter)
+    .filter((item) => !scheduledDateFilter || item.scheduledDate === scheduledDateFilter)
+    .filter((item) => {
+      const query = search.trim().toLocaleLowerCase('vi')
+      if (!query) return true
+      return [item.id, item.customerName, item.unitNumber, item.facilityName]
+        .some((value) => value.toLocaleLowerCase('vi').includes(query))
+    })
+    .sort((left, right) => {
+      if (sort === 'customer') return left.customerName.localeCompare(right.customerName, 'vi')
+      const difference = left.scheduledDate.localeCompare(right.scheduledDate)
+      return sort === 'date-desc' ? -difference : difference
+    })
   const readable = actor?.status === 'ACTIVE' && (
     actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
