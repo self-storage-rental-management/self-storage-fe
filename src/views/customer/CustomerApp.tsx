@@ -625,6 +625,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [page, setPage] = useState(() =>
     resolveCustomerInitialPage(window.location.search, getInitialPage(NAV, 'overview')))
   const [previousPage, setPreviousPage] = useState('overview')
+  const [paymentRentalId, setPaymentRentalId] = useState<string | undefined>()
+  useEffect(() => {
+    if (page !== 'rental-records') setPaymentRentalId(undefined)
+  }, [page])
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(() => {
     return new URLSearchParams(window.location.search).get('facilityId') || new URLSearchParams(window.location.search).get('facility')
   })
@@ -2323,7 +2327,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />}
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} initialRentalId={paymentRentalId} />}
       {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <section className="space-y-4">
@@ -2664,7 +2668,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       </div>}
 
       {/* ── PAYMENTS ─────────────────────────────────────────── */}
-      {page === 'payments' && isApiAuthenticated() && <CustomerPaymentHistory />}
+      {page === 'payments' && isApiAuthenticated() && <CustomerPaymentHistory onOpenRentals={(rentalId) => { setPaymentRentalId(rentalId); navigateTo('rental-records') }} />}
       {page === 'payments' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <SectionHeader

@@ -938,6 +938,8 @@ export default function StaffApp({
 
   const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
 
+  const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
+
   const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
 
   const [inspectModal, setInspectModal] = useState(false)
@@ -978,21 +980,12 @@ export default function StaffApp({
 
   const [returnSort, setReturnSort] = useState<StaffListSort>("deadline-asc")
 
-  const [assignedTasksPage, setAssignedTasksPage] = useState(1)
-
   const [operationalTasksPage, setOperationalTasksPage] = useState(1)
-
-  const [assignedTaskDateFilter, setAssignedTaskDateFilter] = useState("")
-
-  const [assignedTaskPriorityFilter, setAssignedTaskPriorityFilter] =
-    useState("all")
-
-  const [assignedTaskSort, setAssignedTaskSort] =
-    useState<StaffTaskSort>("due-asc")
 
   const [operationalTaskDateFilter, setOperationalTaskDateFilter] =
     useState("")
   const [selectedRecoveryTask, setSelectedRecoveryTask] = useState<{ id: string; facilityId: string } | null>(null)
+  const [selectedMaintenanceTaskId, setSelectedMaintenanceTaskId] = useState<string | null>(null)
 
   const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
     useState("all")
@@ -1280,7 +1273,7 @@ export default function StaffApp({
         setApiDailyOperationsError(staffErrorMessage(reason, 'Không thể tải nhiệm vụ vận hành trong ngày.'))
       })
     return () => { active = false }
-  }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id])
+  }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id, apiDailyOperationsRefresh])
 
   const refreshCredentialAlerts = () => {
     if (!isApiAuthenticated()) return
@@ -1732,21 +1725,6 @@ export default function StaffApp({
       return compareStaffTaskSchedule(left, right, "due-asc")
     })
 
-  const filteredAssignedFacilityTasks = assignedFacilityTasks
-    .filter(
-      (task) =>
-        (!assignedTaskDateFilter ||
-          toDateInputValue(task.dueAt) === assignedTaskDateFilter) &&
-        (assignedTaskPriorityFilter === "all" ||
-          task.priority === assignedTaskPriorityFilter),
-    )
-    .sort((left, right) => {
-      const leftFinished = ["completed", "cancelled"].includes(left.status)
-      const rightFinished = ["completed", "cancelled"].includes(right.status)
-      if (leftFinished !== rightFinished) return leftFinished ? 1 : -1
-      return compareStaffTaskSchedule(left, right, assignedTaskSort)
-    })
-
   const openAssignedFacilityTasks = assignedFacilityTasks.filter(
     (task) => task.status !== "completed" && task.status !== "cancelled",
   )
@@ -1865,7 +1843,7 @@ export default function StaffApp({
     setCheckinModal(true)
   }
 
-  const localOperationalTasks = [
+  const localOperationalTasks = ([
     ...credentialAlerts.map(alert => ({
       id: `credential-${alert.action.toLowerCase()}-${alert.id}`,
       title: alert.action === 'ISSUE'
@@ -2020,32 +1998,37 @@ export default function StaffApp({
 
       page: "tasks",
     })),
-  ].sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
+  ] as StaffDailyOperation[]).sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
 
   const operationalTasks = isApiAuthenticated()
     ? apiDailyOperations
     : localOperationalTasks
 
-  const filteredOperationalTasks = operationalTasks
-    .filter(
-      (task) =>
-        (!!(task as StaffDailyOperation).recoveryTask || !operationalTaskDateFilter ||
-          toDateInputValue(task.dueAt) === operationalTaskDateFilter) &&
-        (operationalTaskPriorityFilter === "all" ||
-          task.priority === operationalTaskPriorityFilter),
+  const dailyTasks: Array<
+    | { kind: "assigned"; task: FacilityTask }
+    | { kind: "operational"; task: StaffDailyOperation }
+  > = [
+    ...assignedFacilityTasks.map((task) => ({ kind: "assigned" as const, task })),
+    ...operationalTasks.map((task) => ({ kind: "operational" as const, task })),
+  ]
+
+  const filteredDailyTasks = dailyTasks
+    .filter(({ kind, task }) =>
+      (kind === "operational" && !!task.recoveryTask) ||
+      (!operationalTaskDateFilter || toDateInputValue(task.dueAt) === operationalTaskDateFilter),
     )
-    .sort((left, right) =>
-      compareStaffTaskSchedule(left, right, operationalTaskSort),
+    .filter(({ task }) =>
+      operationalTaskPriorityFilter === "all" || task.priority === operationalTaskPriorityFilter,
     )
+    .sort((left, right) => {
+      const leftFinished = left.kind === "assigned" && ["completed", "cancelled"].includes(left.task.status)
+      const rightFinished = right.kind === "assigned" && ["completed", "cancelled"].includes(right.task.status)
+      if (leftFinished !== rightFinished) return leftFinished ? 1 : -1
+      return compareStaffTaskSchedule(left.task, right.task, operationalTaskSort)
+    })
 
-  const assignedTasksPagination = paginateStaffItems(
-    filteredAssignedFacilityTasks,
-
-    assignedTasksPage,
-  )
-
-  const operationalTasksPagination = paginateStaffItems(
-    filteredOperationalTasks,
+  const dailyTasksPagination = paginateStaffItems(
+    filteredDailyTasks,
 
     operationalTasksPage,
   )
@@ -2079,10 +2062,6 @@ export default function StaffApp({
   const unmatchedCredentialAlerts = credentialAlerts
     .filter((alert) => alert.action === "REVOKE")
     .filter((alert) => !returnCredentialAlertIds.has(alert.id))
-
-  useEffect(() => {
-    setAssignedTasksPage(1)
-  }, [assignedTaskDateFilter, assignedTaskPriorityFilter, assignedTaskSort])
 
   useEffect(() => {
     setOperationalTasksPage(1)
@@ -2179,15 +2158,15 @@ export default function StaffApp({
     facilityTickets.filter((ticket) => ticket.status === "resolved").length
 
   const totalCount = isApiAuthenticated()
-    ? operationalTasks.length
+    ? operationalTasks.length + assignedFacilityTasks.length
     : operationalTasks.length + operationalCompletedCount + assignedFacilityTasks.length
 
   const completedCount = isApiAuthenticated()
-    ? 0
+    ? assignedFacilityTasks.filter((task) => task.status === "completed").length
     : operationalCompletedCount + assignedFacilityTasks.filter((task) => task.status === "completed").length
 
   const remainingTaskCount = isApiAuthenticated()
-    ? operationalTasks.length
+    ? operationalTasks.length + openAssignedFacilityTasks.length
     : operationalTasks.length + openAssignedFacilityTasks.length
 
   const assignedTaskNotifications = openAssignedFacilityTasks.map((task) => ({
@@ -2527,207 +2506,28 @@ export default function StaffApp({
             />
           </div>
 
-          {isApiAuthenticated() && <StaffMaintenanceOperationsPanel showToast={showToast} />}
           {selectedRecoveryTask && <Modal open title="Chi tiết nhiệm vụ thu hồi" onClose={() => setSelectedRecoveryTask(null)}>
             <RecoveryTaskDetail key={selectedRecoveryTask.id} role="staff" id={selectedRecoveryTask.id} facilityId={selectedRecoveryTask.facilityId} />
           </Modal>}
-
-          <Card className="mb-6">
-            <div className="border-b border-stone-200 p-4">
-              <h3 className="font-bold text-stone-900">
-                {"Nhiệm vụ quản lý giao"}
-              </h3>
-              <p className="mt-1 text-xs text-stone-500">
-                {"Nhiệm vụ được đồng bộ theo đúng tài khoản và cơ sở của bạn."}
-              </p>
-            </div>
-            <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
-              <Input
-                label="Ngày đến hạn"
-                type="date"
-                value={assignedTaskDateFilter}
-                onChange={(event) =>
-                  setAssignedTaskDateFilter(event.target.value)
-                }
-              />
-              <Select
-                label="Mức ưu tiên"
-                value={assignedTaskPriorityFilter}
-                onChange={(event) =>
-                  setAssignedTaskPriorityFilter(event.target.value)
-                }
-              >
-                <option value="all">Tất cả mức ưu tiên</option>
-                <option value="high">Khẩn cấp</option>
-                <option value="medium">Trung bình</option>
-                <option value="low">Thông thường</option>
-              </Select>
-              <Select
-                label="Sắp xếp"
-                value={assignedTaskSort}
-                onChange={(event) =>
-                  setAssignedTaskSort(event.target.value as StaffTaskSort)
-                }
-              >
-                <option value="due-asc">Đến hạn trước</option>
-                <option value="priority">Ưu tiên cao trước</option>
-              </Select>
-            </div>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{"Nhiệm vụ"}</Th>
-                  <Th>{"Loại"}</Th>
-                  <Th>{"Ghi chú"}</Th>
-                  <Th>{"Hạn xử lý"}</Th>
-                  <Th>{"Ưu tiên"}</Th>
-                  <Th>{"Trạng thái"}</Th>
-                  <Th />
-                </tr>
-              </Thead>
-              <Tbody>
-                {assignedTasksPagination.items.map((task) => (
-                  <Tr key={task.id}>
-                    <Td>
-                      <p className="font-semibold text-stone-900">
-                        {task.title}
-                      </p>
-                      <p className="text-xs text-stone-400">
-                        {task.id}
-                        {task.referenceId ? ` · ${task.referenceId}` : ""}
-                      </p>
-                    </Td>
-                    <Td>{staffTaskTypeLabel[task.type]}</Td>
-                    <Td className="max-w-xs text-xs">
-                      {task.notes || "—"}
-                      {task.cancellationReason && (
-                        <p className="mt-1 font-semibold text-red-700">
-                          Lý do hủy: {task.cancellationReason}
-                        </p>
-                      )}
-                    </Td>
-                    <Td className="text-xs">
-                      <span
-                        className={
-                          task.status !== "completed" &&
-                          new Date(task.dueAt).getTime() < Date.now()
-                            ? "font-semibold text-red-700"
-                            : ""
-                        }
-                      >
-                        {formatDate(task.dueAt)}
-                      </span>
-                    </Td>
-                    <Td>
-                      <Badge
-                        variant={
-                          task.priority === "high"
-                            ? "error"
-                            : task.priority === "medium"
-                              ? "warning"
-                              : "info"
-                        }
-                      >
-                        {statusLabelMap[task.priority]}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Badge
-                        variant={
-                          task.status === "completed"
-                            ? "success"
-                            : task.status === "cancelled"
-                              ? "error"
-                            : task.status === "in_progress"
-                              ? "info"
-                              : "warning"
-                        }
-                      >
-                        {task.status === "completed"
-                          ? "Đã hoàn thành"
-                          : task.status === "cancelled"
-                            ? "Đã hủy"
-                          : task.status === "in_progress"
-                            ? "Đang thực hiện"
-                            : "Chờ nhận việc"}
-                      </Badge>
-                      {task.completedAt && (
-                        <p className="mt-1 text-[11px] text-emerald-700">
-                          {formatExactDateTime(task.completedAt)}
-                        </p>
-                      )}
-                    </Td>
-                    <Td className="text-right">
-                      {task.status === "open" && (
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            updateAssignedTaskStatus(task, "in_progress")
-                          }
-                        >
-                          {"Nhận việc"}
-                        </Button>
-                      )}
-                      {task.status === "in_progress" && (
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setTaskCompletionTarget(task)
-                            setTaskResultReport(task.resultReport || "")
-                            setTaskEvidenceText((task.evidence || []).join("\n"))
-                          }}
-                        >
-                          {"Đánh dấu hoàn thành"}
-                        </Button>
-                      )}
-                      {task.status === "completed" && (
-                        <span className="text-xs font-semibold text-emerald-700">
-                          {"Đã gửi quản lý"}
-                        </span>
-                      )}
-                      {task.status === "cancelled" && (
-                        <span className="text-xs font-semibold text-red-700">
-                          {"Quản lý đã hủy"}
-                        </span>
-                      )}
-                    </Td>
-                  </Tr>
-                ))}
-                {!filteredAssignedFacilityTasks.length && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-sm text-stone-500"
-                    >
-                      {assignedFacilityTasks.length
-                        ? "Không có nhiệm vụ phù hợp bộ lọc."
-                        : "Quản lý chưa giao nhiệm vụ nào cho bạn."}
-                    </td>
-                  </tr>
-                )}
-              </Tbody>
-            </Table>
-            <StaffPagination
-              {...assignedTasksPagination}
-              total={filteredAssignedFacilityTasks.length}
-              onPageChange={setAssignedTasksPage}
-            />
-          </Card>
+          {selectedMaintenanceTaskId && <Modal open title="Chi tiết nhiệm vụ bảo trì" onClose={() => { setSelectedMaintenanceTaskId(null); setApiDailyOperationsRefresh(value => value + 1) }}>
+            <StaffMaintenanceOperationsPanel taskId={selectedMaintenanceTaskId} showToast={showToast} />
+          </Modal>}
 
           <Card>
             <div className="border-b border-stone-200 p-4">
               <h3 className="font-bold text-stone-900">
-                {"Nhiệm vụ vận hành"}
+                {"Tất cả nhiệm vụ"}
               </h3>
               <p className="mt-1 text-xs text-stone-500">
                 {
-                  "Các hồ sơ nhận kho, trả kho, hỗ trợ và công việc phát sinh trong ca."
+                  "Nhiệm vụ quản lý giao, bảo trì, nhận kho, trả kho, hỗ trợ và công việc phát sinh trong ca."
                 }
               </p>
             </div>
             {apiDailyOperationsError && isApiAuthenticated() && (
-              <div className="border-b border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                {apiDailyOperationsError}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <span>{apiDailyOperationsError}</span>
+                <Button size="sm" variant="outline" onClick={() => setApiDailyOperationsRefresh(value => value + 1)}>Tải lại</Button>
               </div>
             )}
             <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
@@ -2766,23 +2566,29 @@ export default function StaffApp({
               <Thead>
                 <tr>
                   <Th>{"Nhiệm vụ"}</Th>
-                  <Th>{"Khách hàng"}</Th>
-                  <Th>{"Lịch"}</Th>
-                  <Th>Thời hạn xử lý</Th>
+                  <Th>Loại</Th>
+                  <Th>Khách hàng / Cơ sở</Th>
+                  <Th>Thời điểm</Th>
+                  <Th>Ghi chú xử lý</Th>
                   <Th>{"Ưu tiên"}</Th>
+                  <Th>Trạng thái</Th>
                   <Th></Th>
                 </tr>
               </Thead>
               <Tbody>
-                {operationalTasksPagination.items.map((task) => (
-                  <Tr key={task.id}>
+                {dailyTasksPagination.items.map(({ kind, task }) => (
+                  <Tr key={`${kind}-${task.id}`}>
                     <Td>
                       <b>{task.title}</b>
+                      {kind === "assigned" && task.referenceId && <p className="text-xs text-stone-500">{task.referenceId}</p>}
                     </Td>
-                    <Td>{task.customer}</Td>
-                    <Td className="text-xs">{'recoveryTask' in task && task.recoveryTask ? new Date(task.time).toLocaleString('vi-VN') : task.time}</Td>
+                    <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? staffTaskTypeLabel[task.type] : task.id.startsWith("maintenance-") ? "Bảo trì" : task.id.startsWith("support-") ? "Hỗ trợ" : task.id.startsWith("return-") ? "Trả kho" : task.id.startsWith("checkin-") ? "Nhận kho" : task.id.startsWith("assignment-") ? "Phân kho" : task.recoveryTask ? "Thu hồi" : "Vận hành"}</Td>
+                    <Td>{kind === "assigned" ? task.facilityName : task.customer}</Td>
+                    <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? formatDate(task.dueAt) : isApiAuthenticated()
+                      ? (/^\d{4}-\d{2}-\d{2}$/.test(task.time) ? formatDate(task.time) : formatExactDateTime(task.time))
+                      : task.time}</Td>
                     <Td className="text-xs font-semibold text-amber-700">
-                      {task.sla}
+                      {kind === "assigned" ? task.notes || "—" : task.sla}
                     </Td>
                     <Td>
                       {s(task.priority, {
@@ -2793,32 +2599,31 @@ export default function StaffApp({
                         low: "muted",
                       })}
                     </Td>
+                    <Td>{kind === "assigned" ? <Badge variant={task.status === "completed" ? "success" : task.status === "cancelled" ? "error" : task.status === "in_progress" ? "info" : "warning"}>{task.status === "completed" ? "Đã hoàn thành" : task.status === "cancelled" ? "Đã hủy" : task.status === "in_progress" ? "Đang thực hiện" : "Chờ nhận việc"}</Badge> : <Badge variant="warning">Cần xử lý</Badge>}</Td>
                     <Td className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openOperationalTask(task)}
-                      >
-                        {"Mở hồ sơ"}
-                      </Button>
+                      {kind === "assigned" ? (
+                        task.status === "open" ? <Button size="sm" onClick={() => updateAssignedTaskStatus(task, "in_progress")}>Nhận việc</Button>
+                        : task.status === "in_progress" ? <Button size="sm" onClick={() => { setTaskCompletionTarget(task); setTaskResultReport(task.resultReport || ""); setTaskEvidenceText((task.evidence || []).join("\n")) }}>Hoàn thành</Button>
+                        : <span className="text-xs text-stone-500">—</span>
+                      ) : <Button size="sm" variant="outline" onClick={() => task.id.startsWith("maintenance-") ? setSelectedMaintenanceTaskId(task.id.replace("maintenance-", "")) : openOperationalTask(task)}>Mở hồ sơ</Button>}
                     </Td>
                   </Tr>
                 ))}
-                {!filteredOperationalTasks.length && (
+                {!filteredDailyTasks.length && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm text-stone-500"
                     >
-                      Không có nhiệm vụ vận hành phù hợp bộ lọc.
+                      Không có nhiệm vụ phù hợp bộ lọc.
                     </td>
                   </tr>
                 )}
               </Tbody>
             </Table>
             <StaffPagination
-              {...operationalTasksPagination}
-              total={filteredOperationalTasks.length}
+              {...dailyTasksPagination}
+              total={filteredDailyTasks.length}
               onPageChange={setOperationalTasksPage}
             />
           </Card>
