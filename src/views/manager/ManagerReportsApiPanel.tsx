@@ -5,6 +5,7 @@ import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { getManagerReportSummary, listManagerReportActivities } from '../../services/managerReportingApi'
 import { formatVndAmount } from '../../i18n/currency'
+import { exportManagerFacilityExcel } from '../../utils/excelExport'
 import { Badge, Button, Card, Input, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import ManagerPagination from './ManagerPagination'
 import { managerApiIdentity } from './managerD1D5Api'
@@ -65,8 +66,49 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
     setSearch(draftSearch.trim())
   }
 
+  const handleExportExcel = () => {
+    if (!summary) return
+    exportManagerFacilityExcel({
+      facilityName: summary.facilityName || facilityId,
+      metrics: {
+        occupancyRate: summary.occupancyRate,
+        totalUnits: summary.totalUnits,
+        occupiedUnits: summary.occupiedUnits,
+        availableUnits: summary.availableUnits,
+        maintenanceUnits: summary.maintenanceUnits,
+        monthlyRevenue: summary.monthlyRecurringRevenue,
+        collectedRevenue: summary.collectedRevenue ?? 'Chưa đối soát',
+        overdueRentalsCount: summary.overdueRentalsCount,
+        monthCheckinsCount: summary.monthCheckinsCount,
+        openReturnsCount: summary.openReturnsCount,
+      },
+      activities: activities?.data?.map(a => ({
+        timestamp: a.timestamp,
+        action: a.actionLabel || a.action,
+        actorName: a.actorName,
+        actorRole: a.actorRole,
+        entityType: a.entityType,
+        entityId: a.entityId,
+        notes: a.notes || undefined,
+      })),
+    })
+  }
+
   return <div className="fade-in mx-auto w-full max-w-[1600px] space-y-5">
-    {!overview && <SectionHeader eyebrow="Quản lý cơ sở" title="Báo cáo cơ sở" subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ API cơ sở.'} />}
+    {!overview && (
+      <SectionHeader
+        eyebrow="Quản lý cơ sở"
+        title="Báo cáo cơ sở"
+        subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ API cơ sở.'}
+        action={
+          summary ? (
+            <Button variant="outline" onClick={handleExportExcel}>
+              <span className="flex items-center gap-2">📊 Xuất báo cáo Excel</span>
+            </Button>
+          ) : undefined
+        }
+      />
+    )}
     {summaryRead.loading ? <Card className="p-5" role="status">Đang tải báo cáo cơ sở...</Card> : summaryRead.error ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(summaryRead.error)}</p><Button variant="outline" onClick={summaryRead.refresh}>Thử lại</Button></Card> : summary ? <>
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />

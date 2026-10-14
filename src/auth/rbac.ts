@@ -55,7 +55,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   manager: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read',
     'reservations:approve', 'storage_units:assign', 'contracts:read', 'checkins:read', 'rentals:read',
-    'returns:read', 'payments:read', 'payments:collect', 'support:read', 'support:update',
+    'returns:read', 'returns:process', 'payments:read', 'payments:collect', 'support:read', 'support:update',
     'inventory:update', 'policies:read', 'staff_tasks:update', 'reports:read'
   ),
   business: makePermissions(
