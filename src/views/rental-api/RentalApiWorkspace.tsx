@@ -3,7 +3,9 @@ import { singleManagerFacility, managerFacilityNotice } from "../manager/manager
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { getRental, listRentals } from "../../services/rentalApi"
+import { listRentalHandoverFiles } from "../../services/rentalHandoverFilesApi"
 import { getRenewal, listRenewals } from "../../services/renewalApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type {
@@ -104,13 +106,84 @@ function Pager({
   )
 }
 
-export default function RentalApiWorkspace({ role }: { role: RentalApiRole }) {
-  const actor = getAuthenticatedActor()
-  const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  return <WorkspaceSession key={identity} role={role} />
+function RentalContractCell({ role, rentalId }: { role: RentalApiRole; rentalId: string }) {
+  const [preview, setPreview] = useState<{ url: string; name: string }>()
+  const [previewError, setPreviewError] = useState("")
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewLock = useRef(false)
+  const files = useRentalApiResource(
+    `${role}:rental-contract:${rentalId}`,
+    () => listRentalHandoverFiles(role, rentalId),
+  )
+
+  useEffect(() => () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url)
+  }, [preview])
+
+  const openPreview = async (fileId: string, name: string) => {
+    if (previewLock.current) return
+    previewLock.current = true
+    setPreviewLoading(true)
+    setPreviewError("")
+    try {
+      const downloaded = await downloadCheckInEvidence(fileId)
+      const type = downloaded.blob.type.toLowerCase().split(";")[0]
+      if (type !== "application/pdf") {
+        throw new Error("Chỉ hỗ trợ xem trước hợp đồng PDF.")
+      }
+      const url = URL.createObjectURL(downloaded.blob)
+      setPreview({ url, name })
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Không thể tải hợp đồng.")
+    } finally {
+      previewLock.current = false
+      setPreviewLoading(false)
+    }
+  }
+
+  if (files.loading) return <span className="text-xs text-stone-400">Đang tải…</span>
+  if (files.error) {
+    return <span className="text-xs text-amber-700" title="Không tải được hợp đồng">Chưa tải được</span>
+  }
+
+  const contracts = files.data?.filter((file) =>
+    file.kind === "SIGNED_CONTRACT" && file.contentType.toLowerCase().split(";")[0] === "application/pdf",
+  ) ?? []
+  return contracts.length ? (
+    <div className="min-w-0 space-y-2">
+      {contracts.map((file) => (
+        <div key={file.id} className="min-w-0">
+          <span className="block truncate text-sm font-medium text-stone-800" title={file.name}>
+            {file.name.replace(/^hop-dong-da-ky-/i, "")}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-1 whitespace-nowrap"
+            disabled={previewLoading}
+            onClick={() => void openPreview(file.id, file.name)}
+          >
+            {previewLoading ? "Đang tải…" : "Xem trước"}
+          </Button>
+        </div>
+      ))}
+      {previewError && <p role="alert" className="mt-1 text-xs text-red-700">{previewError}</p>}
+      <Modal open={Boolean(preview)} onClose={() => setPreview(undefined)} title={preview?.name} size="3xl">
+        {preview && <iframe src={preview.url} title={`Hợp đồng: ${preview.name}`} className="h-[70vh] w-full bg-white" />}
+      </Modal>
+    </div>
+  ) : (
+    <span className="text-sm text-stone-500">Không có</span>
+  )
 }
 
-function WorkspaceSession({ role }: { role: RentalApiRole }) {
+export default function RentalApiWorkspace({ role, initialRentalId }: { role: RentalApiRole; initialRentalId?: string }) {
+  const actor = getAuthenticatedActor()
+  const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
+  return <WorkspaceSession key={`${identity}:${initialRentalId ?? ""}`} role={role} initialRentalId={initialRentalId} />
+}
+
+function WorkspaceSession({ role, initialRentalId }: { role: RentalApiRole; initialRentalId?: string }) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -135,7 +208,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState("")
-  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:undefined)
+  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:initialRentalId?{kind:"rental",id:initialRentalId}:undefined)
   const [action, setAction] = useState<Action>()
   const permitted =
     actor?.status === "ACTIVE" &&
@@ -405,11 +478,25 @@ function WorkspaceData({
             <table className="w-full min-w-[980px] table-fixed text-left text-sm">
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>
-                <col className="w-[22%]" />
-                <col className="w-[20%]" />
-                <col className="w-[24%]" />
-                <col className="w-[22%]" />
-                <col className="w-[12%]" />
+                {read.data.kind === "rental" ? (
+                  <>
+                    <col className="w-[20%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[21%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[12%]" />
+                  </>
+                ) : (
+                  <>
+                    <col className="w-[19%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[12%]" />
+                  </>
+                )}
               </colgroup>
               <thead className="bg-stone-50">
                 <tr>
@@ -418,7 +505,9 @@ function WorkspaceData({
                     "Khách hàng",
                     "Gian kho / Loại",
                     "Thời hạn",
-                    "",
+                    ...(read.data.kind === "rental" ? ["Hợp đồng"] : []),
+                    ...(read.data.kind === "renewal" ? ["Trạng thái"] : []),
+                    "Thao tác",
                   ].map((h, i) => (
                     <th key={i} className="p-3 text-left align-middle font-semibold text-stone-600">
                       {h}
@@ -451,11 +540,23 @@ function WorkspaceData({
                         ? rentalPeriodText(row, role === "manager")
                         : rentalDate(row.newEndDate)}
                     </td>
-                    <td className="p-3 align-middle text-right">
+                    {read.data!.kind === "rental" && (
+                      <td className="p-3 align-middle">
+                        <RentalContractCell role={role} rentalId={row.id} />
+                      </td>
+                    )}
+                    {read.data!.kind === "renewal" && (() => {
+                      const renewal = row as RenewalApiRecord
+                      const failed = ["payment_failed", "payment_expired", "rejected", "cancelled"].includes(renewal.status)
+                      const complete = ["completed", "full_rent_paid", "deposit_paid"].includes(renewal.status)
+                      const tone = failed ? "bg-red-50 text-red-700" : complete ? "bg-green-50 text-green-700" : ["pending", "payment_processing"].includes(renewal.status) ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-800"
+                      return <td className="p-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${tone}`}>{copy(renewalLabels[renewal.status] ?? renewal.status)}</span></td>
+                    })()}
+                    <td className="p-3 align-middle text-center">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="whitespace-nowrap"
+                        className="w-20 justify-center whitespace-nowrap"
                         onClick={() =>
                           setDetail({ kind: read.data!.kind, id: row.id })
                         }
@@ -467,7 +568,7 @@ function WorkspaceData({
                 ))}
                 {read.data.page.data.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center">
+                    <td colSpan={read.data.kind === "rental" ? 6 : 6} className="p-6 text-center">
                       Không có dữ liệu
                     </td>
                   </tr>
