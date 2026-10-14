@@ -983,18 +983,20 @@ export default function BusinessApp({
     )
   }
 
-  const handleDeletePolicy = (policyId: string) => {
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ kind: 'package' | 'policy'; id: string; title: string } | null>(null)
+  const [deleteConfirmationBusy, setDeleteConfirmationBusy] = useState(false)
+  const [deleteConfirmationError, setDeleteConfirmationError] = useState('')
+  const handleDeletePolicy = (policyId: string, confirmed = false) => {
     const target = policiesList.find((p) => p.id === policyId)
 
     if (!target) return
 
-    if (
-      window.confirm(
-        lang === "vi"
-          ? `Bạn có chắc chắn muốn xóa chính sách "${target.name}"?`
-          : `Delete policy "${target.name}"?`,
-      )
-    ) {
+    if (!confirmed) {
+      setDeleteConfirmationError('')
+      setDeleteConfirmation({ kind: 'policy', id: policyId, title: target.name })
+      return
+    }
+    {
       const next = policiesList.filter((p) => p.id !== policyId)
 
       savePolicies(next)
@@ -1089,7 +1091,7 @@ export default function BusinessApp({
           label: `${policy.rentalMonths} tháng`,
           discountPercent: Number(policy.discountRate) * 100,
           renewalDiscountPercent: 0,
-          description: `${policy.name} · phiên bản ${policy.policyVersion}`,
+          description: policy.name,
           appliesTo: 'Đặt mới',
           status: policy.active ? 'active' : 'inactive',
           scopeType: 'specific',
@@ -1297,17 +1299,23 @@ export default function BusinessApp({
     )
   }
 
-  const handleDeleteDurationDiscount = async (id: string) => {
+  const handleDeleteDurationDiscount = async (id: string, confirmed = false) => {
     const item = durationDiscounts.find((d) => d.id === id)
     if (!item) return
 
-    if (window.confirm(lang === 'vi' ? `Bạn có chắc muốn xóa gói "${item.title}"?` : `Delete package "${item.title}"?`)) {
+    if (!confirmed) {
+      setDeleteConfirmationError('')
+      setDeleteConfirmation({ kind: 'package', id, title: item.title })
+      return
+    }
+    {
       if (isApiAuthenticated() && item.backendPolicyIds) {
         try {
           await Promise.all(Object.values(item.backendPolicyIds).map(policyId => deactivateBusinessPackagePolicy(policyId)))
         } catch (error) {
           showToast(error instanceof Error ? error.message : 'Không thể ngừng gói thuê.')
-          return
+          setDeleteConfirmationError(error instanceof Error ? error.message : 'Không thể ngừng gói thuê.')
+          return false
         }
       }
       const next = durationDiscounts.filter((d) => d.id !== id)
@@ -4190,7 +4198,7 @@ export default function BusinessApp({
                       </div>
 
                       <p className="text-[11px] text-slate-500 mt-2 line-clamp-3 leading-relaxed">
-                        {item.description}
+                        {item.description.replace(/\s*·?\s*phiên bản\s+[^·\n]+/gi, '').trim()}
                       </p>
                     </div>
 
@@ -7494,6 +7502,29 @@ export default function BusinessApp({
         )}
       </Modal>
 
+      <Modal open={!!deleteConfirmation} onClose={() => { if (!deleteConfirmationBusy) setDeleteConfirmation(null) }} title={deleteConfirmation?.kind === 'package' ? 'Xóa gói thuê' : 'Xóa chính sách'}>
+        <div className="space-y-4">
+          <p>Bạn có chắc muốn xóa <b>{deleteConfirmation?.title}</b>?</p>
+          {deleteConfirmation?.kind === 'package' && <p className="text-sm text-stone-500">Gói sẽ ngừng áp dụng cho lượt thuê mới. Hồ sơ thuê và hóa đơn đã tạo vẫn được giữ nguyên.</p>}
+          {deleteConfirmationError && <p role="alert" className="text-sm text-red-700">{deleteConfirmationError}</p>}
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" disabled={deleteConfirmationBusy} onClick={() => setDeleteConfirmation(null)}>Hủy</Button>
+            <Button variant="danger" disabled={deleteConfirmationBusy} onClick={async () => {
+              if (!deleteConfirmation) return
+              setDeleteConfirmationBusy(true)
+              setDeleteConfirmationError('')
+              try {
+                const result = deleteConfirmation.kind === 'package'
+                  ? await handleDeleteDurationDiscount(deleteConfirmation.id, true)
+                  : handleDeletePolicy(deleteConfirmation.id, true)
+                if (result !== false) setDeleteConfirmation(null)
+              } catch (error) {
+                setDeleteConfirmationError(error instanceof Error ? error.message : 'Không thể xóa. Vui lòng thử lại.')
+              } finally { setDeleteConfirmationBusy(false) }
+            }}>{deleteConfirmationBusy ? 'Đang xử lý…' : 'Xác nhận xóa'}</Button>
+          </div>
+        </div>
+      </Modal>
       <UnitTypeReviewModal open={reviewOpen} requestId={reviewRequestId} onClose={() => setReviewOpen(false)} />
       {/* 4. Modal Chi Tiết Cơ Sở & Danh Mục Gian Kho Quy Hoạch */}
       <Modal
