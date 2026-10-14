@@ -37,89 +37,67 @@ import {
 } from "./presentation"
 
 export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket: SupportTicket; role?: SupportRole }) {
-  const { manager, copy, explain } = useManagerPresentation()
+  const { copy } = useManagerPresentation()
+  const [copied, setCopied] = useState(false)
+  const facilityName = t.facilityId ? getAuthenticatedActor()?.facilityNames?.[t.facilityId] : undefined
+  const otherFields: [string, string][] = [
+    ...(role === "customer" ? [] : [["Mã khách hàng", t.customerId] as [string, string]]),
+    ["Nhân viên phụ trách", supportAssigneeLabel(t, role)],
+    ...(t.parentTicketId ? [["Yêu cầu gốc", `#${t.parentTicketId.slice(0, 8)}`] as [string, string]] : []),
+    ...(t.resolvedBy && role !== "customer" ? [["Người xử lý xong", t.resolvedBy] as [string, string]] : []),
+    ...([
+      ["Phân công lúc", t.assignedAt],
+      ["Nhân viên nhận lúc", t.acceptedAt],
+      ["Xử lý xong lúc", t.resolvedAt],
+      ["Đóng lúc", t.closedAt],
+    ] as const).filter(([, date]) => Boolean(date)).map(([label, date]) => [label, supportDetailDate(date)] as [string, string]),
+  ]
 
   return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <h3 className="break-words text-lg font-semibold">{t.subject}</h3>
-        <p className="break-all text-xs text-stone-500">Mã yêu cầu: {t.id}</p>
+    <div className="space-y-3 text-sm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="break-words text-lg font-semibold text-stone-900">{t.subject}</h3>
+          <span className="inline-flex items-center gap-1 font-mono text-xs text-stone-500" title={t.id}>#{t.id.slice(0, 8)}
+            <button type="button" className="rounded p-0.5 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
+              try { await navigator.clipboard.writeText(t.id); setCopied(true) }
+              catch { setCopied(false) }
+            }}>{copied ? "✓" : "⧉"}</button>
+          </span>
+        </div>
+        <span className={`inline-flex shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${t.status === "open" ? "bg-slate-100 text-slate-700" : t.status === "in_progress" ? "bg-blue-50 text-blue-700" : t.status === "resolved" || t.status === "closed" ? "bg-green-100 text-green-700" : "bg-amber-50 text-amber-800"}`}>{copy(supportStatusLabels[t.status])}</span>
       </div>
-      <Badge
-        variant={
-          t.status === "closed" || t.status === "resolved"
-            ? "success"
-            : "warning"
-        }
-      >
-        {copy(supportStatusLabels[t.status])}
-      </Badge>
-      <p className="whitespace-pre-wrap break-words rounded bg-stone-50 p-3">
+      <p className="whitespace-pre-wrap break-words rounded-lg bg-stone-50 px-3 py-2 text-stone-800">
         {t.description}
       </p>
-      <dl className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+      <dl className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
         {([
-          ...(role === "customer" ? [] : [["Mã khách hàng", t.customerId]]),
-          ["Cơ sở", t.facilityId ?? "Chưa có thông tin"],
-          ["Nhân viên phụ trách", supportAssigneeLabel(t, role)],
-          [
-            "Hồ sơ liên kết",
-            t.linkedId ? `${supportLinkLabels[t.linkedType || ""] || "Hồ sơ"}: ${t.linkedId}` : "Không liên kết",
-          ],
-          ["Yêu cầu gốc", t.parentTicketId ?? "Không có"],
-          ["Người xử lý xong", role === "customer" ? (t.resolvedBy ? "Đã ghi nhận" : "Chưa ghi nhận") : (t.resolvedBy ?? "Chưa ghi nhận")],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-stone-500">{label}</dt>
-            <dd className="break-all">{value}</dd>
-          </div>
-        ))}
-        {([
-          ["Tạo lúc", t.createdAt],
-          ["Phân công lúc", t.assignedAt],
-          ["Nhân viên nhận lúc", t.acceptedAt],
-          ["Xử lý xong lúc", t.resolvedAt],
-          ["Đóng lúc", t.closedAt],
-        ] as const).map(([label, date]) => (
-          <div key={label}>
-            <dt className="text-stone-500">{label}</dt>
-            <dd>{rentalDate(date)}</dd>
-          </div>
-        ))}
+          ["Tạo lúc", supportDetailDate(t.createdAt)],
+          ...(t.facilityId ? [["Cơ sở", facilityName || `#${t.facilityId.slice(0, 8)}`]] : []),
+          ...(t.linkedId ? [["Hồ sơ liên kết", `${supportLinkLabels[t.linkedType || ""] || "Hồ sơ"} #${t.linkedId.slice(0, 8)}`]] : []),
+        ] as [string, string][]).map(([label, value]) => <div key={label} className="min-w-0">
+          <dt className="text-xs text-stone-500">{label}</dt><dd className="break-words font-medium text-stone-900">{value}</dd>
+        </div>)}
       </dl>
-      {!t.workflowReady && (
-        <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
-          Hồ sơ chưa đủ thông tin để tiếp tục xử lý, hiện chỉ có thể xem.</p>
-      )}
       {t.status === "resolved" && (
         <p role="status" className="rounded bg-blue-50 p-3 text-blue-900">
           Đã xử lý xong, chờ khách hàng xác nhận. Nếu chưa hài lòng, khách hàng có thể yêu cầu mở lại.</p>
       )}
-      <div
-        role="status"
-        className="space-y-1 rounded border border-amber-200 bg-amber-50 p-3 text-amber-900"
-      >
-        {t.slaCompleteness === "UNKNOWN" || !t.sla ? (
-          <>
-            <p>Chưa đủ thông tin để xác định hạn xử lý và mức ưu tiên.</p>
-          </>
-        ) : (
-          <>
-            <p>
-              Mức ưu tiên: {supportPriorityLabels[t.sla.priority] ?? "Chưa xác định"}
-            </p>
-            <p>Hạn phản hồi đầu: {rentalDate(t.sla.firstReplyDueAt)}</p>
-            <p>Hạn cập nhật tiếp: {rentalDate(t.sla.nextUpdateDueAt)}</p>
-            <p>
-              {t.sla.activeWorkPaused
-                ? "Tạm dừng thời gian xử lý do đang chờ khách hàng."
-                : "Không tạm dừng thời gian xử lý."}
-            </p>
-          </>
-        )}
-      </div>
+      <details className="rounded-lg border border-stone-200 px-3 py-2 text-stone-700">
+        <summary className="cursor-pointer font-medium">Thông tin xử lý</summary>
+        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">{otherFields.map(([label, value]) => <div key={label} className="min-w-0">
+          <dt className="text-xs text-stone-500">{label}</dt><dd className="break-all">{value}</dd>
+        </div>)}</dl>
+        {!t.workflowReady && <p className="mt-2 text-amber-800">Hồ sơ chưa đủ thông tin để tiếp tục xử lý, hiện chỉ có thể xem.</p>}
+        {t.slaCompleteness === "UNKNOWN" || !t.sla ? <p className="mt-2 text-stone-500">Chưa đủ thông tin để xác định hạn xử lý và mức ưu tiên.</p> : <p className="mt-2">Mức ưu tiên: {supportPriorityLabels[t.sla.priority] ?? "Chưa xác định"} · Hạn phản hồi đầu: {supportDetailDate(t.sla.firstReplyDueAt)} · Hạn cập nhật: {supportDetailDate(t.sla.nextUpdateDueAt)}</p>}
+      </details>
     </div>
   )
+}
+
+function supportDetailDate(value: string | null) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "Chưa ghi nhận"
+  return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value))
 }
 export default function SupportTicketDetail({
   role,
@@ -162,6 +140,8 @@ export default function SupportTicketDetail({
             id={id}
             identity={identity}
             locked={command.locked}
+            initialDescription={t.description}
+            initialCreatedAt={t.createdAt}
           />
           {role !== "manager" && <SupportActionForm
             key={`${id}:${t.version}`}
@@ -185,11 +165,15 @@ function SupportTimeline({
   id,
   identity,
   locked,
+  initialDescription,
+  initialCreatedAt,
 }: {
   role: SupportRole
   id: string
   identity: string
   locked: boolean
+  initialDescription: string
+  initialCreatedAt: string
 }) {
   const [tab, setTab] = useState<"messages" | "events" | "escalations">(
     "messages",
@@ -209,9 +193,13 @@ function SupportTimeline({
     role === "customer"
       ? ["messages"] as const
       : ["messages", "events", "escalations"] as const
+  const isRepeatedOpeningMessage = (message: SupportMessage, index: number) =>
+    role === "customer" && tab === "messages" && page === 0 && index === 0 &&
+    message.authorRole === "CUSTOMER" && message.body.trim() === initialDescription.trim() &&
+    Date.parse(message.sentAt) === Date.parse(initialCreatedAt)
   return (
     <Card className="min-w-0 space-y-3 p-4">
-      <div className="flex flex-wrap gap-2">
+      {role === "customer" ? <h3 className="font-semibold">Trao đổi</h3> : <div className="flex flex-wrap gap-2">
         {tabs.map((t) => (
           <Button
             key={t}
@@ -229,59 +217,61 @@ function SupportTimeline({
                 : "Điều phối nội bộ"}
           </Button>
         ))}
-      </div>
+      </div>}
       <SupportReadState {...read} retry={read.refresh} />
       {read.data && (
         <>
-          {read.data.data.map((row) => (
+          {read.data.data.map((row, index) => {
+            const message = row as SupportMessage
+            const repeatedOpeningMessage = isRepeatedOpeningMessage(message, index)
+            if (repeatedOpeningMessage && !message.evidenceFileIds?.length && message.evidenceCompleteness !== "UNKNOWN") return null
+            return (
             <div
               key={row.id}
               className="min-w-0 space-y-1 rounded border border-stone-200 p-3 text-sm"
             >
               {tab === "messages" ? (
-                <MessageRow message={row as SupportMessage} />
+                <MessageRow message={message} role={role} hideBody={repeatedOpeningMessage} />
               ) : tab === "events" ? (
                 <EventRow event={row as SupportEvent} />
               ) : (
                 <EscalationRow escalation={row as SupportEscalation} />
               )}
             </div>
-          ))}
-          {read.data.data.length === 0 && (
+          )})}
+          {(read.data.data.length === 0 || (tab === "messages" && read.data.data.length === 1 &&
+            isRepeatedOpeningMessage(read.data.data[0] as SupportMessage, 0) &&
+            !(read.data.data[0] as SupportMessage).evidenceFileIds?.length &&
+            (read.data.data[0] as SupportMessage).evidenceCompleteness !== "UNKNOWN")) && (
             <p className="text-sm text-stone-500">
-              Không có dữ liệu
+              Chưa có trao đổi mới.
             </p>
           )}
-          <ApiPager
+          {read.data.pagination.totalPages > 1 && <ApiPager
             pagination={read.data.pagination}
             onPage={setPage}
             disabled={locked}
-          />
+          />}
         </>
       )}
     </Card>
   )
 }
-function MessageRow({ message: m }: { message: SupportMessage }) {
-  const { manager, copy } = useManagerPresentation()
+function MessageRow({ message: m, role, hideBody }: { message: SupportMessage; role: SupportRole; hideBody: boolean }) {
 
   return (
     <>
       <p>
         {m.authorRole === "STAFF" ? "Nhân viên" : "Khách hàng"},{" "}
-        {rentalDate(m.sentAt)}{" "}
-        <Badge variant={m.visibility === "INTERNAL" ? "warning" : "muted"}>
+        {supportDetailDate(m.sentAt)}{" "}
+        {(role !== "customer" || m.visibility === "INTERNAL") && <Badge variant={m.visibility === "INTERNAL" ? "warning" : "muted"}>
           {m.visibility === "INTERNAL" ? "Nội bộ" : "Công khai"}
-        </Badge>
+        </Badge>}
       </p>
-      <p className="whitespace-pre-wrap break-words">{m.body}</p>
-      <p className="text-xs text-stone-500">
-        {m.evidenceCompleteness === "UNKNOWN"
-          ? "Chưa thể xem tệp đính kèm."
-          : m.evidenceFileIds?.length
-            ? "Tệp đính kèm:"
-            : "Không có tệp đính kèm."}
-      </p>
+      {!hideBody && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+      {(m.evidenceCompleteness === "UNKNOWN" || !!m.evidenceFileIds?.length) && <p className="text-xs text-stone-500">
+        {m.evidenceCompleteness === "UNKNOWN" ? "Chưa thể xem tệp đính kèm." : "Tệp đính kèm:"}
+      </p>}
       {m.evidenceCompleteness !== "UNKNOWN" && m.evidenceFileIds?.map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} />)}
     </>
   )

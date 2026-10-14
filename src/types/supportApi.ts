@@ -24,6 +24,7 @@ export type SupportVisibility = "PUBLIC" | "INTERNAL"
 export interface SupportTicket {
   id: string
   customerId: string
+  customerName?: string | null
   facilityId: string | null
   assignedStaffId: string | null
   assignedStaffName?: string | null

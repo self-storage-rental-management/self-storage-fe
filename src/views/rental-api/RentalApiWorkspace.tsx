@@ -4,7 +4,9 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { RentalDeadlineBanner, rentalDeadlineState, rentalDaysUntilDeadline } from "./RentalDeadlineNotice"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { getRental, listRentals } from "../../services/rentalApi"
+import { listRentalHandoverFiles } from "../../services/rentalHandoverFilesApi"
 import { getRenewal, listRenewals } from "../../services/renewalApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type {
@@ -138,7 +140,7 @@ function WorkspaceSession({ role, focusStorageUnitId }: { role: RentalApiRole; f
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState("")
-  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:undefined)
+  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:initialRentalId?{kind:"rental",id:initialRentalId}:undefined)
   const [action, setAction] = useState<Action>()
   const permitted =
     actor?.status === "ACTIVE" &&
@@ -516,7 +518,7 @@ function WorkspaceData({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="whitespace-nowrap"
+                        className="w-20 justify-center whitespace-nowrap"
                         onClick={() =>
                           setDetail({ kind: read.data!.kind, id: row.id })
                         }
@@ -540,7 +542,7 @@ function WorkspaceData({
                 ))}
                 {read.data.page.data.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center">
+                    <td colSpan={read.data.kind === "rental" ? 6 : 6} className="p-6 text-center">
                       Không có dữ liệu
                     </td>
                   </tr>
