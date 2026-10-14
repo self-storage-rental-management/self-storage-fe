@@ -24,9 +24,10 @@ const priorityLabels: Record<MaintenanceTaskApi['priority'], string> = {
   high: 'Cao',
 }
 
-function MaintenanceWorkspace({ actorId, identity, showToast }: {
+function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
   actorId: string
   identity: string
+  taskId?: string
   showToast: (message: string) => void
 }) {
   const read = useRentalApiResource(
@@ -93,9 +94,7 @@ function MaintenanceWorkspace({ actorId, identity, showToast }: {
   const actor = getAuthenticatedActor()
   if (!actor || actor.id !== actorId) return null
 
-  const tasks = read.data?.data ?? []
-  const activeCount = tasks.filter((task) => task.status === 'open' || task.status === 'in_progress').length
-  const completedCount = tasks.filter((task) => task.status === 'completed').length
+  const tasks = (read.data?.data ?? []).filter((task) => !taskId || task.id === taskId)
 
   return (
     <Card className="space-y-4 p-4">
@@ -111,16 +110,9 @@ function MaintenanceWorkspace({ actorId, identity, showToast }: {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded border bg-stone-50 p-3"><p className="text-xs text-stone-500">Tổng nhiệm vụ</p><b>{tasks.length}</b></div>
-        <div className="rounded border bg-stone-50 p-3"><p className="text-xs text-stone-500">Cần xử lý</p><b>{activeCount}</b></div>
-        <div className="rounded border bg-stone-50 p-3"><p className="text-xs text-stone-500">Đã hoàn thành</p><b>{completedCount}</b></div>
-        <div className="rounded border bg-stone-50 p-3"><p className="text-xs text-stone-500">Ảnh đã chọn</p><b>{evidenceFiles.length}</b></div>
-      </div>
-
       {read.loading && <p role="status" className="text-sm text-stone-500">Đang tải nhiệm vụ bảo trì…</p>}
       {Boolean(read.error) && <div role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm"><p>{staffErrorMessage(read.error, 'Không thể tải danh sách nhiệm vụ bảo trì.')}</p><Button className="mt-2" size="sm" variant="outline" onClick={() => read.refresh()}>Thử lại</Button></div>}
-      {!read.loading && !read.error && tasks.length === 0 && <p className="rounded border border-dashed p-5 text-center text-sm text-stone-500">Chưa có nhiệm vụ bảo trì được giao cho bạn.</p>}
+      {!read.loading && !read.error && tasks.length === 0 && <p className="rounded border border-dashed p-5 text-center text-sm text-stone-500">{taskId ? 'Không tìm thấy nhiệm vụ bảo trì này.' : 'Chưa có nhiệm vụ bảo trì được giao cho bạn.'}</p>}
 
       <div className="space-y-3">
         {tasks.map((task) => (
@@ -177,9 +169,9 @@ function MaintenanceWorkspace({ actorId, identity, showToast }: {
   )
 }
 
-export default function StaffMaintenanceOperationsPanel({ showToast }: { showToast: (message: string) => void }) {
+export default function StaffMaintenanceOperationsPanel({ taskId, showToast }: { taskId?: string; showToast: (message: string) => void }) {
   const actor = getAuthenticatedActor()
   if (!actor || actor.status !== 'ACTIVE' || !actor.roles.includes('STAFF')) return null
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
-  return <MaintenanceWorkspace key={identity} actorId={actor.id} identity={identity} showToast={showToast} />
+  return <MaintenanceWorkspace key={`${identity}:${taskId}`} actorId={actor.id} identity={identity} taskId={taskId} showToast={showToast} />
 }

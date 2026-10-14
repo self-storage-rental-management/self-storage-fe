@@ -25,6 +25,17 @@ export default function RentalDetail({
   const f = rental.financialSummary
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
+  const accessStatus = rental.access.completeness === "UNKNOWN"
+    ? null
+    : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || null
+  const paymentStatus = f.completeness === "UNKNOWN"
+    ? unknown
+    : f.completeness === "PARTIAL"
+      ? "Đã xác minh một phần"
+      : (f.overdueAmount ?? 0) > 0
+        ? `Quá hạn: ${rentalMoney(f.overdueAmount, f.currency)}`
+        : `Đang đúng hạn (Dư nợ: ${rentalMoney(f.outstandingAmount, f.currency)})`
+
   return (
     <div className="space-y-5 [&_dt]:text-xs [&_dt]:font-normal [&_dt]:text-stone-500 [&_dd]:mt-1.5 [&_dd]:break-words [&_dd]:text-sm [&_dd]:font-medium [&_dd]:leading-relaxed [&_dd]:text-stone-900">
       <div className="flex flex-wrap gap-2">
@@ -48,28 +59,34 @@ export default function RentalDetail({
             <dd>{rental.customer.fullName}</dd>
           </div>
           <div>
-            <dt className="font-bold">Cơ sở / Gian kho</dt>
-            <dd>
-              {rental.facility.name} / {rental.storageUnit.code}
+            <dt className={labelClass}>Mã hồ sơ thuê</dt>
+            <dd className={`${valueClass} flex items-center gap-2`}>
+              <span title={rental.id}>#{rental.id.slice(0, 8)}</span>
+              <button
+                type="button"
+                aria-label="Sao chép mã hồ sơ thuê"
+                title="Sao chép mã hồ sơ"
+                className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                onClick={() => { void navigator.clipboard?.writeText(rental.id) }}
+              >
+                <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <rect x="8" y="8" width="12" height="12" rx="2" strokeWidth="1.7" />
+                  <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" strokeWidth="1.7" />
+                </svg>
+              </button>
             </dd>
           </div>
           <div>
-            <dt className="font-bold">Loại gian kho</dt>
-            <dd>{copy(rental.unitType.name)}</dd>
+            <dt className={labelClass}>Khách hàng</dt>
+            <dd className={valueClass}>{rental.customer.fullName}</dd>
           </div>
           <div>
-            <dt className="font-bold">Trạng thái</dt>
-            <dd>{copy(rentalLabels[rental.status])}</dd>
+            <dt className={labelClass}>Cơ sở / Gian kho</dt>
+            <dd className={valueClass}>{rental.facility.name} / {rental.storageUnit.code}</dd>
           </div>
           <div>
-            <dt className="font-bold">Đơn giá/tháng</dt>
-            <dd>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>
-          </div>
-          <div>
-            <dt className="font-bold">{showTechnicalWarnings && rental.dateSemantics?.completeness !== "COMPLETE" ? "Ngày thuê đang lưu" : "Thời hạn sử dụng"}</dt>
-            <dd>
-              {rentalPeriodText(rental, showTechnicalWarnings)}
-            </dd>
+            <dt className={labelClass}>Loại gian kho</dt>
+            <dd className={valueClass}>{copy(rental.unitType.name)}</dd>
           </div>
           <div>
             <dt className="font-bold">Trạng thái truy cập</dt>
@@ -86,38 +103,37 @@ export default function RentalDetail({
         <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Theo dõi thanh toán và quá hạn</h3>
         <dl className="grid gap-4 sm:grid-cols-2 [&>div]:rounded-lg [&>div]:bg-stone-50 [&>div]:p-3">
           <div>
-            <dt className="font-bold">Tình trạng tài chính</dt>
-            <dd>{f.completeness === "UNKNOWN" ? unknown :
-              f.completeness === "PARTIAL" ? "Đã xác minh một phần" : "Đã xác minh đầy đủ"}</dd>
+            <dt className={labelClass}>Đơn giá / tháng</dt>
+            <dd className={valueClass}>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>
           </div>
           <div>
-            <dt className="font-bold">Hạn nghĩa vụ thanh toán kế tiếp</dt>
-            <dd>
-              {f.completeness === "UNKNOWN"
-                ? unknown
-                : f.billingMode === "PREPAID_FULL_PERIOD"
-                  ? copy("Trả trước toàn kỳ, không có kỳ thu tiền định kỳ")
-                  : rentalDate(f.nextDueDate)}
+            <dt className={labelClass}>Trạng thái hồ sơ</dt>
+            <dd className="mt-1">
+              {rental.status === "active"
+                ? <Badge variant="success">{copy(rentalLabels[rental.status])}</Badge>
+                : <span className={valueClass}>{copy(rentalLabels[rental.status])}</span>}
             </dd>
           </div>
-          <div>
-            <dt className="font-bold">Dư nợ / Quá hạn</dt>
-            <dd>
-              {f.completeness === "UNKNOWN" ? (
-                unknown
-              ) : (
-                <>
-                  {rentalMoney(f.outstandingAmount, f.currency)} /{" "}
-                  {rentalMoney(f.overdueAmount, f.currency)}
-                </>
-              )}
-            </dd>
+          {accessStatus && (
+            <div>
+              <dt className={labelClass}>Trạng thái truy cập</dt>
+              <dd className={valueClass}>{accessStatus}</dd>
+            </div>
+          )}
+          <div className="sm:col-span-2">
+            <dt className={labelClass}>Tình trạng thanh toán</dt>
+            <dd className={valueClass}>{paymentStatus}</dd>
+            {f.completeness === "COMPLETE" && f.billingMode === "PREPAID_FULL_PERIOD" && (
+              <p className="mt-1 text-xs text-slate-500">Đã thanh toán trước toàn kỳ; không có kỳ thu định kỳ.</p>
+            )}
+            {f.completeness === "COMPLETE" && f.billingMode !== "PREPAID_FULL_PERIOD" && f.nextDueDate && (
+              <p className="mt-1 text-xs text-slate-500">Kỳ thanh toán tiếp theo: {rentalDate(f.nextDueDate)}</p>
+            )}
           </div>
         </dl>
       </Card>}
       {onRequest && (
-        <Card className="p-4 space-y-3">
-          <h3 className="font-bold">Gia hạn</h3>
+        <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end border-t border-stone-200 bg-white/95 px-1 py-3 backdrop-blur">
           <Button disabled={rental.status !== "active"} onClick={onRequest}>
             Yêu cầu gia hạn
           </Button>
@@ -173,9 +189,7 @@ export default function RentalDetail({
         <div role="status" className="rounded-lg bg-amber-50 p-4">
           <h4 className="font-semibold">Cần kiểm tra dữ liệu</h4>
           {rental.dataWarnings.map((w, i) => (
-            <p key={i}>
-              {rentalDataWarning(w.field)}
-            </p>
+            <p key={i}>{rentalDataWarning(w.field)}</p>
           ))}
         </div>
       )}

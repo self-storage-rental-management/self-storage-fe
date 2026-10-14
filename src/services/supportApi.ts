@@ -82,6 +82,7 @@ export function isSupportTicket(value: unknown): value is SupportTicket {
     !r ||
     !isUuid(r.id) ||
     !isUuid(r.customerId) ||
+    !(r.customerName === undefined || nullable(r.customerName, string)) ||
     !nullable(r.facilityId, isUuid) ||
     !nullable(r.assignedStaffId, isUuid) ||
     !(r.assignedStaffName === undefined || nullable(r.assignedStaffName, string)) ||

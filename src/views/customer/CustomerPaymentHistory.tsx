@@ -17,10 +17,22 @@ export function paymentHistoryTimestamp(value: string | null) {
   return new Date(value).toLocaleString("vi-VN")
 }
 
+function ShortCode({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  const compact = value.startsWith("SIMULATED-") ? value.slice(10, 18) : value.slice(0, 8)
+  return <span className="group inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-stone-700" title={value}>
+    #{compact}
+    <button type="button" className="rounded p-0.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100" aria-label={`Sao chép mã ${value}`} title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"} onClick={async () => {
+      try { await navigator.clipboard.writeText(value); setCopied(true) }
+      catch { setCopied(false) }
+    }}>{copied ? "✓" : "⧉"}</button>
+  </span>
+}
+
 const historyAmount = (amount: number | null) =>
   amount === null ? "Chưa có thông tin số tiền" : formatVnd(amount)
 
-export default function CustomerPaymentHistory() {
+export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRentals?: (rentalId: string) => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -72,6 +84,20 @@ export default function CustomerPaymentHistory() {
         : ["FAILED", "CANCELLED"].includes(entry.status)
           ? "Thanh toán thất bại"
           : "Chưa ghi nhận tiền"
+  const filteredEntries = entries.filter((entry) => {
+    const term = search.trim().toLocaleLowerCase("vi-VN")
+    const transactionCode = entry.reservationPayment?.transactionReference || entry.id
+    if (term && ![transactionCode, entry.id, entry.reference].some((value) => value.toLocaleLowerCase("vi-VN").includes(term))) return false
+    if (category !== "all" && !(category === "renewal" ? ["renewal", "renewalSigning"].includes(entry.category) : category === "settlement" ? entry.category === "damage" : category === "deposit" ? ["deposit", "checkin"].includes(entry.category) : true)) return false
+    if (month) {
+      if (!entry.timestamp || !Number.isFinite(Date.parse(entry.timestamp))) return false
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit" }).formatToParts(new Date(entry.timestamp))
+      const year = parts.find((part) => part.type === "year")?.value
+      const yearMonth = parts.find((part) => part.type === "month")?.value
+      if (`${year}-${yearMonth}` !== month) return false
+    }
+    return true
+  })
   return (
     <div className="fade-in space-y-4">
       <SectionHeader
@@ -87,7 +113,7 @@ export default function CustomerPaymentHistory() {
           <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "—" : historyAmount(totalPaid(entries.filter((entry) => entry.category === "renewal" || entry.category === "renewalSigning")))}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs text-stone-500">Tổng giao dịch</p>
+          <p className="text-xs text-stone-500">Số giao dịch</p>
           <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? "—" : entries.length}</p>
         </Card>
       </div>
@@ -119,14 +145,14 @@ export default function CustomerPaymentHistory() {
         <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>
       </div>
       <Card>
-        <Table>
+        <Table tableClassName="min-w-[1000px]">
           <Thead>
             <tr>
               <Th>Mã Giao Dịch</Th>
               <Th>Hồ Sơ</Th>
               <Th>Nội Dung</Th>
               <Th>Phương Thức</Th>
-              <Th>Số Tiền</Th>
+              <Th className="text-right">Số Tiền</Th>
               <Th>Trạng Thái</Th>
               <Th>Thao tác</Th>
             </tr>
@@ -135,13 +161,17 @@ export default function CustomerPaymentHistory() {
             {visibleEntries.map((entry) => (
               <Tr key={entry.id}>
                 <Td>
-                  <span className="break-all text-xs text-stone-600">{entry.reservationPayment?.transactionReference || entry.id}</span>
+                  <ShortCode value={entry.reservationPayment?.transactionReference || entry.id} />
                   <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
                 </Td>
-                <Td><b className="break-all">{entry.reference}</b></Td>
+                <Td>{entry.renewalId ? <>
+                  <button type="button" className="block text-left font-semibold text-stone-900 hover:underline" onClick={() => { if (entry.rentalId) onOpenRentals?.(entry.rentalId) }} disabled={!entry.rentalId || !onOpenRentals}>{entry.unitCode || "Hồ sơ gia hạn"}</button>
+                  {entry.facilityName && <span className="block text-xs text-stone-500">{entry.facilityName}</span>}
+                  <ShortCode value={entry.renewalId} />
+                </> : entry.reference.startsWith("RSV-") ? <span className="whitespace-nowrap font-semibold text-stone-900">{entry.reference}</span> : <span className="font-semibold text-stone-900">{entry.reference}</span>}</Td>
                 <Td>{paymentCategories[entry.category]}</Td>
-                <Td><span className="text-xs text-stone-500">{entry.method || "Chưa có thông tin"}</span></Td>
-                <Td><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b></Td>
+                <Td><span className="whitespace-nowrap text-xs text-stone-500">{entry.method || "—"}</span></Td>
+                <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b></Td>
                 <Td>
                   <div className="space-y-2">
                     <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (entry.status === "PAID" ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
