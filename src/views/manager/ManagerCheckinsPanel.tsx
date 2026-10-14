@@ -21,8 +21,6 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   const [tab, setTab] = useState('All')
   const [search, setSearch] = useState('')
   const [staffFilter, setStaffFilter] = useState('all')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
   const [sortBy, setSortBy] = useState('priority')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -64,8 +62,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
 
     const matchSearch = matchesManagerSearch(search, [c.id, c.holdId, c.customerId, c.customerName, c.unitId, c.staffId, c.staffName])
     const matchStaff = staffFilter === 'all' || c.staffId === staffFilter
-    const matchDate = (!dateFrom || c.scheduledDate >= dateFrom) && (!dateTo || c.scheduledDate <= dateTo)
-    return matchTab && matchSearch && matchStaff && matchDate
+    return matchTab && matchSearch && matchStaff
   }).sort((left, right) => {
     if (sortBy === 'date-asc') return managerDateValue(`${left.scheduledDate}T${left.scheduledTime || '00:00'}`) - managerDateValue(`${right.scheduledDate}T${right.scheduledTime || '00:00'}`)
     if (sortBy === 'date-desc') return managerDateValue(`${right.scheduledDate}T${right.scheduledTime || '00:00'}`) - managerDateValue(`${left.scheduledDate}T${left.scheduledTime || '00:00'}`)
@@ -75,7 +72,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
   })
   const pagination = paginateManagerItems(filteredCheckins, page, pageSize)
 
-  useEffect(() => setPage(1), [tab, search, staffFilter, dateFrom, dateTo, sortBy, pageSize])
+  useEffect(() => setPage(1), [tab, search, staffFilter, sortBy, pageSize])
 
   const getChecklistCount = (cl: CheckInRecord['checklist']) => {
     let count = 0
@@ -209,10 +206,8 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
         </div>
       </div>
       <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-2">
           <Select label="Nhân viên" value={staffFilter} onChange={event => setStaffFilter(event.target.value)}><option value="all">Tất cả nhân viên</option>{staffOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</Select>
-          <label className="text-sm font-medium text-stone-700">Từ ngày<input type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" /></label>
-          <label className="text-sm font-medium text-stone-700">Đến ngày<input type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" /></label>
           <Select label="Sắp xếp" value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="priority">Cần xử lý trước</option><option value="date-asc">Lịch gần nhất</option><option value="date-desc">Lịch xa nhất</option><option value="customer">Tên khách hàng</option></Select>
         </div>
       </Card>

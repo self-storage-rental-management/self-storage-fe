@@ -85,7 +85,10 @@ interface MaintenanceTaskFilters {
   pageSize?: number
 }
 
-async function listMaintenanceTasks(filters: MaintenanceTaskFilters = {}) {
+async function listMaintenanceTasks(
+  filters: MaintenanceTaskFilters = {},
+  endpoint = '/api/staff/maintenance-tasks',
+) {
   const params = new URLSearchParams({
     page: String(filters.page ?? 0),
     pageSize: String(filters.pageSize ?? 100),
@@ -96,7 +99,7 @@ async function listMaintenanceTasks(filters: MaintenanceTaskFilters = {}) {
   if (filters.q) params.set('q', filters.q)
 
   return readRentalPage<MaintenanceTaskApi>(
-    await apiRequest(`/api/staff/maintenance-tasks?${params.toString()}`),
+    await apiRequest(`${endpoint}?${params.toString()}`),
     isMaintenanceTask,
     filters.page ?? 0,
   )
@@ -107,7 +110,7 @@ export function listManagerMaintenanceTasks(filters: MaintenanceTaskFilters): Re
 export function listManagerMaintenanceTasks(facilityIdOrFilters: string | MaintenanceTaskFilters) {
   return listMaintenanceTasks(typeof facilityIdOrFilters === 'string'
     ? { facilityId: facilityIdOrFilters }
-    : facilityIdOrFilters)
+    : facilityIdOrFilters, '/api/manager/maintenance-tasks')
 }
 
 export function listStaffMaintenanceTasks(filters: MaintenanceTaskFilters = {}) {
@@ -140,7 +143,7 @@ export async function createMaintenanceTask(body: {
   dueAt: string
 }) {
   return readRentalEnvelope<MaintenanceTaskApi>(
-    await apiRequest('/api/staff/maintenance-tasks', {
+    await apiRequest('/api/manager/maintenance-tasks', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -150,8 +153,8 @@ export async function createMaintenanceTask(body: {
 
 export async function assignMaintenanceTask(taskId: string, assignedStaffId: string) {
   return readRentalEnvelope<MaintenanceTaskApi>(
-    await apiRequest(`/api/staff/maintenance-tasks/${encodeURIComponent(taskId)}/assign`, {
-      method: 'POST',
+    await apiRequest(`/api/manager/maintenance-tasks/${encodeURIComponent(taskId)}/assign`, {
+      method: 'PATCH',
       body: JSON.stringify({ assignedStaffId }),
     }),
     isMaintenanceTask,

@@ -22,7 +22,6 @@ import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   rentalDate,
   rentalLabels,
-  rentalMoney,
   rentalPeriodText,
   renewalLabels,
 } from "./presentation"
@@ -44,6 +43,7 @@ type Action = {
 const customerRenewalFilterStatuses = new Set([
   "pending",
   "accepted",
+  "deposit_paid",
   "full_rent_paid",
   "appointment_scheduled",
 ])
@@ -147,15 +147,6 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
     for(const key of ["renewalId","vnpayReturn","status","code"])url.searchParams.delete(key)
     window.history.replaceState(null,"",`${url.pathname}${url.search}${url.hash}`)
   },[paymentReturn])
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (tab === "rental")
-        setRq((q) => ({ ...q, search: search.trim(), page: 0 }))
-      else if (role === "manager")
-        setNq((q) => ({ ...q, search: search.trim(), page: 0 }))
-    }, 300)
-    return () => window.clearTimeout(timer)
-  }, [search, tab, role])
   // Parent mounts this workspace keyed by actor/scope. Backend remains authority.
   if (!permitted)
     return (
@@ -327,23 +318,34 @@ function WorkspaceData({
           Yêu cầu gia hạn
         </Button>
       </div>
-      <Card className={`grid gap-3 p-4 sm:grid-cols-2 ${role === "manager" ? (tab === "renewal" ? "xl:grid-cols-4" : "xl:grid-cols-3") : "xl:grid-cols-2"}`}>
+      <Card className={`grid items-end gap-3 p-4 sm:grid-cols-2 ${role === "manager" ? (tab === "renewal" ? "xl:grid-cols-4" : "xl:grid-cols-3") : "xl:grid-cols-2"}`}>
         {(tab === "rental" || role === "manager") && (
-          <label>
-            Tìm kiếm
-            <input
-              className={`${inputClass} block w-full`}
-              value={search}
-              maxLength={200}
-              placeholder="Mã hồ sơ / gian kho"
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
+          <form
+            className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              change({ search: search.trim() || undefined })
+            }}
+          >
+            <label className="block min-w-0">
+              Tìm kiếm
+              <input
+                className={`${inputClass} mt-1 block h-[42px] w-full`}
+                value={search}
+                maxLength={200}
+                placeholder="Mã hồ sơ / gian kho"
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <Button type="submit" className="h-[42px] shrink-0 self-end">
+              Tìm kiếm
+            </Button>
+          </form>
         )}
-        <label>
+        <label className="block min-w-0">
           Trạng thái
           <select
-            className={`${inputClass} block w-full`}
+            className={`${inputClass} mt-1 block h-[42px] w-full`}
             value={query.status || ""}
             onChange={(e) =>
               change({ status: e.target.value || undefined } as RentalApiQuery)
@@ -360,10 +362,10 @@ function WorkspaceData({
           </select>
         </label>
         {tab === "renewal" && (
-          <label>
+          <label className="block min-w-0">
             Mã hồ sơ thuê
             <input
-              className={`${inputClass} block w-full`}
+              className={`${inputClass} mt-1 block h-[42px] w-full`}
               value={rentalFilterDraft}
               onChange={(e) => setRentalFilterDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -377,10 +379,10 @@ function WorkspaceData({
           </label>
         )}
         {role === "manager" && (
-          <label>
+          <label className="block min-w-0">
             Sắp xếp
             <select
-              className={`${inputClass} block w-full`}
+              className={`${inputClass} mt-1 block h-[42px] w-full`}
               value={query.sort || "createdAt,desc"}
               onChange={(e) => change({ sort: e.target.value })}
             >
@@ -400,19 +402,25 @@ function WorkspaceData({
       {read.data && (
         <Card>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+              <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[20%]" />
+                <col className="w-[24%]" />
+                <col className="w-[22%]" />
+                <col className="w-[12%]" />
+              </colgroup>
               <thead className="bg-stone-50">
                 <tr>
                   {[
                     "Mã hồ sơ",
-                    "Khách hàng / Cơ sở",
+                    "Khách hàng",
                     "Gian kho / Loại",
                     "Thời hạn",
-                    "Đơn giá / Tiền gia hạn",
-                    "Trạng thái",
                     "",
                   ].map((h, i) => (
-                    <th key={i} className="p-3">
+                    <th key={i} className="p-3 text-left align-middle font-semibold text-stone-600">
                       {h}
                     </th>
                   ))}
@@ -420,43 +428,34 @@ function WorkspaceData({
               </thead>
               <tbody>
                 {read.data.page.data.map((row) => (
-                  <tr key={row.id} className="border-t">
-                    <td className="p-3 max-w-48 break-all">{row.id}</td>
-                    <td className="p-3">
-                      {row.customer.fullName}
-                      <br />
-                      {row.facility.name}
+                  <tr key={row.id} className="border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40">
+                    <td className="p-3 align-middle">
+                      <code
+                        className="block break-all rounded-md border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs leading-5 tracking-tight text-stone-700"
+                        title={row.id}
+                      >
+                        {row.id}
+                      </code>
                     </td>
-                    <td className="p-3">
-                      {row.storageUnit.code}
-                      <br />
-                      {"unitType" in row ? copy(row.unitType.name) : ""}
+                    <td className="p-3 align-middle">
+                      <p className="font-semibold text-stone-900">{row.customer.fullName}</p>
                     </td>
-                    <td className="p-3 whitespace-nowrap">
+                    <td className="p-3 align-middle">
+                      <p className="font-mono text-sm font-semibold text-stone-800">{row.storageUnit.code}</p>
+                      {"unitType" in row && (
+                        <p className="mt-1 text-xs leading-4 text-stone-500">{copy(row.unitType.name)}</p>
+                      )}
+                    </td>
+                    <td className="p-3 align-middle whitespace-nowrap">
                       {"contractEndDate" in row
                         ? rentalPeriodText(row, role === "manager")
                         : rentalDate(row.newEndDate)}
                     </td>
-                    <td className="p-3">
-                      {"monthlyPrice" in row
-                        ? rentalMoney(row.monthlyPrice, row.currency)
-                        : rentalMoney(row.amount, row.currency)}
-                    </td>
-                    <td className="p-3">
-                      {
-                        read.data!.kind === "rental"
-                          ? rentalLabels[row.status]
-                          : "systemVerification" in row && row.status === "accepted" && row.systemVerification?.status === "VERIFIED"
-                            ? "Đã xác nhận điều kiện"
-                            : renewalLabels[row.status]
-                      }
-                      {role === "manager" && "dataWarnings" in row && row.dataWarnings.length > 0 && (
-                        <p className="text-amber-700">Có cảnh báo dữ liệu</p>
-                      )}
-                    </td>
-                    <td className="p-3">
+                    <td className="p-3 align-middle text-right">
                       <Button
+                        size="sm"
                         variant="outline"
+                        className="whitespace-nowrap"
                         onClick={() =>
                           setDetail({ kind: read.data!.kind, id: row.id })
                         }
@@ -468,7 +467,7 @@ function WorkspaceData({
                 ))}
                 {read.data.page.data.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-6 text-center">
+                    <td colSpan={5} className="p-6 text-center">
                       Không có dữ liệu
                     </td>
                   </tr>
@@ -547,8 +546,10 @@ function DetailModal({
   const { manager, copy } = useManagerPresentation()
 
   const operationLock = useRef(false)
+  const [operationsLocked, setOperationsLocked] = useState(false)
   const setOperationLocked = useCallback((value: boolean) => {
     operationLock.current = value
+    setOperationsLocked(value)
   }, [])
   const [operationOwner, setOperationOwner] = useState<{
     facilityId: string
@@ -563,6 +564,7 @@ function DetailModal({
             kind: "renewal" as const,
             record: await getRenewal(role, detail.id),
           },
+    { retainDataOnRefresh: true },
   )
   useEffect(() => {
     if (read.data?.kind === "renewal") {
@@ -590,9 +592,10 @@ function DetailModal({
         if (!operationLock.current) read.refresh()
       }} />
       {read.data?.kind === "rental" ? (
-        <>
+        <div className="space-y-4">
           <RentalDetail
             rental={read.data.record as RentalApiDetail}
+            role={role}
             showTechnicalWarnings={role === "manager"}
             onRequest={
               role === "customer"
@@ -609,13 +612,26 @@ function DetailModal({
             rentalActive={(read.data.record as RentalApiDetail).status === "active"}
             onChanged={onChanged}
           />}
-        </>
+        </div>
       ) : read.data?.kind === "renewal" ? (
         <div>
           <RenewalDetail
             renewal={read.data.record as RenewalApiRecord}
             role={role}
             onPaymentChange={read.refresh}
+            operationsLocked={operationsLocked}
+            appointmentSelection={role === "customer" && read.data.record.status === "accepted" ? (
+              <RenewalOperationsPanel
+                appointmentOnly
+                status={read.data.record.status}
+                id={detail.id}
+                role="customer"
+                facilityId={read.data.record.facility.id}
+                customerId={read.data.record.customer.id}
+                onLocked={setOperationLocked}
+                onChanged={() => { read.refresh(); onChanged() }}
+              />
+            ) : undefined}
             onAction={(action) => {
               if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord

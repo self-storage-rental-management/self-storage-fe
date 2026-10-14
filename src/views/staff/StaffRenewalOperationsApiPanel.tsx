@@ -31,9 +31,16 @@ function StaffRenewalWorkspace() {
       </Card>
     )
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
-  return <StaffSession key={identity} identity={identity} />
+  return <StaffWorkspaceTabs key={identity} identity={identity} />
 }
-function StaffSession({ identity }: { identity: string }) {
+function StaffWorkspaceTabs({ identity }: { identity: string }) {
+  const [, setLocked] = useState(false)
+  return <div className="space-y-4">
+    <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
+    <StaffSession identity={identity} onLocked={setLocked} />
+  </div>
+}
+function StaffSession({ identity, onLocked }: { identity: string; onLocked: (value: boolean) => void }) {
   const actor = getAuthenticatedActor()!
   const [query, setQuery] = useState<RenewalAppointmentQuery>({
     page: 0,
@@ -41,7 +48,7 @@ function StaffSession({ identity }: { identity: string }) {
   })
   const [selected, setSelected] = useState<string>()
   const lockRef = useRef(false)
-  const setLocked = useCallback((value: boolean) => { lockRef.current = value }, [])
+  const setLocked = useCallback((value: boolean) => { lockRef.current = value; onLocked(value) }, [onLocked])
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
     () => listRenewalAppointments(query),
@@ -53,7 +60,6 @@ function StaffSession({ identity }: { identity: string }) {
   }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
       <Card className="p-4 flex flex-wrap gap-3 items-end">
         <label>
           Cơ sở
@@ -75,7 +81,7 @@ function StaffSession({ identity }: { identity: string }) {
           </select>
         </label>
         <label>
-          Ngày hẹn (Việt Nam)
+          Ngày hẹn
           <input
             className={operationsInputClass}
             type="date"
@@ -99,20 +105,6 @@ function StaffSession({ identity }: { identity: string }) {
             {(["SIGNING", "SIGNING_EXPIRED", "COMPLETED"] as const).map((v) => (
               <option key={v} value={v}>
                 {phaseLabels[v]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Số hồ sơ
-          <select
-            className={operationsInputClass}
-            value={query.size}
-            onChange={(e) => change({ size: Number(e.target.value) })}
-          >
-            {[10, 20, 50].map((n) => (
-              <option key={n} value={n}>
-                {n}/trang
               </option>
             ))}
           </select>
@@ -142,7 +134,7 @@ function StaffSession({ identity }: { identity: string }) {
                 <p className="break-all">Gia hạn: {s.renewalId}</p>
                 <p>{phaseLabels[s.phase]}</p>
                 <p>
-                  {rentalDate(s.appointmentStart)} →{" "}
+                  {rentalDate(s.appointmentStart)} -{" "}
                   {rentalDate(s.appointmentEnd)}
                 </p>
                 <p>Hạn ký: {rentalDate(s.effectiveSigningDeadline)}</p>
@@ -168,7 +160,7 @@ function StaffSession({ identity }: { identity: string }) {
         <Modal
           open
           size="xl"
-          title="Xử lý ký gia hạn — Nhân viên"
+          title="Xử lý ký gia hạn - Nhân viên"
           onClose={() => {
             if (!lockRef.current) setSelected(undefined)
           }}
