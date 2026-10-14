@@ -41,7 +41,8 @@ import {
   type InventoryFilters,
   type InventoryUnit,
 } from "./managerInventoryApi"
-import { createManagerUnitType } from "../../services/managerUnitTypeApi"
+import { createManagerUnitType, updateManagerUnitType, deleteManagerUnitType } from "../../services/managerUnitTypeApi"
+import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
 
 const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
@@ -120,6 +121,12 @@ function InventoryRead({
   onOpenMaintenance?: (unitId: string, unitCode: string) => void
 }) {
   const [createOpen, setCreateOpen] = useState(false)
+  const [editingType, setEditingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
+  const [reviewNotice, setReviewNotice] = useState('')
+  const [viewingType, setViewingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
+  const [deletingType, setDeletingType] = useState<{ id: string; name: string }>()
+  const [actionError, setActionError] = useState<string>()
+  const [actionBusy, setActionBusy] = useState(false)
   const read = useRentalApiResource(identity, () =>
     loadManagerInventory(facilityId),
   )
@@ -143,8 +150,101 @@ function InventoryRead({
     )
   return read.data ? (
     <>
-      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onCreateUnitType={() => setCreateOpen(true)} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} />
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>Thêm loại kho thực tế</Button>
+      </div>
+      {actionError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
+      <Card className="p-4 space-y-3">
+        <h3 className="font-bold">Quản lý loại kho thực tế</h3>
+        {read.data.catalog.map(type => <div key={type.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3">
+          <div><b>{type.code} · {type.name}</b><p className="text-xs text-stone-500">{type.total} gian kho</p></div>
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={actionBusy} onClick={async () => {
+              setActionBusy(true); setActionError(undefined)
+              try {
+                const response = await listAccessibleUnitTypes(facilityId)
+                const detail = response.data.find(item => item.id === type.id)
+                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
+                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
+                setViewingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
+              } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
+            }}>Thông tin loại kho</Button>
+            <Button variant="outline" disabled={actionBusy} onClick={async () => {
+              setActionBusy(true); setActionError(undefined)
+              try {
+                const response = await listAccessibleUnitTypes(facilityId)
+                const detail = response.data.find(item => item.id === type.id)
+                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
+                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
+                setEditingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
+              } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
+            }}>Chỉnh sửa</Button>
+            <Button variant="outline" disabled={actionBusy} onClick={() => { setActionError(undefined); setDeletingType(type) }}>Xóa loại kho</Button>
+          </div>
+        </div>)}
+        {read.data.catalog.length === 0 && <p className="text-sm text-stone-500">Chưa có loại kho thực tế.</p>}
+      </Card>
+      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} />
+      <Modal open={!!viewingType} onClose={() => setViewingType(undefined)} title="Thông tin loại kho thực tế" size="xl">
+        {viewingType && <div className="space-y-4">
+          <div className="flex flex-col gap-4 rounded-xl bg-stone-50 p-4 sm:flex-row">
+            {viewingType.imageUrl && <img src={viewingType.imageUrl} alt={viewingType.name} className="h-32 w-full rounded-lg object-cover sm:w-44" />}
+            <div className="min-w-0"><h3 className="font-semibold">{viewingType.code} · {viewingType.name}</h3><p className="mt-2 whitespace-pre-wrap break-words text-stone-600">{viewingType.description || 'Chưa có mô tả'}</p></div>
+          </div>
+          {(() => {
+            const fields = [
+              ['Kích thước kho (D × R × C)', `${viewingType.lengthM} × ${viewingType.widthM} × ${viewingType.heightM} m`],
+              ['Diện tích', `${viewingType.areaM2} m²`],
+              ['Thể tích', `${viewingType.volumeM3} m³`],
+              ['Tải trọng tối đa', `${viewingType.maxLoadKg} kg`],
+              ['Số khung kệ', viewingType.rackCount],
+              ['Kích thước khung (D × R × C)', `${viewingType.rackLengthM} × ${viewingType.rackWidthM} × ${viewingType.rackHeightM} m`],
+              ['Chiều rộng lối đi (m)', viewingType.aisleWidthM],
+              ['Xe đẩy hỗ trợ', viewingType.trolleyType],
+              ['Sức chứa thùng nhỏ', viewingType.smallBoxCapacity],
+              ['Sức chứa thùng lớn', viewingType.largeBoxCapacity],
+              ['Tổng số gian', viewingType.totalCount],
+              ['Đang sử dụng', viewingType.occupiedCount],
+              ['Còn trống', viewingType.availableCount],
+              ['Giá thuê / tháng', Number(viewingType.monthlyPrice) > 0 ? formatVndAmount(viewingType.monthlyPrice) : 'Chờ BO định giá'],
+              ['Tiền cọc đảm bảo', formatVndAmount(viewingType.securityDepositAmount)],
+              ['Trạng thái', ({ active: 'Đã công bố', awaiting_pricing: 'Chờ BO định giá', draft: 'Đang thiết lập', inactive: 'Ngừng hoạt động' } as Record<string, string>)[viewingType.status] || viewingType.status],
+            ]
+            const groups = [
+              { title: 'Kích thước và tải trọng', items: fields.slice(0, 4) },
+              { title: 'Khung kệ và thiết bị hỗ trợ', items: fields.slice(4, 8) },
+              { title: 'Sức chứa thùng', items: fields.slice(8, 10) },
+              { title: 'Số lượng và giá thuê', items: fields.slice(10) },
+            ]
+            return <div className="grid gap-4 lg:grid-cols-2">
+              {groups.map((group, index) => <section key={group.title} className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 ${index >= 2 ? 'lg:col-span-2' : ''}`}>
+                <h4 className="border-b border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800">{group.title}</h4>
+                <dl className={index >= 2 ? `grid gap-px bg-stone-200 sm:grid-cols-2 ${index === 3 ? 'lg:grid-cols-3' : ''}` : 'divide-y divide-stone-100 px-4'}>
+                  {group.items.map(([label, value]) => <div key={String(label)} className={index >= 2 ? 'min-w-0 bg-white px-4 py-3' : 'grid grid-cols-1 gap-1 py-3 sm:grid-cols-2 sm:gap-3'}>
+                    <dt className={index >= 2 ? 'mb-1 text-xs text-stone-500' : 'text-sm text-stone-500'}>{label}</dt>
+                    <dd className={`min-w-0 whitespace-pre-wrap break-words font-medium text-stone-900 ${index >= 2 ? 'text-base' : 'text-sm'}`}>{value == null || value === '' ? 'Chưa khai báo' : value}</dd>
+                  </div>)}
+                </dl>
+              </section>)}
+            </div>
+          })()}
+          <div className="flex justify-end border-t border-stone-200 pt-4"><Button variant="outline" onClick={() => setViewingType(undefined)}>Đóng</Button></div>
+        </div>}
+      </Modal>
       <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
+      {reviewNotice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{reviewNotice}</p>}
+      {editingType && <CreateUnitTypeModal key={editingType.id} open facilityId={facilityId} initial={editingType} onClose={() => setEditingType(undefined)} onCreated={() => { setEditingType(undefined); setReviewNotice('Đã gửi thay đổi cho BO duyệt. Customer vẫn thấy thông tin đã được duyệt trước đó.'); read.refresh() }} />}
+      <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Xóa loại kho">
+        <div className="space-y-4"><p>Xóa loại kho <b>{deletingType?.name}</b> và các gian trống thuộc loại này? Loại kho có đơn đặt hoặc hồ sơ liên quan không được xóa.</p>
+          {actionError && <p role="alert" className="text-sm text-red-700">{actionError}</p>}
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={actionBusy} onClick={() => setDeletingType(undefined)}>Hủy</Button><Button disabled={actionBusy} onClick={async () => {
+            if (!deletingType) return
+            setActionBusy(true); setActionError(undefined)
+            try { await deleteManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh() }
+            catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
+          }}>{actionBusy ? 'Đang xóa...' : 'Xác nhận xóa'}</Button></div>
+        </div>
+      </Modal>
     </>
   ) : (
     <Card className="p-5" role="alert">
@@ -153,29 +253,32 @@ function InventoryRead({
   )
 }
 
-function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
+function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: {
   open: boolean
   facilityId: string
   onClose: () => void
   onCreated: () => void
+  initial?: CustomerUnitType & { floor?: string; zone?: string }
 }) {
   const [form, setForm] = useState({
     code: '', name: '', description: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
     rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
     aisleWidthM: '1.8', trolleyType: 'Xe đẩy tay / xe sàn nhỏ', smallBoxCapacity: '336', largeBoxCapacity: '200',
     physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
+    ...(initial ? Object.fromEntries(Object.entries(initial).filter(([key]) => ['code', 'name', 'description', 'lengthM', 'widthM', 'heightM', 'maxLoadKg', 'rackCount', 'rackLengthM', 'rackWidthM', 'rackHeightM', 'aisleWidthM', 'trolleyType', 'smallBoxCapacity', 'largeBoxCapacity', 'floor', 'zone', 'imageUrl'].includes(key)).map(([key, value]) => [key, value == null ? '' : String(value)])) : {}),
+    ...(initial ? { physicalUnitCount: String(initial.totalCount ?? 0) } : {}),
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
-      <input className={`${inputClass} mt-1`} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
+      <input className={`${inputClass} mt-1 disabled:bg-stone-100`} disabled={busy || (!!initial && ['code', 'physicalUnitCount', 'floor', 'zone'].includes(key))} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
     </label>
   )
   const submit = async () => {
     setBusy(true); setError(undefined)
     try {
-      await createManagerUnitType(facilityId, {
+      const input = {
         code: form.code.trim().toUpperCase(), name: form.name.trim(), description: form.description.trim() || null,
         lengthM: Number(form.lengthM), widthM: Number(form.widthM), heightM: Number(form.heightM),
         maxLoadKg: Number(form.maxLoadKg), rackCount: Number(form.rackCount),
@@ -184,13 +287,15 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
         smallBoxCapacity: Number(form.smallBoxCapacity), largeBoxCapacity: Number(form.largeBoxCapacity),
         physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
         imageUrl: form.imageUrl.trim() || null,
-      })
+      }
+      if (initial) await updateManagerUnitType(initial.id, input)
+      else await createManagerUnitType(facilityId, input)
       onCreated()
     } catch (cause) {
       setError(managerDisplayError(cause))
     } finally { setBusy(false) }
   }
-  return <Modal open={open} onClose={onClose} title="Thêm loại kho thực tế" size="xl">
+  return <Modal open={open} onClose={() => { if (!busy) onClose() }} title={initial ? 'Chỉnh sửa loại kho thực tế' : 'Thêm loại kho thực tế'} size="xl">
     <div className="space-y-5">
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Thông tin loại kho</h3>
@@ -198,7 +303,32 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
         <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
           <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
         </label>
-        {field('imageUrl', 'URL ảnh loại kho')}
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-stone-700">Hình ảnh loại kho / sơ đồ bố trí
+            <input type="url" placeholder="Dán đường dẫn ảnh https://…" value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl} disabled={busy}
+              onChange={event => setForm(current => ({ ...current, imageUrl: event.target.value }))}
+              className="mt-1 w-full rounded-lg border border-stone-300 p-3" />
+          </label>
+          <label className="block text-sm text-stone-600">Hoặc chọn ảnh từ máy (JPG, PNG, WebP; tối đa 2 MB)
+            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} className="mt-2 block w-full text-sm" onChange={event => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (!file) return
+              if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+                setError('Vui lòng chọn ảnh JPG, PNG hoặc WebP không quá 2 MB.')
+                return
+              }
+              const reader = new FileReader()
+              reader.onload = () => { setForm(current => ({ ...current, imageUrl: String(reader.result) })); setError('') }
+              reader.onerror = () => setError('Không đọc được ảnh. Vui lòng chọn lại.')
+              reader.readAsDataURL(file)
+            }} />
+          </label>
+          {form.imageUrl && <div className="flex flex-col gap-2">
+            <img src={form.imageUrl} alt="Ảnh loại kho xem trước" className="max-h-64 w-full rounded-lg border border-stone-200 bg-stone-50 object-contain" />
+            <Button variant="outline" disabled={busy} onClick={() => setForm(current => ({ ...current, imageUrl: '' }))}>Bỏ ảnh</Button>
+          </div>}
+        </div>
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Kích thước và tải trọng</h3>
@@ -220,7 +350,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated }: {
         <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
@@ -424,8 +554,8 @@ export function InventoryContent({
                   </span>
                 </Td>
                 <Td className="text-right align-middle">
-                  {u.definition.monthlyPrice === null ? (
-                    <p className="text-sm text-stone-500">{missing}</p>
+                  {u.definition.monthlyPrice == null || u.definition.monthlyPrice <= 0 ? (
+                    <p className="text-sm text-stone-500">Chờ BO định giá</p>
                   ) : (
                     <div className="whitespace-nowrap">
                       <p className="font-semibold text-stone-800">
@@ -535,7 +665,7 @@ export function InventoryContent({
                 ["Diện tích", measure(selected.definition.areaM2, "m²")],
                 ["Thể tích", measure(selected.definition.volumeM3, "m³")],
                 ["Tải trọng tối đa", measure(selected.definition.maxLoadKg, "kg")],
-                ["Giá niêm yết", selected.definition.monthlyPrice === null ? missing : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`],
+                ["Giá niêm yết", selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0 ? "Chờ BO định giá" : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`],
               ] as [string, string][]).map(([label, value]) => <div key={label} className="min-w-0">
                 <dt className="text-xs font-medium text-slate-500">{label}</dt>
                 <dd className="mt-1 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">{value}</dd>
