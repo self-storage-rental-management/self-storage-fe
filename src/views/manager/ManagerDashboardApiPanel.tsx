@@ -3,11 +3,12 @@ import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { loadManagerApiCount, managerApiIdentity, requireManagerRead, type ManagerApiMetric } from './managerD1D5Api'
 import { managerDisplayError } from './managerPresentation'
+import ManagerReportsApiPanel from './ManagerReportsApiPanel'
 
 const metrics: { metric: ManagerApiMetric; title: string; page: string }[] = [
   { metric: 'rentals', title: 'Tổng hồ sơ thuê', page: 'rentals' },
   { metric: 'active-rentals', title: 'Đang thuê', page: 'rentals' },
-  { metric: 'pending-renewals', title: 'Chờ duyệt gia hạn', page: 'rentals' },
+  { metric: 'pending-renewals', title: 'Gia hạn cần theo dõi', page: 'rentals' },
   { metric: 'open-support', title: 'Yêu cầu hỗ trợ mới', page: 'support-api' },
   { metric: 'payment-overdue', title: 'Thanh toán quá hạn', page: 'overdue-cases' },
   { metric: 'term-overdue', title: 'Quá thời hạn thuê', page: 'overdue-cases' },
@@ -19,10 +20,14 @@ export default function ManagerDashboardApiPanel({ setPage }: { setPage: (page: 
     <Card className="p-5" role="alert">Cần đăng nhập bằng tài khoản quản lý cơ sở đang hoạt động.</Card>
   )
   return <div className="space-y-5">
-    <h2 className="text-2xl font-bold text-stone-900">Bảng điều khiển</h2>
+    <h1 className="text-3xl font-bold tracking-tight text-stone-900 sm:text-4xl">Tổng quan</h1>
+    <ManagerReportsApiPanel overview />
+    <section className="space-y-4" aria-label="Công việc cần theo dõi">
+    <h2 className="text-xl font-bold text-stone-900">Công việc cần theo dõi</h2>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {metrics.map(item => <ManagerMetric key={`${managerApiIdentity(actor)}:${item.metric}`} actor={actor} item={item} setPage={setPage} />)}
     </div>
+    </section>
   </div>
 }
 
@@ -40,7 +45,7 @@ function MetricSession({ actor, item, setPage }: {
   const read = useRentalApiResource(`${managerApiIdentity(actor)}:${item.metric}`, () => loadManagerApiCount(item.metric, actor))
   const count = !read.loading && !read.error ? read.data : undefined
   return <MetricCard title={item.title} value={read.loading ? 'Đang tải' : count?.value ?? 'Chưa xác minh'}
-    reason={read.error ? managerDisplayError(read.error) : count?.reason}
+    reason={item.metric === 'payment-overdue' ? undefined : read.error ? managerDisplayError(read.error) : count?.reason}
     onOpen={() => setPage(item.page)} />
 }
 

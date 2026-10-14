@@ -12,6 +12,7 @@ export interface PolicyItem {
   lastUpdated?: string
   scopeType?: 'all' | 'specific'
   facilityIds?: string[]
+  category?: 'billing' | 'climate' | 'prohibited' | 'maintenance'
 }
 
 export interface ParsedPolicyBenefit {

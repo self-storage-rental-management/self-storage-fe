@@ -424,52 +424,61 @@ function DemoManagerInventoryPanel({
       </Card>
 
       <Card>
-        <Table>
+        <Table tableClassName="min-w-[1100px] table-fixed">
+          <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
+          <colgroup>
+            <col className="w-[20%]" />
+            <col className="w-[13%]" />
+            <col className="w-[15%]" />
+            <col className="w-[13%]" />
+            <col className="w-[12%]" />
+            <col className="w-[17%]" />
+            <col className="w-[10%]" />
+          </colgroup>
           <Thead>
             <tr>
-              <Th>Gian kho</Th><Th>Loại / Kích thước</Th><Th>Vị trí</Th><Th>Trạng thái</Th><Th>Thuê hiện tại</Th><Th>Giá áp dụng</Th><Th>Khả dụng</Th><Th>Thao tác</Th>
+              <Th className="text-left align-middle">Gian kho</Th>
+              <Th className="text-left align-middle">Loại gian kho</Th>
+              <Th className="text-left align-middle">Vị trí</Th>
+              <Th className="text-left align-middle">Trạng thái</Th>
+              <Th className="text-left align-middle">Giá áp dụng</Th>
+              <Th className="text-left align-middle">Khả dụng</Th>
+              <Th className="text-center align-middle">Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
             {unitPagination.items.map(unit => {
-              const rental = operationalRentalFor(unit)
-              const reservation = activeReservationFor(unit)
               const maintenance = openMaintenanceFor(unit)
               const availability = availabilityFor(unit)
               return (
-                <Tr key={unit.id}>
-                  <Td>
-                    <p className="font-mono font-bold text-stone-900">{unit.code}</p>
+                <Tr key={unit.id} className="odd:bg-white even:bg-stone-50/50">
+                  <Td className="align-middle">
+                    <p className="break-all font-mono text-sm font-semibold leading-5 text-stone-900">{unit.code}</p>
                   </Td>
-                  <Td>
-                    <p className="font-semibold">{managerUnitTypeLabel(unit.type, 'vi')}</p>
-                    <p className="mt-1 text-xs text-stone-500">{unit.areaM2.toLocaleString('vi-VN')} m², {unit.volumeM3.toLocaleString('vi-VN')} m³</p>
-                    <p className="text-xs text-stone-500">Tối đa {unit.maxLoadKg.toLocaleString('vi-VN')} kg</p>
+                  <Td className="align-middle">
+                    <p className="font-semibold leading-5 text-stone-900">{managerUnitTypeLabel(unit.type, 'vi')}</p>
                   </Td>
-                  <Td>
-                    <p>{inventoryLocation(unit.floor, unit.zone)}</p>
-                    <p className="mt-1 text-xs text-stone-500">{unit.climate ? 'Có kiểm soát nhiệt độ' : 'Không kiểm soát nhiệt độ'}</p>
+                  <Td className="align-middle">
+                    <p className="font-medium text-stone-800">{inventoryLocation(unit.floor, unit.zone)}</p>
+                    <p className="mt-1 text-xs leading-4 text-stone-500">{unit.climate ? 'Có kiểm soát nhiệt độ' : 'Không kiểm soát nhiệt độ'}</p>
                   </Td>
-                  <Td>
+                  <Td className="align-middle">
                     <Badge variant={statusVariants[unit.status] || 'muted'}>{unitStatusLabel(unit.status)}</Badge>
-                    {unit.status === 'maintenance' && maintenance && <p className="mt-1 text-xs text-amber-700">Có phiếu bảo trì đang mở</p>}
+                    {unit.status === 'maintenance' && maintenance && <p className="mt-1 text-xs leading-4 text-amber-700">Có phiếu bảo trì đang mở</p>}
                   </Td>
-                  <Td>
-                    {rental ? <><p className="font-semibold text-stone-900">{rental.customerName}</p><p className="text-xs text-stone-500">Hồ sơ thuê {rental.id}</p><p className="mt-1 text-xs text-stone-500">Dự kiến kết thúc {formatDate(rental.endDate)}, {managerStatusLabel(rental.status, 'vi')}</p></> : reservation ? <><p className="font-semibold text-stone-900">{reservation.customerName}</p><p className="text-xs text-stone-500">Đơn đặt chỗ {reservation.id}</p></> : unit.status === 'occupied' ? <p className="text-xs font-medium text-red-700">Thiếu hồ sơ thuê tương ứng với trạng thái đang sử dụng</p> : <p className="text-sm text-stone-500">Chưa có người sử dụng</p>}
+                  <Td className="align-middle">
+                    <p className="whitespace-nowrap font-semibold text-stone-900">{formatManagerMoney(unit.price)}</p>
+                    <p className="mt-1 text-xs text-stone-500">/tháng</p>
                   </Td>
-                  <Td>
-                    <p className="font-semibold">{formatManagerMoney(unit.price)}/tháng</p>
-                    <p className="mt-1 text-xs text-stone-500">Giá chuẩn theo loại gian</p>
+                  <Td className="align-middle">
+                    <p className="font-medium leading-5 text-stone-800">{availability.label}</p>
+                    {availability.detail && <p title={availability.detail} className="mt-1 line-clamp-2 text-xs leading-4 text-stone-500">{availability.detail}</p>}
                   </Td>
-                  <Td>
-                    <p className="font-medium">{availability.label}</p>
-                    {availability.detail && <p className="mt-1 text-xs text-stone-500">{availability.detail}</p>}
-                  </Td>
-                  <Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedUnitId(unit.id)}>Xem chi tiết</Button></Td>
+                  <Td className="align-middle text-center"><Button size="sm" variant="outline" className="whitespace-nowrap" onClick={() => setSelectedUnitId(unit.id)}>Chi tiết</Button></Td>
                 </Tr>
               )
             })}
-            {!visibleUnits.length && <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-stone-500">Không có gian kho phù hợp với bộ lọc.</td></tr>}
+            {!visibleUnits.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có gian kho phù hợp với bộ lọc.</td></tr>}
           </Tbody>
         </Table>
         <ManagerPagination {...unitPagination} pageSize={unitPageSize} onPageChange={setUnitPage} onPageSizeChange={setUnitPageSize} />

@@ -104,9 +104,13 @@ describe("Dương integration presentation and safe policy builders", () => {
   ])("preserves ledger authentication, authorization and blocked-state feedback for HTTP %i", (status, message) => {
     expect(ledgerReadError(new ApiClientError("Raw backend detail", { status: Number(status) }))).toBe(message)
   })
-  it.each(["completed", "cancelled", "rejected", "payment_expired"])("terminal %s does not expose a new coordination command", status => {
+  it.each(["completed"])("terminal %s does not expose a new coordination command", status => {
     state.actor = operationsActor("manager")
     expect(renderToStaticMarkup(<RenewalCoordinationPanel state={operationState} facilityId={ids.facility} status={status} onLocked={vi.fn()} onChanged={vi.fn()} />)).toBe("")
+  })
+  it.each(["cancelled", "rejected", "payment_expired"])("allows fault review after %s for deposit settlement", status => {
+    state.actor = operationsActor("manager")
+    expect(renderToStaticMarkup(<RenewalCoordinationPanel state={operationState} facilityId={ids.facility} status={status} onLocked={vi.fn()} onChanged={vi.fn()} />)).toContain("Xác minh lỗi cơ sở")
   })
   it("renders a persisted assignment rather than relying on the last local command event", () => {
     const html = renderToStaticMarkup(<RenewalAssignmentSummary assignment={{ renewalId: ids.renewal, expectedVersion: 1, status: "ASSIGNED", staffId: ids.staff, staffName: "Nhân viên phụ trách thật" }} expectedVersion={1} />)
@@ -193,7 +197,7 @@ describe("Dương integration presentation and safe policy builders", () => {
     }
     expect(canCoordinateRenewal(ids.facility)).toBe(false)
   })
-  it("does not enable assignment before authoritative approval or after arrival", () => {
+  it("exposes fault review without an obsolete staff assignment form", () => {
     state.actor = operationsActor("manager")
     const html = renderToStaticMarkup(
       <RenewalCoordinationPanel
@@ -204,10 +208,8 @@ describe("Dương integration presentation and safe policy builders", () => {
         onChanged={vi.fn()}
       />,
     )
-    expect(html).toContain("Chỉ phân công khi")
-    expect(html).toMatch(
-      /<button[^>]*disabled=""[^>]*>Ghi nhận phân công<\/button>/,
-    )
+    expect(html).toContain("Xác minh lỗi cơ sở")
+    expect(html).not.toContain("Ghi nhận phân công")
     expect(
       renderToStaticMarkup(
         <RenewalCoordinationPanel

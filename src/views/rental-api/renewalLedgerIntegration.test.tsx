@@ -7,9 +7,8 @@ vi.mock("../rental-support-integration/LedgerPanel", () => ({
   default: ({ role, id }: { role: string; id: string }) => <div data-ledger-role={role} data-ledger-rental={id} />,
 }))
 
-it.each(["customer", "manager"] as const)("routes %s Renewal financial readback to its authoritative Rental", role => {
+it.each(["customer", "manager"] as const)("keeps the removed financial ledger block out of %s Renewal detail", role => {
   const html = renderToStaticMarkup(<RenewalDetail role={role} renewal={{ ...renewal, status: "approved", version: 7 }} onAction={() => {}} />)
-  expect(html).toContain(`data-ledger-role="${role}"`)
-  expect(html).toContain(`data-ledger-rental="${renewal.rentalId}"`)
-  expect(html).not.toContain(`data-ledger-rental="${renewal.id}"`)
+  expect(html).not.toContain("data-ledger-role")
+  expect(html).not.toContain("data-ledger-rental")
 })

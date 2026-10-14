@@ -7,6 +7,7 @@ import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
 import {
   calculateManagerReturnSettlement,
+  canManagerAssignStaff,
   isManagerFacilityVisible,
   type ManagerReturnSettlementFees
 } from '../../domain/managerRules'
@@ -19,10 +20,21 @@ interface ManagerReturnsPanelProps {
   user: User
   showToast: (msg: string) => void
   sb: (v: string) => React.ReactNode
+  onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
 }
 
-export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerReturnsPanelProps) {
-  const { returns: storeReturns, reviewReturnDispute, completeReturnRefund } = useStorageHub()
+export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork }: ManagerReturnsPanelProps) {
+  const {
+    returns: storeReturns,
+    users,
+    units,
+    assignReturnInspection,
+    completeReturnCase,
+    createFacilityTask,
+    updateUnitStatus,
+    reviewReturnDispute,
+    completeReturnRefund
+  } = useStorageHub()
 
   const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
   const [returnSearch, setReturnSearch] = useState('')
@@ -45,6 +57,32 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const [deleteTarget, setDeleteTarget] = useState<ReturnCase | null>(null)
   const returnHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-returns`)
 
+  // Assign staff for inspection state
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [assignTarget, setAssignTarget] = useState<ReturnCase | null>(null)
+  const [assignStaffId, setAssignStaffId] = useState('')
+  const [assignDate, setAssignDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [assignNotes, setAssignNotes] = useState('')
+
+  // Maintenance work order modal state
+  const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false)
+  const [maintenanceTarget, setMaintenanceTarget] = useState<ReturnCase | null>(null)
+  const [maintenanceReason, setMaintenanceReason] = useState('')
+  const [maintenancePriority, setMaintenancePriority] = useState<'high' | 'medium' | 'low'>('medium')
+  const [maintenanceStaffId, setMaintenanceStaffId] = useState('')
+  const [maintenanceDueAt, setMaintenanceDueAt] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 3)
+    return d.toISOString().slice(0, 10)
+  })
+
+  // Complete return modal state
+  const [completeModalOpen, setCompleteModalOpen] = useState(false)
+  const [completeTarget, setCompleteTarget] = useState<ReturnCase | null>(null)
+  const [completeNotes, setCompleteNotes] = useState('')
+
+  const availableStaff = users.filter(member => canManagerAssignStaff(user, member))
+
   // Filter returns by facility
   const scopedReturns = storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
   const facilityReturns = scopedReturns.filter(r => !returnHistory.isHidden(r.id))
@@ -52,22 +90,23 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   const moneyValue = (value?: number) => normalizeManagerMoney(value) ?? 0
 
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
-  useEffect(() => { if (disputedCount > 0) setReturnTab('disputed') }, [disputedCount])
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length
   const completedCount = scopedReturns.filter(r => r.status === 'completed').length
-  const inspectingCount = facilityReturns.filter(
-    r => r.status === 'requested' || r.status === 'scheduled' || r.status === 'inspected' || r.status === 'awaiting_customer_confirmation'
-  ).length
+  const awaitingInspectionCount = facilityReturns.filter(r => r.status === 'requested' || r.status === 'scheduled').length
+  const inspectedCount = facilityReturns.filter(r => r.status === 'inspected' || r.status === 'awaiting_customer_confirmation').length
+  const needsMaintenanceCount = facilityReturns.filter(r => (r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance').length
 
   const filteredReturns = facilityReturns.filter(r => {
     const matchTab =
       returnTab === 'All' ||
       returnTab === 'Tất cả' ||
+      (returnTab === 'awaiting_inspection' && (r.status === 'requested' || r.status === 'scheduled')) ||
+      (returnTab === 'inspected' && (r.status === 'inspected' || r.status === 'awaiting_customer_confirmation')) ||
+      (returnTab === 'needs_maintenance' && ((r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance')) ||
       (returnTab === 'disputed' && r.status === 'disputed') ||
       (returnTab === 'refund_pending' && r.status === 'refund_pending') ||
       (returnTab === 'payment_due' && r.status === 'payment_due') ||
-      (returnTab === 'completed' && r.status === 'completed') ||
-      (returnTab === 'in_progress' && (r.status === 'requested' || r.status === 'scheduled' || r.status === 'inspected' || r.status === 'awaiting_customer_confirmation'))
+      (returnTab === 'completed' && r.status === 'completed')
 
     const matchSearch = matchesManagerSearch(returnSearch, [r.id, r.rentalId, r.customerId, r.customerName, r.unitId, r.customerEmail, r.customerPhone, r.staffNotes, r.customerDecisionNote])
     const matchDamage = damageFilter === 'all' || r.damageClassification === damageFilter
@@ -78,12 +117,106 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
     if (sortBy === 'date-asc') return managerDateValue(left.scheduledDate) - managerDateValue(right.scheduledDate)
     if (sortBy === 'date-desc') return managerDateValue(right.scheduledDate) - managerDateValue(left.scheduledDate)
     if (sortBy === 'amount-desc') return ((right.amountDueFromCustomer || 0) + right.netRefundAmount) - ((left.amountDueFromCustomer || 0) + left.netRefundAmount)
-    const statusPriority: Record<string, number> = { disputed: 0, refund_pending: 1, payment_due: 2, awaiting_customer_confirmation: 3, inspected: 4, scheduled: 5, requested: 6, completed: 7 }
+    const statusPriority: Record<string, number> = { requested: 0, scheduled: 1, inspected: 2, disputed: 3, refund_pending: 4, payment_due: 5, awaiting_customer_confirmation: 6, completed: 7 }
     return (statusPriority[left.status] ?? 99) - (statusPriority[right.status] ?? 99) || managerDateValue(left.requestedAt) - managerDateValue(right.requestedAt)
   })
   const pagination = paginateManagerItems(filteredReturns, page, pageSize)
 
   useEffect(() => setPage(1), [returnTab, returnSearch, damageFilter, settlementFilter, dateFrom, dateTo, sortBy, pageSize])
+
+  const openAssignModal = (returnCase: ReturnCase) => {
+    setAssignTarget(returnCase)
+    setAssignStaffId(availableStaff[0]?.id || '')
+    setAssignDate(returnCase.scheduledDate || new Date().toISOString().slice(0, 10))
+    setAssignNotes('Kiểm tra hiện trường trả kho, thu hồi chìa khóa/thẻ từ, kiểm tra tường trần sàn và đối chiếu kiện hàng.')
+    setAssignModalOpen(true)
+  }
+
+  const handleConfirmAssign = () => {
+    if (!assignTarget) return
+    if (!assignStaffId) {
+      showToast('Vui lòng chọn nhân viên phụ trách nghiệm thu.')
+      return
+    }
+    try {
+      assignReturnInspection(assignTarget.id, assignStaffId, assignDate, assignNotes, user)
+      const staffMember = users.find(u => u.id === assignStaffId)
+      showToast(`Đã phân công ${staffMember?.name || 'nhân viên'} nghiệm thu trả kho gian ${assignTarget.unitId} vào ngày ${assignDate}!`)
+      setAssignModalOpen(false)
+      setAssignTarget(null)
+    } catch (err: any) {
+      showToast(err?.message || 'Có lỗi khi phân công nhân viên.')
+    }
+  }
+
+  const openMaintenanceModal = (returnCase: ReturnCase) => {
+    if (onCreateMaintenanceWork) {
+      onCreateMaintenanceWork({
+        referenceId: returnCase.unitId,
+        title: `Bảo trì gian ${returnCase.unitId} sau trả kho`,
+        notes: `Hồ sơ trả kho ${returnCase.id}. Tình trạng: ${returnCase.damageClassification ? getDamageLabel(returnCase.damageClassification) : ''}. Ghi chú: ${returnCase.staffNotes || ''}`
+      })
+      return
+    }
+    setMaintenanceTarget(returnCase)
+    setMaintenanceStaffId(availableStaff[0]?.id || '')
+    const reasonParts = [
+      `Bảo trì sau trả kho gian ${returnCase.unitId}`,
+      returnCase.damageClassification && returnCase.damageClassification !== 'no_damage' ? `Hiện trạng: ${getDamageLabel(returnCase.damageClassification)}` : '',
+      returnCase.staffNotes ? `Ghi chú nghiệm thu: ${returnCase.staffNotes}` : ''
+    ].filter(Boolean).join('. ')
+    setMaintenanceReason(reasonParts)
+    setMaintenancePriority(returnCase.damageClassification === 'major_damage' ? 'high' : 'medium')
+    const d = new Date()
+    d.setDate(d.getDate() + 3)
+    setMaintenanceDueAt(d.toISOString().slice(0, 10))
+    setMaintenanceModalOpen(true)
+  }
+
+  const handleConfirmMaintenance = () => {
+    if (!maintenanceTarget) return
+    if (!maintenanceReason.trim()) {
+      showToast('Vui lòng nhập lý do/nội dung bảo trì.')
+      return
+    }
+    try {
+      updateUnitStatus(maintenanceTarget.unitId, 'maintenance', user, maintenanceReason)
+      createFacilityTask({
+        facilityId: maintenanceTarget.facilityId,
+        facilityName: maintenanceTarget.facilityName,
+        type: 'maintenance',
+        title: `Bảo trì gian ${maintenanceTarget.unitId} sau trả kho`,
+        referenceId: maintenanceTarget.unitId,
+        dueAt: maintenanceDueAt,
+        priority: maintenancePriority,
+        assignedStaffId: maintenanceStaffId || undefined,
+        notes: maintenanceReason
+      }, user)
+      showToast(`Đã chuyển gian ${maintenanceTarget.unitId} sang bảo trì và tạo phiếu công việc cho nhân viên!`)
+      setMaintenanceModalOpen(false)
+      setMaintenanceTarget(null)
+    } catch (err: any) {
+      showToast(err?.message || 'Có lỗi khi tạo phiếu bảo trì.')
+    }
+  }
+
+  const openCompleteModal = (returnCase: ReturnCase) => {
+    setCompleteTarget(returnCase)
+    setCompleteNotes('Quản lý nghiệm thu đạt yêu cầu. Đóng hồ sơ trả kho.')
+    setCompleteModalOpen(true)
+  }
+
+  const handleConfirmComplete = () => {
+    if (!completeTarget) return
+    try {
+      completeReturnCase(completeTarget.id, user, completeNotes)
+      showToast(`Đã xác nhận hoàn tất hồ sơ trả kho ${completeTarget.id}!`)
+      setCompleteModalOpen(false)
+      setCompleteTarget(null)
+    } catch (err: any) {
+      showToast(err?.message || 'Có lỗi khi đóng hồ sơ trả kho.')
+    }
+  }
 
   const getDamageLabel = (d?: DamageClassification) => {
     switch (d) {
@@ -229,7 +362,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
   return (
     <div className="fade-in space-y-6">
       <SectionHeader
-        title={'Quyết Toán Trả Kho & Xử Lý Khiếu Nại'}
+        eyebrow="Vận hành cơ sở"
+        title={'Quản Lý Trả Kho & Nghiệm Thu Hiện Trường'}
+        subtitle={'Điều phối nhân viên nghiệm thu, kiểm tra biên bản hiện trường, xử lý bảo trì hỏng hóc và đóng hồ sơ trả kho.'}
       />
 
       {/* Bento Grid Stats */}
@@ -241,55 +376,61 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
           iconBg="bg-blue-50 text-blue-700"
         />
         <StatCard
-          title={'Khiếu nại chờ xử lý'}
-          value={disputedCount}
-          delta={disputedCount > 0 ? ("Cần quản lý cơ sở giải quyết") : undefined}
-          deltaPositive={disputedCount === 0}
-          icon={Icon.alert}
-          iconBg={disputedCount > 0 ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-200' : 'bg-stone-50 text-stone-600'}
+          title={'Chờ nghiệm thu hiện trường'}
+          value={awaitingInspectionCount}
+          delta={awaitingInspectionCount > 0 ? ("Cần phân công nhân viên") : undefined}
+          deltaPositive={awaitingInspectionCount === 0}
+          icon={Icon.tasks}
+          iconBg={awaitingInspectionCount > 0 ? 'bg-amber-50 text-amber-700 ring-2 ring-amber-200' : 'bg-stone-50 text-stone-600'}
         />
         <StatCard
-          title={'Chờ hoàn tiền cọc'}
-          value={refundPendingCount}
-          delta={'Đã duyệt biên bản'}
+          title={'Đã kiểm tra hiện trường'}
+          value={inspectedCount}
+          delta={'Chờ quản lý nghiệm thu'}
           deltaPositive
-          icon={Icon.dollar}
+          icon={Icon.check}
           iconBg="bg-emerald-50 text-emerald-700"
         />
         <StatCard
-          title={'Đã hoàn tất thanh lý'}
-          value={completedCount}
-          icon={Icon.check}
-          iconBg="bg-purple-50 text-purple-700"
+          title={'Phát hiện hư hại / Bảo trì'}
+          value={needsMaintenanceCount}
+          delta={needsMaintenanceCount > 0 ? ("Cần lập phiếu sửa chữa") : undefined}
+          deltaPositive={needsMaintenanceCount === 0}
+          icon={Icon.alert}
+          iconBg={needsMaintenanceCount > 0 ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-200' : 'bg-stone-50 text-stone-600'}
         />
       </div>
 
-      <ManagerActionNotice tone={disputedCount || refundPendingCount ? 'warning' : 'info'}>
-        quản lý cơ sở trực tiếp xử lý hồ sơ bị khiếu nại và hồ sơ đã đủ điều kiện hoàn cọc. Các trạng thái còn lại đang chờ nhân viên nghiệm thu, khách hàng xác nhận hoặc khách hàng thanh toán.
+      <ManagerActionNotice tone={awaitingInspectionCount || needsMaintenanceCount ? 'warning' : 'info'}>
+        Quản lý cơ sở phân công nhân viên kiểm tra nghiệm thu hiện trường, xem xét báo cáo hư hỏng để kích hoạt sửa chữa bảo trì kho, và xác nhận hoàn tất giải phóng gian kho về trạng thái khả dụng.
       </ManagerActionNotice>
 
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <Tabs
-          tabs={
-            ['Tất cả', 'Khiếu nại', 'Chờ hoàn cọc', 'Còn nợ phí', 'Đang xử lý', 'Đã hoàn tất']
-          }
+          tabs={[
+            `Tất cả (${facilityReturns.length})`,
+            `Chờ nghiệm thu (${awaitingInspectionCount})`,
+            `Đã kiểm tra (${inspectedCount})`,
+            `Cần bảo trì (${needsMaintenanceCount})`,
+            `Khiếu nại (${disputedCount})`,
+            `Đã hoàn tất (${completedCount})`
+          ]}
           active={
-            returnTab === 'All' ? 'Tất cả' :
-            returnTab === 'disputed' ? 'Khiếu nại' :
-            returnTab === 'refund_pending' ? 'Chờ hoàn cọc' :
-            returnTab === 'payment_due' ? 'Còn nợ phí' :
-            returnTab === 'in_progress' ? 'Đang xử lý' :
-            returnTab === 'completed' ? 'Đã hoàn tất' : returnTab
+            returnTab === 'All' ? `Tất cả (${facilityReturns.length})` :
+            returnTab === 'awaiting_inspection' ? `Chờ nghiệm thu (${awaitingInspectionCount})` :
+            returnTab === 'inspected' ? `Đã kiểm tra (${inspectedCount})` :
+            returnTab === 'needs_maintenance' ? `Cần bảo trì (${needsMaintenanceCount})` :
+            returnTab === 'disputed' ? `Khiếu nại (${disputedCount})` :
+            returnTab === 'completed' ? `Đã hoàn tất (${completedCount})` : `Tất cả (${facilityReturns.length})`
           }
           onChange={val => {
-            if (val === 'Tất cả') setReturnTab('All')
-            else if (val === 'Khiếu nại') setReturnTab('disputed')
-            else if (val === 'Chờ hoàn cọc') setReturnTab('refund_pending')
-            else if (val === 'Còn nợ phí') setReturnTab('payment_due')
-            else if (val === 'Đang xử lý') setReturnTab('in_progress')
-            else if (val === 'Đã hoàn tất') setReturnTab('completed')
-            else setReturnTab(val)
+            if (val.startsWith('Tất cả')) setReturnTab('All')
+            else if (val.startsWith('Chờ nghiệm thu')) setReturnTab('awaiting_inspection')
+            else if (val.startsWith('Đã kiểm tra')) setReturnTab('inspected')
+            else if (val.startsWith('Cần bảo trì')) setReturnTab('needs_maintenance')
+            else if (val.startsWith('Khiếu nại')) setReturnTab('disputed')
+            else if (val.startsWith('Đã hoàn tất')) setReturnTab('completed')
           }}
         />
         <div className="w-full sm:w-72">
@@ -329,11 +470,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
               <Th>{'Mã Trả Kho / HĐ'}</Th>
               <Th>{'Khách Hàng'}</Th>
               <Th>{'Gian Kho'}</Th>
-              <Th>{'Ngày Hẹn'}</Th>
-              <Th>{'Đánh Giá Nghiệm Thu'}</Th>
-              <Th>{'Quyết Toán Tiền Cọc'}</Th>
+              <Th>{'Ngày Hẹn / Nghiệm Thu'}</Th>
+              <Th>{'Đánh Giá Hiện Trường & Hư Hại'}</Th>
+              <Th>{'Quyết Toán'}</Th>
               <Th>{'Trạng Thái'}</Th>
-              <Th className="text-right">{'Hành Động'}</Th>
+              <Th className="text-right">{'Thao Tác'}</Th>
             </tr>
           </Thead>
           <Tbody>
@@ -352,14 +493,16 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                   moneyValue(ret.overdueFee) +
                   moneyValue(ret.outstandingFee)
 
+                const isDamaged = (ret.damageClassification && ret.damageClassification !== 'no_damage') || ret.proposedUnitStatus === 'maintenance'
+
                 return (
                   <Tr
                     key={ret.id}
                     className={
                       ret.status === 'disputed'
                         ? 'bg-rose-50/40 hover:bg-rose-50/70 border-l-4 border-l-rose-500'
-                        : ret.status === 'refund_pending'
-                        ? 'bg-emerald-50/20 hover:bg-emerald-50/50'
+                        : isDamaged && ret.status !== 'completed'
+                        ? 'bg-amber-50/30 hover:bg-amber-50/60'
                         : undefined
                     }
                   >
@@ -387,6 +530,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                         <p className="text-[11px] text-stone-400">
                           {'Yêu cầu:'} {formatManagerDate(ret.requestedAt)}
                         </p>
+                        {ret.staffId && (
+                          <p className="text-[11px] text-blue-600 font-medium mt-0.5">
+                            NV: {users.find(u => u.id === ret.staffId)?.name || ret.staffId}
+                          </p>
+                        )}
                       </div>
                     </Td>
                     <Td>
@@ -415,9 +563,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             </span>
                           </div>
                         )}
-                        {totalDeductions > 0 && (
-                          <p className="text-[11px] text-red-600 font-medium">
-                            {`Khấu trừ: -${formatVnd(totalDeductions)}`}
+                        {ret.returnedItems && (
+                          <p className="text-[11px] text-stone-500">
+                            Bàn giao: {ret.returnedItems.key ? 'Khóa ✓' : 'Khóa ✗'} · {ret.returnedItems.card ? 'Thẻ ✓' : 'Thẻ ✗'}
                           </p>
                         )}
                       </div>
@@ -429,18 +577,18 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                         </p>
                         {ret.amountDueFromCustomer && ret.amountDueFromCustomer > 0 ? (
                           <p className="font-bold text-rose-600">
-                            {`Khách nộp thêm: ${formatManagerMoney(ret.amountDueFromCustomer ?? 0)}`}
+                            {`Khách nộp: ${formatManagerMoney(ret.amountDueFromCustomer ?? 0)}`}
                           </p>
                         ) : (
                           <p className="font-bold text-emerald-700">
-                            {`Hoàn lại: ${formatManagerMoney(ret.netRefundAmount)}`}
+                            {`Hoàn: ${formatManagerMoney(ret.netRefundAmount)}`}
                           </p>
                         )}
                       </div>
                     </Td>
                     <Td>{sb(ret.status)}</Td>
                     <Td className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                         <Button
                           variant="outline"
                           size="sm"
@@ -449,14 +597,47 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             setDetailModalOpen(true)
                           }}
                         >
-                          {'Chi tiết'}
+                          {'Biên bản'}
                         </Button>
+
+                        {(ret.status === 'requested' || ret.status === 'scheduled') && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-medium whitespace-nowrap"
+                            onClick={() => openAssignModal(ret)}
+                          >
+                            {ret.status === 'scheduled' ? 'Đổi NV' : 'Giao NV'}
+                          </Button>
+                        )}
+
+                        {isDamaged && ret.status !== 'completed' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-amber-500 text-amber-700 hover:bg-amber-50 font-medium whitespace-nowrap"
+                            onClick={() => openMaintenanceModal(ret)}
+                          >
+                            {'🛠️ Lập bảo trì'}
+                          </Button>
+                        )}
+
+                        {['inspected', 'awaiting_customer_confirmation', 'refund_pending', 'payment_due'].includes(ret.status) && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap"
+                            onClick={() => openCompleteModal(ret)}
+                          >
+                            {'✓ Hoàn tất'}
+                          </Button>
+                        )}
 
                         {ret.status === 'disputed' && (
                           <Button
                             variant="primary"
                             size="sm"
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-medium"
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-medium whitespace-nowrap"
                             onClick={() => {
                               openDisputeReview(ret)
                             }}
@@ -467,9 +648,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
                         {ret.status === 'refund_pending' && (
                           <Button
-                            variant="primary"
+                            variant="outline"
                             size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                            className="text-emerald-700 border-emerald-500 hover:bg-emerald-50 font-medium whitespace-nowrap"
                             onClick={() => {
                               setSelectedReturn(ret)
                               setRefundTxnRef('')
@@ -479,12 +660,12 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
                             {'Hoàn cọc'}
                           </Button>
                         )}
+
                         {ret.status === 'completed' && (
                           <Button variant="danger" size="sm" onClick={() => setDeleteTarget(ret)}>
                             Xóa
                           </Button>
                         )}
-                        {getReturnActionReason(ret) && <div className="max-w-48 text-left"><ManagerActionNotice compact tone={ret.status === 'completed' ? 'success' : 'info'}>{getReturnActionReason(ret)}</ManagerActionNotice></div>}
                       </div>
                     </Td>
                   </Tr>
@@ -696,9 +877,42 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
             {getReturnActionReason(selectedReturn) && <ManagerActionNotice tone={selectedReturn.status === 'completed' ? 'success' : 'info'}>{getReturnActionReason(selectedReturn)}</ManagerActionNotice>}
 
             <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button variant="outline" onClick={() => setDetailModalOpen(false)}>
-                {'Đóng'}
-              </Button>
+              {(selectedReturn.status === 'requested' || selectedReturn.status === 'scheduled') && (
+                <Button
+                  variant="primary"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => {
+                    setDetailModalOpen(false)
+                    openAssignModal(selectedReturn)
+                  }}
+                >
+                  {selectedReturn.status === 'scheduled' ? 'Đổi nhân viên nghiệm thu' : 'Giao nhân viên nghiệm thu'}
+                </Button>
+              )}
+              {((selectedReturn.damageClassification && selectedReturn.damageClassification !== 'no_damage') || selectedReturn.proposedUnitStatus === 'maintenance') && selectedReturn.status !== 'completed' && (
+                <Button
+                  variant="outline"
+                  className="border-amber-500 text-amber-700 hover:bg-amber-50"
+                  onClick={() => {
+                    setDetailModalOpen(false)
+                    openMaintenanceModal(selectedReturn)
+                  }}
+                >
+                  🛠️ Lập phiếu bảo trì
+                </Button>
+              )}
+              {['inspected', 'awaiting_customer_confirmation', 'refund_pending', 'payment_due'].includes(selectedReturn.status) && (
+                <Button
+                  variant="primary"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => {
+                    setDetailModalOpen(false)
+                    openCompleteModal(selectedReturn)
+                  }}
+                >
+                  ✓ Hoàn tất trả kho
+                </Button>
+              )}
               {selectedReturn.status === 'disputed' && (
                 <Button
                   variant="primary"
@@ -913,6 +1127,142 @@ export default function ManagerReturnsPanel({ user, showToast, sb }: ManagerRetu
 
       <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title="Ẩn khỏi danh sách hồ sơ trả kho">
         {deleteTarget && <div className="space-y-4"><ManagerActionNotice tone="warning">Hồ sơ {deleteTarget.id} chỉ bị ẩn khỏi lịch sử của quản lý cơ sở. Dữ liệu dùng chung, quyết toán và báo cáo không bị xóa.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Hủy</Button><Button variant="danger" onClick={() => { returnHistory.hide(deleteTarget.id); setDeleteTarget(null); showToast(`Đã ẩn hồ sơ ${deleteTarget.id} khỏi lịch sử quản lý cơ sở.`) }}>Xóa khỏi lịch sử</Button></div></div>}
+      </Modal>
+
+      {/* 1. Modal Giao NV Nghiệm Thu */}
+      <Modal open={assignModalOpen} onClose={() => { setAssignModalOpen(false); setAssignTarget(null) }} title="Giao Nhân Viên Nghiệm Thu Trả Kho">
+        {assignTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-xs space-y-1.5">
+              <div className="flex justify-between"><span className="text-blue-800 font-medium">Hồ sơ trả kho:</span><b className="font-mono text-blue-950">{assignTarget.id}</b></div>
+              <div className="flex justify-between"><span className="text-blue-800 font-medium">Gian kho / Cơ sở:</span><b className="font-mono text-blue-950">{assignTarget.unitId} · {assignTarget.facilityName}</b></div>
+              <div className="flex justify-between"><span className="text-blue-800 font-medium">Khách hàng:</span><b>{assignTarget.customerName} ({assignTarget.customerPhone})</b></div>
+            </div>
+
+            <Select label="Chọn nhân viên phụ trách nghiệm thu" value={assignStaffId} onChange={e => setAssignStaffId(e.target.value)}>
+              {availableStaff.length === 0 ? (
+                <option value="">Chưa có nhân viên trực thuộc cơ sở</option>
+              ) : (
+                availableStaff.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.email})
+                  </option>
+                ))
+              )}
+            </Select>
+
+            <Input label="Ngày hẹn nghiệm thu tại cơ sở" type="date" value={assignDate} onChange={e => setAssignDate(e.target.value)} />
+
+            <div>
+              <label className="text-xs font-semibold text-stone-700 block mb-1">Ghi chú & Chỉ đạo nhân viên</label>
+              <textarea
+                rows={3}
+                value={assignNotes}
+                onChange={e => setAssignNotes(e.target.value)}
+                placeholder="Nhiệm vụ kiểm tra trần, sàn, vách, thu hồi khóa/thẻ..."
+                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <Button variant="outline" onClick={() => { setAssignModalOpen(false); setAssignTarget(null) }}>Hủy</Button>
+              <Button variant="primary" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleConfirmAssign}>
+                Xác nhận phân công
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 2. Modal Tạo Phiếu Bảo Trì */}
+      <Modal open={maintenanceModalOpen} onClose={() => { setMaintenanceModalOpen(false); setMaintenanceTarget(null) }} title="🛠️ Lập Phiếu Bảo Trì Kho Sau Nghiệm Thu">
+        {maintenanceTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1.5">
+              <div className="flex justify-between"><span className="text-amber-800 font-medium">Gian kho cần bảo dưỡng:</span><b className="font-mono text-amber-950 text-sm">{maintenanceTarget.unitId}</b></div>
+              <div className="flex justify-between"><span className="text-amber-800 font-medium">Hồ sơ nghiệm thu gốc:</span><span className="font-mono text-stone-600">{maintenanceTarget.id}</span></div>
+              <div className="flex justify-between"><span className="text-amber-800 font-medium">Hiện trạng phát hiện:</span><b className="text-rose-700">{getDamageLabel(maintenanceTarget.damageClassification)}</b></div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-stone-700 block mb-1">Nội dung bảo trì / Hạng mục hư hại cần sửa chữa</label>
+              <textarea
+                rows={3}
+                value={maintenanceReason}
+                onChange={e => setMaintenanceReason(e.target.value)}
+                placeholder="Mô tả chi tiết hạng mục: trần dột, vách nứt ẩm, cửa hỏng, khử mùi..."
+                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Select label="Mức độ ưu tiên" value={maintenancePriority} onChange={e => setMaintenancePriority(e.target.value as any)}>
+                <option value="high">Cao (Cần khắc phục khẩn cấp)</option>
+                <option value="medium">Trung bình (Bảo trì định kỳ)</option>
+                <option value="low">Thấp</option>
+              </Select>
+              <Input label="Hạn hoàn thành bảo trì" type="date" value={maintenanceDueAt} onChange={e => setMaintenanceDueAt(e.target.value)} />
+            </div>
+
+            <Select label="Phân công kỹ thuật viên / Nhân viên sửa chữa" value={maintenanceStaffId} onChange={e => setMaintenanceStaffId(e.target.value)}>
+              <option value="">Chưa phân công cụ thể</option>
+              {availableStaff.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
+              ))}
+            </Select>
+
+            <ManagerActionNotice tone="warning">
+              Sau khi tạo phiếu bảo trì, gian kho <b>{maintenanceTarget.unitId}</b> sẽ tự động chuyển sang trạng thái <b>BẢO TRÌ (Maintenance)</b> và không được cấp phát cho khách thuê mới cho tới khi hoàn tất sửa chữa.
+            </ManagerActionNotice>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <Button variant="outline" onClick={() => { setMaintenanceModalOpen(false); setMaintenanceTarget(null) }}>Hủy</Button>
+              <Button variant="primary" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={handleConfirmMaintenance}>
+                Kích hoạt bảo trì & Tạo việc
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 3. Modal Xác Nhận Hoàn Tất Trả Kho */}
+      <Modal open={completeModalOpen} onClose={() => { setCompleteModalOpen(false); setCompleteTarget(null) }} title="Xác Nhận Hoàn Tất Hồ Sơ Trả Kho">
+        {completeTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs space-y-2">
+              <div className="flex justify-between items-center"><span className="text-stone-500">Mã trả kho:</span><b className="font-mono text-stone-900">{completeTarget.id}</b></div>
+              <div className="flex justify-between items-center"><span className="text-stone-500">Gian kho:</span><b className="font-mono text-stone-900">{completeTarget.unitId}</b></div>
+              <div className="flex justify-between items-center"><span className="text-stone-500">Khách hàng:</span><b className="text-stone-900">{completeTarget.customerName}</b></div>
+              <div className="flex justify-between items-center"><span className="text-stone-500">Đánh giá hiện trường:</span><b>{getDamageLabel(completeTarget.damageClassification)}</b></div>
+            </div>
+
+            {((completeTarget.damageClassification && completeTarget.damageClassification !== 'no_damage') || completeTarget.proposedUnitStatus === 'maintenance') ? (
+              <div className="rounded-lg bg-amber-50 p-3 border border-amber-200 text-xs text-amber-900">
+                <p className="font-bold">⚠️ Gian kho có hư hại / bảo trì</p>
+                <p className="mt-1">Khi đóng hồ sơ trả kho này, hợp đồng của khách sẽ kết thúc. Gian kho sẽ tiếp tục được giữ ở trạng thái <b>BẢO TRÌ</b> để nhân viên kỹ thuật khắc phục.</p>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-200 text-xs text-emerald-900">
+                <p className="font-bold">✓ Gian kho nguyên vẹn & Đạt nghiệm thu</p>
+                <p className="mt-1">Khi xác nhận hoàn tất, gian kho <b>{completeTarget.unitId}</b> sẽ tự động chuyển sang trạng thái <b>CÒN TRỐNG (Available)</b>, quyền truy cập PIN/thẻ được thu hồi và hồ sơ thuê được đóng hoàn toàn.</p>
+              </div>
+            )}
+
+            <Input
+              label="Ghi chú xác nhận của Quản lý"
+              value={completeNotes}
+              onChange={e => setCompleteNotes(e.target.value)}
+              placeholder="Nghiệm thu đạt yêu cầu..."
+            />
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <Button variant="outline" onClick={() => { setCompleteModalOpen(false); setCompleteTarget(null) }}>Hủy</Button>
+              <Button variant="primary" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleConfirmComplete}>
+                Xác nhận đóng hồ sơ
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
