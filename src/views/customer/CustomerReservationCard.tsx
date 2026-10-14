@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
+import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
@@ -34,7 +35,7 @@ function localDateTimeInput(value?: string | null) {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  const local = new Date(date.getTime() + 7 * 60 * 60_000)
   return local.toISOString().slice(0, 16)
 }
 
@@ -50,9 +51,10 @@ interface Props {
   onVerify: () => void
   onCancel: () => void
   onRefresh: () => Promise<void>
+  onReceiptConfirmed?: (reservationId: string) => void
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, onVerify, onCancel, onRefresh }: Props) {
+export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -65,6 +67,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [handoverDocumentsOpen, setHandoverDocumentsOpen] = useState(false)
   const [paymentReceipt, setPaymentReceipt] = useState<ReservationPaymentResult | null>(null)
   const [appointmentInput, setAppointmentInput] = useState(() => localDateTimeInput(r.appointmentAt))
+  const [savedAppointmentAt, setSavedAppointmentAt] = useState(r.appointmentAt)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -73,6 +76,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   }, [])
   useEffect(() => {
     setAppointmentInput(localDateTimeInput(r.appointmentAt))
+    setSavedAppointmentAt(r.appointmentAt)
   }, [r.appointmentAt])
   useEffect(() => {
     let disposed = false
@@ -142,9 +146,10 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     receiptLock.current = true
     setConfirmingReceipt(true); setMessage(null)
     try {
-      await confirmCustomerReceipt(r.id)
+      const confirmed = await confirmCustomerReceipt(r.id)
       setMessage('Đã xác nhận nhận kho. Hồ sơ thuê đã được tạo thành công.')
-      await onRefresh()
+      try { await onRefresh() } catch { /* Receipt command has already succeeded. */ }
+      onReceiptConfirmed?.(confirmed.reservation.assignedUnitId || r.assignedUnitId || '')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Không thể xác nhận nhận kho.')
       try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
@@ -155,14 +160,20 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const saveAppointment = async () => {
     if (!appointmentInput || busy) return
-    if (!isCheckInAppointmentAllowed(new Date(appointmentInput), appointmentWindow)) {
+    const appointment = new Date(`${appointmentInput}:00+07:00`)
+    if (!isCheckInAppointmentAllowed(appointment, appointmentWindow)) {
       setMessage('Lịch nhận kho phải nằm trong thời hạn cho phép, trong giờ làm việc từ 08:00 đến 17:00 và theo khung 30 phút.')
       return
     }
     setBusy(true); setMessage(null)
     try {
-      await setCustomerCheckInAppointment(r.id, new Date(appointmentInput).toISOString())
-      await onRefresh()
+      const saved = await setCustomerCheckInAppointment(r.id, appointment.toISOString())
+      setSavedAppointmentAt(saved.appointmentAt)
+      setAppointmentInput(localDateTimeInput(saved.appointmentAt))
+      try { await onRefresh() } catch {
+        setMessage('Lịch đã lưu vào hệ thống, nhưng chưa tải lại được danh sách. Vui lòng tải lại trang để kiểm tra.')
+        return
+      }
       setMessage('Đã lưu lịch nhận kho. Nhân viên tại cơ sở đã được thông báo về thay đổi này.')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể lưu lịch hẹn.') }
     finally { setBusy(false) }
@@ -217,12 +228,18 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
         <p className="text-xs text-stone-500">Lịch thuê: <b>{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
-        <p className="text-xs text-blue-800">Lịch nhận kho khách đặt: <b>{r.appointmentAt ? new Date(r.appointmentAt).toLocaleString('vi-VN') : 'Chưa đặt lịch'}</b></p>
+        <p className="text-xs text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? new Date(savedAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa đặt lịch'}</b></p>
         <p className="text-xs text-emerald-800">Gian kho được gán: <b>{r.assignedUnitCode || 'Chưa được phân gian kho cụ thể'}</b></p>
         {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
-          <label className="flex flex-col gap-1 font-semibold">Chọn lịch đến nhận kho<input className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 font-normal" type="datetime-local" min={policyDateTimeInput(appointmentWindow.availableAt)} max={policyDateTimeInput(appointmentWindow.deadlineAt)} step="1800" value={appointmentInput} onChange={event => setAppointmentInput(event.target.value)} /></label>
+          <div className="grid w-full gap-3 sm:grid-cols-2">
+            <VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
+              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '09:00'}`); setMessage(null) }} />
+            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="1800" value={appointmentInput.split('T')[1] || ''}
+              onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setMessage(null) }} /></label>
+          </div>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
           <span className="basis-full text-[11px]">Lịch hợp lệ từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
+          {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
         </div>}
         <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 space-y-1.5">
           <p><b>Hàng hóa khai báo:</b> {detail?.goodsItems.map(item => `${item.description || item.customGoodsName || item.category} (${item.quantity} kiện)`).join(' · ') || 'Đang tải chi tiết…'}</p>
