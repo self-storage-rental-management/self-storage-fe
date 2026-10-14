@@ -39,6 +39,10 @@ export async function listAllFacilitiesApi(): Promise<CustomerFacility[]> {
   return response.data
 }
 
+export async function deleteBusinessFacilityApi(facilityId: string) {
+  return apiRequest(`/api/business/facilities/${encodeURIComponent(facilityId)}`, { method: 'DELETE' })
+}
+
 export async function updateBusinessFacilityApi(
   facilityId: string,
   input: Pick<CreateFacilityInput, 'name' | 'address' | 'city' | 'phone' | 'accessHours' | 'imageUrl' | 'climateControlled' | 'securityDescription' | 'status'>,

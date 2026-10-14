@@ -45,6 +45,7 @@ export interface CustomerFacility {
   availableUnits?: number
   occupiedUnits?: number
   minimumMonthlyPrice?: number | null
+  monthRevenue?: number
   status: FacilityStatus
   createdAt: string
   updatedAt: string

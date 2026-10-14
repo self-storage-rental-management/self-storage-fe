@@ -288,7 +288,7 @@ export default function CustomerSupportSection({
             onClick={onOpenChatbot}
             className="inline-flex items-center gap-2 rounded-lg bg-[#e0680f] px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-[#b8540c] transition"
           >
-            <span>🤖</span>
+
             <span>Hỏi trợ lý AI / Tạo yêu cầu</span>
           </button>
         </div>
@@ -322,7 +322,7 @@ export default function CustomerSupportSection({
           <span className="text-xs font-medium text-stone-500">Hài lòng trợ lý AI</span>
           <div className="mt-1 flex items-baseline gap-1.5">
             <b className="text-2xl font-black text-amber-800">{botStats.total > 0 ? `${botStats.satisfactionRate}%` : '—'}</b>
-            <span className="text-[11px] text-stone-500">{botStats.total > 0 ? `(${botStats.helpful} 👍)` : 'Chưa có đánh giá'}</span>
+            <span className="text-[11px] text-stone-500">{botStats.total > 0 ? `(${botStats.helpful} )` : 'Chưa có đánh giá'}</span>
           </div>
         </div>
       </div>
@@ -418,7 +418,7 @@ export default function CustomerSupportSection({
                 </span>
                 {isAI && (
                   <span className="inline-flex items-center gap-1 rounded-md bg-[#fdece0] px-2 py-0.5 text-xs font-bold text-[#b8540c]">
-                    <span>🤖</span> Được trợ lý AI chuyển tiếp
+                     Được trợ lý AI chuyển tiếp
                   </span>
                 )}
                 {ticket.estimatedWaitTime && ticket.status !== 'resolved' && (
@@ -452,7 +452,7 @@ export default function CustomerSupportSection({
               {ticket.emergencyEscalation && (
                 <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-2.5 text-xs text-red-900 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-base">🚨</span>
+
                     <span>
                       <b>Ưu tiên khẩn cấp:</b> Phiếu đã được đánh dấu để Quản lý ca trực tiếp nhận. Bạn tiếp tục theo dõi và bổ sung thông tin ngay trong phiếu này.
                     </span>
@@ -505,7 +505,7 @@ export default function CustomerSupportSection({
 
         {filteredTickets.length === 0 && (
           <div className="rounded-xl border border-stone-200 bg-white p-12 text-center">
-            <div className="text-3xl mb-2">📋</div>
+            <div className="text-3xl mb-2"></div>
             <p className="font-bold text-stone-700">Chưa có yêu cầu hỗ trợ nào trong mục này</p>
             <p className="mt-1 text-xs text-stone-500">
               Bạn có thể bấm "Hỏi trợ lý AI / Tạo yêu cầu" ở trên để được giải đáp hoặc tạo phiếu mới.
@@ -515,7 +515,7 @@ export default function CustomerSupportSection({
               onClick={onOpenChatbot}
               className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#e0680f] px-4 py-2 text-xs font-bold text-white hover:bg-[#b8540c] transition"
             >
-              🤖 Mở Trợ lý StorageHub
+               Mở Trợ lý StorageHub
             </button>
           </div>
         )}
