@@ -77,7 +77,7 @@ import {
   FacilityImageManager,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
-import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi } from "../../services/facilityApi"
+import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi, deleteBusinessFacilityApi } from "../../services/facilityApi"
 import { listAccessibleUnitTypes } from "../../services/customerReservationApi"
 import type { CustomerUnitType } from "../../services/customerReservationApi"
 import { isApiAuthenticated } from "../../services/authApi"
@@ -398,8 +398,9 @@ export default function BusinessApp({
   // Local/demo data may use the facility code as its id. Keep the canonical
   // backend UUID by code so edit requests always target the persisted record.
   const [backendFacilityIdsByCode, setBackendFacilityIdsByCode] = useState<Record<string, string>>({})
-  const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null }>>({})
+  const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null; revenue: number }>>({})
   const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
+  const [facilityDataError, setFacilityDataError] = useState<string>()
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -407,10 +408,12 @@ export default function BusinessApp({
     const refresh = async () => {
       try {
         const facilities = await listAllFacilitiesApi()
+        if (facilities.some(f => f.totalUnits == null || f.monthRevenue == null)) throw new Error('Chưa tải được số liệu cơ sở mới. Vui lòng khởi động lại Backend và tải lại trang.')
+        if (mounted) setFacilityDataError(undefined)
         if (mounted) setBackendFacilityStats(Object.fromEntries(facilities.map(facility => [facility.code.trim().toUpperCase(), {
-          total: facility.totalUnits ?? 0, occupied: facility.occupiedUnits ?? 0, price: facility.minimumMonthlyPrice ?? null,
+          total: facility.totalUnits ?? 0, occupied: facility.occupiedUnits ?? 0, price: facility.minimumMonthlyPrice ?? null, revenue: facility.monthRevenue ?? 0,
         }])))
-      } catch { /* Preserve the last successful snapshot while reconnecting. */ }
+      } catch (error) { if (mounted) setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.') }
     }
     const timer = window.setInterval(() => void refresh(), 30000)
     window.addEventListener('focus', refresh)
@@ -422,6 +425,7 @@ export default function BusinessApp({
     listAllFacilitiesApi()
       .then((backendFacs) => {
         if (!isMounted || !Array.isArray(backendFacs)) return
+        if (backendFacs.some(f => f.totalUnits == null || f.monthRevenue == null)) throw new Error('Chưa tải được số liệu cơ sở mới. Vui lòng khởi động lại Backend và tải lại trang.')
         setBackendFacilityIdsByCode(Object.fromEntries(
           backendFacs.map((facility) => [facility.code.trim().toUpperCase(), facility.id]),
         ))
@@ -429,6 +433,7 @@ export default function BusinessApp({
           total: facility.totalUnits ?? 0,
           occupied: facility.occupiedUnits ?? 0,
           price: facility.minimumMonthlyPrice ?? null,
+          revenue: facility.monthRevenue ?? 0,
         }])))
         backendFacs.forEach((bf) => {
           const cleanBf = sanitizeFacilityStrings(bf)
@@ -493,7 +498,7 @@ export default function BusinessApp({
           }
         })
       })
-      .catch(() => {})
+      .catch(error => { if (isMounted) setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.') })
     return () => {
       isMounted = false
     }
@@ -1419,6 +1424,8 @@ export default function BusinessApp({
   const getFacilityActualRevenue = useCallback(
     (fac: any) => {
       if (!fac) return 0
+      const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
+      if (stats) return stats.revenue
       const isSeed =
         fac.id === "fac-001" ||
         fac.id === "fac-002" ||
@@ -1453,7 +1460,7 @@ export default function BusinessApp({
       }
       return facPaid
     },
-    [holdsList, rentalsList, paymentsList, isFacilityMatching],
+    [holdsList, rentalsList, paymentsList, isFacilityMatching, backendFacilityStats],
   )
 
   const activeRevenueData: MonthlyRevenueRecord[] = useMemo(() => {
@@ -3051,6 +3058,27 @@ export default function BusinessApp({
   const handleUpdateFacility = async () => {
     if (!selectedFacility) return
 
+    if (isApiAuthenticated()) {
+      try {
+        const persisted = (await listAllFacilitiesApi()).find(f => f.id === selectedFacility.id || f.code.toUpperCase() === (selectedFacility.code || '').toUpperCase())
+        if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
+        const saved = await updateBusinessFacilityApi(persisted.id, {
+          name: formFacName.trim(), address: formFacAddress.trim(), city: formFacCity.trim(),
+          phone: formFacPhone.trim() || null, accessHours: formFacAccessHours.trim() || null,
+          imageUrl: formFacImage || null, climateControlled: formFacClimate,
+          securityDescription: formFacSecurity.trim() || null, status: formFacStatus,
+        })
+        updateFacility(selectedFacility.id, {
+          name: saved.name, address: saved.address, city: saved.city, phone: saved.phone || '',
+          accessHours: saved.accessHours || '', image: saved.imageUrl || '', status: saved.status,
+          climate: Boolean(saved.climateControlled), security: saved.securityDescription || '',
+        })
+        setEditFacilityModal(false)
+        showToast('Đã lưu thông tin cơ sở.')
+      } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể lưu thông tin cơ sở.') }
+      return
+    }
+
     const code = formFacCode.trim().toUpperCase()
 
     if (!code) {
@@ -3361,8 +3389,20 @@ export default function BusinessApp({
     )
   }
 
-  const handleDeleteFacility = () => {
+  const handleDeleteFacility = async () => {
     if (!selectedFacility) return
+
+    if (isApiAuthenticated()) {
+      try {
+        const persisted = (await listAllFacilitiesApi()).find(f => f.id === selectedFacility.id || f.code.toUpperCase() === (selectedFacility.code || '').toUpperCase())
+        if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống.')
+        await deleteBusinessFacilityApi(persisted.id)
+        deleteFacility(selectedFacility.id, user)
+        setDeleteFacilityModal(false)
+        showToast('Đã xóa cơ sở.')
+      } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa cơ sở.') }
+      return
+    }
 
     const result = deleteFacility(selectedFacility.id, user)
 
@@ -3509,6 +3549,7 @@ export default function BusinessApp({
             />
           </div>
           {/* Thanh Công Cụ: Tìm kiếm & Lọc Đa Tiêu Chí */}
+          {facilityDataError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{facilityDataError}</p>}
           <Card className="p-4 border border-stone-200/90 shadow-sm bg-white">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
               <div className="lg:col-span-2">
@@ -3807,7 +3848,7 @@ export default function BusinessApp({
                                   : "Revenue MTD"}
                               </p>
                               <p className="font-bold text-slate-900 text-sm">
-                                {formatCurrency(getFacilityActualRevenue(f))}
+                                {isApiAuthenticated() ? formatVndAmount(getFacilityActualRevenue(f)) : formatCurrency(getFacilityActualRevenue(f))}
                               </p>
                               <p className="text-[10px] text-emerald-700 font-semibold">
                                 {getFacilityActualRevenue(f) === 0
