@@ -1,26 +1,12 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
+import { useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
-import { Badge, Button, Card } from "../../components/ui"
+import { Button, Card, Modal } from "../../components/ui"
+import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail } from "../../types/rentalApi"
-import {
-  bookingPaymentPurposes,
-  bookingPaymentStatuses,
-  bookingPaymentVerification,
-} from "../../services/rentalBookingEvidence"
-import {
-  rentalDate,
-  rentalLabels,
-  rentalMoney,
-  unknown,
-  accessStatusLabels,
-  rentalDataWarning,
-  rentalPeriodText,
-} from "./presentation"
-
-const labelClass = "text-[13px] font-normal text-slate-500"
-const valueClass = "mt-0.5 font-medium text-slate-900"
-
+import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
+import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning, rentalPeriodText } from "./presentation"
 export default function RentalDetail({
   rental,
   onRequest,
@@ -33,6 +19,8 @@ export default function RentalDetail({
   showTechnicalWarnings?: boolean
 }) {
   const { copy } = useManagerPresentation()
+  const [section, setSection] = useState<'documents' | 'payments'>('documents')
+  const [receiptPayment, setReceiptPayment] = useState<string>()
 
   const f = rental.financialSummary
   const evidence = rental.bookingEvidence
@@ -49,12 +37,27 @@ export default function RentalDetail({
         : `Đang đúng hạn (Dư nợ: ${rentalMoney(f.outstandingAmount, f.currency)})`
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 [&_dt]:text-xs [&_dt]:font-normal [&_dt]:text-stone-500 [&_dd]:mt-1.5 [&_dd]:break-words [&_dd]:text-sm [&_dd]:font-medium [&_dd]:leading-relaxed [&_dd]:text-stone-900">
+      <div className="flex flex-wrap gap-2">
+        <Button variant={section === 'documents' ? 'primary' : 'outline'} onClick={() => setSection('documents')}>Hồ sơ & tài liệu</Button>
+        <Button variant={section === 'payments' ? 'primary' : 'outline'} onClick={() => setSection('payments')}>Thỏa thuận & giao dịch</Button>
+      </div>
+      <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
       {rental.status === "active" && <RenewalRiskNotice rentalId={rental.id} role={role} />}
-
-      <Card className="p-4 sm:p-5">
-        <h3 className="mb-4 font-semibold text-slate-900">Hồ sơ thuê</h3>
-        <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+      <Card className="overflow-hidden rounded-xl p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
+          <h3 className="text-base font-bold">Thông tin hồ sơ thuê</h3>
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{copy(rentalLabels[rental.status])}</span>
+        </div>
+        <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-lg [&>div]:bg-stone-50 [&>div]:p-3">
+          <div>
+            <dt className="font-bold">Mã hồ sơ thuê</dt>
+            <dd className="break-all font-semibold">{rental.id}</dd>
+          </div>
+          <div>
+            <dt className="font-bold">Khách hàng</dt>
+            <dd>{rental.customer.fullName}</dd>
+          </div>
           <div>
             <dt className={labelClass}>Mã hồ sơ thuê</dt>
             <dd className={`${valueClass} flex items-center gap-2`}>
@@ -86,9 +89,19 @@ export default function RentalDetail({
             <dd className={valueClass}>{copy(rental.unitType.name)}</dd>
           </div>
           <div>
-            <dt className={labelClass}>Thời hạn sử dụng</dt>
-            <dd className={valueClass}>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
+            <dt className="font-bold">Trạng thái truy cập</dt>
+            <dd>
+              {rental.access.completeness === "UNKNOWN"
+                ? 'Chưa có thông tin quyền ra vào kho'
+                : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || unknown}
+            </dd>
           </div>
+        </dl>
+      </Card>
+      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role} id={rental.id} />
+      {role === 'manager' && <Card className="rounded-xl p-5">
+        <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Theo dõi thanh toán và quá hạn</h3>
+        <dl className="grid gap-4 sm:grid-cols-2 [&>div]:rounded-lg [&>div]:bg-stone-50 [&>div]:p-3">
           <div>
             <dt className={labelClass}>Đơn giá / tháng</dt>
             <dd className={valueClass}>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>
@@ -118,78 +131,60 @@ export default function RentalDetail({
             )}
           </div>
         </dl>
-      </Card>
-
-      {evidence && (
-        <Card className="p-4 sm:p-5">
-          <h3 className="mb-4 font-semibold text-slate-900">Tài chính ban đầu</h3>
-          {agreed ? (
-            <>
-              <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
-                {([
-                  ["Tiền thuê kỳ đầu", agreed.netRentalAmount],
-                  ["Tiền cọc bảo đảm", agreed.securityDepositAmount],
-                  ["Tổng giá trị ban đầu", agreed.totalInitialObligation],
-                ] as const).map(([label, amount]) => (
-                  <div key={label}>
-                    <dt className={labelClass}>{label}</dt>
-                    <dd className={valueClass}>{rentalMoney(amount, evidence.currency)}</dd>
-                  </div>
-                ))}
-              </dl>
-              <details className="mt-4 border-t border-slate-200 pt-3">
-                <summary className="cursor-pointer text-sm font-medium text-slate-700 hover:text-slate-950">Xem chi tiết ban đầu</summary>
-                <div className="mt-3 space-y-4">
-                  <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
-                    {([
-                      ["Tiền đặt chỗ", agreed.reservationDepositAmount],
-                      ["Tiền thuê còn lại sau đặt chỗ", agreed.remainingRentalAmount],
-                      ["Khoản phải thanh toán khi nhận kho", agreed.dueAtCheckIn],
-                    ] as const).map(([label, amount]) => (
-                      <div key={label}>
-                        <dt className={labelClass}>{label}</dt>
-                        <dd className={valueClass}>{rentalMoney(amount, evidence.currency)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <p className="text-xs text-slate-500">Đây là số tiền theo thỏa thuận ban đầu, không xác nhận số tiền đã thu hoặc dư nợ hiện tại.</p>
-                  <div>
-                    <h4 className="mb-2 text-sm font-semibold text-slate-800">Giao dịch đặt chỗ</h4>
-                    {evidence.payments.length === 0 ? <p className="text-sm text-slate-500">Không có dữ liệu</p> : (
-                      <ul className="divide-y divide-slate-100">
-                        {evidence.payments.map(payment => (
-                          <li key={payment.id} className="space-y-1 py-3 text-sm">
-                            <p><span className={labelClass}>{bookingPaymentPurposes[payment.purpose]}</span>: <span className="font-medium text-slate-900">{rentalMoney(payment.amount, evidence.currency)}</span></p>
-                            <p><span className={labelClass}>Trạng thái:</span> {bookingPaymentStatuses[payment.status]}</p>
-                            <p className="text-xs text-slate-500">{bookingPaymentVerification[payment.verification]}</p>
-                            {payment.projectRecognition && <p role="status" className="text-xs text-slate-500">
-                              {payment.projectRecognition.eligibleForReconciliation
-                                ? "Chứng cứ VNPay Sandbox hợp lệ để đối soát trong dự án; chưa xác nhận phân bổ vào sổ công nợ."
-                                : "Giao dịch chưa đủ điều kiện đối soát theo chính sách VNPay Sandbox của dự án."}
-                            </p>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {evidence.paymentsTruncated && <p role="status" className="mt-2 text-xs text-slate-500">Chỉ hiển thị 20 giao dịch gần nhất.</p>}
-                  </div>
-                </div>
-              </details>
-            </>
-          ) : <p className="text-sm text-slate-500">Không có dữ liệu</p>}
-        </Card>
-      )}
-
-      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role} id={rental.id} />
-
+      </Card>}
       {onRequest && (
         <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end border-t border-stone-200 bg-white/95 px-1 py-3 backdrop-blur">
           <Button disabled={rental.status !== "active"} onClick={onRequest}>
             Yêu cầu gia hạn
           </Button>
-        </div>
+          {rental.status !== "active" && (
+            <p>
+              Chỉ có thể yêu cầu gia hạn khi hồ sơ đang hiệu lực và chưa yêu cầu trả kho.
+            </p>
+          )}
+        </Card>
       )}
-
+      </div>
+      <div className={section === 'payments' ? 'space-y-5' : 'hidden'}>
+      {evidence && (
+        <Card className="rounded-xl p-5">
+          <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Thỏa thuận ban đầu</h3>
+          {agreed ? (
+            <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-stone-200 [&>div]:bg-stone-50 [&>div]:p-4">
+              {([
+                ["Tiền thuê toàn kỳ", agreed.netRentalAmount],
+                ["Cọc giữ chỗ (trừ vào tiền thuê)", agreed.reservationDepositAmount],
+                ["Tiền thuê còn lại sau cọc giữ chỗ", agreed.remainingRentalAmount],
+                ["Cọc bảo đảm kho", agreed.securityDepositAmount],
+                ["Thanh toán khi nhận kho (tiền thuê còn lại + cọc bảo đảm)", agreed.dueAtCheckIn],
+                ["Tổng tiền thuê + cọc bảo đảm (không cộng cọc giữ chỗ lần nữa)", agreed.totalInitialObligation],
+              ] as const).map(([label, amount]) => (
+                <div key={label} className={label.startsWith('Tổng') ? '!border-emerald-200 !bg-emerald-50' : label.startsWith('Thanh toán') ? '!border-amber-200 !bg-amber-50' : ''}><dt>{label}</dt><dd className="!mt-2 !text-lg !font-bold">{rentalMoney(amount, evidence.currency)}</dd></div>
+              ))}
+            </dl>
+          ) : <p>Không có dữ liệu</p>}
+          <p className="mt-3 text-sm">Đây là số tiền theo thỏa thuận ban đầu, không phải xác nhận đã thu tiền hoặc dư nợ hiện tại.</p>
+          <h4 className="font-bold mt-4 mb-2">Giao dịch của đơn đặt chỗ</h4>
+          {evidence.payments.length === 0 ? <p>Không có dữ liệu</p> : (
+            <ul className="space-y-3">
+              {evidence.payments.map(payment => (
+                <li key={payment.id} className="rounded-xl border border-stone-200 p-4">
+                  <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
+                  <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
+                  <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
+                  {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {evidence.paymentsTruncated && <p role="status" className="mt-3">Chỉ hiển thị 20 giao dịch gần nhất, chưa phải toàn bộ lịch sử.</p>}
+        </Card>
+      )}
+      {!evidence && <p className="rounded-xl border border-stone-200 p-4 text-sm text-stone-500">Chưa có dữ liệu thỏa thuận và giao dịch của đơn đặt chỗ.</p>}
+      </div>
+      {receiptPayment && rental.reservationId && <Modal open onClose={() => setReceiptPayment(undefined)} title="Biên lai thanh toán" size="lg">
+        <BookingTransactionReceipt reservationId={rental.reservationId} paymentId={receiptPayment} />
+      </Modal>}
       {showTechnicalWarnings && rental.dataWarnings.length > 0 && (
         <div role="status" className="rounded-lg bg-amber-50 p-4">
           <h4 className="font-semibold">Cần kiểm tra dữ liệu</h4>
