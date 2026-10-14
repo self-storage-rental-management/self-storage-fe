@@ -157,10 +157,8 @@ function ReturnWorkspace({
       {read.loading && <p role="status">Đang tải hồ sơ trả kho...</p>}
       {!!read.error && <p role="alert">{returnError(read.error)}</p>}
       {feedback && <p role="status">{feedback}</p>}
-      <Button variant="outline" disabled={busy} onClick={() => read.refresh()}>Tải lại danh sách</Button>
-      {!read.loading && !read.error && !rows.length && <p>Chưa có hồ sơ trả kho trên trang này.</p>}
       {rows.map((record) => <div key={record.id} className="rounded border p-3"><ReturnSummary record={record} /><Button variant="outline" disabled={busy} onClick={() => setSelected(record.id)}>Xem và xử lý hồ sơ</Button></div>)}
-      <div className="flex gap-2"><Button disabled={busy || page === 0} onClick={() => { setSelected(null); setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { setSelected(null); setPage((value) => value + 1) }}>Trang sau</Button></div>
+      {!rentalId && rows.length > 0 && <div className="flex gap-2"><Button disabled={busy || page === 0} onClick={() => { setSelected(null); setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { setSelected(null); setPage((value) => value + 1) }}>Trang sau</Button></div>}
       {selected && <ReturnActions key={selected} role={role} id={selected} run={run} busy={busy} />}
     </Card>
   )

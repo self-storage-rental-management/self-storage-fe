@@ -19,8 +19,8 @@ export const rentalLabels: Record<string, string> = {
 }
 export const renewalLabels: Record<string, string> = {
   pending: "Hệ thống đang kiểm tra điều kiện",
-  accepted: "Đã xác nhận; thanh toán chưa mở",
-  deposit_paid: "Đã thanh toán cọc theo điều khoản gia hạn cũ",
+  accepted: "Đã xác nhận, thanh toán chưa mở",
+  deposit_paid: "Đã thanh toán cọc gia hạn",
   full_rent_paid: "Đã thanh toán toàn kỳ gia hạn",
   approved: "Đã mở thanh toán (hồ sơ cũ)",
   appointment_scheduled: "Đã hẹn",

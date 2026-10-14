@@ -10,21 +10,20 @@ import type {
 } from "../../types/renewalOperationsApi"
 
 export const operationLabels: Record<RenewalOperationAction, string> = {
-  deposit: "Thanh toán gia hạn (tác vụ cũ)",
   appointment: "Đề nghị lịch ký",
   reschedule: "Đổi lịch ký",
   confirmation: "Xác nhận đề xuất ngoại lệ",
   arrival: "Ghi nhận khách đến",
   incident: "Báo sự cố tại cơ sở",
-  cash: "Ghi nhận thu tiền mặt",
+  cash: "Ghi nhận thanh toán còn lại",
   completion: "Hoàn tất ký gia hạn",
   exception: "Xem xét ngoại lệ",
   refund: "Xem xét hoàn tiền",
 }
 export const phaseLabels: Record<RenewalOperationState["phase"], string> = {
-  AWAITING_PAYMENT_INTENT: "Chờ mở thanh toán toàn kỳ",
+  AWAITING_PAYMENT_INTENT: "Chọn lịch ký rồi thanh toán cọc",
   UNKNOWN: "Chưa có thông tin xử lý gia hạn",
-  AWAITING_DEPOSIT: "Chờ thanh toán toàn kỳ",
+  AWAITING_DEPOSIT: "Chờ thanh toán cọc",
   SIGNING: "Đang xử lý ký gia hạn",
   SIGNING_EXPIRY_PENDING: "Đã quá hạn ký, chờ đối soát",
   SIGNING_EXPIRED: "Hết hạn ký, cần xem xét",
@@ -36,7 +35,7 @@ export const sourceLabels: Record<string, string> = {
   SERVICE_CALENDAR: "Lịch phục vụ và đặt lịch thực tế",
   RENEWAL_ACCOUNTING: "Thanh toán và phân bổ tiền gia hạn",
   SHARED_HOLD_RETURN_RECOVERY: "Giữ chỗ, trả kho và thu hồi",
-  STAFF_PERMISSION_ASSIGNMENT: "Quyền và phân công nhân viên",
+  STAFF_PERMISSION_ASSIGNMENT: "Quyền nhân viên tại cơ sở",
   RESOURCE_EVIDENCE: "Minh chứng gắn với hồ sơ",
   REFUND_ENTITLEMENT_EXECUTION:
     "Điều kiện và kết quả hoàn tiền",
@@ -45,12 +44,6 @@ export const sourceLabels: Record<string, string> = {
     "Khoản phải thanh toán và phân bổ tiền",
 }
 const sources: Record<RenewalOperationAction, string[]> = {
-  deposit: [
-    "BO_SIGNING_POLICY",
-    "SERVICE_CALENDAR",
-    "RENEWAL_ACCOUNTING",
-    "SHARED_HOLD_RETURN_RECOVERY",
-  ],
   appointment: ["SERVICE_CALENDAR", "SHARED_HOLD_RETURN_RECOVERY"],
   reschedule: ["SERVICE_CALENDAR", "SHARED_HOLD_RETURN_RECOVERY"],
   confirmation: [
@@ -66,6 +59,7 @@ const sources: Record<RenewalOperationAction, string[]> = {
   incident: ["STAFF_PERMISSION_ASSIGNMENT", "RESOURCE_EVIDENCE"],
   cash: [
     "STAFF_PERMISSION_ASSIGNMENT",
+    "RESOURCE_EVIDENCE",
     "RENEWAL_ACCOUNTING",
     "SHARED_HOLD_RETURN_RECOVERY",
   ],
@@ -89,7 +83,6 @@ export function operationBlockedReason(
   now = Date.now(),
 ) {
   const owner = [
-    "deposit",
     "appointment",
     "reschedule",
     "confirmation",
@@ -118,18 +111,17 @@ export function operationBlockedReason(
     return "Bạn chưa có quyền quản lý hồ sơ thuê tại cơ sở này."
   if (s.expectedVersion === null)
     return "Hồ sơ chưa đủ thông tin để tiếp tục xử lý."
+  const selectingBeforePayment = s.phase === "AWAITING_PAYMENT_INTENT" && ["appointment", "reschedule"].includes(action)
   const missing = sources[action].filter((ref) =>
-    s.missingSources.includes(ref),
+    s.missingSources.includes(ref) && !(selectingBeforePayment && ref === "SHARED_HOLD_RETURN_RECOVERY"),
   )
   if (missing.length)
     return `Chưa đủ thông tin: ${missing.map((ref) => sourceLabels[ref] || "Thông tin xử lý gia hạn").join(", ")}.`
-  if (action === "deposit" && s.phase !== "AWAITING_DEPOSIT")
-    return "Không ở bước thanh toán theo điều khoản gia hạn cũ."
   if (
     ["appointment", "reschedule", "arrival", "cash", "completion"].includes(
       action,
     ) &&
-    s.phase !== "SIGNING"
+    s.phase !== "SIGNING" && !selectingBeforePayment
   )
     return "Chỉ thao tác trong bước ký đang hiệu lực."
   if (action === "appointment" && s.appointmentRef)
@@ -173,7 +165,7 @@ export function operationValidationError(error: unknown) {
 // datetime-local is explicitly a Vietnam local time, independent of the browser's timezone.
 export function vietnamLocalInstant(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))
-    throw new Error("Chọn ngày và giờ tại Việt Nam.")
+    throw new Error("Chọn ngày và giờ.")
   const instant = new Date(`${value}:00+07:00`)
   if (!Number.isFinite(instant.getTime()))
     throw new Error("Ngày/giờ không hợp lệ.")

@@ -82,7 +82,7 @@ export function isOverdueFollowUp(value: unknown): value is OverdueFollowUp {
     validOverdueRef(f.caseRef) &&
     ["NOTE", "REMINDER", "RECOVERY_HANDOFF"].includes(f.type) &&
     typeof f.content === "string" &&
-    isUuid(f.actorId) &&
+    (isUuid(f.actorId) || f.type === "RECOVERY_HANDOFF" && f.actorId === null) &&
     isInstant(f.recordedAt) &&
     isVersion(f.followUpVersion) &&
     (f.externalRef === null || isUuid(f.externalRef)) &&

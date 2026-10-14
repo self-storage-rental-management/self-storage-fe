@@ -4,6 +4,8 @@ import { createRenewalVnpayPaymentIntent, getRenewalVnpayPayment, renewalPayment
 import type { RenewalApiRecord, RenewalVnpayPaymentResponse } from "../types/renewalApi"
 import { newRenewalIdempotencyKey } from "./useRenewalCommand"
 
+import { getRenewalOperations } from "../services/renewalOperationsApi"
+
 export function renewalPaymentError(error: unknown): string {
   if(error instanceof ApiClientError) {
     if(error.status===401)return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại rồi tiếp tục thanh toán."
@@ -27,10 +29,11 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
   const attempt=useRef<{scope:string,key:string}|null>(null)
   const refresh=useRef(onChange);refresh.current=onChange
   const epoch=useRef(0)
-  const lastStatus=useRef<string|null>(null)
+  const lastStatus=useRef<{scope:string,signature:string}|null>(null)
   const [payment,setPayment]=useState<RenewalVnpayPaymentResponse|null>(null)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState<string|null>(null)
+  const [appointmentSelected,setAppointmentSelected]=useState(false)
   useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false}},[])
   const forget=()=>{
     attempt.current=null
@@ -40,20 +43,25 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
   useEffect(()=>{
     let active=true
     let reading=false
-    setPayment(null);setError(null);lastStatus.current=null
+    setPayment(null);setError(null);setAppointmentSelected(false)
+    if(lastStatus.current?.scope!==scope)lastStatus.current=null
     if(!enabled)return
     const read=async()=>{
       if(lock.current||reading)return
       reading=true
       const request=++epoch.current
       try {
+        const operations=await getRenewalOperations("customer",renewal.id)
+        if(!active||currentScope.current!==scope||request!==epoch.current)return
+        setAppointmentSelected(!!operations.appointmentRef && !!operations.appointmentStart && Date.parse(operations.appointmentStart)>Date.now())
         const result=await getRenewalVnpayPayment(renewal.id)
         if(!active||currentScope.current!==scope||request!==epoch.current)return
         setPayment(result);setError(null)
         if(result.paymentStatus==="FAILED"||result.paymentStatus==="CANCELLED")forget()
         const signature=`${result.paymentStatus}:${result.settlementStage}:${result.reconciliationRequired}`
-        if(signature!==lastStatus.current&&(lastStatus.current!==null||result.paymentStatus==="PAID"))refresh.current?.()
-        lastStatus.current=signature
+        const previous=lastStatus.current?.signature
+        lastStatus.current={scope,signature}
+        if(signature!==previous&&(previous!==undefined||result.paymentStatus==="PAID"))refresh.current?.()
       } catch(e) {
         if(!active||currentScope.current!==scope||request!==epoch.current)return
         if(e instanceof ApiClientError&&e.status===404)return
@@ -66,12 +74,16 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
       if(document.visibilityState!=="hidden")void read()
     },5000)
     return ()=>{active=false;if(timer!==null)globalThis.clearInterval(timer)}
-  },[enabled,scope,renewal.id])
+  },[enabled,scope,renewal.id,renewal.version])
 
   const pay=async()=>{
     if(lock.current||!enabled||renewal.status!=="accepted"||renewal.acceptedRevision===null||payment?.paymentStatus==="PAID")return
     lock.current=true;++epoch.current;setBusy(true);setError(null)
     try {
+      const operations=await getRenewalOperations("customer",renewal.id)
+      if(!operations.appointmentRef || !operations.appointmentStart || Date.parse(operations.appointmentStart)<=Date.now())
+        throw new Error("Vui lòng chọn lịch ký gia hạn trước khi thanh toán cọc.")
+      if(!mounted.current||currentScope.current!==scope||!currentEnabled.current)return
       if(attempt.current?.scope!==scope)attempt.current=null
       let key=attempt.current?.key
       if(!key) { try { key=sessionStorage.getItem(scope)??undefined } catch {} }
@@ -90,5 +102,5 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
       if(mounted.current&&currentScope.current===scope)setError(renewalPaymentError(e))
     } finally { lock.current=false;if(mounted.current)setBusy(false) }
   }
-  return {payment,busy,error,pay}
+  return {payment,busy,error,pay,appointmentSelected}
 }
