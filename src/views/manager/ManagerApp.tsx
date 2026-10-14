@@ -16,6 +16,7 @@ import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
 import ManagerOverdueApiPanel from './ManagerOverdueApiPanel'
 import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import ManagerReportsPanel from './ManagerReportsPanel'
+import ManagerReportsApiPanel from './ManagerReportsApiPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerApiStaffTasksPanel from './ManagerApiStaffTasksPanel'
 import ManagerUnitAssignmentPanel from './ManagerUnitAssignmentPanel'
@@ -37,6 +38,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:collect' },
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
     ...(isApiAuthenticated() ? [{ id: 'support-api', label: "Hỗ trợ khách hàng", icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
+    { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'reports:read' },
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)
@@ -95,7 +97,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'unit-assignments' && <ManagerUnitAssignmentPanel showToast={showToast} />}
     {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
 
-    {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} />}
+    {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
     {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
     {page === 'support-api' && isApiAuthenticated() && <SupportApiWorkspace role="manager" />}
@@ -103,6 +105,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'staff-tasks' && (isApiAuthenticated()
       ? <ManagerApiStaffTasksPanel showToast={showToast} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}
+    {page === 'reports' && (isApiAuthenticated()
+      ? <ManagerReportsApiPanel />
+      : <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />)}
     {page === 'profile' && <ProfileView user={user} />}
     {toast && <div className="fixed bottom-6 right-6 z-50 max-w-md rounded-lg border border-amber-500/50 bg-[#292a27] px-5 py-3 text-white shadow-2xl"><p className="text-sm font-medium">{toast}</p></div>}
   </Layout></div></ManagerPresentationProvider>
