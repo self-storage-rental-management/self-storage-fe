@@ -100,6 +100,7 @@ export default function Layout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const notificationAreaRef = useRef<HTMLDivElement>(null)
+  const contentScrollRef = useRef<HTMLElement>(null)
   useEffect(() => {
     if (!notificationsOpen) return
     const closeOutside = (event: PointerEvent) => {
@@ -169,13 +170,14 @@ export default function Layout({
     window.history.replaceState({ page: currentPage }, '', url)
   }, [currentPage])
 
-  const navigate = (page: string) => {
+  const navigate = (page: string, fromMenu = true) => {
     const url = new URL(window.location.href)
     url.pathname = '/'
     url.searchParams.set('page', page)
     url.searchParams.delete('tab')
     window.history.pushState({ page }, '', url)
     onNavigate(page)
+    if (fromMenu) contentScrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   // Chuẩn hóa nhãn điều hướng theo tiếng Việt cho toàn bộ cổng
@@ -303,7 +305,7 @@ export default function Layout({
     localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
     setNotificationsOpen(false)
     if (onNotificationClick) onNotificationClick(notification)
-    else navigate(notification.page)
+    else navigate(notification.page, false)
   }
 
   return (
@@ -485,7 +487,7 @@ export default function Layout({
         </header>
 
         {/* Content */}
-        <main data-layout-scroll-container className="flex-1 overflow-y-auto p-4 lg:p-7 fade-in">
+        <main ref={contentScrollRef} data-layout-scroll-container className="flex-1 overflow-y-auto p-4 lg:p-7 fade-in">
           <div className="mx-auto w-full max-w-[1600px]">{children}</div>
 
         </main>
