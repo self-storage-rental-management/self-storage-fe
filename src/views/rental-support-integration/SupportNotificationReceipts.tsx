@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { Button, Card } from "../../components/ui"
+import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { listNotifications } from "../../services/notificationApi"
@@ -64,15 +64,18 @@ export default function SupportNotificationReceipts({
           (n) => n.type === "SUPPORT" && n.relatedEntityId === ticketId,
         )
       : []
+  const relevantNotices = notices.filter(n => (receipts[n.id] || read.data?.acknowledgements[n.id] || null)?.status !== "UNTRACKED")
+  if (read.data && relevantNotices.length === 0 && read.data.pagination.totalPages <= 1 && !read.error && !error) return null
   return (
-    <Card className="p-4 space-y-3 text-sm">
-      <h4 className="font-semibold">Thông báo về yêu cầu này</h4>
+    <details className="rounded-lg border border-stone-200 px-4 py-3 text-sm">
+      <summary className="cursor-pointer font-medium text-stone-700">Thông báo cần xem{relevantNotices.length ? ` (${relevantNotices.length})` : ""}</summary>
+      <div className="mt-3 space-y-3">
       {read.loading && <p role="status">Đang tải thông báo...</p>}
       {!!(read.error || error) && (
         <p role="alert">{integrationError(read.error || error)}</p>
       )}
-      {read.data && !notices.length && <p>Không có dữ liệu trên trang này.</p>}
-      {notices.map((n) => (
+      {read.data && !relevantNotices.length && <p>Không có thông báo cần xem trên trang này.</p>}
+      {relevantNotices.map((n) => (
         <div key={n.id} className="rounded border p-3 space-y-2">
           <p className="font-semibold">{n.title}</p>
           <p className="whitespace-pre-wrap">{n.content}</p>
@@ -111,7 +114,8 @@ export default function SupportNotificationReceipts({
           </Button>
         </div>
       )}
-    </Card>
+      </div>
+    </details>
   )
 }
 
