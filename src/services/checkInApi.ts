@@ -226,7 +226,8 @@ export interface CheckInPayment {
 export async function recordCheckInRemainingPayment(checkInId: string, request: {
   amount: number
   paymentMethod: string
-  transactionReference: string
+  paymentEvidenceFileId: string
+  transactionReference?: string
   note?: string
 }) {
   return assertPaymentEnvelope(await apiRequest<unknown>(
