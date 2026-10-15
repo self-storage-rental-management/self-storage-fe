@@ -35,6 +35,8 @@ interface Props {
   updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
   onCreateMaintenanceWork: (draft: { referenceId: string; title: string; notes: string }) => void
   showToast: (message: string) => void
+  onOpenRental?: (rentalId: string) => void
+  onOpenMaintenance?: (unitId: string, unitCode: string) => void
 }
 
 const statusVariants: Record<string, string> = {
@@ -112,7 +114,7 @@ const normalizeOperationalText = (value?: string) => {
 }
 
 export default function ManagerInventoryPanel(props: Props) {
-  return isApiAuthenticated() ? <ManagerInventoryApiPanel /> : <DemoManagerInventoryPanel {...props} />
+  return isApiAuthenticated() ? <ManagerInventoryApiPanel onOpenRental={props.onOpenRental} onOpenMaintenance={props.onOpenMaintenance} /> : <DemoManagerInventoryPanel {...props} />
 }
 
 function DemoManagerInventoryPanel({

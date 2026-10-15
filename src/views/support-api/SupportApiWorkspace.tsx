@@ -1,7 +1,7 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useEffect, useRef, useState } from "react"
-import { Badge, Button, Card, Modal } from "../../components/ui"
+import { Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useSupportCommand } from "../../hooks/useSupportCommand"
 import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
@@ -25,6 +25,48 @@ import {
   supportTicketVisible,
   supportAssigneeLabel,
 } from "./presentation"
+
+function TicketCode({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false)
+  return <div className="group mt-1 flex items-center gap-1.5 text-xs text-stone-500">
+    <code className="font-mono" title={id}>#{id.slice(0, 8)}</code>
+    <button
+      type="button"
+      className="rounded p-0.5 text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+      aria-label={`Sao chép mã yêu cầu ${id}`}
+      title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(id)
+          setCopied(true)
+        } catch {
+          setCopied(false)
+        }
+      }}
+    >
+      {copied ? "✓" : "⧉"}
+    </button>
+  </div>
+}
+
+function supportStatusClass(status: SupportTicket["status"]) {
+  if (status === "open") return "bg-slate-100 text-slate-700 ring-slate-200"
+  if (status === "in_progress") return "bg-blue-50 text-blue-700 ring-blue-200"
+  if (status === "resolved" || status === "closed") return "bg-green-50 text-green-700 ring-green-200"
+  return "bg-amber-50 text-amber-800 ring-amber-200"
+}
+
+function SupportCreatedAt({ value }: { value: string }) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return <span>{rentalDate(value)}</span>
+  const dateText = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(date)
+  const timeText = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(date)
+  return <time dateTime={value} className="whitespace-nowrap">{dateText} <span className="text-stone-500">{timeText}</span></time>
+}
 
 export default function SupportApiWorkspace({
   role,
@@ -169,7 +211,7 @@ function SupportSession({
               setCreation({})
             }}
           >
-            Tạo yêu cầu
+            <span aria-hidden="true">+</span> Tạo yêu cầu
           </Button>
         )}
       </div>
@@ -185,13 +227,19 @@ function SupportSession({
         >
           <label className="block text-sm">
             Tìm tiêu đề / nội dung
-            <input
-              className={supportInputClass}
-              maxLength={200}
-              disabled={locked}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <span className="relative block">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400">
+                <circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />
+              </svg>
+              <input
+                className={`${supportInputClass} pl-9`}
+                placeholder="Nhập tiêu đề hoặc nội dung..."
+                maxLength={200}
+                disabled={locked}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </span>
           </label>
           {(role !== "staff" || staffView === "assigned") && <label className="block text-sm">
             Trạng thái
@@ -235,7 +283,7 @@ function SupportSession({
                 : "lg:col-span-3"
             }`}
           >
-            <Button type="submit" disabled={locked}>
+            <Button type="submit" variant="secondary" className="whitespace-nowrap" disabled={locked}>
               Tìm kiếm
             </Button>
             <Button
@@ -300,31 +348,37 @@ function SupportSession({
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <>
             {read.data.data.length > 0 && <Card className="overflow-x-auto p-0">
-              <table className="w-full min-w-[1000px] text-left text-sm">
+              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[1000px]" : "min-w-[1180px]"}`}>
+                <colgroup>
+                  {role === "customer" ? <>
+                    <col className="w-[28%]" /><col className="w-[22%]" /><col className="w-[23%]" /><col className="w-[15%]" /><col className="w-[12%]" />
+                  </> : <>
+                    <col className="w-[24%]" /><col className="w-[20%]" /><col className="w-[18%]" /><col className="w-[16%]" /><col className="w-[12%]" /><col className="w-[10%]" />
+                  </>}
+                </colgroup>
                 <thead className="border-b bg-stone-50 text-stone-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
                     <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Mã yêu cầu</th>
                     <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Nhân viên phụ trách</th>
+                    {role !== "customer" && <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Nhân viên phụ trách</th>}
                     <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Thao tác</th>
+                    <th scope="col" className="px-4 py-3 text-right font-semibold">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-200">
                   {read.data.data.map((t) => <tr key={t.id}>
-                    <td className="max-w-xs break-words px-4 py-3 font-semibold">{t.subject}</td>
-                    <td className="px-4 py-3"><Badge variant={t.status === "closed" || t.status === "resolved" ? "success" : "warning"}>
-                      {t.status === "open"
-                        ? "Chờ tiếp nhận"
-                        : supportStatusLabels[t.status]}
-                    </Badge></td>
-                    <td className="max-w-[150px] break-all px-4 py-3 text-xs text-stone-500">{t.id}</td>
-                    <td className="px-4 py-3">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
-                    <td className="px-4 py-3">{supportAssigneeLabel(t, role)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{rentalDate(t.createdAt)}</td>
-                    <td className="px-4 py-3"><Button variant="outline" disabled={locked} onClick={() => {
+                    <td className="break-words px-4 py-3 align-middle">
+                      <div className="font-semibold text-stone-900">{t.subject}</div>
+                      <TicketCode id={t.id} />
+                    </td>
+                    <td className="px-4 py-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${supportStatusClass(t.status)}`}>
+                      {supportStatusLabels[t.status]}
+                    </span></td>
+                    <td className="break-words px-4 py-3 align-middle">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
+                    {role !== "customer" && <td className="break-words px-4 py-3 align-middle">{supportAssigneeLabel(t, role)}</td>}
+                    <td className="whitespace-nowrap px-4 py-3 align-middle"><SupportCreatedAt value={t.createdAt} /></td>
+                    <td className="px-4 py-3 text-right align-middle"><Button size="sm" className="whitespace-nowrap" variant="outline" disabled={locked} onClick={() => {
                       setSelected(t.id)
                       command.clearError()
                     }}>Chi tiết</Button></td>
@@ -348,7 +402,7 @@ function SupportSession({
         <Modal
           open
           size="xl"
-          title="Chi tiết yêu cầu Hỗ trợ"
+          title="Chi tiết yêu cầu hỗ trợ"
           onClose={() => {
             if (!command.locked && !uploadLock.current) setSelected(undefined)
           }}
