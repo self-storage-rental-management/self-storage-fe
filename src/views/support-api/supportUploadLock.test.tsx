@@ -4,14 +4,15 @@ import SupportApiWorkspace from "./SupportApiWorkspace"
 import SupportCreateForm from "./SupportCreateForm"
 import SupportActionForm from "./SupportActionForm"
 import SupportTicketDetail from "./SupportTicketDetail"
+import SupportReadState from "./SupportReadState"
 import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
 import { Button, Modal } from "../../components/ui"
 import { ApiClientError } from "../../services/apiClient"
-import { supportActor, supportPage, supportTicket, supportIds } from "../../../tests/supportApiFixtures"
+import { supportActor, supportActive, supportPage, supportTicket, supportIds } from "../../../tests/supportApiFixtures"
 
 // Exercise actual event handlers and form -> detail/workspace lock propagation.
 // Controlled hook lifecycle/transport; not a browser or real file-storage E2E test.
-const harness = vi.hoisted(() => ({ slots: [] as any[], cursor: 0, data: undefined as any, refresh: vi.fn(), upload: vi.fn() }))
+const harness = vi.hoisted(() => ({ slots: [] as any[], cursor: 0, data: undefined as any, refresh: vi.fn(), upload: vi.fn(), role: "customer" as "customer" | "staff" }))
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
   useState: (initial: any) => {
@@ -26,7 +27,7 @@ vi.mock("react", async original => ({
   useEffect: () => undefined,
 }))
 vi.mock("../manager/managerPresentation", () => ({ useManagerPresentation: () => ({ manager: false, copy: (v: string) => v, errorText: () => "Test" }) }))
-vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => supportActor("customer") }))
+vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => supportActor(harness.role) }))
 vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: () => ({ data: harness.data, loading: false, error: undefined, refresh: harness.refresh }) }))
 vi.mock("../../hooks/useSupportCommand", () => ({ useSupportCommand: () => ({ locked: false, busy: false, uncertain: false, conflict: false, run: vi.fn(), clearError: vi.fn(), retry: vi.fn() }) }))
 vi.mock("../../services/duongIntegrationApi", async original => ({ ...await original<typeof import("../../services/duongIntegrationApi")>(), uploadDuongEvidence: (...args: unknown[]) => harness.upload(...args) }))
@@ -34,16 +35,40 @@ function render<T>(fn: () => T, slots: any[] = []): T { harness.slots = slots; h
 function nodes(node: any): ReactElement<any>[] {
   if (Array.isArray(node)) return node.flatMap(nodes)
   if (!node || typeof node !== "object" || !("type" in node)) return []
-  return [node, ...nodes(node.props.children)]
+  return [node, ...nodes(node.props.children), ...nodes(node.props.composer), ...nodes(node.props.internalComposer)]
 }
 function find(tree: unknown, type: unknown) { return nodes(tree).find(node => node.type === type)! }
-beforeEach(() => { harness.refresh.mockReset(); harness.upload.mockReset(); harness.data = supportPage([supportTicket]) })
+beforeEach(() => { harness.refresh.mockReset(); harness.upload.mockReset(); harness.data = supportPage([supportTicket]); harness.role = "customer" })
 describe("D5 upload preserves its form until response is handled", () => {
+  it("blocks empty resolution and waits for a saved proof before enabling evidence-only reporting", () => {
+    harness.role = "staff"
+    const run = vi.fn(), formSlots: any[] = []
+    const command = { run, locked: false, busy: false, conflict: false } as any
+    const form = () => render(() => SupportActionForm({ role: "staff", ticket: supportActive, command, mode: "message" }), formSlots)
+    const report = (tree: unknown) => nodes(tree).find(node => node.type === Button && node.props.children === "Báo đã xử lý")!
+    let tree = form()
+    expect(report(tree).props.disabled).toBe(true)
+    report(tree).props.onClick()
+    expect(run).not.toHaveBeenCalled()
+    find(tree, EvidenceUpload).props.onBusy(true)
+    find(tree, EvidenceUpload).props.onChange([supportIds.message])
+    tree = form()
+    expect(report(tree).props.disabled).toBe(true)
+    report(tree).props.onClick()
+    expect(run).not.toHaveBeenCalled()
+    find(tree, EvidenceUpload).props.onBusy(false)
+    tree = form()
+    expect(report(tree).props.disabled).toBe(false)
+    report(tree).props.onClick()
+    expect(run).toHaveBeenCalledWith({ kind: "command", role: "staff", id: supportActive.id, command: {
+      kind: "resolve", summary: "", evidenceFileIds: [supportIds.message], expectedVersion: supportActive.version,
+    } })
+  })
   it.each(["create", "message"])("%s upload prevents close and reload, then retains returned file", async kind => {
     const onLocked = vi.fn(), root = SupportApiWorkspace({ role: "customer", onLocked }) as ReactElement<any>
     const sessionSlots: any[] = [], session = () => render(() => (root.type as any)(root.props), sessionSlots)
     let tree = session()
-    const open = nodes(tree).find(node => node.type === Button && node.props.children === (kind === "create" ? "Tạo yêu cầu" : "Chi tiết"))!
+    const open = nodes(tree).find(node => node.type === Button && [node.props.children].flat().some(child => typeof child === "string" && child.trim() === (kind === "create" ? "Tạo yêu cầu" : "Chi tiết")))!
     open.props.onClick()
     tree = session()
     const modal = find(tree, Modal)
@@ -65,7 +90,7 @@ describe("D5 upload preserves its form until response is handled", () => {
     expect(onLocked).toHaveBeenLastCalledWith(true)
     // Invoke stale callbacks before a React rerender: synchronous upload ref must protect close/reload.
     modal.props.onClose()
-    nodes(tree).find(node => node.type === Button && node.props.children === "Tải lại")!.props.onClick()
+    find(tree, SupportReadState).props.retry()
     expect(harness.refresh).not.toHaveBeenCalled()
     harness.data = supportPage([supportTicket])
     tree = session()
