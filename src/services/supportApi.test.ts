@@ -45,6 +45,28 @@ afterEach(() => {
   clearAuthTokens()
 })
 describe("D5 transport and response boundaries", () => {
+  it("separates internal conversation and accepts Manager replies", async () => {
+    const message = { ...supportMessage, authorRole: "MANAGER", visibility: "INTERNAL" }
+    const fetch = respond(supportPage([message]))
+    expect((await listSupportMessages("staff", ids.ticket, 0, 20, "INTERNAL")).data[0]).toEqual(message)
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(`/api/staff/support-workflows/${ids.ticket}/internal-messages`)
+    respond(supportPage([message]))
+    await expect(listSupportMessages("staff", ids.ticket, 0, 20, "PUBLIC")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
+  it("never fetches internal conversation for Customer", async () => {
+    const fetch = respond(supportPage([]))
+    await expect(listSupportMessages("customer", ids.ticket, 0, 20, "INTERNAL")).rejects.toMatchObject({ code: "CLIENT_VALIDATION" })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it("allows Manager internal messages and rejects public replies before fetch", async () => {
+    const fetch = respond({ data: { ...supportMessage, authorRole: "MANAGER", visibility: "INTERNAL" } })
+    await sendSupportCommand("manager", ids.ticket, { kind: "message", body: "Internal guidance", visibility: "INTERNAL" }, "manager-chat")
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(`/api/manager/support-tickets/${ids.ticket}/messages`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ body: "Internal guidance", visibility: "INTERNAL" })
+    fetch.mockClear()
+    await expect(sendSupportCommand("manager", ids.ticket, { kind: "message", body: "Public reply", visibility: "PUBLIC" }, "manager-public")).rejects.toMatchObject({ code: "CLIENT_VALIDATION" })
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it("reads a safe Staff queue and rejects private fields", async () => {
     const item = { id: ids.ticket, facilityId: ids.facility, subject: "Need help", createdAt: "2026-10-08T03:00:00Z", version: 0 }
     const fetch = respond(supportPage([item]))
@@ -281,6 +303,17 @@ describe("D5 transport and response boundaries", () => {
   })
 })
 describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
+  it("requires a description or saved evidence before reporting resolution", async () => {
+    const fetch = respond({ data: { ...supportActive, status: "resolved" } })
+    await expect(sendSupportCommand("staff", ids.ticket, {
+      kind: "resolve", summary: "   ", evidenceFileIds: [], expectedVersion: 2,
+    }, "empty-resolution")).rejects.toMatchObject({ code: "CLIENT_VALIDATION" })
+    expect(fetch).not.toHaveBeenCalled()
+    await sendSupportCommand("staff", ids.ticket, {
+      kind: "resolve", summary: "", evidenceFileIds: [ids.foreign], expectedVersion: 2,
+    }, "evidence-resolution")
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ summary: "", evidenceFileIds: [ids.foreign], expectedVersion: 2 })
+  })
   it("rejects expectedVersion on Staff messages before sending a strict BE DTO", async () => {
     const fetch = respond({ data: supportMessage })
     await expect(

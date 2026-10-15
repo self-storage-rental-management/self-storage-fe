@@ -50,24 +50,29 @@ describe("Dương delete-first UI copy regression", () => {
     state.actor = operationsActor("manager")
     state.data = { ...overduePage, ...apiPage([]) }
     const html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toMatch(/<h1[^>]*>Theo dõi quá hạn<\/h1><div class="app-card/)
+    expect(html).toMatch(/<h1[^>]*>Theo dõi quá hạn<\/h1>/)
     expect(html).not.toContain("Tách quá hạn thuê và quá hạn thanh toán")
     expect(html).not.toContain("Theo dõi các hồ sơ quá hạn")
     expect(html).toContain("Quá hạn thanh toán")
     expect(html).toContain("Quá thời hạn thuê")
     expect(html).toContain("Mã theo dõi có sẵn")
   })
-  it("D4 partial empty list is not the verified complete empty state", () => {
+  it("D4 empty results stay compact without unsupported warnings or pagination", () => {
     state.actor = operationsActor("manager")
     state.data = { ...overduePage, ...apiPage([]), completeness: "PARTIAL", missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS"] }
     let html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toContain("dữ liệu quá hạn còn thiếu")
+    expect(html).toContain("Không tìm thấy hồ sơ phù hợp.")
+    expect(html).not.toContain("dữ liệu quá hạn còn thiếu")
+    expect(html).not.toContain("Chưa đủ dữ liệu")
+    expect(html).not.toContain("Trang 0/0")
+    expect(html).not.toContain(">Trước</button>")
+    expect(html).toContain('<details class="text-sm"><summary')
     expect(html).not.toContain("Không có dữ liệu")
     expect(html).not.toContain("AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS")
     expect(html).not.toContain("0 đ")
     state.data = { ...overduePage, ...apiPage([]), completeness: "COMPLETE", missingSources: [] }
     html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toContain("Không có dữ liệu")
+    expect(html).toContain("Không tìm thấy hồ sơ phù hợp.")
     expect(html).not.toContain("dữ liệu quá hạn còn thiếu")
   })
   it("D4 denied actor still gets an alert, no filters or actions", () => {
