@@ -46,24 +46,16 @@ export default function RentalDetail({
       </div>
       <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
       {rental.status === "active" && <RenewalRiskNotice rentalId={rental.id} role={role} />}
-      <Card className="overflow-hidden rounded-xl p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
-          <h3 className="text-base font-bold">Thông tin hồ sơ thuê</h3>
+      <Card className="overflow-hidden rounded-xl border-t-4 border-t-amber-500 bg-white px-5 py-6 sm:px-8 sm:py-8">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 pb-6">
+          <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-700">StorageHub · Hồ sơ lưu trữ</p><h3 className="text-2xl font-bold text-stone-900">Thông tin hồ sơ thuê</h3><p className="mt-2 text-sm text-stone-500">{rental.facility.name}</p></div>
           <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{copy(rentalLabels[rental.status])}</span>
         </div>
-        <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-lg [&>div]:bg-stone-50 [&>div]:p-3">
-          <div>
-            <dt className="font-bold">Mã hồ sơ thuê</dt>
-            <dd className="break-all font-semibold">{rental.id}</dd>
-          </div>
-          <div>
-            <dt className="font-bold">Khách hàng</dt>
-            <dd>{rental.customer.fullName}</dd>
-          </div>
+        <dl className="divide-y divide-stone-100 [&>div]:grid [&>div]:min-w-0 [&>div]:gap-1 [&>div]:py-4 sm:[&>div]:grid-cols-[180px_minmax(0,1fr)] sm:[&>div]:gap-6 [&_dd]:!mt-0">
           <div>
             <dt className={labelClass}>Mã hồ sơ thuê</dt>
             <dd className={`${valueClass} flex items-center gap-2`}>
-              <span title={rental.id}>#{rental.id.slice(0, 8)}</span>
+              <span className="break-all font-mono text-xs sm:text-sm" title={rental.id}>{rental.id}</span>
               <button
                 type="button"
                 aria-label="Sao chép mã hồ sơ thuê"
@@ -83,20 +75,34 @@ export default function RentalDetail({
             <dd className={valueClass}>{rental.customer.fullName}</dd>
           </div>
           <div>
-            <dt className={labelClass}>Cơ sở / Gian kho</dt>
-            <dd className={valueClass}>{rental.facility.name} / {rental.storageUnit.code}</dd>
+            <dt className={labelClass}>Cơ sở lưu trữ</dt>
+            <dd className={valueClass}>{rental.facility.name}</dd>
+          </div>
+          <div>
+            <dt className={labelClass}>Gian kho</dt>
+            <dd className={valueClass}>{rental.storageUnit.code}</dd>
           </div>
           <div>
             <dt className={labelClass}>Loại gian kho</dt>
             <dd className={valueClass}>{copy(rental.unitType.name)}</dd>
           </div>
           <div>
-            <dt className="font-bold">Trạng thái truy cập</dt>
-            <dd>
-              {rental.access.completeness === "UNKNOWN"
-                ? 'Chưa có thông tin quyền ra vào kho'
-                : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || unknown}
-            </dd>
+            <dt>Thời hạn thuê</dt>
+            <dd>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
+          </div>
+          <div>
+            <dt>Giá thuê / tháng</dt>
+            <dd>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>
+          </div>
+          <div>
+            <dt>Quyền ra vào kho</dt>
+            <dd><Badge variant={rental.access.status === 'ACTIVE' ? 'success' : 'muted'}>{accessStatus || 'Chưa xác minh'}</Badge>
+            <p className="mt-2 text-xs leading-5 text-stone-500">{rental.access.completeness === 'UNKNOWN'
+              ? 'Chưa tải được trạng thái cấp quyền ra vào. Vui lòng liên hệ nhân viên cơ sở.'
+              : rental.access.status === 'ACTIVE' ? 'Đã có thẻ hoặc mã ra vào đang hoạt động.'
+              : rental.access.status === 'REVOKED' ? 'Thẻ hoặc mã ra vào đã được thu hồi.'
+              : rental.access.status === 'INACTIVE' ? 'Chưa ghi nhận thẻ hoặc mã ra vào được cấp cho hồ sơ này.'
+              : 'Trạng thái được cập nhật theo thông tin quyền ra vào của cơ sở.'}</p></dd>
           </div>
         </dl>
       </Card>
