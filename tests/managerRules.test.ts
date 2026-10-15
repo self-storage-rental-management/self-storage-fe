@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addMonthsToDate,
+  calculateCalendarRentalEndDate,
   billingPeriodsDue,
   calculateManagerReturnSettlement,
   canManagerAssignStaff,
@@ -38,6 +39,17 @@ const reservation = (overrides: Partial<StorageReservation> = {}): StorageReserv
 describe('Facility Manager business rules', () => {
   it('clamps calendar month additions at month end', () => {
     expect(addMonthsToDate('2026-01-31', 1)).toBe('2026-02-28')
+  })
+
+  it('calculates inclusive calendar-month rental end dates accurately', () => {
+    // 15/10/2026 for 3 months ends on 14/01/2027
+    expect(calculateCalendarRentalEndDate('2026-10-15', 3)).toBe('2027-01-14')
+    // 31/01/2026 for 1 month clamps to end of Feb and ends on 27/02/2026
+    expect(calculateCalendarRentalEndDate('2026-01-31', 1)).toBe('2026-02-27')
+    // 01/01/2026 for 1 month ends on 31/01/2026
+    expect(calculateCalendarRentalEndDate('2026-01-01', 1)).toBe('2026-01-31')
+    // Leap year: 01/02/2024 for 1 month ends on 29/02/2024
+    expect(calculateCalendarRentalEndDate('2024-02-01', 1)).toBe('2024-02-29')
   })
 
   it('collects every overdue billing period', () => {
