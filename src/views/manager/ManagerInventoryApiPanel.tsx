@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import {
   Badge,
   Button,
@@ -202,6 +202,58 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [imageError, setImageError] = useState(false)
+
+  useEffect(() => {
+    setImageError(false)
+  }, [open, initial?.imageUrl])
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, WebP).')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (uploadEvt) => {
+      const result = uploadEvt.target?.result
+      if (typeof result === 'string') {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const maxDim = 1200
+          let w = img.width
+          let h = img.height
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w)
+              w = maxDim
+            } else {
+              w = Math.round((w * maxDim) / h)
+              h = maxDim
+            }
+          }
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h)
+            const compressed = canvas.toDataURL('image/jpeg', 0.85)
+            setForm(current => ({ ...current, imageUrl: compressed }))
+            setImageError(false)
+          } else {
+            setForm(current => ({ ...current, imageUrl: result }))
+            setImageError(false)
+          }
+        }
+        img.src = result
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
       <input className={`${inputClass} mt-1 disabled:bg-stone-100`} disabled={busy || (!!initial && ['code', 'physicalUnitCount', 'floor', 'zone'].includes(key))} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
@@ -235,7 +287,97 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
           <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
         </label>
-        {field('imageUrl', 'URL ảnh loại kho')}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-stone-700">
+            Hình ảnh loại kho
+          </label>
+          <div className="flex flex-col sm:flex-row gap-3 items-start bg-stone-50 p-3 rounded-xl border border-stone-200">
+            {/* Thumbnail Preview / Dropzone */}
+            <div className="relative w-full sm:w-44 h-32 rounded-lg overflow-hidden bg-stone-200 border border-stone-300 shrink-0 group flex items-center justify-center shadow-xs">
+              {form.imageUrl && !imageError ? (
+                <>
+                  <img
+                    src={form.imageUrl}
+                    alt={form.name || "Unit type"}
+                    className="w-full h-full object-cover transition"
+                    onError={() => setImageError(true)}
+                  />
+                  <div className="absolute inset-0 bg-stone-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="cursor-pointer bg-white text-stone-800 text-[11px] font-bold px-2 py-1 rounded shadow hover:bg-stone-100 transition"
+                    >
+                      Đổi ảnh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm(current => ({ ...current, imageUrl: '' }))
+                        setImageError(false)
+                      }}
+                      className="cursor-pointer bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-2 py-1 rounded shadow transition"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-full flex flex-col items-center justify-center p-3 text-center cursor-pointer hover:bg-stone-300/50 transition"
+                >
+                  <svg className="w-8 h-8 text-stone-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-xs font-semibold text-stone-600">Chọn ảnh từ máy</span>
+                  <span className="text-[10px] text-stone-400">PNG, JPG, WebP</span>
+                </div>
+              )}
+            </div>
+
+            {/* Upload & URL Controls */}
+            <div className="flex-1 w-full space-y-2 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                  Tải ảnh từ máy tính hoặc dán link ảnh (URL)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    placeholder="Dán link ảnh (URL) hoặc chọn file từ máy..."
+                    value={form.imageUrl}
+                    onChange={e => {
+                      setForm(current => ({ ...current, imageUrl: e.target.value }))
+                      setImageError(false)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg text-xs shrink-0 transition cursor-pointer shadow-2xs"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span>Chọn file</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                </div>
+                <p className="text-[11px] text-stone-400 mt-1.5">
+                  Hỗ trợ định dạng PNG, JPG, WebP. Ảnh sẽ hiển thị đại diện cho loại kho này trên hệ thống.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Kích thước và tải trọng</h3>

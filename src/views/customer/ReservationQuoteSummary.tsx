@@ -14,8 +14,14 @@ export default function ReservationQuoteSummary({ quote: q, needsReview }: { quo
     <dl className="space-y-2 rounded-xl border border-stone-200 bg-white p-4">
       <div className="flex justify-between gap-4"><dt>Đơn giá mỗi tháng</dt><dd className="font-bold">{formatVndAmount(q.monthlyPrice)}</dd></div>
       <div className="flex justify-between gap-4"><dt>Tiền thuê trước giảm</dt><dd className="font-bold">{formatVndAmount(q.subtotal)}</dd></div>
-      <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800"><dt>Giảm giá ({Math.round(q.discountRate * 100)}%)</dt><dd className="font-bold">{formatVndAmount(q.discountAmount)}</dd></div>
-      <div className="flex justify-between gap-4 border-t border-stone-200 pt-3"><dt className="font-bold">Tiền thuê sau giảm</dt><dd className="font-bold text-emerald-700">{formatVndAmount(q.totalAfterDiscount)}</dd></div>
+      <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800"><dt>Giảm giá kỳ hạn ({Math.round(q.discountRate * 100)}%)</dt><dd className="font-bold">{formatVndAmount(q.discountAmount)}</dd></div>
+      {q.voucherCode && (q.voucherDiscountAmount ?? 0) > 0 && (
+        <div className="flex justify-between gap-4 rounded-lg bg-purple-50 px-3 py-2 text-purple-900 border border-purple-200">
+          <dt className="font-semibold">Mã ưu đãi [{q.voucherCode}]</dt>
+          <dd className="font-bold">-{formatVndAmount(q.voucherDiscountAmount!)}</dd>
+        </div>
+      )}
+      <div className="flex justify-between gap-4 border-t border-stone-200 pt-3"><dt className="font-bold">Tiền thuê ròng sau giảm</dt><dd className="font-bold text-emerald-700">{formatVndAmount(q.totalAfterDiscount)}</dd></div>
       <div className="flex justify-between gap-4 rounded-lg bg-amber-50 px-3 py-2"><dt>Cọc giữ chỗ ({depositPercent}%)</dt><dd className="font-bold text-amber-800">{formatVndAmount(q.reservationDepositAmount)}</dd></div>
       <div className="flex justify-between gap-4"><dt>Tiền thuê còn lại</dt><dd className="font-bold">{formatVndAmount(q.remainingRentalAmount)}</dd></div>
       <div className="flex justify-between gap-4"><dt>Tiền đảm bảo kho</dt><dd className="font-bold">{formatVndAmount(q.securityDepositAmount)}</dd></div>
