@@ -121,6 +121,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const managerNotificationPage = (type: ApiNotification['type']) => {
     if (type === 'CHECKIN' || type === 'RETURN') return 'moves'
     if (type === 'RESERVATION') return 'unit-assignments'
+    if (type === 'RENEWAL') return 'rentals'
     if (type === 'PAYMENT' || type === 'OVERDUE') return type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
     if (type === 'SUPPORT') return 'support-api'
     return 'dashboard'

@@ -1082,6 +1082,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       title: notification.title,
       message: notification.content,
       page: notification.title === 'Biên bản bàn giao đang chờ xác nhận' ? 'reservations'
+        : notification.type === 'RENEWAL' || notification.type === 'OVERDUE' ? 'rental-records'
         : notification.type === 'RETURN' || notification.type === 'CHECKIN' ? 'rental-records'
         : notification.type === 'SUPPORT' ? 'support'
           : notification.type === 'SYSTEM' ? 'overview' : 'reservations',
