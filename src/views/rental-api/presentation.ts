@@ -79,6 +79,8 @@ export function rentalError(error: unknown) {
       ["Move-out/non-active or incomplete rental blocks renewal", "Hồ sơ thuê không còn hiệu lực hoặc đang trong quy trình trả kho nên không thể gia hạn."],
       ["Rental unit type missing", "Hồ sơ chưa xác định được loại gian kho để tính giá gia hạn. Vui lòng liên hệ quản lý cơ sở."],
       ["Due obligations or dispute block approval", "Còn khoản phải thanh toán hoặc vấn đề tài chính chưa được giải quyết. Vui lòng kiểm tra công nợ với cơ sở."],
+      ["Renewal obligation is unpaid or refunded", "Chưa ghi nhận đủ khoản thanh toán gia hạn. Nhân viên cần ghi nhận khoản còn lại theo bảng kê và tải chứng từ trước khi hoàn tất ký."],
+      ["Verified remaining-rent and overdue-fee allocations required", "Chưa ghi nhận đủ tiền thuê còn lại hoặc phí quá hạn theo bảng kê. Hãy hoàn tất bước ghi nhận thanh toán trước khi ký gia hạn."],
       ["Financial state UNKNOWN", "Chưa xác minh được tình trạng thanh toán của hồ sơ. Vui lòng tải lại sau."],
       ["Financial state incomplete", "Dữ liệu thanh toán của hồ sơ chưa đầy đủ để xét gia hạn. Vui lòng liên hệ quản lý cơ sở."],
       ["Consistent financial source missing", "Chưa kết nối được nguồn đối soát thanh toán của cơ sở. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
