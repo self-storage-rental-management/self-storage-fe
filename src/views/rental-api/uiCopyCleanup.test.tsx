@@ -101,11 +101,11 @@ describe("Dương delete-first UI copy regression", () => {
   })
   it("D3 deposit history discloses simulation, without labeling an actual CASH receipt as simulated", () => {
     let html = renderToStaticMarkup(<OperationEventCard event={operationEvent} />)
-    expect(html).toContain("Giao dịch gia hạn theo luồng cũ")
+    expect(html).toContain("Thanh toán cọc gia hạn")
     expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).toContain("3.201.000 đ")
     html = renderToStaticMarkup(<OperationEventCard event={{ ...operationEvent, kind: "CASH" }} />)
-    expect(html).toContain("Biên nhận tiền mặt")
+    expect(html).toContain("Ghi nhận tiền thuê còn lại")
     expect(html).not.toContain("thử nghiệm")
   })
   it("D3 Manager has no empty reload wrapper after presentation cleanup", () => {
