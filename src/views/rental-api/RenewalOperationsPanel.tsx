@@ -50,7 +50,7 @@ export const operationsInputClass =
 const eventLabels: Record<string, string> = {
   DEPOSIT: "Thanh toán cọc gia hạn",
   FULL_RENT_PAYMENT: "Thanh toán toàn kỳ bằng VNPay Sandbox",
-  CASH: "Biên nhận tiền mặt",
+  CASH: "Ghi nhận tiền thuê còn lại",
   INCIDENT: "Sự cố cơ sở",
   FAULT_REVIEW: "Kết quả xác minh lỗi cơ sở",
   STAFF_ASSIGNMENT: "Phân công nhân viên gia hạn",
@@ -121,6 +121,15 @@ export function OperationEventCard({
       )}
       {amount !== null && field("currency") && (
         <p>Số tiền: {rentalMoney(amount, field("currency")!)}</p>
+      )}
+      {e.kind === "CASH" && field("paymentMethod") && (
+        <p>Phương thức: {field("paymentMethod") === "BANK_TRANSFER" ? "Chuyển khoản" : "Tiền mặt"}</p>
+      )}
+      {e.kind === "CASH" && field("transactionReference") && (
+        <p className="break-all">Mã giao dịch: {field("transactionReference")}</p>
+      )}
+      {e.kind === "CASH" && field("receiptFileId") && isUuid(field("receiptFileId")!) && (
+        <EvidenceDownload id={field("receiptFileId")!} />
       )}
       {["reason", "completionNote"].map((key) =>
         field(key) ? <p key={key}>{field(key)}</p> : null,
@@ -874,7 +883,7 @@ function OperationForm({
               </select>
             </label>
             <label className="block">
-              Mã biên nhận / giao dịch thực tế
+              {balanceMethod === "BANK_TRANSFER" ? "Mã giao dịch chuyển khoản" : "Mã biên nhận tiền mặt"}
               <input
                 className={operationsInputClass}
                 value={receipt}
@@ -882,6 +891,11 @@ function OperationForm({
                 onChange={(e) => setReceipt(e.target.value)}
               />
             </label>
+            <p className="text-sm text-stone-600">
+              {balanceMethod === "BANK_TRANSFER"
+                ? "Tải chứng từ chuyển khoản và chỉ ghi nhận sau khi đã đối chiếu tiền vào tài khoản nhận. Ảnh chuyển khoản do khách gửi chưa đủ để xác nhận đã thanh toán."
+                : "Tải biên nhận thu tiền mặt đã lập cho giao dịch này."}
+            </p>
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
               onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />
@@ -891,7 +905,9 @@ function OperationForm({
                 checked={attested}
                 onChange={(e) => setAttested(e.target.checked)}
               />{" "}
-              Tôi đã nhận đủ tiền theo bảng kê.</label>
+              {balanceMethod === "BANK_TRANSFER"
+                ? "Tôi đã đối chiếu tiền chuyển khoản vào tài khoản nhận và số tiền khớp bảng kê."
+                : "Tôi đã nhận đủ tiền mặt theo bảng kê."}</label>
           </>
         )}
         {action === "completion" && (
