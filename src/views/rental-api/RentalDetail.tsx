@@ -2,11 +2,13 @@ import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
-import { Button, Card, Modal } from "../../components/ui"
+import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalDate, rentalLabels, rentalMoney, unknown, accessStatusLabels, rentalDataWarning, rentalPeriodText } from "./presentation"
+const labelClass = "text-xs font-normal text-slate-500"
+const valueClass = "mt-1 text-sm font-medium text-slate-900"
 export default function RentalDetail({
   rental,
   onRequest,
@@ -50,14 +52,6 @@ export default function RentalDetail({
           <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{copy(rentalLabels[rental.status])}</span>
         </div>
         <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-lg [&>div]:bg-stone-50 [&>div]:p-3">
-          <div>
-            <dt className="font-bold">Mã hồ sơ thuê</dt>
-            <dd className="break-all font-semibold">{rental.id}</dd>
-          </div>
-          <div>
-            <dt className="font-bold">Khách hàng</dt>
-            <dd>{rental.customer.fullName}</dd>
-          </div>
           <div>
             <dt className={labelClass}>Mã hồ sơ thuê</dt>
             <dd className={`${valueClass} flex items-center gap-2`}>
@@ -142,7 +136,7 @@ export default function RentalDetail({
               Chỉ có thể yêu cầu gia hạn khi hồ sơ đang hiệu lực và chưa yêu cầu trả kho.
             </p>
           )}
-        </Card>
+        </div>
       )}
       </div>
       <div className={section === 'payments' ? 'space-y-5' : 'hidden'}>
