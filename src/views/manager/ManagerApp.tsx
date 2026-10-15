@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { ManagerPresentationProvider } from './managerPresentation'
 import './managerTypography.css'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
@@ -8,6 +7,7 @@ import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import ProfileView from '../ProfileView'
 import ManagerDashboardApiPanel from './ManagerDashboardApiPanel'
+import ManagerDashboardPanel from './ManagerDashboardPanel'
 import ManagerInventoryPanel from './ManagerInventoryPanel'
 import ManagerMovesPanel from './ManagerMovesPanel'
 import ManagerPaymentsPanel from './ManagerPaymentsPanel'
@@ -17,6 +17,7 @@ import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
 import ManagerOverdueApiPanel from './ManagerOverdueApiPanel'
 import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import ManagerReportsPanel from './ManagerReportsPanel'
+import ManagerReportsApiPanel from './ManagerReportsApiPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerApiStaffTasksPanel from './ManagerApiStaffTasksPanel'
 import ManagerUnitAssignmentPanel from './ManagerUnitAssignmentPanel'
@@ -24,6 +25,7 @@ import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
+import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
@@ -38,23 +40,32 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:collect' },
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
     ...(isApiAuthenticated() ? [{ id: 'support-api', label: "Hỗ trợ khách hàng", icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
+    { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'reports:read' },
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
-  const [apiNotifications, setApiNotifications] = useState<ApiNotification[]>([])
+  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+
   useEffect(() => {
     if (!isApiAuthenticated()) return
     let cancelled = false
-    const refresh = async () => {
+    const loadNotifications = async () => {
       try {
-        const result = await listNotifications()
-        if (!cancelled) setApiNotifications(result.data)
-      } catch { /* Keep the latest successful response on transient failures. */ }
+        const result = await listNotifications(0, 50)
+        if (!cancelled) setBackendNotifications(result.data)
+      } catch {
+        // Manager operations remain available if notifications are temporarily unavailable.
+      }
     }
-    void refresh()
-    const timer = window.setInterval(refresh, 15000)
-    window.addEventListener('focus', refresh)
-    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
-  }, [user.id])
+    void loadNotifications()
+    const refreshNotifications = () => void loadNotifications()
+    window.addEventListener('storagehub:notifications-refresh', refreshNotifications)
+    const timer = window.setInterval(refreshNotifications, 10_000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storagehub:notifications-refresh', refreshNotifications)
+      window.clearInterval(timer)
+    }
+  }, [])
   const [toast, setToast] = useState<string | null>(null)
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
   const [inventoryRentalId, setInventoryRentalId] = useState<string | undefined>()
@@ -108,25 +119,42 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       if (isFacilityTaskOverdue(task)) notifications.push({ id: `manager-task-overdue-${task.id}-${task.dueAt}`, date: task.dueAt, title: 'Nhiệm vụ đã quá hạn', message: `${task.title} · ${task.assignedStaffName || 'Chưa phân công'}`, page: 'staff-tasks', targetId: task.id })
       return notifications
     })
-  const managerNotifications = [...apiNotifications.map(item => ({
-    id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead,
-    page: item.type === 'SYSTEM' ? 'inventory' : item.type === 'SUPPORT' ? 'support-api' : item.type === 'PAYMENT' ? 'payments' : 'rentals',
-  })), ...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
+  const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
+  const managerNotificationPage = (type: ApiNotification['type']) => {
+    if (type === 'CHECKIN' || type === 'RETURN') return 'moves'
+    if (type === 'RESERVATION') return 'unit-assignments'
+    if (type === 'PAYMENT' || type === 'OVERDUE') return type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
+    if (type === 'SUPPORT') return 'support-api'
+    return 'dashboard'
+  }
+  const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
+    id: `api-notification-${notification.id}`,
+    title: notification.title,
+    message: notification.content,
+    date: notification.createdAt,
+    page: managerNotificationPage(notification.type),
+    targetId: notification.relatedEntityId ?? undefined,
+    isRead: notification.isRead,
+  }))
 
-  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} additionalNotifications={managerNotifications} onNotificationClick={item => {
-    setPage(item.page || 'inventory')
-    const notification = apiNotifications.find(n => n.id === item.id)
-    if (notification) {
-      showToast(notification.content)
-      void markNotificationRead(item.id).then(saved => setApiNotifications(current => current.map(n => n.id === saved.id ? saved : n))).catch(() => {})
+  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} onNotificationClick={(notification) => {
+    if (notification.id.startsWith('api-notification-')) {
+      const notificationId = notification.id.replace('api-notification-', '')
+      setPage(notification.page)
+      setBackendNotifications(current => current.map(item =>
+        item.id === notificationId ? { ...item, isRead: true } : item
+      ))
+      void markNotificationRead(notificationId).catch(() => undefined)
+      return
     }
+    setPage(notification.page)
   }} canAccess={permission => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
     {page === 'dashboard' && (isApiAuthenticated() ? <ManagerDashboardApiPanel setPage={setPage} /> : <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />)}
     {page === 'inventory' && <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} showToast={showToast} />}
     {page === 'unit-assignments' && <ManagerUnitAssignmentPanel showToast={showToast} />}
     {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} initialRentalId={inventoryRentalId} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
 
-    {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} />}
+    {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
     {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
     {page === 'support-api' && isApiAuthenticated() && <SupportApiWorkspace role="manager" />}
@@ -134,6 +162,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'staff-tasks' && (isApiAuthenticated()
       ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}
+    {page === 'reports' && (isApiAuthenticated()
+      ? <ManagerReportsApiPanel />
+      : <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />)}
     {page === 'profile' && <ProfileView user={user} />}
     {toast && <div className="fixed bottom-6 right-6 z-50 max-w-md rounded-lg border border-amber-500/50 bg-[#292a27] px-5 py-3 text-white shadow-2xl"><p className="text-sm font-medium">{toast}</p></div>}
   </Layout></div></ManagerPresentationProvider>
