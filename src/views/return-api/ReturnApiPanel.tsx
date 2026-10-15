@@ -153,19 +153,7 @@ function ReturnWorkspace({
   }
 
   const rows = (read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? [])
-    .filter((item) => statusFilter === 'all' || item.status === statusFilter)
-    .filter((item) => !scheduledDateFilter || item.scheduledDate === scheduledDateFilter)
-    .filter((item) => {
-      const query = search.trim().toLocaleLowerCase('vi')
-      if (!query) return true
-      return [item.id, item.customerName, item.unitNumber, item.facilityName]
-        .some((value) => value.toLocaleLowerCase('vi').includes(query))
-    })
-    .sort((left, right) => {
-      if (sort === 'customer') return left.customerName.localeCompare(right.customerName, 'vi')
-      const difference = left.scheduledDate.localeCompare(right.scheduledDate)
-      return sort === 'date-desc' ? -difference : difference
-    })
+    .sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate))
   const readable = actor?.status === 'ACTIVE' && (
     actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))

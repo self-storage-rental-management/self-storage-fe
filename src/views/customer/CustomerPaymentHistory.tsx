@@ -84,20 +84,6 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         : ["FAILED", "CANCELLED"].includes(entry.status)
           ? "Thanh toán thất bại"
           : "Chưa ghi nhận tiền"
-  const filteredEntries = entries.filter((entry) => {
-    const term = search.trim().toLocaleLowerCase("vi-VN")
-    const transactionCode = entry.reservationPayment?.transactionReference || entry.id
-    if (term && ![transactionCode, entry.id, entry.reference].some((value) => value.toLocaleLowerCase("vi-VN").includes(term))) return false
-    if (category !== "all" && !(category === "renewal" ? ["renewal", "renewalSigning"].includes(entry.category) : category === "settlement" ? entry.category === "damage" : category === "deposit" ? ["deposit", "checkin"].includes(entry.category) : true)) return false
-    if (month) {
-      if (!entry.timestamp || !Number.isFinite(Date.parse(entry.timestamp))) return false
-      const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit" }).formatToParts(new Date(entry.timestamp))
-      const year = parts.find((part) => part.type === "year")?.value
-      const yearMonth = parts.find((part) => part.type === "month")?.value
-      if (`${year}-${yearMonth}` !== month) return false
-    }
-    return true
-  })
   return (
     <div className="fade-in space-y-4">
       <SectionHeader
