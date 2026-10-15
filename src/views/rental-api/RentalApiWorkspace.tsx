@@ -438,7 +438,7 @@ function WorkspaceData({
               const days = rentalDaysUntilDeadline(row)
               const focused = focusStorageUnitId === row.storageUnit.id && row.status !== 'completed'
               return <article key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1}
-                className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 border-l-4 bg-white shadow-sm transition hover:border-l-amber-500 hover:shadow-md focus-within:border-l-amber-500 ${focused ? 'border-l-amber-500 outline outline-2 outline-amber-400' : 'border-l-stone-200'}`}>
+                className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 border-l-4 border-l-amber-500 bg-white shadow-sm transition-colors duration-200 hover:border-amber-300 hover:bg-white hover:shadow-md focus-within:border-l-amber-500 ${focused ? 'outline outline-2 outline-amber-400' : ''}`}>
                 <div className={`${customerRentalColumns} items-center divide-x divide-stone-100 px-1 py-2`}>
                     <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
                     <div className="min-w-0 px-3"><span className="break-all font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>

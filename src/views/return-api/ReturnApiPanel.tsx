@@ -153,6 +153,7 @@ function ReturnWorkspace({
   }
 
   const rows = (read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? [])
+    .sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate))
   const readable = actor?.status === 'ACTIVE' && (
     actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
