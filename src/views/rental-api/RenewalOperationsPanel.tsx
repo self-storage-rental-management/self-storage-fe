@@ -33,7 +33,6 @@ import {
   operationBlockedReason,
   operationLabels,
   phaseLabels,
-  sourceLabels,
   vietnamLocalInstant,
   exceptionConfirmationBlockedReason,
   exceptionConfirmationCommand,
@@ -129,13 +128,13 @@ export function OperationEventCard({
         <p className="break-all">Mã giao dịch: {field("transactionReference")}</p>
       )}
       {e.kind === "CASH" && field("receiptFileId") && isUuid(field("receiptFileId")!) && (
-        <EvidenceDownload id={field("receiptFileId")!} />
+        <EvidenceDownload id={field("receiptFileId")!} label={field("paymentMethod") === "BANK_TRANSFER" ? "Tải chứng từ chuyển khoản" : "Tải biên nhận"} previewLabel="Xem trước" />
       )}
+      {e.kind === "COMPLETION" && field("signedDocumentFileId") && isUuid(field("signedDocumentFileId")!) && <EvidenceDownload id={field("signedDocumentFileId")!} label="Tải hợp đồng đã ký" previewLabel="Xem trước PDF" />}
       {["reason", "completionNote"].map((key) =>
         field(key) ? <p key={key}>{field(key)}</p> : null,
       )}
       {[
-        "paidAt",
         "receivedAt",
         "start",
         "end",
@@ -146,7 +145,6 @@ export function OperationEventCard({
           <p key={key}>
             {
               {
-                paidAt: "Thời điểm thanh toán theo luồng cũ",
                 receivedAt: "Lúc thu tiền",
                 start: "Bắt đầu lịch",
                 end: "Kết thúc lịch",
@@ -216,71 +214,79 @@ export function OperationEventCard({
   )
 }
 
-export function RenewalOperationsSummary({
-  state: s,
-}: {
-  state: RenewalOperationState
-}) {
-  const { manager, copy, errorText } = useManagerPresentation()
-
+export function RenewalOperationsSummary({ state: s, role, cashRecorded = false }: { state: RenewalOperationState; role?: RenewalOperationsRole; cashRecorded?: boolean }) {
+  const { copy } = useManagerPresentation()
+  const progressSteps = [
+    { label: "Thanh toán cọc", detail: "Khoản cọc gia hạn đã được ghi nhận", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
+    { label: "Chọn lịch ký", detail: "Lịch hẹn đã được lưu", done: !!s.appointmentRef },
+    { label: "Khách đến", detail: "Nhân viên đã ghi nhận khách tại cơ sở", done: !!s.arrivalRef },
+    { label: "Thanh toán còn lại", detail: "Khoản tiền thuê còn lại đã được ghi nhận", done: cashRecorded || !!s.fullRentPaidAt || s.phase === "COMPLETED" },
+    { label: "Hoàn tất ký", detail: "Hợp đồng gia hạn đã được lưu", done: !!s.completedAt || s.phase === "COMPLETED" },
+  ]
+  const activeProgressIndex = progressSteps.findIndex(step => !step.done)
+  const progressIndex = activeProgressIndex < 0 ? progressSteps.length : activeProgressIndex
   return (
-    <Card className="p-4 space-y-2 text-sm">
-      <h3 className="font-semibold text-lg">Ký và thanh toán gia hạn</h3>
-      <p>
-        Trạng thái: {copy(phaseLabels[s.phase])}
-      </p>
-      {s.depositPaidAt && <p>Cọc gia hạn được ghi nhận lúc: {rentalDate(s.depositPaidAt)}</p>}
-      {s.phase === "AWAITING_PAYMENT_INTENT" && s.appointmentRef && <p>Lịch dự kiến đã lưu. Thanh toán cọc để xác nhận; hệ thống kiểm tra lại chỗ trống khi mở VNPay.</p>}
-      {s.phase === "SIGNING" && !s.arrivalRef && s.appointmentEnd && Date.parse(s.appointmentEnd) < Date.now() && <p className="text-amber-700">Lịch hẹn đã qua. Khách hàng cần đổi lịch trong hạn ký còn hiệu lực để tiếp tục; không cần thanh toán cọc lại.</p>}
-      {s.fullRentPaidAt && <p>Thanh toán toàn kỳ được ghi nhận lúc: {rentalDate(s.fullRentPaidAt)}</p>}
-      <p>
-        Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}, Hạn ký hiệu
-        lực: {rentalDate(s.effectiveSigningDeadline)}
-      </p>
-      <p>Mốc thu hồi: {rentalDate(s.recoveryCutoff)}</p>
-      <p>
-        Lịch ký đã lưu:{" "}
-        {s.appointmentRef
-          ? `${rentalDate(s.appointmentStart)} - ${rentalDate(s.appointmentEnd)}`
-          : "Chưa đặt lịch"}
-      </p>
-      <p>Khách đến: {s.arrivalRef ? "Đã ghi nhận" : "Chưa ghi nhận"}</p>
-      {s.completedAt && (
-        <p className="break-all">
-          Hoàn tất lúc: {rentalDate(s.completedAt)}
-        </p>
-      )}
-      {s.pendingExceptionRef && (
-        <p className="text-amber-800 break-all">
-          Có cập nhật về lịch ký gia hạn.</p>
-      )}
-      {s.missingSources.length > 0 && (
-        <section role="status" className="rounded bg-amber-50 p-3">
-          <p className="font-semibold">
-            Chưa đủ thông tin để xử lý:</p>
-          <ul className="list-disc pl-5">
-            {s.missingSources.map((ref) => (
-              <li key={ref}>
-                {sourceLabels[ref] || "Thông tin bổ sung"}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+    <Card className="space-y-3 p-4 text-sm">
+      <h3 className="font-semibold">Lịch ký</h3>
+      {role === "staff" && <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình gia hạn cho nhân viên">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="font-semibold">Tiến trình gia hạn</h4>
+            <p className="text-xs text-stone-500">Đã hoàn thành {progressIndex}/{progressSteps.length} bước</p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${progressIndex === progressSteps.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+            {progressIndex === progressSteps.length ? "Gia hạn hoàn tất" : `Đang thực hiện: ${progressSteps[progressIndex]?.label}`}
+          </span>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {progressSteps.map((step, index) => {
+            const completed = step.done
+            const current = index === progressIndex && progressIndex < progressSteps.length
+            return <div key={step.label} aria-current={current ? "step" : undefined} className={`rounded-lg border p-3 ${completed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : current ? "border-amber-400 bg-amber-500 text-white" : "border-stone-200 bg-white text-stone-400"}`}>
+              <div className="mb-2 flex items-center justify-between gap-1">
+                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${completed ? "bg-emerald-600 text-white" : current ? "bg-white text-amber-700" : "bg-stone-100 text-stone-500"}`}>{completed ? "✓" : index + 1}</span>
+                <span className="text-[10px] font-semibold">{completed ? "Đã xong" : current ? "Hiện tại" : "Sắp tới"}</span>
+              </div>
+              <p className="text-xs font-bold">{step.label}</p>
+              <p className={`mt-1 text-[11px] leading-4 ${current ? "text-amber-50" : completed ? "text-emerald-800" : "text-stone-500"}`}>{step.detail}</p>
+            </div>
+          })}
+        </div>
+      </section>}
+      <dl className="grid gap-3 sm:grid-cols-3">
+        <div><dt className="text-xs text-stone-500">Trạng thái</dt><dd className="font-semibold">{copy(phaseLabels[s.phase])}</dd></div>
+        <div><dt className="text-xs text-stone-500">Lịch ký</dt><dd className="font-medium">{s.appointmentRef ? `${rentalDate(s.appointmentStart)} — ${rentalDate(s.appointmentEnd)}` : "Chưa đặt lịch"}</dd></div>
+        <div><dt className="text-xs text-stone-500">Khách đến</dt><dd className="font-medium">{s.arrivalRef ? "Đã ghi nhận" : "Chưa ghi nhận"}</dd></div>
+      </dl>
+      {s.phase === "SIGNING" && !s.arrivalRef && s.appointmentEnd && Date.parse(s.appointmentEnd) < Date.now() && <p className="text-amber-700">Lịch hẹn đã qua. Khách hàng cần đổi lịch trong hạn ký còn hiệu lực để tiếp tục.</p>}
+      <details>
+        <summary className="cursor-pointer text-xs font-semibold text-stone-600">Hạn ký và hạn xử lý</summary>
+        <div className="mt-2 grid gap-2 text-xs text-stone-600 sm:grid-cols-3">
+          <p>Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}</p>
+          <p>Hạn ký hiện tại: {rentalDate(s.effectiveSigningDeadline)}</p>
+          <p>Mốc thu hồi: {rentalDate(s.recoveryCutoff)}</p>
+        </div>
+      </details>
+      {s.completedAt && <p className="text-emerald-700">Gia hạn hoàn tất lúc {rentalDate(s.completedAt)}</p>}
+      {s.pendingExceptionRef && <p className="text-amber-800">Có cập nhật về lịch ký gia hạn đang chờ xử lý.</p>}
+
     </Card>
   )
 }
-
 function EventTimeline({
   role,
   id,
   category,
   identity,
+  collapsible = true,
+  extraEvents = [],
 }: {
   role: RenewalOperationsRole
   id: string
-  category: "payments" | "refunds" | "facility-incidents"
+  category: "payments" | "documents" | "refunds" | "facility-incidents"
   identity: string
+  collapsible?: boolean
+  extraEvents?: RenewalOperationEvent[]
 }) {
   const { manager, copy, errorText } = useManagerPresentation()
 
@@ -290,36 +296,64 @@ function EventTimeline({
       ? listAllRenewalPaymentEvents(role, id)
       : listRenewalOperationEvents(role, id, category, page),
   )
-  if (!read.loading && !read.error && read.data?.data.length === 0) return null
-  return (
-    <Card className="p-4 space-y-3">
-      <div className="flex justify-between gap-3">
-        <h4 className="font-semibold">
-          {
-            {
-              payments: "Lịch sử thanh toán gia hạn và biên nhận tiền mặt",
-              refunds: "Lịch sử xử lý cọc và hoàn tiền",
-              "facility-incidents": "Sự cố & xem xét ngoại lệ",
-            }[category]
-          }
-        </h4>
-      </div>
-      <ApiReadState {...read} retry={read.refresh} />
-      {read.data && (
-        <>
-          {read.data.data.map((e) => (
-            <OperationEventCard key={e.id} event={e} />
-          ))}
-          {read.data.data.length === 0 && (
-            <p>
-              Không có dữ liệu
-            </p>
-          )}
-          {category !== "payments" && <ApiPager pagination={read.data.pagination} onPage={setPage} />}
-        </>
-      )}
-    </Card>
-  )
+  const apiEvents = category === "payments"
+    ? read.data?.data.filter((event) => event.kind === "CASH")
+    : read.data?.data
+  const visibleEvents = category === "documents"
+    ? [...(apiEvents ?? []), ...extraEvents.filter(event => ["ARRIVAL", "COMPLETION"].includes(event.kind) && !apiEvents?.some(existing => existing.id === event.id))]
+    : apiEvents
+  if (!read.loading && !read.error && visibleEvents?.length === 0) return null
+  const title = {
+    payments: "Lịch sử thanh toán và biên lai",
+    documents: "Chứng từ",
+    refunds: "Lịch sử xử lý cọc và hoàn tiền",
+    "facility-incidents": "Sự cố & xem xét ngoại lệ",
+  }[category]
+  const content = <div className="space-y-3">
+    {!(category === "documents" && extraEvents.length > 0 && read.error) && <ApiReadState {...read} retry={read.refresh} />}
+    {(read.data || (category === "documents" && extraEvents.length > 0)) && <>
+      {visibleEvents?.map((e) => category === "documents" ? (
+        <article key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm">
+          <div>
+            <p className="font-semibold">{e.kind === "ARRIVAL" ? "Minh chứng khách đến" : "Hợp đồng gia hạn đã ký"}</p>
+            <p className="text-xs text-stone-500">{rentalDate(e.occurredAt)}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {e.kind === "ARRIVAL" && (() => {
+              const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
+              const ids = Array.isArray(data.evidenceFileIds) ? data.evidenceFileIds.filter((value): value is string => typeof value === "string" && isUuid(value)) : []
+              return ids.length ? ids.map((fileId, index) => <EvidenceDownload key={fileId} id={fileId} index={index + 1} label={`Tải minh chứng ${index + 1}`} previewLabel={`Xem trước ${index + 1}`} />) : <span className="text-stone-500">Không có tệp đính kèm</span>
+            })()}
+            {e.kind === "COMPLETION" && (() => {
+              const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
+              return typeof data.signedDocumentFileId === "string" && isUuid(data.signedDocumentFileId)
+                ? <EvidenceDownload id={data.signedDocumentFileId} label="Tải hợp đồng" previewLabel="Xem trước PDF" />
+                : <span className="text-stone-500">Không có hợp đồng đính kèm</span>
+            })()}
+          </div>
+        </article>
+      ) : <OperationEventCard key={e.id} event={e} />)}
+      {visibleEvents?.length === 0 && <p className="text-sm text-stone-500">Không có dữ liệu</p>}
+      {category !== "payments" && read.data && read.data.pagination.totalPages > 1 && <ApiPager pagination={read.data.pagination} onPage={setPage} />}
+    </>}
+  </div>
+  if (category === "payments" && collapsible) return <details className="rounded-xl border border-stone-200 bg-white p-4">
+    <summary className="cursor-pointer list-none font-semibold">{title}<span className="ml-2 text-sm font-normal text-stone-500">Mở để xem biên lai và lịch sử thanh toán</span></summary>
+    <div className="mt-3">{content}</div>
+  </details>
+  if (category === "documents" && collapsible) return <details className="rounded-xl border border-stone-200 bg-white p-4">
+    <summary className="cursor-pointer list-none font-semibold">{title}</summary>
+    <div className="mt-3">{content}</div>
+  </details>
+  return <Card className="space-y-3 p-4">{category !== "payments" && <h4 className="font-semibold">{title}</h4>}{content}</Card>
+}
+
+export function RenewalPaymentHistory({ id, role, identity }: { id: string; role: RenewalOperationsRole; identity: string }) {
+  return <EventTimeline id={id} role={role} identity={identity} category="payments" collapsible={false} />
+}
+
+export function RenewalDocumentHistory({ id, role, identity, extraEvents = [] }: { id: string; role: RenewalOperationsRole; identity: string; extraEvents?: RenewalOperationEvent[] }) {
+  return <EventTimeline id={id} role={role} identity={identity} category="documents" extraEvents={extraEvents} />
 }
 
 export default function RenewalOperationsPanel({
@@ -330,6 +364,7 @@ export default function RenewalOperationsPanel({
   status,
   onChanged,
   onLocked,
+  onDocumentEvent,
   appointmentOnly = false,
 }: {
   id: string
@@ -339,6 +374,7 @@ export default function RenewalOperationsPanel({
   status?: string
   onChanged?: () => void
   onLocked?: (locked: boolean) => void
+  onDocumentEvent?: (event: RenewalOperationEvent) => void
   appointmentOnly?: boolean
 }) {
   const { manager, copy, errorText } = useManagerPresentation()
@@ -351,12 +387,19 @@ export default function RenewalOperationsPanel({
     state: RenewalOperationState
     proposal?: RenewalExceptionProposal | null
   }>()
+  const [successMessage, setSuccessMessage] = useState<string>()
   const [lastEvent, setLastEvent] = useState<RenewalOperationEvent>()
   const [locked, setLocked] = useState(false)
   const lockRef = useRef(false)
   const read = useRentalApiResource(`${identity}:${revision}`, () =>
     getRenewalOperations(role, id),
   )
+  const paymentEventsRead = useRentalApiResource(`${identity}:${revision}:payment-events`, () =>
+    role === "staff" && !appointmentOnly
+      ? listAllRenewalPaymentEvents(role, id)
+      : Promise.resolve(null),
+  )
+  const cashRecorded = paymentEventsRead.data?.data.some(event => event.kind === "CASH") ?? false
   const proposalRead = useRentalApiResource(
     `${identity}:${revision}:${read.data?.expectedVersion}:${read.data?.pendingExceptionRef}:proposal`,
     () => role === "customer" && read.data?.pendingExceptionRef ? getRenewalExceptionProposal(id) : Promise.resolve(null),
@@ -369,7 +412,10 @@ export default function RenewalOperationsPanel({
   }, [role])
   const actions: RenewalOperationAction[] =
     role === "customer"
-      ? appointmentOnly ? ["appointment", "reschedule"] : ["appointment", "reschedule", "confirmation"]
+      ? [
+          read.data?.appointmentRef ? "reschedule" : "appointment",
+          ...(!appointmentOnly && read.data?.pendingExceptionRef ? ["confirmation" as const] : []),
+        ]
       : role === "staff"
         ? ["arrival", "incident", "cash", "completion"]
         : ["exception", "refund"]
@@ -397,7 +443,7 @@ export default function RenewalOperationsPanel({
                 ? `Lịch đã chọn: ${rentalDate(read.data.appointmentStart)} - ${rentalDate(read.data.appointmentEnd)}`
                 : "Chọn và lưu lịch ký trước khi thanh toán cọc."}</p>
             </section>
-          ) : <RenewalOperationsSummary state={read.data} />}
+          ) : <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
           {role === "manager" && !selected && <RenewalCoordinationPanel
             key={`${identity}:${revision}`}
             state={read.data} facilityId={facilityId} status={status}
@@ -416,10 +462,11 @@ export default function RenewalOperationsPanel({
               <OperationEventCard event={lastEvent} />
             </div>
           )}
+          {successMessage && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{successMessage}</p>}
           {!appointmentOnly && <Card className="p-4 space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               {actions.map((action) => {
-                const reason = operationBlockedReason(
+                const blockedReason = operationBlockedReason(
                   read.data!,
                   role,
                   action,
@@ -429,6 +476,15 @@ export default function RenewalOperationsPanel({
                   proposalRead.data,
                   now,
                 )
+                const reason = action === "cash"
+                  ? cashRecorded
+                    ? "Khoản thanh toán còn lại đã được ghi nhận."
+                    : paymentEventsRead.loading
+                      ? "Đang kiểm tra trạng thái thanh toán."
+                      : paymentEventsRead.error
+                        ? "Không thể xác minh trạng thái thanh toán. Hãy tải lại hồ sơ rồi thử lại."
+                        : blockedReason
+                  : blockedReason
                 return (
                   <div key={action}>
                     <Button
@@ -436,12 +492,13 @@ export default function RenewalOperationsPanel({
                       disabled={!!reason || locked}
                       onClick={() => {
                         if (lockRef.current || reason) return
+                        setSuccessMessage(undefined)
                         setSelected({ action, state: read.data!, proposal: proposalRead.data })
                       }}
                     >
                       {copy(operationLabels[action])}
                     </Button>
-                    {reason && (
+                    {reason && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
                       <p className="mt-1 text-xs text-stone-500">{copy(reason)}</p>
                     )}
                   </div>
@@ -458,7 +515,7 @@ export default function RenewalOperationsPanel({
         onLocked={lock}
         onCancel={() => { setRevision(v => v + 1); onChanged?.() }}
         onSuccess={event => {
-          setLastEvent(event); setRevision(v => v + 1); onChanged?.()
+          setLastEvent(event); setSuccessMessage("Lịch ký đã lưu thành công."); setRevision(v => v + 1); onChanged?.()
         }}
       />}
       {/* Keep the selected snapshot mounted across background read/proposal updates.
@@ -477,19 +534,35 @@ export default function RenewalOperationsPanel({
           }}
           onSuccess={(e) => {
             setLastEvent(e)
+            if (e.kind === "ARRIVAL" || e.kind === "COMPLETION") onDocumentEvent?.(e)
+            if (selected.action === "appointment" || selected.action === "reschedule")
+              setSuccessMessage(selected.action === "reschedule" ? "Đổi lịch ký đã lưu thành công." : "Lịch ký đã lưu thành công.")
             setSelected(undefined)
             setRevision((v) => v + 1)
             onChanged?.()
           }}
         />
       )}
-      {!appointmentOnly && <EventTimeline
-        key={`${identity}:${revision}:payments`}
-        identity={`${identity}:${revision}`}
-        role={role}
-        id={id}
-        category="payments"
-      />}
+      {role === "staff" && !appointmentOnly && <>
+        <EventTimeline
+          key={`${identity}:${revision}:payments`}
+          identity={`${identity}:${revision}`}
+          role={role}
+          id={id}
+          category="payments"
+        />
+        <EventTimeline
+          key={`${identity}:${revision}:documents`}
+          identity={`${identity}:${revision}`}
+          role={role}
+          id={id}
+          category="documents"
+          extraEvents={[
+            ...(paymentEventsRead.data?.data ?? []),
+            ...(lastEvent ? [lastEvent] : []),
+          ]}
+        />
+      </>}
       {!appointmentOnly && role !== "staff" && (
         <EventTimeline
           key={`${identity}:${revision}:refunds`}
@@ -914,14 +987,9 @@ function OperationForm({
           <>
             <EvidenceUpload entityType={renewalSignedContractEntityType} entityId={s.renewalId}
               value={signedFile ? [signedFile] : []} limit={1}
+              label="Tải lên hợp đồng gia hạn đã ký (PDF)" accept=".pdf,application/pdf"
               onChange={ids => setSignedFile(ids[0] || "")} onBusy={uploadBusy} />
-            <label className="block">
-              Mã tài liệu gia hạn đã ký<input
-                className={operationsInputClass}
-                value={signedFile}
-                onChange={(e) => setSignedFile(e.target.value.trim())}
-              />
-            </label>
+            {signedFile && isUuid(signedFile) && <EvidenceDownload id={signedFile} label="Tải hợp đồng đã ký" previewLabel="Xem trước PDF" />}
             <label>
               <input
                 type="checkbox"
@@ -933,12 +1001,6 @@ function OperationForm({
           </>
         )}
       </fieldset>
-      {decisionMissing.length > 0 && (
-        <p role="status" className="text-amber-700">
-          Chưa đủ thông tin:{" "}
-          {decisionMissing.map((ref) => sourceLabels[ref] || "Thông tin bổ sung").join(", ")}
-        </p>
-      )}
       {validation && <p role="alert">{validation}</p>}
       {command.error ? <p role="alert">{errorText(command.error, rentalError)}</p> : null}
       {command.uncertain && (
@@ -992,10 +1054,10 @@ function OperationForm({
           }}
         >
           {command.busy
-            ? "Đang gửi…"
+            ? ["appointment", "reschedule"].includes(action) ? "Đang lưu lịch ký…" : "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : "Gửi yêu cầu"}
+              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : "Gửi yêu cầu"}
         </Button>
         <Button
           variant="outline"

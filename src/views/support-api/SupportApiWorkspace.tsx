@@ -348,28 +348,28 @@ function SupportSession({
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <>
             {read.data.data.length > 0 && <Card className="overflow-x-auto p-0">
-              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[1000px]" : "min-w-[1180px]"}`}>
+              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[1000px]" : "min-w-[1080px]"}`}>
                 <colgroup>
                   {role === "customer" ? <>
                     <col className="w-[28%]" /><col className="w-[22%]" /><col className="w-[23%]" /><col className="w-[15%]" /><col className="w-[12%]" />
                   </> : <>
-                    <col className="w-[24%]" /><col className="w-[20%]" /><col className="w-[18%]" /><col className="w-[16%]" /><col className="w-[12%]" /><col className="w-[10%]" />
+                    <col className="w-[25%]" /><col className="w-[15%]" /><col className="w-[19%]" /><col className="w-[15%]" /><col className="w-[14%]" /><col className="w-[12%]" />
                   </>}
                 </colgroup>
                 <thead className="border-b bg-stone-50 text-stone-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
+                    <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Trạng thái</th>
                     <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
-                    {role !== "customer" && <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Nhân viên phụ trách</th>}
-                    <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
-                    <th scope="col" className="px-4 py-3 text-right font-semibold">Thao tác</th>
+                    {role !== "customer" && <th scope="col" className="px-4 py-3 font-semibold">Nhân viên phụ trách</th>}
+                    <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Tạo lúc</th>
+                    <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-200">
                   {read.data.data.map((t) => <tr key={t.id}>
                     <td className="break-words px-4 py-3 align-middle">
-                      <div className="font-semibold text-stone-900">{t.subject}</div>
+                      <div className="line-clamp-2 min-h-10 font-semibold text-stone-900">{t.subject}</div>
                       <TicketCode id={t.id} />
                     </td>
                     <td className="px-4 py-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${supportStatusClass(t.status)}`}>

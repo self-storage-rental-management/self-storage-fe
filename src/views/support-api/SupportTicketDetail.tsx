@@ -88,8 +88,6 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
         <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">{otherFields.map(([label, value]) => <div key={label} className="min-w-0">
           <dt className="text-xs text-stone-500">{label}</dt><dd className="break-all">{value}</dd>
         </div>)}</dl>
-        {!t.workflowReady && <p className="mt-2 text-amber-800">Hồ sơ chưa đủ thông tin để tiếp tục xử lý, hiện chỉ có thể xem.</p>}
-        {t.slaCompleteness === "UNKNOWN" || !t.sla ? <p className="mt-2 text-stone-500">Chưa đủ thông tin để xác định hạn xử lý và mức ưu tiên.</p> : <p className="mt-2">Mức ưu tiên: {supportPriorityLabels[t.sla.priority] ?? "Chưa xác định"} · Hạn phản hồi đầu: {supportDetailDate(t.sla.firstReplyDueAt)} · Hạn cập nhật: {supportDetailDate(t.sla.nextUpdateDueAt)}</p>}
       </details>
     </div>
   )
