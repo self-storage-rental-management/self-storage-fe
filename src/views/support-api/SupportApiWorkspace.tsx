@@ -123,6 +123,7 @@ function SupportSession({
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
   const [revision, setRevision] = useState(0)
+  const [conversation, setConversation] = useState<"messages" | "internal">("messages")
   const [staffView, setStaffView] = useState<"queue" | "assigned">("assigned")
   const [queuePage, setQueuePage] = useState(0)
   const read = useRentalApiResource(
@@ -216,6 +217,35 @@ function SupportSession({
         )}
       </div>
       {role !== "manager" && !selected && !creation && commandNotice}
+
+      {role === "staff" && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Danh sách hỗ trợ">
+          {([
+            ["assigned", "Hồ sơ của tôi"],
+            ["queue", "Chờ tiếp nhận"],
+          ] as const).map(([view, label]) => (
+            <Button
+              key={view}
+              type="button"
+              variant={staffView === view ? "primary" : "outline"}
+              aria-pressed={staffView === view}
+              disabled={locked}
+              onClick={() => {
+                if (command.locked || uploadLock.current || staffView === view) return
+                setStaffView(view)
+                setSelected(undefined)
+                setQuery(q => ({ ...q, page: 0 }))
+                setQueuePage(0)
+                command.clearError()
+                if (view === "queue") queueRead.refresh()
+                else read.refresh()
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <Card className="space-y-3 p-4">
         <form
@@ -414,6 +444,8 @@ function SupportSession({
               role={role}
               id={selected}
               command={formCommand}
+              conversation={conversation}
+              onConversationChange={setConversation}
               onUploadBusy={uploadBusy}
               onFollowUp={(parent) => {
                 if (command.locked || uploadLock.current) return

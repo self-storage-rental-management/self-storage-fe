@@ -66,14 +66,15 @@ describe("D5 role and lifecycle boundaries", () => {
       ...supportActive, status: "resolved", resolvedAt: "2026-10-08T03:00:00Z",
       resolvedBy: supportIds.staff,
     }} />)
-    expect(html).toContain("Đã xử lý xong, chờ khách hàng xác nhận")
+    expect(html).toContain("Đã xử lý - chờ xác nhận")
+    expect(html).not.toContain("Đã xử lý xong, chờ khách hàng xác nhận")
     expect(html).not.toContain("notification")
     expect(html).not.toContain("Tự đóng sau 7 ngày")
   })
-  it("Manager coordinates only; cannot resolve, reply or accept as Staff", () => {
+  it("Manager can message internally but cannot change workflow", () => {
     expect(
       supportActions(supportActor("manager"), "manager", supportActive),
-    ).toEqual(["assign", "decision"])
+    ).toEqual(["message"])
   })
   it.each(["READ", "OPERATE"] as const)(
     "Manager %s scope is read-only",
@@ -217,19 +218,23 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
     expect(html).not.toContain("<script>")
     expect(html).not.toContain("9004#")
   })
-  it("Manager assignment submit stays disabled until an actual Staff ID and reason are selected", () => {
+  it("Manager internal composer uses the chat controls without workflow actions", () => {
     session.actor = supportActor("manager")
     const html = renderToStaticMarkup(
       <SupportActionForm
         role="manager"
-        ticket={supportTicket}
+        ticket={supportActive}
         command={command}
+        mode="message"
+        internal
       />,
     )
-    expect(html).toContain("Chọn nhân viên")
+    expect(html).toContain("Nhập tin nhắn...")
+    expect(html).toContain("Gửi tin nhắn")
     expect(html).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>/)
     expect(html).not.toContain("Báo kết quả xử lý")
     expect(html).not.toContain("Nhận xử lý")
+    expect(html).not.toContain("Báo đã xử lý")
   })
   it("shows a Staff permission gate without impersonation or demo fallback", () => {
     session.actor = { ...supportActor("staff"), permissions: ["support:read"] }

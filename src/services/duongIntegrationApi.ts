@@ -502,6 +502,11 @@ export function downloadDuongEvidence(id: string) {
   requireId(id)
   return apiDownload(`/api/files/${id}`)
 }
+export async function getDuongEvidenceName(id: string) {
+  requireId(id)
+  const file = await apiDownload(`/api/files/${id}`, undefined, "HEAD")
+  return file.fileName
+}
 export function integrationError(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.status === 401)
