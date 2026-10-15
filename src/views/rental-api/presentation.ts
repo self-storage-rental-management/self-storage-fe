@@ -58,7 +58,7 @@ export function rentalError(error: unknown) {
     if (error.status === 403)
       return "Bạn không có quyền hoặc phạm vi cơ sở để thực hiện thao tác này."
     if (error.status === 404)
-      return "Không tìm thấy hồ sơ hoặc hồ sơ không thuộc phạm vi truy cập."
+      return "Không có"
     const renewalErrors: Array<[string, string]> = [
       ["Appointment expired during reservation", "Lịch hẹn đã qua trong lúc xử lý. Hãy tải lại hồ sơ và chọn lịch khác; lịch mới chưa được lưu."],
       ["Eligibility UNKNOWN", "Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau; nếu vẫn gặp lỗi, liên hệ quản lý cơ sở."],
