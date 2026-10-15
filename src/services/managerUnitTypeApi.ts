@@ -18,6 +18,7 @@ export interface ManagerUnitTypeInput {
   smallBoxCapacity: number
   largeBoxCapacity: number
   imageUrl?: string | null
+  detailImageUrl?: string | null
   physicalUnitCount: number
   floor?: string | null
   zone?: string | null
