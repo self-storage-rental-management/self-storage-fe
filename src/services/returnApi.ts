@@ -10,6 +10,7 @@ export interface ApiReturn {
   facilityName: string; unitNumber: string; customerName: string
   status: typeof returnStatuses[number]; scheduledDate: string
   inspectionNotes: string | null; managerResolutionNote: string | null
+  customerNotes?: string | null
   depositAmount: number | null; totalDeductions: number; netRefundAmount: number | null; amountDueFromCustomer: number | null
   settlementBlocker?: string | null; customerConfirmed: boolean
   damageFee: number; cleaningFee: number; lostItemFee: number; overdueFee: number; outstandingFee: number
@@ -62,6 +63,13 @@ export async function requestReturn(rentalId: string, scheduledDate: string, not
   return bound(await apiRequest(`/api/customer/rentals/${rentalId}/return-request`, {
     method: 'POST', body: JSON.stringify({ scheduledDate, notes }),
   }), 'customer', undefined, rentalId)
+}
+export async function updateReturnRequest(id: string, scheduledDate: string, notes: string) {
+  actor('customer', true)
+  if (!isUuid(id) || !date(scheduledDate) || !notes.trim() || notes.length > 2000) throw new Error('Kiểm tra ngày trả kho và lý do.')
+  return bound(await apiRequest(`/api/customer/returns/${id}/request`, {
+    method: 'PATCH', body: JSON.stringify({ scheduledDate, notes }),
+  }), 'customer', id)
 }
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>

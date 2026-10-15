@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useRef } from "react"
+import { useMemo, useState } from "react"
+import ManagerWarehouseImageField from "./ManagerWarehouseImageField"
 import {
   Badge,
   Button,
@@ -25,6 +26,7 @@ import ManagerPagination from "./ManagerPagination"
 import { paginateManagerItems } from "./managerList"
 import type { RentalApiRecord } from "../../types/rentalApi"
 import {
+  currentInventoryRentals,
   inventoryLocation,
   loadInventoryRentals,
 } from "./managerInventoryDetailsApi"
@@ -51,13 +53,13 @@ const statusLabels: Record<InventoryUnit["status"], string> = {
   held: "Đang giữ tạm thời",
   maintenance: "Đang bảo trì",
 }
-const variants: Record<InventoryUnit["status"], string> = {
-  available: "success",
-  occupied: "info",
-  reserved: "purple",
-  assigned: "purple",
-  held: "purple",
-  maintenance: "warning",
+const statusClasses: Record<InventoryUnit["status"], string> = {
+  available: "bg-green-100 text-green-700",
+  occupied: "bg-blue-50 text-blue-700",
+  reserved: "bg-violet-50 text-violet-700",
+  assigned: "bg-violet-50 text-violet-700",
+  held: "bg-amber-50 text-amber-800",
+  maintenance: "bg-red-50 text-red-700",
 }
 const inputClass =
   "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -74,13 +76,15 @@ const dimensions = (u: InventoryUnit) =>
     ? missing
     : `${u.definition.lengthM?.toLocaleString("vi-VN")} × ${u.definition.widthM?.toLocaleString("vi-VN")} × ${u.definition.heightM?.toLocaleString("vi-VN")} m`
 
-export default function ManagerInventoryApiPanel() {
+export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenance }: {
+  onOpenRental?: (rentalId: string) => void
+  onOpenMaintenance?: (unitId: string, unitCode: string) => void
+} = {}) {
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const identity = `${actor?.id}:${actor?.status}:${JSON.stringify(actor?.roles)}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${facilityId}`
   return (
     <div className="fade-in space-y-6">
-      <SectionHeader eyebrow="Vận hành cơ sở" title="Quản lý gian kho" />
       {!actor ||
       actor.status !== "ACTIVE" ||
       !actor.roles.includes("MANAGER") ? (
@@ -97,6 +101,8 @@ export default function ManagerInventoryApiPanel() {
             key={identity}
             identity={identity}
             facilityId={facilityId}
+            onOpenRental={onOpenRental}
+            onOpenMaintenance={onOpenMaintenance}
           />
         </>
       )}
@@ -107,12 +113,18 @@ export default function ManagerInventoryApiPanel() {
 function InventoryRead({
   identity,
   facilityId,
+  onOpenRental,
+  onOpenMaintenance,
 }: {
   identity: string
   facilityId: string
+  onOpenRental?: (rentalId: string) => void
+  onOpenMaintenance?: (unitId: string, unitCode: string) => void
 }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [editingType, setEditingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
+  const [reviewNotice, setReviewNotice] = useState('')
+  const [viewingType, setViewingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
   const [deletingType, setDeletingType] = useState<{ id: string; name: string }>()
   const [actionError, setActionError] = useState<string>()
   const [actionBusy, setActionBusy] = useState(false)
@@ -155,6 +167,16 @@ function InventoryRead({
                 const detail = response.data.find(item => item.id === type.id)
                 if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
                 const unit = read.data?.units.find(item => item.unitTypeId === type.id)
+                setViewingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
+              } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
+            }}>Thông tin loại kho</Button>
+            <Button variant="outline" disabled={actionBusy} onClick={async () => {
+              setActionBusy(true); setActionError(undefined)
+              try {
+                const response = await listAccessibleUnitTypes(facilityId)
+                const detail = response.data.find(item => item.id === type.id)
+                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
+                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
                 setEditingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
               } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
             }}>Chỉnh sửa</Button>
@@ -163,9 +185,60 @@ function InventoryRead({
         </div>)}
         {read.data.catalog.length === 0 && <p className="text-sm text-stone-500">Chưa có loại kho thực tế.</p>}
       </Card>
-      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} />
+      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} />
+      <Modal open={!!viewingType} onClose={() => setViewingType(undefined)} title="Thông tin loại kho thực tế" size="xl">
+        {viewingType && <div className="space-y-4">
+          <div className="flex flex-col gap-4 rounded-xl bg-stone-50 p-4 sm:flex-row">
+            {viewingType.imageUrl && <img src={viewingType.imageUrl} alt={viewingType.name} className="h-32 w-full rounded-lg object-cover sm:w-44" />}
+            <div className="min-w-0"><h3 className="font-semibold">{viewingType.code} · {viewingType.name}</h3><p className="mt-2 whitespace-pre-wrap break-words text-stone-600">{viewingType.description || 'Chưa có mô tả'}</p></div>
+          </div>
+          {viewingType.detailImageUrl && <figure className="rounded-xl border border-stone-200 p-4">
+            <figcaption className="mb-2 text-sm font-semibold">Ảnh chi tiết / sơ đồ bố trí</figcaption>
+            <img src={viewingType.detailImageUrl} alt={`Sơ đồ ${viewingType.name}`} className="max-h-72 w-full object-contain" />
+          </figure>}
+          {(() => {
+            const fields = [
+              ['Kích thước kho (D × R × C)', `${viewingType.lengthM} × ${viewingType.widthM} × ${viewingType.heightM} m`],
+              ['Diện tích', `${viewingType.areaM2} m²`],
+              ['Thể tích', `${viewingType.volumeM3} m³`],
+              ['Tải trọng tối đa', `${viewingType.maxLoadKg} kg`],
+              ['Số khung kệ', viewingType.rackCount],
+              ['Kích thước khung (D × R × C)', `${viewingType.rackLengthM} × ${viewingType.rackWidthM} × ${viewingType.rackHeightM} m`],
+              ['Chiều rộng lối đi (m)', viewingType.aisleWidthM],
+              ['Xe đẩy hỗ trợ', viewingType.trolleyType],
+              ['Sức chứa thùng nhỏ', viewingType.smallBoxCapacity],
+              ['Sức chứa thùng lớn', viewingType.largeBoxCapacity],
+              ['Tổng số gian', viewingType.totalCount],
+              ['Đang sử dụng', viewingType.occupiedCount],
+              ['Còn trống', viewingType.availableCount],
+              ['Giá thuê / tháng', Number(viewingType.monthlyPrice) > 0 ? formatVndAmount(viewingType.monthlyPrice) : 'Chờ BO định giá'],
+              ['Tiền cọc đảm bảo', formatVndAmount(viewingType.securityDepositAmount)],
+              ['Trạng thái', ({ active: 'Đã công bố', awaiting_pricing: 'Chờ BO định giá', draft: 'Đang thiết lập', inactive: 'Ngừng hoạt động' } as Record<string, string>)[viewingType.status] || viewingType.status],
+            ]
+            const groups = [
+              { title: 'Kích thước và tải trọng', items: fields.slice(0, 4) },
+              { title: 'Khung kệ và thiết bị hỗ trợ', items: fields.slice(4, 8) },
+              { title: 'Sức chứa thùng', items: fields.slice(8, 10) },
+              { title: 'Số lượng và giá thuê', items: fields.slice(10) },
+            ]
+            return <div className="grid gap-4 lg:grid-cols-2">
+              {groups.map((group, index) => <section key={group.title} className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 ${index >= 2 ? 'lg:col-span-2' : ''}`}>
+                <h4 className="border-b border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800">{group.title}</h4>
+                <dl className={index >= 2 ? `grid gap-px bg-stone-200 sm:grid-cols-2 ${index === 3 ? 'lg:grid-cols-3' : ''}` : 'divide-y divide-stone-100 px-4'}>
+                  {group.items.map(([label, value]) => <div key={String(label)} className={index >= 2 ? 'min-w-0 bg-white px-4 py-3' : 'grid grid-cols-1 gap-1 py-3 sm:grid-cols-2 sm:gap-3'}>
+                    <dt className={index >= 2 ? 'mb-1 text-xs text-stone-500' : 'text-sm text-stone-500'}>{label}</dt>
+                    <dd className={`min-w-0 whitespace-pre-wrap break-words font-medium text-stone-900 ${index >= 2 ? 'text-base' : 'text-sm'}`}>{value == null || value === '' ? 'Chưa khai báo' : value}</dd>
+                  </div>)}
+                </dl>
+              </section>)}
+            </div>
+          })()}
+          <div className="flex justify-end border-t border-stone-200 pt-4"><Button variant="outline" onClick={() => setViewingType(undefined)}>Đóng</Button></div>
+        </div>}
+      </Modal>
       <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
-      {editingType && <CreateUnitTypeModal key={editingType.id} open facilityId={facilityId} initial={editingType} onClose={() => setEditingType(undefined)} onCreated={() => { setEditingType(undefined); read.refresh() }} />}
+      {reviewNotice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{reviewNotice}</p>}
+      {editingType && <CreateUnitTypeModal key={editingType.id} open facilityId={facilityId} initial={editingType} onClose={() => setEditingType(undefined)} onCreated={() => { setEditingType(undefined); setReviewNotice('Đã gửi thay đổi cho BO duyệt. Customer vẫn thấy thông tin đã được duyệt trước đó.'); read.refresh() }} />}
       <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Xóa loại kho">
         <div className="space-y-4"><p>Xóa loại kho <b>{deletingType?.name}</b> và các gian trống thuộc loại này? Loại kho có đơn đặt hoặc hồ sơ liên quan không được xóa.</p>
           {actionError && <p role="alert" className="text-sm text-red-700">{actionError}</p>}
@@ -196,63 +269,14 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     code: '', name: '', description: '', lengthM: '8', widthM: '10', heightM: '5', maxLoadKg: '1000',
     rackCount: '4', rackLengthM: '4', rackWidthM: '2', rackHeightM: '4.5',
     aisleWidthM: '1.8', trolleyType: 'Xe đẩy tay / xe sàn nhỏ', smallBoxCapacity: '336', largeBoxCapacity: '200',
-    physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '',
+    physicalUnitCount: '1', floor: '1', zone: 'Khu A', imageUrl: '', detailImageUrl: initial?.detailImageUrl || '',
     ...(initial ? Object.fromEntries(Object.entries(initial).filter(([key]) => ['code', 'name', 'description', 'lengthM', 'widthM', 'heightM', 'maxLoadKg', 'rackCount', 'rackLengthM', 'rackWidthM', 'rackHeightM', 'aisleWidthM', 'trolleyType', 'smallBoxCapacity', 'largeBoxCapacity', 'floor', 'zone', 'imageUrl'].includes(key)).map(([key, value]) => [key, value == null ? '' : String(value)])) : {}),
     ...(initial ? { physicalUnitCount: String(initial.totalCount ?? 0) } : {}),
   })
   const [busy, setBusy] = useState(false)
+  const [imageReading, setImageReading] = useState(false)
   const [error, setError] = useState<string>()
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [imageError, setImageError] = useState(false)
 
-  useEffect(() => {
-    setImageError(false)
-  }, [open, initial?.imageUrl])
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setError('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, WebP).')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = (uploadEvt) => {
-      const result = uploadEvt.target?.result
-      if (typeof result === 'string') {
-        const img = new Image()
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          const maxDim = 1200
-          let w = img.width
-          let h = img.height
-          if (w > maxDim || h > maxDim) {
-            if (w > h) {
-              h = Math.round((h * maxDim) / w)
-              w = maxDim
-            } else {
-              w = Math.round((w * maxDim) / h)
-              h = maxDim
-            }
-          }
-          canvas.width = w
-          canvas.height = h
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, w, h)
-            const compressed = canvas.toDataURL('image/jpeg', 0.85)
-            setForm(current => ({ ...current, imageUrl: compressed }))
-            setImageError(false)
-          } else {
-            setForm(current => ({ ...current, imageUrl: result }))
-            setImageError(false)
-          }
-        }
-        img.src = result
-      }
-    }
-    reader.readAsDataURL(file)
-  }
 
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
@@ -260,6 +284,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     </label>
   )
   const submit = async () => {
+    if (imageReading) return
     setBusy(true); setError(undefined)
     try {
       const input = {
@@ -271,6 +296,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         smallBoxCapacity: Number(form.smallBoxCapacity), largeBoxCapacity: Number(form.largeBoxCapacity),
         physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
         imageUrl: form.imageUrl.trim() || null,
+        detailImageUrl: form.detailImageUrl.trim() || null,
       }
       if (initial) await updateManagerUnitType(initial.id, input)
       else await createManagerUnitType(facilityId, input)
@@ -287,96 +313,11 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
           <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
         </label>
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-stone-700">
-            Hình ảnh loại kho
-          </label>
-          <div className="flex flex-col sm:flex-row gap-3 items-start bg-stone-50 p-3 rounded-xl border border-stone-200">
-            {/* Thumbnail Preview / Dropzone */}
-            <div className="relative w-full sm:w-44 h-32 rounded-lg overflow-hidden bg-stone-200 border border-stone-300 shrink-0 group flex items-center justify-center shadow-xs">
-              {form.imageUrl && !imageError ? (
-                <>
-                  <img
-                    src={form.imageUrl}
-                    alt={form.name || "Unit type"}
-                    className="w-full h-full object-cover transition"
-                    onError={() => setImageError(true)}
-                  />
-                  <div className="absolute inset-0 bg-stone-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="cursor-pointer bg-white text-stone-800 text-[11px] font-bold px-2 py-1 rounded shadow hover:bg-stone-100 transition"
-                    >
-                      Đổi ảnh
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setForm(current => ({ ...current, imageUrl: '' }))
-                        setImageError(false)
-                      }}
-                      className="cursor-pointer bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-2 py-1 rounded shadow transition"
-                    >
-                      Xóa
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-full flex flex-col items-center justify-center p-3 text-center cursor-pointer hover:bg-stone-300/50 transition"
-                >
-                  <svg className="w-8 h-8 text-stone-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span className="text-xs font-semibold text-stone-600">Chọn ảnh từ máy</span>
-                  <span className="text-[10px] text-stone-400">PNG, JPG, WebP</span>
-                </div>
-              )}
-            </div>
-
-            {/* Upload & URL Controls */}
-            <div className="flex-1 w-full space-y-2 text-xs">
-              <div>
-                <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-                  Tải ảnh từ máy tính hoặc dán link ảnh (URL)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    placeholder="Dán link ảnh (URL) hoặc chọn file từ máy..."
-                    value={form.imageUrl}
-                    onChange={e => {
-                      setForm(current => ({ ...current, imageUrl: e.target.value }))
-                      setImageError(false)
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg text-xs shrink-0 transition cursor-pointer shadow-2xs"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    <span>Chọn file</span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                  />
-                </div>
-                <p className="text-[11px] text-stone-400 mt-1.5">
-                  Hỗ trợ định dạng PNG, JPG, WebP. Ảnh sẽ hiển thị đại diện cho loại kho này trên hệ thống.
-                </p>
-              </div>
-            </div>
-          </div>
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <ManagerWarehouseImageField label="Ảnh tổng quan kho" value={form.imageUrl} disabled={busy || imageReading}
+            onChange={value => setForm(current => ({ ...current, imageUrl: value }))} onReading={setImageReading} onError={setError} />
+          <ManagerWarehouseImageField label="Ảnh chi tiết / sơ đồ bố trí" value={form.detailImageUrl} disabled={busy || imageReading}
+            onChange={value => setForm(current => ({ ...current, detailImageUrl: value }))} onReading={setImageReading} onError={setError} />
         </div>
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
@@ -399,7 +340,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy} onClick={onClose}>Hủy</Button><Button disabled={busy || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
@@ -408,10 +349,16 @@ export function InventoryContent({
   inventory,
   rentals = { loading: true },
   identity = "inventory",
+  onCreateUnitType,
+  onOpenRental,
+  onOpenMaintenance,
 }: {
   inventory: Awaited<ReturnType<typeof loadManagerInventory>>
   rentals?: InventorySourceRead<RentalApiRecord[]>
   identity?: string
+  onCreateUnitType?: () => void
+  onOpenRental?: (rentalId: string) => void
+  onOpenMaintenance?: (unitId: string, unitCode: string) => void
 }) {
   const [filters, setFilters] = useState<InventoryFilters>(
     emptyInventoryFilters,
@@ -426,6 +373,12 @@ export function InventoryContent({
   )
   const pagination = paginateManagerItems(visible, page, pageSize)
   const selected = units.find((u) => u.id === selectedId)
+  let selectedRentals: RentalApiRecord[] = []
+  if (selected && rentals.data) {
+    try { selectedRentals = currentInventoryRentals(selected, rentals.data) }
+    catch { selectedRentals = [] }
+  }
+  const selectedRental = selectedRentals.length === 1 ? selectedRentals[0] : undefined
   const floors = [
     ...new Set(
       units.map((u) => u.floor).filter((s): s is string => !!s?.trim()),
@@ -484,9 +437,10 @@ export function InventoryContent({
           icon={Icon.tasks}
         />
       </div>
+      <SectionHeader title="Quản lý gian kho" action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
       <Card className="p-4">
-        <div className="grid items-end gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <label className="block text-sm font-medium text-stone-700 md:col-span-2">
+        <div className="grid items-end gap-3 md:grid-cols-2 2xl:grid-cols-6">
+          <label className="block min-w-0 text-sm font-medium text-stone-700 md:col-span-2">
             Tìm kiếm
             <input
               className={`${inputClass} mt-1`}
@@ -521,18 +475,8 @@ export function InventoryContent({
             ["all", "Tất cả khu vực"],
             ...zones.map((z) => [z, z] as [string, string]),
           ])}
-          {filter("Sắp xếp", "sort", [
-            ["attention", "Cần chú ý trước"],
-            ["code", "Sắp xếp theo mã gian"],
-            ["area-desc", "Diện tích từ lớn đến nhỏ"],
-            ["price-asc", "Giá từ thấp đến cao"],
-            ["price-desc", "Giá từ cao đến thấp"],
-          ])}
         </div>
-        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-stone-500">
-          <span>
-            Hiển thị {visible.length} trên {units.length} gian kho
-          </span>
+        <div className="mt-2 flex justify-end">
           <Button
             size="sm"
             variant="ghost"
@@ -540,21 +484,29 @@ export function InventoryContent({
               setFilters(emptyInventoryFilters)
               setPage(1)
             }}
-          >
-            Xóa bộ lọc
-          </Button>
+          >Xóa bộ lọc</Button>
         </div>
       </Card>
+      <div className="flex flex-wrap items-end justify-between gap-3 text-sm text-stone-600">
+        <span>Hiển thị {visible.length} trên {units.length} gian kho</span>
+        <div className="w-full sm:w-64">{filter("Sắp xếp", "sort", [
+            ["attention", "Cần chú ý trước"],
+            ["code", "Sắp xếp theo mã gian"],
+            ["area-desc", "Diện tích từ lớn đến nhỏ"],
+            ["price-asc", "Giá từ thấp đến cao"],
+            ["price-desc", "Giá từ cao đến thấp"],
+          ])}</div>
+        </div>
       <Card>
-        <Table tableClassName="min-w-[980px] table-fixed">
+        <Table tableClassName="min-w-[1100px] table-fixed">
           <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
           <colgroup>
-            <col className="w-[24%]" />
-            <col className="w-[19%]" />
+            <col className="w-[22%]" />
+            <col className="w-[22%]" />
             <col className="w-[15%]" />
             <col className="w-[15%]" />
-            <col className="w-[15%]" />
-            <col className="w-[12%]" />
+            <col className="w-[16%]" />
+            <col className="w-[10%]" />
           </colgroup>
           <Thead>
             <tr>
@@ -562,8 +514,8 @@ export function InventoryContent({
               <Th className="text-left align-middle">Loại gian kho</Th>
               <Th className="text-left align-middle">Vị trí</Th>
               <Th className="whitespace-nowrap text-left align-middle">Trạng thái</Th>
-              <Th className="whitespace-nowrap text-left align-middle">Giá niêm yết</Th>
-              <Th className="whitespace-nowrap text-left align-middle">Thao tác</Th>
+              <Th className="whitespace-nowrap text-right align-middle">Giá niêm yết</Th>
+              <Th className="whitespace-nowrap text-right align-middle">Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
@@ -574,19 +526,24 @@ export function InventoryContent({
                 </Td>
                 <Td className="align-middle">
                   <p className="font-semibold leading-5">{typeLabel(u)}</p>
+                  {(u.definition.areaM2 !== null || (u.definition.lengthM !== null && u.definition.widthM !== null)) &&
+                    <p className="mt-1 text-xs text-stone-500">
+                      {u.definition.areaM2 !== null && `${measure(u.definition.areaM2, "m²")}`}
+                      {u.definition.lengthM !== null && u.definition.widthM !== null && ` (${u.definition.lengthM.toLocaleString("vi-VN")} × ${u.definition.widthM.toLocaleString("vi-VN")} m)`}
+                    </p>}
                 </Td>
-                <Td className="align-middle">
+                <Td className="min-w-0 align-middle">
                   <div className="space-y-1">
-                    <p>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
-                    <p className="text-sm text-stone-500">{location(u.zone)}</p>
+                    <p className="break-words [overflow-wrap:anywhere]" title={u.floor ?? undefined}>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
+                    <p className="break-words text-sm text-stone-500 [overflow-wrap:anywhere]" title={u.zone ?? undefined}>{location(u.zone)}</p>
                   </div>
                 </Td>
                 <Td className="align-middle">
-                  <Badge variant={variants[u.status]}>
+                  <span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${statusClasses[u.status]}`}>
                     {statusLabels[u.status]}
-                  </Badge>
+                  </span>
                 </Td>
-                <Td className="align-middle">
+                <Td className="text-right align-middle">
                   {u.definition.monthlyPrice == null || u.definition.monthlyPrice <= 0 ? (
                     <p className="text-sm text-stone-500">Chờ BO định giá</p>
                   ) : (
@@ -598,7 +555,7 @@ export function InventoryContent({
                     </div>
                   )}
                 </Td>
-                <Td className="align-middle">
+                <Td className="text-right align-middle">
                   <Button
                     size="sm"
                     variant="outline"
@@ -677,47 +634,33 @@ export function InventoryContent({
       <Modal
         open={!!selected}
         onClose={() => setSelectedId(undefined)}
-        title="Chi tiết gian kho"
         size="xl"
+        customHeader={selected && <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="modal-title" className="text-lg font-bold text-slate-900">Chi tiết gian kho · <span className="font-mono">{selected.code}</span></h2>
+            <span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${statusClasses[selected.status]}`}>{statusLabels[selected.status]}</span>
+          </div>
+          <button type="button" aria-label="Đóng chi tiết gian kho" className="shrink-0 rounded p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900" onClick={() => setSelectedId(undefined)}>✕</button>
+        </div>}
+        contentClassName="max-h-[calc(90vh-76px)] overflow-y-auto p-4 sm:p-6"
       >
         {selected && (
           <div className="space-y-4 text-sm">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <p>
-                Gian kho: <b>{selected.code}</b>
-              </p>
-              <p>
-                Loại gian kho: <b>{typeLabel(selected)}</b>
-              </p>
-              <p>
-                Trạng thái: <b>{statusLabels[selected.status]}</b>
-              </p>
-              <p>
-                Vị trí:{" "}
-                <b>{inventoryLocation(selected.floor, selected.zone)}</b>
-              </p>
-              <p>
-                Kích thước: <b>{dimensions(selected)}</b>
-              </p>
-              <p>
-                Diện tích: <b>{measure(selected.definition.areaM2, "m²")}</b>
-              </p>
-              <p>
-                Thể tích: <b>{measure(selected.definition.volumeM3, "m³")}</b>
-              </p>
-              <p>
-                Tải trọng tối đa:{" "}
-                <b>{measure(selected.definition.maxLoadKg, "kg")}</b>
-              </p>
-              <p>
-                Giá niêm yết:{" "}
-                <b>
-                  {selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0
-                    ? 'Chờ BO định giá'
-                    : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`}
-                </b>
-              </p>
-            </div>
+            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              {([
+                ["Loại gian kho", typeLabel(selected)],
+                ["Tầng", location(selected.floor)],
+                ["Khu vực", location(selected.zone)],
+                ["Kích thước", dimensions(selected)],
+                ["Diện tích", measure(selected.definition.areaM2, "m²")],
+                ["Thể tích", measure(selected.definition.volumeM3, "m³")],
+                ["Tải trọng tối đa", measure(selected.definition.maxLoadKg, "kg")],
+                ["Giá niêm yết", selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0 ? "Chờ BO định giá" : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`],
+              ] as [string, string][]).map(([label, value]) => <div key={label} className="min-w-0">
+                <dt className="text-xs font-medium text-slate-500">{label}</dt>
+                <dd className="mt-1 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">{value}</dd>
+              </div>)}
+            </dl>
             <section className="space-y-2 border-t border-stone-200 pt-4">
               <h3 className="font-bold">Hồ sơ thuê</h3>
               <InventoryRentalSummary unit={selected} read={rentals} detailed />
@@ -727,6 +670,11 @@ export function InventoryContent({
               unit={selected}
               identity={identity}
             />
+            {(((selected.status === "available" || selected.status === "maintenance") && onOpenMaintenance) || (selectedRental && onOpenRental) || (selected.status === "occupied" && !selectedRentals.length)) && <div className="sticky bottom-0 -mx-4 flex flex-wrap justify-end gap-2 border-t border-stone-200 bg-white px-4 py-3 sm:-mx-6 sm:px-6">
+              {selected.status === "occupied" && !selectedRentals.length && <Button variant="outline" onClick={() => rentals.refresh?.()}>Kiểm tra lại hồ sơ</Button>}
+              {(selected.status === "available" || selected.status === "maintenance") && onOpenMaintenance && <Button variant="outline" onClick={() => { setSelectedId(undefined); onOpenMaintenance(selected.id, selected.code) }}>Tạo yêu cầu bảo trì</Button>}
+              {selectedRental && onOpenRental && <Button onClick={() => { setSelectedId(undefined); onOpenRental(selectedRental.id) }}>Xem hồ sơ thuê</Button>}
+            </div>}
           </div>
         )}
       </Modal>

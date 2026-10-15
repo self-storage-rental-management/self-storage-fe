@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
 import type { PermissionKey, User, Role } from '../types'
@@ -99,6 +99,25 @@ export default function Layout({
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const notificationAreaRef = useRef<HTMLDivElement>(null)
+  const contentScrollRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!notificationsOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !notificationAreaRef.current?.contains(event.target)) {
+        setNotificationsOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNotificationsOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside, true)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside, true)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [notificationsOpen])
   const notificationReadKey = `storagehub-opened-notifications-v2-${user.id}`
   const notificationBadgeKey = `storagehub-seen-notification-badge-v2-${user.id}`
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
@@ -151,13 +170,14 @@ export default function Layout({
     window.history.replaceState({ page: currentPage }, '', url)
   }, [currentPage])
 
-  const navigate = (page: string) => {
+  const navigate = (page: string, fromMenu = true) => {
     const url = new URL(window.location.href)
     url.pathname = '/'
     url.searchParams.set('page', page)
     url.searchParams.delete('tab')
     window.history.pushState({ page }, '', url)
     onNavigate(page)
+    if (fromMenu) contentScrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   // Chuẩn hóa nhãn điều hướng theo tiếng Việt cho toàn bộ cổng
@@ -285,7 +305,7 @@ export default function Layout({
     localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
     setNotificationsOpen(false)
     if (onNotificationClick) onNotificationClick(notification)
-    else navigate(notification.page)
+    else navigate(notification.page, false)
   }
 
   return (
@@ -406,7 +426,7 @@ export default function Layout({
           <div className="flex-1" />
 
           {/* Notifications */}
-          <div className="relative">
+            <div className="relative" ref={notificationAreaRef}>
             <button
               type="button"
               onClick={openNotifications}
@@ -442,7 +462,11 @@ export default function Layout({
                         {!isNotificationRead(item) && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />}
                         <span className="block text-sm font-medium text-stone-800">{item.title}</span>
                       </span>
-                      {item.message && <span className="mt-1 block text-xs text-stone-500">{item.message}</span>}
+                        {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-500">{
+                          item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
+                            ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
+                            : item.message
+                        }</span>}
                       {item.date && <span className="mt-1 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
                     </button>
                   )) : (
@@ -463,7 +487,7 @@ export default function Layout({
         </header>
 
         {/* Content */}
-        <main data-layout-scroll-container className="flex-1 overflow-y-auto p-4 lg:p-7 fade-in">
+        <main ref={contentScrollRef} data-layout-scroll-container className="flex-1 overflow-y-auto p-4 lg:p-7 fade-in">
           <div className="mx-auto w-full max-w-[1600px]">{children}</div>
 
         </main>

@@ -52,6 +52,8 @@ export interface CustomerFacility {
 }
 
 export interface CustomerUnitType {
+  detailImageUrl?: string | null
+  description?: string | null
   id: string
   facilityId: string
   code: string

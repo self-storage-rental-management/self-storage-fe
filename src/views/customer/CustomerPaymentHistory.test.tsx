@@ -22,7 +22,7 @@ describe('Booking acceptance uses Payment and Reservation response fields', () =
     'does not call PAID with %s a confirmed Booking deposit', reservationStatus => {
       const payment = { ...paid, reservationStatus }
       expect(bookingDepositAccepted(payment)).toBe(false)
-      expect(paymentRecordLabel(payment)).toContain('Giao dịch đã ghi nhận')
+      expect(paymentRecordLabel(payment)).toBe('Thanh toán thành công')
       const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode="RSV-TEST" />)
       expect(html).toContain('Chi tiết giao dịch cần đối soát')
       expect(html).toContain('Đơn chưa xác nhận')

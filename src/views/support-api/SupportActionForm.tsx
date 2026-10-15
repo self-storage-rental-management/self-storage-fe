@@ -134,8 +134,8 @@ export default function SupportActionForm({
         submit()
       }}
     >
-      <h3 className="font-semibold">Xử lý yêu cầu</h3>
-      <label className="block text-sm">
+      <h3 className="font-semibold">{actions.length === 1 ? copy(labels[action]) : "Xử lý yêu cầu"}</h3>
+      {actions.length > 1 && <label className="block text-sm">
         Thao tác
         <select
           className={supportInputClass}
@@ -155,7 +155,7 @@ export default function SupportActionForm({
             </option>
           ))}
         </select>
-      </label>
+      </label>}
       {action === "assign" && t.facilityId && (
         <SupportStaffPicker
           key={t.facilityId}
@@ -228,10 +228,10 @@ export default function SupportActionForm({
                 action === "reopen" ||
                 action === "escalate"
               ? "Lý do"
-              : "Nội dung / kết quả"}
+            : action === "message" ? "Nội dung trao đổi" : "Nội dung / kết quả"}
           <textarea
             className={supportInputClass}
-            rows={3}
+            rows={2}
             maxLength={limit}
             value={body}
             required={needsBody}
