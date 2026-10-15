@@ -70,7 +70,8 @@ const statusLabels: Record<string, string> = {
   APPROVED_AWAITING_EXECUTION:
     "Đã duyệt, chờ hoàn tiền (chưa chuyển tiền)",
   REJECTED: "Từ chối",
-  FORFEITED: "Cọc không hoàn lại",
+  FORFEITED: "Đã ghi nhận mất cọc gia hạn",
+  AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý cọc ngày quá hạn thứ 8",
   REVIEW_REQUIRED: "Chờ xác minh nguyên nhân",
   REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc",
   APPROVE_RESCHEDULE_BEFORE_CUTOFF:
@@ -432,7 +433,7 @@ export default function RenewalOperationsPanel({
     <div className="space-y-4 mt-4">
       {!appointmentOnly && <RenewalDepositSettlementPanel id={id} role={role} revision={read.data?.expectedVersion}
         onLocked={lock} onChanged={() => { read.refresh();setRevision(value => value + 1);onChanged?.() }} />}
-      {!appointmentOnly && role === "staff" && <RenewalRiskNotice renewalId={id} role="staff" revision={read.data?.expectedVersion} />}
+      {!appointmentOnly && role === "staff" && <RenewalRiskNotice renewalId={id} role="staff" revision={read.data?.expectedVersion} facilityId={facilityId} />}
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <>
