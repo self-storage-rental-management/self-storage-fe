@@ -37,7 +37,7 @@ export default function RentalDetail({
         <Button variant={section === 'payments' ? 'primary' : 'outline'} onClick={() => setSection('payments')}>Thỏa thuận & giao dịch</Button>
       </div>
       <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
-      {rental.status === "active" && <RenewalRiskNotice rentalId={rental.id} role={role} />}
+      <RenewalRiskNotice rentalId={rental.id} role={role} facilityId={rental.facility.id} />
       <Card className="overflow-hidden rounded-xl p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
           <h3 className="text-base font-bold">Thông tin hồ sơ thuê</h3>

@@ -82,7 +82,7 @@ export default function RenewalDetail({
         ]
   return (
     <Card className="p-4 space-y-3">
-      {r.status !== "completed" && <RenewalRiskNotice renewalId={r.id} role={role} revision={r.version} />}
+      {r.status !== "completed" && <RenewalRiskNotice renewalId={r.id} role={role} revision={r.version} facilityId={r.facility.id} />}
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-stone-50 p-3">
         <div>
           <p className="font-semibold text-stone-900">{r.storageUnit.code}</p>

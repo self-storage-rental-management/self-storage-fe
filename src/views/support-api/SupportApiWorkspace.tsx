@@ -116,14 +116,14 @@ function SupportSession({
   const [query, setQuery] = useState<SupportQuery>({
     page: 0,
     size: role === "manager" ? 10 : 20,
-    facilityId,
+    ...(facilityId ? { facilityId } : {}),
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState(""),
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
   const [revision, setRevision] = useState(0)
-  const [staffView, setStaffView] = useState<"queue" | "assigned">("queue")
+  const [staffView, setStaffView] = useState<"queue" | "assigned">("assigned")
   const [queuePage, setQueuePage] = useState(0)
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
@@ -292,7 +292,7 @@ function SupportSession({
               disabled={locked}
               onClick={() => {
                 setSearch("")
-                setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
+                setQuery({ page: 0, size: role === "manager" ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: "createdAt,desc" })
                 setQueuePage(0)
               }}
             >

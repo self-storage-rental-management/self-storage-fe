@@ -966,6 +966,7 @@ export default function StaffApp({
   const [operationalTaskDateFilter, setOperationalTaskDateFilter] =
     useState("")
   const [selectedRecoveryTask, setSelectedRecoveryTask] = useState<{ id: string; facilityId: string } | null>(null)
+  const recoveryCloseGuard = useRef<() => boolean>(() => false)
   const [selectedMaintenanceTaskId, setSelectedMaintenanceTaskId] = useState<string | null>(null)
 
   const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
@@ -2489,8 +2490,8 @@ export default function StaffApp({
             />
           </div>
 
-          {selectedRecoveryTask && <Modal open title="Chi tiết nhiệm vụ thu hồi" onClose={() => setSelectedRecoveryTask(null)}>
-            <RecoveryTaskDetail key={selectedRecoveryTask.id} role="staff" id={selectedRecoveryTask.id} facilityId={selectedRecoveryTask.facilityId} />
+          {selectedRecoveryTask && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!recoveryCloseGuard.current()) setSelectedRecoveryTask(null) }}>
+            <RecoveryTaskDetail key={selectedRecoveryTask.id} role="staff" id={selectedRecoveryTask.id} facilityId={selectedRecoveryTask.facilityId} closeGuard={recoveryCloseGuard} onChanged={() => setApiDailyOperationsRefresh(v => v + 1)} />
           </Modal>}
           {selectedMaintenanceTaskId && <Modal open title="Chi tiết nhiệm vụ bảo trì" onClose={() => { setSelectedMaintenanceTaskId(null); setApiDailyOperationsRefresh(value => value + 1) }}>
             <StaffMaintenanceOperationsPanel taskId={selectedMaintenanceTaskId} showToast={showToast} />
