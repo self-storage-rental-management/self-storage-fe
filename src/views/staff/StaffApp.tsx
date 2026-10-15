@@ -35,7 +35,7 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
-import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
+import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import UnitAssignmentPanel from "../UnitAssignmentPanel"
@@ -836,30 +836,6 @@ export default function StaffApp({
     },
 
     {
-      id: "reservations",
-
-      label: "Duyệt yêu cầu đặt kho",
-
-      icon: Icon.calendar,
-
-      group: "Vận hành",
-
-      permission: "reservations:approve",
-    },
-
-    {
-      id: "unit-assignments",
-
-      label: "Phân kho đặt chỗ",
-
-      icon: Icon.box,
-
-      group: "Vận hành",
-
-      permission: "storage_units:assign",
-    },
-
-    {
       id: "checkin",
 
       label: "Nhận kho & bàn giao",
@@ -991,7 +967,7 @@ export default function StaffApp({
     useState("all")
 
   const [operationalTaskSort, setOperationalTaskSort] =
-    useState<StaffTaskSort>("due-asc")
+    useState<StaffTaskSort>("priority")
 
   const [taskCompletionTarget, setTaskCompletionTarget] =
     useState<FacilityTask | null>(null)
@@ -2627,6 +2603,7 @@ export default function StaffApp({
               onPageChange={setOperationalTasksPage}
             />
           </Card>
+          </div>}
 
           <Modal
             open={Boolean(taskCompletionTarget)}
@@ -3513,10 +3490,10 @@ export default function StaffApp({
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-6 right-4 left-4 sm:left-auto sm:max-w-md z-[100] bg-white text-stone-800 p-4 rounded-xl shadow-2xl border border-stone-200 flex items-start gap-3 fade-in"
+          className="fixed bottom-6 right-4 left-4 sm:left-auto sm:max-w-md z-[100] bg-[#292a27] text-white p-4 rounded-xl shadow-2xl border border-stone-700 flex items-start gap-3 fade-in"
         >
           <span
-            className="rounded-full bg-blue-50 px-2 py-1 font-bold text-blue-700"
+            className="rounded-full bg-white/10 px-2 py-1 font-bold text-white"
             aria-hidden="true"
           >
             i
@@ -3528,7 +3505,7 @@ export default function StaffApp({
           <button
             type="button"
             aria-label="Đóng thông báo"
-            className="px-2 text-stone-500"
+            className="px-2 text-stone-300 hover:text-white"
             onClick={() => setToast(null)}
           >
             ×
