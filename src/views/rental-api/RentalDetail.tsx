@@ -2,7 +2,7 @@ import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
-import { Button, Card, Modal } from "../../components/ui"
+import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
@@ -21,6 +21,8 @@ export default function RentalDetail({
   const { copy } = useManagerPresentation()
   const [section, setSection] = useState<'documents' | 'payments'>('documents')
   const [receiptPayment, setReceiptPayment] = useState<string>()
+  const labelClass = "text-xs font-medium text-stone-500"
+  const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
   const f = rental.financialSummary
   const evidence = rental.bookingEvidence
@@ -142,7 +144,7 @@ export default function RentalDetail({
               Chỉ có thể yêu cầu gia hạn khi hồ sơ đang hiệu lực và chưa yêu cầu trả kho.
             </p>
           )}
-        </Card>
+        </div>
       )}
       </div>
       <div className={section === 'payments' ? 'space-y-5' : 'hidden'}>
