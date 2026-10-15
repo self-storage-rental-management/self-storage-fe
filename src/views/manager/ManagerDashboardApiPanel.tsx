@@ -44,8 +44,9 @@ function MetricSession({ actor, item, setPage }: {
 }) {
   const read = useRentalApiResource(`${managerApiIdentity(actor)}:${item.metric}`, () => loadManagerApiCount(item.metric, actor))
   const count = !read.loading && !read.error ? read.data : undefined
-  return <MetricCard title={item.title} value={read.loading ? 'Đang tải' : count?.value ?? 'Chưa xác minh'}
-    reason={item.metric === 'payment-overdue' ? undefined : read.error ? managerDisplayError(read.error) : count?.reason}
+  const isOverdueMetric = item.metric === 'payment-overdue' || item.metric === 'term-overdue'
+  return <MetricCard title={item.title} value={read.loading ? 'Đang tải' : count?.value ?? (isOverdueMetric ? 0 : 'Chưa xác minh')}
+    reason={isOverdueMetric ? undefined : read.error ? managerDisplayError(read.error) : count?.reason}
     onOpen={() => setPage(item.page)} />
 }
 

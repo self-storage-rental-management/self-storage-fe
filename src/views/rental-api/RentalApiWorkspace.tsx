@@ -15,10 +15,11 @@ import type {
   RentalApiRole,
 } from "../../types/rentalApi"
 import type { RenewalApiQuery, RenewalApiRecord } from "../../types/renewalApi"
+import type { RenewalOperationEvent } from "../../types/renewalOperationsApi"
 import ApiReadState from "./ApiReadState"
 import RentalDetail from "./RentalDetail"
 import RenewalDetail from "./RenewalDetail"
-import RenewalOperationsPanel from "./RenewalOperationsPanel"
+import RenewalOperationsPanel, { RenewalDocumentHistory, RenewalPaymentHistory } from "./RenewalOperationsPanel"
 import RenewalDecisionModal from "./RenewalDecisionModal"
 import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
@@ -463,10 +464,10 @@ function WorkspaceData({
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>
                 <col className="w-[20%]" />
-                <col className="w-[15%]" />
-                <col className="w-[20%]" />
-                <col className="w-[20%]" />
-                <col className="w-[25%]" />
+                <col className="w-[17%]" />
+                <col className="w-[24%]" />
+                <col className="w-[23%]" />
+                <col className="w-[16%]" />
               </colgroup>
               <thead className="bg-stone-50">
                 <tr>
@@ -477,7 +478,7 @@ function WorkspaceData({
                     "Thời hạn",
                     "Thao tác",
                   ].map((h, i) => (
-                    <th key={i} className="p-3 text-left align-middle font-semibold text-stone-600">
+                    <th key={i} className={`p-3 align-middle font-semibold text-stone-600 ${i === 4 ? 'text-center' : 'text-left'}`}>
                       {h}
                     </th>
                   ))}
@@ -507,18 +508,18 @@ function WorkspaceData({
                     </td>
                     <td className="p-3 align-middle">
                       <p className="text-sm leading-6">{"contractEndDate" in row
-                        ? rentalPeriodText(row, role === "manager")
+                        ? rentalPeriodText(row, false)
                         : rentalDate(row.newEndDate)}</p>
                       {role === 'manager' && <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>
                         {copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}
                       </span>}
                     </td>
-                    <td className="p-3 align-middle text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
+                    <td className="p-3 align-middle text-center">
+                      <div className="flex justify-center">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="w-20 justify-center whitespace-nowrap"
+                        className="w-24 justify-center whitespace-nowrap"
                         onClick={() =>
                           setDetail({ kind: read.data!.kind, id: row.id })
                         }
@@ -625,6 +626,7 @@ function DetailModal({
 
   const operationLock = useRef(false)
   const [operationsLocked, setOperationsLocked] = useState(false)
+  const [documentEvents, setDocumentEvents] = useState<RenewalOperationEvent[]>([])
   const setOperationLocked = useCallback((value: boolean) => {
     operationLock.current = value
     setOperationsLocked(value)
@@ -683,6 +685,8 @@ function DetailModal({
             renewal={read.data.record as RenewalApiRecord}
             role={role}
             onPaymentChange={read.refresh}
+            financeHistory={<RenewalPaymentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:finance`} />}
+            evidenceDocuments={<RenewalDocumentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:documents`} extraEvents={documentEvents} />}
             operationsLocked={operationsLocked}
             appointmentSelection={role === "customer" && read.data.record.status === "accepted" ? (
               <RenewalOperationsPanel
@@ -718,6 +722,7 @@ function DetailModal({
           role={role}
           {...operationOwner}
           onLocked={setOperationLocked}
+          onDocumentEvent={event => setDocumentEvents(previous => [event, ...previous.filter(item => item.id !== event.id)])}
           onChanged={() => {
             read.refresh()
             onChanged()
