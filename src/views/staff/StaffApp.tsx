@@ -36,6 +36,7 @@ import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
+import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import UnitAssignmentPanel from "../UnitAssignmentPanel"
@@ -2607,7 +2608,6 @@ export default function StaffApp({
               onPageChange={setOperationalTasksPage}
             />
           </Card>
-          </div>}
 
           <Modal
             open={Boolean(taskCompletionTarget)}

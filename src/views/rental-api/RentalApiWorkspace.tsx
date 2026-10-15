@@ -109,13 +109,13 @@ function Pager({
   )
 }
 
-export default function RentalApiWorkspace({ role, focusStorageUnitId }: { role: RentalApiRole; focusStorageUnitId?: string }) {
+export default function RentalApiWorkspace({ role, focusStorageUnitId, initialRentalId }: { role: RentalApiRole; focusStorageUnitId?: string; initialRentalId?: string }) {
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  return <WorkspaceSession key={identity} role={role} focusStorageUnitId={focusStorageUnitId} />
+  return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} role={role} focusStorageUnitId={focusStorageUnitId} initialRentalId={initialRentalId} />
 }
 
-function WorkspaceSession({ role, focusStorageUnitId }: { role: RentalApiRole; focusStorageUnitId?: string }) {
+function WorkspaceSession({ role, focusStorageUnitId, initialRentalId }: { role: RentalApiRole; focusStorageUnitId?: string; initialRentalId?: string }) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
