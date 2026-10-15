@@ -48,9 +48,8 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Gia hạn quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">Tối đa 7 ngày</p><p className="text-sm leading-6 text-stone-600">Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.</p></article>
       </div>
     </section>
-    <section><h4 className="mb-3 font-bold">3. An ninh và tiện ích vận hành</h4><div className="grid gap-3 sm:grid-cols-2"><article className="rounded-xl border border-blue-200 bg-blue-50 p-4"><b>An ninh và kiểm soát ra vào</b><p className="mt-2 text-sm">Mã ra vào cá nhân và camera giám sát theo thông tin của cơ sở.</p></article><article className="rounded-xl border border-rose-200 bg-rose-50 p-4"><b>Hệ thống phòng cháy chữa cháy</b><p className="mt-2 text-sm">Cảm biến khói, nhiệt và đầu phun nước tự động theo thông tin của cơ sở.</p></article></div></section>
     <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
-      <h4 className="font-bold text-rose-900">4. Quy định trả kho và gia hạn</h4>
+      <h4 className="font-bold text-rose-900">3. Quy định trả kho và gia hạn</h4>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <article className="rounded-xl border border-rose-200 bg-white p-4 text-sm">
           <b>Trả kho sau ngày hết hạn</b>
@@ -71,7 +70,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       <p className="mt-3 rounded-lg bg-rose-100 p-3 text-xs leading-5 text-rose-900">Theo giá hiện tại: {formatVndAmount(t.monthlyPrice)} ÷ 30 × 50% = {formatVndAmount(overdueFeePerDay)}/ngày. Trễ {overdueExampleDays} ngày tương ứng {formatVndAmount(overdueFeePerDay * overdueExampleDays)}.</p>
     </section>
     <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/70 to-white p-5 sm:p-6">
-      <h4 className="font-bold text-stone-900">5. Quy trình đặt kho và thanh toán</h4>
+      <h4 className="font-bold text-stone-900">4. Quy trình đặt kho và thanh toán</h4>
       <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
         ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá và xác minh email.'],

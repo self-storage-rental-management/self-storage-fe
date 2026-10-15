@@ -141,6 +141,7 @@ export interface CompatibilityCheckResult {
 
 export interface ReservationQuoteInput extends ReservationSelectionInput {
   pricingPackageCode: string
+  voucherCode?: string | null
 }
 
 export interface ReservationRentalPackage {
@@ -169,6 +170,8 @@ export interface ReservationQuote {
   dueAtCheckIn: number
   totalInitialObligation: number
   policyVersion: string
+  voucherCode?: string | null
+  voucherDiscountAmount?: number | null
   quotedAt: string
   expiresAt: string
 }

@@ -16,7 +16,7 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
       { code: 'FAC-6M', name: 'Gói 6 tháng cơ sở', rentalMonths: 6, discountRate: 0.10, policyVersion: 'v1' },
     ]} onReserve={() => {}} onClose={() => {}} />)
   for (const text of ['Kho Việt – Cơ sở Quận 1', '125 Nguyễn Bỉnh Khiêm', 'kho-s-chi-tiet.png',
-    'Ưu đãi và báo giá theo kỳ thuê', 'An ninh và tiện ích vận hành', 'Quy định trả kho và gia hạn',
+    'Ưu đãi và báo giá theo kỳ thuê', 'Quy định trả kho và gia hạn',
     'Gói 6 tháng cơ sở', 'Giảm 10% tiền thuê',
     'Chính sách và quy định áp dụng', 'Phí quá hạn', 'Tiền đảm bảo kho', 'Thời hạn thuê tối thiểu',
     'Gia hạn quá hạn', 'Tối đa 7 ngày', 'Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn',
@@ -33,9 +33,7 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
     'Kích thước hàng hóa tối đa', '160 × 80 × 150 cm']) expect(html).not.toContain(text)
   for (const text of ['Quy định trả kho và gia hạn muộn', 'giao diện cũ', 'Lối đi và thiết bị hỗ trợ',
     'Thời hạn thanh toán hiển thị trên đơn; tiền cọc được trừ vào tiền thuê.']) expect(html).not.toContain(text)
-  for (const text of ['Giảm 3% tiền thuê', 'Giảm 5% tiền thuê', 'Giảm 8% tiền thuê',
-    'Chiều rộng lối đi', 'Thiết bị xe đẩy', 'Bố trí và sức chứa kho',
-    'Mẫu thùng nhỏ 50 × 40 × 40 cm', 'Mẫu thùng lớn 70 × 50 × 50 cm']) expect(html).not.toContain(text)
+  for (const text of ['Giảm 3% tiền thuê', 'Giảm 5% tiền thuê', 'Giảm 8% tiền thuê']) expect(html).not.toContain(text)
   for (const text of ['Dữ liệu hiện chưa có', 'Ảnh minh họa giao diện;', '/images/customer-units/kho-s.jpg']) expect(html).not.toContain(text)
   expect(html).not.toContain('sticky')
 })

@@ -300,10 +300,22 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
     largeBoxCapacity: apiSpec.largeBoxCapacity ?? 0,
   } : customerUnitAmenities(sizeCode)
 
+  const resolvedImage = apiSpec?.imageUrl || facility.image || getCustomerUnitImage(sizeCode)
+  const [imgSrc, setImgSrc] = useState(resolvedImage)
+
+  useEffect(() => {
+    setImgSrc(apiSpec?.imageUrl || facility.image || getCustomerUnitImage(sizeCode))
+  }, [apiSpec?.imageUrl, facility.image, sizeCode])
+
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
       <div className="relative h-44 overflow-hidden bg-stone-200">
-        <img src={apiSpec?.imageUrl || getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <img
+          src={imgSrc}
+          alt={`Không gian kho loại ${sizeCode}`}
+          className="h-full w-full object-cover transition duration-300 hover:scale-105"
+          onError={() => setImgSrc(getCustomerUnitImage(sizeCode))}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
            {facility.name}
@@ -382,9 +394,20 @@ function notificationTimestamp(value?: string): number {
 
 function addMonthsForPreview(value: string, months: number): string {
   const date = parseCustomerDate(value)
-  if (!date) return '—'
-  date.setMonth(date.getMonth() + months)
-  return dateInputValue(date)
+  if (!date || months <= 0) return '—'
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const day = date.getDate()
+
+  const targetYear = year + Math.floor((month + months) / 12)
+  const targetMonth = (month + months) % 12
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate()
+  const targetDay = Math.min(day, daysInTargetMonth)
+
+  const correspondingDate = new Date(targetYear, targetMonth, targetDay)
+  // Calendar-month inclusive end date: ends at the close of day before corresponding date (e.g. 15/10/2026 + 3M -> 14/01/2027)
+  correspondingDate.setDate(correspondingDate.getDate() - 1)
+  return dateInputValue(correspondingDate)
 }
 
 export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAppProps) {
@@ -438,6 +461,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return { startDate, endDate: addMonthsForPreview(startDate, 3) }
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
+  const [bookingVoucherCode, setBookingVoucherCode] = useState('')
   const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
   const [rentalPackagesLoading, setRentalPackagesLoading] = useState(false)
   const [backendReservations, setBackendReservations] = useState<CustomerReservation[]>([])
@@ -812,6 +836,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setReservationSubmitError(null)
     setValidationViolation(null)
     setBookingReview(false)
+    setBookingVoucherCode('')
   }
   const capacitySamples: PackageSample[] = goodsItems.map((item, index) => ({
     id: item.id, quantity: item.quantity, lengthCm: item.lengthCm, widthCm: item.widthCm,
@@ -1566,7 +1591,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         const packageCode = selectedBackendRentalPackage?.code
           || selectedActivePackage?.id
           || `${rentalMonths}_MONTHS`
-        const quote = await createReservationQuote({ ...selection, pricingPackageCode: packageCode })
+        const quote = await createReservationQuote({
+          ...selection,
+          pricingPackageCode: packageCode,
+          voucherCode: bookingVoucherCode.trim() || undefined,
+        })
         setServerQuote(quote)
         setValidationViolation(null)
         setBookingReview(true)
@@ -1882,7 +1911,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               return (
                 <Card key={facility.id} className="overflow-hidden stat-card-hover">
                   <div className="relative h-44 bg-stone-200">
-                    <img src={facility.image?.startsWith('/') || facility.image?.startsWith('http') ? facility.image : `https://images.unsplash.com/${facility.image || 'photo-1586528116311-ad8dd3c8310d'}?w=720&h=352&fit=crop&auto=format`} alt={`Hình ảnh ${displayName}`} className="h-full w-full object-cover" />
+                    <img
+                      src={
+                        facility.image?.startsWith('/') || facility.image?.startsWith('http') || facility.image?.startsWith('data:')
+                          ? facility.image
+                          : `https://images.unsplash.com/${facility.image || 'photo-1586528116311-ad8dd3c8310d'}?w=720&h=352&fit=crop&auto=format`
+                      }
+                      alt={`Hình ảnh ${displayName}`}
+                      className="h-full w-full object-cover"
+                      onError={e => {
+                        (e.currentTarget as HTMLImageElement).src = '/images/facilities/binh-duong.jpg'
+                      }}
+                    />
                     <div className="absolute left-3 top-3 z-10">
                       <span className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-extrabold backdrop-blur-sm ${availCount > 0 ? 'border-emerald-300 bg-emerald-700/95 text-white shadow-[0_8px_22px_rgba(4,120,87,0.55)]' : 'border-red-300 bg-red-700/95 text-white shadow-[0_8px_22px_rgba(185,28,28,0.5)]'}`}>
                         {availCount} {'gian kho còn trống'}
@@ -2794,82 +2834,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <div className="px-5 py-3 text-sm font-semibold text-amber-950 sm:px-6">{'Công thức: Tổng cần chuẩn bị = Tổng tiền thuê kỳ đầu + Tiền đảm bảo kho. Cọc giữ chỗ 40% chỉ là phần trả trước của tiền thuê.'}</div>
           </section>
 
-          {/* ── KHỐI 2: KHUNG QUY ĐỊNH VẬN HÀNH & PHÁP LÝ SỰ CỐ / ẨM MỐC (BO PROTOCOLS) ── */}
-          <div className="space-y-3">
-            <div className="border-b border-stone-200/80 pb-2">
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-amber-800">
-                Cam Kết Vận Hành & Bảo Vệ Quyền Lợi Khách Hàng
-              </p>
-              <h3 className="mt-1 text-lg font-bold text-stone-950">
-                Khung Quy Định Vận Hành & Pháp Lý Sự Cố / Ẩm Mốc
-              </h3>
-              <p className="text-xs text-stone-600 mt-0.5">
-                Chính sách áp dụng thống nhất toàn hệ thống StorageHub do Ban Điều Hành (BO) ban hành
-              </p>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="p-4 border-l-4 border-l-rose-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-rose-50/20">
-                <div className="flex items-start gap-3">
-                  <span
-                    data-testid="customer-protocol-badge-1"
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-800 font-bold shrink-0 text-sm"
-                  >
-                    1
-                  </span>
-                  <div className="space-y-1.5 flex-1">
-                    <h4 className="font-bold text-slate-900 text-sm">
-                      Xử Lý Sự Cố Kết Cấu Hạ Tầng Kho (Sàn vỡ, Dột nóc, Kẹt cửa)
-                    </h4>
-                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-rose-500 font-bold shrink-0">•</span>
-                        <span><strong className="text-slate-800">Lỗi kết cấu cơ sở:</strong> Cơ sở chịu 100% trách nhiệm. Xử lý khẩn cấp trong 4 đến 12 giờ.</span>
-                      </li>
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-rose-500 font-bold shrink-0">•</span>
-                        <span><strong className="text-slate-800">Kho đang có khách:</strong> Kích hoạt luồng di dời khẩn cấp sang kho trống tương đương, cấp mã ra vào mới miễn phí và giữ nguyên hợp đồng.</span>
-                      </li>
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-rose-500 font-bold shrink-0">•</span>
-                        <span><strong className="text-slate-800">Kho trống:</strong> Lập tức chuyển sang trạng thái bảo trì, ẩn khỏi trang đặt kho để sửa chữa.</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-4 border-l-4 border-l-sky-500 border border-stone-200/90 shadow-2xs bg-gradient-to-br from-white to-sky-50/20">
-                <div className="flex items-start gap-3">
-                  <span
-                    data-testid="customer-protocol-badge-2"
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 text-sky-800 font-bold shrink-0 text-sm"
-                  >
-                    2
-                  </span>
-                  <div className="space-y-1.5 flex-1">
-                        <h4 className="font-bold text-slate-900 text-sm">
-                      Phân định trách nhiệm ẩm mốc khi trả kho
-                    </h4>
-                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed">
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-sky-500 font-bold shrink-0">•</span>
-                        <span><strong className="text-slate-800">Vách/trần loang ố hoặc máy lạnh hỏng → Lỗi cơ sở:</strong> Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.</span>
-                      </li>
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-sky-500 font-bold shrink-0">•</span>
-                        <span><strong className="text-slate-800">Kho khô 100%, đồ mốc do khách cất ẩm/hàng cấm → Lỗi khách:</strong> Tự chịu 100% + trừ phí khử trùng 1.500.000₫ vào cọc.</span>
-                      </li>
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-sky-500 font-bold shrink-0">•</span>
-                        <span><strong className="text-slate-800">Kho thường:</strong> Miễn trừ trách nhiệm độ ẩm tự nhiên theo cam kết hợp đồng.</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 font-extrabold text-amber-800">1</span><div><h3 className="font-bold text-stone-950">{'Thuê kho và thanh toán ban đầu'}</h3><p className="text-xs text-stone-500">{'Từ lúc chọn kho đến khi xác nhận đặt giữ'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
@@ -3369,6 +3334,25 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
                 <b>Ngày bắt đầu tính kỳ thuê:</b> {earliestCheckInDate}. Kỳ thuê bắt đầu từ ngày kho sẵn sàng sớm nhất, không phụ thuộc việc bạn chọn đến muộn hơn trong cửa sổ 7 ngày.
               </div>
+            </div>
+
+            {/* Voucher / Promotion Code Input */}
+            <div className="space-y-1.5 border-t border-stone-200 pt-3">
+              <label className="text-xs font-semibold text-stone-700 block">
+                Mã ưu đãi / Voucher giảm giá (Tùy chọn)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nhập mã ưu đãi nếu có (VD: HELLO2026)..."
+                  value={bookingVoucherCode}
+                  onChange={e => setBookingVoucherCode(e.target.value.toUpperCase())}
+                  className="w-full text-xs border border-stone-300 rounded-lg px-3 py-2 bg-white uppercase font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              <p className="text-[10px] text-stone-500">
+                Chiết khấu voucher được áp dụng trên phần tiền thuê sau chiết khấu kỳ hạn (tối đa 1 voucher/đơn).
+              </p>
             </div>
 
             {/* Storage Space & Cost Breakdown */}
