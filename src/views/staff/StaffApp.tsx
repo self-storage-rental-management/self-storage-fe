@@ -2169,7 +2169,9 @@ export default function StaffApp({
     if (type === "CHECKIN") return "checkin"
     if (type === "SUPPORT") return "support"
     if (type === "RETURN") return "return"
-    if (type === "PAYMENT" || type === "OVERDUE") return "payments"
+    if (type === "RENEWAL") return "renewal-signing"
+    if (type === "OVERDUE") return "tasks"
+    if (type === "PAYMENT") return "payments"
     if (type === "RESERVATION") return "reservations"
     return "dashboard"
   }
