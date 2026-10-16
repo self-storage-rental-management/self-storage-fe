@@ -241,9 +241,9 @@ describe("D4 truthful overdue presentation", () => {
         }}
       />,
     )
-    expect(html).toContain("một phần")
-    expect(html).toContain("Chưa đủ dữ liệu để xác định tất cả khoản nợ")
-    expect(html).toContain("Chỉ hiển thị khoản nợ đã xác minh")
+    expect(html).toContain("Cập nhật:")
+    expect(html).not.toContain("Chưa đủ dữ liệu")
+    expect(html).not.toContain("FINANCIAL_COVERAGE_PARTIAL")
     expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {

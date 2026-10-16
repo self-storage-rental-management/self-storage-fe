@@ -96,10 +96,10 @@ export function InventoryRentalSummary({
           <p className="text-xs text-stone-500">{rentalLabels[r.status]}</p>
           {detailed && (
             <p className="text-xs text-stone-500">
-              Kỳ thuê: {rentalPeriodText(r)}
+              Kỳ thuê: {rentalPeriodText(r, false)}
             </p>
           )}
-          {r.dataWarnings.map((warning, index) => (
+          {r.dataWarnings.filter(warning => warning.field !== "contractEndDate").map((warning, index) => (
             <p
               key={`${warning.field}:${index}`}
               className="text-xs text-amber-800"

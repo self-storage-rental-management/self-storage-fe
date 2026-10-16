@@ -1,7 +1,7 @@
 import { apiRequest } from './apiClient'
 import type { PageResponse } from './customerReservationApi'
 
-export type ApiNotificationType = 'RESERVATION' | 'PAYMENT' | 'CHECKIN' | 'RETURN' | 'OVERDUE' | 'SUPPORT' | 'SYSTEM'
+export type ApiNotificationType = 'RESERVATION' | 'PAYMENT' | 'CHECKIN' | 'RETURN' | 'RENEWAL' | 'OVERDUE' | 'SUPPORT' | 'SYSTEM'
 
 export interface ApiNotification {
   id: string
