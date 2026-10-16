@@ -4,6 +4,7 @@ import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, Section
 import { formatVnd, vndToLegacyBase } from '../../i18n/currency'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import CustomerUnitDetails from './CustomerUnitDetails'
+import CustomerRentalRegulations from './CustomerRentalRegulations'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import type { User } from '../../types'
@@ -3135,29 +3136,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 )
               })()}
 
-              {/* 3. Safety, Security & Operating Standards */}
+              {/* 3. Quy định cho thuê kho */}
               <div className="order-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
-                  {'3. An ninh và tiện ích vận hành'}
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-stone-700">
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-1">
-                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
-                      <span className="text-blue-600"></span> {'An ninh & Ra vào độc quyền 24/7'}
-                    </p>
-                    <p className="text-stone-500 text-[11px]">
-                      {'Cổng tự động mở bằng mã số cá nhân hóa do bạn sở hữu. Camera giám sát độ nét cao theo dõi từng hành lang và cửa kho suốt ngày đêm.'}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 space-y-1">
-                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
-                      <span className="text-rose-600"></span> {'Hệ thống PCCC tự động đạt chuẩn'}
-                    </p>
-                    <p className="text-stone-500 text-[11px]">
-                      {'Tích hợp cảm biến khói nhiệt quang học và đầu phun nước tự động Sprinkler riêng biệt cho từng gian kho, thẩm duyệt PCCC định kỳ.'}
-                    </p>
-                  </div>
-                </div>
+                <CustomerRentalRegulations
+                  facilityName={selectedTarget ? (CUSTOMER_FACILITY_DISPLAY[selectedTarget.facility.id]?.name ?? selectedTarget.facility.name) : selectedUnit.facilityName}
+                />
               </div>
 
               <div className="order-6 rounded-2xl border border-rose-200 bg-rose-50/60 p-4 text-xs text-stone-700 sm:p-5">
