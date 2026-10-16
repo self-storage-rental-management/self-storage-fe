@@ -466,7 +466,7 @@ export async function uploadDuongEvidence(
   entityId?: string,
 ) {
   if (
-    !/^DUONG_(SUPPORT_(PUBLIC|INTERNAL)|RENEWAL_(ARRIVAL|INCIDENT|SIGNED_CONTRACT|CASH_RECEIPT|EXCEPTION|FAULT_REVIEW|REFUND))$/.test(
+    !/^DUONG_(SUPPORT_(PUBLIC|INTERNAL)|RENEWAL_(ARRIVAL|INCIDENT|SIGNED_CONTRACT|CASH_RECEIPT|EXCEPTION|FAULT_REVIEW|REFUND)|RECOVERY_(INSPECTION|SETTLEMENT|COMPLETION))$/.test(
       entityType,
     )
   )
@@ -501,6 +501,11 @@ export async function uploadDuongEvidence(
 export function downloadDuongEvidence(id: string) {
   requireId(id)
   return apiDownload(`/api/files/${id}`)
+}
+export async function getDuongEvidenceName(id: string) {
+  requireId(id)
+  const file = await apiDownload(`/api/files/${id}`, undefined, "HEAD")
+  return file.fileName
 }
 export function integrationError(error: unknown): string {
   if (error instanceof ApiClientError) {

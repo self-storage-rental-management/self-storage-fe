@@ -8,7 +8,7 @@ import type { RenewalOperationsRole } from "../../types/renewalOperationsApi"
 import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
 import { rentalError, rentalMoney } from "./presentation"
 
-const labels = { HELD: "Đã ghi nhận cọc", APPLIED_TO_RENT: "Đã tính vào tiền thuê", REVIEW_REQUIRED: "Chờ xác minh nguyên nhân", FORFEITED: "Cọc không hoàn lại", REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc", REFUND_APPROVED: "Đã duyệt, chờ hoàn cọc", REFUNDED: "Đã ghi nhận hoàn cọc", UNKNOWN: "Chưa xác minh", NOT_APPLICABLE: "Không áp dụng" }
+const labels = { HELD: "Đã ghi nhận cọc", AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý cọc ngày quá hạn thứ 8", APPLIED_TO_RENT: "Đã tính vào tiền thuê", REVIEW_REQUIRED: "Chờ xác minh nguyên nhân", FORFEITED: "Đã ghi nhận mất cọc gia hạn", REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc", REFUND_APPROVED: "Đã duyệt, chờ hoàn cọc", REFUNDED: "Đã ghi nhận hoàn cọc", UNKNOWN: "Chưa xác minh", NOT_APPLICABLE: "Không áp dụng" }
 export default function RenewalDepositSettlementPanel({ id, role, revision, onLocked, onChanged }: {
   id: string; role: RenewalOperationsRole; revision?: number | null; onLocked: (value: boolean) => void; onChanged: () => void
 }) {
@@ -27,8 +27,8 @@ export default function RenewalDepositSettlementPanel({ id, role, revision, onLo
   useEffect(() => { onLocked(uploadRef.current || command.isLocked()) }, [locked,onLocked])
   const settlement = read.data
   if (read.loading) return null
-  if (read.error) return <p role="status" className="text-sm text-stone-500">Chưa tải được thông tin xử lý cọc gia hạn.</p>
-  if (!settlement || ["UNKNOWN","NOT_APPLICABLE","APPLIED_TO_RENT"].includes(settlement.status)) return null
+  if (read.error) return null
+  if (!settlement || ["UNKNOWN","NOT_APPLICABLE","APPLIED_TO_RENT","HELD"].includes(settlement.status)) return null
   const canRecord = role === "manager" && actor?.permissions.includes("payments:collect") && actor.permissions.includes("rentals:update") && settlement.status === "REFUND_APPROVED"
   return <Card className="space-y-4 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3">

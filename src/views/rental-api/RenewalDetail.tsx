@@ -1,6 +1,7 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
 import RenewalRiskNotice from "./RenewalRiskNotice"
-import { Button, Card } from "../../components/ui"
+import { Button, Card, Modal } from "../../components/ui"
+import { useState } from "react"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { useRenewalPayment } from "../../hooks/useRenewalPayment"
 import type { RentalApiRole } from "../../types/rentalApi"
@@ -12,14 +13,16 @@ import {
   rentalMoney,
   renewalLabels,
   unknown,
-  financialCompletenessLabels,
 } from "./presentation"
+import RenewalReceipt from "../customer/RenewalReceipt"
 export default function RenewalDetail({
   renewal: r,
   role,
   onAction,
   onPaymentChange,
   appointmentSelection,
+  financeHistory,
+  evidenceDocuments,
   operationsLocked = false,
 }: {
   renewal: RenewalApiRecord
@@ -27,8 +30,11 @@ export default function RenewalDetail({
   onAction: (action: RenewalApiAction) => void
   onPaymentChange?: () => void
   appointmentSelection?: ReactNode
+  financeHistory?: ReactNode
+  evidenceDocuments?: ReactNode
   operationsLocked?: boolean
 }) {
+  const [receiptOpen, setReceiptOpen] = useState(false)
   const { manager, copy, explain } = useManagerPresentation()
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
@@ -38,39 +44,30 @@ export default function RenewalDetail({
   const { payment, busy: paymentBusy, error: paymentError, pay: openRenewalPayment, appointmentSelected } = useRenewalPayment(
     r, role === "customer", onPaymentChange,
   )
-  const financialState = r.financialCheck.completeness
-  const obligationRefs = r.financialCheck.blockingObligationRefs
-  const obligationsState = obligationRefs === null
-    ? "Chưa xác minh"
-    : obligationRefs.length > 0
-      ? "Cần xử lý"
-      : financialState === "COMPLETE"
-        ? "Không có khoản chặn theo lần kiểm tra"
-        : "Chưa xác minh, không thể kết luận là không có nợ"
-  const reviewState = r.reviewState === "READY"
-    ? "Điều khoản hiện tại còn hiệu lực"
-    : r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION"
-      ? "Khách hàng cần xác nhận báo giá mới"
-      : "Chưa xác minh điều khoản hoặc nguồn vận hành"
+  const canViewReceipt = payment?.paymentStatus === "PAID" && !payment.reconciliationRequired &&
+    (!payment.settlementStage || ["ALLOCATED_AWAITING_SIGNING", "AWAITING_SIGNING", "COMPLETED"].includes(payment.settlementStage))
   const verification = r.systemVerification
-  const verificationLabel = verification?.status === "VERIFIED"
-    ? "Đã xác minh các nguồn hiện có"
-    : verification?.status === "BLOCKED"
-      ? "Có điều kiện hiện có không đạt"
-      : verification?.status === "INCOMPLETE"
-        ? "Chưa đủ dữ liệu từ nguồn hiện có"
-        : "Chưa xác minh"
   const workflowStatusLabel = r.status === "accepted" && r.approvedPaymentDeadline
     ? hasDeposit ? "Đã mở thanh toán cọc qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
     : r.status === "accepted" && verification?.status === "VERIFIED"
     ? "Đã xác nhận điều kiện, chờ kiểm tra readiness thanh toán"
     : copy(renewalLabels[r.status] || unknown)
-  const verificationCheckLabel = (check: string) => ({
-    ACTIVE_RENTAL_AND_PERIOD: "Hồ sơ thuê đang hoạt động và kỳ thuê hợp lệ",
-    PUBLISHED_POLICY: "Chính sách gia hạn đã công bố",
-    ELIGIBILITY_AND_RECOVERY: "Điều kiện gia hạn và hạn xử lý",
-    CURRENT_PRICING_AND_ACCEPTED_TERMS: "Giá hiện tại khớp điều khoản khách đã chấp nhận",
-  }[check] ?? check)
+  const renewalProgressSteps = [
+    { label: "Gửi yêu cầu", detail: "Hồ sơ gia hạn đã được tạo" },
+    { label: "Kiểm tra & báo giá", detail: "Hệ thống xác minh điều kiện và ghi nhận điều khoản" },
+    { label: "Thanh toán", detail: hasDeposit ? "Thanh toán cọc gia hạn" : "Thanh toán tiền gia hạn" },
+    { label: "Hẹn lịch ký", detail: "Chọn thời gian đến cơ sở" },
+    { label: "Đối chiếu & ký", detail: "Staff xác minh, nhận tiền còn lại và lưu hợp đồng đã ký" },
+  ]
+  const renewalProgressIndex = r.status === "completed" ? renewalProgressSteps.length
+    : ["deposit_paid", "full_rent_paid"].includes(r.status) || payment?.paymentStatus === "PAID" ? 3
+      : r.status === "appointment_scheduled" ? 4
+        : ["accepted", "approved", "payment_processing", "payment_failed"].includes(r.status) ? 2
+          : 1
+  const renewalTerminalMessage = r.status === "rejected" ? "Yêu cầu bị từ chối. Xem lý do quyết định bên dưới."
+    : r.status === "cancelled" ? "Yêu cầu đã hủy. Các khoản đã thu cần được đối soát theo giao dịch."
+      : r.status === "payment_expired" ? "Yêu cầu đã hết hạn thanh toán; các bước tiếp theo đang tạm dừng."
+        : null
   const actions: {
     action: RenewalApiAction
     label: string
@@ -85,132 +82,93 @@ export default function RenewalDetail({
         ]
   return (
     <Card className="p-4 space-y-3">
-      {r.status !== "completed" && <RenewalRiskNotice renewalId={r.id} role={role} revision={r.version} />}
-      <p className="break-all">Mã gia hạn: {r.id}</p>
-      <p className="break-all">Hồ sơ thuê: {r.rentalId}</p>
-      <p>
-        {r.customer.fullName}, {r.facility.name.replace(/[–—]/g, "-")}, {r.storageUnit.code}
-      </p>
-      <p>
-        Trạng thái: {workflowStatusLabel}
-      </p>
-      <p>
-        Mốc kết thúc kỳ thuê cũ: {rentalDate(r.oldEndDate)}, Ngày cuối kỳ gia hạn:{" "}
-        {rentalDate(r.newEndDate)}
-      </p>
-      <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>
-      <p>
-        Thời điểm gửi: {rentalDate(r.createdAt)}
-      </p>
+      {r.status !== "completed" && <RenewalRiskNotice renewalId={r.id} role={role} revision={r.version} facilityId={r.facility.id} />}
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-stone-50 p-3">
+        <div>
+          <p className="font-semibold text-stone-900">{r.storageUnit.code}</p>
+          <p className="text-sm text-stone-600">{r.facility.name.replace(/[–—]/g, "-")} — {r.customer.fullName}</p>
+        </div>
+        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{workflowStatusLabel}</span>
+      </div>
+      <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình hồ sơ gia hạn">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h4 className="font-semibold">Tiến trình gia hạn</h4>
+            <p className="text-xs text-stone-500">Đã hoàn thành {renewalProgressIndex}/{renewalProgressSteps.length} bước</p>
+          </div>
+          {renewalTerminalMessage
+            ? <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">Đang tạm dừng</span>
+            : renewalProgressIndex === renewalProgressSteps.length
+              ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Gia hạn hoàn tất</span>
+              : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Đang thực hiện: {renewalProgressSteps[renewalProgressIndex]?.label}</span>}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {renewalProgressSteps.map((step, index) => {
+            const completed = index < renewalProgressIndex
+            const current = index === renewalProgressIndex && renewalProgressIndex < renewalProgressSteps.length
+            return <div key={step.label} aria-current={current ? "step" : undefined} className={`rounded-lg border p-3 ${completed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : current ? "border-amber-400 bg-amber-500 text-white" : "border-stone-200 bg-white text-stone-400"}`}>
+              <div className="mb-2 flex items-center justify-between gap-1">
+                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${completed ? "bg-emerald-600 text-white" : current ? "bg-white text-amber-700" : "bg-stone-100 text-stone-500"}`}>{completed ? "✓" : index + 1}</span>
+                <span className="text-[10px] font-semibold">{completed ? "Đã xong" : current ? "Hiện tại" : "Sắp tới"}</span>
+              </div>
+              <p className="text-xs font-bold">{step.label}</p>
+              <p className={`mt-1 text-[11px] leading-4 ${current ? "text-amber-50" : completed ? "text-emerald-800" : "text-stone-500"}`}>{step.detail}</p>
+            </div>
+          })}
+        </div>
+        {renewalTerminalMessage && <p role="status" className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800">{renewalTerminalMessage}</p>}
+      </section>
+      <dl className="rounded-lg border border-stone-200 p-3 text-sm">
+        <div><dt className="text-xs text-stone-500">Kỳ gia hạn</dt><dd className="font-semibold">{rentalDate(r.oldEndDate)} → {rentalDate(r.newEndDate)}</dd></div>
+      </dl>
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền cọc đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
-      {isManager ? (
-        <section className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3" aria-labelledby="renewal-monitoring">
-          <div>
-            <h4 id="renewal-monitoring" className="font-semibold">Theo dõi yêu cầu gia hạn</h4>
-            <p className="text-sm text-stone-600">Manager theo dõi hồ sơ, không cần duyệt để khách hàng được thanh toán. Hệ thống chỉ mở thanh toán khi điều kiện và nguồn thanh toán sẵn sàng.</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-stone-200 text-stone-600">
-                  <th scope="col" className="py-2 pr-4">Điều kiện</th>
-                  <th scope="col" className="py-2 pr-4">Trạng thái</th>
-                  <th scope="col" className="py-2">Chi tiết</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-stone-200 align-top">
-                  <th scope="row" className="py-2 pr-4 font-medium">Xác minh tự động</th>
-                  <td className="py-2 pr-4">{verificationLabel}</td>
-                  <td className="py-2">
-                    {verification?.verifiedChecks.length ? <p>Đã kiểm tra: {verification.verifiedChecks.map(verificationCheckLabel).join(", ")}</p> : null}
-                    {verification?.blockingReasons.map((reason) => <p key={reason} className="text-red-700">{copy(reason)}</p>)}
-                  </td>
-                </tr>
-                <tr className="border-b border-stone-200 align-top">
-                  <th scope="row" className="py-2 pr-4 font-medium">Báo giá khách đã chấp nhận</th>
-                  <td className="py-2 pr-4">{reviewState}</td>
-                  <td className="py-2">{r.acceptedRevision == null ? unknown : `Phiên bản ${r.acceptedRevision}`}</td>
-                </tr>
-                <tr className="border-b border-stone-200 align-top">
-                  <th scope="row" className="py-2 pr-4 font-medium">Đối soát tài chính Rental hiện tại</th>
-                  <td className="py-2 pr-4">{financialCompletenessLabels[financialState] ?? unknown}</td>
-                  <td className="py-2">{rentalDate(r.financialCheck.checkedAt)}, đây không phải xác nhận đã thu tiền gia hạn.</td>
-                </tr>
-                <tr className="border-b border-stone-200 align-top">
-                  <th scope="row" className="py-2 pr-4 font-medium">Khoản đến hạn cần xử lý</th>
-                  <td className="py-2 pr-4">{obligationsState}</td>
-                  <td className="py-2">{obligationRefs?.length ? obligationRefs.join(", ") : ""}</td>
-                </tr>
-                <tr className="border-b border-stone-200 align-top">
-                  <th scope="row" className="py-2 pr-4 font-medium">Khiếu nại chưa giải quyết</th>
-                  <td className="py-2 pr-4">{r.financialCheck.hasUnresolvedDispute === null ? unknown : r.financialCheck.hasUnresolvedDispute ? "Có" : "Không ghi nhận"}</td>
-                  <td className="py-2">{r.financialCheck.checkedAt ? `Kiểm tra lúc ${rentalDate(r.financialCheck.checkedAt)}` : unknown}</td>
-                </tr>
-                <tr className="align-top">
-                  <th scope="row" className="py-2 pr-4 font-medium">Khả năng thanh toán</th>
-                  <td className="py-2 pr-4 font-semibold">{r.approvedPaymentDeadline ? "Đã mở thanh toán" : "Chưa mở thanh toán"}</td>
-                  <td className="py-2">VNPay Sandbox chỉ mở khi đối soát tài chính, kỳ hạn, giữ chỗ và lịch ký đạt readiness. Khi đã mở, hạn thanh toán bắt đầu từ lúc payment intent khả dụng.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-      {r.approvedPaymentDeadline && (
-        <p>Hạn thanh toán: {rentalDate(r.approvedPaymentDeadline)}</p>
-      )}
-      {role==="customer"&&payment&&(
-        <section className={`space-y-1 rounded-lg border p-3 ${payment.reconciliationRequired?"border-amber-300 bg-amber-50":"border-stone-200 bg-stone-50"}`} aria-live="polite">
-          <p className="font-semibold">Trạng thái thanh toán {hasDeposit ? "cọc" : "toàn kỳ"}: {({PENDING:"Đang chờ VNPay",PROCESSING:"Đang xử lý",PAID:payment.reconciliationRequired?"Đã nhận tiền, cần đối soát":"Đã ghi nhận thanh toán",NOT_RECEIVED:"Chưa xác nhận đã nhận tiền",FAILED:"Thanh toán thất bại",CANCELLED:"Giao dịch đã hủy"} as Record<string,string>)[payment.paymentStatus]}</p>
-          <p>{payment.settlementStage ? ({
-            AWAITING_PAYMENT: "Chờ VNPay xác nhận thanh toán",
-            VERIFIED_AWAITING_ALLOCATION: "Đã xác minh tiền, đang chờ phân bổ vào khoản gia hạn",
-            ALLOCATED_AWAITING_SIGNING: "Đã phân bổ tiền, đang kiểm tra điều kiện ký hợp đồng",
-            AWAITING_SIGNING: "Đã thanh toán, cần hoàn tất ký hợp đồng để gia hạn có hiệu lực",
-            COMPLETED: "Gia hạn đã hoàn tất",
-            RECONCILIATION_REQUIRED: "Đã ghi nhận tiền, cần hỗ trợ đối soát trước khi tiếp tục",
-          }[payment.settlementStage]) : payment.message}</p>
-          <p>Số tiền: {rentalMoney(payment.amount,payment.currency)}</p>
-          {payment.paidAt&&<p>Thời điểm VNPay ghi nhận: {rentalDate(payment.paidAt)}</p>}
-          {payment.paymentDeadline&&<p>Hạn thanh toán: {rentalDate(payment.paymentDeadline)}</p>}
-        </section>
-      )}
-      {role==="customer"&&paymentError&&<p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{paymentError}</p>}
+      <details className="rounded-xl border border-stone-200 bg-white p-3">
+        <summary className="cursor-pointer font-semibold">Tài chính</summary>
+        <div className="mt-3 space-y-3">
+          {role === "customer" && payment && <section className={`space-y-1 rounded-lg border p-3 ${payment.reconciliationRequired ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-stone-50"}`} aria-live="polite">
+            <p className="font-semibold">{hasDeposit ? "Thanh toán cọc" : "Thanh toán toàn kỳ"}: {({ PENDING: "Đang chờ VNPay", PROCESSING: "Đang xử lý", PAID: payment.reconciliationRequired ? "Đã nhận tiền, cần đối soát" : "Đã ghi nhận thanh toán", NOT_RECEIVED: "Chưa xác nhận đã nhận tiền", FAILED: "Thanh toán thất bại", CANCELLED: "Giao dịch đã hủy" } as Record<string, string>)[payment.paymentStatus]}</p>
+            <p>{payment.settlementStage ? ({ AWAITING_PAYMENT: "Chờ VNPay xác nhận thanh toán", VERIFIED_AWAITING_ALLOCATION: "Đã xác minh tiền, đang chờ phân bổ", ALLOCATED_AWAITING_SIGNING: "Đang kiểm tra điều kiện ký", AWAITING_SIGNING: "Đã thanh toán, chờ hoàn tất ký", COMPLETED: "Gia hạn đã hoàn tất", RECONCILIATION_REQUIRED: "Cần hỗ trợ đối soát" }[payment.settlementStage]) : payment.message}</p>
+            <p>{rentalMoney(payment.amount, payment.currency)}{payment.paidAt ? ` — ${rentalDate(payment.paidAt)}` : ""}</p>
+            {payment.paymentDeadline && <p className="text-xs text-stone-600">Hạn thanh toán: {rentalDate(payment.paymentDeadline)}</p>}
+            {canViewReceipt && <Button type="button" variant="outline" onClick={() => setReceiptOpen(true)}>Xem biên lai</Button>}
+          </section>}
+          {financeHistory}
+          {role === "customer" && paymentError && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{paymentError}</p>}
+        </div>
+      </details>
+      {evidenceDocuments}
+      {receiptOpen && canViewReceipt && payment && <Modal open onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán" size="lg">
+        <RenewalReceipt id={r.id} paymentId={payment.paymentId} role={role} />
+      </Modal>}
       {terms ? (
-        <section className="rounded border border-stone-200 p-3 space-y-2">
-          <h4 className="font-semibold">Điều khoản khách hàng đã chấp nhận</h4>
-          <p>Gói gia hạn: {terms.rentalMonths} tháng</p>
-          <p>Kỳ gia hạn: {rentalDate(terms.extensionStartDate)} - {rentalDate(terms.newEndDate)}</p>
-          <dl className="grid gap-2 sm:grid-cols-2">
-            <div><dt>Đơn giá/tháng</dt><dd>{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
-            <div><dt>Trước giảm giá</dt><dd>{rentalMoney(terms.subtotal, terms.currency)}</dd></div>
-            <div><dt>Giảm giá</dt><dd>{rentalMoney(terms.discountAmount, terms.currency)}</dd></div>
-            <div><dt>Tổng tiền gia hạn</dt><dd>{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>
-            {hasDeposit ? <>
-              <div><dt>Cọc gia hạn trả trước</dt><dd>{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
-              <div><dt>Tiền thuê còn lại khi ký</dt><dd>{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
-            </> : <div><dt>Toàn bộ tiền thuê gia hạn cần thanh toán</dt><dd>{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
-          </dl>
-          {isManager && <p className="text-sm text-stone-600">Đây là số tiền theo báo giá, chưa xác nhận đã phát sinh nghĩa vụ hoặc đã thu tiền.</p>}
-        </section>
+        <details className="rounded-xl border border-stone-200 bg-white p-3">
+          <summary className="cursor-pointer font-semibold">Điều khoản</summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-sm text-stone-600">Gói gia hạn: {terms.rentalMonths} tháng</p>
+            <p className="text-sm text-stone-600">Kỳ gia hạn: {rentalDate(terms.extensionStartDate)} → {rentalDate(terms.newEndDate)}</p>
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div><dt className="text-stone-500">Đơn giá/tháng</dt><dd className="font-medium">{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
+              <div><dt className="text-stone-500">Tạm tính</dt><dd className="font-medium">{rentalMoney(terms.subtotal, terms.currency)}</dd></div>
+              <div><dt className="text-stone-500">Giảm giá</dt><dd className="font-medium">{rentalMoney(terms.discountAmount, terms.currency)}</dd></div>
+              <div><dt className="text-stone-500">Tổng tiền sau giảm</dt><dd className="font-semibold">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>
+              {hasDeposit ? <>
+                <div><dt className="text-stone-500">Cọc gia hạn trả trước</dt><dd className="font-medium">{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
+                <div><dt className="text-stone-500">Tiền thuê còn lại khi ký</dt><dd className="font-medium">{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
+              </> : <div><dt className="text-stone-500">Tiền cần thanh toán</dt><dd className="font-medium">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
+            </dl>
+            {isManager && <p className="text-sm text-stone-600">Đây là số tiền theo báo giá, chưa xác nhận đã phát sinh nghĩa vụ hoặc đã thu tiền.</p>}
+          </div>
+        </details>
       ) : (
-        <p className="text-sm text-stone-500">Chưa có điều khoản được khách hàng chấp nhận, chưa thể xác định giá và khoản thanh toán.</p>
+        <p className="text-sm text-stone-500">Chưa có điều khoản được khách hàng chấp nhận.</p>
       )}
       {r.status === "approved" && (
         <p className="rounded bg-amber-50 p-3">
           Hồ sơ gia hạn đã được duyệt. Trạng thái này chưa xác nhận đã thanh toán hoặc hoàn tất ký, ngày kết thúc thuê chưa thay đổi.</p>
       )}
-      {r.version === null && (
-        <p className="text-amber-700">
-          Hồ sơ chưa đủ thông tin để xử lý, hiện chỉ có thể xem.</p>
-      )}
       {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
-      </p>}
-      {!isManager && r.disabledReasons.length > 0 && r.reviewState !== "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
-        Chưa đủ điều kiện xử lý. Vui lòng kiểm tra hồ sơ hoặc liên hệ quản lý.
       </p>}
       {appointmentSelection}
       {canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi thanh toán cọc.</p>}

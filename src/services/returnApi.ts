@@ -16,6 +16,10 @@ export interface ApiReturn {
   damageFee: number; cleaningFee: number; lostItemFee: number; overdueFee: number; outstandingFee: number
   proposedUnitStatus: 'available' | 'maintenance' | null
   evidencePhotos?: string[]
+  sourceType?: 'CUSTOMER_RETURN' | 'RECOVERY'
+  recoveryTaskId?: string | null
+  recoveryTaskStatus?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | null
+  recoveryCompletedAt?: string | null
 }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const money = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 999999999999.99 && Math.abs(v * 100 - Math.round(v * 100)) < 0.01
@@ -28,7 +32,11 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
     (v.evidencePhotos === undefined || (Array.isArray(v.evidencePhotos) && v.evidencePhotos.every(item => typeof item === 'string'))) &&
     ['depositAmount', 'netRefundAmount', 'amountDueFromCustomer'].every(k => v[k] === null || money(v[k])) &&
-    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string')
+    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string') &&
+    (v.sourceType === undefined ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
+      v.sourceType === 'CUSTOMER_RETURN' ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
+        v.sourceType === 'RECOVERY' && isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) &&
+        (v.recoveryTaskStatus === 'CLOSED' ? v.status === 'completed' && typeof v.recoveryCompletedAt === 'string' && Number.isFinite(Date.parse(v.recoveryCompletedAt)) : v.recoveryCompletedAt === null))
 }
 function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string) {
   if (a.roles.includes('BUSINESS') || a.roles.includes('ADMIN')) return true

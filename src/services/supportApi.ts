@@ -135,7 +135,7 @@ export function isSupportMessage(value: unknown): value is SupportMessage {
   return (
     !!m &&
     [m.id, m.ticketId, m.authorId].every(isUuid) &&
-    inList(m.authorRole, ["CUSTOMER", "STAFF"]) &&
+    inList(m.authorRole, ["CUSTOMER", "STAFF", "MANAGER"]) &&
     inList(m.visibility, ["PUBLIC", "INTERNAL"]) &&
     string(m.body) &&
     isInstant(m.sentAt) &&
@@ -303,15 +303,18 @@ export async function listSupportMessages(
   id: string,
   p = 0,
   size = 20,
+  visibility?: "PUBLIC" | "INTERNAL",
 ) {
+  check(role !== "customer" || visibility !== "INTERNAL", "Trao đổi nội bộ chỉ dành cho nhân viên và quản lý.")
+  const route = role !== "customer" && visibility ? visibility === "INTERNAL" ? "internal-messages" : "public-messages" : "messages"
   return page<SupportMessage>(
     await apiRequest(
-      `${path(role, id)}/messages${queryString({ page: p, size }, false, true)}`,
+      `${path(role, id)}/${route}${queryString({ page: p, size }, false, true)}`,
     ),
     (v) =>
       isSupportMessage(v) &&
       v.ticketId === id &&
-      (role !== "customer" || v.visibility === "PUBLIC"),
+      (role !== "customer" || v.visibility === "PUBLIC") && (!visibility || v.visibility === visibility),
     p,
   )
 }
@@ -410,7 +413,7 @@ export async function sendSupportCommand(
   keyValid(key)
   const allowed: Record<SupportRole, string[]> = {
     customer: ["message", "close", "reopen"],
-    manager: ["assign", "decision"],
+    manager: ["assign", "decision", "message"],
     staff: ["claim", "accept", "message", "information", "resolve", "escalate"],
   }
   check(allowed[role].includes(command.kind), "Thao tác không thuộc role này.")
@@ -433,7 +436,7 @@ export async function sendSupportCommand(
     message: [
       "body",
       "evidenceFileIds",
-      ...(role === "staff" ? ["visibility"] : ["expectedVersion"]),
+      ...(role !== "customer" ? ["visibility"] : ["expectedVersion"]),
     ],
     information: ["message", "evidenceFileIds", "expectedVersion"],
     resolve: ["summary", "evidenceFileIds", "expectedVersion"],
@@ -455,18 +458,25 @@ export async function sendSupportCommand(
   if ("reason" in payload) text(payload.reason, 2000)
   if ("body" in payload) text(payload.body, 4000)
   if ("message" in payload) text(payload.message, 4000)
-  if ("summary" in payload) text(payload.summary, 4000)
+  if (kind === "resolve")
+    check(
+      "summary" in payload && string(payload.summary) && payload.summary.length <= 4000 &&
+        (!!payload.summary.trim() || ("evidenceFileIds" in payload && Array.isArray(payload.evidenceFileIds) && payload.evidenceFileIds.length > 0)),
+      "Cần nhập mô tả xử lý hoặc đính kèm minh chứng để gửi cho khách hàng.",
+    )
   if ("feedback" in payload && payload.feedback !== undefined)
     check(
       string(payload.feedback) && payload.feedback.length <= 2000,
       "Phản hồi tối đa 2000 ký tự.",
     )
-  if (kind === "message" && role === "staff")
+  if (kind === "message" && role !== "customer")
     check(
       "visibility" in payload &&
         inList(payload.visibility, ["PUBLIC", "INTERNAL"]),
       "Cần chọn công khai hoặc nội bộ.",
     )
+  if (kind === "message" && role === "manager")
+    check("visibility" in payload && payload.visibility === "INTERNAL", "Manager chỉ được gửi trao đổi nội bộ.")
   if (kind === "assign")
     check(
       "assignedStaffId" in payload && isUuid(payload.assignedStaffId),

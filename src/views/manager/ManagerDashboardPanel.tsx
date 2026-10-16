@@ -416,11 +416,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
       <SectionHeader
         eyebrow="Tổng quan cơ sở"
         title="Tình hình vận hành"
-        action={
-          <Button variant="outline" onClick={() => setPage("reports")}>
-            Mở báo cáo chi tiết
-          </Button>
-        }
       />
 
       <section aria-labelledby="manager-priority-heading">
@@ -738,13 +733,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
                 Khôi phục ({hiddenActivityCount})
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setPage("reports")}
-            >
-              Xem báo cáo
-            </Button>
           </div>
         </div>
         {recentActivities.length ? (
