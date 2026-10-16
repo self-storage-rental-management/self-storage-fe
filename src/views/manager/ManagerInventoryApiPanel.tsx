@@ -276,6 +276,8 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
   const [busy, setBusy] = useState(false)
   const [imageReading, setImageReading] = useState(false)
   const [error, setError] = useState<string>()
+
+
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
       <input className={`${inputClass} mt-1 disabled:bg-stone-100`} disabled={busy || (!!initial && ['code', 'physicalUnitCount', 'floor', 'zone'].includes(key))} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />

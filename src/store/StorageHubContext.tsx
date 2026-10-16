@@ -319,11 +319,56 @@ export function sanitizeFacilityStrings<T extends { code?: string; id?: string; 
   return f
 }
 
-export const isExcludedFacility = (_f: { code?: string; id?: string; city?: string; name?: string }) => false
+export const isExcludedFacility = (f: { code?: string; id?: string; city?: string; name?: string }) => {
+  if (!f) return false
+  const id = (f.id || '').toUpperCase()
+  const code = (f.code || '').toUpperCase()
+  const name = (f.name || '').toLowerCase()
+  return (
+    id === 'FAC-001' ||
+    id === 'FAC-002' ||
+    code === 'HCM-Q1-F01' ||
+    code === 'BD-F01' ||
+    name.includes('quận 1') ||
+    name.includes('bình dương') ||
+    name.includes('downtown storage') ||
+    name.includes('riverside storage')
+  )
+}
 
-export const isExcludedUnit = (_u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => false
+export const isExcludedUnit = (u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => {
+  if (!u) return false
+  const facId = (u.facilityId || '').toUpperCase()
+  const fac = (u.facility || '').toLowerCase()
+  const facName = (u.facilityName || '').toLowerCase()
+  const code = (u.code || u.id || '').toUpperCase()
+  return (
+    facId === 'FAC-001' ||
+    facId === 'FAC-002' ||
+    facId === 'HCM-Q1-F01' ||
+    facId === 'BD-F01' ||
+    fac.includes('quận 1') ||
+    fac.includes('bình dương') ||
+    facName.includes('quận 1') ||
+    facName.includes('bình dương') ||
+    code.startsWith('HCM-Q1-F01') ||
+    code.startsWith('BD-F01')
+  )
+}
 
-export const isExcludedRelated = (_item: any) => false
+export const isExcludedRelated = (item: any) => {
+  if (!item) return false
+  const facId = (item.facilityId || '').toUpperCase()
+  const facName = (item.facilityName || item.facility || '').toLowerCase()
+  return (
+    facId === 'FAC-001' ||
+    facId === 'FAC-002' ||
+    facId === 'HCM-Q1-F01' ||
+    facId === 'BD-F01' ||
+    facName.includes('quận 1') ||
+    facName.includes('bình dương')
+  )
+}
 
 const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
   const normalizedName = facilityName ? LEGACY_FACILITY_NAMES[facilityName] || facilityName : undefined
@@ -331,7 +376,7 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 }
 
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
-  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES.map(sanitizeFacilityStrings)
+  if (!Array.isArray(facilities)) return []
   const cleaned = facilities.filter(f => !isExcludedFacility(f)).map(sanitizeFacilityStrings)
   const mapped = cleaned.map(stored => {
     stored = sanitizeFacilityStrings(stored)
@@ -472,18 +517,18 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     price,
     deposit: price,
     climate: u.climate,
-    status: isOccupiedDemo ? 'occupied' : 'available',
+    status: (isOccupiedDemo ? 'occupied' : 'available') as 'occupied' | 'available',
     reservedPeriods,
     nextAvailableDate: u.id === 'HCM-Q1-F01-S-001' ? '2027-01-12' : u.id === 'HCM-Q1-F01-M-001' ? '2027-05-01' : u.id === 'HCM-Q1-F01-L-001' ? '2026-09-18' : u.id === 'A-104' ? '2027-03-21' : u.id === 'B-112' ? '2026-12-23' : undefined,
     currentRentalId: demoRentalByUnit[u.id],
     version: 1
   }
-})
+}).filter(u => !isExcludedUnit(u))
 
 // Keep runtime state (status, reservations, next available date) while
 // upgrading older browser snapshots to the current Customer catalog metadata.
 const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
-  if (!Array.isArray(units) || units.length === 0) return INITIAL_UNITS
+  if (!Array.isArray(units)) return []
   const cleaned = units.filter(u => !isExcludedUnit(u))
   const mapped = cleaned.map(stored => {
     const canonical = INITIAL_UNITS.find(unit => unit.id === stored.id || unit.code === stored.code)
@@ -510,7 +555,7 @@ const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
   })
   const existingIds = new Set(mapped.map(u => u.id))
   for (const initUnit of INITIAL_UNITS) {
-    if (!existingIds.has(initUnit.id)) {
+    if (!existingIds.has(initUnit.id) && !isExcludedUnit(initUnit)) {
       mapped.push(initUnit)
     }
   }
@@ -1320,7 +1365,7 @@ interface StorageHubContextValue extends StorageHubState {
   // Facility & Unit CRUD
   createFacility: (data: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => Facility
   updateFacility: (facilityId: string, updates: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => void
-  deleteFacility: (facilityId: string, actor?: User) => { success: boolean; reason?: string }
+  deleteFacility: (facilityId: string, actor?: User, force?: boolean) => { success: boolean; reason?: string }
   createUnit: (data: Partial<StorageUnit>, actor: User) => StorageUnit
   updateUnit: (unitId: string, updates: Partial<StorageUnit>, actor: User) => void
   deleteUnit: (unitId: string, actor: User) => { success: boolean; reason?: string }
@@ -4832,14 +4877,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const deleteFacility = (facilityId: string, actor?: User): { success: boolean; reason?: string } => {
+  const deleteFacility = (facilityId: string, actor?: User, force: boolean = false): { success: boolean; reason?: string } => {
     if (actor) assertPermission(actor, 'facilities:read')
     const targetFac = state.facilities.find(f => f.id === facilityId || f.code === facilityId)
     const hasActiveHolds = state.holds.some(h => (h.facilityId === facilityId || (targetFac && (h.facilityId === targetFac.id || h.facilityId === targetFac.code)) || h.facilityName?.includes(facilityId)) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status))
     const hasActiveRentals = state.rentals.some(r => (r.facilityId === facilityId || (targetFac && (r.facilityId === targetFac.id || r.facilityId === targetFac.code)) || r.facilityName?.includes(facilityId)) && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status))
     const hasOccupiedUnits = state.units.some(u => (u.facilityId === facilityId || (targetFac && (u.facilityId === targetFac.id || u.facilityId === targetFac.code))) && (u.status === 'occupied' || (u.status as string) === 'rented'))
 
-    if (hasActiveHolds || hasActiveRentals || hasOccupiedUnits) {
+    if (!force && (hasActiveHolds || hasActiveRentals || hasOccupiedUnits)) {
       return {
         success: false,
         reason: 'Không thể xóa cơ sở đang có gian kho cho thuê hoạt động hoặc có đơn giữ chỗ chưa hoàn tất.'
