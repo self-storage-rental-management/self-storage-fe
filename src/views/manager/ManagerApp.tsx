@@ -17,7 +17,6 @@ import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
 import ManagerOverdueApiPanel from './ManagerOverdueApiPanel'
 import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import ManagerReportsPanel from './ManagerReportsPanel'
-import ManagerReportsApiPanel from './ManagerReportsApiPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerApiStaffTasksPanel from './ManagerApiStaffTasksPanel'
 import ManagerUnitAssignmentPanel from './ManagerUnitAssignmentPanel'
@@ -40,7 +39,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:collect' },
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
     ...(isApiAuthenticated() ? [{ id: 'support-api', label: "Hỗ trợ khách hàng", icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
-    { id: 'reports', label: 'Báo cáo cơ sở', icon: Icon.chart, group: 'Báo cáo', permission: 'reports:read' },
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
@@ -139,6 +137,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const managerNotificationPage = (type: ApiNotification['type']) => {
     if (type === 'CHECKIN' || type === 'RETURN') return 'moves'
     if (type === 'RESERVATION') return 'unit-assignments'
+    if (type === 'RENEWAL') return 'rentals'
     if (type === 'PAYMENT' || type === 'OVERDUE') return type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
     if (type === 'SUPPORT') return 'support-api'
     return 'dashboard'
@@ -178,9 +177,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'staff-tasks' && (isApiAuthenticated()
       ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}
-    {page === 'reports' && (isApiAuthenticated()
-      ? <ManagerReportsApiPanel />
-      : <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />)}
     {page === 'profile' && <ProfileView user={user} />}
   </Layout></div></ManagerPresentationProvider>
 }
