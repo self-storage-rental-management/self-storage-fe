@@ -116,14 +116,15 @@ function SupportSession({
   const [query, setQuery] = useState<SupportQuery>({
     page: 0,
     size: role === "manager" ? 10 : 20,
-    facilityId,
+    ...(facilityId ? { facilityId } : {}),
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState(""),
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
   const [revision, setRevision] = useState(0)
-  const [staffView, setStaffView] = useState<"queue" | "assigned">("queue")
+  const [conversation, setConversation] = useState<"messages" | "internal">("messages")
+  const [staffView, setStaffView] = useState<"queue" | "assigned">("assigned")
   const [queuePage, setQueuePage] = useState(0)
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
@@ -217,6 +218,35 @@ function SupportSession({
       </div>
       {role !== "manager" && !selected && !creation && commandNotice}
 
+      {role === "staff" && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Danh sách hỗ trợ">
+          {([
+            ["assigned", "Hồ sơ của tôi"],
+            ["queue", "Chờ tiếp nhận"],
+          ] as const).map(([view, label]) => (
+            <Button
+              key={view}
+              type="button"
+              variant={staffView === view ? "primary" : "outline"}
+              aria-pressed={staffView === view}
+              disabled={locked}
+              onClick={() => {
+                if (command.locked || uploadLock.current || staffView === view) return
+                setStaffView(view)
+                setSelected(undefined)
+                setQuery(q => ({ ...q, page: 0 }))
+                setQueuePage(0)
+                command.clearError()
+                if (view === "queue") queueRead.refresh()
+                else read.refresh()
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <Card className="space-y-3 p-4">
         <form
           className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
@@ -292,7 +322,7 @@ function SupportSession({
               disabled={locked}
               onClick={() => {
                 setSearch("")
-                setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
+                setQuery({ page: 0, size: role === "manager" ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: "createdAt,desc" })
                 setQueuePage(0)
               }}
             >
@@ -348,28 +378,28 @@ function SupportSession({
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <>
             {read.data.data.length > 0 && <Card className="overflow-x-auto p-0">
-              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[1000px]" : "min-w-[1180px]"}`}>
+              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[1000px]" : "min-w-[1080px]"}`}>
                 <colgroup>
                   {role === "customer" ? <>
                     <col className="w-[28%]" /><col className="w-[22%]" /><col className="w-[23%]" /><col className="w-[15%]" /><col className="w-[12%]" />
                   </> : <>
-                    <col className="w-[24%]" /><col className="w-[20%]" /><col className="w-[18%]" /><col className="w-[16%]" /><col className="w-[12%]" /><col className="w-[10%]" />
+                    <col className="w-[25%]" /><col className="w-[15%]" /><col className="w-[19%]" /><col className="w-[15%]" /><col className="w-[14%]" /><col className="w-[12%]" />
                   </>}
                 </colgroup>
                 <thead className="border-b bg-stone-50 text-stone-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
+                    <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Trạng thái</th>
                     <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
-                    {role !== "customer" && <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Nhân viên phụ trách</th>}
-                    <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
-                    <th scope="col" className="px-4 py-3 text-right font-semibold">Thao tác</th>
+                    {role !== "customer" && <th scope="col" className="px-4 py-3 font-semibold">Nhân viên phụ trách</th>}
+                    <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Tạo lúc</th>
+                    <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-200">
                   {read.data.data.map((t) => <tr key={t.id}>
                     <td className="break-words px-4 py-3 align-middle">
-                      <div className="font-semibold text-stone-900">{t.subject}</div>
+                      <div className="line-clamp-2 min-h-10 font-semibold text-stone-900">{t.subject}</div>
                       <TicketCode id={t.id} />
                     </td>
                     <td className="px-4 py-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${supportStatusClass(t.status)}`}>
@@ -414,6 +444,8 @@ function SupportSession({
               role={role}
               id={selected}
               command={formCommand}
+              conversation={conversation}
+              onConversationChange={setConversation}
               onUploadBusy={uploadBusy}
               onFollowUp={(parent) => {
                 if (command.locked || uploadLock.current) return

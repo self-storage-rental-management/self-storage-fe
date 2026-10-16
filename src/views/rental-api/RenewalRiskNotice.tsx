@@ -4,6 +4,7 @@ import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { isUuid } from "../../services/renewalOperationsApi"
 import { rentalDate, rentalMoney } from "./presentation"
+import RecoveryTaskLink from "./RecoveryTaskLink"
 
 export interface Risk {
   rentalId: string; renewalId: string | null; checkedAt: string; completeness: "COMPLETE" | "UNKNOWN"
@@ -30,21 +31,22 @@ export function validRenewalRisk(value: unknown): value is Risk {
       : instant(r.repossessionStartedAt)&&isUuid(r.recoveryTaskId)&&r.withinOrdinaryRenewalWindow===false)
     &&(r.completeness!=="COMPLETE"||(r.overdueDays!==null&&instant(r.repossessionDeadline)&&instant(r.repossessionStartsAt)&&typeof r.withinOrdinaryRenewalWindow==="boolean"))
 }
-export default function RenewalRiskNotice({ rentalId,renewalId,role="customer",revision }: {
-  rentalId?: string;renewalId?: string;role?: "customer"|"manager"|"staff";revision?: number | null
+export default function RenewalRiskNotice({ rentalId,renewalId,role="customer",revision,facilityId }: {
+  rentalId?: string;renewalId?: string;role?: "customer"|"manager"|"staff";revision?: number | null;facilityId?: string
 }) {
   const actor=getAuthenticatedActor(),id=renewalId??rentalId
   const read=useRentalApiResource(`${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${id}:${revision}:renewal-risk`,async()=>{
     if(!id)throw new Error("Missing rental")
     return readRentalEnvelope<Risk>(await apiRequest(`/api/${role}/${renewalId?"renewals":"rentals"}/${encodeURIComponent(id)}/renewal-risk`),
       v=>validRenewalRisk(v)&&(renewalId?v.renewalId===id:v.rentalId===id))
-  })
+  }, { retainDataOnRefresh: true })
   const r=read.data
-  if(read.loading)return null
+  if(read.loading&&!r)return null
   if(r&&["REPOSSESSION_STARTED","REPOSSESSION_CLOSED"].includes(r.repossessionStatus??""))return <section role="status" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 space-y-1">
     <p className="font-semibold">{r.repossessionStatus==="REPOSSESSION_STARTED"?"Hồ sơ đã chuyển sang xử lý thu hồi":"Nhiệm vụ thu hồi đã đóng"}</p>
     <p>Hồ sơ được tiếp nhận thu hồi lúc {rentalDate(r.repossessionStartedAt??null)}.</p>
     <p>Gia hạn theo luồng thông thường đã bị khóa. Vui lòng liên hệ cơ sở để xử lý hợp đồng, tài sản và tiền cọc.</p>
+    {role !== "customer" && facilityId && r.recoveryTaskId && <RecoveryTaskLink role={role} taskId={r.recoveryTaskId} facilityId={facilityId} onChanged={read.refresh} />}
   </section>
   if(read.error||!r||r.completeness==="UNKNOWN")return null
   if(r.severity==="NONE")return null
