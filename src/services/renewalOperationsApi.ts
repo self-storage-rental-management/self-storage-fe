@@ -255,7 +255,7 @@ export async function listRenewalAppointments(
 export async function listRenewalOperationEvents(
   role: RenewalOperationsRole,
   id: string,
-  category: "payments" | "refunds" | "facility-incidents",
+  category: "payments" | "documents" | "refunds" | "facility-incidents",
   page = 0,
   size = 20,
 ) {
@@ -268,7 +268,9 @@ export async function listRenewalOperationEvents(
   const allowed =
     category === "payments"
       ? ["DEPOSIT", "FULL_RENT_PAYMENT", "CASH"]
-      : category === "refunds"
+      : category === "documents"
+        ? ["ARRIVAL", "COMPLETION"]
+        : category === "refunds"
         ? ["REFUND", "DEPOSIT_DISPOSITION", "REFUND_EXECUTION"]
         : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION"]
   return readRentalPage<RenewalOperationEvent>(
