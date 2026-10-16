@@ -10,7 +10,7 @@ import type {
 } from "../../types/renewalOperationsApi"
 
 export const operationLabels: Record<RenewalOperationAction, string> = {
-  appointment: "Đề nghị lịch ký",
+  appointment: "Chọn lịch ký",
   reschedule: "Đổi lịch ký",
   confirmation: "Xác nhận đề xuất ngoại lệ",
   arrival: "Ghi nhận khách đến",
@@ -131,8 +131,10 @@ export function operationBlockedReason(
     !s.appointmentRef
   )
     return "Chưa có lịch ký được ghi nhận."
-  if (["appointment", "reschedule", "arrival"].includes(action) && s.arrivalRef)
-    return "Đã ghi nhận khách đến; cần luồng sự cố/ngoại lệ thay vì đổi lịch thông thường."
+  if (["appointment", "reschedule"].includes(action) && s.arrivalRef)
+    return "Không thể đổi lịch sau khi khách đã đến."
+  if (action === "arrival" && s.arrivalRef)
+    return "Đã ghi nhận khách đến cho lịch này."
   if (action === "completion" && !s.arrivalRef)
     return "Chưa có lượt khách đến được nhân viên ghi nhận."
   if (action === "confirmation") return exceptionConfirmationBlockedReason(s, proposal, now)

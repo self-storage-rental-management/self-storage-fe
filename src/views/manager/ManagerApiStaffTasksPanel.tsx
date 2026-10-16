@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
@@ -54,6 +54,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
   const [recoveryError, setRecoveryError] = useState<unknown>(null)
   const [recoveryDisabled, setRecoveryDisabled] = useState(false)
   const [selectedRecovery, setSelectedRecovery] = useState<RecoveryTask | null>(null)
+  const recoveryCloseGuard = useRef<() => boolean>(() => false)
   const [units, setUnits] = useState<MaintenanceStorageUnit[]>([])
   const [staff, setStaff] = useState<MaintenanceStaffOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -229,8 +230,8 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
         </Table>
       </Card>
 
-      {selectedRecovery && <Modal open title="Chi tiết nhiệm vụ thu hồi" onClose={() => setSelectedRecovery(null)}>
-        <RecoveryTaskDetail key={selectedRecovery.id} role="manager" id={selectedRecovery.id} facilityId={selectedRecovery.facilityId} />
+      {selectedRecovery && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!recoveryCloseGuard.current()) setSelectedRecovery(null) }}>
+        <RecoveryTaskDetail key={selectedRecovery.id} role="manager" id={selectedRecovery.id} facilityId={selectedRecovery.facilityId} closeGuard={recoveryCloseGuard} onChanged={() => { void reload() }} />
       </Modal>}
       <Modal open={modalOpen} onClose={() => !saving && setModalOpen(false)} title="Tạo nhiệm vụ bảo trì">
         <div className="space-y-4">

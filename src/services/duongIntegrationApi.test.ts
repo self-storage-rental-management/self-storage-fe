@@ -15,6 +15,7 @@ import {
   uploadDuongEvidence,
   renewalSignedContractEntityType,
   downloadDuongEvidence,
+  getDuongEvidenceName,
   integrationError,
   validPolicyInput,
   type RenewalPolicyInput,
@@ -591,6 +592,17 @@ describe("Dương integration real transport contracts", () => {
     expect(
       new Headers(fetch.mock.calls[0][1].headers).get("Authorization"),
     ).toBe("Bearer token")
+  })
+  it("reads the real attachment name with an authenticated HEAD request", async () => {
+    const fileName = "minh chứng.pdf"
+    const fetch = vi.fn().mockResolvedValue(new Response(null, {
+      headers: { "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}` },
+    }))
+    vi.stubGlobal("fetch", fetch)
+    setAccessToken("token")
+    expect(await getDuongEvidenceName(ids.file)).toBe(fileName)
+    expect(fetch.mock.calls[0][1].method).toBe("HEAD")
+    expect(new Headers(fetch.mock.calls[0][1].headers).get("Authorization")).toBe("Bearer token")
   })
   it.each([401, 403, 404, 409, 500])(
     "redacts raw server internals while retaining HTTP %s meaning",
