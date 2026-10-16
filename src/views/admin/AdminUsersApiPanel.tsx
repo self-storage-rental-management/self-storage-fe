@@ -21,6 +21,7 @@ import {
 import type { Role, User } from '../../types'
 import {
   createAdminUser,
+  deleteAdminUser,
   listAdminFacilities,
   listAdminLoginHistory,
   listAdminSessions,
@@ -141,6 +142,8 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmStatusModal, setConfirmStatusModal] = useState<AdminApiUser | null>(null)
   const [statusUpdating, setStatusUpdating] = useState(false)
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState<AdminApiUser | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Load last seen and summary stats
   useEffect(() => {
@@ -379,6 +382,31 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       showToast(reason instanceof Error ? reason.message : 'Không thể cập nhật trạng thái.')
     } finally {
       setStatusUpdating(false)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteModal) return
+    if (confirmDeleteModal.roles.includes('ADMIN')) {
+      showToast('Tài khoản quản trị viên được bảo vệ và không thể xóa.')
+      setConfirmDeleteModal(null)
+      return
+    }
+    if (confirmDeleteModal.id === user.id) {
+      showToast('Bạn không thể tự xóa tài khoản của chính mình.')
+      setConfirmDeleteModal(null)
+      return
+    }
+    try {
+      setDeleting(true)
+      await deleteAdminUser(confirmDeleteModal.id)
+      showToast(`Đã xóa vĩnh viễn tài khoản ${confirmDeleteModal.fullName}.`)
+      setConfirmDeleteModal(null)
+      setRefreshKey(v => v + 1)
+    } catch (reason) {
+      showToast(reason instanceof Error ? reason.message : 'Không thể xóa tài khoản người dùng.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -735,18 +763,29 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                             </Button>
 
                             {account.id !== user.id && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setConfirmStatusModal(account)}
-                                className={`h-8 px-2.5 text-xs ${
-                                  status === 'active'
-                                    ? 'border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300'
-                                    : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300'
-                                }`}
-                              >
-                                {status === 'active' ? 'Khóa' : 'Mở khóa'}
-                              </Button>
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setConfirmStatusModal(account)}
+                                  className={`h-8 px-2.5 text-xs ${
+                                    status === 'active'
+                                      ? 'border-amber-200 text-amber-700 hover:bg-amber-50 hover:border-amber-300'
+                                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300'
+                                  }`}
+                                >
+                                  {status === 'active' ? 'Khóa' : 'Mở khóa'}
+                                </Button>
+
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setConfirmDeleteModal(account)}
+                                  className="h-8 px-2.5 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 font-medium"
+                                >
+                                  Xóa
+                                </Button>
+                              </>
                             )}
                           </>
                         )}
@@ -1017,6 +1056,47 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                   : confirmStatusModal.status === 'ACTIVE'
                     ? 'Khóa tài khoản ngay'
                     : 'Mở khóa ngay'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Modal: Xác nhận Xóa Tài Khoản Người Dùng (Vĩnh viễn) ────────── */}
+      <Modal
+        open={Boolean(confirmDeleteModal)}
+        onClose={() => setConfirmDeleteModal(null)}
+        title="Xác nhận xóa tài khoản người dùng"
+      >
+        {confirmDeleteModal && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <div className="flex items-center gap-2 font-bold text-red-800">
+                <svg className="w-5 h-5 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Cảnh báo: Hành động xóa vĩnh viễn không thể hoàn tác!</span>
+              </div>
+              <p className="mt-2 text-stone-800">
+                Bạn đang chuẩn bị xóa vĩnh viễn tài khoản{' '}
+                <strong className="text-red-900">{confirmDeleteModal.fullName}</strong> ({confirmDeleteModal.email}).
+              </p>
+              <p className="mt-2 text-xs text-red-700 leading-relaxed">
+                Toàn bộ dữ liệu phiên làm việc, lịch sử đăng nhập và phân quyền của tài khoản này sẽ bị xóa khỏi hệ thống.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setConfirmDeleteModal(null)} disabled={deleting}>
+                Hủy bỏ
+              </Button>
+              <Button
+                variant="danger"
+                disabled={deleting}
+                onClick={handleConfirmDelete}
+                className="bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm"
+              >
+                {deleting ? 'Đang xóa tài khoản…' : 'Xác nhận xóa vĩnh viễn'}
               </Button>
             </div>
           </div>
