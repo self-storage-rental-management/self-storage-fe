@@ -88,7 +88,7 @@ import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, upda
 import { listAccessibleUnitTypes } from "../../services/customerReservationApi"
 import type { CustomerUnitType } from "../../services/customerReservationApi"
 import { isApiAuthenticated } from "../../services/authApi"
-import { listNotifications, markNotificationRead, type ApiNotification } from "../../services/notificationApi"
+import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
 import {
   createBusinessPackagePolicy,
   deactivateBusinessPackagePolicy,
@@ -448,8 +448,13 @@ export default function BusinessApp({
       catch { /* A failed refresh must not invent notifications. */ }
     }
     void refresh()
-    const timer = window.setInterval(() => void refresh(), 30000)
-    return () => { mounted = false; window.clearInterval(timer) }
+    window.addEventListener('storagehub:notifications-refresh', refresh)
+    const timer = window.setInterval(() => void refresh(), 10000)
+    return () => {
+      mounted = false
+      window.removeEventListener('storagehub:notifications-refresh', refresh)
+      window.clearInterval(timer)
+    }
   }, [user.id])
 
   useEffect(() => {
@@ -2388,14 +2393,25 @@ export default function BusinessApp({
     )
   }
 
-  // Toast
-
-  const [toast, setToast] = useState<string | null>(null)
-
+  // Toast -> Routed to Topbar Bell
   const showToast = (msg: string) => {
-    setToast(msg)
-
-    setTimeout(() => setToast(null), 3000)
+    const pageTitles: Record<string, string> = {
+      facilities: 'Quản lý cơ sở',
+      pricing: 'Bảng giá & Biểu phí',
+      discounts: 'Khuyến mãi & Voucher',
+      policies: 'Chính sách thuê',
+      returns: 'Hồ sơ trả kho & Quyết toán',
+      'damage-incidents': 'Sự cố & Bồi thường',
+      performance: 'Hiệu suất vận hành',
+      revenue: 'Báo cáo doanh thu',
+      'rental-source-policies': 'Quy định nguồn thuê'
+    }
+    notifyBell({
+      title: pageTitles[page] || (lang === 'vi' ? 'Thông báo kinh doanh' : 'Business Notice'),
+      message: msg,
+      page,
+      date: new Date().toISOString()
+    })
   }
 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3508,18 +3524,24 @@ export default function BusinessApp({
       notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
       onNotificationClick={item => {
         const notification = businessNotifications.find(n => n.id === item.id)
-        if (notification?.title === 'Yêu cầu duyệt thay đổi loại kho' && notification.relatedEntityId) {
-          setPage('facilities')
-          setReviewRequestId(notification.relatedEntityId)
-          setReviewOpen(true)
-        } else if (notification?.title === 'Manager cập nhật ảnh hoặc thông tin loại kho' || notification?.title === 'Loại kho cần BO duyệt lại') {
-          setPage('facilities')
-          setReviewRequestId(null)
-          setReviewOpen(true)
-        } else {
-          setPage('facilities')
+        if (notification) {
+          if (notification.title === 'Yêu cầu duyệt thay đổi loại kho' && notification.relatedEntityId) {
+            setPage('facilities')
+            setReviewRequestId(notification.relatedEntityId)
+            setReviewOpen(true)
+          } else if (notification.title === 'Manager cập nhật ảnh hoặc thông tin loại kho' || notification.title === 'Loại kho cần BO duyệt lại') {
+            setPage('facilities')
+            setReviewRequestId(null)
+            setReviewOpen(true)
+          } else {
+            setPage(item.page || 'facilities')
+          }
+          void markNotificationRead(item.id).then(saved => setBusinessNotifications(current => current.map(n => n.id === saved.id ? saved : n))).catch(() => {})
+          return
         }
-        void markNotificationRead(item.id).then(saved => setBusinessNotifications(current => current.map(n => n.id === saved.id ? saved : n))).catch(() => {})
+        if (item.page) {
+          setPage(item.page)
+        }
       }}
       navItems={NAV}
       currentPage={page}
@@ -5531,14 +5553,6 @@ export default function BusinessApp({
       {page === "profile" && (
         <div className="fade-in">
           <ProfileView user={user} />
-        </div>
-      )}
-
-      {/* ── TOAST MESSAGE ──────────────────────────────────────── */}
-      {toast && (
-        <div role="status" className="fixed bottom-6 right-6 z-[100] bg-[#292a27] text-white px-5 py-3 rounded-lg shadow-2xl border border-amber-500/50 flex items-center gap-3 fade-in">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#e9a12c] animate-ping" />
-          <p className="text-sm font-medium">{toast}</p>
         </div>
       )}
 

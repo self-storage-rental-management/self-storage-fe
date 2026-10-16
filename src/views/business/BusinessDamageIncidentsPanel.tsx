@@ -11,6 +11,7 @@ import {
   type IncidentStatus,
 } from '../../services/incidentApi'
 import type { User } from '../../types'
+import { notifyBell } from '../../services/notificationApi'
 
 interface Props {
   user: User
@@ -61,11 +62,14 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
   // Data & loading
   const [incidents, setIncidents] = useState<DamageIncidentApi[]>([])
   const [loading, setLoading] = useState<boolean>(false)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
 
   const showToast = (msg: string) => {
-    setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 3500)
+    notifyBell({
+      title: isVi ? 'Sự cố & Bồi thường' : 'Damage Incidents',
+      message: msg,
+      page: 'damage-incidents',
+      date: new Date().toISOString()
+    })
   }
 
   const fetchIncidents = async () => {
@@ -209,12 +213,6 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
 
   return (
     <div className="space-y-6 fade-in">
-      {/* Toast */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white text-sm px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-bounce">
-          <span>{toastMessage}</span>
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-4">
