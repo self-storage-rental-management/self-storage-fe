@@ -474,6 +474,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [backendOtpCode, setBackendOtpCode] = useState('')
   const [backendOtpBusy, setBackendOtpBusy] = useState(false)
   const [backendOtpMessage, setBackendOtpMessage] = useState<string | null>(null)
+  const [backendOtpDevelopmentCode, setBackendOtpDevelopmentCode] = useState<string | null>(null)
   const [backendOtpNextResendAt, setBackendOtpNextResendAt] = useState<Record<string, number>>({})
   const [settlementModalOpen, setSettlementModalOpen] = useState(false)
   const [selectedSettlementReturn, setSelectedSettlementReturn] = useState<ReturnCase | null>(null)
@@ -1664,11 +1665,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (reservation.status === 'AWAITING_EMAIL') {
         setBackendOtpReservation(reservation)
         setBackendOtpCode('')
+        setBackendOtpDevelopmentCode(null)
         setBackendOtpMessage(null)
         setBackendOtpBusy(true)
         try {
           const sent = await resendReservationOtp(reservation.id)
           setBackendOtpNextResendAt(current => ({ ...current, [reservation.id]: new Date(sent.nextResendAt).getTime() }))
+          if (sent.developmentCode) {
+            setBackendOtpDevelopmentCode(sent.developmentCode)
+          }
           setBackendOtpMessage(goodsImageError || null)
         } catch (error) {
           setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${error instanceof Error ? error.message : 'Lỗi kết nối'}. Bạn có thể gửi lại.${goodsImageError ? ` ${goodsImageError}` : ''}`)
@@ -1730,6 +1735,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       await refreshBackendReservations()
       setBackendOtpReservation(null)
       setBackendOtpCode('')
+      setBackendOtpDevelopmentCode(null)
       setBackendOtpMessage(null)
       showToast(result.reservationStatus === 'AWAITING_REVIEW'
         ? 'Email đã xác minh. Hồ sơ đang chờ nhân viên duyệt.'
@@ -1748,6 +1754,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const result = await resendReservationOtp(backendOtpReservation.id)
       setBackendOtpCode('')
       setBackendOtpNextResendAt(current => ({ ...current, [backendOtpReservation.id]: new Date(result.nextResendAt).getTime() }))
+      if (result.developmentCode) {
+        setBackendOtpDevelopmentCode(result.developmentCode)
+      }
       setBackendOtpMessage(null)
     } catch (error) {
       setBackendOtpMessage(error instanceof Error ? error.message : 'Không thể gửi lại OTP.')
@@ -2132,7 +2141,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 reservation={reservation}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
                 unitTypeName={unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
-                onVerify={() => { setBackendOtpReservation(reservation); setBackendOtpCode(''); setBackendOtpMessage(null) }}
+                onVerify={() => {
+                  setBackendOtpReservation(reservation)
+                  setBackendOtpCode('')
+                  setBackendOtpDevelopmentCode(null)
+                  setBackendOtpMessage(null)
+                  void resendReservationOtp(reservation.id).then(res => {
+                    setBackendOtpNextResendAt(current => ({ ...current, [reservation.id]: new Date(res.nextResendAt).getTime() }))
+                    if (res.developmentCode) {
+                      setBackendOtpDevelopmentCode(res.developmentCode)
+                    }
+                  }).catch(() => {})
+                }}
                 onCancel={() => cancelBackendReservation(reservation)}
                 onRefresh={refreshBackendReservations}
                 onReceiptConfirmed={reservationId => {
@@ -3539,12 +3559,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       <CustomerReservationOtpModal
         reservation={backendOtpReservation}
         code={backendOtpCode}
+        developmentCode={backendOtpDevelopmentCode}
         busy={backendOtpBusy}
         message={backendOtpMessage}
         nextResendAt={backendOtpReservation ? backendOtpNextResendAt[backendOtpReservation.id] || 0 : 0}
         now={now}
         onCodeChange={setBackendOtpCode}
-        onClose={() => { if (!backendOtpBusy) setBackendOtpReservation(null) }}
+        onClose={() => {
+          if (!backendOtpBusy) {
+            setBackendOtpReservation(null)
+            setBackendOtpDevelopmentCode(null)
+          }
+        }}
         onResend={() => void resendBackendReservationOtp()}
         onVerify={() => void verifyBackendReservationOtp()}
       />
