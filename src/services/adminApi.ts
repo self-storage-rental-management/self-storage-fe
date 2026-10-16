@@ -274,3 +274,10 @@ export async function listAdminFacilities() {
   return readPage<AdminApiFacility>(response)
 }
 
+export async function deleteAdminUser(id: string) {
+  const response = await apiRequest<ApiEnvelope<{ success: boolean }>>(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  return readData<{ success: boolean }>(response)
+}
+
