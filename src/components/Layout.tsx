@@ -2,6 +2,8 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
 import type { PermissionKey, User, Role } from '../types'
+import { isApiAuthenticated } from '../services/authApi'
+import { markAllNotificationsRead } from '../services/notificationApi'
 
 export interface NavItem {
   id: string
@@ -120,6 +122,7 @@ export default function Layout({
   }, [notificationsOpen])
   const notificationReadKey = `storagehub-opened-notifications-v2-${user.id}`
   const notificationBadgeKey = `storagehub-seen-notification-badge-v2-${user.id}`
+  const bellActionStorageKey = `storagehub-bell-actions-${user.id}`
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(notificationReadKey) || '[]')
@@ -134,6 +137,32 @@ export default function Layout({
       return []
     }
   })
+  const [bellActionNotifications, setBellActionNotifications] = useState<LayoutNotification[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(bellActionStorageKey) || '[]')
+    } catch {
+      return []
+    }
+  })
+  const [isBellRinging, setIsBellRinging] = useState(false)
+
+  useEffect(() => {
+    const handleBellNotification = (e: Event) => {
+      const notif = (e as CustomEvent<LayoutNotification>).detail
+      if (!notif) return
+      setBellActionNotifications(prev => {
+        const next = [notif, ...prev.filter(item => item.id !== notif.id)].slice(0, 50)
+        try {
+          localStorage.setItem(bellActionStorageKey, JSON.stringify(next))
+        } catch {}
+        return next
+      })
+      setIsBellRinging(true)
+      window.setTimeout(() => setIsBellRinging(false), 1200)
+    }
+    window.addEventListener('storagehub:bell-notification', handleBellNotification)
+    return () => window.removeEventListener('storagehub:bell-notification', handleBellNotification)
+  }, [user.id, bellActionStorageKey])
 
   useEffect(() => {
     const restorePage = () => {
@@ -277,17 +306,34 @@ export default function Layout({
     return roleLabel
   }
 
-  const notifications = [
-    ...(suppliedNotifications ?? []),
-    ...(additionalNotifications ?? [])
-  ]
+  const allNotificationsMap = new Map<string, LayoutNotification>()
+  bellActionNotifications.forEach(n => allNotificationsMap.set(n.id, n))
+  ;(suppliedNotifications ?? []).forEach(n => {
+    if (!allNotificationsMap.has(n.id)) allNotificationsMap.set(n.id, n)
+  })
+  ;(additionalNotifications ?? []).forEach(n => {
+    if (!allNotificationsMap.has(n.id)) allNotificationsMap.set(n.id, n)
+  })
+  const notifications = Array.from(allNotificationsMap.values())
+
   const isNotificationRead = (item: LayoutNotification) => Boolean(item.isRead || readNotificationIds.includes(item.id))
   const unreadCount = notifications.filter(item => !item.isRead && !badgeSeenNotificationIds.includes(item.id)).length
 
   const formatNotificationDate = (value?: string) => {
     if (!value) return ''
     const parsed = new Date(value)
-    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('vi-VN')
+    if (Number.isNaN(parsed.getTime())) return value
+    const diffSec = Math.floor((Date.now() - parsed.getTime()) / 1000)
+    if (diffSec < 45) return 'Vừa xong'
+    if (diffSec < 3600) return `${Math.max(1, Math.floor(diffSec / 60))} phút trước`
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} giờ trước`
+    return parsed.toLocaleString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
   }
 
   const openNotifications = () => {
@@ -303,9 +349,32 @@ export default function Layout({
     const nextReadIds = Array.from(new Set([...readNotificationIds, notification.id]))
     setReadNotificationIds(nextReadIds)
     localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
+    setBellActionNotifications(prev => {
+      const updated = prev.map(item => item.id === notification.id ? { ...item, isRead: true } : item)
+      try { localStorage.setItem(bellActionStorageKey, JSON.stringify(updated)) } catch {}
+      return updated
+    })
     setNotificationsOpen(false)
     if (onNotificationClick) onNotificationClick(notification)
     else navigate(notification.page, false)
+  }
+
+  const markAllAsRead = () => {
+    const allIds = notifications.map(item => item.id)
+    const nextReadIds = Array.from(new Set([...readNotificationIds, ...allIds]))
+    setReadNotificationIds(nextReadIds)
+    localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
+    setBadgeSeenNotificationIds(nextReadIds)
+    localStorage.setItem(notificationBadgeKey, JSON.stringify(nextReadIds))
+    setBellActionNotifications(prev => {
+      const updated = prev.map(item => ({ ...item, isRead: true }))
+      try { localStorage.setItem(bellActionStorageKey, JSON.stringify(updated)) } catch {}
+      return updated
+    })
+    if (isApiAuthenticated()) {
+      void markAllNotificationsRead().catch(() => undefined)
+      window.dispatchEvent(new Event('storagehub:notifications-refresh'))
+    }
   }
 
   return (
@@ -430,7 +499,7 @@ export default function Layout({
             <button
               type="button"
               onClick={openNotifications}
-              className={`relative text-stone-400 hover:text-stone-700 transition p-2 rounded-lg hover:bg-stone-100 ${roleLabel === 'Customer' ? 'customer-notification-bell' : ''}`}
+              className={`relative text-stone-400 hover:text-stone-700 transition p-2 rounded-lg hover:bg-stone-100 ${roleLabel === 'Customer' ? 'customer-notification-bell' : ''} ${isBellRinging ? 'bell-ring-active' : ''}`}
               aria-label={'Xem thông báo'}
               title={'Thông báo'}
               aria-expanded={notificationsOpen}
@@ -439,38 +508,59 @@ export default function Layout({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               {unreadCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex min-w-5 h-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
+                <span className="absolute -right-1 -top-1 flex min-w-5 h-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white animate-pulse">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
             </button>
             {notificationsOpen && (
-              <div className="absolute right-0 top-11 z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
-                <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
-                  <p className="font-semibold text-stone-900">{'Thông báo'}</p>
-                  <span className="text-xs text-stone-400">{notifications.length}</span>
+              <div className="absolute right-0 top-11 z-50 w-84 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3 bg-stone-50/80">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-stone-900">{'Thông báo'}</p>
+                    {unreadCount > 0 && (
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                        {unreadCount} mới
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={markAllAsRead}
+                        className="text-xs text-amber-700 hover:text-amber-800 font-medium hover:underline cursor-pointer"
+                      >
+                        {'Đọc tất cả'}
+                      </button>
+                    )}
+                    <span className="text-xs text-stone-400">({notifications.length})</span>
+                  </div>
                 </div>
-                <div className="max-h-96 overflow-y-auto">
+                <div className="max-h-96 overflow-y-auto divide-y divide-stone-100">
                   {notifications.length ? notifications.map(item => (
                     <button
                       type="button"
                       key={item.id}
                       onClick={() => openNotificationDetail(item)}
-                      className={`block w-full border-b border-stone-100 px-4 py-3 text-left transition last:border-0 hover:bg-amber-100 ${isNotificationRead(item) ? 'bg-white' : 'bg-amber-50'}`}
+                      className={`block w-full px-4 py-3 text-left transition cursor-pointer hover:bg-amber-100/60 ${isNotificationRead(item) ? 'bg-white' : 'bg-amber-50/70'}`}
                     >
                       <span className="flex items-start gap-2">
-                        {!isNotificationRead(item) && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />}
-                        <span className="block text-sm font-medium text-stone-800">{item.title}</span>
+                        {!isNotificationRead(item) && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-200" />}
+                        <span className={`block text-sm ${!isNotificationRead(item) ? 'font-semibold text-stone-900' : 'font-medium text-stone-700'}`}>{item.title}</span>
                       </span>
-                        {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-500">{
-                          item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
-                            ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
-                            : item.message
-                        }</span>}
-                      {item.date && <span className="mt-1 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
+                      {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-600 line-clamp-3">{
+                        item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
+                          ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
+                          : item.message
+                      }</span>}
+                      {item.date && <span className="mt-1.5 block text-[10px] text-stone-400 font-mono">{formatNotificationDate(item.date)}</span>}
                     </button>
                   )) : (
-                    <p className="px-4 py-6 text-center text-sm text-stone-500">{'Chưa có thông báo mới'}</p>
+                    <div className="flex flex-col items-center justify-center px-4 py-10 text-center text-stone-400">
+                      <p className="text-sm font-medium text-stone-600">{'Chưa có thông báo mới'}</p>
+                      <p className="text-xs text-stone-400 mt-1">{'Mọi thông báo vận hành và hệ thống sẽ xuất hiện tại đây.'}</p>
+                    </div>
                   )}
                 </div>
               </div>

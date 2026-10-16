@@ -25,7 +25,7 @@ import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
-import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
+import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from '../../services/notificationApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
@@ -66,7 +66,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       window.clearInterval(timer)
     }
   }, [])
-  const [toast, setToast] = useState<string | null>(null)
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
   const [inventoryRentalId, setInventoryRentalId] = useState<string | undefined>()
   const [inventoryMaintenanceDraft, setInventoryMaintenanceDraft] = useState<{ unitId: string; unitCode: string } | null>(null)
@@ -74,8 +73,25 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     if (page !== 'rentals') setInventoryRentalId(undefined)
   }, [page])
   const showToast = (message: string) => {
-    setToast(message)
-    window.setTimeout(() => setToast(null), 3500)
+    const pageTitles: Record<string, string> = {
+      dashboard: 'Tổng quan cơ sở',
+      inventory: 'Quản lý gian kho',
+      'unit-assignments': 'Phân kho đặt chỗ',
+      rentals: 'Hồ sơ thuê & Gia hạn',
+      moves: 'Nhận kho & Trả kho',
+      payments: 'Lịch sử thanh toán',
+      'overdue-cases': 'Theo dõi quá hạn',
+      'payment-complaints': 'Khiếu nại thanh toán',
+      'staff-tasks': 'Nhân viên & Nhiệm vụ',
+      'support-api': 'Hỗ trợ khách hàng',
+      reports: 'Báo cáo cơ sở'
+    }
+    notifyBell({
+      title: pageTitles[page] || 'Thông báo quản lý cơ sở',
+      message,
+      page,
+      date: new Date().toISOString()
+    })
   }
 
   const statusBadge = (status: string) => {
@@ -166,6 +182,5 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       ? <ManagerReportsApiPanel />
       : <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />)}
     {page === 'profile' && <ProfileView user={user} />}
-    {toast && <div className="fixed bottom-6 right-6 z-50 max-w-md rounded-lg border border-amber-500/50 bg-[#292a27] px-5 py-3 text-white shadow-2xl"><p className="text-sm font-medium">{toast}</p></div>}
   </Layout></div></ManagerPresentationProvider>
 }
