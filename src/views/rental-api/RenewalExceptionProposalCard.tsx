@@ -19,10 +19,10 @@ export default function RenewalExceptionProposalCard({ proposal: p }: { proposal
         <div><dt>Hạn ký được đề xuất</dt><dd>{dateTime(p.proposedSigningDeadline)}</dd></div>
       </dl>
       {p.validUntil && <p>Cần xác nhận trước: {dateTime(p.validUntil)}</p>}
-      {!p.confirmationAllowed && <p role="status">{p.disabledReasons.includes("PROPOSAL_EXPIRED")
+      {!p.confirmationAllowed && p.disabledReasons.some(reason => ["PROPOSAL_EXPIRED", "NOT_RESCHEDULE_PROPOSAL"].includes(reason)) && <p role="status">{p.disabledReasons.includes("PROPOSAL_EXPIRED")
         ? "Đề xuất đã hết hạn."
         : p.disabledReasons.includes("NOT_RESCHEDULE_PROPOSAL") ? "Cập nhật này không yêu cầu xác nhận đổi lịch."
-        : "Đề xuất chưa đủ điều kiện xác nhận. Vui lòng kiểm tra lại sau."}</p>}
+        : ""}</p>}
     </>}
   </Card>
 }
