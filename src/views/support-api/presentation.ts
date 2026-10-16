@@ -126,7 +126,7 @@ export function supportActions(
   if (!actor!.permissions.includes("support:update")) return []
   if (role === "manager")
     return scope === "MANAGE" && !["resolved", "closed"].includes(t.status)
-      ? ["assign", "decision"]
+      ? t.acceptedAt ? ["message"] : []
       : []
   if (!["OPERATE", "MANAGE"].includes(scope) || t.assignedStaffId !== actor!.id)
     return []

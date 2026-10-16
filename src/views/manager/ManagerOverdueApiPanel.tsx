@@ -21,8 +21,7 @@ import type {
 import ApiReadState from "../rental-api/ApiReadState"
 import ApiPager from "../rental-api/ApiPager"
 import { operationsInputClass } from "../rental-api/RenewalOperationsPanel"
-import { sourceLabels } from "../rental-api/operationsPresentation"
-import { managerDisplayText, managerDisplayError } from './managerPresentation'
+import { managerDisplayError } from './managerPresentation'
 import {
   rentalDate,
   rentalError,
@@ -38,33 +37,7 @@ const priorityLabels: Record<string, string> = {
 }
 export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
   return (
-    <div
-      className={`rounded p-3 text-sm ${
-        p.completeness === "PARTIAL"
-          ? "bg-amber-50 text-amber-900"
-          : "bg-stone-50"
-      }`}
-      role="status"
-    >
-      <p>
-        Dữ liệu lúc {rentalDate(p.asOf)},{" "}
-        {p.completeness === "COMPLETE"
-          ? "Đầy đủ"
-          : "Chỉ có dữ liệu một phần"}
-      </p>
-      {p.completeness === "PARTIAL" && (
-        <>
-          <p>
-            Chưa đủ dữ liệu để xác định tất cả khoản nợ và hồ sơ quá hạn.
-          </p>
-          <ul className="list-disc pl-5">
-            {p.missingSources.map((ref) => (
-              <li key={ref}>{managerDisplayText(ref === "FINANCIAL_COVERAGE_PARTIAL" ? "Chỉ hiển thị khoản nợ đã xác minh; tổng công nợ và lịch sử thanh toán Sandbox chưa đầy đủ." : sourceLabels[ref] || 'Thông tin bổ sung')}</li>
-            ))}
-          </ul>
-        </>
-      )}
-    </div>
+    <span className="text-xs text-stone-500">Cập nhật: {rentalDate(p.asOf)}</span>
   )
 }
 export function OverdueCaseSummary({ record: r }: { record: OverdueCase }) {
@@ -179,11 +152,16 @@ function OverdueSession({ identity, facilityId, onLocked }: {
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="flex flex-wrap gap-3 items-end">
-          <label>
-            Tìm khách / gian / mã
+        <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0 md:col-span-2">
+          <label className="block text-sm" htmlFor="overdue-search">
+            Tìm kiếm
+          </label>
+          <div className="mt-1 flex items-center gap-2">
             <input
-              className={operationsInputClass}
+              id="overdue-search"
+              className={operationsInputClass.replace("mt-1 ", "")}
+              placeholder="Khách hàng, gian kho hoặc mã hồ sơ"
               value={search}
               maxLength={200}
               onChange={(e) => setSearch(e.target.value)}
@@ -191,15 +169,16 @@ function OverdueSession({ identity, facilityId, onLocked }: {
                 if (e.key === "Enter") change({ search: search.trim() })
               }}
             />
-          </label>
           <Button
-            variant="outline"
+            className="shrink-0 whitespace-nowrap"
             onClick={() => change({ search: search.trim() })}
           >
-            Tìm
+            Tìm kiếm
           </Button>
-          <label>
-            Loại
+          </div>
+          </div>
+          <label className="min-w-0 text-sm">
+            Loại quá hạn
             <select
               className={operationsInputClass}
               value={query.kind}
@@ -212,7 +191,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
               <option value="RENTAL_TERM">Quá thời hạn thuê</option>
             </select>
           </label>
-          <label>
+          <label className="min-w-0 text-sm">
             Sắp xếp
             <select
               className={operationsInputClass}
@@ -230,56 +209,43 @@ function OverdueSession({ identity, facilityId, onLocked }: {
       <ApiReadState {...read} retry={read.refresh} />
       {read.data && (
         <>
-          <OverdueCompleteness page={read.data} />
-          <Card className="p-4 space-y-3">
-            {read.data.data.map((r) => (
-              <div
-                key={r.caseRef}
-                className="rounded border p-3 flex flex-wrap justify-between gap-3"
-              >
-                <div className="space-y-1 text-sm min-w-0">
-                  <p className="font-semibold">
-                    {r.customerName}, {r.storageUnitCode},{" "}
-                    {priorityLabels[r.priority]}
-                  </p>
-                  <p>
-                    {r.kind === "PAYMENT_DUE"
-                      ? "Thanh toán quá hạn"
-                      : "Quá thời hạn thuê"}, {r.overdueDays} ngày
-                  </p>
-                  {r.kind === "PAYMENT_DUE" && (
-                    <p>{rentalMoney(r.outstanding, r.currency!)}</p>
-                  )}
-                  <p className="break-all">{r.caseRef}</p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setSelected(r.caseRef)}
-                >
-                  Chi tiết / Theo dõi
-                </Button>
-              </div>
-            ))}
+          <Card className="overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
+              <h2 className="text-sm font-semibold">Danh sách theo dõi <span className="ml-2 font-normal text-stone-500">({read.data.pagination.totalItems})</span></h2>
+              <OverdueCompleteness page={read.data} />
+            </div>
+            {read.data.data.length > 0 && <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] table-fixed text-left text-sm">
+                <colgroup><col className="w-[30%]" /><col className="w-[24%]" /><col className="w-[12%]" /><col className="w-[18%]" /><col className="w-[16%]" /></colgroup>
+                <thead className="border-b border-stone-200 bg-stone-50 text-stone-600">
+                  <tr><th className="px-4 py-3 font-semibold">Khách hàng / Gian kho</th><th className="px-4 py-3 font-semibold">Loại quá hạn</th><th className="px-4 py-3 font-semibold">Số ngày</th><th className="px-4 py-3 font-semibold">Mức độ</th><th className="px-4 py-3 text-right font-semibold">Thao tác</th></tr>
+                </thead>
+                <tbody className="divide-y divide-stone-200">
+                  {read.data.data.map(r => <tr key={r.caseRef} className="hover:bg-stone-50">
+                    <td className="break-words px-4 py-3 align-middle"><p className="font-semibold">{r.customerName}</p><p className="mt-1 text-xs text-stone-500">{r.storageUnitCode}</p></td>
+                    <td className="px-4 py-3 align-middle"><p>{r.kind === "PAYMENT_DUE" ? "Thanh toán quá hạn" : "Quá thời hạn thuê"}</p>{r.kind === "PAYMENT_DUE" && <p className="mt-1 text-xs text-stone-500">{rentalMoney(r.outstanding, r.currency!)}</p>}</td>
+                    <td className="px-4 py-3 align-middle">{r.overdueDays} ngày</td>
+                    <td className="px-4 py-3 align-middle">{priorityLabels[r.priority]}</td>
+                    <td className="px-4 py-3 text-right align-middle"><Button size="sm" variant="outline" onClick={() => setSelected(r.caseRef)}>Chi tiết</Button></td>
+                  </tr>)}
+                </tbody>
+              </table>
+            </div>}
             {read.data.data.length === 0 && (
-              <p>
-                {read.data.completeness === "PARTIAL"
-                  ? "Chưa tìm thấy hồ sơ, nhưng dữ liệu quá hạn còn thiếu."
-                  : "Không có dữ liệu"}
-              </p>
+              <p className="px-4 py-8 text-center text-sm text-stone-500">Không tìm thấy hồ sơ phù hợp.</p>
             )}
-            <ApiPager
+            {read.data.pagination.totalPages > 1 && <div className="border-t border-stone-200 px-4"><ApiPager
               pagination={read.data.pagination}
               onPage={(page) => setQuery((q) => ({ ...q, page }))}
-            />
+            /></div>}
           </Card>
         </>
       )}
-      <Card className="p-4 space-y-2">
-        <p className="text-sm">
-          Xem lại lịch sử bằng mã theo dõi đã lưu, kể cả khi hồ sơ không còn quá
-          hạn.
-        </p>
-        <label className="block">
+      <Card className="p-4">
+        <details className="text-sm">
+        <summary className="cursor-pointer font-semibold">Tra cứu lịch sử</summary>
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="min-w-0 flex-1">
           Mã theo dõi có sẵn
           <input
             className={operationsInputClass}
@@ -301,6 +267,8 @@ function OverdueSession({ identity, facilityId, onLocked }: {
         {refError && (
           <p role="alert">Mã hồ sơ không hợp lệ. Vui lòng chọn hồ sơ trong danh sách phía trên.</p>
         )}
+        </div>
+        </details>
       </Card>
       {selected && (
         <Modal

@@ -28,10 +28,6 @@ export function LedgerContent({ data }: { data: LedgerView }) {
     return <div><p role="status">Không có dữ liệu</p><CoverageDetails data={data} /></div>
   return (
     <div className="space-y-3 text-sm">
-      <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
-        Dữ liệu tài chính chưa được xác minh đầy đủ. Các khoản dưới đây không
-        xác nhận toàn bộ công nợ.
-      </p>
       <CoverageDetails data={data} />
       <h4 className="font-semibold">Các khoản phải thanh toán đã ghi nhận</h4>
       {!data.obligations?.length ? (
@@ -110,7 +106,6 @@ function CoverageDetails({ data }: { data: LedgerView }) {
         : "Cọc gia hạn chưa có nguồn duyệt được xác minh."}
     </p>)}
     <ul className="list-disc pl-5">{labels.map(label => <li key={label}>{label}</li>)}</ul>
-    <p>Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.</p>
   </section>
 }
 export function canReconcileSandboxPayment(payment: NonNullable<LedgerView["coverageInventory"]>["payments"][number]) {

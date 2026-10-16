@@ -58,7 +58,7 @@ export interface SupportMessage {
   id: string
   ticketId: string
   authorId: string
-  authorRole: "CUSTOMER" | "STAFF"
+  authorRole: "CUSTOMER" | "STAFF" | "MANAGER"
   visibility: SupportVisibility
   body: string
   sentAt: string
