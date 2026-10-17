@@ -229,8 +229,6 @@ export default function StaffCheckInOperationsPanel({
 
   const [keyLockReference, setKeyLockReference] = useState("")
 
-  const [lockCondition, setLockCondition] = useState("Mới, hoạt động tốt")
-
   const [paymentMethod, setPaymentMethod] = useState("CASH")
 
   const [noShowTarget, setNoShowTarget] = useState<CheckInCase | null>(null)
@@ -240,6 +238,8 @@ export default function StaffCheckInOperationsPanel({
   const [rejectTarget, setRejectTarget] = useState<CheckInCase | null>(null)
 
   const [rejectReason, setRejectReason] = useState("")
+
+  const [refundDepositRequested, setRefundDepositRequested] = useState(false)
 
   const [rejectDisposition, setRejectDisposition] =
     useState<"AVAILABLE" | "MAINTENANCE">("AVAILABLE")
@@ -518,7 +518,7 @@ export default function StaffCheckInOperationsPanel({
         await issueAccessCredential(handoverTarget.checkInId, {
           type: "KEY",
           reference: keyLockReference.trim(),
-          note: `Bàn giao chìa khóa/ổ khóa: ${lockCondition.trim() || "Chưa ghi nhận tình trạng"}`,
+          note: "Bàn giao chìa khóa/ổ khóa",
         })
       }
 
@@ -557,7 +557,7 @@ export default function StaffCheckInOperationsPanel({
           ...handedOverItems.split(",").map((value) => value.trim()).filter(Boolean),
           ...(hasPassword ? ["Mật khẩu"] : []),
           ...(hasKeyLock
-            ? [`Chìa khóa/ổ khóa ${keyLockReference.trim()} · ${lockCondition.trim() || "Chưa ghi nhận tình trạng"}`]
+            ? [`Chìa khóa/ổ khóa ${keyLockReference.trim()}`]
             : []),
         ],
 
@@ -597,6 +597,9 @@ export default function StaffCheckInOperationsPanel({
     setSubmitting(true)
 
     try {
+      const finalRejectReason = refundDepositRequested
+        ? `${rejectReason.trim()} YÊU CẦU HOÀN CỌC TIỀN ĐẶT GIỮ KHO.`
+        : rejectReason.trim()
       const uploadedEvidence = [...rejectEvidenceReferences]
 
       for (const file of rejectEvidenceFiles) {
@@ -614,7 +617,7 @@ export default function StaffCheckInOperationsPanel({
       }
 
       await rejectCheckIn(rejectTarget.checkInId, {
-        reason: rejectReason.trim(),
+        reason: finalRejectReason,
 
         disposition: rejectDisposition,
 
@@ -622,9 +625,11 @@ export default function StaffCheckInOperationsPanel({
       })
 
       showToast(
-        rejectDisposition === "MAINTENANCE"
-          ? `Đã từ chối nhận kho và chuyển ${rejectTarget.storageUnitCode} sang bảo trì.`
-          : `Đã từ chối nhận kho và trả ${rejectTarget.storageUnitCode} về trạng thái sẵn sàng.`,
+        refundDepositRequested
+          ? `Đã hủy bàn giao ${rejectTarget.storageUnitCode} và ghi nhận yêu cầu hoàn cọc.`
+          : rejectDisposition === "MAINTENANCE"
+            ? `Đã từ chối nhận kho và chuyển ${rejectTarget.storageUnitCode} sang bảo trì.`
+            : `Đã từ chối nhận kho và trả ${rejectTarget.storageUnitCode} về trạng thái sẵn sàng.`,
       )
 
       setRejectTarget(null)
@@ -710,8 +715,6 @@ export default function StaffCheckInOperationsPanel({
 
     setKeyLockReference("")
 
-    setLockCondition("Mới, hoạt động tốt")
-
     setPaymentMethod("CASH")
 
     setHandedOverItems("Biên nhận bàn giao")
@@ -766,10 +769,16 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
-  const openRejection = (item: CheckInCase) => {
+  const openRejection = (item: CheckInCase, requestRefund = false) => {
     setRejectTarget(item)
 
-    setRejectReason("")
+    setRefundDepositRequested(requestRefund)
+
+    setRejectReason(
+      requestRefund
+        ? "Không chấp nhận chênh lệch hàng hóa thực tế so với khai báo."
+        : "",
+    )
 
     setRejectDisposition("AVAILABLE")
 
@@ -1299,6 +1308,25 @@ export default function StaffCheckInOperationsPanel({
                   maxLength={1000}
                   onChange={(event) => setVarianceReason(event.target.value)}
                 />
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 pt-3">
+                  <p className="max-w-2xl text-xs text-amber-900">
+                    Nếu không chấp nhận chênh lệch, có thể hủy bàn giao tại đây để giải phóng gian kho và ghi nhận yêu cầu hoàn cọc.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    disabled={submitting}
+                    onClick={() => {
+                      if (!handoverTarget) return
+                      const target = handoverTarget
+                      setHandoverTarget(null)
+                      openRejection(target, true)
+                    }}
+                  >
+                    Hủy bàn giao & hoàn cọc
+                  </Button>
+                </div>
               </div>
             )}
             </div>
@@ -1412,13 +1440,9 @@ export default function StaffCheckInOperationsPanel({
             <div hidden={handoverStep !== 4} className="space-y-4">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
               <p className="font-semibold text-amber-950">Bàn giao quyền truy cập và ổ khóa</p>
-              <p className="text-xs text-amber-900">Chỉ ghi nhận hai nhóm: mật khẩu và chìa khóa/ổ khóa. Mật khẩu gốc không được lưu, backend chỉ lưu giá trị băm.</p>
               <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="Mã chìa khóa / ổ khóa" value={keyLockReference} onChange={event => setKeyLockReference(event.target.value)} placeholder="Ví dụ: KEY-018 hoặc LOCK-018" />
                 <Input label="Mật khẩu" type="password" value={credentialPassword} onChange={event => setCredentialPassword(event.target.value)} autoComplete="new-password" placeholder="Nhập mật khẩu bàn giao" />
-                <div className="space-y-3">
-                  <Input label="Mã chìa khóa / ổ khóa" value={keyLockReference} onChange={event => setKeyLockReference(event.target.value)} placeholder="Ví dụ: KEY-018 hoặc LOCK-018" />
-                  <Input label="Tình trạng chìa khóa / ổ khóa" value={lockCondition} onChange={event => setLockCondition(event.target.value)} placeholder="Ví dụ: Mới, đủ chìa, hoạt động tốt" />
-                </div>
               </div>
               <p className="text-xs text-stone-600">Bắt buộc nhập ít nhất một trong hai nhóm trên <span className="font-bold text-red-600">*</span>.</p>
               <label className="flex items-start gap-2 text-sm font-medium text-amber-950">
@@ -1463,12 +1487,6 @@ export default function StaffCheckInOperationsPanel({
               maxLength={2000}
               onChange={(event) => setHandoverNotes(event.target.value)}
             />
-            </div>
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-              Sau khi hoàn tất, đơn đặt giữ kho sẽ chuyển sang trạng thái chờ
-              khách hàng xác nhận. Lệnh phân kho và gian kho sẽ được ghi nhận
-              đã bàn giao. Hợp đồng thuê chỉ được tạo sau khi khách hàng xác
-              nhận nhận kho.
             </div>
             <div className="flex justify-between gap-2">
               <Button variant="outline" onClick={() => setHandoverTarget(null)}>
@@ -1561,7 +1579,7 @@ export default function StaffCheckInOperationsPanel({
         onClose={() => {
           if (!submitting) setRejectTarget(null)
         }}
-        title="Từ chối nhận kho"
+        title={refundDepositRequested ? "Hủy bàn giao & hoàn cọc" : "Từ chối nhận kho"}
       >
         {rejectTarget && (
           <div className="space-y-4">
@@ -1575,6 +1593,11 @@ export default function StaffCheckInOperationsPanel({
               maxLength={1000}
               onChange={(event) => setRejectReason(event.target.value)}
             />
+            {refundDepositRequested && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
+                Đã chọn hủy bàn giao do không chấp nhận chênh lệch hàng hóa. Yêu cầu hoàn cọc sẽ được ghi nhận cùng biên bản từ chối.
+              </div>
+            )}
             <Select
               label="Xử lý gian kho sau khi từ chối"
               value={rejectDisposition}
