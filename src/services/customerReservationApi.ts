@@ -176,6 +176,7 @@ export interface ReservationQuote {
 
 export interface CreateReservationInput {
   quoteId: string
+  identityDocumentNumber: string
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
@@ -209,6 +210,7 @@ export interface CustomerReservation {
   customerName?: string | null
   customerEmail?: string | null
   customerPhone?: string | null
+  identityDocumentNumber?: string | null
   createdAt: string
 }
 
