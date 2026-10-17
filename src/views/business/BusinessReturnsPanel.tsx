@@ -922,21 +922,8 @@ export default function BusinessReturnsPanel({ user }: Props) {
             </select>
           </div>
 
-          {/* Nhóm nút hành động cao cấp: Demo E2E & Tạo mới & Nạp data */}
+          {/* Nhóm nút hành động: Tạo mới hồ sơ */}
           <div className="flex flex-wrap gap-2 items-center">
-            <Button
-              variant="primary"
-              size="sm"
-              className="bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
-              onClick={() => {
-                setDemoStep(0)
-                setDemoLogs([])
-                setDemoModalOpen(true)
-              }}
-            >
-              ⚡ Chạy Demo E2E 5 Bước
-            </Button>
-
             <Button
               variant="outline"
               size="sm"
@@ -945,27 +932,6 @@ export default function BusinessReturnsPanel({ user }: Props) {
             >
               + Tạo hồ sơ trả kho
             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-stone-700 border-stone-300 hover:bg-stone-50 cursor-pointer"
-              onClick={handleSeedDemoData}
-            >
-              Nạp dữ liệu mẫu
-            </Button>
-
-            {useApi && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={apiLoading}
-                onClick={() => void loadApiData()}
-                className="cursor-pointer"
-              >
-                Đồng bộ API
-              </Button>
-            )}
           </div>
         </div>
 
@@ -1862,70 +1828,6 @@ export default function BusinessReturnsPanel({ user }: Props) {
                 onClick={handleCreateNewReturn}
               >
                 {submitting ? 'Đang tạo...' : 'Tạo hồ sơ trả kho'}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── MODAL DEMO TOÀN TRÌNH TỰ ĐỘNG (AUTOMATED E2E SIMULATOR) ── */}
-      {demoModalOpen && (
-        <Modal
-          open={demoModalOpen}
-          onClose={() => setDemoModalOpen(false)}
-          title="⚡ Demo Tự Động 5 Bước Quy Trình Trả Kho & Quyết Toán"
-        >
-          <div className="space-y-4 text-sm">
-            <p className="text-xs text-stone-600">
-              Trình diễn toàn diện luồng nghiệp vụ tương tác giữa Khách Hàng, Nhân Viên Vận Hành và Ban Điều Hành (BO) trong 5 bước:
-            </p>
-
-            {/* 5 bước trực quan */}
-            <div className="space-y-2">
-              {[
-                { s: 1, title: 'Bước 1: Khách hàng tạo yêu cầu trả kho gian HCM-Q1-M-001' },
-                { s: 2, title: 'Bước 2: Staff kiểm tra hiện trường & lập biên bản khấu trừ 300k' },
-                { s: 3, title: 'Bước 3: Khách hàng phản ánh khiếu nại phí vệ sinh' },
-                { s: 4, title: 'Bước 4: Ban Điều Hành thẩm định, giảm phí vệ sinh về 0₫' },
-                { s: 5, title: 'Bước 5: Kế toán hoàn cọc 9.3 triệu, Gian kho phục hồi Available' },
-              ].map((stepItem) => (
-                <div
-                  key={stepItem.s}
-                  className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between transition-all ${
-                    demoStep >= stepItem.s
-                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                      : demoStep === stepItem.s - 1 && demoRunning
-                      ? 'bg-amber-50 border-amber-400 text-amber-900 animate-pulse'
-                      : 'bg-stone-50 border-stone-200 text-stone-400'
-                  }`}
-                >
-                  <span>{stepItem.title}</span>
-                  <span>{demoStep >= stepItem.s ? '✓ Hoàn thành' : demoRunning && demoStep === stepItem.s - 1 ? '● Đang chạy...' : 'Chờ'}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Terminal Log */}
-            <div className="p-3 bg-stone-900 text-emerald-400 rounded-lg font-mono text-xs max-h-40 overflow-y-auto space-y-1">
-              {demoLogs.length === 0 ? (
-                <p className="text-stone-500 italic">Nhấn nút bên dưới để bắt đầu chạy kịch bản tự động...</p>
-              ) : (
-                demoLogs.map((log, i) => <p key={i}>{log}</p>)
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-stone-200">
-              <Button variant="outline" size="sm" onClick={() => setDemoModalOpen(false)}>
-                Đóng
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={demoRunning}
-                className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer"
-                onClick={runAutomatedDemo}
-              >
-                {demoRunning ? 'Đang thực thi demo...' : '⚡ Bắt Đầu Chạy Demo Ngay'}
               </Button>
             </div>
           </div>
