@@ -17,6 +17,7 @@ export interface CheckInChecklist {
 
 export interface CompleteCheckInRequest {
   checklist: CheckInChecklist
+  identityDocumentNumber: string
   actualMeasurements: {
     lengthCm: number
     widthCm: number

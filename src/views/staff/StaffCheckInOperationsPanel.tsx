@@ -179,6 +179,10 @@ export default function StaffCheckInOperationsPanel({
 
   const [checklist, setChecklist] = useState<CheckInChecklist>(emptyChecklist)
 
+  const [identityDocumentNumber, setIdentityDocumentNumber] = useState("")
+
+  const [verificationNotes, setVerificationNotes] = useState("")
+
   const [lengthCm, setLengthCm] = useState("100")
 
   const [widthCm, setWidthCm] = useState("100")
@@ -521,6 +525,8 @@ export default function StaffCheckInOperationsPanel({
       await completeCheckIn(handoverTarget.checkInId, {
         checklist,
 
+        identityDocumentNumber: identityDocumentNumber.trim(),
+
         actualMeasurements: {
           lengthCm: Number(lengthCm),
 
@@ -555,7 +561,16 @@ export default function StaffCheckInOperationsPanel({
             : []),
         ],
 
-        notes: handoverNotes.trim(),
+        notes: [
+          verificationNotes.trim()
+            ? `Ghi chú xác minh: ${verificationNotes.trim()}`
+            : "",
+          handoverNotes.trim()
+            ? `Ghi chú bàn giao: ${handoverNotes.trim()}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       })
 
       setContractFile(null)
@@ -678,6 +693,10 @@ export default function StaffCheckInOperationsPanel({
     setHandoverStep(1)
 
     setChecklist(emptyChecklist())
+
+    setIdentityDocumentNumber("")
+
+    setVerificationNotes("")
 
     setEvidenceFiles([])
 
@@ -1018,8 +1037,17 @@ export default function StaffCheckInOperationsPanel({
                 <p className="font-semibold">{handoverTarget.customerName}</p>
               </div>
               <div>
-                <span className="text-stone-500">Email</span>
-                <p className="font-semibold">{handoverTarget.customerEmail || "Chưa cập nhật"}</p>
+                <label className="block text-stone-500" htmlFor="checkin-identity-document">
+                  Số CCCD / Hộ chiếu <span className="font-bold text-red-600">*</span>
+                </label>
+                <input
+                  id="checkin-identity-document"
+                  value={identityDocumentNumber}
+                  onChange={(event) => setIdentityDocumentNumber(event.target.value)}
+                  placeholder="Nhập số trên giấy tờ gốc"
+                  autoComplete="off"
+                  className="mt-1 block w-full rounded-md border border-stone-300 bg-white px-2 py-1.5 font-semibold text-stone-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                />
               </div>
               <div>
                 <span className="text-stone-500">Số điện thoại</span>
@@ -1041,6 +1069,23 @@ export default function StaffCheckInOperationsPanel({
                   {label}
                 </label>
               ))}
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              <label className="block font-medium" htmlFor="checkin-verification-notes">
+                Ghi chú xác minh nếu thông tin chưa trùng khớp
+              </label>
+              <textarea
+                id="checkin-verification-notes"
+                rows={2}
+                value={verificationNotes}
+                onChange={(event) => setVerificationNotes(event.target.value)}
+                maxLength={1000}
+                placeholder="Ghi rõ nội dung chưa khớp và cách xử lý hoặc đánh dấu cần kiểm tra lại…"
+                className="mt-1 block w-full resize-y rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+              />
+              <p className="mt-1 text-xs text-amber-800">
+                Nếu chưa xác minh được, để nguyên mục tương ứng chưa chọn và ghi chú lý do tại đây.
+              </p>
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
               Lịch nhận kho do khách hàng đặt: <b>{formatStaffDateTime(handoverTarget.appointmentAt || handoverTarget.scheduledAt)}</b>.
@@ -1439,7 +1484,7 @@ export default function StaffCheckInOperationsPanel({
                   <Button
                     disabled={
                       submitting ||
-                      (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched)) ||
+                      (handoverStep === 1 && (!identityDocumentNumber.trim() || !checklist.identityVerified || !checklist.reservationMatched)) ||
                       (handoverStep === 2 && (!Object.values(measurementChecks).every(Boolean) || (measurementVariance && (!varianceAccepted || !varianceReason.trim())))) ||
                       (handoverStep === 3 && (!checklist.paymentVerified || !contractFile || !checklist.contractVerified || !initialCondition.trim() || !goodsCondition.trim() || ((handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile)))
                     }
@@ -1452,6 +1497,7 @@ export default function StaffCheckInOperationsPanel({
                     disabled={
                       submitting ||
                       !allChecksComplete ||
+                      !identityDocumentNumber.trim() ||
                       !contractFile ||
                       (!credentialPassword.trim() && !keyLockReference.trim()) ||
                       ((handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
@@ -1608,8 +1654,8 @@ export default function StaffCheckInOperationsPanel({
                 <p className="font-semibold">{detailTarget.customerName}</p>
               </div>
               <div>
-                <span className="text-stone-500">Email</span>
-                <p className="font-semibold">{detailTarget.customerEmail || "Chưa cập nhật"}</p>
+                <span className="text-stone-500">Số CCCD / Hộ chiếu</span>
+                <p className="font-semibold">{detailTarget.handover.identityDocumentNumber || "Chưa cập nhật"}</p>
               </div>
               <div>
                 <span className="text-stone-500">Số điện thoại</span>
