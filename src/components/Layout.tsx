@@ -211,7 +211,7 @@ export default function Layout({
 
   // Chuẩn hóa nhãn điều hướng theo tiếng Việt cho toàn bộ cổng
   const getNavLabel = (item: NavItem) => {
-    if (item.id === 'dashboard' && item.label === 'Tổng quan') return item.label
+    if (item.label && item.label.trim()) return item.label
     const navItemTranslations: Record<string, string> = {
       'overview': 'Tổng Quan',
       'browse-facilities': 'Tìm Cơ Sở Kho',
@@ -230,10 +230,10 @@ export default function Layout({
       'rentals': 'Hợp Đồng & Cước Thuê',
       'overdue': 'Quản Lý Nợ Quá Hạn',
       'facilities': 'Quản Lý Cơ Sở',
-      'performance': 'Hiệu Suất Vận Hành',
-      'policies': 'Chính Sách Thuê',
-      'pricing': 'Bảng Giá & Biểu Phí',
-      'discounts': 'Khuyến Mãi & Voucher',
+      'performance': 'Hiệu Suất Mặt Bằng',
+      'policies': 'Gói Thuê Kỳ Hạn',
+      'pricing': 'Bảng Giá Loại Kho',
+      'discounts': 'Mã Voucher Ưu Đãi',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',
       'roles': 'Vai Trò & Phân Quyền',
@@ -241,7 +241,10 @@ export default function Layout({
       'activity': 'Nhật Ký Hoạt Động',
       'settings': 'Cài Đặt Hệ Thống',
       'profile': 'Hồ Sơ Cá Nhân',
-      'returns': 'Hồ Sơ Trả Kho & Quyết Toán',
+      'returns': 'Trả Kho & Quyết Toán',
+      'rental-regulations': 'Quy Chế Lưu Kho',
+      'rental-source-policies': 'Chính Sách Gia Hạn',
+      'damage-incidents': 'Xử Lý Sự Cố Kho',
     }
     const mapping = navItemTranslations[item.id]
     if (mapping) return mapping
@@ -252,6 +255,11 @@ export default function Layout({
     if (!group) return undefined
     const gLower = group.toLowerCase().trim()
     const groupMap: Record<string, string> = {
+      'cơ sở & mặt bằng': 'Cơ Sở & Mặt Bằng',
+      'giá & khuyến mãi': 'Giá & Khuyến Mãi',
+      'quy định & pháp lý': 'Quy Định & Pháp Lý',
+      'vận hành & hậu mãi': 'Vận Hành & Hậu Mãi',
+      'báo cáo thống kê': 'Báo Cáo Thống Kê',
       'my storage': 'Kho Của Tôi',
       'kho của tôi': 'Kho Của Tôi',
       'find storage': 'Tìm Kho',
@@ -271,14 +279,14 @@ export default function Layout({
       'tổng quan': 'Tổng Quan',
       'facility operations': 'Vận Hành Cơ Sở',
       'vận hành cơ sở': 'Vận Hành Cơ Sở',
-      'vận hành': 'Vận Hành & Trả Kho',
-      'vận hành & trả kho': 'Vận Hành & Trả Kho',
+      'vận hành': 'Vận Hành & Hậu Mãi',
+      'vận hành & trả kho': 'Vận Hành & Hậu Mãi',
       'rentals & finance': 'Hợp Đồng & Tài Chính',
       'hợp đồng & tài chính': 'Hợp Đồng & Tài Chính',
-      'portfolio': 'Danh Mục Cơ Sở',
-      'danh mục': 'Danh Mục Cơ Sở',
-      'commercial': 'Thương Mại & Biểu Phí',
-      'thương mại': 'Thương Mại & Biểu Phí',
+      'portfolio': 'Cơ Sở & Mặt Bằng',
+      'danh mục': 'Cơ Sở & Mặt Bằng',
+      'commercial': 'Giá & Khuyến Mãi',
+      'thương mại': 'Giá & Khuyến Mãi',
       'reporting': 'Báo Cáo Thống Kê',
       'báo cáo': 'Báo Cáo Thống Kê',
       'administration': 'Quản Trị Hệ Thống',
@@ -397,14 +405,26 @@ export default function Layout({
           <BrandLogo light subtitle={'Lưu trữ an toàn'} />
         </div>
 
-        {/* Role badge */}
-        {user.role !== 'manager' && (
-          <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+        {/* Role & Facility badge */}
+        <div className="px-4 pt-4 pb-2 space-y-1.5">
+          <div className="flex items-center justify-between">
             <span className="inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold bg-[#3a3933] text-[#f3c675] border border-[#4b4940]">
               {getTranslatedRole()}
             </span>
           </div>
-        )}
+          {(user.role === 'manager' || user.role === 'staff') && (
+            user.facility ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#3a3933]/80 border border-[#4b4940] text-[11px] text-amber-300">
+                <span>🏢</span>
+                <span className="truncate font-medium">{user.facility}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/40 border border-amber-800/60 text-[11px] text-amber-400">
+                <span>⚠️ Chưa phân công cơ sở</span>
+              </div>
+            )
+          )}
+        </div>
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 overflow-y-auto" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
@@ -492,6 +512,20 @@ export default function Layout({
             <p className="text-xs text-stone-400 font-mono uppercase tracking-wider">{getTranslatedRole()} {'· CỔNG QUẢN TRỊ'}</p>
             <p className="text-sm font-semibold text-stone-800">{'Quản lý cơ sở lưu trữ thông minh StorageHub'}</p>
           </div>
+          {(user.role === 'manager' || user.role === 'staff') && (
+            <div className="hidden sm:flex items-center ml-2">
+              {user.facility ? (
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>🏢 Cơ sở: <strong className="font-bold text-emerald-950">{user.facility}</strong></span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                  <span>⚠️ Chưa phân công cơ sở</span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex-1" />
 
           {/* Notifications */}

@@ -44,7 +44,7 @@ function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>
 }
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.some(r => r === role.toUpperCase() || (role === 'manager' && (r === 'BUSINESS' || r === 'ADMIN'))))
+  if (!a || a.status !== 'ACTIVE' || !a.roles.some(r => r === role.toUpperCase() || ((role === 'manager' || role === 'staff') && (r === 'BUSINESS' || r === 'ADMIN'))))
     throw new ApiClientError('Bạn không có quyền truy cập hồ sơ trả kho.', { status: 403 })
   if (role !== 'customer' && !a.permissions.includes(write ? role === 'manager' ? 'rentals:update' : 'returns:process' : 'returns:read'))
     throw new ApiClientError('Bạn chưa có quyền xử lý hồ sơ trả kho.', { status: 403 })

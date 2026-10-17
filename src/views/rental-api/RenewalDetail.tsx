@@ -171,7 +171,7 @@ export default function RenewalDetail({
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
       {appointmentSelection}
-      {canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi thanh toán cọc.</p>}
+      {canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán cọc" : "thanh toán"}.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
           disabled={operationsLocked||paymentBusy||!appointmentSelected||payment?.paymentStatus==="PAID"}
