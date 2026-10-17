@@ -1511,8 +1511,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`)
       : null
 
+    if (customerIdCard.trim().length < 9) errors.identity = 'CCCD/Hộ chiếu phải có ít nhất 9 ký tự.'
     if (!isApiAuthenticated()) {
-      if (customerIdCard.trim().length < 9) errors.identity = 'CCCD/Hộ chiếu phải có ít nhất 9 ký tự.'
       if (customerPhone.replace(/\D/g, '').length < 9) errors.phone = 'Số điện thoại phải có ít nhất 9 chữ số.'
       if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     }
@@ -1637,6 +1637,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       reservationIdempotencyKey.current = idempotencyKey
       const reservation = await createCustomerReservation({
         quoteId: serverQuote.quoteId,
+        identityDocumentNumber: customerIdCard.trim(),
         goodsCondition,
         notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | ') || null,
         goodsItems: apiGoodsItems,
