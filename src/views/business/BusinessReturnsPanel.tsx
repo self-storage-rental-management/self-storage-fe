@@ -232,10 +232,13 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const [totalPages, setTotalPages] = useState(1)
 
   // Local fallback state (cho phép người dùng luôn tương tác mượt mà)
-  const [localReturns, setLocalReturns] = useState(() => {
+  const [localReturns, setLocalReturns] = useState<typeof SAMPLE_RETURNS>(() => {
     try {
       const saved = localStorage.getItem('storagehub:bo:returns-cache')
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved)
+        if (Array.isArray(parsed)) return parsed as typeof SAMPLE_RETURNS
+      }
     } catch {}
     return SAMPLE_RETURNS
   })
@@ -336,7 +339,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   }, [useApi, page])
 
   // Normalized list of return items
-  const displayItems = useMemo(() => {
+  const displayItems = useMemo<typeof SAMPLE_RETURNS>(() => {
     if (useApi && apiRows.length > 0) {
       return apiRows.map((r) => ({
         id: r.id,
@@ -1013,7 +1016,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       )}
                     </Td>
                     <Td>
-                      <Badge variant={statusBadgeVariant(item.status)} className="font-semibold text-xs whitespace-nowrap">
+                      <Badge variant={statusBadgeVariant(item.status)}>
                         {statusLabels[item.status] || item.status}
                       </Badge>
                     </Td>
