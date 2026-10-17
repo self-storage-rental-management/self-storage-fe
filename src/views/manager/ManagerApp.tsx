@@ -103,12 +103,16 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   }
 
   const facility = hub.facilities.find(item => item.id === user.facilityId || item.name === user.facility || item.id === user.facility)
-  const managerFacilityId = user.facilityId || facility?.id
+  const actor = getAuthenticatedActor()
+  const resolvedFacilityName = user.facility || (actor?.facilityNames && (actor.facilityNames[user.facilityId || ''] || Object.values(actor.facilityNames)[0])) || facility?.name || ''
+  const resolvedFacilityId = user.facilityId || (actor?.facilityScopes && Object.keys(actor.facilityScopes)[0]) || facility?.id || ''
+  const resolvedUser = { ...user, facility: resolvedFacilityName || user.facility, facilityId: resolvedFacilityId || user.facilityId }
+  const managerFacilityId = resolvedFacilityId || user.facilityId || facility?.id
   const facilityRenewals = hub.renewals.filter(renewal => {
     const rental = hub.rentals.find(item => item.id === renewal.rentalId)
     const renewalFacilityId = renewal.facilityId || rental?.facilityId
     const renewalFacilityName = rental?.facilityName
-    return isManagerFacilityVisible({ ...user, facilityId: managerFacilityId }, renewalFacilityId, renewalFacilityName)
+    return isManagerFacilityVisible({ ...resolvedUser, facilityId: managerFacilityId }, renewalFacilityId, renewalFacilityName)
   })
   const renewalNotifications: LayoutNotification[] = (isApiAuthenticated() ? [] : facilityRenewals)
     .filter(renewal => ['pending', 'appointment_scheduled'].includes(renewal.status))
@@ -152,7 +156,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     isRead: notification.isRead,
   }))
 
-  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} onNotificationClick={(notification) => {
+  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={resolvedUser} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} onNotificationClick={(notification) => {
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.replace('api-notification-', '')
       setPage(notification.page)
