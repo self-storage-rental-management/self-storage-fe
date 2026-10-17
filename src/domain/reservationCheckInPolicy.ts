@@ -1,4 +1,4 @@
-export const PAYMENT_WINDOW_HOURS = 6
+export const PAYMENT_WINDOW_MINUTES = 15
 export const STAFF_REVIEW_WORKING_HOURS = 9
 export const MANAGER_ASSIGNMENT_WORKING_HOURS = 9
 export const CHECK_IN_WINDOW_DAYS = 7
@@ -68,7 +68,7 @@ function normalizeCheckInSlot(value: Date) {
 export function plannedCheckInWindow(registeredAt: Date | string | number, reviewRequired: boolean) {
   let candidate = new Date(registeredAt)
   if (reviewRequired) candidate = addWorkingHours(candidate, STAFF_REVIEW_WORKING_HOURS)
-  candidate = new Date(candidate.getTime() + PAYMENT_WINDOW_HOURS * HOUR_MS)
+  candidate = new Date(candidate.getTime() + PAYMENT_WINDOW_MINUTES * 60 * 1000)
   candidate = addWorkingHours(candidate, MANAGER_ASSIGNMENT_WORKING_HOURS)
   const availableAt = normalizeCheckInSlot(candidate)
 
