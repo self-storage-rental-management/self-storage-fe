@@ -121,6 +121,7 @@ describe('customerReservationApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const input = {
       quoteId: 'quote-1',
+      identityDocumentNumber: '079203009988',
       goodsCondition: 'Packed',
       notes: 'FE integration',
       goodsItems: [{
