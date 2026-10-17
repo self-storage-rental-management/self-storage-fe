@@ -1057,7 +1057,6 @@ export default function StaffCheckInOperationsPanel({
                   autoComplete="off"
                   className="mt-1 block w-full rounded-md border border-stone-300 bg-white px-2 py-1.5 font-semibold text-stone-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                 />
-                <p className="mt-1 text-xs text-stone-500">Đối chiếu số này với giấy tờ gốc của khách hàng.</p>
               </div>
               <div>
                 <span className="text-stone-500">Số điện thoại</span>
