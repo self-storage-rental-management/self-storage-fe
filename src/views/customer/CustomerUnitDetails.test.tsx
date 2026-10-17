@@ -19,11 +19,11 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
     'Ưu đãi và báo giá theo kỳ thuê', '3. Quy định cho thuê kho', 'QUY ĐỊNH CHO THUÊ KHO STORAGEHUB',
     'Quy định trả kho và gia hạn',
     'Gói 6 tháng cơ sở', 'Giảm 10% tiền thuê',
-    'Chính sách và quy định áp dụng', 'Phí quá hạn', 'Tiền đảm bảo kho', 'Thời hạn thuê tối thiểu',
+    'Chính sách và quy định áp dụng', 'Phí quá hạn', 'Tiền duy trì CSVC', 'Thời hạn thuê tối thiểu',
     'Gia hạn quá hạn', 'Tối đa 7 ngày', 'Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn',
     'Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi',
     'Trả kho sau ngày hết hạn', 'Gia hạn kỳ thuê',
-    'Quy trình đặt kho và thanh toán', 'cọc 40%', '5.500.000', 'Tiền cọc đảm bảo',
+    'Quy trình đặt kho và thanh toán', 'cọc 20%', '5.500.000', 'Tiền duy trì CSVC',
     'Xác nhận hồ sơ', 'Thanh toán cọc', 'Nhận kho']) expect(html).toContain(text)
   for (const text of ['Số kho trống theo kỳ thuê', 'Theo báo giá kỳ thuê', 'Chiều rộng làn xe đẩy',
     '(hồ sơ bố trí)', '– phù hợp thùng carton và đồ gia dụng nhẹ', 'Kiểm tra hàng hóa',
@@ -32,7 +32,7 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
     'Kiểm tra cân nặng', 'Tổng trọng lượng hàng không vượt quá 1.000 kg',
     'An ninh và tiện ích vận hành', 'An ninh và kiểm soát ra vào', 'Hệ thống phòng cháy chữa cháy',
     'Cơ sở chưa công bố chính sách nội dung']) expect(html).not.toContain(text)
-  for (const text of ['StorageHub Quan 1', 'Thời gian ân hạn', 'Thời hạn báo trước khi trả kho', 'cọc 20%',
+  for (const text of ['StorageHub Quan 1', 'Thời gian ân hạn', 'Thời hạn báo trước khi trả kho', 'cọc 40%',
     'Kích thước hàng hóa tối đa', '160 × 80 × 150 cm']) expect(html).not.toContain(text)
   for (const text of ['Quy định trả kho và gia hạn muộn', 'giao diện cũ', 'Lối đi và thiết bị hỗ trợ',
     'Thời hạn thanh toán hiển thị trên đơn; tiền cọc được trừ vào tiền thuê.']) expect(html).not.toContain(text)
