@@ -53,6 +53,7 @@ export interface CheckInCase {
   customerId: string
   customerName: string
   customerEmail: string
+  identityDocumentNumber: string | null
   customerPhone: string | null
   facilityId: string
   facilityName: string
