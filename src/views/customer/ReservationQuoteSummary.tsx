@@ -118,7 +118,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview }: { quo
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-stone-600">
-                • Tiền đảm bảo kho <span className="text-stone-400 italic font-normal">(Hoàn trả khi trả kho)</span>
+                • Tiền duy trì CSVC <span className="text-stone-400 italic font-normal">(Hoàn trả khi trả kho)</span>
               </span>
               <span className="font-semibold text-stone-800">{formatVndAmount(q.securityDepositAmount)}</span>
             </div>
@@ -134,8 +134,8 @@ export default function ReservationQuoteSummary({ quote: q, needsReview }: { quo
       {/* ── KHỐI 3: TỔNG NGHĨA VỤ TÀI CHÍNH KỲ THUÊ ── */}
       <div className="rounded-xl bg-stone-900 p-3.5 text-white shadow-sm flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold text-stone-300">Tổng tiền thuê và tiền đảm bảo kho</p>
-          <p className="text-[11px] text-stone-400">Bao gồm cọc giữ chỗ + tiền còn lại + cọc đảm bảo hoàn trả</p>
+          <p className="text-xs font-semibold text-stone-300">Tổng tiền thuê và tiền duy trì CSVC</p>
+          <p className="text-[11px] text-stone-400">Bao gồm cọc giữ chỗ + tiền còn lại + tiền duy trì CSVC hoàn trả</p>
         </div>
         <div className="text-right">
           <span className="text-lg font-black text-white">{formatVndAmount(q.totalInitialObligation)}</span>

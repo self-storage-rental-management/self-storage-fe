@@ -82,7 +82,7 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
     try {
       const operations=await getRenewalOperations("customer",renewal.id)
       if(!operations.appointmentRef || !operations.appointmentStart || Date.parse(operations.appointmentStart)<=Date.now())
-        throw new Error("Vui lòng chọn lịch ký gia hạn trước khi thanh toán cọc.")
+        throw new Error("Vui lòng chọn lịch ký gia hạn trước khi thanh toán.")
       if(!mounted.current||currentScope.current!==scope||!currentEnabled.current)return
       if(attempt.current?.scope!==scope)attempt.current=null
       let key=attempt.current?.key

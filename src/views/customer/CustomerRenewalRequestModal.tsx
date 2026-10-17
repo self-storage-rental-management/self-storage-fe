@@ -23,12 +23,14 @@ export default function CustomerRenewalRequestModal({
   revision,
   onClose,
   onSuccess,
+  onNavigateToRenewals,
 }: {
   actorId: string
   rentalId: string
   revision?: RenewalApiRecord
   onClose: () => void
   onSuccess: () => void
+  onNavigateToRenewals?: () => void
 }) {
   const options = useRentalApiResource(`${actorId}:${rentalId}:options`, () =>
     getRenewalOptions(rentalId),
@@ -125,7 +127,7 @@ export default function CustomerRenewalRequestModal({
                 <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
                 <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
               </div>
-              <div className="space-y-2 border-b border-dashed border-slate-200 pb-3">
+              <div className="space-y-2">
                 <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
                 {quote.discountAmount > 0 && (
                   <QuoteLine
@@ -134,11 +136,7 @@ export default function CustomerRenewalRequestModal({
                     valueClassName="text-emerald-700"
                   />
                 )}
-                <QuoteLine label="Tổng sau giảm" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
-              </div>
-              <div className="space-y-2">
-                <QuoteLine label="Cọc gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} valueClassName="text-amber-800" emphasis />
-                <QuoteLine label="Tiền thuê còn lại khi ký" value={rentalMoney(quote.remainingRentalAmount, quote.currency)} />
+                <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
               </div>
             </div>
           </section>
@@ -224,9 +222,19 @@ export default function CustomerRenewalRequestModal({
               : "Xác nhận và gửi"}
         </Button>
         {command.error && !command.uncertain ? (
-          <Button variant="outline" onClick={onSuccess}>
-            Đóng và tải lại hồ sơ
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={onSuccess}>
+              Đóng và tải lại hồ sơ
+            </Button>
+            {onNavigateToRenewals && (
+              <Button
+                variant="primary"
+                onClick={onNavigateToRenewals}
+              >
+                Mở tab Yêu cầu gia hạn
+              </Button>
+            )}
+          </div>
         ) : null}
       </div>
     </Modal>

@@ -588,6 +588,11 @@ function WorkspaceData({
           revision={action.revision}
           onClose={() => setAction(undefined)}
           onSuccess={success}
+          onNavigateToRenewals={() => {
+            setAction(undefined)
+            setDetail(undefined)
+            setTab("renewal")
+          }}
         />
       )}
       {action?.kind === "cancel" && (

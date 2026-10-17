@@ -260,7 +260,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           </div>}
           <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
             <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</p><p>Tiền thuê cả kỳ: {formatVnd(r.totalRentalAmount)}</p><p>Cọc giữ chỗ: {formatVnd(r.reservationDepositAmount)}</p><p>Tiền thuê còn lại: {formatVnd(r.remainingRentalAmount)}</p></div>
-            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">Khoản thu khi nhận kho</p><p>Tiền đảm bảo kho: {formatVnd(r.securityDepositAmount)}</p><p className="border-t border-amber-200 pt-1 font-bold">Tổng thu khi nhận kho: {formatVnd(r.dueAtCheckIn)}</p></div>
+            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">Khoản thu khi nhận kho</p><p>Tiền duy trì CSVC: {formatVnd(r.securityDepositAmount)}</p><p className="border-t border-amber-200 pt-1 font-bold">Tổng thu khi nhận kho: {formatVnd(r.dueAtCheckIn)}</p></div>
           </div>
             {remainingPayment && <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
@@ -280,7 +280,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>}
       </div>
       <div className="flex min-w-0 flex-col items-stretch gap-3 lg:items-end">
-        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{formatVnd(r.totalInitialObligation)}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {formatVnd(r.reservationDepositAmount)}</p></div>
+        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền duy trì CSVC)</p><p className="text-xl font-bold text-stone-900">{formatVnd(r.totalInitialObligation)}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {formatVnd(r.reservationDepositAmount)}</p></div>
         {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />

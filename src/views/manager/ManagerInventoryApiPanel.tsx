@@ -134,6 +134,9 @@ function InventoryRead({
   const rentals = useRentalApiResource(`${identity}:rentals`, () =>
     loadInventoryRentals(facilityId),
   )
+  const actor = getAuthenticatedActor()
+  const facilityName = (facilityId && actor?.facilityNames?.[facilityId]) || Object.values(actor?.facilityNames || {})[0] || 'Cơ sở được phân công'
+
   if (read.loading)
     return (
       <Card className="p-5" role="status">
@@ -151,8 +154,20 @@ function InventoryRead({
     )
   return read.data ? (
     <>
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={() => setCreateOpen(true)}>Thêm loại kho thực tế</Button>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-stone-200 pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-700">Cơ sở phụ trách</span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-800">
+              🏢 {facilityName}
+            </span>
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-stone-900 mt-1">Quản lý gian kho thực tế</h2>
+          <p className="text-xs sm:text-sm text-stone-500 mt-0.5">Khởi tạo và quản lý loại kho, diện tích và số lượng gian kho tại cơ sở {facilityName}.</p>
+        </div>
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>
+          + Thêm loại kho thực tế
+        </Button>
       </div>
       {actionError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
       <Card className="p-4 space-y-3">
@@ -183,7 +198,19 @@ function InventoryRead({
             <Button variant="outline" disabled={actionBusy} onClick={() => { setActionError(undefined); setDeletingType(type) }}>Xóa loại kho</Button>
           </div>
         </div>)}
-        {read.data.catalog.length === 0 && <p className="text-sm text-stone-500">Chưa có loại kho thực tế.</p>}
+        {read.data.catalog.length === 0 && (
+          <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50/80 p-6 text-center space-y-2">
+            <p className="text-sm font-semibold text-stone-700">Cơ sở {facilityName} chưa có loại gian kho thực tế nào</p>
+            <p className="text-xs text-stone-500 max-w-md mx-auto">
+              Vui lòng bấm nút "Thêm loại kho thực tế" bên trên để khai báo kích thước, tải trọng và số lượng gian kho cho cơ sở.
+            </p>
+            <div className="pt-1">
+              <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
+                + Khởi tạo loại kho đầu tiên
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
       <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} />
       <Modal open={!!viewingType} onClose={() => setViewingType(undefined)} title="Thông tin loại kho thực tế" size="xl">
@@ -212,7 +239,7 @@ function InventoryRead({
               ['Đang sử dụng', viewingType.occupiedCount],
               ['Còn trống', viewingType.availableCount],
               ['Giá thuê / tháng', Number(viewingType.monthlyPrice) > 0 ? formatVndAmount(viewingType.monthlyPrice) : 'Chờ BO định giá'],
-              ['Tiền cọc đảm bảo', formatVndAmount(viewingType.securityDepositAmount)],
+              ['Tiền duy trì CSVC', formatVndAmount(viewingType.securityDepositAmount)],
               ['Trạng thái', ({ active: 'Đã công bố', awaiting_pricing: 'Chờ BO định giá', draft: 'Đang thiết lập', inactive: 'Ngừng hoạt động' } as Record<string, string>)[viewingType.status] || viewingType.status],
             ]
             const groups = [
