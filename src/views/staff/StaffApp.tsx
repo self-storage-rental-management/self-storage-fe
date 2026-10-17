@@ -4588,7 +4588,7 @@ export default function StaffApp({
                 <span>
                   <b>{"Tiền cọc"}:</b>{" "}
                   {reservationForCheckin?.paid
-                    ? "40% · đã thu"
+                    ? "20% · đã thu"
                     : "Chưa xác nhận"}
                 </span>
                 <span>
