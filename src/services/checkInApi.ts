@@ -17,6 +17,7 @@ export interface CheckInChecklist {
 
 export interface CompleteCheckInRequest {
   checklist: CheckInChecklist
+  identityDocumentNumber: string
   actualMeasurements: {
     lengthCm: number
     widthCm: number
@@ -52,6 +53,7 @@ export interface CheckInCase {
   customerId: string
   customerName: string
   customerEmail: string
+  identityDocumentNumber: string | null
   customerPhone: string | null
   facilityId: string
   facilityName: string
