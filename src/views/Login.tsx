@@ -51,6 +51,31 @@ function formatAuthError(error: unknown, fallback: string): string {
   ) {
     return 'Không thể kết nối, vui lòng thử lại sau.'
   }
+
+  // Extract detailed field validation messages if available from ApiClientError
+  if (error && typeof error === 'object' && 'details' in error) {
+    const details = (error as { details?: unknown }).details
+    if (typeof details === 'string' && details.trim()) {
+      return details
+    }
+    if (details && typeof details === 'object') {
+      const fieldTranslations: Record<string, string> = {
+        password: 'Mật khẩu phải từ 8-128 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (!@#$%^&*...) không có khoảng trắng.',
+        email: 'Địa chỉ email không hợp lệ hoặc đã được đăng ký trong hệ thống.',
+        phone: 'Số điện thoại phải là số điện thoại Việt Nam hợp lệ (10 số, bắt đầu bằng 0).',
+        fullName: 'Họ và tên tối thiểu 2 ký tự và không vượt quá 160 ký tự.',
+        permanentAddress: 'Địa chỉ thường trú không hợp lệ hoặc để trống.',
+        emergencyContactName: 'Họ tên người liên hệ khẩn cấp không hợp lệ hoặc để trống.',
+        emergencyContactPhone: 'Số điện thoại người liên hệ khẩn cấp không hợp lệ (10 số, bắt đầu bằng 0).',
+      }
+      const entries = Object.entries(details as Record<string, string>)
+      if (entries.length > 0) {
+        const [field, msg] = entries[0]
+        return fieldTranslations[field] || msg || fallback
+      }
+    }
+  }
+
   const translations: Record<string, string> = {
     'The email delivery service is unavailable': 'Dịch vụ gửi email hiện không khả dụng. Vui lòng thử lại sau.',
     'The email delivery service is not configured': 'Dịch vụ gửi email chưa được cấu hình. Vui lòng báo Admin.',
@@ -58,6 +83,7 @@ function formatAuthError(error: unknown, fallback: string): string {
     'Invalid email or password': 'Email hoặc mật khẩu không chính xác.',
     'User not found': 'Không tìm thấy tài khoản với thông tin đã cung cấp.',
     'Account is disabled': 'Tài khoản của bạn tạm thời bị khóa. Vui lòng liên hệ hỗ trợ.',
+    'Request validation failed': 'Thông tin đăng ký chưa hợp lệ. Vui lòng kiểm tra lại các trường thông tin.',
   }
   return translations[message] || (message.length > 0 && !message.includes('http') && !message.includes('Error:') ? message : fallback)
 }
@@ -85,11 +111,15 @@ function validatePhone(val: string): string | null {
 
 function validatePassword(val: string): string | null {
   if (!val) return 'Vui lòng nhập mật khẩu.'
-  const hasMinLength = val.length >= 8
-  const hasLetter = /[a-zA-Z]/.test(val)
+  if (val.length < 8) return 'Tối thiểu 8 ký tự.'
+  if (val.length > 128) return 'Mật khẩu tối đa 128 ký tự.'
+  if (/\s/.test(val)) return 'Mật khẩu không được chứa khoảng trắng.'
+  const hasUpper = /[A-Z]/.test(val)
+  const hasLower = /[a-z]/.test(val)
   const hasNumber = /[0-9]/.test(val)
-  if (!hasMinLength || !hasLetter || !hasNumber) {
-    return 'Tối thiểu 8 ký tự, gồm chữ và số'
+  const hasSpecial = /[^a-zA-Z0-9\s]/.test(val)
+  if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+    return 'Gồm chữ hoa, chữ thường, số và ký tự đặc biệt (!@#...)'
   }
   return null
 }
@@ -481,7 +511,17 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
         : `Mã xác minh đã được gửi đến ${normalizedEmail}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
     } catch (registrationError) {
       setNotice('')
-      setError(formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.'))
+      const formatted = formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.')
+      setError(formatted)
+      if (registrationError && typeof registrationError === 'object' && 'details' in registrationError) {
+        const details = (registrationError as { details?: unknown }).details
+        if (details && typeof details === 'object') {
+          const step1Fields = ['email', 'password', 'fullName', 'phone']
+          if (Object.keys(details as Record<string, unknown>).some(k => step1Fields.includes(k))) {
+            setRegisterStep(1)
+          }
+        }
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -990,7 +1030,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
                       show={showPassword}
                       toggle={() => setShowPassword(!showPassword)}
                       autoComplete="new-password"
-                      placeholder="Tối thiểu 8 ký tự"
+                      placeholder="Tối thiểu 8 ký tự (hoa, thường, số, ký tự đặc biệt)"
                       minLength={PASSWORD_MIN_LENGTH}
                       maxLength={PASSWORD_MAX_LENGTH}
                       touched={touched.password}
