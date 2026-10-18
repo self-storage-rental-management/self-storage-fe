@@ -46,8 +46,10 @@ export default function RenewalDetail({
   )
   const canViewReceipt = payment?.paymentStatus === "PAID" && !payment.reconciliationRequired &&
     (!payment.settlementStage || ["ALLOCATED_AWAITING_SIGNING", "AWAITING_SIGNING", "COMPLETED"].includes(payment.settlementStage))
+  const paymentDeadline = payment?.paymentDeadline ?? r.approvedPaymentDeadline
+  const paymentExpired = r.status === "accepted" && !!paymentDeadline && Date.parse(paymentDeadline) <= Date.now() && payment?.paymentStatus !== "PAID"
   const verification = r.systemVerification
-  const workflowStatusLabel = r.status === "accepted" && r.approvedPaymentDeadline
+  const workflowStatusLabel = paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
     ? hasDeposit ? "Đã mở thanh toán cọc qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
     : r.status === "accepted" && verification?.status === "VERIFIED"
     ? "Đã xác nhận điều kiện, chờ kiểm tra readiness thanh toán"
@@ -171,10 +173,10 @@ export default function RenewalDetail({
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
       {appointmentSelection}
-      {canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi thanh toán cọc.</p>}
+      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay; khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi thanh toán cọc.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
-          disabled={operationsLocked||paymentBusy||!appointmentSelected||payment?.paymentStatus==="PAID"}
+          disabled={operationsLocked||paymentBusy||paymentExpired||!appointmentSelected||payment?.paymentStatus==="PAID"}
           onClick={openRenewalPayment}
         >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":hasDeposit?"Thanh toán cọc":"Thanh toán toàn kỳ"}</Button>}
         {actions
