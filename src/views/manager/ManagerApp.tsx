@@ -24,7 +24,7 @@ import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
-import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
+import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from '../../services/notificationApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     const hub = useStorageHub()
@@ -64,7 +64,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       window.clearInterval(timer)
     }
   }, [])
-  const [toast, setToast] = useState<string | null>(null)
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
   const [inventoryRentalId, setInventoryRentalId] = useState<string | undefined>()
   const [inventoryMaintenanceDraft, setInventoryMaintenanceDraft] = useState<{ unitId: string; unitCode: string } | null>(null)
@@ -72,8 +71,25 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     if (page !== 'rentals') setInventoryRentalId(undefined)
   }, [page])
   const showToast = (message: string) => {
-    setToast(message)
-    window.setTimeout(() => setToast(null), 3500)
+    const pageTitles: Record<string, string> = {
+      dashboard: 'Tổng quan cơ sở',
+      inventory: 'Quản lý gian kho',
+      'unit-assignments': 'Phân kho đặt chỗ',
+      rentals: 'Hồ sơ thuê & Gia hạn',
+      moves: 'Nhận kho & Trả kho',
+      payments: 'Lịch sử thanh toán',
+      'overdue-cases': 'Theo dõi quá hạn',
+      'payment-complaints': 'Khiếu nại thanh toán',
+      'staff-tasks': 'Nhân viên & Nhiệm vụ',
+      'support-api': 'Hỗ trợ khách hàng',
+      reports: 'Báo cáo cơ sở'
+    }
+    notifyBell({
+      title: pageTitles[page] || 'Thông báo quản lý cơ sở',
+      message,
+      page,
+      date: new Date().toISOString()
+    })
   }
 
   const statusBadge = (status: string) => {
@@ -87,12 +103,16 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   }
 
   const facility = hub.facilities.find(item => item.id === user.facilityId || item.name === user.facility || item.id === user.facility)
-  const managerFacilityId = user.facilityId || facility?.id
+  const actor = getAuthenticatedActor()
+  const resolvedFacilityName = user.facility || (actor?.facilityNames && (actor.facilityNames[user.facilityId || ''] || Object.values(actor.facilityNames)[0])) || facility?.name || ''
+  const resolvedFacilityId = user.facilityId || (actor?.facilityScopes && Object.keys(actor.facilityScopes)[0]) || facility?.id || ''
+  const resolvedUser = { ...user, facility: resolvedFacilityName || user.facility, facilityId: resolvedFacilityId || user.facilityId }
+  const managerFacilityId = resolvedFacilityId || user.facilityId || facility?.id
   const facilityRenewals = hub.renewals.filter(renewal => {
     const rental = hub.rentals.find(item => item.id === renewal.rentalId)
     const renewalFacilityId = renewal.facilityId || rental?.facilityId
     const renewalFacilityName = rental?.facilityName
-    return isManagerFacilityVisible({ ...user, facilityId: managerFacilityId }, renewalFacilityId, renewalFacilityName)
+    return isManagerFacilityVisible({ ...resolvedUser, facilityId: managerFacilityId }, renewalFacilityId, renewalFacilityName)
   })
   const renewalNotifications: LayoutNotification[] = (isApiAuthenticated() ? [] : facilityRenewals)
     .filter(renewal => ['pending', 'appointment_scheduled'].includes(renewal.status))
@@ -136,7 +156,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     isRead: notification.isRead,
   }))
 
-  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={user} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} onNotificationClick={(notification) => {
+  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={resolvedUser} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} onNotificationClick={(notification) => {
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.replace('api-notification-', '')
       setPage(notification.page)
@@ -162,6 +182,5 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}
     {page === 'profile' && <ProfileView user={user} />}
-    {toast && <div className="fixed bottom-6 right-6 z-50 max-w-md rounded-lg border border-amber-500/50 bg-[#292a27] px-5 py-3 text-white shadow-2xl"><p className="text-sm font-medium">{toast}</p></div>}
   </Layout></div></ManagerPresentationProvider>
 }

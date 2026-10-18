@@ -40,13 +40,13 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       ['Xe đẩy hỗ trợ', t.trolleyType || 'Chưa cập nhật'],
       ['Tải trọng tối đa', `${t.maxLoadKg.toLocaleString('vi-VN')} kg`],
       ['Giá thuê mỗi tháng', formatVndAmount(t.monthlyPrice)],
-      ['Tiền cọc đảm bảo', formatVndAmount(t.securityDepositAmount)],
+      ['Tiền duy trì CSVC', formatVndAmount(t.securityDepositAmount)],
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
     <ReferenceBoxCapacity unitType={t} />
-    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, cọc giữ chỗ, cọc đảm bảo và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
+    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, cọc giữ chỗ 20%, tiền duy trì CSVC và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>
-      <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, cọc giữ chỗ 40%, tiền thuê còn lại và tiền đảm bảo kho.</p>
+      <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, cọc giữ chỗ 20%, tiền thuê còn lại và tiền duy trì CSVC.</p>
       {rentalPackages.length > 0 ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {rentalPackages.map(item => (
@@ -70,7 +70,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       <p className="mt-1 text-sm text-stone-700">Áp dụng cho khách thuê tại {facilityName}.</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Phí quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">50% đơn giá thuê ngày cho mỗi ngày trễ</p><p className="text-sm leading-6 text-stone-600">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.</p></article>
-        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Tiền đảm bảo kho</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">{formatVndAmount(t.securityDepositAmount)}</p><p className="text-sm leading-6 text-stone-600">Thu khi nhận kho và được quyết toán sau khi kiểm tra bàn giao, công nợ, vệ sinh và hư hại.</p></article>
+        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Tiền duy trì CSVC</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">{formatVndAmount(t.securityDepositAmount)}</p><p className="text-sm leading-6 text-stone-600">Thu khi nhận kho và được quyết toán sau khi kiểm tra bàn giao, công nợ, vệ sinh và hư hại.</p></article>
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Thời hạn thuê tối thiểu</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">01 tháng</p><p className="text-sm leading-6 text-stone-600">Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.</p></article>
         <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Gia hạn quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">Tối đa 7 ngày</p><p className="text-sm leading-6 text-stone-600">Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.</p></article>
       </div>
@@ -83,7 +83,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
           <ul className="mt-2 list-disc space-y-2 pl-5 text-stone-700">
             <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
             <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-            <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền đảm bảo được đưa vào quyết toán.</li>
+            <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.</li>
           </ul>
         </article>
         <article className="rounded-xl border border-amber-200 bg-white p-4 text-sm">
@@ -101,7 +101,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
         ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá và xác minh email.'],
-        ['Thanh toán cọc', 'Duyệt hồ sơ nếu cần. Thanh toán cọc 40% theo báo giá.'],
+        ['Thanh toán cọc', 'Duyệt hồ sơ nếu cần. Thanh toán cọc 20% theo báo giá.'],
         ['Nhận kho', 'Quản lý cơ sở phân gian kho. Khách hàng nhận kho và ký hồ sơ.'],
       ].map(([title, description], i) => <li key={title} className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">
         <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-sm font-bold text-white">{i + 1}</span>

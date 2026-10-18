@@ -32,6 +32,7 @@ const labels: Record<string, string> = {
   expectedRevision: "Lần cập nhật hiện tại (nhập 0 chỉ khi tạo mới)",
   effectiveFrom: "Có hiệu lực từ ngày",
   effectiveTo: "Đến ngày (không bắt buộc)",
+  quoteTtlHours: "Thời hạn báo giá (giờ)",
   quoteTtlMinutes: "Thời hạn báo giá (phút)",
   paymentWindowHours: "Thời hạn thanh toán (giờ)",
   requestWindowDays: "Số ngày được gửi yêu cầu trước khi hết thuê",
@@ -56,6 +57,11 @@ export function policyDraft(policy: Policy | PolicyInput): Draft {
       (typeof value === "number" || typeof value === "string")
     )
       result[key] = String(value)
+  if ("quoteTtlHours" in policy && typeof policy.quoteTtlHours === "number") {
+    result.quoteTtlHours = String(policy.quoteTtlHours)
+  } else if ("quoteTtlMinutes" in policy && typeof policy.quoteTtlMinutes === "number") {
+    result.quoteTtlHours = String(Math.max(1, Math.round(policy.quoteTtlMinutes / 60)))
+  }
   if ("eligiblePackageIds" in policy) {
     result.eligiblePackageIds = policy.eligiblePackageIds.join(", ")
     result.unrestrictedRenewalWindow = String(policy.requestWindowDays >= 36_500)
@@ -87,6 +93,10 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
     if (!d[key]?.trim()) throw new Error("Vui lòng nhập đủ thông tin bắt buộc.")
     return Number(d[key])
   }
+  const resolveQuoteMinutes = () => {
+    if (d.quoteTtlHours?.trim()) return Number(d.quoteTtlHours) * 60
+    return n("quoteTtlMinutes")
+  }
   const base = {
     expectedRevision: n("expectedRevision"),
     effectiveFrom: d.effectiveFrom || "",
@@ -96,7 +106,7 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
     kind === "renewal"
       ? {
           ...base,
-          quoteTtlMinutes: n("quoteTtlMinutes"),
+          quoteTtlMinutes: resolveQuoteMinutes(),
           paymentWindowHours: n("paymentWindowHours"),
           requestWindowDays: d.unrestrictedRenewalWindow === "true" ? 36_500 : n("requestWindowDays"),
           // Retained in the legacy policy DTO; new Renewal terms do not collect a deposit.
@@ -482,7 +492,7 @@ function PolicyEditor({
               <section className="rounded-xl border border-stone-200 p-4">
                 <h4 className="font-semibold text-stone-900">Điều kiện gia hạn</h4>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  {field("quoteTtlMinutes")}{field("paymentWindowHours")}
+                  {field("quoteTtlHours")}<p className="self-end rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Thời hạn giao dịch thanh toán gia hạn: <strong>15 phút</strong> kể từ khi mở thanh toán.</p>
                   <label className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-3 font-medium text-stone-700 sm:col-span-2">
                     <input type="checkbox" checked={draft.unrestrictedRenewalWindow === "true"} onChange={(e) => setDraft((d) => ({ ...d, unrestrictedRenewalWindow: String(e.target.checked), requestWindowDays: e.target.checked ? "36500" : "30" }))} />
                     Cho phép gửi yêu cầu gia hạn bất kỳ lúc nào (chế độ demo)

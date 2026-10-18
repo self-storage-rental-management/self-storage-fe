@@ -17,6 +17,7 @@ import {
   type DiscountType,
 } from '../../services/discountApi'
 import type { User } from '../../types'
+import { notifyBell } from '../../services/notificationApi'
 
 interface Props {
   user: User
@@ -75,11 +76,14 @@ export default function BusinessDiscountsPanel({ user, lang = 'vi', facilitiesLi
   // Data & loading
   const [discounts, setDiscounts] = useState<DiscountCodeApi[]>([])
   const [loading, setLoading] = useState<boolean>(false)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
 
   const showToast = (msg: string) => {
-    setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 3500)
+    notifyBell({
+      title: isVi ? 'Khuyến mãi & Voucher' : 'Discount Codes',
+      message: msg,
+      page: 'discounts',
+      date: new Date().toISOString()
+    })
   }
 
   const fetchDiscounts = async () => {
@@ -270,12 +274,6 @@ export default function BusinessDiscountsPanel({ user, lang = 'vi', facilitiesLi
 
   return (
     <div className="space-y-6 fade-in">
-      {/* Toast */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white text-sm px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-bounce">
-          <span>{toastMessage}</span>
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-4">
