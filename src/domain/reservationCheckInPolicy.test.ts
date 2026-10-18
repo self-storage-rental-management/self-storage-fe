@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { isCheckInAppointmentAllowed, plannedCheckInWindow } from './reservationCheckInPolicy'
 
 describe('reservation check in policy', () => {
-  it('uses one working day for review and one working day for assignment', () => {
+  it('includes 15 minutes for payment between review and assignment', () => {
     const window = plannedCheckInWindow('2026-10-12T10:30:00+07:00', true)
-    expect(window.availableAt.toISOString()).toBe('2026-10-14T09:30:00.000Z')
+    expect(window.availableAt.toISOString()).toBe('2026-10-14T04:00:00.000Z')
   })
 
   it('moves a result at closing time to eight the next morning', () => {
