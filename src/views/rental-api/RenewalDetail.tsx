@@ -173,7 +173,7 @@ export default function RenewalDetail({
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
       {appointmentSelection}
-      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay; khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi thanh toán cọc.</p>}
+      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay; khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán cọc" : "thanh toán"}.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
           disabled={operationsLocked||paymentBusy||paymentExpired||!appointmentSelected||payment?.paymentStatus==="PAID"}

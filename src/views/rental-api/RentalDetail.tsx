@@ -6,7 +6,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
-import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText } from "./presentation"
+import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, accessStatusLabels } from "./presentation"
 const labelClass = "text-xs font-normal text-slate-500"
 const valueClass = "mt-1 text-sm font-medium text-slate-900"
 export default function RentalDetail({
@@ -29,6 +29,9 @@ export default function RentalDetail({
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   const warnings = rental.dataWarnings.filter(warning => warning.field !== "contractEndDate")
+  const accessStatus = rental.access.completeness === "UNKNOWN"
+    ? null
+    : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || null
 
   return (
     <div className="space-y-5 [&_dt]:text-xs [&_dt]:font-normal [&_dt]:text-stone-500 [&_dd]:mt-1.5 [&_dd]:break-words [&_dd]:text-sm [&_dd]:font-medium [&_dd]:leading-relaxed [&_dd]:text-stone-900">

@@ -4,6 +4,7 @@ import type { CustomerReservation } from '../../services/customerReservationApi'
 export default function CustomerReservationOtpModal({
   reservation,
   code,
+  developmentCode,
   busy,
   message,
   nextResendAt,
@@ -15,6 +16,7 @@ export default function CustomerReservationOtpModal({
 }: {
   reservation: CustomerReservation | null
   code: string
+  developmentCode?: string | null
   busy: boolean
   message: string | null
   nextResendAt: number
@@ -39,6 +41,21 @@ export default function CustomerReservationOtpModal({
         onChange={event => onCodeChange(event.target.value.replace(/\D/g, '').slice(0, 6))}
         placeholder="000000"
       />
+      {developmentCode && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          <div>
+            <span>Mã OTP thử nghiệm (Dev): </span>
+            <strong className="font-mono text-sm font-bold tracking-widest">{developmentCode}</strong>
+          </div>
+          <button
+            type="button"
+            className="rounded bg-amber-200 px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-300 transition-colors"
+            onClick={() => onCodeChange(developmentCode)}
+          >
+            Điền mã
+          </button>
+        </div>
+      )}
       {message && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</div>}
       <div className="flex flex-wrap justify-end gap-2 border-t border-stone-200 pt-4">
         <Button variant="outline" disabled={busy || resendSeconds > 0} onClick={onResend}>

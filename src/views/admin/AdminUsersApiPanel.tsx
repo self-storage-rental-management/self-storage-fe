@@ -26,6 +26,8 @@ import {
   listAdminLoginHistory,
   listAdminSessions,
   listAdminUsers,
+  updateAdminUserFacilities,
+  updateAdminUserRoles,
   updateAdminUserStatus,
   type AdminApiFacility,
   type AdminApiUser,
@@ -280,8 +282,9 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       showToast('Tài khoản quản trị viên được bảo vệ và không thể chỉnh sửa.')
       return
     }
+    listAdminFacilities().then(res => setFacilities(res.data)).catch(() => {})
     const role = primaryRole(account.roles)
-    const facilityId = Object.keys(account.facilityScopes)[0] || ''
+    const facilityId = Object.keys(account.facilityScopes || {})[0] || ''
     setSelected(account)
     setMode('internal')
     setForm({
@@ -291,7 +294,11 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       phone: account.phone || '',
       role: role === 'customer' ? 'staff' : role,
       facilityId,
-      scopeLevel: facilityId ? account.facilityScopes[facilityId] : role === 'manager' ? 'MANAGE' : 'OPERATE',
+      scopeLevel: (facilityId && account.facilityScopes[facilityId])
+        ? account.facilityScopes[facilityId]
+        : role === 'manager'
+          ? 'MANAGE'
+          : 'OPERATE',
       status: toUiStatus(account.status),
     })
     setFieldErrors({})
@@ -341,11 +348,49 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       showToast('Tài khoản quản trị viên được bảo vệ và không thể chỉnh sửa.')
       return
     }
-    const updated = toUiStatus(selected.status) === form.status
-      ? selected
-      : await updateAdminUserStatus(selected.id, toApiStatus(form.status))
-    replaceAccount(updated)
-    showToast(toUiStatus(selected.status) === form.status ? 'Chưa có thay đổi trạng thái.' : 'Đã cập nhật trạng thái tài khoản.')
+
+    let currentAccount = selected
+    const changes: string[] = []
+
+    // 1. Kiểm tra thay đổi vai trò (chỉ áp dụng tài khoản nội bộ)
+    const currentRole = primaryRole(selected.roles)
+    const roleChanged = currentRole !== 'customer' && form.role !== currentRole
+    if (roleChanged) {
+      currentAccount = await updateAdminUserRoles(selected.id, [toApiRole(form.role)])
+      changes.push(`vai trò (${roleLabels[form.role]})`)
+    }
+
+    // 2. Kiểm tra thay đổi cơ sở phụ trách (Staff / Manager)
+    const activeHasFacilityRole = form.role === 'staff' || form.role === 'manager'
+    const currentFacilityId = Object.keys(selected.facilityScopes || {})[0] || ''
+    const currentScopeLevel = currentFacilityId ? selected.facilityScopes[currentFacilityId] : null
+    const nextFacilityId = activeHasFacilityRole ? form.facilityId : ''
+    const nextScopeLevel = form.scopeLevel
+
+    const scopesChanged = currentFacilityId !== nextFacilityId ||
+      (Boolean(nextFacilityId) && currentScopeLevel !== nextScopeLevel)
+
+    if (scopesChanged) {
+      const nextScopes: Record<string, ApiFacilityScopeLevel> = nextFacilityId
+        ? { [nextFacilityId]: nextScopeLevel }
+        : {}
+      currentAccount = await updateAdminUserFacilities(selected.id, nextScopes)
+      changes.push(nextFacilityId ? `cơ sở phụ trách (${facilityName(nextFacilityId)})` : 'hủy gán cơ sở')
+    }
+
+    // 3. Kiểm tra thay đổi trạng thái
+    const statusChanged = toUiStatus(selected.status) !== form.status
+    if (statusChanged) {
+      currentAccount = await updateAdminUserStatus(selected.id, toApiStatus(form.status))
+      changes.push('trạng thái')
+    }
+
+    replaceAccount(currentAccount)
+    if (changes.length > 0) {
+      showToast(`Đã cập nhật ${changes.join(', ')} cho tài khoản ${currentAccount.fullName}.`)
+    } else {
+      showToast('Chưa có thay đổi nào được thực hiện.')
+    }
   }
 
   const save = async () => {
@@ -908,9 +953,17 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
               <Select
                 label="Vai Trò Nội Bộ"
                 value={selectedRole === 'customer' ? 'customer' : form.role}
-                disabled={Boolean(selected) || selectedRole === 'customer'}
-                className={selected ? 'cursor-not-allowed bg-stone-50 text-stone-500' : ''}
-                onChange={event => setField('role', event.target.value as FormRole)}
+                disabled={selectedRole === 'customer' || selectedRole === 'admin'}
+                className={selectedRole === 'customer' || selectedRole === 'admin' ? 'cursor-not-allowed bg-stone-50 text-stone-500' : ''}
+                onChange={event => {
+                  const nextRole = event.target.value as FormRole
+                  setField('role', nextRole)
+                  if (nextRole === 'manager' && form.scopeLevel !== 'MANAGE') {
+                    setField('scopeLevel', 'MANAGE')
+                  } else if (nextRole === 'staff' && form.scopeLevel === 'MANAGE') {
+                    setField('scopeLevel', 'OPERATE')
+                  }
+                }}
               >
                 {selectedRole === 'customer' && <option value="customer">Khách hàng</option>}
                 <option value="staff">Chuyên viên vận hành (Staff)</option>
@@ -957,29 +1010,63 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             className={selected ? 'cursor-not-allowed bg-stone-50 text-stone-500' : ''}
           />
 
-          {hasFacilityRole && !selected && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Select
-                label="Cơ sở kho phụ trách"
-                value={form.facilityId}
-                onChange={event => setField('facilityId', event.target.value)}
-              >
-                <option value="">Chưa gán cơ sở</option>
-                {facilities.map(facility => (
-                  <option key={facility.id} value={facility.id}>
-                    {facility.name}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                label="Mức phân quyền tại cơ sở"
-                value={form.scopeLevel}
-                onChange={event => setField('scopeLevel', event.target.value as ApiFacilityScopeLevel)}
-              >
-                <option value="READ">Chỉ xem (Read-only)</option>
-                <option value="OPERATE">Vận hành (Operate)</option>
-                <option value="MANAGE">Quản lý toàn diện (Manage)</option>
-              </Select>
+          {hasFacilityRole && (
+            <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
+                  Phân công & Phân loại quản lý cơ sở
+                </span>
+                <span className="text-[11px] text-stone-500 font-medium">
+                  {form.role === 'manager' ? 'Dành cho Quản lý cơ sở (Manager)' : 'Dành cho Chuyên viên vận hành (Staff)'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Select
+                  label="Cơ sở kho phụ trách"
+                  value={form.facilityId}
+                  onChange={event => setField('facilityId', event.target.value)}
+                >
+                  <option value="">{facilities.length === 0 ? 'Chưa có cơ sở nào trên hệ thống' : 'Chưa gán cơ sở'}</option>
+                  {facilities.map(facility => (
+                    <option key={facility.id} value={facility.id}>
+                      {facility.name}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  label="Mức phân quyền tại cơ sở"
+                  value={form.scopeLevel}
+                  onChange={event => setField('scopeLevel', event.target.value as ApiFacilityScopeLevel)}
+                >
+                  <option value="READ">Chỉ xem (Read-only)</option>
+                  <option value="OPERATE">Vận hành (Operate)</option>
+                  <option value="MANAGE">Quản lý toàn diện (Manage)</option>
+                </Select>
+              </div>
+
+              {form.facilityId ? (
+                <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 border border-amber-200/80">
+                  <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>
+                    Tài khoản được phân quyền{' '}
+                    <strong>
+                      {form.scopeLevel === 'MANAGE'
+                        ? 'Quản lý toàn diện (Manage)'
+                        : form.scopeLevel === 'OPERATE'
+                          ? 'Vận hành (Operate)'
+                          : 'Chỉ xem (Read-only)'}
+                    </strong>{' '}
+                    tại cơ sở <strong>{facilityName(form.facilityId)}</strong>.
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-stone-500 italic">
+                  Chưa gán cơ sở. Tài khoản chưa được liên kết với cơ sở kho nào.
+                </p>
+              )}
             </div>
           )}
 
