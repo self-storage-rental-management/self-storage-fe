@@ -4,20 +4,35 @@ export type CustomerRentalStatus = 'active' | 'return_requested' | 'return_inspe
 
 export interface CustomerRental {
   id: string
-  reservationId: string
-  facilityId: string
-  facilityName: string
-  facilityAddress: string
-  storageUnitId: string
-  storageUnitCode: string
+  reservationId?: string
+  facilityId?: string
+  facilityName?: string
+  facilityAddress?: string
+  storageUnitId?: string
+  storageUnitCode?: string
+  facility?: {
+    id: string
+    code?: string
+    name: string
+  }
+  storageUnit?: {
+    id: string
+    code: string
+  }
+  unitType?: {
+    id: string
+    code?: string
+    name: string
+  }
   status: CustomerRentalStatus
-  startDate: string
-  contractEndDate: string
-  monthlyPrice: number
-  actualReturnedAt: string | null
-  completedAt: string | null
-  createdAt: string
-  updatedAt: string
+  startDate?: string
+  contractEndDate?: string | null
+  monthlyPrice?: number
+  currency?: string
+  actualReturnedAt?: string | null
+  completedAt?: string | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 interface CustomerRentalPage {
@@ -36,4 +51,15 @@ export async function listCustomerRentals(status?: CustomerRentalStatus, page = 
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   if (status) params.set('status', status)
   return apiRequest<CustomerRentalPage>(`/api/customer/rentals?${params.toString()}`)
+}
+
+export async function listAllCustomerRentals() {
+  const firstPage = await listCustomerRentals(undefined, 0, 100)
+  const totalPages = Math.max(firstPage.pagination.totalPages, 1)
+  if (totalPages === 1) return firstPage.data
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => listCustomerRentals(undefined, index + 1, 100)),
+  )
+  return [firstPage, ...remainingPages].flatMap(page => page.data)
 }
