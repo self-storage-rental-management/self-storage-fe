@@ -858,6 +858,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }))
   const packageCountNumber = capacitySamples.reduce((sum, sample) => sum + (Number(sample.quantity) || 0), 0)
   const goodsWeightNumber = capacitySamples.reduce((sum, sample) => sum + ((Number(sample.quantity) || 0) * (Number(sample.weightKg) || 0)), 0)
+  const goodsVolumeM3 = capacitySamples.reduce((sum, sample) => sum + (
+    (Number(sample.quantity) || 0)
+    * (Number(sample.lengthCm) || 0)
+    * (Number(sample.widthCm) || 0)
+    * (Number(sample.heightCm) || 0)
+    / 1_000_000
+  ), 0)
+  const formatVolumeM3 = (value: number) => value.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
   const largestPackage = capacitySamples.reduce<PackageSample | null>((largest, sample) => {
     const volume = Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm)
     if (!largest) return sample
@@ -1517,6 +1525,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const requestedAt = moveInDate && bookingAppointmentTime
       ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`)
       : null
+    const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
+      ? new Date(`${moveInDate}T00:00:00`)
+      : null
 
     if (customerIdCard.trim().length < 9) errors.identity = 'CCCD/Hộ chiếu phải có ít nhất 9 ký tự.'
     if (!isApiAuthenticated()) {
@@ -1546,10 +1557,28 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!isApiAuthenticated() && allPackageSamplesValid && !hasUnplaceablePackage && totalFramesRequired > selectedRackCount) errors.capacity = `Kho không chứa vừa: cần ${totalFramesRequired} khung nhưng kho chỉ có ${selectedRackCount} khung.`
     if (!Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Vui lòng nhập cân nặng mỗi kiện cho tất cả mẫu hàng.'
     if (goodsWeightNumber > selectedUnit.maxLoadKg) errors.weightLimit = `${'Tổng cân nặng vượt tải trọng sàn'} (${selectedUnit.maxLoadKg} kg).`
-    if (!requestedAt || !isCheckInAppointmentAllowed(requestedAt, checkInWindow)) errors.moveInDate = `Lịch nhận kho phải từ ${formatPolicyDateTime(checkInWindow.availableAt)} đến ${formatPolicyDateTime(checkInWindow.deadlineAt)}, áp dụng cả Thứ Bảy và Chủ Nhật, trong giờ làm việc 08:00–17:00 và theo khung 30 phút.`
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(moveInDate) || !requestedAt || Number.isNaN(requestedAt.getTime()) || policyDateInput(requestedAt) !== moveInDate) errors.moveInDate = 'Vui lòng nhập ngày hợp lệ theo định dạng DD/MM/YYYY.'
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(bookingAppointmentTime)) errors.appointmentTime = 'Vui lòng nhập giờ hợp lệ theo định dạng HH:mm (24 giờ).'
-    else if (!withinFacilityHours(bookingAppointmentTime, selectedTarget?.facility.accessHours)) errors.appointmentTime = `Giờ nhận kho nằm ngoài giờ hoạt động của cơ sở: ${selectedTarget?.facility.accessHours}. Vui lòng chọn giờ khác.`
+    const dateIsValid = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
+      && requestedDate !== null
+      && !Number.isNaN(requestedDate.getTime())
+      && policyDateInput(requestedDate) === moveInDate
+    const timeIsValid = /^([01]\d|2[0-3]):[0-5]\d$/.test(bookingAppointmentTime)
+
+    if (!dateIsValid) {
+      errors.moveInDate = 'Vui lòng nhập ngày hợp lệ theo định dạng DD/MM/YYYY.'
+    } else if (moveInDate < earliestCheckInDate || moveInDate > latestCheckInDate) {
+      errors.moveInDate = `Ngày nhận kho phải từ ${checkInWindow.availableAt.toLocaleDateString('vi-VN')} đến ${checkInWindow.deadlineAt.toLocaleDateString('vi-VN')}.`
+    }
+
+    if (!timeIsValid) {
+      errors.appointmentTime = 'Vui lòng nhập giờ hợp lệ theo định dạng HH:mm (24 giờ).'
+    } else if (!withinFacilityHours(bookingAppointmentTime, selectedTarget?.facility.accessHours)) {
+      errors.appointmentTime = `Giờ nhận kho nằm ngoài giờ hoạt động của cơ sở: ${selectedTarget?.facility.accessHours}. Vui lòng chọn giờ khác.`
+    } else if (requestedAt && dateIsValid && !errors.moveInDate && !isCheckInAppointmentAllowed(requestedAt, checkInWindow)) {
+      const isFirstAvailableDate = moveInDate === earliestCheckInDate
+      errors.appointmentTime = isFirstAvailableDate && requestedAt < checkInWindow.availableAt
+        ? `Trong ngày ${checkInWindow.availableAt.toLocaleDateString('vi-VN')}, giờ nhận kho sớm nhất là ${earliestCheckInTime}.`
+        : 'Giờ nhận kho phải nằm trong khoảng 08:00–16:30 và theo khung 30 phút.'
+    }
     setBookingErrors(errors)
     if (Object.keys(errors).length) {
       showToast('Vui lòng kiểm tra lại các thông tin được đánh dấu.')
@@ -3261,26 +3290,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       >
         {selectedUnit && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">{'Loại kho bạn đang chọn'}</p>
-                  <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:justify-between text-sm gap-0.5 sm:gap-2">
-                <span className="text-stone-700">{'Cỡ kho đã chọn:'}</span>
-                <b>{`${unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
-              </div>
-              <div className="mt-2 flex flex-col sm:flex-row sm:justify-between text-sm gap-0.5 sm:gap-2">
-                <span className="text-stone-700">{'Kích thước & Sức chịu tải:'}</span>
-                <span className="text-stone-900 font-medium">{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
-              </div>
-              <div className="mt-3 rounded-lg bg-stone-100 p-3 text-xs leading-5 text-stone-700">
-                {'Việc mở và điền biểu mẫu chưa giữ suất kho. Khi bạn nhấn xác nhận, hệ thống sẽ kiểm tra lại số lượng của loại kho. Yêu cầu hợp lệ được ghi nhận trước sẽ được ưu tiên. Quản lý cơ sở sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.'}
-              </div>
-            </div>
-
             <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Các bước đặt kho">
               {[
                 [1, 'Thông tin cá nhân'],
@@ -3296,6 +3305,21 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </li>
               })}
             </ol>
+
+            {bookingStep === 2 && <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
+              <div className="mb-3 border-b border-stone-200 pb-3">
+                <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">Loại kho bạn đang chọn</p>
+                <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
+              </div>
+              <div className="flex flex-col gap-0.5 text-sm sm:flex-row sm:justify-between sm:gap-2">
+                <span className="text-stone-700">Cỡ kho đã chọn:</span>
+                <b>{`${unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
+              </div>
+              <div className="mt-2 flex flex-col gap-0.5 text-sm sm:flex-row sm:justify-between sm:gap-2">
+                <span className="text-stone-700">Kích thước & Sức chịu tải:</span>
+                <span className="font-medium text-stone-900">{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
+              </div>
+            </div>}
 
             <div className="space-y-4">
             {Object.keys(bookingErrors).length > 0 && (
@@ -3403,7 +3427,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>
 
               <div className="mt-4 grid grid-cols-1 gap-3">
-                <Input label={'Tình trạng đóng gói chung'} value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)} />
+                <Input label={'Tình trạng đóng gói chung *'} value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)} />
               </div>
 
             </div>
@@ -3430,14 +3454,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <p className="text-sm font-semibold text-stone-900">Chọn ngày giờ nhận kho</p>
                 <p className="mt-1 text-xs leading-5 text-stone-600">
                   Lịch hợp lệ từ <b>{formatPolicyDateTime(checkInWindow.availableAt)}</b> đến <b>{formatPolicyDateTime(checkInWindow.deadlineAt)}</b>.
-                  {' Nhận lịch tất cả các ngày trong tuần, kể cả Thứ Bảy và Chủ Nhật. Ngày kho sẵn sàng được tính là ngày thứ nhất của cửa sổ 7 ngày làm việc.'}
-                  {hasOtherGoods ? ' Mốc này đã bao gồm tối đa một ngày làm việc để nhân viên duyệt hàng “Khác”, 15 phút thanh toán và một ngày làm việc để quản lý phân kho.' : ' Mốc này đã bao gồm 15 phút thanh toán và một ngày làm việc để quản lý phân kho.'}
                 </p>
               </div>
               {schedulePolicyMessage && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950">{schedulePolicyMessage}</div>}
               <div className="grid gap-3 sm:grid-cols-2">
-                <div><VietnameseDateInput value={moveInDate} min={earliestCheckInDate} max={latestCheckInDate} onChange={value => { setMoveInDate(value); setSchedulePolicyMessage(null) }} />{bookingErrors.moveInDate && <p className="mt-1 text-xs text-red-700">{bookingErrors.moveInDate}</p>}</div>
-                <div><Input label="Giờ nhận kho mong muốn" type="time" step="1800" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
+                <div><VietnameseDateInput value={moveInDate} min={earliestCheckInDate} max={latestCheckInDate} onChange={value => { setMoveInDate(value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.moveInDate; return next }) }} />{bookingErrors.moveInDate && <p className="mt-1 text-xs text-red-700">{bookingErrors.moveInDate}</p>}</div>
+                <div><Input label="Giờ nhận kho mong muốn" type="time" step="1800" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.appointmentTime; return next }) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
               </div>
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
                 <b>Ngày bắt đầu tính kỳ thuê:</b> {earliestCheckInDate}. Kỳ thuê bắt đầu từ ngày kho sẵn sàng sớm nhất, không phụ thuộc việc bạn chọn đến muộn hơn trong cửa sổ 7 ngày làm việc.
@@ -3468,8 +3490,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {/* Storage Space & Cost Breakdown */}
             {(() => {
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
-                <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p><p className="mt-1 text-xs">Kết quả được tính theo kích thước từng kiện, tổng thể tích và tải trọng của loại kho đã chọn.</p></div>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'Phù hợp' : 'Không phù hợp'}</span>}</div>
-                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện</span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-2"><p><b>Tổng khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div><p className="text-xs text-stone-500">Các loại hàng được gộp chung theo tổng thể tích. Mỗi khung sử dụng tối đa 80% thể tích để chừa khoảng xếp dỡ.</p></div>}
+                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'Phù hợp' : 'Không phù hợp'}</span>}</div>
+                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(Number(sample.quantity) * Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm) / 1_000_000)} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(goodsVolumeM3)} m³</span></p><p><b>Tổng khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
                 {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa một ngày làm việc kể từ khi bạn xác minh email. Sau khi chấp thuận, bạn có 15 phút để hoàn tất tiền cọc giữ chỗ.</p></div>}
               </div>
               const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
@@ -3491,8 +3513,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
 
                   {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
-                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg</span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {selectedRackDimensions.join(' × ')} m</b>}</div>)}
-                    <div className="flex justify-between pt-1 text-sm"><b>Tổng khung cần dùng</b><b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</b></div>
+                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · <b>{formatVolumeM3(Number(sample.quantity) * Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm) / 1_000_000)} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {selectedRackDimensions.join(' × ')} m</b>}</div>)}
+                    <div className="grid gap-2 border-t border-stone-100 pt-2 text-sm sm:grid-cols-2"><span><b>Tổng thể tích cần lưu:</b> {formatVolumeM3(goodsVolumeM3)} m³</span><span className="sm:text-right"><b>Tổng khung cần dùng:</b> <b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</b></span></div>
                     {warehouseRecommendation && <p className="border-t border-stone-100 pt-2 text-emerald-700">Cỡ kho nhỏ nhất phù hợp: <b>{storageSizeCode(warehouseRecommendation.name || warehouseRecommendation.code)}</b></p>}
                   </div>}
 
@@ -3570,7 +3592,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className={`rounded-lg border p-3 ${packagesFitSelectedUnit ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div><p className={`font-bold ${packagesFitSelectedUnit ? 'text-emerald-900' : 'text-red-900'}`}>Kiểm tra sức chứa theo khung</p><p className="mt-0.5 text-[11px] text-stone-600">Cần {totalFramesRequired} / {selectedRackCount} khung · gộp tổng thể tích ở mức sử dụng 80%, từng kiện được thử đủ 6 hướng xoay</p></div>
-                      <span className={`rounded-full px-3 py-1 font-bold ${packagesFitSelectedUnit ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit ? '✓ Kho chứa vừa' : '✕ Kho không chứa vừa'}</span>
+                      <span className={`font-bold ${packagesFitSelectedUnit ? 'text-emerald-800' : 'text-red-800'}`}>{packagesFitSelectedUnit ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>
                     </div>
                   </div>
                   <div className="divide-y divide-stone-200 border-y border-stone-200">
