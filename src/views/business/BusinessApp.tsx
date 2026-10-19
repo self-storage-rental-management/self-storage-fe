@@ -87,7 +87,7 @@ import { DEMO_DATA_ENABLED } from "../../config/runtime"
 import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi, deleteBusinessFacilityApi, publishBusinessFacilityApi } from "../../services/facilityApi"
 import { listAccessibleUnitTypes } from "../../services/customerReservationApi"
 import type { CustomerUnitType } from "../../services/customerReservationApi"
-import { isApiAuthenticated } from "../../services/authApi"
+import { isApiAuthenticated, canApiActor } from "../../services/authApi"
 import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
 import {
   createBusinessPackagePolicy,
@@ -3616,7 +3616,11 @@ export default function BusinessApp({
       currentPage={page}
       onNavigate={next => { if (!integrationLocked) setPage(next) }}
       onLogout={() => { if (!integrationLocked) onLogout() }}
-      canAccess={(permission) => (permission === "returns:read" || permission === "rentals:update" ? true : hub?.can ? hub.can(user, permission) : true)}
+      canAccess={(permission) => {
+        if (user.role === 'business' || user.role === 'admin') return true
+        if (isApiAuthenticated()) return canApiActor(user, permission)
+        return hub?.can ? hub.can(user, permission) : true
+      }}
       roleLabel={"Giám Đốc Thương Mại"}
       roleColor="bg-amber-100 text-amber-700"
     >

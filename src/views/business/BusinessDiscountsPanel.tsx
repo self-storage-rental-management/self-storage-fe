@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, Select, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
-import { formatVnd } from '../../i18n/currency'
+import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { isApiAuthenticated } from '../../services/authApi'
 import {
   createDiscountCode,
