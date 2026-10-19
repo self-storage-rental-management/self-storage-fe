@@ -12,6 +12,7 @@ export interface PolicyItem {
   lastUpdated?: string
   scopeType?: 'all' | 'specific'
   facilityIds?: string[]
+  category?: 'billing' | 'climate' | 'prohibited' | 'maintenance'
 }
 
 export interface ParsedPolicyBenefit {
@@ -30,7 +31,7 @@ export interface ParsedPolicyBenefit {
 export function getStoredPolicies(): PolicyItem[] {
   try {
     const storage = typeof window !== 'undefined' ? window.localStorage : (typeof localStorage !== 'undefined' ? localStorage : null)
-    const raw = DEMO_DATA_ENABLED ? storage?.getItem('storagehub:policies') : null
+    const raw = storage?.getItem('storagehub:policies') || null
     if (raw) {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -39,6 +40,39 @@ export function getStoredPolicies(): PolicyItem[] {
         const sanitized = parsed.filter((item: PolicyItem) => {
           const name = (item.name || '').trim().toLowerCase()
           const val = (item.value || '').trim().toLowerCase()
+          const desc = (item.description || '').trim().toLowerCase()
+          const cat = (item.category || '').toLowerCase()
+          // Loại bỏ độ ẩm, kho mát, hàng cấm, khử trùng
+          if (cat === 'climate' || cat === 'prohibited') {
+            changed = true
+            return false
+          }
+          if (['pol-6', 'pol-7', 'pol-8', 'pol-9'].includes(item.id)) {
+            changed = true
+            return false
+          }
+          if (['pol-1', 'pol-2', 'pol-3', 'pol-4', 'pol-5', 'pol-10'].includes(item.id)) {
+            changed = true
+            return false
+          }
+          if (name.includes('độ ẩm') || name.includes('kho mát') || name.includes('hàng cấm') || name.includes('khử trùng')) {
+            changed = true
+            return false
+          }
+          if (desc.includes('độ ẩm') || desc.includes('kho mát') || desc.includes('hàng cấm') || desc.includes('khử trùng')) {
+            changed = true
+            return false
+          }
+          if (name === 'thời gian ân hạn thanh toán' || name === 'grace period' || name === 'thời gian gia hạn nợ' ||
+              name === 'mức phí phạt trễ hạn' || name === 'late fee' ||
+              name === 'tiền đặt cọc an ninh' || name === 'security deposit' ||
+              name === 'thời hạn báo trước khi trả kho sớm' || name === 'notice to vacate' ||
+              name === 'thời hạn thuê tối thiểu' || name === 'minimum lease' ||
+              name.includes('khắc phục sự cố') || name.includes('di dời')) {
+            changed = true
+            return false
+          }
+
           // Lọc bỏ bản ghi rác "thời gian gia hạn" có giá trị chiết khấu gói thuê (3 tháng giảm 3%)
           if (name === 'thời gian gia hạn' || name === 'thoi gian gia han') {
             changed = true

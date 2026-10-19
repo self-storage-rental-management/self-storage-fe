@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, type ChangeEvent } from 'react'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar } from '../../components/ui'
 import { formatVnd, vndToLegacyBase } from '../../i18n/currency'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import CustomerUnitDetails from './CustomerUnitDetails'
+import CustomerRentalRegulations from './CustomerRentalRegulations'
+import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import type { User } from '../../types'
 import type { TicketItem } from '../../types/support'
-import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage } from '../../types/storageHub'
+import type { Facility, StorageUnit, StorageHold, UnitType, RentalPackage, ReturnCase } from '../../types/storageHub'
 import { useStorageHub } from '../../store/StorageHubContext'
 import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
@@ -15,16 +17,21 @@ import CustomerPaymentHistory from './CustomerPaymentHistory'
 import CustomerRentalsApiPanel from './CustomerRentalsApiPanel'
 import { SupportApiRoute } from '../support-api/SupportApiEntry'
 import { CustomerApiMetric, CustomerRentalApiLink } from '../rental-api/CustomerApiOverview'
-import { customerRentalApiNav, CUSTOMER_RENTAL_API_PAGE } from './customerRentalApiIntegration'
+import { resolveCustomerInitialPage } from './customerRentalApiIntegration'
 import CustomerReservationOtpModal from './CustomerReservationOtpModal'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { reservationProgress } from './reservationPresentation'
+import { requestReturn as requestReturnApi } from '../../services/returnApi'
+import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
+import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_WORKING_HOURS, CHECK_IN_WINDOW_DAYS, CHECK_IN_OPENING_HOUR, CHECK_IN_CLOSING_HOUR } from '../../domain/reservationCheckInPolicy'
+import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
+import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import {
   getStoredPolicies,
   getPoliciesForFacility,
@@ -37,6 +44,7 @@ import { customerFacilityImage, customerUnitAmenities } from './customerPresenta
 import {
   listCustomerFacilities,
   listCustomerUnitTypes,
+  listReservationRentalPackages,
   getAvailability,
   checkCompatibility,
   cancelCustomerReservation,
@@ -53,6 +61,7 @@ import {
   type GoodsCategory,
   type GoodsItemInput,
   type ReservationQuote,
+  type ReservationRentalPackage,
 } from '../../services/customerReservationApi'
 
 
@@ -61,8 +70,6 @@ type CustomerCatalogUnit = StorageUnit & {
   rackCount: number
   rackDimensions: string
   aisleWidthM: number
-  doorWidthM: number
-  doorHeightM: number
   smallBoxCapacity: number
   largeBoxCapacity: number
   trolley: string
@@ -75,13 +82,21 @@ type CustomerConfirmation = {
   tone?: 'danger' | 'primary'
   onConfirm: () => void
 }
+
+const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) => {
+  const seen = new Set<number>()
+  return packages.filter(pkg => {
+    if (seen.has(pkg.rentalMonths)) return false
+    seen.add(pkg.rentalMonths)
+    return true
+  })
+}
+
+const isIdentityDocumentFormatValid = (value: string) =>
+  /^[0-9A-Za-z][0-9A-Za-z .-]{8,29}$/.test(value.trim())
+
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
-  const code = (sizeCode || '').toUpperCase()
-  if (code === 'S') return 'Xe đẩy tay / xe sàn nhỏ'
-  if (code === 'M') return 'Xe đẩy sàn phẳng'
-  if (code === 'L') return 'Xe nâng tay pallet'
-  if (code === 'XL') return 'Xe nâng điện dắt bộ'
-  if (!originalTrolley) return 'Xe đẩy tiêu chuẩn'
+  if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
   const t = originalTrolley.toLowerCase()
   if (t.includes('electric') || t.includes('walkie')) return 'Xe nâng điện dắt bộ'
   if (t.includes('platform')) return 'Xe đẩy sàn phẳng'
@@ -242,6 +257,7 @@ const statusLabelMap: Record<string, string> = {
     payment_expired: 'Hết hạn thanh toán',
     confirmed: 'Đã xác nhận',
     deposit_paid: 'Đã cọc giữ chỗ',
+    full_rent_paid: 'Đã thanh toán toàn kỳ gia hạn',
     contract_signed: 'Đã ký hợp đồng',
     fully_paid: 'Đã thanh toán đủ',
     unit_assigned: 'Đã xác định gian kho',
@@ -284,15 +300,32 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
   const isAvailable = availableCount > 0
   const usableCapacity = Math.round(unitType.volumeM3 * 0.75 * 10) / 10
   const sizeCode = storageSizeCode(unitType.name)
-  const amenities = customerUnitAmenities(sizeCode)
+  const amenities = apiSpec ? {
+    aisleWidthM: apiSpec.aisleWidthM ?? 0,
+    trolley: apiSpec.trolleyType || 'Chưa cập nhật',
+    smallBoxCapacity: apiSpec.smallBoxCapacity ?? 0,
+    largeBoxCapacity: apiSpec.largeBoxCapacity ?? 0,
+  } : customerUnitAmenities(sizeCode)
+
+  const resolvedImage = apiSpec?.imageUrl || facility.image || getCustomerUnitImage(sizeCode)
+  const [imgSrc, setImgSrc] = useState(resolvedImage)
+
+  useEffect(() => {
+    setImgSrc(apiSpec?.imageUrl || facility.image || getCustomerUnitImage(sizeCode))
+  }, [apiSpec?.imageUrl, facility.image, sizeCode])
 
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
       <div className="relative h-44 overflow-hidden bg-stone-200">
-        <img src={getCustomerUnitImage(sizeCode)} alt={`Không gian kho loại ${sizeCode}`} className="h-full w-full object-cover transition duration-300 hover:scale-105" />
+        <img
+          src={imgSrc}
+          alt={`Không gian kho loại ${sizeCode}`}
+          className="h-full w-full object-cover transition duration-300 hover:scale-105"
+          onError={() => setImgSrc(getCustomerUnitImage(sizeCode))}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
-          📍 {facility.name}
+           {facility.name}
         </span>
         <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Kho size {sizeCode}</span>
       </div>
@@ -326,7 +359,7 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           <p className="text-xs text-stone-500">{'Giá thuê từ'}</p>
           <p className="text-2xl font-bold tracking-tight text-black">{formatVnd(unitType.monthlyPrice)}<span className="text-sm font-normal text-stone-500">/{'tháng'}</span></p>
           <p className="mt-1 text-xs text-stone-600">Cọc giữ chỗ theo báo giá hệ thống</p>
-          <p className="mt-1 text-xs text-stone-600">{`Tiền đảm bảo kho: ${formatVnd(unitType.monthlyPrice)} (hoàn sau nghiệm thu nếu không phát sinh khấu trừ)`}</p>
+          <p className="mt-1 text-xs text-stone-600">{`Tiền duy trì CSVC: ${formatVnd(unitType.monthlyPrice)} (hoàn sau nghiệm thu nếu không phát sinh khấu trừ)`}</p>
           {!isAvailable && <p className="mt-2 text-xs font-bold text-red-700">{'Cỡ kho này hiện chưa thể đặt.'}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button variant="outline" size="sm" onClick={() => onViewSpecs(facility, unitType, availableCount)}>{'Xem chi tiết'}</Button>
@@ -350,6 +383,12 @@ function dateInputValue(value: Date): string {
   return value.toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })
 }
 
+function displayDateValue(value?: string): string {
+  if (!value) return 'Chưa có'
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replace(/-/g, '/')
+}
+
 function notificationTimestamp(value?: string): number {
   if (!value) return 0
   const nativeTime = new Date(value).getTime()
@@ -362,9 +401,20 @@ function notificationTimestamp(value?: string): number {
 
 function addMonthsForPreview(value: string, months: number): string {
   const date = parseCustomerDate(value)
-  if (!date) return '—'
-  date.setMonth(date.getMonth() + months)
-  return dateInputValue(date)
+  if (!date || months <= 0) return '—'
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const day = date.getDate()
+
+  const targetYear = year + Math.floor((month + months) / 12)
+  const targetMonth = (month + months) % 12
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate()
+  const targetDay = Math.min(day, daysInTargetMonth)
+
+  const correspondingDate = new Date(targetYear, targetMonth, targetDay)
+  // Calendar-month inclusive end date: ends at the close of day before corresponding date (e.g. 15/10/2026 + 3M -> 14/01/2027)
+  correspondingDate.setDate(correspondingDate.getDate() - 1)
+  return dateInputValue(correspondingDate)
 }
 
 export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAppProps) {
@@ -392,7 +442,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     requestRenewal,
     updateRenewalRequest,
     cancelRenewalRequest,
-    payRenewal,
     expireRenewalPayment,
     confirmUnitReceipt,
     confirmReturnSettlement,
@@ -419,6 +468,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return { startDate, endDate: addMonthsForPreview(startDate, 3) }
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
+  const [bookingVoucherCode, setBookingVoucherCode] = useState('')
+  const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
+  const [rentalPackagesLoading, setRentalPackagesLoading] = useState(false)
   const [backendReservations, setBackendReservations] = useState<CustomerReservation[]>([])
   const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
   const [reservationSubmitting, setReservationSubmitting] = useState(false)
@@ -426,7 +478,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [backendOtpCode, setBackendOtpCode] = useState('')
   const [backendOtpBusy, setBackendOtpBusy] = useState(false)
   const [backendOtpMessage, setBackendOtpMessage] = useState<string | null>(null)
+  const [backendOtpDevelopmentCode, setBackendOtpDevelopmentCode] = useState<string | null>(null)
   const [backendOtpNextResendAt, setBackendOtpNextResendAt] = useState<Record<string, number>>({})
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [selectedSettlementReturn, setSelectedSettlementReturn] = useState<ReturnCase | null>(null)
   const reservationIdempotencyKey = useRef<string | null>(null)
 
   const facilities: Facility[] = useMemo(() => backendFacilities.length
@@ -441,16 +496,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           .filter(unitType => unitType.facilityId === facility.id)
           .reduce((total, unitType) => total + (availabilityByUnitType[unitType.id] ?? unitType.availableCount ?? 0), 0),
         price: '',
-        climate: true,
-        security: '24/7',
-        image: customerFacilityImage(facility.code),
+        climate: Boolean(facility.climateControlled),
+        security: facility.securityDescription || '',
+        image: facility.imageUrl || customerFacilityImage(facility.code),
         units: backendUnitTypes.filter(unitType => unitType.facilityId === facility.id).length,
         occupied: 0,
         revenue: 0,
         growth: 0,
         manager: '',
         status: facility.status === 'maintenance' ? 'maintenance' : 'active',
-        accessHours: '24/7',
+        accessHours: facility.accessHours || 'Chưa cập nhật',
         timezone: 'Asia/Ho_Chi_Minh',
       }))
     : isApiAuthenticated() ? [] : sharedFacilities, [backendFacilities, backendUnitTypes, availabilityByUnitType, sharedFacilities])
@@ -475,7 +530,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             widthM: unitType.widthM,
             heightM: unitType.heightM,
           },
-          doorDimensions: { widthM: 1.1, heightM: 2.2 },
+          doorDimensions: { widthM: 0, heightM: 0 },
           volumeM3: unitType.volumeM3,
           maxLoadKg: unitType.maxLoadKg,
           allowedGoods: [],
@@ -483,7 +538,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           price: vndToLegacyBase(unitType.monthlyPrice),
           deposit: vndToLegacyBase(unitType.securityDepositAmount),
           rackCount: unitType.rackCount,
-          climate: true,
+          climate: Boolean(facility?.climateControlled),
           status: (unitType.availableCount ?? 0) > 0 ? 'available' : 'reserved',
           reservedPeriods: [],
           version: 1,
@@ -503,7 +558,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         pricePerM3: unitType.volumeM3 > 0 ? vndToLegacyBase(unitType.monthlyPrice) / unitType.volumeM3 : 0,
         monthlyPrice: vndToLegacyBase(unitType.monthlyPrice),
         maxLoadKg: unitType.maxLoadKg,
-        descriptionVi: '',
+        descriptionVi: unitType.description || '',
         descriptionEn: '',
       }))
     : isApiAuthenticated() ? [] : sharedUnitTypes, [backendUnitTypes, sharedUnitTypes])
@@ -543,7 +598,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       const backendSpec = backendUnitTypes.find(item => item.id === unit.id)
-      const amenities = customerUnitAmenities(sizeCode)
+      const amenities = backendSpec ? {
+        aisleWidthM: backendSpec.aisleWidthM ?? 0,
+        trolley: backendSpec.trolleyType || 'Chưa cập nhật',
+        smallBoxCapacity: backendSpec.smallBoxCapacity ?? 0,
+        largeBoxCapacity: backendSpec.largeBoxCapacity ?? 0,
+      } : customerUnitAmenities(sizeCode)
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
       const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
       const lengthM = unit.dimensions?.lengthM ?? backendSpec?.lengthM ?? 0
@@ -552,14 +612,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const areaM2 = unit.areaM2 || (lengthM * widthM)
       const volumeM3 = unit.volumeM3 || (lengthM * widthM * heightM)
       const aisleWidthM = amenities?.aisleWidthM ?? 0
-      const doorWidthM = unit.doorDimensions?.widthM ?? 0
-      const doorHeightM = unit.doorDimensions?.heightM ?? 0
       const maxLoadKg = unit.maxLoadKg || backendSpec?.maxLoadKg || 0
       const price = unit.price
 
       const rackCount = backendSpec?.rackCount ?? (unit as any).rackCount ?? 0
-      const smallBoxCapacity = amenities?.smallBoxCapacity ?? Math.floor(volumeM3 * 8)
-      const largeBoxCapacity = amenities?.largeBoxCapacity ?? Math.floor(volumeM3 * 2.5)
+      const smallBoxCapacity = amenities?.smallBoxCapacity ?? 0
+      const largeBoxCapacity = amenities?.largeBoxCapacity ?? 0
 
       return {
         ...unit,
@@ -571,23 +629,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           ? `${backendSpec.rackLengthM}×${backendSpec.rackWidthM}×${backendSpec.rackHeightM} m`
           : 'Chưa có dữ liệu',
         aisleWidthM,
-        doorWidthM,
-        doorHeightM,
         smallBoxCapacity,
         largeBoxCapacity,
-        trolley: amenities?.trolley ?? customerTrolleyVi(sizeCode),
-        trolleyDetail: amenities?.trolley ?? customerTrolleyVi(sizeCode),
+        trolley: customerTrolleyVi(sizeCode, amenities?.trolley),
+        trolleyDetail: customerTrolleyVi(sizeCode, amenities?.trolley),
         dimensions: { lengthM, widthM, heightM },
-        doorDimensions: { widthM: doorWidthM, heightM: doorHeightM },
         volumeM3,
         maxLoadKg,
         price,
-        deposit: unit.deposit || price,
+        deposit: backendSpec?.securityDepositAmount ?? unit.deposit ?? 0,
         rentalPackages: isApiAuthenticated()
           ? []
           : unit.rentalPackages || fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages || generateDefaultRentalPackages(fac?.id || unit.facilityId, sizeCode, price),
-        allowedGoods: unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
-        prohibitedGoods: unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+        allowedGoods: isApiAuthenticated() ? [] : (unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử']),
+        prohibitedGoods: isApiAuthenticated() ? [] : (unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống']),
       }
     })
   }, [units, facilities, backendUnitTypes])
@@ -597,15 +652,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'facilities:read' },
     { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'storage_units:read' },
     { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'reservations:read' },
-    { id: 'rental-records', label: isApiAuthenticated() ? 'Trả kho & Biên nhận' : 'Hồ sơ thuê của tôi', icon: Icon.key, group: 'Đặt giữ kho', permission: 'rentals:read' },
-    ...customerRentalApiNav(isApiAuthenticated()),
+    { id: 'rental-records', label: 'Hồ sơ Thuê', icon: Icon.key, group: 'Đặt giữ kho', permission: 'rentals:read' },
     { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'payments:read' },
     { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'policies:read' },
     { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'support:read' }
   ]
 
-  const [page, setPage] = useState(() => getInitialPage(NAV, 'overview'))
+  const [page, setPage] = useState(() =>
+    resolveCustomerInitialPage(window.location.search, getInitialPage(NAV, 'overview')))
   const [previousPage, setPreviousPage] = useState('overview')
+  const [paymentRentalId, setPaymentRentalId] = useState<string | undefined>()
+  useEffect(() => {
+    if (page !== 'rental-records') setPaymentRentalId(undefined)
+  }, [page])
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(() => {
     return new URLSearchParams(window.location.search).get('facilityId') || new URLSearchParams(window.location.search).get('facility')
   })
@@ -613,10 +672,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [selectedUnit, setSelectedUnit] = useState<StorageUnit | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [bookOpen, setBookOpen] = useState(false)
+  const [bookingStep, setBookingStep] = useState<1 | 2 | 3>(1)
   const [bookingReview, setBookingReview] = useState(false)
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
   const [inputToken, setInputToken] = useState('')
+  const storedPoliciesList = useMemo(() => getStoredPolicies(), [])
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -628,8 +689,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       } catch { /* The reservation screens remain usable if notifications are temporarily unavailable. */ }
     }
     void load()
+    const refreshAfterPayment = () => void load()
+    window.addEventListener('storagehub:notifications-refresh', refreshAfterPayment)
     const timer = window.setInterval(() => void load(), 10_000)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      window.removeEventListener('storagehub:notifications-refresh', refreshAfterPayment)
+    }
   }, [])
 
   useEffect(() => {
@@ -689,7 +756,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [editingRenewalId, setEditingRenewalId] = useState<string | null>(null)
   const [renewalPaymentOpen, setRenewalPaymentOpen] = useState(false)
   const [activeRenewalForPayment, setActiveRenewalForPayment] = useState<typeof renewals[0] | null>(null)
-  const [renewalPaymentMethod, setRenewalPaymentMethod] = useState<'BANK_TRANSFER' | 'ONLINE_GATEWAY'>('BANK_TRANSFER')
   const [renewalTermsAccepted, setRenewalTermsAccepted] = useState(false)
   const [renewalAppointmentDate, setRenewalAppointmentDate] = useState('')
   const [renewalAppointmentTime, setRenewalAppointmentTime] = useState('09:00')
@@ -699,6 +765,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [searchFacility, setSearchFacility] = useState('')
   const [unitSearch, setUnitSearch] = useState('')
   const [reservationFacilityFilter, setReservationFacilityFilter] = useState('all')
+  const [receiptRentalTarget, setReceiptRentalTarget] = useState<string>()
+  const [rentalMenuVisit, setRentalMenuVisit] = useState(0)
+  const [paymentHistoryFilter, setPaymentHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
   const [rentalTypeFilter, setRentalTypeFilter] = useState('all')
@@ -743,9 +812,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Goods declaration form in Booking Modal
   const [goodsItems, setGoodsItems] = useState<GoodsDeclarationItem[]>([createGoodsDeclarationItem('goods-1')])
-  const [goodsCondition, setGoodsCondition] = useState('6 kiện nguyên vẹn, bao gói cẩn thận')
+  const [goodsCondition, setGoodsCondition] = useState('')
   const [moveInDate, setMoveInDate] = useState(availabilityPeriod.startDate)
   const [bookingAppointmentTime, setBookingAppointmentTime] = useState('09:00')
+  const [bookingStartedAt, setBookingStartedAt] = useState(() => Date.now())
+  const [schedulePolicyMessage, setSchedulePolicyMessage] = useState<string | null>(null)
   const [rentalMonths, setRentalMonths] = useState(3)
   const [selectedPackageId, setSelectedPackageId] = useState<string>('')
   const [customerIdCard, setCustomerIdCard] = useState('079203009988')
@@ -755,13 +826,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [bookingErrors, setBookingErrors] = useState<Record<string, string>>({})
   const [reservationSubmitError, setReservationSubmitError] = useState<string | null>(null)
   const bookingErrorRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!bookOpen || !moveInDate || rentalMonths <= 0) return
-    const endDate = addMonthsForPreview(moveInDate, rentalMonths)
-    if (endDate === '—') return
-    setAvailabilityPeriod({ startDate: moveInDate, endDate })
-  }, [bookOpen, moveInDate, rentalMonths])
 
   useEffect(() => {
     if (!backendUnitTypes.length) return
@@ -775,7 +839,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [backendUnitTypes, availabilityPeriod, availabilityRevision])
   const resetBookingForm = () => {
     setGoodsItems([createGoodsDeclarationItem('goods-1')])
-    setGoodsCondition('6 kiện nguyên vẹn, bao gói cẩn thận')
+    setGoodsCondition('')
     setMoveInDate(availabilityPeriod.startDate)
     setBookingAppointmentTime('09:00')
     setRentalMonths(3)
@@ -784,9 +848,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setCustomerPhone('+84 908 123 456')
     setCustomerAddress('Quận 1, TP. Hồ Chí Minh')
     setBookingErrors({})
+    setSchedulePolicyMessage(null)
     setReservationSubmitError(null)
     setValidationViolation(null)
+    setBookingStep(1)
     setBookingReview(false)
+    setBookingVoucherCode('')
   }
   const capacitySamples: PackageSample[] = goodsItems.map((item, index) => ({
     id: item.id, quantity: item.quantity, lengthCm: item.lengthCm, widthCm: item.widthCm,
@@ -795,6 +862,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }))
   const packageCountNumber = capacitySamples.reduce((sum, sample) => sum + (Number(sample.quantity) || 0), 0)
   const goodsWeightNumber = capacitySamples.reduce((sum, sample) => sum + ((Number(sample.quantity) || 0) * (Number(sample.weightKg) || 0)), 0)
+  const goodsVolumeM3 = capacitySamples.reduce((sum, sample) => sum + (
+    (Number(sample.quantity) || 0)
+    * (Number(sample.lengthCm) || 0)
+    * (Number(sample.widthCm) || 0)
+    * (Number(sample.heightCm) || 0)
+    / 1_000_000
+  ), 0)
+  const formatVolumeM3 = (value: number) => value.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
   const largestPackage = capacitySamples.reduce<PackageSample | null>((largest, sample) => {
     const volume = Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm)
     if (!largest) return sample
@@ -810,6 +885,71 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const goodsType = goodsItems.map(item => GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]).filter(Boolean).join(', ')
   const goodsMaterial = goodsItems.map(item => item.category === 'OTHER' ? item.customMaterial : item.materialName).filter(Boolean).join(', ')
   const hasOtherGoods = goodsItems.some(item => item.category === 'OTHER')
+  const checkInWindow = useMemo(
+    () => plannedCheckInWindow(bookingStartedAt, hasOtherGoods),
+    [bookingStartedAt, hasOtherGoods],
+  )
+  const earliestCheckInDate = policyDateInput(checkInWindow.availableAt)
+  const earliestCheckInTime = policyTimeInput(checkInWindow.availableAt)
+  const latestCheckInDate = policyDateInput(checkInWindow.deadlineAt)
+  const latestCheckInTime = policyTimeInput(checkInWindow.deadlineAt)
+  const previousReviewRequirement = useRef(hasOtherGoods)
+  const previousBookingStart = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!bookOpen) return
+    if (previousReviewRequirement.current === hasOtherGoods && previousBookingStart.current === bookingStartedAt) return
+    previousBookingStart.current = bookingStartedAt
+    const selectedAt = moveInDate && bookingAppointmentTime
+      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`)
+      : null
+    const invalid = !selectedAt || !isCheckInAppointmentAllowed(selectedAt, checkInWindow)
+    if (invalid) {
+      setMoveInDate(earliestCheckInDate)
+      setBookingAppointmentTime(earliestCheckInTime)
+      if (!previousReviewRequirement.current && hasOtherGoods) {
+        setSchedulePolicyMessage(`Do hàng hóa “Khác” cần nhân viên duyệt trong tối đa 24 giờ, lịch cũ không còn hợp lệ. Hệ thống đã chuyển sang thời điểm sớm nhất ${formatPolicyDateTime(checkInWindow.availableAt)}.`)
+      }
+    }
+    previousReviewRequirement.current = hasOtherGoods
+  }, [bookOpen, hasOtherGoods, checkInWindow.availableAt, checkInWindow.deadlineAt, earliestCheckInDate, earliestCheckInTime, moveInDate, bookingAppointmentTime])
+
+  useEffect(() => {
+    if (!bookOpen || rentalMonths <= 0) return
+    const endDate = addMonthsForPreview(earliestCheckInDate, rentalMonths)
+    if (endDate !== '—') setAvailabilityPeriod({ startDate: earliestCheckInDate, endDate })
+  }, [bookOpen, earliestCheckInDate, rentalMonths])
+
+  useEffect(() => {
+    if (!isApiAuthenticated() || !bookOpen || !selectedTarget) return
+    let cancelled = false
+    setRentalPackagesLoading(true)
+    setReservationSubmitError(null)
+    void listReservationRentalPackages(selectedTarget.facility.id, earliestCheckInDate)
+      .then(packages => {
+        if (cancelled) return
+        const uniquePackages = uniqueRentalPackagesByDuration(packages)
+        setBackendRentalPackages(uniquePackages)
+        const selected = uniquePackages.find(item => item.code === selectedPackageId)
+          || uniquePackages.find(item => item.rentalMonths === 3)
+          || uniquePackages[0]
+        if (selected) {
+          setSelectedPackageId(selected.code)
+          setRentalMonths(selected.rentalMonths)
+        } else {
+          setSelectedPackageId('')
+          setReservationSubmitError('Cơ sở chưa có gói thuê đang hiệu lực cho ngày bắt đầu kỳ thuê.')
+        }
+      })
+      .catch(error => {
+        if (cancelled) return
+        setBackendRentalPackages([])
+        setSelectedPackageId('')
+        setReservationSubmitError(error instanceof Error ? error.message : 'Không thể tải gói thuê từ hệ thống.')
+      })
+      .finally(() => { if (!cancelled) setRentalPackagesLoading(false) })
+    return () => { cancelled = true }
+  }, [bookOpen, earliestCheckInDate, selectedTarget?.facility.id])
 
   // Support
   const [supportChatbotOpen, setSupportChatbotOpen] = useState(false)
@@ -888,7 +1028,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Data scoping for Customer (P1.4)
   const myHolds = holds.filter(h => h.customerId === user.id || h.customerName === user.name || h.customerEmail === user.email)
-  const visibleMyHolds = myHolds.filter(hold => !hold.customerArchivedAt)
+  const visibleMyHolds = myHolds.filter(hold => !hold.customerArchivedAt && !['completed', 'COMPLETED'].includes(hold.status))
   const myRentals = rentals.filter(r => r.customerId === user.id || r.customerName === user.name || r.customerEmail === user.email)
   const visibleMyRentals = myRentals.filter(rental => !rental.customerArchivedAt && rental.status !== 'completed')
   const visibleMyContracts = contracts.filter(contract => !contract.customerArchivedAt && (
@@ -938,7 +1078,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
   })
-  const filteredBackendReservations = backendReservations.filter(reservation => {
+  const pendingHandoverReservations = backendReservations.filter(reservation => reservation.status !== 'COMPLETED')
+  const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
@@ -981,7 +1122,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       date: notification.createdAt,
       title: notification.title,
       message: notification.content,
-      page: notification.type === 'RETURN' || notification.type === 'CHECKIN' ? 'rental-records'
+      page: notification.title === 'Biên bản bàn giao đang chờ xác nhận' ? 'reservations'
+        : notification.type === 'RENEWAL' || notification.type === 'OVERDUE' ? 'rental-records'
+        : notification.type === 'RETURN' || notification.type === 'CHECKIN' ? 'rental-records'
         : notification.type === 'SUPPORT' ? 'support'
           : notification.type === 'SYSTEM' ? 'overview' : 'reservations',
       targetId: notification.relatedEntityId || undefined,
@@ -1078,6 +1221,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const handleLayoutNavigate = (nextPage: string) => {
+    notificationRevealTimers.current.forEach(timer => window.clearTimeout(timer))
+    notificationRevealTimers.current = []
+    setFocusedNotificationTarget(null)
+    setReceiptRentalTarget(undefined)
+    if (nextPage === 'rental-records') setRentalMenuVisit(visit => visit + 1)
     if (nextPage === page) return
     if (bookOpen) {
       resetReservationDraft()
@@ -1088,16 +1236,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setPage(nextPage)
   }
 
-  const handleStartReservation = (facility: Facility, unitType: UnitType, exactUnit?: StorageUnit) => {
+  const handleStartReservation = (facility: Facility, unitType: UnitType, exactUnit?: StorageUnit, initialStep: 1 | 2 = 1) => {
     const hasAvailablePhysicalUnit = effectiveAvailableCount(facility.id, unitType.name) > 0
     if (!hasAvailablePhysicalUnit) {
       showToast('Cơ sở hiện không còn gian kho trống cho loại này trong thời gian đã chọn.')
       return
     }
-    const suggestedCheckIn = new Date()
-    suggestedCheckIn.setDate(suggestedCheckIn.getDate() + 2)
-    setMoveInDate(dateInputValue(suggestedCheckIn))
-    setBookingAppointmentTime('09:00')
+    const startedAt = Date.now()
+    const suggestedCheckIn = plannedCheckInWindow(startedAt, false).availableAt
+    setBookingStartedAt(startedAt)
+    setMoveInDate(policyDateInput(suggestedCheckIn))
+    setBookingAppointmentTime(policyTimeInput(suggestedCheckIn))
+    setSchedulePolicyMessage(null)
+    setBookingStep(initialStep)
     setBookingReview(false)
     setServerQuote(null)
     reservationIdempotencyKey.current = crypto.randomUUID()
@@ -1249,6 +1400,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const warehouseRecommendation = allPackageSamplesValid
     ? backendUnitTypes
       .filter(candidate => !selectedTarget || candidate.facilityId === selectedTarget.facility.id)
+      .filter(candidate => (availabilityByUnitType[candidate.id] ?? candidate.availableCount ?? 0) > 0)
       .sort((left, right) => left.volumeM3 - right.volumeM3)
       .find(candidate => {
         const candidateRackDimensions: [number, number, number] = [candidate.rackLengthM, candidate.rackWidthM, candidate.rackHeightM]
@@ -1258,6 +1410,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           : Number.POSITIVE_INFINITY
         return framesRequired <= candidate.rackCount && goodsWeightNumber <= candidate.maxLoadKg
       })
+    : undefined
+  const recommendedUnitType = warehouseRecommendation
+    ? unitTypes.find(candidate => candidate.id === warehouseRecommendation.id)
     : undefined
   const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
   const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
@@ -1285,6 +1440,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return selectedUnitActivePackages.find(p => p.months === rentalMonths)
   }, [selectedPackageId, selectedUnitActivePackages, rentalMonths])
 
+  const selectedBackendRentalPackage = useMemo(
+    () => backendRentalPackages.find(item => item.code === selectedPackageId),
+    [backendRentalPackages, selectedPackageId],
+  )
+
   const discountRate = selectedActivePackage
     ? (selectedActivePackage.discountPercent ?? 0) / 100
     : rentalDiscountRate(rentalMonths, selectedUnitActivePackages)
@@ -1307,6 +1467,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const totalCombinedDiscount = Math.min(grossTermValue, Math.round((promotionDiscount + facilityPolicyDiscount) * 100) / 100)
 
   const handleNotificationClick = (notification: LayoutNotification) => {
+    setReceiptRentalTarget(undefined)
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.slice('api-notification-'.length)
       void markNotificationRead(notificationId).then(updated => {
@@ -1314,6 +1475,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }).catch(() => undefined)
     }
     navigateTo(notification.page)
+    if (notification.page === 'reservations') {
+      setReservationFacilityFilter('all')
+      setReservationSizeFilter('all')
+    }
     if (notification.id.startsWith('ticket-')) {
       setSupportTab('All')
       setSupportSearch('')
@@ -1329,6 +1494,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
     const scrollTimer = window.setTimeout(() => {
       const target = document.getElementById(`customer-record-${targetId}`)
+        || document.getElementById(`customer-reservation-${targetId}`)
+        || document.getElementById(`rental-api-record-${targetId}`)
       const scrollContainer = target?.closest('[data-layout-scroll-container]') as HTMLElement | null
       if (!target || !scrollContainer) return
       const targetRect = target.getBoundingClientRect()
@@ -1359,12 +1526,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const validateBookingForm = () => {
     if (!selectedUnit) return false
     const errors: Record<string, string> = {}
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const latestCheckIn = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)
-    const requestedDate = moveInDate ? new Date(`${moveInDate}T00:00:00`) : null
+    const requestedAt = moveInDate && bookingAppointmentTime
+      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`)
+      : null
+    const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
+      ? new Date(`${moveInDate}T00:00:00`)
+      : null
 
+    if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
     if (!isApiAuthenticated()) {
-      if (customerIdCard.trim().length < 9) errors.identity = 'CCCD/Hộ chiếu phải có ít nhất 9 ký tự.'
       if (customerPhone.replace(/\D/g, '').length < 9) errors.phone = 'Số điện thoại phải có ít nhất 9 chữ số.'
       if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     }
@@ -1391,8 +1561,28 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!isApiAuthenticated() && allPackageSamplesValid && !hasUnplaceablePackage && totalFramesRequired > selectedRackCount) errors.capacity = `Kho không chứa vừa: cần ${totalFramesRequired} khung nhưng kho chỉ có ${selectedRackCount} khung.`
     if (!Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Vui lòng nhập cân nặng mỗi kiện cho tất cả mẫu hàng.'
     if (goodsWeightNumber > selectedUnit.maxLoadKg) errors.weightLimit = `${'Tổng cân nặng vượt tải trọng sàn'} (${selectedUnit.maxLoadKg} kg).`
-    if (!requestedDate || Number.isNaN(requestedDate.getTime()) || requestedDate < today || requestedDate > latestCheckIn) errors.moveInDate = 'Ngày dự kiến nhận kho phải từ hôm nay đến tối đa 14 ngày tới.'
-    if (!bookingAppointmentTime) errors.appointmentTime = 'Vui lòng chọn khung giờ nhận kho.'
+    const dateIsValid = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
+      && requestedDate !== null
+      && !Number.isNaN(requestedDate.getTime())
+      && policyDateInput(requestedDate) === moveInDate
+    const timeIsValid = /^([01]\d|2[0-3]):[0-5]\d$/.test(bookingAppointmentTime)
+
+    if (!dateIsValid) {
+      errors.moveInDate = 'Vui lòng nhập ngày hợp lệ theo định dạng DD/MM/YYYY.'
+    } else if (moveInDate < earliestCheckInDate || moveInDate > latestCheckInDate) {
+      errors.moveInDate = `Ngày nhận kho phải từ ${checkInWindow.availableAt.toLocaleDateString('vi-VN')} đến ${checkInWindow.deadlineAt.toLocaleDateString('vi-VN')}.`
+    }
+
+    if (!timeIsValid) {
+      errors.appointmentTime = 'Vui lòng nhập giờ hợp lệ theo định dạng HH:mm (24 giờ).'
+    } else if (!withinFacilityHours(bookingAppointmentTime, selectedTarget?.facility.accessHours)) {
+      errors.appointmentTime = `Giờ nhận kho nằm ngoài giờ hoạt động của cơ sở: ${selectedTarget?.facility.accessHours}. Vui lòng chọn giờ khác.`
+    } else if (requestedAt && dateIsValid && !errors.moveInDate && !isCheckInAppointmentAllowed(requestedAt, checkInWindow)) {
+      const isFirstAvailableDate = moveInDate === earliestCheckInDate
+      errors.appointmentTime = isFirstAvailableDate && requestedAt < checkInWindow.availableAt
+        ? `Trong ngày ${checkInWindow.availableAt.toLocaleDateString('vi-VN')}, giờ nhận kho sớm nhất là ${earliestCheckInTime}.`
+        : 'Giờ nhận kho phải nằm trong khoảng 08:00–16:30 và theo khung 30 phút.'
+    }
     setBookingErrors(errors)
     if (Object.keys(errors).length) {
       showToast('Vui lòng kiểm tra lại các thông tin được đánh dấu.')
@@ -1402,12 +1592,53 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return true
   }
 
+  const continueFromPersonalDetails = () => {
+    const errors: Record<string, string> = {}
+    if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
+    if (!isApiAuthenticated()) {
+      if (customerPhone.replace(/\D/g, '').length < 9) errors.phone = 'Số điện thoại phải có ít nhất 9 chữ số.'
+      if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
+    }
+    setBookingErrors(errors)
+    if (Object.keys(errors).length) {
+      showToast('Vui lòng kiểm tra lại thông tin cá nhân.')
+      requestAnimationFrame(() => bookingErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+      return
+    }
+    setBookingStep(2)
+  }
+
+  const selectGoodsImages = (goodsItemId: string, event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files ?? [])
+    const errorKey = `goodsImages-${goodsItemId}`
+    if (files.length > 10) {
+      event.currentTarget.value = ''
+      setBookingErrors(current => ({
+        ...current,
+        [errorKey]: `Bạn đã chọn ${files.length} ảnh. Mỗi loại hàng hóa chỉ được tải tối đa 10 ảnh.`,
+      }))
+      showToast('Bạn chỉ được chọn tối đa 10 ảnh cho mỗi loại hàng hóa.')
+      return
+    }
+    setGoodsItems(items => items.map(row => row.id === goodsItemId ? { ...row, images: files } : row))
+    setBookingErrors(current => {
+      if (!current[errorKey]) return current
+      const next = { ...current }
+      delete next[errorKey]
+      return next
+    })
+  }
+
   const confirmReservation = async () => {
     if (!selectedUnit || !selectedTarget || reservationSubmitting) return
     setReservationSubmitError(null)
+    if (isApiAuthenticated() && !selectedBackendRentalPackage) {
+      setReservationSubmitError('Vui lòng chọn một gói thuê đang hiệu lực trước khi lấy báo giá.')
+      return
+    }
     if (!validateBookingForm()) return
 
-    const endDate = addMonthsForPreview(moveInDate, rentalMonths)
+    const endDate = addMonthsForPreview(earliestCheckInDate, rentalMonths)
     if (endDate === '—') return
     const apiGoodsItems: GoodsItemInput[] = goodsItems.map(item => {
       const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
@@ -1429,7 +1660,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const selection = {
       facilityId: selectedTarget.facility.id,
       unitTypeId: selectedTarget.unitType.id,
-      startDate: moveInDate,
+      startDate: earliestCheckInDate,
       endDate,
       goodsCondition,
       goodsItems: apiGoodsItems,
@@ -1444,15 +1675,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           showToast(compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.')
           return
         }
-        const packageCode = rentalMonths === 1 ? 'ONE_MONTH'
-          : rentalMonths === 3 ? 'THREE_MONTHS'
-          : rentalMonths === 6 ? 'SIX_MONTHS'
-          : rentalMonths === 12 ? 'TWELVE_MONTHS'
-          : selectedActivePackage?.id || `${rentalMonths}_MONTHS`
-        const quote = await createReservationQuote({ ...selection, pricingPackageCode: packageCode })
+        const packageCode = selectedBackendRentalPackage?.code
+          || selectedActivePackage?.id
+          || `${rentalMonths}_MONTHS`
+        const quote = await createReservationQuote({
+          ...selection,
+          pricingPackageCode: packageCode,
+          voucherCode: bookingVoucherCode.trim() || undefined,
+        })
         setServerQuote(quote)
         setValidationViolation(null)
         setBookingReview(true)
+        setBookingStep(3)
         return
       }
 
@@ -1460,11 +1694,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       reservationIdempotencyKey.current = idempotencyKey
       const reservation = await createCustomerReservation({
         quoteId: serverQuote.quoteId,
+        identityDocumentNumber: customerIdCard.trim(),
+        customerPhone: customerPhone.trim(),
+        customerAddress: customerAddress.trim(),
         goodsCondition,
         notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | ') || null,
         goodsItems: apiGoodsItems,
+        appointmentAt: bookingAppointmentTime
+          ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`).toISOString()
+          : undefined,
       }, idempotencyKey)
-      let goodsImageMessage = ''
+      let goodsImageError = ''
       const imageCount = goodsItems.reduce((total, item) => total + item.images.length, 0)
       if (imageCount > 0) {
         try {
@@ -1472,9 +1712,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           await Promise.all(detail.goodsItems.flatMap((savedItem, index) =>
             (goodsItems[index]?.images ?? []).map(file => uploadReservationGoodsImage(savedItem.id, file)),
           ))
-          goodsImageMessage = ` Đã tải ${imageCount} ảnh hàng hóa.`
         } catch (error) {
-          goodsImageMessage = ` Đơn đã được tạo nhưng chưa tải đủ ảnh hàng hóa: ${error instanceof Error ? error.message : 'Lỗi tải ảnh'}.`
+          goodsImageError = `Đơn đã được tạo nhưng chưa tải đủ ảnh hàng hóa: ${error instanceof Error ? error.message : 'Lỗi tải ảnh'}.`
         }
       }
       // Creation does not send an email in the current BE contract. Issue the first OTP here.
@@ -1487,23 +1726,32 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (reservation.status === 'AWAITING_EMAIL') {
         setBackendOtpReservation(reservation)
         setBackendOtpCode('')
+        setBackendOtpDevelopmentCode(null)
         setBackendOtpMessage(null)
         setBackendOtpBusy(true)
         try {
           const sent = await resendReservationOtp(reservation.id)
           setBackendOtpNextResendAt(current => ({ ...current, [reservation.id]: new Date(sent.nextResendAt).getTime() }))
-          setBackendOtpMessage(`Đã gửi OTP tới email của bạn. Có thể gửi lại sau ${new Date(sent.nextResendAt).toLocaleTimeString('vi-VN')}.${goodsImageMessage}`)
+          if (sent.developmentCode) {
+            setBackendOtpDevelopmentCode(sent.developmentCode)
+          }
+          setBackendOtpMessage(goodsImageError || null)
         } catch (error) {
-          setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${error instanceof Error ? error.message : 'Lỗi kết nối'}. Bạn có thể gửi lại.${goodsImageMessage}`)
+          setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${error instanceof Error ? error.message : 'Lỗi kết nối'}. Bạn có thể gửi lại.${goodsImageError ? ` ${goodsImageError}` : ''}`)
         } finally { setBackendOtpBusy(false) }
       }
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
     } catch (error) {
-      const message = error instanceof ApiClientError && error.status === 409
-        ? error.message.includes('No storage unit is available')
+      const backendMessage = error instanceof Error ? error.message : ''
+      const message = backendMessage.includes('Rental package was not found')
+        ? 'Gói thuê đã chọn không còn khả dụng. Vui lòng chọn lại gói thuê và lấy báo giá mới.'
+        : backendMessage.includes('Rental package is not effective')
+          ? 'Gói thuê không còn hiệu lực vào ngày nhận kho đã chọn. Vui lòng chọn gói hoặc ngày nhận kho khác.'
+          : error instanceof ApiClientError && error.status === 409
+        ? backendMessage.includes('No storage unit is available')
           ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
-          : error.message
-        : error instanceof Error ? error.message : 'Không thể tạo đơn đặt kho.'
+          : backendMessage
+        : backendMessage || 'Không thể tạo đơn đặt kho.'
       setReservationSubmitError(message)
       showToast(message)
     } finally {
@@ -1512,24 +1760,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const cancelBackendReservation = (reservation: CustomerReservation) => {
-    requestConfirmation({
-      title: 'Xác nhận hủy giữ kho',
-      message: (reservationProgress(reservation.status) ?? 0) >= 3
-        ? `Đơn ${reservation.reservationCode} đã được xác nhận thanh toán cọc. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
-        : `Bạn có chắc muốn hủy ${reservation.reservationCode}? Suất kho đang giữ sẽ được giải phóng.`,
-      confirmLabel: 'Hủy giữ kho',
-      tone: 'danger',
-      onConfirm: () => {
-        void cancelCustomerReservation(reservation.id, 'Khách hàng chủ động hủy trên Customer Portal')
-          .then(() => listCustomerReservations(undefined, 0, 50))
-          .then(result => {
-            setBackendReservations(result.data)
-            setAvailabilityRevision(value => value + 1)
-            showToast(`Đã hủy ${reservation.reservationCode}.`)
-          })
-          .catch(error => showToast(error instanceof Error ? error.message : 'Không thể hủy đơn đặt kho.'))
-      },
-    })
+    void cancelCustomerReservation(reservation.id, 'Khách hàng chủ động hủy trên cổng khách hàng')
+      .then(() => listCustomerReservations(undefined, 0, 50))
+      .then(result => {
+        setBackendReservations(result.data)
+        setAvailabilityRevision(value => value + 1)
+        showToast(`Đã hủy ${reservation.reservationCode}.`)
+      })
+      .catch(error => showToast(error instanceof Error ? error.message : 'Không thể hủy đơn đặt kho.'))
   }
 
   const refreshBackendReservations = async () => {
@@ -1558,6 +1796,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       await refreshBackendReservations()
       setBackendOtpReservation(null)
       setBackendOtpCode('')
+      setBackendOtpDevelopmentCode(null)
       setBackendOtpMessage(null)
       showToast(result.reservationStatus === 'AWAITING_REVIEW'
         ? 'Email đã xác minh. Hồ sơ đang chờ nhân viên duyệt.'
@@ -1576,7 +1815,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const result = await resendReservationOtp(backendOtpReservation.id)
       setBackendOtpCode('')
       setBackendOtpNextResendAt(current => ({ ...current, [backendOtpReservation.id]: new Date(result.nextResendAt).getTime() }))
-      setBackendOtpMessage(`Đã gửi OTP mới. Có thể gửi lại sau ${new Date(result.nextResendAt).toLocaleTimeString('vi-VN')}.`)
+      if (result.developmentCode) {
+        setBackendOtpDevelopmentCode(result.developmentCode)
+      }
+      setBackendOtpMessage(null)
     } catch (error) {
       setBackendOtpMessage(error instanceof Error ? error.message : 'Không thể gửi lại OTP.')
     } finally {
@@ -1591,8 +1833,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       currentPage={page}
       onNavigate={handleLayoutNavigate}
       onLogout={onLogout}
-      roleLabel="Customer"
-      roleColor=""
+      roleLabel="Khách hàng"
+      roleColor="bg-[#F4C542] text-[#5C4300] border-[#D4A900]"
       notifications={customerNotifications}
       onNotificationClick={handleNotificationClick}
       canAccess={permission => isApiAuthenticated() ? canApiCustomerNavigate(user, permission) : hub.can(user, permission)}
@@ -1624,13 +1866,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2.5 sm:gap-3">
                 {[
-                  ['30', 'Phút tạm giữ suất kho trực tuyến'],
-                  ['12', 'Giờ thanh toán tiền cọc giữ kho'],
-                  ['14', 'Ngày tối đa để Check-in nhận kho']
-                ].map(([value, label]) => (
-                  <div key={value} className="flex sm:flex-col lg:flex-row items-center sm:items-start lg:items-center gap-3 sm:gap-1 lg:gap-3 rounded-2xl border border-white/15 bg-white/[.06] p-3.5 sm:p-4 backdrop-blur">
-                    <p className="text-2xl sm:text-3xl font-bold text-amber-400 sm:text-white shrink-0">{value}</p>
-                    <p className="text-xs leading-4 sm:leading-5 text-white/75">{label}</p>
+                  [String(PAYMENT_WINDOW_MINUTES), 'phút', 'Hoàn tất cọc, giữ chỗ an tâm', 'Tính từ khi mở thanh toán.'],
+                  [String(Math.ceil(MANAGER_ASSIGNMENT_WORKING_HOURS / (CHECK_IN_CLOSING_HOUR - CHECK_IN_OPENING_HOUR))), 'ngày làm việc', 'Quản lý bố trí gian kho', ''],
+                  [String(CHECK_IN_WINDOW_DAYS), 'ngày', 'Chủ động lịch đến nhận kho', 'Tính từ thời điểm kho có thể sẵn sàng.']
+                ].map(([value, unit, label, note]) => (
+                  <div key={label} className="grid min-h-[104px] grid-cols-[96px_minmax(0,1fr)] items-center gap-4 rounded-2xl border border-white/10 bg-white/[.06] px-4 py-4 backdrop-blur sm:grid-cols-1 lg:grid-cols-[96px_minmax(0,1fr)]">
+                    <div className="flex min-h-[64px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/[.08] px-2 py-2 text-center"><p className="text-3xl font-bold leading-none tabular-nums text-white">{value}</p><p className="mt-2 whitespace-nowrap text-[11px] font-medium leading-4 text-white/65">{unit}</p></div>
+                    <div className="min-w-0"><p className="text-sm font-semibold leading-5 text-white">{label}</p>{note && <p className="mt-1.5 text-xs leading-4 text-white/55">{note}</p>}</div>
                   </div>
                 ))}
               </div>
@@ -1646,13 +1888,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Account summary">
             {isApiAuthenticated() ? <CustomerApiMetric metric="active-rentals" /> : <StatCard title={'Hồ sơ thuê đang hoạt động'} value={activeRentals.length} icon={Icon.key} iconBg="bg-blue-50 text-blue-700" />}
-            <StatCard title={'Đơn đặt giữ kho'} value={visibleMyHolds.length} icon={Icon.calendar} iconBg="bg-amber-50 text-amber-700" />
-            <StatCard title={'Kho đang giữ chờ hoàn tất'} value={visibleMyHolds.filter(h => !['CANCELLED', 'EXPIRED', 'COMPLETED', 'checked_in', 'rejected'].includes(h.status)).length} icon={Icon.clock} iconBg="bg-stone-100 text-black" />
+            {isApiAuthenticated() ? <CustomerApiMetric metric="reservations" /> : <StatCard title={'Đơn đặt giữ kho'} value={visibleMyHolds.length} icon={Icon.calendar} iconBg="bg-amber-50 text-amber-700" />}
+            {isApiAuthenticated() ? <CustomerApiMetric metric="returning-rentals" /> : <StatCard title={'Kho đang yêu cầu trả'} value={activeRentals.filter(rental => rental.status === 'return_requested').length} icon={Icon.clock} iconBg="bg-stone-100 text-black" />}
             {isApiAuthenticated() ? <CustomerApiMetric metric="open-support" /> : <StatCard title={'Yêu cầu hỗ trợ đang mở'} value={tickets.filter(t => t.status === 'open').length} icon={Icon.support} />}
           </section>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
-            {isApiAuthenticated() ? <CustomerRentalApiLink onOpen={() => navigateTo(CUSTOMER_RENTAL_API_PAGE)} /> : (
+            {isApiAuthenticated() ? <CustomerRentalApiLink onOpen={(storageUnitId) => { setReceiptRentalTarget(storageUnitId); navigateTo('rental-records') }} /> : (
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
                 <div>
@@ -1721,10 +1963,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <span className="text-amber-700 group-hover:text-white">{Icon.calendar}</span>
                   <span>
                     <b className="block text-sm">{'2. Tiến độ đơn đặt giữ kho'}</b>
-                    <small className="text-stone-500 group-hover:text-white">{'Cọc giữ chỗ 40% theo báo giá trong 24 giờ'}</small>
+                    <small className="text-stone-500 group-hover:text-white">{'Cọc giữ chỗ 20% theo báo giá trong 15 phút'}</small>
                   </span>
                 </button>
-                <button onClick={() => setTicketOpen(true)} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
+                <button onClick={() => navigateTo('support')} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
                   <span className="text-amber-700 group-hover:text-white">{Icon.support}</span>
                   <span>
                     <b className="block text-sm">{'3. Hỗ trợ kỹ thuật & Mở cổng'}</b>
@@ -1768,7 +2010,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               return (
                 <Card key={facility.id} className="overflow-hidden stat-card-hover">
                   <div className="relative h-44 bg-stone-200">
-                    <img src={facility.image?.startsWith('/') || facility.image?.startsWith('http') ? facility.image : `https://images.unsplash.com/${facility.image || 'photo-1586528116311-ad8dd3c8310d'}?w=720&h=352&fit=crop&auto=format`} alt={`Hình ảnh ${displayName}`} className="h-full w-full object-cover" />
+                    <img
+                      src={
+                        facility.image?.startsWith('/') || facility.image?.startsWith('http') || facility.image?.startsWith('data:')
+                          ? facility.image
+                          : facility.image
+                          ? `https://images.unsplash.com/${facility.image}?w=720&h=352&fit=crop&auto=format`
+                          : '/images/facilities/binh-duong.jpg'
+                      }
+                      alt={`Hình ảnh ${displayName}`}
+                      className="h-full w-full object-cover"
+                      onError={e => {
+                        (e.currentTarget as HTMLImageElement).src = '/images/facilities/binh-duong.jpg'
+                      }}
+                    />
                     <div className="absolute left-3 top-3 z-10">
                       <span className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-extrabold backdrop-blur-sm ${availCount > 0 ? 'border-emerald-300 bg-emerald-700/95 text-white shadow-[0_8px_22px_rgba(4,120,87,0.55)]' : 'border-red-300 bg-red-700/95 text-white shadow-[0_8px_22px_rgba(185,28,28,0.5)]'}`}>
                         {availCount} {'gian kho còn trống'}
@@ -1830,7 +2085,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 ? (`Kho còn trống tại ${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.name ?? selectedFacility.name}`)
                 : ('Kho còn trống')}
               subtitle={selectedFacility
-                ? `${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address} · Chọn loại kho phù hợp; quản lý sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.`
+                ? (CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.address ?? selectedFacility.address)
                 : undefined}
               action={
                 <div className="flex flex-wrap items-center gap-2">
@@ -1857,7 +2112,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
 
             {/* List Facilities with their 3-4 Unit Sizes */}
-            {isApiAuthenticated() && <p className="text-xs text-stone-500">Số kho trống theo kỳ thuê: <b>{availabilityPeriod.startDate} → {availabilityPeriod.endDate}</b>. Đơn đang giữ chỗ cũng được trừ vào suất trống.</p>}
             <div className="space-y-8">
               {displayedFacilities.map(facility => {
                 const display = CUSTOMER_FACILITY_DISPLAY[facility.id]
@@ -1940,7 +2194,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <Select label="Lọc theo kích thước kho" value={reservationSizeFilter} onChange={event => setReservationSizeFilter(event.target.value)}><option value="all">Tất cả kích thước</option><option value="S">Kho nhỏ (S)</option><option value="M">Kho vừa (M)</option><option value="L">Kho lớn (L)</option><option value="XL">Kho rất lớn (XL)</option></Select>
               <Button variant="outline" disabled={reservationFacilityFilter === 'all' && reservationSizeFilter === 'all'} onClick={() => { setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button>
             </div>
-            <p className="mt-3 text-xs text-stone-500">Hiển thị {isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length}/{isApiAuthenticated() ? backendReservations.length : visibleMyHolds.length} đơn đặt giữ kho.</p>
+            <p className="mt-3 text-xs text-stone-500">Hiển thị {isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length}/{isApiAuthenticated() ? pendingHandoverReservations.length : visibleMyHolds.length} đơn đặt giữ kho.</p>
           </Card>
 
           {isApiAuthenticated() ? (
@@ -1950,11 +2204,29 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 reservation={reservation}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
                 unitTypeName={unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
-                onVerify={() => { setBackendOtpReservation(reservation); setBackendOtpCode(''); setBackendOtpMessage(null) }}
+                onVerify={() => {
+                  setBackendOtpReservation(reservation)
+                  setBackendOtpCode('')
+                  setBackendOtpDevelopmentCode(null)
+                  setBackendOtpMessage(null)
+                  void resendReservationOtp(reservation.id).then(res => {
+                    setBackendOtpNextResendAt(current => ({ ...current, [reservation.id]: new Date(res.nextResendAt).getTime() }))
+                    if (res.developmentCode) {
+                      setBackendOtpDevelopmentCode(res.developmentCode)
+                    }
+                    setBackendOtpMessage(`Đã gửi OTP tới ${reservation.customerEmail || 'email tài khoản của bạn'}. Vui lòng kiểm tra cả hộp thư rác.`)
+                  }).catch(error => {
+                    setBackendOtpMessage(error instanceof Error ? error.message : 'Không thể gửi OTP. Hãy kiểm tra kết nối tới backend và thử lại.')
+                  })
+                }}
                 onCancel={() => cancelBackendReservation(reservation)}
                 onRefresh={refreshBackendReservations}
+                onReceiptConfirmed={reservationId => {
+                  setReceiptRentalTarget(reservationId)
+                  navigateTo('rental-records')
+                }}
               />)}
-              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{backendReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Chưa có đơn đặt giữ kho nào'}</h2><p className="mt-1 text-sm text-stone-500">{backendReservations.length ? 'Hãy chọn lại cơ sở hoặc kích thước kho.' : 'Đơn đặt giữ kho của bạn sẽ hiển thị tại đây.'}</p></Card>}
+              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{pendingHandoverReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Không có đơn đặt giữ kho đang chờ bàn giao'}</h2><p className="mt-1 text-sm text-stone-500">{pendingHandoverReservations.length ? 'Hãy chọn lại cơ sở hoặc kích thước kho.' : 'Kho đã bàn giao được theo dõi trong Hồ sơ thuê.'}</p></Card>}
             </div>
           ) : filteredReservationHolds.length ? (
             <div className="grid gap-4">
@@ -1970,12 +2242,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-amber-700">{hold.id}</span>
                         {badgeFor(hold.status)}
-                        {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã cọc giữ chỗ 40%'}</span>}
+                        {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã cọc giữ chỗ 20%'}</span>}
                       </div>
                       <h2 className="mt-1 text-lg font-bold text-stone-900">
                         {unitTypeLabel(hold.unitTypeName || hold.unitId)} · {hold.facilityName}
                       </h2>
-                      <p className="text-xs font-semibold text-blue-800">{hold.assignedUnitId ? 'Gian kho Manager đã phân:' : 'Trạng thái phân kho:'} {hold.assignedUnitId ? (units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId) : 'Chưa phân gian kho cụ thể'}</p>
+                      <p className="text-xs font-semibold text-blue-800">{hold.assignedUnitId ? 'Gian kho quản lý cơ sở đã phân:' : 'Trạng thái phân kho:'} {hold.assignedUnitId ? (units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId) : 'Chưa phân gian kho cụ thể'}</p>
                       <p className="text-xs text-stone-500">
                         {'Lịch nhận kho hiện tại:'} <b>{hold.appointmentDate || hold.moveInDate}{hold.appointmentTime ? ` · ${hold.appointmentTime}` : ''}</b> · {'Thời hạn:'} {hold.rentalMonths} {'tháng'}
                       </p>
@@ -1985,7 +2257,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <p><b>Hàng hóa khai báo:</b> {hold.goods.category} ({hold.goods.packageCount} kiện, {hold.goods.weightKg}kg)</p>
                           {hold.assignedUnitId ? (
                             <div className="flex flex-wrap justify-end gap-1">
-                              <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Manager đã phân: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
+                              <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Quản lý cơ sở đã phân: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
                               {hold.status === 'awaiting_email' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ xác minh email</span>}
                               {hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ nhân viên cơ sở duyệt hàng hóa</span>}
                             </div>
@@ -2003,7 +2275,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                             </span>
                           ) : (
                             <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">
-                              {hold.payment.status === 'paid' ? 'Đã cọc · Chờ Manager phân kho' : 'Chờ hoàn tất đặt loại kho'}
+                              {hold.payment.status === 'paid' ? 'Đã cọc · Chờ quản lý cơ sở phân kho' : 'Chờ hoàn tất đặt loại kho'}
                             </span>
                           )}
                         </div>
@@ -2014,19 +2286,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           const discountAmount = hold.discountAmount ?? 0
                           const rentTotal = Math.max(0, grossRent - discountAmount)
                           const rentBeforeDiscount = grossRent
-                          const bookingDeposit = hold.reservationDepositAmount ?? Math.round(rentTotal * 0.4 * 100) / 100
+                          const bookingDeposit = hold.reservationDepositAmount ?? Math.round(rentTotal * 0.2 * 100) / 100
                           const rentBalance = Math.max(0, rentTotal - bookingDeposit)
                           return <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
-                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và cọc giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 40%: ${formatVnd(rentTotal)} × 40% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
-                            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">{'Khoản thu khi nhận kho'}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentBalance)}`}</p><p>{`+ Tiền đảm bảo kho: ${formatVnd(hold.securityDepositAmount)}`}</p><p className="border-t border-amber-200 pt-1 font-bold">{`Tổng thu khi nhận kho: ${formatVnd(hold.remainingAmount)}`}</p></div>
+                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và cọc giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 20%: ${formatVnd(rentTotal)} × 20% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
+                            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">{'Khoản thu khi nhận kho'}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentBalance)}`}</p><p>{`+ Tiền duy trì CSVC: ${formatVnd(hold.securityDepositAmount)}`}</p><p className="border-t border-amber-200 pt-1 font-bold">{`Tổng thu khi nhận kho: ${formatVnd(hold.remainingAmount)}`}</p></div>
                           </div>
                         })()}
 
-                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Manager đã phân gian kho; vui lòng hoàn tất nhận kho trong 14 ngày từ ngày cọc.' : 'Cọc đã thanh toán. Manager sẽ phân gian kho cụ thể trước lịch check-in của bạn.'}</p>}
+                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Quản lý cơ sở đã phân gian kho. Vui lòng nhận kho trong thời hạn 7 ngày làm việc.' : 'Cọc đã thanh toán. Quản lý cơ sở có tối đa một ngày làm việc để phân gian kho cụ thể.'}</p>}
 
                         {hold.generatedAccessPin && !holdInactive && (
                           <div className="mt-2 rounded bg-[#292a27] p-2 text-white text-xs flex items-center justify-between">
-                            <span>{'Mã PIN hệ thống cấp (kích hoạt sau khi nhận kho):'}</span>
+                            <span>{'Mã ra vào do hệ thống cấp (kích hoạt sau khi nhận kho):'}</span>
                             <span className="text-[#e9a12c] font-bold text-sm tracking-widest">{hold.generatedAccessPin}</span>
                           </div>
                         )}
@@ -2035,9 +2307,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {!['CANCELLED', 'EXPIRED'].includes(hold.status) && (() => {
                         const progressSteps = [
                           { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
-                          { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa trong tối đa 24 giờ' : 'Hồ sơ được duyệt tự động' },
-                          { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ 40%' },
-                          { label: 'Manager phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
+                          { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa trong tối đa một ngày làm việc' : 'Hồ sơ được duyệt tự động' },
+                          { label: 'Thanh toán cọc', detail: 'Hoàn tất cọc giữ chỗ 20%' },
+                          { label: 'Quản lý cơ sở phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
                           { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
                         ]
@@ -2075,7 +2347,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     {/* Action buttons based on canonical status */}
                     <div className="flex min-w-0 flex-col items-stretch gap-3 lg:items-end">
                       <div className="text-right">
-                        {hold.goodsReviewStatus === 'PENDING' ? <><p className="text-xs text-stone-500">Tiền cọc</p><p className="text-lg font-bold text-blue-900">Chưa yêu cầu</p><p className="text-xs text-blue-800">Chỉ tính và mở thanh toán sau khi nhân viên chấp thuận.</p></> : <><p className="text-xs text-stone-500">{'Tổng thu cả kỳ (gồm tiền đảm bảo kho):'}</p><p className="text-xl font-bold text-stone-900">{formatVnd(hold.totalInitialAmount ?? hold.quote.totalFirstPayment)}</p><p className="text-xs text-amber-800">{'Trả lúc giữ chỗ'}: {formatVnd(hold.reservationDepositAmount ?? hold.payment.amount)} · {'Thu khi nhận kho'}: {formatVnd(hold.remainingAmount)}</p></>}
+                        {hold.goodsReviewStatus === 'PENDING' ? <><p className="text-xs text-stone-500">Tiền cọc</p><p className="text-lg font-bold text-blue-900">Chưa yêu cầu</p><p className="text-xs text-blue-800">Chỉ tính và mở thanh toán sau khi nhân viên chấp thuận.</p></> : <><p className="text-xs text-stone-500">{'Tổng thu cả kỳ (gồm tiền duy trì CSVC):'}</p><p className="text-xl font-bold text-stone-900">{formatVnd(hold.totalInitialAmount ?? hold.quote.totalFirstPayment)}</p><p className="text-xs text-amber-800">{'Trả lúc giữ chỗ'}: {formatVnd(hold.reservationDepositAmount ?? hold.payment.amount)} · {'Thu khi nhận kho'}: {formatVnd(hold.remainingAmount)}</p></>}
                       </div>
 
                       {hold.status === 'awaiting_email' && (
@@ -2090,7 +2362,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <p className="font-bold">{hold.goodsReviewStatus === 'PENDING' ? 'Đang chờ nhân viên cơ sở duyệt hàng hóa' : 'Đang chờ xác nhận hồ sơ'}</p>
                           <p className="mt-1">Kho đang được giữ cho bạn · Tiền cọc: Chưa yêu cầu</p>
                           {hold.goodsReviewSubmittedAt && <p className="mt-1">Gửi lúc: {new Date(hold.goodsReviewSubmittedAt).toLocaleString('vi-VN')}</p>}
-                          {hold.goodsReviewDueAt && <p className="mt-1">{new Date(hold.goodsReviewDueAt).getTime() < now ? 'Yêu cầu đang được xử lý lâu hơn dự kiến; kho vẫn được giữ.' : `Dự kiến xử lý trước: ${new Date(hold.goodsReviewDueAt).toLocaleString('vi-VN')}`}</p>}
+                          {hold.goodsReviewDueAt && <p className="mt-1">{new Date(hold.goodsReviewDueAt).getTime() < now ? 'Yêu cầu đang được xử lý lâu hơn dự kiến, kho vẫn được giữ.' : `Dự kiến xử lý trước: ${new Date(hold.goodsReviewDueAt).toLocaleString('vi-VN')}`}</p>}
                         </div>
                       )}
 
@@ -2104,9 +2376,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
                       {hold.status === 'awaiting_payment' && hold.payment.status !== 'paid' && (
                         <div className="min-w-[220px] rounded-lg border border-red-700 bg-red-700 p-3 text-right text-xs text-white shadow-sm">
-                          <p className="font-bold text-white">{'Cần thanh toán cọc trong 24 giờ'}</p>
+                          <p className="font-bold text-white">{'Cần thanh toán cọc trong 15 phút'}</p>
                           <p className="mt-1 text-lg font-bold text-white">{formatCountdown(hold.paymentExpiresAt).text}</p>
-                          <Button className="mt-2" size="sm" disabled={formatCountdown(hold.paymentExpiresAt).isExpired} onClick={() => { setActiveHoldForPayment(hold); setPayModalOpen(true) }}>{'Thanh toán cọc 40%'}</Button>
+                          <Button className="mt-2" size="sm" disabled={formatCountdown(hold.paymentExpiresAt).isExpired} onClick={() => { setActiveHoldForPayment(hold); setPayModalOpen(true) }}>{'Thanh toán cọc 20%'}</Button>
                         </div>
                       )}
 
@@ -2151,7 +2423,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                              {'Sẵn sàng nhận bàn giao kho'}
                           </p>
                           <p className="text-[11px] text-stone-600">
-                            {'Nhân viên sẽ chụp ảnh hiện trạng và kích hoạt mã PIN mở cửa.'}
+                            {'Nhân viên sẽ chụp ảnh hiện trạng và kích hoạt mã mở cửa.'}
                           </p>
                         </div>
                       )}
@@ -2194,8 +2466,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <p className="text-[11px] mt-0.5">{'Gian kho đã được hoàn lại danh mục.'}</p>
                         </div>
                       )}
-                      {linkedRentalEnded && <div className="inactive-record-alert rounded-lg border border-red-300 bg-red-100 px-3 py-2 text-right text-xs text-red-800"><p className="font-bold">{'Hồ sơ giữ kho đã hết hiệu lực'}</p><p className="mt-0.5">{'Hợp đồng đã hoàn tất trả kho; mã PIN đã bị thu hồi.'}</p></div>}
-                      {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử.') } } })}><span aria-hidden="true">🗑</span> {'Xóa lịch sử'}</Button>}
+                      {linkedRentalEnded && <div className="inactive-record-alert rounded-lg border border-red-300 bg-red-100 px-3 py-2 text-right text-xs text-red-800"><p className="font-bold">{'Hồ sơ giữ kho đã hết hiệu lực'}</p><p className="mt-0.5">{'Hợp đồng đã hoàn tất trả kho. Mã ra vào đã bị thu hồi.'}</p></div>}
+                      {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử.') } } })}> {'Xóa lịch sử'}</Button>}
                     </div>
                   </div>
                 </Card>
@@ -2213,10 +2485,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {/* D1–D4 API workspace is separate; preserve the team's existing lifecycle page. */}
-      {page === CUSTOMER_RENTAL_API_PAGE && isApiAuthenticated() && <CustomerRentalsApiPanel key={user.id} />}
-      {page === 'rental-records' && (
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`} focusStorageUnitId={receiptRentalTarget} />}
+      {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
+          <section className="space-y-4">
           <SectionHeader
             title={'Hồ Sơ Thuê Kho Của Tôi'}
             action={<Button variant="outline" size="sm" onClick={() => setPage(previousPage || 'overview')}>← {'Quay lại'}</Button>}
@@ -2262,7 +2534,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <span className="text-stone-400">{'Mã mở cổng:'}</span>
                           <span className="text-[#e9a12c] font-bold tracking-wider">{rental.gateCode}</span>
                         </div>
-                        <span className="text-xs text-stone-500">{'Tiền đảm bảo kho:'} <b>{formatVnd(rental.securityDeposit ?? rental.deposit)}</b></span>
+                        <span className="text-xs text-stone-500">{'Tiền duy trì CSVC:'} <b>{formatVnd(rental.securityDeposit ?? rental.deposit)}</b></span>
                       </div>
                     </div>
 
@@ -2282,7 +2554,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               const rentalDurationDays = rentalStart && rentalEnd ? Math.max(1, Math.round((rentalEnd.getTime() - rentalStart.getTime()) / 86_400_000)) : 30
                               const syntheticRentalMonths = Math.max(1, Math.round(rentalDurationDays / 30))
                               const syntheticTermValue = rental.monthlyRate * syntheticRentalMonths
-                              const syntheticBookingDeposit = Math.round(syntheticTermValue * 0.4 * 100) / 100
+                              const syntheticBookingDeposit = Math.round(syntheticTermValue * 0.2 * 100) / 100
                               const syntheticSecurityDeposit = rental.securityDeposit ?? rental.deposit
                               const syntheticHold: StorageHold = {
                                 id: `CTR-${rental.id}`,
@@ -2370,7 +2642,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               size="sm"
                               disabled={!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status))}
                               onClick={() => {
-                                if (isApiAuthenticated()) { navigateTo(CUSTOMER_RENTAL_API_PAGE); return }
+                                if (isApiAuthenticated()) { navigateTo('rental-records'); return }
                                 setActiveRentalForRenewal(rental)
                                 setRenewalMonths(1)
                                 setEditingRenewalId(null)
@@ -2398,7 +2670,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <Badge variant="warning">{'Đã gửi yêu cầu trả kho'}</Badge>
                         )}
                         {rental.status === 'completed' && (
-                          <><span className="inactive-record-alert rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-xs font-bold text-red-800">{'Hồ sơ hết hiệu lực · PIN đã thu hồi'}</span><Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hồ sơ thuê', message: 'Xóa hồ sơ thuê này khỏi danh sách của bạn? Dữ liệu đối soát vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveRentalHistory(rental.id, user); showToast('Đã xóa lịch sử hồ sơ thuê khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hồ sơ thuê.') } } })}><span aria-hidden="true">🗑</span> {'Xóa lịch sử'}</Button></>
+                          <><span className="inactive-record-alert rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-xs font-bold text-red-800">{'Hồ sơ hết hiệu lực · Mã ra vào đã thu hồi'}</span><Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hồ sơ thuê', message: 'Xóa hồ sơ thuê này khỏi danh sách của bạn? Dữ liệu đối soát vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveRentalHistory(rental.id, user); showToast('Đã xóa lịch sử hồ sơ thuê khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hồ sơ thuê.') } } })}> {'Xóa lịch sử'}</Button></>
                         )}
                       </div>
                     </div>
@@ -2413,15 +2685,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     const remainingDays = Math.ceil((end.getTime() - today.getTime()) / 86_400_000)
                     const totalDays = Math.ceil((end.getTime() - start.getTime()) / 86_400_000)
                     const reminderWindow = totalDays > 31 ? 30 : 7
-                    const unfinishedRenewal = renewals.find(item => item.rentalId === rental.id && ['pending', 'approved', 'deposit_paid', 'appointment_scheduled', 'payment_processing'].includes(item.status))
+                    const unfinishedRenewal = renewals.find(item => item.rentalId === rental.id && ['pending', 'approved', 'deposit_paid', 'full_rent_paid', 'appointment_scheduled', 'payment_processing'].includes(item.status))
                     if (remainingDays < 0) {
                       const overdueDays = Math.abs(remainingDays)
                       const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
                       const currentLateFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
-                      return <div className="border-t border-red-300 bg-red-50 px-5 py-4 text-xs text-red-900"><p className="font-bold">⚠ {`Hợp đồng đã quá hạn ${overdueDays} ngày`}</p><p className="mt-1">{`Hợp đồng đã hết hạn ngày ${rental.endDate}. Phí muộn tạm tính hiện tại: ${overdueDays} ngày × ${formatVnd(lateFeePerDay)} = ${formatVnd(currentLateFee)}. ${unfinishedRenewal ? 'Yêu cầu gia hạn vẫn chưa có hiệu lực; bạn phải đến cơ sở ký tiếp hợp đồng để hoàn tất.' : 'Bạn vẫn có thể gửi yêu cầu gia hạn.'} Phí cuối cùng được tính đến ngày thanh toán hoặc ngày ký hợp đồng gia hạn, tùy ngày nào muộn hơn.`}</p></div>
+                      return <div className="border-t border-red-300 bg-red-50 px-5 py-4 text-xs text-red-900"><p className="font-bold"> {`Hợp đồng đã quá hạn ${overdueDays} ngày`}</p><p className="mt-1">{`Hợp đồng đã hết hạn ngày ${rental.endDate}. Phí muộn tạm tính hiện tại: ${overdueDays} ngày × ${formatVnd(lateFeePerDay)} = ${formatVnd(currentLateFee)}. ${unfinishedRenewal ? 'Yêu cầu gia hạn vẫn chưa có hiệu lực. Bạn phải đến cơ sở ký tiếp hợp đồng để hoàn tất.' : 'Bạn vẫn có thể gửi yêu cầu gia hạn.'} Phí cuối cùng được tính đến ngày thanh toán hoặc ngày ký hợp đồng gia hạn, tùy ngày nào muộn hơn.`}</p></div>
                     }
                     if (remainingDays > reminderWindow) return null
-                    return <div className="border-t border-amber-200 bg-amber-50 px-5 py-4 text-xs text-amber-950"><p className="font-bold">⚠ {'Hợp đồng sắp hết hạn'}</p><p className="mt-1">{`Còn ${remainingDays} ngày đến ${rental.endDate}. ${unfinishedRenewal ? 'Yêu cầu gia hạn chưa thành công; hãy đến cơ sở ký tiếp hợp đồng và hoàn tất thanh toán.' : 'Vui lòng gửi yêu cầu gia hạn nếu bạn muốn tiếp tục thuê kho.'}`}</p></div>
+                    return <div className="border-t border-amber-200 bg-amber-50 px-5 py-4 text-xs text-amber-950"><p className="font-bold"> {'Hợp đồng sắp hết hạn'}</p><p className="mt-1">{`Còn ${remainingDays} ngày đến ${rental.endDate}. ${unfinishedRenewal ? 'Yêu cầu gia hạn chưa thành công. Hãy đến cơ sở ký tiếp hợp đồng và hoàn tất thanh toán.' : 'Vui lòng gửi yêu cầu gia hạn nếu bạn muốn tiếp tục thuê kho.'}`}</p></div>
                   })()}
                   {rental.receiptConfirmedAt && <div className="border-t border-emerald-100 bg-emerald-50 px-5 py-3 text-xs font-semibold text-emerald-800">✓ {`Đã xác nhận nhận kho lúc ${new Date(rental.receiptConfirmedAt).toLocaleString('vi-VN')}`}</div>}
                   {(() => {
@@ -2439,22 +2711,21 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               <p className="font-bold text-stone-900">{`Gói gia hạn ${renewal.renewalMonths || 1} tháng`} · {renewal.oldEndDate} → {renewal.newEndDate}</p>
                               <p className="mt-1 text-stone-500">{renewal.id} · {badgeFor(renewal.status)}</p>
                               {renewal.invoiceNumber && <p className="mt-1 text-stone-600">{'Hóa đơn'}: <b>{renewal.invoiceNumber}</b></p>}
-                              {renewal.status === 'approved' && renewal.paymentDueAt && <p className={`mt-1 font-semibold ${paymentExpired ? 'text-red-700' : 'text-amber-700'}`}>{'Hạn thanh toán cọc 72 giờ'}: {new Date(renewal.paymentDueAt).toLocaleString('vi-VN')}</p>}
+                              {renewal.status === 'approved' && renewal.paymentDueAt && <p className={`mt-1 font-semibold ${paymentExpired ? 'text-red-700' : 'text-amber-700'}`}>{'Hạn thanh toán toàn kỳ'}: {new Date(renewal.paymentDueAt).toLocaleString('vi-VN')}</p>}
                               {renewal.status === 'approved' && renewal.paymentDueAt && !paymentExpired && <p className="mt-1 text-sm font-extrabold text-red-700">⏱ {'Còn lại'}: {formatCountdown(renewal.paymentDueAt).text}</p>}
                               {renewal.status === 'approved' && contractOverdue && <p className="mt-1 font-semibold text-red-700">{'Hợp đồng cũ đã hết hạn; phí muộn được tính từ ngày kế tiếp ngày hết hạn đến ngày thanh toán/ký thực tế.'}</p>}
-                              {renewal.status === 'pending' && <p className="mt-1 text-blue-700">{'Bạn có thể sửa hoặc hủy trước khi Manager duyệt. Mọi thay đổi sẽ được ghi nhận cho Manager.'}</p>}
+                              {renewal.status === 'pending' && <p className="mt-1 text-blue-700">{'Yêu cầu đang chờ hệ thống xác nhận điều kiện thanh toán. Manager có thể theo dõi hồ sơ; không cần Manager duyệt để thanh toán.'}</p>}
                               {renewal.updatedAt && <p className="mt-1 text-stone-500">{'Cập nhật gần nhất'}: {new Date(renewal.updatedAt).toLocaleString('vi-VN')}</p>}
                               {renewal.status === 'payment_expired' && <p className="mt-1 text-red-700">{'Yêu cầu đã hết hiệu lực. Hãy gửi yêu cầu mới để Manager kiểm tra lại khả dụng.'}</p>}
                               {renewal.status === 'rejected' && renewal.notes && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">{'Lý do Manager từ chối'}: {renewal.notes}</p>}
-                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Đã cọc gia hạn · Hẹn ký ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Còn thu tại cơ sở: ${formatVnd(renewal.remainingAmount ?? 0)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
+                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Hẹn ký gia hạn ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Số tiền còn phải thanh toán: ${formatVnd(renewal.remainingAmount ?? renewal.totalAmount ?? renewal.renewalFee)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
                               {renewal.status === 'completed' && <p className="mt-1 text-emerald-700">{`Phụ lục ${renewal.addendumNumber} · Hiệu lực từ ${renewal.effectiveAt ? new Date(renewal.effectiveAt).toLocaleString('vi-VN') : renewal.paidAt}`}</p>}
                             </div>
                             <div className="flex items-center gap-3">
                               <b>{formatVnd(renewal.totalAmount ?? renewal.renewalFee)}</b>
-                              {renewal.status === 'pending' && <><Button variant="outline" size="sm" onClick={() => { setActiveRentalForRenewal(rental); setRenewalMonths(renewal.renewalMonths); setEditingRenewalId(renewal.id); setRenewalModalOpen(true) }}>{'Chỉnh sửa'}</Button><Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy yêu cầu gia hạn', message: 'Bạn chắc chắn muốn hủy yêu cầu gia hạn này?', confirmLabel: 'Hủy yêu cầu', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy yêu cầu. Manager đã nhận được cập nhật.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy yêu cầu.') } } })}>{'Hủy yêu cầu'}</Button></>}
+                              {renewal.status === 'pending' && <><Button variant="outline" size="sm" onClick={() => { setActiveRentalForRenewal(rental); setRenewalMonths(renewal.renewalMonths); setEditingRenewalId(renewal.id); setRenewalModalOpen(true) }}>{'Chỉnh sửa'}</Button><Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy yêu cầu gia hạn', message: 'Bạn chắc chắn muốn hủy yêu cầu gia hạn này?', confirmLabel: 'Hủy yêu cầu', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy yêu cầu. Quản lý cơ sở đã nhận được cập nhật.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy yêu cầu.') } } })}>{'Hủy yêu cầu'}</Button></>}
                               {renewal.status === 'approved' && !paymentExpired && <Button size="sm" onClick={() => {
                                 setActiveRenewalForPayment(renewal)
-                                setRenewalPaymentMethod('BANK_TRANSFER')
                                 setRenewalTermsAccepted(false)
                                 const suggestedSigningDate = new Date()
                                 if (new Date(`${renewal.oldEndDate}T23:59:59`).getTime() >= now) suggestedSigningDate.setDate(suggestedSigningDate.getDate() + 1)
@@ -2466,12 +2737,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                                 requestConfirmation({ title: 'Hủy gia hạn đã được duyệt', message: `Hủy yêu cầu sẽ làm hóa đơn ${renewal.invoiceNumber || ''} mất hiệu lực. Bạn chắc chắn muốn tiếp tục?`, confirmLabel: 'Hủy gia hạn', tone: 'danger', onConfirm: () => { try {
                                   cancelRenewalRequest(renewal.id, user)
                                   setRenewalPaymentOpen(false)
-                                  showToast('Đã hủy gia hạn và vô hiệu hóa hóa đơn. Manager đã nhận được thông báo.')
+                                  showToast('Đã hủy gia hạn và vô hiệu hóa hóa đơn. Quản lý cơ sở đã nhận được thông báo.')
                                 } catch (error) {
                                   showToast(error instanceof Error ? error.message : 'Không thể hủy yêu cầu gia hạn.')
                                 } } })
                               }}>{'Hủy gia hạn'}</Button>}
-                              {renewal.status === 'appointment_scheduled' && <Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy lịch gia hạn', message: `Hủy sau khi đã cọc sẽ không được hoàn lại ${formatVnd(renewal.bookingDepositAmount ?? 0)}. Manager sẽ nhận được thông báo.`, confirmLabel: 'Vẫn hủy lịch', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy gia hạn. Cọc gia hạn không hoàn lại và Manager đã được thông báo.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy gia hạn.') } } })}>{'Hủy lịch gia hạn'}</Button>}
+                              {renewal.status === 'appointment_scheduled' && <Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy lịch gia hạn', message: 'Hủy lịch ký gia hạn? Các khoản đã thanh toán (nếu có) cần được đối soát theo giao dịch thực tế.', confirmLabel: 'Vẫn hủy lịch', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy lịch gia hạn. Các khoản đã thanh toán cần được đối soát theo giao dịch thực tế.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy gia hạn.') } } })}>{'Hủy lịch gia hạn'}</Button>}
                             </div>
                           </div>
                         </div>
@@ -2483,13 +2754,55 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     if (!returnCase) return null
                     const totalDeductions = (returnCase.damageFee || 0) + (returnCase.cleaningFee || 0) + (returnCase.lostItemFee || 0) + (returnCase.overdueFee || 0) + (returnCase.outstandingFee || 0)
                     return <div className="border-t border-stone-200 bg-stone-50 px-5 py-4 text-xs">
-                      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-stone-950">{'Nghiệm thu và quyết toán trả kho'}</p><p className="mt-1 text-stone-500">{returnCase.id} · {badgeFor(returnCase.status)}</p></div>{returnCase.refundTransaction && <span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">{'Đã hoàn cọc'} {formatVnd(returnCase.refundTransaction.amount)}</span>}</div>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-stone-950">{'Nghiệm thu và quyết toán trả kho'}</p>
+                          <p className="mt-1 text-stone-500">{returnCase.id} · {badgeFor(returnCase.status)}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                            onClick={() => {
+                              setSelectedSettlementReturn(returnCase)
+                              setSettlementModalOpen(true)
+                            }}
+                          >
+                            🧾 Xem hóa đơn & biên lai quyết toán
+                          </Button>
+                          {returnCase.refundTransaction && (
+                            <span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">
+                              {'Đã hoàn cọc'} {formatVnd(returnCase.refundTransaction.amount)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                       {['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(returnCase.status) && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Hiện trạng ban đầu'}</p><p className="mt-1 font-semibold">{returnCase.initialConditionSnapshot}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Kết quả nghiệm thu'}</p><p className="mt-1 font-semibold">{returnCase.damageClassification || '—'} · {returnCase.staffNotes || '—'}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{`Phí quá hạn (${returnCase.overdueDays || 0} ngày)`}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.overdueFee || 0)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Cọc được hoàn'}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(returnCase.netRefundAmount)}</p></div><div className={`rounded-lg p-3 ${(returnCase.amountDueFromCustomer || 0) > 0 ? 'bg-red-100' : 'bg-white'}`}><p className="text-stone-500">{'Khách phải đóng thêm'}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.amountDueFromCustomer || 0)}</p></div></div>}
-                      {returnCase.status === 'awaiting_customer_confirmation' && <div className="mt-3 flex flex-wrap justify-end gap-2"><Button variant="outline" size="sm" onClick={() => { setReturnDisputeTargetId(returnCase.id); setReturnDisputeReason('') }}>{'Yêu cầu xem xét lại'}</Button><Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền đảm bảo. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và PIN đã hết hiệu lực; đang chờ Staff chuyển hoàn cọc.')) } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xác nhận quyết toán.') } } }) }}>{'Đồng ý quyết toán'}</Button></div>}
+                      {returnCase.structuralInspection && (
+                        <div className="mt-2.5 rounded-lg border border-stone-200 bg-white p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-stone-700">Kiểm tra kết cấu:</span>
+                            <span>Trần: {returnCase.structuralInspection.ceiling === 'leaking' ? 'Dột nước (Lỗi cơ sở)' : returnCase.structuralInspection.ceiling === 'stained' ? 'Loang ố' : 'Khô ráo'}</span>
+                            <span>·</span>
+                            <span>Vách: {returnCase.structuralInspection.wall === 'damp_seepage' ? 'Thấm ẩm ngoài vào (Lỗi cơ sở)' : 'Khô ráo'}</span>
+                            <span>·</span>
+                            <span>Sàn: {returnCase.structuralInspection.floor === 'cracked' ? 'Nứt vỡ sàn' : returnCase.structuralInspection.floor === 'water_pooling' ? 'Đọng nước' : 'Khô ráo'}</span>
+                          </div>
+                          {returnCase.moistureOrigin && returnCase.moistureOrigin !== 'none' && (
+                            <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                              returnCase.moistureOrigin === 'facility_fault' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {returnCase.moistureOrigin === 'facility_fault' ? '✓ Xác nhận do lỗi dột thấm cơ sở kho (Được bồi thường)' : 'Do đóng gói ẩm / hàng cấm (Khách chịu phí khử trùng)'}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {returnCase.status === 'awaiting_customer_confirmation' && <div className="mt-3 flex flex-wrap justify-end gap-2"><Button variant="outline" size="sm" onClick={() => { setReturnDisputeTargetId(returnCase.id); setReturnDisputeReason('') }}>{'Yêu cầu xem xét lại'}</Button><Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền duy trì CSVC. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và mã ra vào đã hết hiệu lực, đang chờ nhân viên chuyển hoàn cọc.')) } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xác nhận quyết toán.') } } }) }}>{'Đồng ý quyết toán'}</Button></div>}
                       {returnCase.status === 'payment_due' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-3"><div><p className="font-bold text-red-900">{`Cần thanh toán thêm ${formatVnd(returnCase.amountDueFromCustomer ?? 0)}`}</p><p className="mt-1 text-red-700">{'Sau khi thanh toán, hệ thống sẽ đóng hồ sơ và phát hành biên nhận trong Lịch sử thanh toán.'}</p></div><Button size="sm" onClick={() => requestConfirmation({ title: 'Xác nhận thanh toán', message: `Thanh toán ${formatVnd(returnCase.amountDueFromCustomer ?? 0)} bằng chuyển khoản?`, confirmLabel: 'Thanh toán', onConfirm: () => { const reference = `RET-BAL-${Date.now()}`; try { payReturnBalance(returnCase.id, user, 'BANK_TRANSFER', reference); showToast('Đã thanh toán phần thiếu và phát hành biên nhận.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể thanh toán.') } } })}>{'Thanh toán phần thiếu'}</Button></div>}
-                      {returnCase.status === 'disputed' && <p className="mt-3 rounded-lg bg-amber-100 p-3 font-semibold text-amber-900">{'Đang chờ Facility Manager xem xét lại'}: {returnCase.customerDecisionNote}</p>}
-                      {returnCase.status === 'refund_pending' && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900">{'Hồ sơ thuê và mã PIN đã hết hiệu lực. Staff đang chuyển hoàn cọc; biên nhận sẽ xuất hiện sau khi xác nhận giao dịch.'}</p>}
-                      {rental.status === 'completed' && units.find(unit => unit.id === rental.unitId)?.status === 'maintenance' && <p className="mt-3 rounded-lg border border-stone-300 bg-stone-100 p-3 font-semibold text-stone-700">{'Gian kho đang chờ Manager nghiệm thu vệ sinh/bảo trì. Kho chưa được tính vào số lượng còn trống.'}</p>}
+                      {returnCase.status === 'disputed' && <p className="mt-3 rounded-lg bg-amber-100 p-3 font-semibold text-amber-900">{'Đang chờ quản lý cơ sở xem xét lại'}: {returnCase.customerDecisionNote}</p>}
+                      {returnCase.status === 'refund_pending' && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900">{'Hồ sơ thuê và mã ra vào đã hết hiệu lực. Nhân viên đang chuyển hoàn cọc, biên nhận sẽ xuất hiện sau khi xác nhận giao dịch.'}</p>}
+                      {rental.status === 'completed' && units.find(unit => unit.id === rental.unitId)?.status === 'maintenance' && <p className="mt-3 rounded-lg border border-stone-300 bg-stone-100 p-3 font-semibold text-stone-700">{'Gian kho đang chờ quản lý cơ sở nghiệm thu vệ sinh hoặc bảo trì. Kho chưa được tính vào số lượng còn trống.'}</p>}
                     </div>
                   })()}
                 </Card>
@@ -2503,13 +2816,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               {visibleMyRentals.length ? <Button className="mt-4" size="sm" variant="outline" onClick={() => { setRentalFacilityFilter('all'); setRentalTypeFilter('all'); setRentalDeadlineFilter('all') }}>Xóa bộ lọc</Button> : <Button className="mt-4" size="sm" onClick={() => navigateTo('browse-units')}>{'Tìm gian kho trống'}</Button>}
             </Card>
           )}
+          </section>
         </div>
       )}
 
       {page === 'contracts' && <div className="fade-in space-y-4">
         <SectionHeader title={'Hợp đồng của tôi'} subtitle={'Bản scan hợp đồng giấy đã ký tại cơ sở'} />
         <div className="flex flex-wrap gap-2" aria-label="Lọc hợp đồng">{([['all', 'Tất cả'], ['active', 'Còn hiệu lực'], ['completed', 'Đã kết thúc']] as const).map(([value, label]) => <Button key={value} size="sm" variant={contractFilter === value ? 'primary' : 'outline'} onClick={() => setContractFilter(value)}>{label}</Button>)}</div>
-        <Card className="p-4 text-sm text-stone-700"><p className="font-bold">Các điều khoản áp dụng cùng hợp đồng giấy</p><p className="mt-2">Cọc giữ chỗ theo báo giá được trừ vào tiền thuê; mã OTP có hiệu lực 10 phút và sau khi xác minh, thời hạn thanh toán là 24 giờ. Hồ sơ hàng hóa cần duyệt được xử lý theo thứ tự đến trước. Khách đến sớm chỉ được nhận kho sau khi nhân viên xác minh danh tính, hợp đồng, thanh toán và hiện trạng. Khi trả kho, hai bên đối chiếu biên bản, ảnh và từng khoản phí; khách có quyền yêu cầu xem xét lại trước khi quyết toán. Tiền đảm bảo còn lại được hoàn theo chứng từ giao dịch, sau khi trừ công nợ và phí phát sinh đã xác nhận.</p></Card>
+        <Card className="p-4 text-sm text-stone-700"><p className="font-bold">Các điều khoản áp dụng cùng hợp đồng giấy</p><p className="mt-2">Cọc giữ chỗ theo báo giá được trừ vào tiền thuê. Mã xác minh có hiệu lực 10 phút. Sau khi xác minh, hoặc sau khi hàng “Khác” được duyệt, thời hạn thanh toán là 15 phút. Hồ sơ hàng hóa cần duyệt được xử lý theo thứ tự đến trước. Khách đến sớm chỉ được nhận kho sau khi nhân viên xác minh danh tính, hợp đồng, thanh toán và hiện trạng. Khi trả kho, hai bên đối chiếu biên bản, ảnh và từng khoản phí. Khách có quyền yêu cầu xem xét lại trước khi quyết toán. Tiền duy trì CSVC còn lại được hoàn theo chứng từ giao dịch, sau khi trừ công nợ và phí phát sinh đã xác nhận.</p></Card>
         {sortedMyContracts.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{sortedMyContracts.map(c => {
           const contractRental = myRentals.find(rental => rental.contractId === c.id || rental.holdId === c.reservationId)
           const contractInactive = contractRental?.status === 'completed'
@@ -2529,13 +2843,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <div className="flex items-center justify-between gap-3"><div><p className="font-bold">{c.contractNumber}</p>{c.contractType === 'RENEWAL' && <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">{'Hợp đồng gia hạn'}</p>}</div><span className="rounded border border-black px-2 py-0.5 text-xs font-semibold">{c.status}</span></div>
             <p>{'Ngày ký'}: {c.signedAt}</p><p>{'Hiệu lực'}: {c.startDate} – {c.endDate}</p>
             <p className="truncate text-stone-600">{c.scannedFileName}</p>
-            <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hợp đồng.') } } })}><span aria-hidden="true">🗑</span> {'Xóa lịch sử'}</Button>}</div>
+            <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hợp đồng.') } } })}> {'Xóa lịch sử'}</Button>}</div>
           </div>
         </Card>})}</div> : <Card className="p-4 text-sm text-stone-500">{'Chưa có hợp đồng giấy đã ký. Hợp đồng sẽ xuất hiện sau khi nhân viên lưu bản scan.'}</Card>}
       </div>}
 
       {/* ── PAYMENTS ─────────────────────────────────────────── */}
-      {page === 'payments' && isApiAuthenticated() && <CustomerPaymentHistory />}
+      {page === 'payments' && isApiAuthenticated() && <CustomerPaymentHistory onOpenRentals={(rentalId) => { setPaymentRentalId(rentalId); navigateTo('rental-records') }} />}
       {page === 'payments' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <SectionHeader
@@ -2548,6 +2862,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <Card className="p-4"><p className="text-xs text-stone-500">{'Gia hạn chờ thanh toán'}</p><p className="mt-1 text-2xl font-extrabold text-amber-700">{renewals.filter(r => r.customerId === user.id && r.status === 'approved').length}</p></Card>
           </div>
 
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc lịch sử thanh toán">
+            <Button variant={paymentHistoryFilter === 'all' ? 'primary' : 'outline'} onClick={() => setPaymentHistoryFilter('all')}>Tất cả</Button>
+            <Button variant={paymentHistoryFilter === 'payments' ? 'primary' : 'outline'} onClick={() => setPaymentHistoryFilter('payments')}>Lịch sử thanh toán</Button>
+            <Button variant={paymentHistoryFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setPaymentHistoryFilter('settlement')}>Quyết toán</Button>
+          </div>
           <Card>
             <Table>
               <Thead>
@@ -2561,11 +2880,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </tr>
               </Thead>
               <Tbody>
-                {myPayments.map(payment => {
+                {myPayments.filter(payment => paymentHistoryFilter === 'all' || (paymentHistoryFilter === 'settlement' ? ['DAMAGE_FEE', 'REFUND'].includes(payment.type) : !['DAMAGE_FEE', 'REFUND'].includes(payment.type))).map(payment => {
                   const rental = myRentals.find(r => r.id === payment.rentalId)
                   const hold = myHolds.find(h => h.id === payment.reservationId)
-                  const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Cọc giữ chỗ 40%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
-                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || payment.type}</Td><Td><span className="text-xs text-stone-500">{payment.paymentMethod || '—'}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
+                  const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Cọc giữ chỗ 20%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
+                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{paymentMethodLabel(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
                 })}
                 {!myPayments.length && <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">{'Chưa có giao dịch nào.'}</p></td></tr>}
               </Tbody>
@@ -2615,63 +2934,105 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         <div className="fade-in space-y-6">
           <SectionHeader
             title={'Quy Định & Chính Sách Thuê Kho'}
-            subtitle={'Quy định về thuê kho, Check-in, gia hạn, trả kho, thanh toán và xử lý trễ hạn'}
+            subtitle={'Quy định về thuê kho, nhận kho, gia hạn, trả kho, thanh toán và xử lý trễ hạn'}
           />
 
           <div className="overflow-hidden rounded-2xl bg-[#292a27] text-white shadow-lg">
             <div className="grid gap-5 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
               <div><p className="text-xs font-bold uppercase tracking-[.16em] text-amber-400">StorageHub</p><h2 className="mt-2 text-xl font-bold">{'Quy trình thuê kho và thanh toán rõ ràng'}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-stone-300">{'Mỗi giai đoạn đều có thời hạn, khoản thanh toán và điều kiện hoàn tất cụ thể để khách hàng chủ động theo dõi.'}</p></div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">30</b>{'phút tạm giữ'}</div><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">12</b>{'giờ trả cọc'}</div><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">14</b>{'ngày check-in'}</div></div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">30</b>{'phút tạm giữ'}</div><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">12</b>{'giờ trả cọc'}</div><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">14</b>{'ngày nhận kho'}</div></div>
             </div>
           </div>
 
           <section className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
             <div className="border-b border-amber-200 px-5 py-4 sm:px-6">
               <p className="text-xs font-bold uppercase tracking-[.16em] text-amber-800">{'Hiểu đúng các khoản tiền'}</p>
-              <h2 className="mt-1 text-lg font-bold text-stone-950">{'Cọc giữ chỗ và tiền đảm bảo kho là hai khoản khác nhau'}</h2>
+              <h2 className="mt-1 text-lg font-bold text-stone-950">{'Cọc giữ chỗ và tiền duy trì CSVC là hai khoản khác nhau'}</h2>
             </div>
             <div className="grid gap-px bg-amber-200 md:grid-cols-3">
-              <div className="bg-white p-5"><p className="text-sm font-bold text-blue-800">{'1. Cọc giữ chỗ 40%'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tính trên tổng tiền thuê sau giảm của kỳ đã chọn. Khoản này được trừ vào tiền thuê, không cộng thêm vào giá thuê và không hoàn nếu khách hủy trước khi nhận kho.'}</p></div>
-              <div className="bg-white p-5"><p className="text-sm font-bold text-emerald-800">{'2. Tiền đảm bảo kho'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Bằng một tháng tiền thuê và được thu riêng tại Check-in. Đây không phải tiền thuê; khoản còn lại được hoàn sau khi trả kho và hoàn tất nghiệm thu.'}</p></div>
-              <div className="bg-white p-5"><p className="text-sm font-bold text-amber-800">{'3. Số tiền thu tại Check-in'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tiền thuê còn lại sau khi trừ cọc giữ chỗ + tiền đảm bảo kho. Mọi khoản thu phải có mã giao dịch hoặc biên nhận trong hồ sơ.'}</p></div>
+              <div className="bg-white p-5"><p className="text-sm font-bold text-blue-800">{'1. Cọc giữ chỗ 20%'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tính trên tổng tiền thuê sau giảm của kỳ đã chọn. Khoản này được trừ vào tiền thuê, không cộng thêm vào giá thuê và không hoàn nếu khách hủy trước khi nhận kho.'}</p></div>
+              <div className="bg-white p-5"><p className="text-sm font-bold text-emerald-800">{'2. Tiền duy trì CSVC'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Bằng một tháng tiền thuê và được thu riêng khi nhận kho. Đây không phải tiền thuê. Khoản còn lại được hoàn sau khi trả kho và hoàn tất nghiệm thu.'}</p></div>
+              <div className="bg-white p-5"><p className="text-sm font-bold text-amber-800">{'3. Số tiền thu khi nhận kho'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tiền thuê còn lại sau khi trừ cọc giữ chỗ và tiền duy trì CSVC. Mọi khoản thu phải có mã giao dịch hoặc biên nhận trong hồ sơ.'}</p></div>
             </div>
-            <div className="px-5 py-3 text-sm font-semibold text-amber-950 sm:px-6">{'Công thức: Tổng cần chuẩn bị = Tổng tiền thuê kỳ đầu + Tiền đảm bảo kho. Cọc giữ chỗ 40% chỉ là phần trả trước của tiền thuê.'}</div>
+            <div className="px-5 py-3 text-sm font-semibold text-amber-950 sm:px-6">{'Công thức: Tổng cần chuẩn bị = Tổng tiền thuê kỳ đầu + Tiền duy trì CSVC. Cọc giữ chỗ 20% chỉ là phần trả trước của tiền thuê.'}</div>
           </section>
+
+
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 font-extrabold text-amber-800">1</span><div><h3 className="font-bold text-stone-950">{'Thuê kho và thanh toán ban đầu'}</h3><p className="text-xs text-stone-500">{'Từ lúc chọn kho đến khi xác nhận đặt giữ'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
               'Kho chỉ được giữ sau khi yêu cầu đặt kho được hệ thống ghi nhận thành công.',
-              'Mã OTP có hiệu lực 10 phút. Sau khi xác minh email, khách có 24 giờ để thanh toán cọc giữ chỗ 40% theo báo giá.',
-              'Cọc giữ chỗ được trừ vào tiền thuê; nếu khách hủy trước Check-in thì khoản này không được hoàn.',
-              'Đơn chuyển sang xử lý quá hạn nếu chưa ghi nhận thanh toán sau 24 giờ.'
+              'Mã OTP có hiệu lực 10 phút. Sau khi xác minh email, khách có 15 phút để thanh toán cọc giữ chỗ 20% theo báo giá.',
+              'Cọc giữ chỗ được trừ vào tiền thuê. Nếu khách hủy trước khi nhận kho, khoản này không được hoàn.',
+              'Đơn chuyển sang xử lý quá hạn nếu chưa ghi nhận thanh toán sau 15 phút.'
             ].map(item => <p key={item} className="flex gap-2"><span className="text-emerald-700">✓</span><span>{item}</span></p>)}</div></Card>
 
-            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-extrabold text-blue-800">2</span><div><h3 className="font-bold text-stone-950">{'Check-in và nhận kho'}</h3><p className="text-xs text-stone-500">{'Hoàn tất trong thời hạn nhận kho'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
-              'Khách đặt lịch và hoàn tất Check-in trong tối đa 14 ngày kể từ ngày cọc.',
-              'Khi Check-in, khách hoàn tất hợp đồng và xác nhận hiện trạng gian kho. Nếu đến sớm, nhân viên xác minh đủ điều kiện và ghi lý do điều chỉnh lịch trước khi bàn giao.',
-              'Khoản phải trả tại Check-in gồm tiền thuê còn lại sau khi trừ cọc giữ chỗ và tiền đảm bảo kho bằng một tháng tiền thuê.',
-              'Check-in chỉ hoàn tất sau khi các khoản đến hạn đã được thanh toán và khách xác nhận nhận đúng gian kho.'
+            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-extrabold text-blue-800">2</span><div><h3 className="font-bold text-stone-950">{'Nhận kho và bàn giao'}</h3><p className="text-xs text-stone-500">{'Hoàn tất trong thời hạn nhận kho'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
+              'Quản lý phân kho trong tối đa một ngày làm việc. Khách đặt lịch nhận kho trong vòng 7 ngày làm việc từ lúc kho có thể sẵn sàng.',
+              'Khi nhận kho, khách hoàn tất hợp đồng và xác nhận hiện trạng gian kho. Nếu đến sớm, nhân viên xác minh đủ điều kiện và ghi lý do điều chỉnh lịch trước khi bàn giao.',
+              'Khoản phải trả khi nhận kho gồm tiền thuê còn lại sau khi trừ cọc giữ chỗ và tiền duy trì CSVC bằng một tháng tiền thuê.',
+              'Việc nhận kho chỉ hoàn tất sau khi các khoản đến hạn đã được thanh toán và khách xác nhận nhận đúng gian kho.'
             ].map(item => <p key={item} className="flex gap-2"><span className="text-blue-700">✓</span><span>{item}</span></p>)}</div></Card>
 
             <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-extrabold text-emerald-800">3</span><div><h3 className="font-bold text-stone-950">{'Gia hạn thuê kho'}</h3><p className="text-xs text-stone-500">{'Hoàn tất trước khi kỳ thuê mới có hiệu lực'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
               'Khách gửi yêu cầu, chọn số tháng muốn gia hạn và theo dõi trạng thái xác nhận trên hồ sơ thuê.',
-              'Khi yêu cầu được chấp thuận, khách thanh toán trước 40% giá trị kỳ gia hạn trong thời hạn hiển thị.',
-              'Khách thanh toán 60% còn lại và hoàn tất phụ lục trước khi kỳ gia hạn có hiệu lực.',
+              'Khi yêu cầu được chấp thuận, khách thanh toán trước 20% giá trị kỳ gia hạn trong thời hạn hiển thị.',
+              'Khách thanh toán 80% còn lại và hoàn tất phụ lục trước khi kỳ gia hạn có hiệu lực.',
               'Nếu quá hạn thanh toán, yêu cầu gia hạn hết hiệu lực và khách cần gửi yêu cầu mới.'
             ].map(item => <p key={item} className="flex gap-2"><span className="text-emerald-700">✓</span><span>{item}</span></p>)}</div></Card>
 
-            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 font-extrabold text-violet-800">4</span><div><h3 className="font-bold text-stone-950">{'Trả kho và hoàn tiền đảm bảo'}</h3><p className="text-xs text-stone-500">{'Quyết toán khi kết thúc thuê'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
+            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 font-extrabold text-violet-800">4</span><div><h3 className="font-bold text-stone-950">{'Trả kho và hoàn tiền duy trì CSVC'}</h3><p className="text-xs text-stone-500">{'Quyết toán khi kết thúc thuê'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
               'Khách gửi yêu cầu trả kho và hoàn tất bàn giao theo lịch đã xác nhận.',
-              'Gian kho phải được dọn trống; hiện trạng và các khoản còn phải thanh toán được ghi nhận khi trả kho.',
-              'Tiền đảm bảo kho được hoàn sau khi trừ các khoản hư hại, vệ sinh, thất lạc, trễ hạn hoặc công nợ đã xác nhận.',
+              'Gian kho phải được dọn trống. Hiện trạng và các khoản còn phải thanh toán được ghi nhận khi trả kho.',
+              'Tiền duy trì CSVC được hoàn sau khi trừ các khoản hư hại, vệ sinh, thất lạc, trễ hạn hoặc công nợ đã xác nhận.',
               'Việc trả kho hoàn tất khi quyết toán được xác nhận, tiền hoàn được xử lý và quyền truy cập kho chấm dứt.'
             ].map(item => <p key={item} className="flex gap-2"><span className="text-violet-700">✓</span><span>{item}</span></p>)}</div></Card>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-rose-200 p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-rose-700">{'Quy định trễ hạn'}</p><h3 className="mt-2 font-bold text-stone-950">{'Thời hạn và phụ thu được tính theo từng giai đoạn'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Quá 24 giờ chưa ghi nhận thanh toán cọc: đơn được chuyển sang bước đối soát để bảo vệ quyền lợi khách hàng.'}</li><li>• {'Quá 14 ngày kể từ ngày cọc mà chưa nhận kho: không thể kích hoạt hồ sơ thuê và cọc giữ chỗ không được hoàn.'}</li><li>• {'Hợp đồng quá hạn không có thời gian ân hạn; từ ngày sau ngày hết hạn, phụ thu mỗi ngày bằng 50% đơn giá thuê ngày.'}</li><li>• {'Gia hạn hợp đồng đã quá hạn phải hoàn tất trong 3 ngày kể từ khi thanh toán cọc gia hạn.'}</li></ul></Card>
-            <Card className="p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-stone-500">{'Tóm tắt thanh toán giữ kho'}</p><h3 className="mt-2 font-bold text-stone-950">{'Khoản phải trả theo báo giá'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Đặt giữ: 40% tổng tiền thuê sau giảm của kỳ đầu.'}</li><li>• {'Khi nhận kho: tiền thuê còn lại và tiền đảm bảo kho theo báo giá.'}</li><li>• {'Số tiền chính thức luôn lấy từ báo giá đã lưu cùng đơn giữ kho.'}</li></ul></Card>
+            <Card className="border-rose-200 p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-rose-700">{'Quy định trễ hạn'}</p><h3 className="mt-2 font-bold text-stone-950">{'Thời hạn và phụ thu được tính theo từng giai đoạn'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Quá 15 phút chưa ghi nhận thanh toán cọc, đơn được chuyển sang bước đối soát để bảo vệ quyền lợi khách hàng.'}</li><li>• {'Quá 7 ngày làm việc mà chưa nhận kho, hệ thống không thể kích hoạt hồ sơ thuê và cọc giữ chỗ không được hoàn.'}</li><li>• {'Hợp đồng quá hạn không có thời gian ân hạn. Từ ngày sau ngày hết hạn, phụ thu mỗi ngày bằng 50% đơn giá thuê ngày.'}</li><li>• {'Gia hạn hợp đồng đã quá hạn phải hoàn tất trong 3 ngày kể từ khi thanh toán cọc gia hạn.'}</li></ul></Card>
+            <Card className="p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-stone-500">{'Tóm tắt thanh toán giữ kho'}</p><h3 className="mt-2 font-bold text-stone-950">{'Khoản phải trả theo báo giá'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Đặt giữ: 20% tổng tiền thuê sau giảm của kỳ đầu.'}</li><li>• {'Khi nhận kho: tiền thuê còn lại và tiền duy trì CSVC theo báo giá.'}</li><li>• {'Số tiền chính thức luôn lấy từ báo giá đã lưu cùng đơn giữ kho.'}</li></ul></Card>
           </div>
+
+          {/* ── KHỐI 4: DANH SÁCH TIÊU CHUẨN & QUY ĐỊNH VẬN HÀNH DO BO THIẾT LẬP ── */}
+          <Card className="p-5 border border-stone-200/90 shadow-sm bg-white space-y-3">
+            <div className="border-b border-stone-100 pb-3">
+              <h3 className="font-bold text-slate-900 text-base">
+                Danh Sách Tiêu Chuẩn & Quy Định Vận Hành Đang Áp Dụng
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Các quy định về độ ẩm kho mát, hàng cấm, phí khử trùng và SLA hỗ trợ được đồng bộ từ Ban Điều Hành (BO)
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {storedPoliciesList.map((policy) => (
+                <div
+                  key={policy.id}
+                  className="rounded-xl border border-stone-200 bg-stone-50/50 p-3.5 flex flex-col justify-between hover:border-amber-400 transition"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-slate-900 text-xs">
+                        {policy.name}
+                      </span>
+                      <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100/90 text-amber-900 shrink-0">
+                        {policy.value}
+                      </span>
+                    </div>
+                    {policy.description && (
+                      <p className="mt-2 text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
+                        {policy.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-2.5 pt-2 border-t border-stone-200/60 text-[10px] text-slate-500">
+                    Phạm vi: {policy.scope || 'Toàn bộ cơ sở'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
 
         </div>
       )}
@@ -2703,6 +3064,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           if (isApiAuthenticated() && backendSpec && selectedTarget) return <CustomerUnitDetails
             unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
             availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
+            rentalPackages={backendRentalPackages}
             onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
           const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 
@@ -2724,7 +3086,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-white">{formatVnd(selectedUnit.price)}<span className="text-sm font-normal text-stone-300">/{'tháng'}</span></p>
-                    <p className="text-xs font-medium text-white/70">{isApiAuthenticated() ? 'Cọc giữ chỗ theo báo giá của hệ thống' : 'Tiền cọc = 40% tổng giá trị kỳ thuê đã chọn'}</p>
+                    <p className="text-xs font-medium text-white/70">{isApiAuthenticated() ? 'Cọc giữ chỗ theo báo giá của hệ thống' : 'Tiền cọc = 20% tổng giá trị kỳ thuê đã chọn'}</p>
                   </div>
                 </div>
               </div>
@@ -2767,9 +3129,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                       <p className="text-xs font-bold text-stone-700 mb-2">Xe đẩy hỗ trợ tại cơ sở</p>
                       <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-900 text-white text-lg">
-                          🛒
-                        </div>
                         <div>
                           <p className="font-bold text-stone-950 text-sm">{customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)}</p>
                         </div>
@@ -2809,7 +3168,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                          <span>🏷️</span>
+
                           <span>Gói thuê ưu đãi cho loại kho này</span>
                         </p>
                         <p className="mt-0.5 text-xs text-emerald-950">
@@ -2863,29 +3222,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 )
               })()}
 
-              {/* 3. Safety, Security & Operating Standards */}
+              {/* 3. Quy định cho thuê kho */}
               <div className="order-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
-                  {'3. An ninh và tiện ích vận hành'}
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-stone-700">
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-1">
-                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
-                      <span className="text-blue-600"></span> {'An ninh & Ra vào độc quyền 24/7'}
-                    </p>
-                    <p className="text-stone-500 text-[11px]">
-                      {'Cổng tự động mở bằng mã PIN số cá nhân hóa do bạn sở hữu. Camera CCTV Full-HD góc rộng giám sát 24/7 từng hành lang và cửa kho.'}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 space-y-1">
-                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
-                      <span className="text-rose-600"></span> {'Hệ thống PCCC tự động đạt chuẩn'}
-                    </p>
-                    <p className="text-stone-500 text-[11px]">
-                      {'Tích hợp cảm biến khói nhiệt quang học và đầu phun nước tự động Sprinkler riêng biệt cho từng gian kho, thẩm duyệt PCCC định kỳ.'}
-                    </p>
-                  </div>
-                </div>
+                <CustomerRentalRegulations
+                  facilityName={selectedTarget ? (CUSTOMER_FACILITY_DISPLAY[selectedTarget.facility.id]?.name ?? selectedTarget.facility.name) : selectedUnit.facilityName}
+                />
               </div>
 
               <div className="order-6 rounded-2xl border border-rose-200 bg-rose-50/60 p-4 text-xs text-stone-700 sm:p-5">
@@ -2896,7 +3237,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <ul className="mt-2 list-disc space-y-1.5 pl-5 leading-5">
                       <li>Thời gian quá hạn được tính từ ngày kế tiếp sau ngày hết hạn hợp đồng đến ngày bàn giao và nghiệm thu kho thực tế.</li>
                       <li><b>Phí phạt mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</b></li>
-                      <li><b>Tổng phí phạt = số ngày quá hạn × phí phạt mỗi ngày.</b> Khoản này được khấu trừ vào tiền đảm bảo kho; nếu tiền đảm bảo không đủ, khách hàng phải thanh toán phần còn thiếu.</li>
+                      <li><b>Tổng phí phạt = số ngày quá hạn × phí phạt mỗi ngày.</b> Khoản này được khấu trừ vào tiền duy trì CSVC. Nếu tiền duy trì CSVC không đủ, khách hàng phải thanh toán phần còn thiếu.</li>
                     </ul>
                   </section>
                   <section className="rounded-xl border border-amber-200 bg-white p-4">
@@ -2908,8 +3249,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </ul>
                   </section>
                 </div>
-                <p className="mt-3 rounded-lg bg-rose-100 px-3 py-2 font-semibold text-rose-900">Ví dụ: đơn giá 3.000.000 ₫/tháng thì đơn giá ngày là 100.000 ₫; phí phạt là 50.000 ₫/ngày. Trễ 4 ngày, tổng phí phạt là 200.000 ₫.</p>
-                <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-900">Ưu đãi gia hạn: gói 6 tháng được giảm 3%, gói 12 tháng được giảm 5% tiền thuê của kỳ gia hạn. Gói 1 và 3 tháng không giảm; phí phạt quá hạn và các khoản phát sinh không được giảm.</p>
+                <p className="mt-3 rounded-lg bg-rose-100 px-3 py-2 font-semibold text-rose-900">Ví dụ: đơn giá 3.000.000 ₫/tháng thì đơn giá ngày là 100.000 ₫. Phí phạt là 50.000 ₫/ngày. Trễ 4 ngày, tổng phí phạt là 200.000 ₫.</p>
+                <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-900">Ưu đãi gia hạn: gói 6 tháng được giảm 3%, gói 12 tháng được giảm 5% tiền thuê của kỳ gia hạn. Gói 1 và 3 tháng không giảm. Phí phạt quá hạn và các khoản phát sinh không được giảm.</p>
               </div>
 
               {/* 5. Reservation & Financial Transparency Guarantee */}
@@ -2921,8 +3262,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {[
                     'Chọn cỡ kho phù hợp',
                     'Xác nhận giữ suất theo loại kho',
-                    'Thanh toán cọc 40% trong 24 giờ',
-                    'quản lý phân gian và khách nhận kho trong 14 ngày'
+                    'Thanh toán cọc 20% trong 15 phút',
+                    'Quản lý phân gian trong một ngày làm việc. Khách nhận kho trong 7 ngày làm việc'
                   ].map((item, index) => <div key={item} className="flex gap-2 rounded-xl bg-stone-50 p-3"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white">{index + 1}</span><span className="font-medium leading-4 text-stone-700">{item}</span></div>)}
                 </div>
               </div>
@@ -2936,6 +3277,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       handleStartReservation(selectedTarget.facility, selectedTarget.unitType)
                     } else {
                       setDetailOpen(false)
+                      setBookingStartedAt(Date.now())
                       setBookOpen(true)
                     }
                   }}
@@ -2957,47 +3299,73 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       >
         {selectedUnit && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">{'Loại kho bạn đang chọn'}</p>
-                  <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
-                </div>
+            <ol className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Các bước đặt kho">
+              {[
+                [1, 'Thông tin cá nhân'],
+                [2, 'Hàng hóa & sức chứa'],
+                [3, 'Báo giá & lịch nhận kho'],
+              ].map(([step, label]) => {
+                const stepNumber = Number(step)
+                const active = bookingStep === stepNumber
+                const completed = bookingStep > stepNumber
+                return <li key={stepNumber} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${active ? 'border-amber-500 bg-amber-50 text-amber-950' : completed ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-stone-200 bg-white text-stone-500'}`}>
+                  <span className="mr-1.5">{completed ? '✓' : stepNumber}.</span>{label}
+                </li>
+              })}
+            </ol>
+
+            {bookingStep === 2 && <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
+              <div className="mb-3 border-b border-stone-200 pb-3">
+                <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">Loại kho bạn đang chọn</p>
+                <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
               </div>
-              <div className="flex flex-col sm:flex-row sm:justify-between text-sm gap-0.5 sm:gap-2">
-                <span className="text-stone-700">{'Cỡ kho đã chọn:'}</span>
+              <div className="flex flex-col gap-0.5 text-sm sm:flex-row sm:justify-between sm:gap-2">
+                <span className="text-stone-700">Cỡ kho đã chọn:</span>
                 <b>{`${unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} (${selectedUnit.areaM2.toLocaleString('vi-VN')} m²)`}</b>
               </div>
-              <div className="mt-2 flex flex-col sm:flex-row sm:justify-between text-sm gap-0.5 sm:gap-2">
-                <span className="text-stone-700">{'Kích thước & Sức chịu tải:'}</span>
-                <span className="text-stone-900 font-medium">{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
+              <div className="mt-2 flex flex-col gap-0.5 text-sm sm:flex-row sm:justify-between sm:gap-2">
+                <span className="text-stone-700">Kích thước & Sức chịu tải:</span>
+                <span className="font-medium text-stone-900">{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
               </div>
-              <div className="mt-3 rounded-lg bg-stone-100 p-3 text-xs leading-5 text-stone-700">
-                {'Việc mở và điền biểu mẫu chưa giữ suất kho. Khi bạn nhấn xác nhận, hệ thống sẽ kiểm tra lại số lượng của loại kho; yêu cầu hợp lệ được ghi nhận trước sẽ được ưu tiên. quản lý sẽ phân gian kho cụ thể sau khi bạn thanh toán cọc.'}
-              </div>
-            </div>
+            </div>}
 
-            <div className={bookingReview ? 'hidden' : 'space-y-4'}>
+            <div className="space-y-4">
             {Object.keys(bookingErrors).length > 0 && (
               <div ref={bookingErrorRef} role="alert" tabIndex={-1} className="rounded-xl border border-red-700 bg-red-700 p-4 text-sm text-white shadow-lg">
                 <p className="font-bold">{'Thông tin chưa hợp lệ'}</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">{Object.values(bookingErrors).map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul>
               </div>
             )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {bookingStep === 1 && <section className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <div><p className="font-bold text-stone-900">Thông tin cá nhân</p><p className="mt-1 text-xs text-stone-500">Thông tin dùng để lập hồ sơ và đối chiếu khi nhận kho.</p></div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input label={'Họ và tên người thuê'} value={user.name} disabled />
               <Input label={'Số CCCD / Hộ chiếu (Đối chiếu lúc nhận kho)'} value={customerIdCard} onChange={e => setCustomerIdCard(e.target.value)} />
               <Input label={'Số điện thoại liên hệ'} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               <Input label="Email" value={customerEmail} disabled />
               <Input label={'Địa chỉ'} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
-              <Input label={'Ngày nhận kho mong muốn'} type="date" value={moveInDate} min={dateInputValue(new Date())} max={dateInputValue(new Date(now + 14 * 86_400_000))} onChange={e => setMoveInDate(e.target.value)} />
-              <div><Input label={'Giờ nhận kho (đang mở 24/7 để kiểm thử)'} type="time" min="00:00" max="23:59" step="1800" value={bookingAppointmentTime} onChange={e => setBookingAppointmentTime(e.target.value)} /><p className="mt-1 text-[11px] text-blue-700">{'Bạn có thể chọn bất kỳ giờ nào trong ngày; giới hạn 14 ngày nhận kho vẫn được áp dụng.'}</p></div>
+              </div>
+            </section>}
+
+            {bookingStep === 2 && <>
+              <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                <p className="mb-3 font-bold text-stone-900">Nhu cầu thuê kho</p>
               <Select
                 label={'Gói thuê & Kỳ hạn'}
-                value={isApiAuthenticated() ? rentalMonths.toString() : selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
+                value={isApiAuthenticated() ? selectedPackageId : selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
+                disabled={isApiAuthenticated() && rentalPackagesLoading}
                 onChange={e => {
                   const val = e.target.value
-                  if (isApiAuthenticated()) { setRentalMonths(Number(val)); setServerQuote(null); return }
+                  if (isApiAuthenticated()) {
+                    const pkg = backendRentalPackages.find(item => item.code === val)
+                    if (pkg) {
+                      setSelectedPackageId(pkg.code)
+                      setRentalMonths(pkg.rentalMonths)
+                      setServerQuote(null)
+                      setReservationSubmitError(null)
+                    }
+                    return
+                  }
                   const pkg = selectedUnitActivePackages.find(p => p.id === val || p.months.toString() === val)
                   if (pkg) {
                     setSelectedPackageId(pkg.id)
@@ -3010,7 +3378,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   }
                 }}
               >
-                {isApiAuthenticated() ? <>{[1, 3, 6, 12].map(months => <option key={months} value={months}>{months} tháng — lấy báo giá khi xác nhận</option>)}</> : selectedUnitActivePackages.length > 0 ? (
+                {isApiAuthenticated() ? <>
+                  {rentalPackagesLoading && <option value="">Đang tải gói thuê…</option>}
+                  {!rentalPackagesLoading && backendRentalPackages.length === 0 && <option value="">Không có gói thuê khả dụng</option>}
+                  {backendRentalPackages.map(pkg => <option key={pkg.code} value={pkg.code}>
+                    {pkg.rentalMonths} tháng - giảm {Math.round(pkg.discountRate * 100)}%
+                  </option>)}
+                </> : selectedUnitActivePackages.length > 0 ? (
                   selectedUnitActivePackages.map(pkg => (
                     <option key={pkg.id} value={pkg.id}>
                       {pkg.name} — {formatVnd(pkg.packagePrice)} {pkg.discountPercent ? `(Giảm ${pkg.discountPercent}%)` : ''}
@@ -3025,7 +3399,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </>
                 )}
               </Select>
-            </div>
+              </section>
 
             {/* Goods Declaration */}
             <div className="border-t border-stone-200 pt-3">
@@ -3037,10 +3411,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div><Select label="Loại hàng hóa" value={item.category} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, category: e.target.value, materialType: '', materialName: '' } : row))}><option value="">Chọn loại hàng hóa</option>{GOODS_CATEGORY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{bookingErrors[`goodsCategory-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsCategory-${item.id}`]}</p>}</div>
                      {item.category !== 'OTHER' ? <div><Select label="Chất liệu chính" value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const categoryMaterials = MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]; const materialType: GoodsDeclarationItem['materialType'] = materialName ? 'NORMAL' : ''; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, materialType } : row)) }}><option value="">Chọn chất liệu cụ thể</option>{item.category && [...MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>].normal, ...MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>].fragile].map(material => <option key={material} value={material}>{material}</option>)}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div> : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần nhân viên cơ sở duyệt trước khi thu cọc</div>}
                   </div>
-                   {item.category === 'OTHER' && <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-2">
-                     <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
-                     <div><Input label="Chất liệu chính *" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} />{bookingErrors[`customMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customMaterial-${item.id}`]}</p>}</div>
-                   </div>}
                    <div className="mt-4"><label className="text-sm font-medium text-stone-700">Mô tả hàng hóa *</label><textarea className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={item.description} placeholder="Mô tả tên đồ vật, tình trạng hoặc đặc điểm cần lưu ý" onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, description: e.target.value } : row))} />{bookingErrors[`goodsDescription-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsDescription-${item.id}`]}</p>}</div>
                    <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-5 sm:items-start">
                      <div className="flex h-full flex-col"><Input type="number" min="1" step="1" label="Số lượng *" value={item.quantity} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, quantity: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsQuantity-${item.id}`] || ''}</p></div>
@@ -3050,32 +3420,74 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Nặng/kiện (kg) *" value={item.weightKg} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, weightKg: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWeight-${item.id}`] || ''}</p></div>
                   </div>
                   <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row))} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row))} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
-                   {item.category === 'OTHER' && <div className="mt-4 space-y-3 border-t border-stone-200 pt-4">
-                    <p className="font-bold text-stone-900">Thông tin hàng hóa khác</p>
-                    <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
-                    <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={e => { const files = Array.from(e.target.files || []).slice(0, 10); setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, images: files } : row)) }} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">{item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
-                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>ℹ Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi xác nhận email, yêu cầu sẽ được xem xét trong tối đa 24 giờ. Kho chưa bị khóa trong thời gian chờ duyệt; có 24 giờ thanh toán sau khi hồ sơ được duyệt.</p></div>
-                  </div>}
+                   {item.category === 'OTHER' && <details className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
+                    <summary className="cursor-pointer font-bold text-stone-900">Thông tin nâng cao: vật liệu, ghi chú và hình ảnh</summary>
+                    <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
+                        <div><Input label="Chất liệu chính *" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} />{bookingErrors[`customMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customMaterial-${item.id}`]}</p>}</div>
+                      </div>
+                      <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
+                      <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
+                      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>ℹ Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi xác nhận email, yêu cầu sẽ được xem xét trong tối đa một ngày làm việc. Sau khi hồ sơ được duyệt, khách hàng có 15 phút để thanh toán. Quản lý cơ sở có tối đa một ngày làm việc tiếp theo để phân kho.</p></div>
+                    </div>
+                  </details>}
                 </div>)}
               </div>
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>
 
               <div className="mt-4 grid grid-cols-1 gap-3">
-                <Input label={'Tình trạng đóng gói chung'} value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)} />
+                <Input label={'Tình trạng đóng gói chung *'} value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)} />
               </div>
 
             </div>
 
+            {allPackageSamplesValid && warehouseRecommendation && (
+              <div className={`rounded-xl border p-4 text-sm ${warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold">Gợi ý kho phù hợp theo số lượng và kích thước đã nhập</p>
+                    <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
+                    {warehouseRecommendation.id === selectedTarget?.unitType.id && <p className="mt-1 text-xs font-semibold">Cỡ kho bạn đang chọn đã phù hợp.</p>}
+                  </div>
+                  {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && <Button type="button" size="sm" variant="outline" onClick={() => handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2)}>Chọn cỡ kho được gợi ý</Button>}
+                </div>
+              </div>
+            )}
+            {allPackageSamplesValid && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900"><b>Chưa có cỡ kho còn trống phù hợp</b><p className="mt-1 text-xs">Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.</p></div>}
+
+            {/* Check-in schedule is intentionally placed after goods declaration because OTHER goods add a review stage. */}
+            </>}
+
+            {bookingStep === 3 && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <div>
+                <p className="text-sm font-semibold text-stone-900">Chọn ngày giờ nhận kho</p>
+                <p className="mt-1 text-xs leading-5 text-stone-600">
+                  Lịch hợp lệ từ <b>{formatPolicyDateTime(checkInWindow.availableAt)}</b> đến <b>{formatPolicyDateTime(checkInWindow.deadlineAt)}</b>.
+                </p>
+              </div>
+              {schedulePolicyMessage && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950">{schedulePolicyMessage}</div>}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><VietnameseDateInput value={moveInDate} min={earliestCheckInDate} max={latestCheckInDate} onChange={value => { setMoveInDate(value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.moveInDate; return next }) }} />{bookingErrors.moveInDate && <p className="mt-1 text-xs text-red-700">{bookingErrors.moveInDate}</p>}</div>
+                <div><Input label="Giờ nhận kho mong muốn" type="time" step="1800" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.appointmentTime; return next }) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
+                <b>Ngày bắt đầu tính kỳ thuê:</b> {earliestCheckInDate}. Kỳ thuê bắt đầu từ ngày kho sẵn sàng sớm nhất, không phụ thuộc việc bạn chọn đến muộn hơn trong cửa sổ 7 ngày làm việc.
+              </div>
+            </div>}
+
+            {bookingStep === 3 && <>
+
             {/* Storage Space & Cost Breakdown */}
             {(() => {
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
-                <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p><p className="mt-1 text-xs">Kết quả được tính theo kích thước từng kiện, tổng thể tích và tải trọng của loại kho đã chọn.</p></div>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'Phù hợp' : 'Không phù hợp'}</span>}</div>
-                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện</span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-2"><p><b>Tổng khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div><p className="text-xs text-stone-500">Các loại hàng được gộp chung theo tổng thể tích; mỗi khung sử dụng tối đa 80% thể tích để chừa khoảng xếp dỡ.</p></div>}
-                {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” sẽ được nhân viên cơ sở xem xét trong tối đa 24 giờ kể từ khi bạn xác minh email. Sau khi hồ sơ được chấp thuận, bạn có 24 giờ để hoàn tất tiền cọc giữ chỗ.</p></div>}
+                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'Phù hợp' : 'Không phù hợp'}</span>}</div>
+                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(Number(sample.quantity) * Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm) / 1_000_000)} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(goodsVolumeM3)} m³</span></p><p><b>Tổng khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
+                {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa một ngày làm việc kể từ khi bạn xác minh email. Sau khi chấp thuận, bạn có 15 phút để hoàn tất tiền cọc giữ chỗ.</p></div>}
               </div>
               const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
               const totalTermValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
-              const reservationDeposit = Math.round(totalTermValue * 0.4 * 100) / 100
+              const reservationDeposit = Math.round(totalTermValue * 0.2 * 100) / 100
               const remainingPayment = Math.max(0, totalTermValue - reservationDeposit)
               const conditionSecurityDeposit = currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice
               const dueAtCheckIn = remainingPayment + conditionSecurityDeposit
@@ -3086,14 +3498,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className="flex items-center justify-between border-b border-stone-200 pb-2">
                     <div>
                       <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
-                      <p className="text-[11px] text-stone-500">Mỗi khung rộng 0,8 m × dài 2,0 m × cao theo kho; hệ thống thử đủ 6 hướng xoay.</p>
+                      <p className="text-[11px] text-stone-500">Mỗi khung rộng 0,8 m × dài 2,0 m × cao theo kho. Hệ thống thử đủ 6 hướng xoay.</p>
                     </div>
                     {capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
                   </div>
 
                   {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
-                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg</span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {selectedRackDimensions.join(' × ')} m</b>}</div>)}
-                    <div className="flex justify-between pt-1 text-sm"><b>Tổng khung cần dùng</b><b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</b></div>
+                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · <b>{formatVolumeM3(Number(sample.quantity) * Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm) / 1_000_000)} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {selectedRackDimensions.join(' × ')} m</b>}</div>)}
+                    <div className="grid gap-2 border-t border-stone-100 pt-2 text-sm sm:grid-cols-2"><span><b>Tổng thể tích cần lưu:</b> {formatVolumeM3(goodsVolumeM3)} m³</span><span className="sm:text-right"><b>Tổng khung cần dùng:</b> <b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</b></span></div>
                     {warehouseRecommendation && <p className="border-t border-stone-100 pt-2 text-emerald-700">Cỡ kho nhỏ nhất phù hợp: <b>{storageSizeCode(warehouseRecommendation.name || warehouseRecommendation.code)}</b></p>}
                   </div>}
 
@@ -3103,9 +3515,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
                   </div>
 
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>− {formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>🎁</span><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>− {formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 40% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + cọc đảm bảo)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng nghĩa vụ kỳ thuê và cọc đảm bảo</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
+                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền duy trì CSVC (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + tiền duy trì CSVC)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng tiền thuê và tiền duy trì CSVC</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
 
-                    <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Mã OTP có hiệu lực 10 phút; thời hạn thanh toán bắt đầu sau khi xác minh hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Sau khi xác minh email, hàng hóa “Khác” được nhân viên cơ sở xét duyệt trong tối đa 24 giờ; sau khi duyệt có 24 giờ để thanh toán.' : 'Sau khi xác minh email, bạn có 24 giờ để thanh toán cọc 40% theo báo giá.'}</li><li>Sau khi cọc, bạn cần hoàn tất nhận kho tại gian kho đã chọn trong 14 ngày.</li></ul></div>
+                    <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Mã OTP có hiệu lực 10 phút. Thời hạn thanh toán bắt đầu sau khi xác minh hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được xét duyệt trong tối đa một ngày làm việc. Sau khi duyệt có 15 phút để thanh toán.' : 'Sau khi xác minh email, bạn có 15 phút để thanh toán cọc 20% theo báo giá.'}</li><li>Quản lý cơ sở có tối đa một ngày làm việc để phân kho. Khách hàng chọn lịch nhận kho trong thời hạn 7 ngày làm việc từ thời điểm kho có thể sẵn sàng.</li></ul></div>
                 </div>
               )
             })()}
@@ -3137,7 +3549,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                                   ut.name.toLowerCase().includes(targetTypePrefix.toLowerCase())
                           )
                           if (upgradeType && selectedTarget) {
-                            handleStartReservation(selectedTarget.facility, upgradeType)
+                            handleStartReservation(selectedTarget.facility, upgradeType, undefined, 2)
                             setValidationViolation(null)
                             showToast(`Đã chuyển sang cỡ kho ${upgradeType.name}!`)
                           } else {
@@ -3152,12 +3564,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 )}
               </div>
             )}
+            </>}
             </div>
 
-            {bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={serverQuote} needsReview={hasOtherGoods} />}
-            {bookingReview && !isApiAuthenticated() && (() => {
+            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={serverQuote} needsReview={hasOtherGoods} />}
+            {bookingStep === 3 && bookingReview && !isApiAuthenticated() && (() => {
               const totalValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
-              const deposit = Math.round(totalValue * 0.4 * 100) / 100
+              const deposit = Math.round(totalValue * 0.2 * 100) / 100
               const securityDeposit = currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice
               const dueAtCheckIn = totalValue - deposit + securityDeposit
               return (
@@ -3170,39 +3583,39 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className={`rounded-lg border p-3 ${packagesFitSelectedUnit ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div><p className={`font-bold ${packagesFitSelectedUnit ? 'text-emerald-900' : 'text-red-900'}`}>Kiểm tra sức chứa theo khung</p><p className="mt-0.5 text-[11px] text-stone-600">Cần {totalFramesRequired} / {selectedRackCount} khung · gộp tổng thể tích ở mức sử dụng 80%, từng kiện được thử đủ 6 hướng xoay</p></div>
-                      <span className={`rounded-full px-3 py-1 font-bold ${packagesFitSelectedUnit ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit ? '✓ Kho chứa vừa' : '✕ Kho không chứa vừa'}</span>
+                      <span className={`font-bold ${packagesFitSelectedUnit ? 'text-emerald-800' : 'text-red-800'}`}>{packagesFitSelectedUnit ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>
                     </div>
                   </div>
                   <div className="divide-y divide-stone-200 border-y border-stone-200">
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · 2 × 4 × 4,5 m/khung</p></section>
                     <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa và sức chứa</p><ul className="list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}><b>{sample.sourceLabel || `Hàng hóa ${index + 1}`}:</b> {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg{!sample.canFitFrame && ' · không thể xếp vừa khung'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện:</b> {packageCountNumber}</p><p><b>Tổng khung cần dùng:</b> {hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</p><p className="text-xs text-stone-500">Số khung được tính từ tổng thể tích của mọi loại hàng với mức sử dụng tối đa 80% mỗi khung.</p><p><b>Tổng cân nặng:</b> {goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch nhận kho:</b> {moveInDate} · {bookingAppointmentTime}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, ngày mới vẫn phải nằm trong 14 ngày sau khi thanh toán cọc.</p></section>
+                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch nhận kho:</b> {displayDateValue(moveInDate)} · {bookingAppointmentTime}</p><p><b>Ngày bắt đầu kỳ thuê:</b> {displayDateValue(earliestCheckInDate)}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, thời điểm mới vẫn phải nằm trong thời hạn nhận kho 7 ngày làm việc.</p></section>
                   </div>
-                  {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, nhân viên có tối đa 24 giờ để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
-                    <div><p className="text-xs text-stone-500">Giảm giá {facilityPolicyDiscount > 0 ? '(Gồm ưu đãi cơ sở)' : `(${Math.round(discountRate * 100)}%)`}</p><p className="mt-1 font-bold text-emerald-700">− {formatVnd(totalCombinedDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
+                  {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, nhân viên có tối đa một ngày làm việc để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
+                    <div><p className="text-xs text-stone-500">Giảm giá {facilityPolicyDiscount > 0 ? '(Gồm ưu đãi cơ sở)' : `(${Math.round(discountRate * 100)}%)`}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(totalCombinedDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
                     <div><p className="text-xs text-stone-500">Tiền thuê sau giảm</p><p className="mt-1 font-bold">{formatVnd(totalValue)}</p></div>
-                    <div><p className="text-xs text-stone-500">{'Cọc giữ chỗ 40%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
-                    <div><p className="text-xs text-stone-500">Tiền cọc đảm bảo kho</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
+                    <div><p className="text-xs text-stone-500">{'Cọc giữ chỗ 20%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
+                    <div><p className="text-xs text-stone-500">Tiền duy trì CSVC</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
                     <div><p className="text-xs text-stone-500">{'Thu tại nhận kho'}</p><p className="mt-1 font-bold">{formatVnd(dueAtCheckIn)}</p></div>
                   </div>}
                   {evaluatedPolicyBenefits.some(b => b.isDiscount) && (
                     <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950">
                       <p className="font-bold flex items-center gap-1.5 text-emerald-900">
-                        <span>🎁</span>
+
                         <span>Chính sách ưu đãi cơ sở được áp dụng:</span>
                       </p>
                       <div className="mt-2 space-y-1 pl-4">
                         {evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => (
                           <div key={b.policy.id} className="flex flex-wrap items-center justify-between gap-2">
                             <span>• <b>{b.policy.name}</b> ({b.policy.value}): {b.descriptionVi}</span>
-                            <span className="font-bold text-emerald-800">− {formatVnd(b.discountAmount)}</span>
+                            <span className="font-bold text-emerald-800">{formatVnd(b.discountAmount)}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi nhân viên cơ sở chấp thuận, hệ thống mới mở bước thanh toán cọc 40%. Nếu bị từ chối, suất kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hủy trước nhận kho. Tiền đảm bảo kho được thu riêng tại nhận kho để bảo đảm nghĩa vụ về hư hại, vệ sinh và công nợ; khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
+                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi nhân viên cơ sở chấp thuận, hệ thống mới mở bước thanh toán cọc 20%. Nếu bị từ chối, suất kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hàng hủy trước nhận kho. Tiền duy trì CSVC được thu riêng tại nhận kho để bảo đảm trách nhiệm về hư hại, vệ sinh và công nợ. Khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
                 </div>
               )
             })()}
@@ -3212,17 +3625,22 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
             </div>}
 
-            <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
-              {bookingReview ? (
-                <Button variant="outline" disabled={reservationSubmitting} onClick={() => { setBookingReview(false); setServerQuote(null); setReservationSubmitError(null) }}>{'Quay lại chỉnh sửa'}</Button>
-              ) : (
-                <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>{'Hủy đặt kho'}</Button>
-              )}
-              <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>
-                {reservationSubmitting ? 'Đang xử lý...'
-                  : bookingReview ? (hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho')
-                  : 'Kiểm tra và lấy báo giá'}
-              </Button>
+            <div className="flex flex-wrap justify-between gap-2 border-t border-stone-100 pt-3">
+              <div>
+                {bookingStep === 1
+                  ? <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>Hủy đặt kho</Button>
+                  : <Button variant="outline" disabled={reservationSubmitting} onClick={() => {
+                      if (bookingStep === 3) {
+                        setBookingReview(false)
+                        setServerQuote(null)
+                        setReservationSubmitError(null)
+                      }
+                      setBookingStep(current => Math.max(1, current - 1) as 1 | 2 | 3)
+                    }}>Quay lại</Button>}
+              </div>
+              {bookingStep === 1 && <Button onClick={continueFromPersonalDetails}>Tiếp theo: Hàng hóa</Button>}
+              {bookingStep === 2 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && (rentalPackagesLoading || !selectedBackendRentalPackage))} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang lập báo giá...' : 'Tiếp tục: Xem báo giá'}</Button>}
+              {bookingStep === 3 && <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận và đặt kho'}</Button>}
             </div>
           </div>
         )}
@@ -3231,12 +3649,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       <CustomerReservationOtpModal
         reservation={backendOtpReservation}
         code={backendOtpCode}
+        developmentCode={backendOtpDevelopmentCode}
         busy={backendOtpBusy}
         message={backendOtpMessage}
         nextResendAt={backendOtpReservation ? backendOtpNextResendAt[backendOtpReservation.id] || 0 : 0}
         now={now}
         onCodeChange={setBackendOtpCode}
-        onClose={() => { if (!backendOtpBusy) setBackendOtpReservation(null) }}
+        onClose={() => {
+          if (!backendOtpBusy) {
+            setBackendOtpReservation(null)
+            setBackendOtpDevelopmentCode(null)
+          }
+        }}
         onResend={() => void resendBackendReservationOtp()}
         onVerify={() => void verifyBackendReservationOtp()}
       />
@@ -3275,7 +3699,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 size="sm"
                 onClick={() => {
                   setInputToken(resendHoldEmail(activeHoldForEmail.id, user))
-                  showToast('Đã tạo lại mã demo trên phiên hiện tại; chưa gửi email thật.')
+                  showToast('Đã tạo lại mã thử nghiệm trên phiên hiện tại. Hệ thống chưa gửi thư điện tử thật.')
                 }}
               >
                  {'Tạo lại mã demo'}
@@ -3317,7 +3741,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const grossTotal = originalRent * activeHoldForPayment.rentalMonths
           const discountAmount = activeHoldForPayment.discountAmount ?? 0
           const totalDue = Math.max(0, grossTotal - discountAmount)
-          const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round(totalDue * 0.4 * 100) / 100
+          const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round(totalDue * 0.2 * 100) / 100
           const securityDeposit = activeHoldForPayment.securityDepositAmount ?? originalRent
           const dueAtCheckIn = activeHoldForPayment.remainingAmount ?? totalDue - reservationDeposit + securityDeposit
 
@@ -3342,10 +3766,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span>{'Tổng giá trị kỳ thuê:'}</span>
                     <span className="">{formatVnd(totalDue)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (40%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
-                  <div className="flex justify-between"><span>{'Tiền đảm bảo kho:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
+                  <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (20%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
+                  <div className="flex justify-between"><span>{'Tiền duy trì CSVC:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Còn thu tại nhận kho:'}</span><span>{formatVnd(dueAtCheckIn)}</span></div>
-                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Cọc giữ chỗ 40% được khấu trừ vào tiền thuê. Tiền đảm bảo kho được thu riêng tại nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ; phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
+                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Cọc giữ chỗ 20% được khấu trừ vào tiền thuê. Tiền duy trì CSVC được thu riêng khi nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
                 </div>
               </div>
 
@@ -3395,7 +3819,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <span className="underline">{activeHoldForContract.customerEmail}</span>
                 </p>
                 <p className="text-stone-700">
-                  {'Đã ghi nhận cọc giữ chỗ. Hợp đồng giấy chỉ xuất hiện sau khi hai bên ký và nhân viên lưu bản scan; phần còn lại thu tại cơ sở.'}
+                  {'Đã ghi nhận cọc giữ chỗ. Hợp đồng giấy chỉ xuất hiện sau khi hai bên ký và nhân viên lưu bản chụp. Phần còn lại thu tại cơ sở.'}
                 </p>
               </div>
             </div>
@@ -3466,13 +3890,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       ['Lịch nhận kho / bàn giao', appointment]
                     ].map(([label, value]) => <div key={label} className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</p><p className="mt-1 font-bold leading-5 text-stone-900">{value}</p></div>)}</div></section>
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'3. Điều khoản chính'}</p><div className="grid gap-2 sm:grid-cols-2">{[
-                      `Đơn giá hiện hành: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng; tổng giá trị tiền thuê sau gia hạn là ${formatVnd(currentTermValue)}.`,
-                      `Tổng cọc giữ chỗ đã ghi nhận (${formatVnd(totalBookingDeposit)}) được trừ vào tiền thuê; tiền đảm bảo kho ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ, phần còn lại được hoàn sau nghiệm thu.`,
-                      'Khách hoàn tất nhận kho trong 14 ngày sau khi thanh toán cọc; đổi lịch cũng phải nằm trong thời hạn này.',
+                      `Đơn giá hiện hành: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng. Tổng giá trị tiền thuê sau gia hạn là ${formatVnd(currentTermValue)}.`,
+                      `Tổng cọc giữ chỗ đã ghi nhận (${formatVnd(totalBookingDeposit)}) được trừ vào tiền thuê. Tiền duy trì CSVC ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần còn lại được hoàn sau nghiệm thu.`,
+                      'Khách hoàn tất nhận kho trong vòng 7 ngày làm việc. Việc đổi lịch cũng phải nằm trong thời hạn này.',
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
-                      'Gia hạn theo gói tháng, chỉ thanh toán sau khi quản lý cơ sở kiểm tra lịch và phê duyệt.',
+                      'Gia hạn theo gói tháng. Hệ thống kiểm tra điều kiện và mở thanh toán khi các nguồn cần thiết sẵn sàng; quản lý cơ sở theo dõi hồ sơ.',
                       'Khi trả kho, nhân viên lập biên bản trước–sau; khấu trừ phải có nội dung, số tiền và minh chứng.',
-                      'Khách được xem, đồng ý hoặc yêu cầu xem xét lại quyết toán trước khi đóng hồ sơ.'
+                      'Khách được xem, đồng ý hoặc yêu cầu xem xét lại quyết toán trước khi đóng hồ sơ.',
+                      'Sự cố kết cấu hạ tầng: Cơ sở chịu 100% trách nhiệm, xử lý khẩn cấp trong 4 đến 12 giờ. Cơ sở kích hoạt di dời khẩn cấp miễn phí sang kho tương đương và giữ nguyên hợp đồng.',
+                      'Phân định trách nhiệm ẩm mốc khi trả kho: Hoàn 100% cọc và đền bù nếu do thấm dột hoặc hỏng máy lạnh của cơ sở. Khách hàng tự chịu và bị khấu trừ phí khử trùng 1.500.000₫ nếu do đóng gói ẩm hoặc vi phạm hàng cấm.'
                     ].map((term, index) => <div key={term} className="flex gap-2 rounded-lg bg-stone-50 p-3 leading-5"><span className="font-bold text-amber-700">{index + 1}.</span><span>{term}</span></div>)}</div></section>
                     {completedRenewals.length > 0 && <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'4. Hợp đồng gia hạn đã phát hành'}</p><div className="space-y-2">{completedRenewals.map(renewal => {
                       const renewalContract = contracts.find(contract => contract.id === renewal.renewalContractId || contract.renewalId === renewal.id)
@@ -3482,7 +3908,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className="grid gap-3 border-t border-stone-200 p-5 sm:grid-cols-4">
                     <div className="rounded-lg bg-stone-50 p-3"><p className="text-stone-500">{'Tổng giá trị thuê hiện hành'}</p><p className="mt-1 text-base font-bold text-stone-950">{formatVnd(currentTermValue)}</p><p className="mt-1 text-[10px] text-stone-500">{totalRentalMonths} {'tháng, gồm các kỳ gia hạn đã hoàn tất'}</p></div>
                     <div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Tổng cọc giữ chỗ đã ghi nhận'}</p><p className="mt-1 text-base font-bold text-blue-800">{formatVnd(totalBookingDeposit)}</p>{depositDueNow > 0 && <p className="mt-1 text-[10px] font-semibold text-blue-700">{`Cần thanh toán ngay: ${formatVnd(depositDueNow)}`}</p>}</div>
-                    <div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền đảm bảo kho'}</p><p className="mt-1 text-base font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div>
+                    <div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền duy trì CSVC'}</p><p className="mt-1 text-base font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div>
                     <div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn thanh toán tại cơ sở'}</p><p className="mt-1 text-base font-bold text-amber-900">{formatVnd(balance)}</p><p className="mt-1 text-[10px] text-amber-700">{balance > 0 ? ('Theo lịch gia hạn đang chờ hoàn tất') : ('Không còn khoản gia hạn phải thanh toán')}</p></div>
                   </div>
                   <section className="border-t border-stone-200 bg-stone-50 p-5">
@@ -3525,25 +3951,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               const totalValue = rentalValue + securityDeposit
               const totalPaid = receiptPayments.filter(payment => payment.status === 'PAID' && payment.type !== 'REFUND').reduce((sum, payment) => sum + payment.amount, 0)
               const balance = Math.max(0, totalValue - totalPaid)
-              const renewalReceiptAudit = completedRenewals.map(renewal => {
-                const renewalPayments = receiptPayments.filter(payment => payment.renewalId === renewal.id && payment.status === 'PAID')
-                return { renewal, hasDeposit: renewalPayments.some(payment => !payment.id.startsWith('PAY-RNW-BAL-')), hasCounterBalance: renewalPayments.some(payment => payment.id.startsWith('PAY-RNW-BAL-')) }
-              })
               return <div className="space-y-4 text-xs">
-                <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{formatVnd(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền đảm bảo kho'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{formatVnd(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{formatVnd(balance)}</p></div></div></div>
-                {renewalReceiptAudit.map(({ renewal, hasDeposit, hasCounterBalance }) => <div key={`receipt-audit-${renewal.id}`} className={`rounded-xl border p-4 ${hasDeposit && hasCounterBalance ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-red-300 bg-red-50 text-red-900'}`}><p className="font-bold">Đối soát biên lai gia hạn · {renewal.renewalContractNumber || renewal.id}</p><p className="mt-1">{hasDeposit ? '✓ Có biên lai cọc gia hạn' : '✕ Thiếu biên lai cọc gia hạn'} · {hasCounterBalance ? '✓ Có biên lai đóng đủ tiền tại quầy' : '✕ Thiếu biên lai đóng đủ tiền tại quầy'}</p></div>)}
-                {receiptPayments.map(payment => <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai đóng đủ tiền gia hạn tại quầy' : payment.type === 'RENEWAL' ? 'Biên lai cọc gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{formatVnd(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền duy trì CSVC'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{formatVnd(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{formatVnd(balance)}</p></div></div></div>
+                {receiptPayments.map(payment => <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai thanh toán số dư gia hạn' : payment.type === 'RENEWAL' ? 'Biên lai thanh toán gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
                   ['Số biên nhận', payment.id],
                   ['Ngày giờ thanh toán', payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—'],
                   ['Người nộp tiền', `${activeHoldForContract.customerName} · ${activeHoldForContract.customerEmail}`],
                   ['Đơn vị nhận tiền', `StorageHub · ${activeHoldForContract.facilityName}`],
-                  ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Cọc giữ chỗ 40% giá trị kỳ thuê') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : payment.type)],
+                  ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Cọc giữ chỗ 20% giá trị kỳ thuê') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : 'Giao dịch thanh toán')],
                   ['Số hóa đơn', payment.invoiceNumber || '—'],
                   ['Mã đơn / hợp đồng', `${activeHoldForContract.id} · ${contracts.find(item => item.reservationId === activeHoldForContract.id)?.contractNumber || '—'}`],
-                  ['Phương thức', payment.paymentMethod || activeHoldForContract.payment.method || '—'],
+                  ['Phương thức', paymentMethodLabel(payment.paymentMethod || activeHoldForContract.payment.method)],
                   ['Mã giao dịch đối soát', payment.transactionReference || activeHoldForContract.payment.transactionId || payment.id],
-                  ['Số tiền / tiền tệ', `${formatVnd(payment.amount)} · VND`],
-                  ['Người ghi nhận', payment.receivedBy || payment.recordedBy || 'StorageHub System']
+                  ['Số tiền / tiền tệ', `${formatVnd(payment.amount)} · ${paymentCurrencyLabel('VND')}`],
+                  ['Người ghi nhận', payment.receivedBy || payment.recordedBy || 'Hệ thống StorageHub']
                 ].map(([label, value]) => <div key={label} className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</p><p className="mt-1 font-bold leading-5 text-stone-900">{value}</p></div>)}</div><div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-5 py-4"><p className="text-stone-600">{'Biên nhận được lưu trong hồ sơ khách hàng và dùng để đối chiếu thanh toán.'}</p><p className="text-lg font-extrabold text-emerald-700">{formatVnd(payment.amount)}</p></div></article>)}
                 {!receiptPayments.length && <div className="rounded-xl border border-dashed border-stone-300 p-8 text-center text-stone-500">{'Chưa có giao dịch để phát hành biên nhận.'}</div>}
               </div>
@@ -3561,9 +3982,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         {activeHoldForSchedule && (
           <div className="space-y-4">
             <p className="text-xs text-stone-600">
-              {'Chọn ngày giờ bạn sẽ đến cơ sở để cùng nhân viên đối chiếu CCCD, cân đo hàng hóa thực tế và nhận mã PIN mở cửa:'}
+              {'Chọn ngày giờ bạn sẽ đến cơ sở để cùng nhân viên đối chiếu CCCD, cân đo hàng hóa thực tế và nhận mã mở cửa:'}
             </p>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950"><b>{'Hạn đổi lịch:'}</b> {activeHoldForSchedule.checkInDeadline ? dateInputValue(new Date(activeHoldForSchedule.checkInDeadline)) : ('14 ngày sau khi thanh toán cọc')}. {'Ngày dự kiến trên đơn sẽ được cập nhật theo lịch mới.'}</div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950"><b>{'Hạn đổi lịch:'}</b> {activeHoldForSchedule.checkInDeadline ? dateInputValue(new Date(activeHoldForSchedule.checkInDeadline)) : ('trong thời hạn nhận kho 7 ngày làm việc')}. {'Ngày dự kiến trên đơn sẽ được cập nhật theo lịch mới.'}</div>
 
             <div className="grid grid-cols-2 gap-3">
               <Input
@@ -3608,7 +4029,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-700 bg-amber-700 p-3 text-xs text-white">
               <p className="font-semibold">{`Gian kho ${activeRentalForReturn.unitId} (${activeRentalForReturn.facilityName})`}</p>
-              <p>{'Tiền đảm bảo kho sẽ được hoàn đầy đủ sau khi nghiệm thu xác nhận không có hư hại, phí vệ sinh hoặc công nợ.'}</p>
+              <p>{'Tiền duy trì CSVC sẽ được hoàn đầy đủ sau khi nghiệm thu xác nhận không có hư hại, phí vệ sinh hoặc công nợ.'}</p>
             </div>
 
             <Input
@@ -3637,8 +4058,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <Button
                 variant="danger"
                 disabled={!returnTargetDate || Boolean(parseCustomerDate(activeRentalForReturn.endDate) && new Date(`${returnTargetDate}T00:00:00`).getTime() > parseCustomerDate(activeRentalForReturn.endDate)!.getTime())}
-                onClick={() => {
+                onClick={async () => {
                   try {
+                    if (isApiAuthenticated()) {
+                      await requestReturnApi(activeRentalForReturn.id, returnTargetDate, returnReason || '')
+                    }
                     requestReturn(activeRentalForReturn.id, returnTargetDate, user, returnReason)
                     setReturnModalOpen(false)
                     showToast('Yêu cầu trả kho đã được tiếp nhận. Nhân viên sẽ chuẩn bị biên bản nghiệm thu!')
@@ -3666,7 +4090,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <p className="font-semibold">{`Gian kho ${activeRentalForRenewal.unitId} (${activeRentalForRenewal.facilityName})`}</p>
               <p>{`Hạn hợp đồng hiện tại: ${activeRentalForRenewal.endDate}. Giá thuê: ${formatVnd(activeRentalForRenewal.monthlyRate)}/tháng.`}</p>
               <p className="text-[11px] text-white">
-                {'quản lý cơ sở sẽ kiểm tra xung đột lịch đặt trước khi phê duyệt gia hạn cho bạn.'}
+                {'hệ thống sẽ kiểm tra điều kiện và xung đột lịch; quản lý cơ sở theo dõi hồ sơ, không cần duyệt để khách hàng thanh toán.'}
               </p>
             </div>
 
@@ -3694,7 +4118,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     else requestRenewal(activeRentalForRenewal.id, renewalMonths, user)
                     setRenewalModalOpen(false)
                     setEditingRenewalId(null)
-                    showToast(editingRenewalId ? ('Đã cập nhật yêu cầu và thông báo lại cho quản lý.') : ('Đã gửi yêu cầu gia hạn tới quản lý cơ sở!'))
+                    showToast(editingRenewalId ? ('Đã cập nhật yêu cầu gia hạn.') : ('Đã gửi yêu cầu gia hạn để hệ thống kiểm tra.'))
                   } catch (err: any) {
                     showToast(err?.message || 'Error requesting renewal')
                   }
@@ -3720,9 +4144,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const renewalGrossTotal = (activeRenewalForPayment.originalMonthlyRate ?? rental?.monthlyRate ?? 0) * activeRenewalForPayment.renewalMonths
           const renewalDiscountAmount = activeRenewalForPayment.discountAmount ?? Math.max(0, Math.round((renewalGrossTotal - renewalTotal) * 100) / 100)
           const appliedRenewalDiscountRate = activeRenewalForPayment.discountRate ?? (renewalGrossTotal > 0 ? renewalDiscountAmount / renewalGrossTotal : 0)
-          const renewalPaymentSplit = calculateRenewalPaymentSplit(renewalTotal)
-          const renewalDeposit = activeRenewalForPayment.bookingDepositAmount ?? renewalPaymentSplit.depositAmount
-          const remainingAtFacility = activeRenewalForPayment.remainingAmount ?? renewalPaymentSplit.remainingAmount
+          const legacyRenewalDeposit = activeRenewalForPayment.bookingDepositAmount ?? 0
           const oldEndAt = new Date(`${activeRenewalForPayment.oldEndDate}T23:59:59`)
           const isOverdue = oldEndAt.getTime() < now
           const latestAppointment = new Date(now); latestAppointment.setDate(latestAppointment.getDate() + 7)
@@ -3736,21 +4158,21 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const overdueStart = new Date(`${activeRenewalForPayment.oldEndDate}T00:00:00`); overdueStart.setDate(overdueStart.getDate() + 1)
           const projectedOverdueDays = projectedLateThrough.getTime() >= overdueStart.getTime() ? Math.floor((projectedLateThrough.getTime() - overdueStart.getTime()) / 86_400_000) + 1 : 0
           const projectedLateFee = Math.round(projectedOverdueDays * lateFeePerDay * 100) / 100
-          const projectedOnSiteTotal = Math.round((remainingAtFacility + projectedLateFee) * 100) / 100
+          const renewalPaymentReady = false
           return <div className="space-y-5 text-sm">
             <div className="overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white">
               <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-amber-700">{'Hóa đơn gia hạn đã được duyệt'}</p><p className="mt-1 text-xl font-extrabold text-stone-950">{activeRenewalForPayment.invoiceNumber}</p><p className="mt-1 text-stone-600">Gian kho <b>{activeRenewalForPayment.unitId}</b> · Gói <b>{activeRenewalForPayment.renewalMonths} tháng</b></p></div>
-                <div className="rounded-xl bg-stone-950 px-5 py-4 text-left text-white sm:min-w-56 sm:text-right"><p className="text-xs text-stone-300">{'Cần thanh toán cọc (40%)'}</p><p className="mt-1 text-2xl font-extrabold">{formatVnd(renewalDeposit)}</p></div>
+                <div className="rounded-xl bg-stone-950 px-5 py-4 text-left text-white sm:min-w-56 sm:text-right"><p className="text-xs text-stone-300">{legacyRenewalDeposit > 0 ? 'Điều khoản gia hạn cũ: cọc đã ghi nhận' : 'Toàn bộ tiền gia hạn cần thanh toán'}</p><p className="mt-1 text-2xl font-extrabold">{formatVnd(legacyRenewalDeposit > 0 ? legacyRenewalDeposit : renewalTotal)}</p></div>
               </div>
               <div className="grid border-t border-amber-200 bg-white/70 sm:grid-cols-4">
                 <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Hợp đồng cũ đến'}</p><p className="mt-1 font-bold text-stone-900">{activeRenewalForPayment.oldEndDate}</p></div>
                 <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Kỳ gia hạn mới'}</p><p className="mt-1 font-bold text-stone-900">{dateInputValue(renewalEffectiveAt)} → {activeRenewalForPayment.newEndDate}</p></div>
                 <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Đơn giá mỗi tháng'}</p><p className="mt-1 font-bold text-stone-900">{formatVnd(activeRenewalForPayment.originalMonthlyRate ?? rental?.monthlyRate ?? 0)}</p></div>
-                <div className="p-4"><p className="text-xs text-stone-500">{'Hạn thanh toán cọc'}</p><p className={`mt-1 font-bold ${paymentExpired ? 'text-red-700' : 'text-amber-800'}`}>{activeRenewalForPayment.paymentDueAt ? new Date(activeRenewalForPayment.paymentDueAt).toLocaleString('vi-VN') : '—'}</p></div>
+                <div className="p-4"><p className="text-xs text-stone-500">{'Hạn thanh toán toàn kỳ (nếu đã mở)'}</p><p className={`mt-1 font-bold ${paymentExpired ? 'text-red-700' : 'text-amber-800'}`}>{activeRenewalForPayment.paymentDueAt ? new Date(activeRenewalForPayment.paymentDueAt).toLocaleString('vi-VN') : '—'}</p></div>
               </div>
             </div>
-            {!paymentExpired && activeRenewalForPayment.paymentDueAt && <div className="flex flex-col gap-1 rounded-xl bg-red-700 px-5 py-3 text-white sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-bold uppercase tracking-wider">{'Thời gian thanh toán cọc còn lại'}</p><p className="text-xl font-extrabold">{formatCountdown(activeRenewalForPayment.paymentDueAt).text}</p></div>}
+            {!paymentExpired && activeRenewalForPayment.paymentDueAt && <div className="flex flex-col gap-1 rounded-xl bg-red-700 px-5 py-3 text-white sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-bold uppercase tracking-wider">{'Thời gian thanh toán toàn kỳ còn lại'}</p><p className="text-xl font-extrabold">{formatCountdown(activeRenewalForPayment.paymentDueAt).text}</p></div>}
             <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
               <div className="space-y-4">
                 <section className="rounded-xl border border-stone-200 p-4">
@@ -3760,33 +4182,22 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <p className={`mt-3 rounded-lg p-3 text-xs leading-5 ${isOverdue || projectedOverdueDays > 0 ? 'border border-red-200 bg-red-50 font-semibold text-red-800' : 'bg-stone-100 text-stone-600'}`}>{`Hợp đồng cũ hết hạn ${activeRenewalForPayment.oldEndDate}. Nếu ký sau ngày này, hệ thống tính phụ thu từ ngày kế tiếp sau khi hết hạn đến ngày ký thực tế.`}</p>
                 </section>
                 <section className="rounded-xl border border-stone-200 p-4">
-                  <h3 className="font-bold text-stone-950">{'2. Chọn phương thức thanh toán'}</h3>
-                  <div className="mt-3"><Select label={'Phương thức thanh toán cọc'} value={renewalPaymentMethod} onChange={event => setRenewalPaymentMethod(event.target.value as 'BANK_TRANSFER' | 'ONLINE_GATEWAY')}><option value="BANK_TRANSFER">{'Chuyển khoản ngân hàng / VietQR'}</option><option value="ONLINE_GATEWAY">{'Cổng thanh toán trực tuyến'}</option></Select></div>
-                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950">{`Khoản cọc ${formatVnd(renewalDeposit)} dùng để giữ kỳ gia hạn. Bạn sẽ đóng ${formatVnd(remainingAtFacility)} còn lại khi đến cơ sở ký hợp đồng.`}</div>
+                  <h3 className="font-bold text-stone-950">{'2. Thanh toán toàn bộ kỳ gia hạn'}</h3>
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">{'Renewal mới không thu cọc riêng. Thanh toán toàn kỳ VNPay Sandbox được mở trong hồ sơ gia hạn API khi hệ thống xác nhận đủ điều kiện.'}</div>
                 </section>
                 <section className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs leading-5 text-red-900"><h3 className="text-sm font-bold">{'Chính sách phụ thu quá hạn'}</h3><p className="mt-1">{`Mức phụ thu ${formatVnd(lateFeePerDay)}/ngày, tương đương 50% đơn giá thuê ngày (${formatVnd(renewalMonthlyRate)} ÷ 30 = ${formatVnd(dailyRentalRate)}/ngày).`}</p></section>
               </div>
               <div className="space-y-4">
                 <div className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm">
                   <div className="border-b border-stone-200 bg-stone-50 px-4 py-3"><p className="font-bold text-stone-950">{'Tóm tắt thanh toán'}</p><p className="mt-0.5 text-xs text-stone-500">{'Kiểm tra số tiền trước khi xác nhận'}</p></div>
-                  <div className="space-y-3 p-4 text-stone-700"><div className="flex justify-between gap-4"><span>{'Tiền gia hạn gốc'}</span><b>{formatVnd(renewalGrossTotal)}</b></div><div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700"><span>{`Ưu đãi gói ${activeRenewalForPayment.renewalMonths} tháng (${Math.round(appliedRenewalDiscountRate * 100)}%)`}</span><b>− {formatVnd(renewalDiscountAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-3"><span>{'Giá sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div><div className="flex justify-between gap-4 text-blue-700"><span>{'Thanh toán cọc ngay (40%)'}</span><b>{formatVnd(renewalDeposit)}</b></div><div className="flex justify-between gap-4"><span>{'Còn lại tại cơ sở (60%)'}</span><b>{formatVnd(remainingAtFacility)}</b></div><div className={`flex justify-between gap-4 ${projectedLateFee > 0 ? 'font-semibold text-red-700' : ''}`}><span>{`Phí muộn dự kiến (${projectedOverdueDays} ngày)`}</span><b>{formatVnd(projectedLateFee)}</b></div></div>
-                  <div className="flex items-center justify-between gap-4 border-t border-stone-200 bg-stone-950 px-4 py-4 text-white"><span className="font-semibold">{'Dự kiến đóng tại cơ sở'}</span><span className="text-lg font-extrabold">{formatVnd(projectedOnSiteTotal)}</span></div>
+                  <div className="space-y-3 p-4 text-stone-700"><div className="flex justify-between gap-4"><span>{'Tiền gia hạn gốc'}</span><b>{formatVnd(renewalGrossTotal)}</b></div><div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700"><span>{`Ưu đãi gói ${activeRenewalForPayment.renewalMonths} tháng (${Math.round(appliedRenewalDiscountRate * 100)}%)`}</span><b>− {formatVnd(renewalDiscountAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-3 font-semibold"><span>{legacyRenewalDeposit > 0 ? 'Tổng giá trị điều khoản gia hạn cũ' : 'Tổng tiền cần thanh toán một lần'}</span><b>{formatVnd(renewalTotal)}</b></div><div className={`flex justify-between gap-4 ${projectedLateFee > 0 ? 'font-semibold text-red-700' : ''}`}><span>{`Phí muộn dự kiến (${projectedOverdueDays} ngày)`}</span><b>{formatVnd(projectedLateFee)}</b></div></div>
+                  <div className="flex items-center justify-between gap-4 border-t border-stone-200 bg-stone-950 px-4 py-4 text-white"><span className="font-semibold">{'Tổng tiền gia hạn'}</span><span className="text-lg font-extrabold">{formatVnd(renewalTotal)}</span></div>
                 </div>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-4 text-xs leading-5"><input type="checkbox" className="mt-1 h-4 w-4 accent-stone-900" checked={renewalTermsAccepted} onChange={event => setRenewalTermsAccepted(event.target.checked)} /><span>{'Tôi đồng ý thanh toán cọc 40%, đến cơ sở đúng lịch để ký hợp đồng và đóng phần còn lại. Tôi hiểu phí muộn sẽ tăng theo từng ngày nếu ký sau ngày hết hạn.'}</span></label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-4 text-xs leading-5"><input type="checkbox" className="mt-1 h-4 w-4 accent-stone-900" checked={renewalTermsAccepted} onChange={event => setRenewalTermsAccepted(event.target.checked)} /><span>{'Tôi xác nhận thanh toán một lần toàn bộ tiền gia hạn sau khi VNPay Sandbox được mở và đến cơ sở ký hồ sơ theo lịch.'}</span></label>
               </div>
             </div>
             {paymentExpired && <p className="rounded-lg bg-red-50 p-3 font-semibold text-red-700">{'Đã quá thời hạn thanh toán 72 giờ. Vui lòng gửi yêu cầu gia hạn mới.'}</p>}
-            <div className="flex justify-end gap-2 border-t border-stone-100 pt-3"><Button variant="outline" onClick={() => setRenewalPaymentOpen(false)}>{'Đóng'}</Button><Button disabled={paymentExpired || !renewalAppointmentDate || !renewalAppointmentTime || !renewalTermsAccepted} onClick={() => {
-              try {
-                const reference = `${renewalPaymentMethod === 'ONLINE_GATEWAY' ? 'GW' : 'BANK'}-${Date.now()}`
-                payRenewal(activeRenewalForPayment.id, user, renewalPaymentMethod, reference, renewalTermsAccepted, renewalAppointmentDate, renewalAppointmentTime)
-                setRenewalPaymentOpen(false)
-                setRenewalTermsAccepted(false)
-                showToast('Đã cọc 40% và đặt lịch ký. Hợp đồng chỉ được gia hạn sau khi nhân viên xác nhận ký và thu phần còn lại.')
-              } catch (error) {
-                showToast(error instanceof Error ? error.message : 'Không thể xác minh thanh toán gia hạn.')
-              }
-            }}>{'Thanh toán cọc & đặt lịch'}</Button></div>
+            <div className="flex justify-end gap-2 border-t border-stone-100 pt-3"><Button variant="outline" onClick={() => setRenewalPaymentOpen(false)}>{'Đóng'}</Button><Button disabled={!renewalPaymentReady || paymentExpired || !renewalAppointmentDate || !renewalAppointmentTime || !renewalTermsAccepted} onClick={() => showToast('Mở yêu cầu gia hạn trong Hồ sơ thuê của tôi để thanh toán VNPay Sandbox khi hệ thống xác nhận đủ điều kiện.')}>{'Thanh toán toàn kỳ'}</Button></div>
           </div>
         })()}
       </Modal>
@@ -3803,6 +4214,27 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       <Modal open={Boolean(returnDisputeTargetId)} onClose={() => { setReturnDisputeTargetId(null); setReturnDisputeReason('') }} title="Yêu cầu xem xét lại quyết toán">
         <div className="space-y-4">
+          <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-3.5 text-xs text-slate-700 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded bg-sky-600 text-white font-bold text-[11px]">2</span>
+              <p className="font-bold text-sky-950">Căn cứ: Phân định trách nhiệm ẩm mốc khi trả kho</p>
+            </div>
+            <ul className="space-y-1 pl-1 leading-relaxed">
+              <li className="flex items-start gap-1.5">
+                <span className="text-sky-600 font-bold shrink-0">•</span>
+                <span><strong>Lỗi cơ sở (vách/trần loang ố, dột hoặc máy lạnh hỏng):</strong> Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-sky-600 font-bold shrink-0">•</span>
+                <span><strong>Lỗi khách hàng (kho khô 100%, đồ mốc do khách cất ẩm/hàng cấm):</strong> Khách tự chịu 100% + trừ phí khử trùng 1.500.000₫ vào cọc.</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-sky-600 font-bold shrink-0">•</span>
+                <span><strong>Kho thường:</strong> Miễn trừ trách nhiệm độ ẩm tự nhiên theo cam kết hợp đồng.</span>
+              </li>
+            </ul>
+          </div>
+
           <div><label className="text-sm font-medium text-stone-700">Lý do cần xem xét lại *</label><textarea rows={4} value={returnDisputeReason} onChange={event => setReturnDisputeReason(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" placeholder="Mô tả khoản phí hoặc kết quả nghiệm thu cần kiểm tra lại..." /></div>
           <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => { setReturnDisputeTargetId(null); setReturnDisputeReason('') }}>{'Hủy'}</Button><Button disabled={!returnDisputeReason.trim()} onClick={() => { if (!returnDisputeTargetId) return; try { confirmReturnSettlement(returnDisputeTargetId, user, 'disputed', returnDisputeReason.trim()); setReturnDisputeTargetId(null); setReturnDisputeReason(''); showToast('Đã gửi yêu cầu xem xét lại.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể gửi yêu cầu.') } }}>{'Gửi yêu cầu'}</Button></div>
         </div>
@@ -3877,11 +4309,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             label={'Tiêu đề yêu cầu'}
             value={ticketSubject}
             onChange={e => setTicketSubject(e.target.value)}
-            placeholder={'Tóm tắt sự cố (ví dụ: Khóa cổng không nhận mã PIN)'}
+            placeholder={'Tóm tắt sự cố (ví dụ: Khóa cổng không nhận mã mở cửa)'}
           />
           <div className="grid grid-cols-2 gap-3">
             <Select label={'Phân loại'} value={ticketCategory} onChange={e => setTicketCategory(e.target.value)}>
-              <option value="Access & Entry">{'Ra vào & mã PIN'}</option>
+              <option value="Access & Entry">{'Ra vào và mã mở cửa'}</option>
               <option value="Billing & Invoices">{'Thanh toán & hóa đơn'}</option>
               <option value="Unit Condition">{'Hiện trạng gian kho'}</option>
               <option value="General Inquiry">{'Tư vấn chung'}</option>
@@ -3947,6 +4379,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         onOpenTicketList={() => setPage('support')}
         showToast={showToast}
       />}
+
+      <ReturnSettlementModal
+        open={settlementModalOpen}
+        onClose={() => setSettlementModalOpen(false)}
+        returnCase={selectedSettlementReturn}
+        payments={payments}
+        role="customer"
+      />
       </div>
     </Layout>
   )

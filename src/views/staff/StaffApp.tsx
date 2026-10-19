@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import Layout, {
   getInitialPage,
   Icon,
+  type LayoutNotification,
   type NavItem,
 } from "../../components/Layout"
 
@@ -32,11 +33,28 @@ import StaffSupportPanel from "./StaffSupportPanel"
 import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
+import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
+import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
+import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
+import ReturnApiPanel from "../return-api/ReturnApiPanel"
+import UnitAssignmentPanel from "../UnitAssignmentPanel"
+import {
+  listCredentialAlerts,
+  revokeAccessCredential,
+  type CredentialAlert,
+} from "../../services/checkInApi"
+import {
+  loadStaffDailyOperations,
+  type StaffDailyOperation,
+} from "../../services/staffDailyOperationsApi"
 
 import ProfileView from "../ProfileView"
 import StaffReservationReviews from './StaffReservationReviews'
+import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
+import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 
 import type { User } from "../../types"
 
@@ -113,6 +131,8 @@ type StaffCheckin = Omit<typeof CHECKINS[number], "status"> & {
 
 type StaffReturn = Omit<typeof RETURNS[number], "status"> & {
   status: "pending" | "waiting-customer" | "disputed" | "payment-due" | "refund-pending" | "refunded"
+
+  rentalId?: string
 
   contractStart: string
 
@@ -461,6 +481,8 @@ const mapSharedReturn = (
   return {
     id: item.id,
 
+    rentalId: item.rentalId,
+
     customer: item.customerName,
 
     email: item.customerEmail,
@@ -764,7 +786,7 @@ const statusLabelMap: Record<string, string> = {
 
   "waiting-customer": "Chờ khách hàng phản hồi",
 
-  disputed: "Khách yêu cầu tính lại",
+  disputed: "Đang khiếu nại - Cần BO giải quyết",
 
   "payment-due": "Chờ khách thanh toán thêm",
 
@@ -791,7 +813,6 @@ export default function StaffApp({
   const hub = useStorageHub()
 
   const nav: NavItem[] = [
-    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
     {
       id: "dashboard",
 
@@ -814,18 +835,6 @@ export default function StaffApp({
       group: "Ca làm việc",
 
       permission: "dashboard:read",
-    },
-
-    {
-      id: "reservations",
-
-      label: "Duyệt yêu cầu đặt kho",
-
-      icon: Icon.calendar,
-
-      group: "Vận hành",
-
-      permission: "reservations:approve",
     },
 
     {
@@ -852,6 +861,8 @@ export default function StaffApp({
       permission: "returns:read",
     },
 
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
+
     {
       id: "support",
 
@@ -867,11 +878,47 @@ export default function StaffApp({
 
   const [page, setPage] = useState(() => getInitialPage(nav, "dashboard"))
 
+  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) return
+    let cancelled = false
+    const loadNotifications = async () => {
+      try {
+        const result = await listNotifications(0, 50)
+        if (!cancelled) setBackendNotifications(result.data)
+      } catch {
+        // Staff operations remain available if notifications are temporarily unavailable.
+      }
+    }
+    void loadNotifications()
+    const refreshNotifications = () => void loadNotifications()
+    window.addEventListener("storagehub:notifications-refresh", refreshNotifications)
+    const timer = window.setInterval(refreshNotifications, 10_000)
+    return () => {
+      cancelled = true
+      window.removeEventListener("storagehub:notifications-refresh", refreshNotifications)
+      window.clearInterval(timer)
+    }
+  }, [])
+
   const [reservations, setReservations] = useState<StaffReservation[]>([])
 
   const [checkins, setCheckins] = useState<StaffCheckin[]>([])
 
   const [returns, setReturns] = useState<StaffReturn[]>([])
+
+  const [credentialAlerts, setCredentialAlerts] = useState<CredentialAlert[]>([])
+
+  const [credentialError, setCredentialError] = useState<string | null>(null)
+
+  const [apiDailyOperations, setApiDailyOperations] = useState<StaffDailyOperation[]>([])
+
+  const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
+
+  const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
+
+  const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
 
   const [inspectModal, setInspectModal] = useState(false)
 
@@ -885,6 +932,9 @@ export default function StaffApp({
   const [selectedReturn, setSelectedReturn] = useState<StaffReturn | null>(null)
 
   const [returnDetailsOnly, setReturnDetailsOnly] = useState(false)
+
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [settlementTarget, setSettlementTarget] = useState<ReturnCase | null>(null)
 
   const [selectedCheckin, setSelectedCheckin] = useState<StaffCheckin | null>(
     null,
@@ -911,26 +961,19 @@ export default function StaffApp({
 
   const [returnSort, setReturnSort] = useState<StaffListSort>("deadline-asc")
 
-  const [assignedTasksPage, setAssignedTasksPage] = useState(1)
-
   const [operationalTasksPage, setOperationalTasksPage] = useState(1)
-
-  const [assignedTaskDateFilter, setAssignedTaskDateFilter] = useState("")
-
-  const [assignedTaskPriorityFilter, setAssignedTaskPriorityFilter] =
-    useState("all")
-
-  const [assignedTaskSort, setAssignedTaskSort] =
-    useState<StaffTaskSort>("due-asc")
 
   const [operationalTaskDateFilter, setOperationalTaskDateFilter] =
     useState("")
+  const [selectedRecoveryTask, setSelectedRecoveryTask] = useState<{ id: string; facilityId: string } | null>(null)
+  const recoveryCloseGuard = useRef<() => boolean>(() => false)
+  const [selectedMaintenanceTaskId, setSelectedMaintenanceTaskId] = useState<string | null>(null)
 
   const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
     useState("all")
 
   const [operationalTaskSort, setOperationalTaskSort] =
-    useState<StaffTaskSort>("due-asc")
+    useState<StaffTaskSort>("priority")
 
   const [taskCompletionTarget, setTaskCompletionTarget] =
     useState<FacilityTask | null>(null)
@@ -1024,6 +1067,14 @@ export default function StaffApp({
   const [returnRefundReference, setReturnRefundReference] = useState("")
 
   const [feeDetails, setFeeDetails] = useState<Record<string, string>>({})
+
+  // VẤN ĐỀ 1 & 2: Kiểm tra kết cấu & phân định ẩm mốc khi trả kho
+  const [returnCeilingStatus, setReturnCeilingStatus] = useState<'dry_intact' | 'leaking' | 'stained'>('dry_intact')
+  const [returnWallStatus, setReturnWallStatus] = useState<'dry_intact' | 'damp_seepage' | 'cracked'>('dry_intact')
+  const [returnFloorStatus, setReturnFloorStatus] = useState<'dry_intact' | 'cracked' | 'water_pooling'>('dry_intact')
+  const [returnMoistureOrigin, setReturnMoistureOrigin] = useState<'none' | 'facility_fault' | 'customer_fault' | 'climate_standard_uncontrolled'>('none')
+  const [returnSanitizationFee, setReturnSanitizationFee] = useState("")
+  const [returnFacilityCompensation, setReturnFacilityCompensation] = useState("")
 
   // Support Tickets state
 
@@ -1159,6 +1210,63 @@ export default function StaffApp({
     setReturns(sharedReturns)
   }, [hub.returns, hub.rentals, user.facility, user.facilityId])
 
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setCredentialAlerts([])
+      setCredentialError(null)
+      return
+    }
+    setCredentialError(null)
+    let active = true
+    void listCredentialAlerts(user.facilityId && user.facilityId !== 'ALL' ? user.facilityId : undefined)
+      .then(items => { if (active) setCredentialAlerts(items) })
+      .catch(reason => {
+        if (!active) return
+        setCredentialAlerts([])
+        setCredentialError(staffErrorMessage(reason, "Không thể tải quyền truy cập cần thu hồi."))
+      })
+    return () => { active = false }
+  }, [user.facilityId, page])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setApiDailyOperations([])
+      setApiDailyOperationsError(null)
+      return
+    }
+    const requestedDate = operationalTaskDateFilter || toDateInputValue(new Date().toISOString())
+    let active = true
+    void loadStaffDailyOperations(requestedDate, user.id, credentialAlerts)
+      .then(result => {
+        if (!active) return
+        setApiDailyOperations(result.tasks)
+        const failedSources = credentialError
+          ? [...result.failedSources, "quyền truy cập"]
+          : result.failedSources
+        setApiDailyOperationsError(
+          failedSources.length
+            ? `Chưa đồng bộ được dữ liệu: ${failedSources.join(', ')}.`
+            : null,
+        )
+      })
+      .catch(reason => {
+        if (!active) return
+        setApiDailyOperations([])
+        setApiDailyOperationsError(staffErrorMessage(reason, 'Không thể tải nhiệm vụ vận hành trong ngày.'))
+      })
+    return () => { active = false }
+  }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id, apiDailyOperationsRefresh])
+
+  const refreshCredentialAlerts = () => {
+    if (!isApiAuthenticated()) return
+    void listCredentialAlerts(user.facilityId && user.facilityId !== 'ALL' ? user.facilityId : undefined)
+      .then(items => setCredentialAlerts(items))
+      .catch(reason => {
+        setCredentialAlerts([])
+        setCredentialError(staffErrorMessage(reason, "Không thể tải quyền truy cập cần thu hồi."))
+      })
+  }
+
   const showToast = (message: string) => {
     setToast(
       message
@@ -1181,6 +1289,45 @@ export default function StaffApp({
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
 
     toastTimer.current = window.setTimeout(() => setToast(null), 7000)
+  }
+
+  const returnCredentialAlerts = (returnItem: StaffReturn) => {
+    const rentalId =
+      returnItem.rentalId ||
+      hub.returns.find((item) => item.id === returnItem.id)?.rentalId
+
+    if (!rentalId) return []
+
+    return credentialAlerts.filter(
+      (alert) => alert.action === "REVOKE" && alert.rentalId === rentalId,
+    )
+  }
+
+  const revokeReturnCredential = async (alert: CredentialAlert) => {
+    setCredentialBusy(alert.id)
+
+    try {
+      await revokeAccessCredential(
+        alert.id,
+        "Thu hồi trong nghiệm thu trả kho",
+      )
+
+      setCredentialAlerts((items) =>
+        items.filter((item) => item.id !== alert.id),
+      )
+
+      showToast(
+        "Đã thu hồi " +
+          (alert.credentialType || "quyền truy cập") +
+          " của " +
+          alert.storageUnitCode +
+          ".",
+      )
+    } catch (error) {
+      showToast(staffErrorMessage(error, "Không thể thu hồi quyền truy cập."))
+    } finally {
+      setCredentialBusy(null)
+    }
   }
 
   useEffect(() => {
@@ -1328,7 +1475,7 @@ export default function StaffApp({
       setCheckinModal(false)
 
       showToast(
-        "Đã kích hoạt hợp đồng thuê; khách hàng có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.",
+        "Đã kích hoạt hợp đồng thuê. Khách hàng có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.",
       )
     } catch (error) {
       setPendingCheckinCompletionId(null)
@@ -1560,21 +1707,6 @@ export default function StaffApp({
       return compareStaffTaskSchedule(left, right, "due-asc")
     })
 
-  const filteredAssignedFacilityTasks = assignedFacilityTasks
-    .filter(
-      (task) =>
-        (!assignedTaskDateFilter ||
-          toDateInputValue(task.dueAt) === assignedTaskDateFilter) &&
-        (assignedTaskPriorityFilter === "all" ||
-          task.priority === assignedTaskPriorityFilter),
-    )
-    .sort((left, right) => {
-      const leftFinished = ["completed", "cancelled"].includes(left.status)
-      const rightFinished = ["completed", "cancelled"].includes(right.status)
-      if (leftFinished !== rightFinished) return leftFinished ? 1 : -1
-      return compareStaffTaskSchedule(left, right, assignedTaskSort)
-    })
-
   const openAssignedFacilityTasks = assignedFacilityTasks.filter(
     (task) => task.status !== "completed" && task.status !== "cancelled",
   )
@@ -1693,7 +1825,20 @@ export default function StaffApp({
     setCheckinModal(true)
   }
 
-  const operationalTasks = [
+  const localOperationalTasks = ([
+    ...credentialAlerts.map(alert => ({
+      id: `credential-${alert.action.toLowerCase()}-${alert.id}`,
+      title: alert.action === 'ISSUE'
+        ? `Cấp quyền truy cập ${alert.storageUnitCode}`
+        : `Thu hồi quyền truy cập ${alert.storageUnitCode}`,
+      customer: alert.customerName,
+      time: alert.dueAt ? formatExactDateTime(alert.dueAt) : 'Trong ca',
+      dueAt: alert.dueAt || new Date().toISOString(),
+      sla: alert.reason,
+      priority: 'high',
+      page: alert.action === 'ISSUE' ? 'checkin' : 'return',
+    })),
+
     ...reservations
 
       .filter((r) => r.status === "REVIEW_REQUIRED")
@@ -1835,28 +1980,37 @@ export default function StaffApp({
 
       page: "tasks",
     })),
-  ].sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
+  ] as StaffDailyOperation[]).sort((left, right) => compareStaffTaskSchedule(left, right, "due-asc"))
 
-  const filteredOperationalTasks = operationalTasks
-    .filter(
-      (task) =>
-        (!operationalTaskDateFilter ||
-          toDateInputValue(task.dueAt) === operationalTaskDateFilter) &&
-        (operationalTaskPriorityFilter === "all" ||
-          task.priority === operationalTaskPriorityFilter),
+  const operationalTasks = isApiAuthenticated()
+    ? apiDailyOperations
+    : localOperationalTasks
+
+  const dailyTasks: Array<
+    | { kind: "assigned"; task: FacilityTask }
+    | { kind: "operational"; task: StaffDailyOperation }
+  > = [
+    ...assignedFacilityTasks.map((task) => ({ kind: "assigned" as const, task })),
+    ...operationalTasks.map((task) => ({ kind: "operational" as const, task })),
+  ]
+
+  const filteredDailyTasks = dailyTasks
+    .filter(({ kind, task }) =>
+      (kind === "operational" && !!task.recoveryTask) ||
+      (!operationalTaskDateFilter || toDateInputValue(task.dueAt) === operationalTaskDateFilter),
     )
-    .sort((left, right) =>
-      compareStaffTaskSchedule(left, right, operationalTaskSort),
+    .filter(({ task }) =>
+      operationalTaskPriorityFilter === "all" || task.priority === operationalTaskPriorityFilter,
     )
+    .sort((left, right) => {
+      const leftFinished = left.kind === "assigned" && ["completed", "cancelled"].includes(left.task.status)
+      const rightFinished = right.kind === "assigned" && ["completed", "cancelled"].includes(right.task.status)
+      if (leftFinished !== rightFinished) return leftFinished ? 1 : -1
+      return compareStaffTaskSchedule(left.task, right.task, operationalTaskSort)
+    })
 
-  const assignedTasksPagination = paginateStaffItems(
-    filteredAssignedFacilityTasks,
-
-    assignedTasksPage,
-  )
-
-  const operationalTasksPagination = paginateStaffItems(
-    filteredOperationalTasks,
+  const dailyTasksPagination = paginateStaffItems(
+    filteredDailyTasks,
 
     operationalTasksPage,
   )
@@ -1881,9 +2035,15 @@ export default function StaffApp({
 
   const returnsPagination = paginateStaffItems(displayedReturns, returnsPage)
 
-  useEffect(() => {
-    setAssignedTasksPage(1)
-  }, [assignedTaskDateFilter, assignedTaskPriorityFilter, assignedTaskSort])
+  const returnCredentialAlertIds = new Set(
+    returns.flatMap((returnItem) =>
+      returnCredentialAlerts(returnItem).map((alert) => alert.id),
+    ),
+  )
+
+  const unmatchedCredentialAlerts = credentialAlerts
+    .filter((alert) => alert.action === "REVOKE")
+    .filter((alert) => !returnCredentialAlertIds.has(alert.id))
 
   useEffect(() => {
     setOperationalTasksPage(1)
@@ -1894,6 +2054,21 @@ export default function StaffApp({
   ])
 
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
+    if (isApiAuthenticated()) {
+      const recovery = (task as StaffDailyOperation).recoveryTask
+      if (recovery) {
+        setPage('tasks')
+        setSelectedRecoveryTask(recovery)
+        return
+      }
+      setPage(task.page)
+      if (task.id.startsWith("assignment-"))
+        showToast(`Đã mở danh sách đặt chỗ chờ phân kho cho ${task.customer}.`)
+      if (task.id.startsWith("return-"))
+        showToast(`Đã mở danh sách hồ sơ trả kho cho ${task.customer}.`)
+      return
+    }
+
     if (task.id.startsWith("allocation-")) {
       const reservation = reservations.find(
         (item) => item.id === task.id.replace("allocation-", ""),
@@ -1951,7 +2126,9 @@ export default function StaffApp({
       showToast(`Đã mở nhiệm vụ theo dõi gia hạn cho ${task.customer}.`)
   }
 
-  const operationalCompletedCount =
+  const operationalCompletedCount = isApiAuthenticated()
+    ? 0
+    :
     reservations.filter((r) => r.status === "COMPLETED").length +
     checkins.filter((c) => c.status === "completed").length +
     returns.filter(
@@ -1962,17 +2139,17 @@ export default function StaffApp({
     ).length +
     facilityTickets.filter((ticket) => ticket.status === "resolved").length
 
-  const totalCount =
-    operationalTasks.length +
-    operationalCompletedCount +
-    assignedFacilityTasks.length
+  const totalCount = isApiAuthenticated()
+    ? operationalTasks.length + assignedFacilityTasks.length
+    : operationalTasks.length + operationalCompletedCount + assignedFacilityTasks.length
 
-  const completedCount =
-    operationalCompletedCount +
-    assignedFacilityTasks.filter((task) => task.status === "completed").length
+  const completedCount = isApiAuthenticated()
+    ? assignedFacilityTasks.filter((task) => task.status === "completed").length
+    : operationalCompletedCount + assignedFacilityTasks.filter((task) => task.status === "completed").length
 
-  const remainingTaskCount =
-    operationalTasks.length + openAssignedFacilityTasks.length
+  const remainingTaskCount = isApiAuthenticated()
+    ? operationalTasks.length + openAssignedFacilityTasks.length
+    : operationalTasks.length + openAssignedFacilityTasks.length
 
   const assignedTaskNotifications = openAssignedFacilityTasks.map((task) => ({
     id: `assigned-task-${task.id}`,
@@ -1988,6 +2165,27 @@ export default function StaffApp({
     page: "tasks",
   }))
 
+  const notificationPage = (type: ApiNotification["type"]) => {
+    if (type === "CHECKIN") return "checkin"
+    if (type === "SUPPORT") return "support"
+    if (type === "RETURN") return "return"
+    if (type === "RENEWAL") return "renewal-signing"
+    if (type === "OVERDUE") return "tasks"
+    if (type === "PAYMENT") return "payments"
+    if (type === "RESERVATION") return "reservations"
+    return "dashboard"
+  }
+
+  const staffApiNotifications: LayoutNotification[] = backendNotifications.map((notification) => ({
+    id: `api-notification-${notification.id}`,
+    title: notification.title,
+    message: notification.content,
+    date: notification.createdAt,
+    page: notificationPage(notification.type),
+    targetId: notification.relatedEntityId ?? undefined,
+    isRead: notification.isRead,
+  }))
+
   return (
     <Layout
       user={user}
@@ -1996,6 +2194,7 @@ export default function StaffApp({
       onNavigate={setPage}
       onLogout={onLogout}
       notifications={[
+        ...staffApiNotifications,
         ...assignedTaskNotifications,
 
         ...operationalTasks
@@ -2013,6 +2212,22 @@ export default function StaffApp({
           })),
       ]}
       onNotificationClick={(notification) => {
+        if (notification.id.startsWith("api-notification-")) {
+          const notificationId = notification.id.replace("api-notification-", "")
+          setPage(notification.page)
+          setBackendNotifications((current) => current.map((item) =>
+            item.id === notificationId ? { ...item, isRead: true } : item
+          ))
+          void markNotificationRead(notificationId).catch(() => undefined)
+          if (notification.page === "checkin") {
+            window.setTimeout(() => window.dispatchEvent(new Event("storagehub:checkins-refresh")), 0)
+          }
+          if (notification.page === "reservations") {
+            window.setTimeout(() => window.dispatchEvent(new Event("storagehub:staff-reservations-refresh")), 0)
+          }
+          return
+        }
+
         if (notification.id.startsWith("assigned-task-")) {
           setPage("tasks")
 
@@ -2275,199 +2490,30 @@ export default function StaffApp({
             />
           </div>
 
-          <Card className="mb-6">
-            <div className="border-b border-stone-200 p-4">
-              <h3 className="font-bold text-stone-900">
-                {"Nhiệm vụ quản lý giao"}
-              </h3>
-              <p className="mt-1 text-xs text-stone-500">
-                {"Nhiệm vụ được đồng bộ theo đúng tài khoản và cơ sở của bạn."}
-              </p>
-            </div>
-            <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
-              <Input
-                label="Ngày đến hạn"
-                type="date"
-                value={assignedTaskDateFilter}
-                onChange={(event) =>
-                  setAssignedTaskDateFilter(event.target.value)
-                }
-              />
-              <Select
-                label="Mức ưu tiên"
-                value={assignedTaskPriorityFilter}
-                onChange={(event) =>
-                  setAssignedTaskPriorityFilter(event.target.value)
-                }
-              >
-                <option value="all">Tất cả mức ưu tiên</option>
-                <option value="high">Khẩn cấp</option>
-                <option value="medium">Trung bình</option>
-                <option value="low">Thông thường</option>
-              </Select>
-              <Select
-                label="Sắp xếp"
-                value={assignedTaskSort}
-                onChange={(event) =>
-                  setAssignedTaskSort(event.target.value as StaffTaskSort)
-                }
-              >
-                <option value="due-asc">Đến hạn trước</option>
-                <option value="priority">Ưu tiên cao trước</option>
-              </Select>
-            </div>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{"Nhiệm vụ"}</Th>
-                  <Th>{"Loại"}</Th>
-                  <Th>{"Ghi chú"}</Th>
-                  <Th>{"Hạn xử lý"}</Th>
-                  <Th>{"Ưu tiên"}</Th>
-                  <Th>{"Trạng thái"}</Th>
-                  <Th />
-                </tr>
-              </Thead>
-              <Tbody>
-                {assignedTasksPagination.items.map((task) => (
-                  <Tr key={task.id}>
-                    <Td>
-                      <p className="font-semibold text-stone-900">
-                        {task.title}
-                      </p>
-                      <p className="text-xs text-stone-400">
-                        {task.id}
-                        {task.referenceId ? ` · ${task.referenceId}` : ""}
-                      </p>
-                    </Td>
-                    <Td>{staffTaskTypeLabel[task.type]}</Td>
-                    <Td className="max-w-xs text-xs">
-                      {task.notes || "—"}
-                      {task.cancellationReason && (
-                        <p className="mt-1 font-semibold text-red-700">
-                          Lý do hủy: {task.cancellationReason}
-                        </p>
-                      )}
-                    </Td>
-                    <Td className="text-xs">
-                      <span
-                        className={
-                          task.status !== "completed" &&
-                          new Date(task.dueAt).getTime() < Date.now()
-                            ? "font-semibold text-red-700"
-                            : ""
-                        }
-                      >
-                        {formatDate(task.dueAt)}
-                      </span>
-                    </Td>
-                    <Td>
-                      <Badge
-                        variant={
-                          task.priority === "high"
-                            ? "error"
-                            : task.priority === "medium"
-                              ? "warning"
-                              : "info"
-                        }
-                      >
-                        {statusLabelMap[task.priority]}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Badge
-                        variant={
-                          task.status === "completed"
-                            ? "success"
-                            : task.status === "cancelled"
-                              ? "error"
-                            : task.status === "in_progress"
-                              ? "info"
-                              : "warning"
-                        }
-                      >
-                        {task.status === "completed"
-                          ? "Đã hoàn thành"
-                          : task.status === "cancelled"
-                            ? "Đã hủy"
-                          : task.status === "in_progress"
-                            ? "Đang thực hiện"
-                            : "Chờ nhận việc"}
-                      </Badge>
-                      {task.completedAt && (
-                        <p className="mt-1 text-[11px] text-emerald-700">
-                          {formatExactDateTime(task.completedAt)}
-                        </p>
-                      )}
-                    </Td>
-                    <Td className="text-right">
-                      {task.status === "open" && (
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            updateAssignedTaskStatus(task, "in_progress")
-                          }
-                        >
-                          {"Nhận việc"}
-                        </Button>
-                      )}
-                      {task.status === "in_progress" && (
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setTaskCompletionTarget(task)
-                            setTaskResultReport(task.resultReport || "")
-                            setTaskEvidenceText((task.evidence || []).join("\n"))
-                          }}
-                        >
-                          {"Đánh dấu hoàn thành"}
-                        </Button>
-                      )}
-                      {task.status === "completed" && (
-                        <span className="text-xs font-semibold text-emerald-700">
-                          {"Đã gửi quản lý"}
-                        </span>
-                      )}
-                      {task.status === "cancelled" && (
-                        <span className="text-xs font-semibold text-red-700">
-                          {"Quản lý đã hủy"}
-                        </span>
-                      )}
-                    </Td>
-                  </Tr>
-                ))}
-                {!filteredAssignedFacilityTasks.length && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-sm text-stone-500"
-                    >
-                      {assignedFacilityTasks.length
-                        ? "Không có nhiệm vụ phù hợp bộ lọc."
-                        : "Quản lý chưa giao nhiệm vụ nào cho bạn."}
-                    </td>
-                  </tr>
-                )}
-              </Tbody>
-            </Table>
-            <StaffPagination
-              {...assignedTasksPagination}
-              total={filteredAssignedFacilityTasks.length}
-              onPageChange={setAssignedTasksPage}
-            />
-          </Card>
+          {selectedRecoveryTask && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!recoveryCloseGuard.current()) setSelectedRecoveryTask(null) }}>
+            <RecoveryTaskDetail key={selectedRecoveryTask.id} role="staff" id={selectedRecoveryTask.id} facilityId={selectedRecoveryTask.facilityId} closeGuard={recoveryCloseGuard} onChanged={() => setApiDailyOperationsRefresh(v => v + 1)} />
+          </Modal>}
+          {selectedMaintenanceTaskId && <Modal open title="Chi tiết nhiệm vụ bảo trì" onClose={() => { setSelectedMaintenanceTaskId(null); setApiDailyOperationsRefresh(value => value + 1) }}>
+            <StaffMaintenanceOperationsPanel taskId={selectedMaintenanceTaskId} showToast={showToast} />
+          </Modal>}
 
           <Card>
             <div className="border-b border-stone-200 p-4">
               <h3 className="font-bold text-stone-900">
-                {"Nhiệm vụ vận hành"}
+                {"Tất cả nhiệm vụ"}
               </h3>
               <p className="mt-1 text-xs text-stone-500">
                 {
-                  "Các hồ sơ nhận kho, trả kho, hỗ trợ và công việc phát sinh trong ca."
+                  "Nhiệm vụ quản lý giao, bảo trì, nhận kho, trả kho, hỗ trợ và công việc phát sinh trong ca."
                 }
               </p>
             </div>
+            {apiDailyOperationsError && isApiAuthenticated() && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <span>{apiDailyOperationsError}</span>
+                <Button size="sm" variant="outline" onClick={() => setApiDailyOperationsRefresh(value => value + 1)}>Tải lại</Button>
+              </div>
+            )}
             <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
               <Input
                 label="Ngày đến hạn"
@@ -2504,23 +2550,29 @@ export default function StaffApp({
               <Thead>
                 <tr>
                   <Th>{"Nhiệm vụ"}</Th>
-                  <Th>{"Khách hàng"}</Th>
-                  <Th>{"Lịch"}</Th>
-                  <Th>Thời hạn xử lý</Th>
+                  <Th>Loại</Th>
+                  <Th>Khách hàng / Cơ sở</Th>
+                  <Th>Thời điểm</Th>
+                  <Th>Ghi chú xử lý</Th>
                   <Th>{"Ưu tiên"}</Th>
+                  <Th>Trạng thái</Th>
                   <Th></Th>
                 </tr>
               </Thead>
               <Tbody>
-                {operationalTasksPagination.items.map((task) => (
-                  <Tr key={task.id}>
+                {dailyTasksPagination.items.map(({ kind, task }) => (
+                  <Tr key={`${kind}-${task.id}`}>
                     <Td>
                       <b>{task.title}</b>
+                      {kind === "assigned" && task.referenceId && <p className="text-xs text-stone-500">{task.referenceId}</p>}
                     </Td>
-                    <Td>{task.customer}</Td>
-                    <Td className="text-xs">{task.time}</Td>
+                    <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? staffTaskTypeLabel[task.type] : task.id.startsWith("maintenance-") ? "Bảo trì" : task.id.startsWith("support-") ? "Hỗ trợ" : task.id.startsWith("return-") ? "Trả kho" : task.id.startsWith("checkin-") ? "Nhận kho" : task.id.startsWith("assignment-") ? "Phân kho" : task.recoveryTask ? "Thu hồi" : "Vận hành"}</Td>
+                    <Td>{kind === "assigned" ? task.facilityName : task.customer}</Td>
+                    <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? formatDate(task.dueAt) : isApiAuthenticated()
+                      ? (/^\d{4}-\d{2}-\d{2}$/.test(task.time) ? formatDate(task.time) : formatExactDateTime(task.time))
+                      : task.time}</Td>
                     <Td className="text-xs font-semibold text-amber-700">
-                      {task.sla}
+                      {kind === "assigned" ? task.notes || "—" : task.sla}
                     </Td>
                     <Td>
                       {s(task.priority, {
@@ -2531,32 +2583,31 @@ export default function StaffApp({
                         low: "muted",
                       })}
                     </Td>
+                    <Td>{kind === "assigned" ? <Badge variant={task.status === "completed" ? "success" : task.status === "cancelled" ? "error" : task.status === "in_progress" ? "info" : "warning"}>{task.status === "completed" ? "Đã hoàn thành" : task.status === "cancelled" ? "Đã hủy" : task.status === "in_progress" ? "Đang thực hiện" : "Chờ nhận việc"}</Badge> : <Badge variant="warning">Cần xử lý</Badge>}</Td>
                     <Td className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openOperationalTask(task)}
-                      >
-                        {"Mở hồ sơ"}
-                      </Button>
+                      {kind === "assigned" ? (
+                        task.status === "open" ? <Button size="sm" onClick={() => updateAssignedTaskStatus(task, "in_progress")}>Nhận việc</Button>
+                        : task.status === "in_progress" ? <Button size="sm" onClick={() => { setTaskCompletionTarget(task); setTaskResultReport(task.resultReport || ""); setTaskEvidenceText((task.evidence || []).join("\n")) }}>Hoàn thành</Button>
+                        : <span className="text-xs text-stone-500">—</span>
+                      ) : <Button size="sm" variant="outline" onClick={() => task.id.startsWith("maintenance-") ? setSelectedMaintenanceTaskId(task.id.replace("maintenance-", "")) : openOperationalTask(task)}>Mở hồ sơ</Button>}
                     </Td>
                   </Tr>
                 ))}
-                {!filteredOperationalTasks.length && (
+                {!filteredDailyTasks.length && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm text-stone-500"
                     >
-                      Không có nhiệm vụ vận hành phù hợp bộ lọc.
+                      Không có nhiệm vụ phù hợp bộ lọc.
                     </td>
                   </tr>
                 )}
               </Tbody>
             </Table>
             <StaffPagination
-              {...operationalTasksPagination}
-              total={filteredOperationalTasks.length}
+              {...dailyTasksPagination}
+              total={filteredDailyTasks.length}
               onPageChange={setOperationalTasksPage}
             />
           </Card>
@@ -2822,7 +2873,7 @@ export default function StaffApp({
                         )}
                         {r.status === "DEPOSIT_PAID" && (
                           <Badge variant="info">
-                            {"Đã cọc · Chờ Nhận kho"}
+                            {"Đã cọc · Chờ nhận kho"}
                           </Badge>
                         )}
                       </div>
@@ -2847,6 +2898,8 @@ export default function StaffApp({
         </div>
       )}
 
+      {page === "unit-assignments" && <UnitAssignmentPanel showToast={showToast} />}
+
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
       {page === "checkin-legacy" && (
@@ -2854,7 +2907,7 @@ export default function StaffApp({
           <SectionHeader
             title={"Nhận kho và bàn giao"}
             subtitle={
-              "Đối chiếu thông tin khách đã khai báo trước khi nhận kho và bàn giao gian kho"
+              "Đối chiếu thông tin khách hàng đã khai báo trước khi nhận kho và bàn giao gian kho."
             }
           />
           <Card className="mb-4 p-4">
@@ -2969,8 +3022,8 @@ export default function StaffApp({
                           }
                         >
                           {c.customerHandoverStatus === "confirmed"
-                            ? "Khách đã xác nhận nhận kho"
-                            : "Chờ khách xác nhận nhận kho"}
+                            ? "Khách hàng đã xác nhận nhận kho"
+                            : "Chờ khách hàng xác nhận nhận kho"}
                         </Badge>
                       )}
                       {c.status !== "completed" && (
@@ -3078,8 +3131,22 @@ export default function StaffApp({
       )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
+
       {page === "return" && (
-        <div className="fade-in">
+        <>
+          {isApiAuthenticated() && (
+            <div className="fade-in space-y-4">
+              <SectionHeader
+                eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
+                title="Nghiệm thu trả kho"
+                subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
+              />
+              <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
+            </div>
+          )}
+
+          {!isApiAuthenticated() && (
+            <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
             title={"Nghiệm thu trả kho"}
@@ -3099,7 +3166,7 @@ export default function StaffApp({
                 <option value="waiting-customer">
                   {"Chờ khách hàng phản hồi"}
                 </option>
-                <option value="disputed">{"Khách yêu cầu tính lại"}</option>
+                <option value="disputed">{"Đang khiếu nại - Cần BO giải quyết"}</option>
                 <option value="payment-due">
                   {"Chờ khách thanh toán thêm"}
                 </option>
@@ -3131,6 +3198,11 @@ export default function StaffApp({
             </p>
           </Card>
           <Card>
+            {credentialError && (
+              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                {credentialError}
+              </div>
+            )}
             <Table>
               <Thead>
                 <tr>
@@ -3141,6 +3213,7 @@ export default function StaffApp({
                   <Th>{"Hiện trạng"}</Th>
                   <Th>{"Tiền cọc"}</Th>
                   <Th>{"Trạng thái"}</Th>
+                  <Th>{"Quyền truy cập cần thu hồi"}</Th>
                   <Th></Th>
                 </tr>
               </Thead>
@@ -3191,6 +3264,39 @@ export default function StaffApp({
                       })}
                     </Td>
                     <Td>
+                      {returnCredentialAlerts(r).map((alert) => (
+                        <div key={alert.id} className="space-y-1">
+                          <Badge variant="warning">
+                            {alert.credentialType || "Quyền truy cập"}
+                          </Badge>
+                          <p className="font-mono text-xs text-stone-500">
+                            {alert.reference || "Chưa có mã tham chiếu"}
+                          </p>
+                          <p className="text-xs text-stone-500">
+                            {alert.dueAt
+                              ? "Hạn thu hồi: " +
+                                formatExactDateTime(alert.dueAt)
+                              : "Thu hồi trong nghiệm thu trả kho"}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={credentialBusy === alert.id}
+                            onClick={() => void revokeReturnCredential(alert)}
+                          >
+                            {credentialBusy === alert.id
+                              ? "Đang thu hồi…"
+                              : "Thu hồi và vô hiệu hóa"}
+                          </Button>
+                        </div>
+                      ))}
+                      {!returnCredentialAlerts(r).length && (
+                        <span className="text-xs text-stone-500">
+                          Không có quyền truy cập cần thu hồi
+                        </span>
+                      )}
+                    </Td>
+                    <Td>
                       {r.status === "pending" && (
                         <Button
                           variant="primary"
@@ -3203,6 +3309,18 @@ export default function StaffApp({
                             setReturnInventory("match")
 
                             setReturnClassification("no-damage")
+
+                            setReturnCeilingStatus("dry_intact")
+
+                            setReturnWallStatus("dry_intact")
+
+                            setReturnFloorStatus("dry_intact")
+
+                            setReturnMoistureOrigin("none")
+
+                            setReturnSanitizationFee("")
+
+                            setReturnFacilityCompensation("")
 
                             setReturnEvidence("")
 
@@ -3263,6 +3381,18 @@ export default function StaffApp({
                               String(saved?.outstandingFee ?? 0),
                             )
 
+                            setReturnCeilingStatus(saved?.structuralInspection?.ceiling ?? "dry_intact")
+
+                            setReturnWallStatus(saved?.structuralInspection?.wall ?? "dry_intact")
+
+                            setReturnFloorStatus(saved?.structuralInspection?.floor ?? "dry_intact")
+
+                            setReturnMoistureOrigin(saved?.moistureOrigin ?? "none")
+
+                            setReturnSanitizationFee(saved?.sanitizationFee ? String(saved.sanitizationFee) : "")
+
+                            setReturnFacilityCompensation(saved?.facilityCompensationAmount ? String(saved.facilityCompensationAmount) : "")
+
                             setReturnInventory("match")
 
                             setReturnClassification(
@@ -3287,6 +3417,54 @@ export default function StaffApp({
                           {"Chi tiết"}
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50 ml-1.5"
+                        onClick={() => {
+                          const hubReturn = hub.returns.find(item => item.id === r.id) || (r as unknown as ReturnCase)
+                          setSettlementTarget(hubReturn)
+                          setSettlementModalOpen(true)
+                        }}
+                      >
+                        {"🧾 Quyết toán"}
+                      </Button>
+                    </Td>
+                  </Tr>
+                ))}
+                {unmatchedCredentialAlerts.map((alert) => (
+                  <Tr key={"unmatched-credential-" + alert.id}>
+                    <Td>
+                      <span className="font-mono text-xs text-slate-500">
+                        {alert.reservationCode}
+                      </span>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Chưa có hồ sơ nghiệm thu tương ứng
+                      </p>
+                    </Td>
+                    <Td>
+                      <span className="text-sm font-medium">
+                        {alert.customerName}
+                      </span>
+                    </Td>
+                    <Td className="font-medium">{alert.storageUnitCode}</Td>
+                    <Td>Chưa xác định</Td>
+                    <Td>
+                      <Badge variant="warning">Chờ thu hồi quyền truy cập</Badge>
+                    </Td>
+                    <Td>—</Td>
+                    <Td>Chờ xử lý</Td>
+                    <Td>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={credentialBusy === alert.id}
+                        onClick={() => void revokeReturnCredential(alert)}
+                      >
+                        {credentialBusy === alert.id
+                          ? "Đang thu hồi…"
+                          : "Thu hồi và vô hiệu hóa"}
+                      </Button>
                     </Td>
                   </Tr>
                 ))}
@@ -3298,20 +3476,25 @@ export default function StaffApp({
               onPageChange={setReturnsPage}
             />
           </Card>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── SUPPORT ───────────────────────────────────────────── */}
       {page === 'support' && (
-        <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
-        <StaffSupportPanel
-          user={user}
-          tickets={hub.tickets}
-          respondSupportTicket={hub.respondSupportTicket}
-          canManageSupport={true}
-          showToast={showToast}
-        />
-        </SupportApiRoute>
+        <div className="space-y-4">
+          <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
+            <StaffSupportPanel
+              user={user}
+              tickets={hub.tickets}
+              respondSupportTicket={hub.respondSupportTicket}
+              canManageSupport={true}
+              showToast={showToast}
+            />
+          </SupportApiRoute>
+          {isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
+        </div>
       )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
@@ -3326,10 +3509,10 @@ export default function StaffApp({
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-6 right-4 left-4 sm:left-auto sm:max-w-md z-[100] bg-white text-stone-800 p-4 rounded-xl shadow-2xl border border-stone-200 flex items-start gap-3 fade-in"
+          className="fixed bottom-6 right-4 left-4 sm:left-auto sm:max-w-md z-[100] bg-[#292a27] text-white p-4 rounded-xl shadow-2xl border border-stone-700 flex items-start gap-3 fade-in"
         >
           <span
-            className="rounded-full bg-blue-50 px-2 py-1 font-bold text-blue-700"
+            className="rounded-full bg-white/10 px-2 py-1 font-bold text-white"
             aria-hidden="true"
           >
             i
@@ -3341,7 +3524,7 @@ export default function StaffApp({
           <button
             type="button"
             aria-label="Đóng thông báo"
-            className="px-2 text-stone-500"
+            className="px-2 text-stone-300 hover:text-white"
             onClick={() => setToast(null)}
           >
             ×
@@ -3458,7 +3641,7 @@ export default function StaffApp({
                         setSelectedReservation(updated)
 
                         showToast(
-                          "Đã duyệt hồ sơ; khách hàng được mở bước thanh toán cọc.",
+                          "Đã duyệt hồ sơ. Khách hàng được mở bước thanh toán cọc.",
                         )
                       } catch (error) {
                         showToast(staffErrorMessage(error, "Không thể duyệt hồ sơ."))
@@ -3607,7 +3790,7 @@ export default function StaffApp({
                 </p>
                 <p className="mt-2 text-xs">
                   Các số tiền bên dưới khớp với bản quyết toán khách hàng đang
-                  thấy. Hồ sơ đã chuyển quản lý cơ sở xem xét; nhân viên chỉ
+                  thấy. Hồ sơ đã chuyển quản lý cơ sở xem xét. Nhân viên chỉ
                   theo dõi và không tự thay đổi kết quả khiếu nại.
                 </p>
               </div>
@@ -3738,6 +3921,139 @@ export default function StaffApp({
                 onChange={(event) => setReturnKeys(event.target.value)}
               />
             </div>
+            {/* VẤN ĐỀ 1: Khối Kiểm Tra Kết Cấu Cơ Sở Gian Kho (Trần - Vách - Sàn) */}
+            <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  {"Kiểm tra kết cấu cơ sở (Trần — Vách — Sàn)"}
+                </h4>
+                <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-stone-200 text-stone-700">
+                  {"Căn cứ pháp lý đối chứng"}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    {"1. Trần / Mái kho"}
+                  </label>
+                  <select
+                    disabled={returnDetailsOnly}
+                    value={returnCeilingStatus}
+                    onChange={(e) => setReturnCeilingStatus(e.target.value as any)}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                  >
+                    <option value="dry_intact">{"🟢 Khô ráo, kín gió, nguyên vẹn"}</option>
+                    <option value="stained">{"🟡 Có vết loang ố nước cũ / ẩm"}</option>
+                    <option value="leaking">{"🔴 Dột nước / thấm dột mái (Lỗi cơ sở)"}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    {"2. Vách tường ngăn"}
+                  </label>
+                  <select
+                    disabled={returnDetailsOnly}
+                    value={returnWallStatus}
+                    onChange={(e) => setReturnWallStatus(e.target.value as any)}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                  >
+                    <option value="dry_intact">{"🟢 Khô ráo, sạch sẽ"}</option>
+                    <option value="damp_seepage">{"🔴 Thấm ẩm tường ngoài (Lỗi cơ sở)"}</option>
+                    <option value="cracked">{"🟠 Móp méo / nứt vỡ vách"}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    {"3. Sàn gian kho"}
+                  </label>
+                  <select
+                    disabled={returnDetailsOnly}
+                    value={returnFloorStatus}
+                    onChange={(e) => setReturnFloorStatus(e.target.value as any)}
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                  >
+                    <option value="dry_intact">{"🟢 Khô ráo, chịu lực tốt"}</option>
+                    <option value="cracked">{"🔴 Nứt vỡ sàn / bong gạch lát"}</option>
+                    <option value="water_pooling">{"🔴 Có đọng vũng nước / ngấm sàn"}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* VẤN ĐỀ 2: Phân Định Nguồn Gốc Ẩm Mốc / Hư Hại Hàng Hóa */}
+            <div className={`rounded-xl border p-3.5 space-y-3 transition-colors ${
+              returnMoistureOrigin === 'facility_fault'
+                ? 'border-rose-300 bg-rose-50/70'
+                : returnMoistureOrigin === 'customer_fault'
+                  ? 'border-amber-300 bg-amber-50/70'
+                  : 'border-stone-200 bg-stone-50/70'
+            }`}>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  {"Giám định nguồn gốc ẩm mốc / hư hại hàng hóa"}
+                </h4>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {"Quy định bảo quản & SLA"}
+                </span>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  {"Kết luận nguồn gốc ẩm mốc"}
+                </label>
+                <select
+                  disabled={returnDetailsOnly}
+                  value={returnMoistureOrigin}
+                  onChange={(e) => {
+                    const origin = e.target.value as any
+                    setReturnMoistureOrigin(origin)
+                    if (origin === 'facility_fault') {
+                      setReturnDamageFee("0")
+                      setReturnCleaningFee("0")
+                    } else if (origin === 'customer_fault' && !returnCleaningFee) {
+                      setReturnCleaningFee("1500000")
+                    }
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs bg-white"
+                >
+                  <option value="none">{"🟢 Không phát sinh ẩm mốc / Hàng hóa & kho bình thường"}</option>
+                  <option value="facility_fault">{"🔴 Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)"}</option>
+                  <option value="customer_fault">{"🟠 Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)"}</option>
+                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn — Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)"}</option>
+                </select>
+              </div>
+
+              {returnMoistureOrigin === 'facility_fault' && (
+                <div className="rounded-lg border border-rose-200 bg-rose-100/80 p-2.5 text-xs text-rose-900 space-y-1">
+                  <p className="font-bold">{"✓ Trách nhiệm của cơ sở kho:"}</p>
+                  <p>{"Hệ thống tự động miễn trừ toàn bộ phí hư hại và vệ sinh đối với khách hàng. Hệ thống hoàn 100% tiền cọc và kích hoạt phiếu sửa chữa bảo trì khẩn cấp (P1) cho Đội Kỹ thuật."}</p>
+                </div>
+              )}
+
+              {returnMoistureOrigin === 'customer_fault' && (
+                <div className="rounded-lg border border-amber-200 bg-amber-100/80 p-2.5 text-xs text-amber-950 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold">{"Trách nhiệm khách hàng vi phạm quy chuẩn bảo quản:"}</p>
+                    {!returnDetailsOnly && (
+                      <button
+                        type="button"
+                        onClick={() => setReturnCleaningFee("1500000")}
+                        className="px-2 py-0.5 rounded bg-amber-800 text-white font-semibold hover:bg-amber-900 text-[11px]"
+                      >
+                        {"Áp dụng phí khử trùng 1.500.000₫"}
+                      </button>
+                    )}
+                  </div>
+                  <p>{"Khách hàng tự chịu tổn thất hàng hóa. Phí dọn dẹp và khử trùng nấm mốc bằng ozone sẽ được khấu trừ thêm từ tiền cọc."}</p>
+                </div>
+              )}
+
+              {returnMoistureOrigin === 'climate_standard_uncontrolled' && (
+                <div className="rounded-lg border border-stone-200 bg-stone-100 p-2.5 text-xs text-stone-700">
+                  <p>{"Áp dụng điều khoản Miễn trừ trách nhiệm kho tiêu chuẩn: Khách đã ký cam kết tự bảo quản đối với đồ nhạy cảm ẩm ở kho không có kiểm soát nhiệt độ."}</p>
+                </div>
+              )}
+            </div>
+
             <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
               <b>{"Bằng chứng bàn giao ban đầu (bất biến)"}:</b>{" "}
               {selectedReturn.evidence.join(" · ")}
@@ -3760,7 +4076,7 @@ export default function StaffApp({
               </h3>
               <p className="mt-1 text-xs leading-5 text-stone-600">
                 Đơn vị: Việt Nam đồng (₫). Nhập số lượng và đơn giá theo hợp
-                đồng hoặc chứng từ để hệ thống tự tính thành tiền; khoản không
+                đồng hoặc chứng từ để hệ thống tự tính thành tiền. Khoản không
                 phát sinh có thể để trống.
               </p>
               <div className="mt-4 grid auto-rows-fr gap-3 lg:grid-cols-2">
@@ -3808,7 +4124,7 @@ export default function StaffApp({
                   {
                     label: "Công nợ khác",
 
-                    hint: "Tổng các khoản chưa thanh toán; ghi rõ từng khoản, không tính trùng phí ở trên.",
+                    hint: "Tổng các khoản chưa thanh toán. Ghi rõ từng khoản, không tính trùng phí ở trên.",
 
                     value: returnOtherDebt,
 
@@ -3884,11 +4200,25 @@ export default function StaffApp({
               />
             </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              {selectedSharedReturn?.status === "disputed"
-                ? "Khách hàng đã yêu cầu tính lại. Quản lý cơ sở là người xem xét và gửi lại quyết toán; nhân viên không sửa hoặc đóng hồ sơ tại bước này."
-                : "Sau khi nhân viên gửi, hồ sơ chuyển sang “Chờ khách hàng xác nhận”. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng."}
-            </div>
+            {selectedSharedReturn?.status === "disputed" ? (
+              <div className="rounded-lg border border-red-300 bg-red-50 p-3.5 text-sm text-red-900">
+                <p className="font-bold">⚠️ Đang khiếu nại - Cần BO giải quyết</p>
+                <p className="mt-1 text-xs leading-relaxed text-red-800">
+                  Khách hàng đã gửi khiếu nại về các khoản phí quyết toán ({selectedSharedReturn?.customerDecisionNote || "Cần xem xét lại"}). Quản lý cơ sở hoặc Ban Điều Hành (BO) là người xem xét thẩm định. Nhân viên không đóng hồ sơ hoặc hoàn cọc tại bước này để tránh xung đột dữ liệu (lỗi 409 Conflict).
+                </p>
+              </div>
+            ) : selectedSharedReturn?.status === "awaiting_customer_confirmation" ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900">
+                <p className="font-bold">⏳ Chờ khách hàng phản hồi duyệt quyết toán</p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                  Biên bản nghiệm thu đã lập và đang chờ khách hàng duyệt. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng để tránh xung đột hệ thống (lỗi 409 Conflict).
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                Sau khi nhân viên gửi, hồ sơ chuyển sang “Chờ khách hàng xác nhận”. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng.
+              </div>
+            )}
             {selectedSharedReturn?.status === "refund_pending" && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                 <p className="font-semibold text-emerald-950">
@@ -3937,7 +4267,20 @@ export default function StaffApp({
                 </div>
               </div>
             )}
-            <div className="flex gap-2 justify-end pt-2">
+            <div className="flex flex-wrap gap-2 justify-end pt-2">
+              {selectedReturn && (
+                <Button
+                  variant="outline"
+                  className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                  onClick={() => {
+                    const hubReturn = hub.returns.find(item => item.id === selectedReturn.id) || (selectedReturn as unknown as ReturnCase)
+                    setSettlementTarget(hubReturn)
+                    setSettlementModalOpen(true)
+                  }}
+                >
+                  🧾 Xem hóa đơn & biên lai
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setInspectModal(false)}>
                 {returnDetailsOnly ? "Đóng" : "Hủy"}
               </Button>
@@ -3991,8 +4334,26 @@ export default function StaffApp({
 
                         outstandingFee: Number(returnOtherDebt) || 0,
 
+                        structuralInspection: {
+                          ceiling: returnCeilingStatus,
+                          wall: returnWallStatus,
+                          floor: returnFloorStatus,
+                        },
+
+                        moistureOrigin: returnMoistureOrigin,
+
+                        sanitizationFee: Number(returnSanitizationFee) || 0,
+
+                        facilityCompensationAmount: Number(returnFacilityCompensation) || 0,
+
                         staffNotes: [
                           returnNotes.trim(),
+
+                          `[Hiện trạng kết cấu: Trần ${returnCeilingStatus === 'dry_intact' ? 'khô ráo' : returnCeilingStatus === 'leaking' ? 'dột nước (lỗi cơ sở)' : 'loang ố'}, vách ${returnWallStatus === 'dry_intact' ? 'khô ráo' : returnWallStatus === 'damp_seepage' ? 'thấm ẩm ngoài vào (lỗi cơ sở)' : 'nứt vỡ'}, sàn ${returnFloorStatus === 'dry_intact' ? 'khô ráo' : returnFloorStatus === 'cracked' ? 'nứt vỡ' : 'đọng nước'}]`,
+
+                          returnMoistureOrigin !== 'none'
+                            ? `[Nguồn gốc ẩm mốc: ${returnMoistureOrigin === 'facility_fault' ? 'Do lỗi cơ sở kho thấm dột / sự cố hệ thống' : returnMoistureOrigin === 'customer_fault' ? 'Do khách hàng đóng gói ẩm / vi phạm hàng cấm' : 'Kho tiêu chuẩn - độ ẩm tự nhiên'}]`
+                            : '',
 
                           ...Object.values(feeDetails),
                         ]
@@ -4004,7 +4365,7 @@ export default function StaffApp({
                         evidencePhotos: [
                           returnEvidence.trim(),
 
-                          `EV-OUT-${Date.now()} · ${user.name} lập biên bản; thu hồi ${returnKeys}`,
+                          `EV-OUT-${Date.now()} · ${user.name} lập biên bản. Thu hồi ${returnKeys}`,
                         ],
 
                         returnedItems: { key: true, card: true, lock: true },
@@ -4013,7 +4374,7 @@ export default function StaffApp({
                       setInspectModal(false)
 
                       showToast(
-                        "Đã gửi biên bản; khách hàng đã nhận được yêu cầu xác nhận quyết toán.",
+                        "Đã gửi biên bản. Khách hàng đã nhận được yêu cầu xác nhận quyết toán.",
                       )
                     } catch (error) {
                       showToast(staffErrorMessage(error, "Không thể hoàn tất nghiệm thu trả kho."))
@@ -4060,7 +4421,7 @@ export default function StaffApp({
                   <b>Cơ sở:</b> {selectedCheckin.facility}
                 </span>
                 <span>
-                  <b>Hàng:</b> {selectedCheckin.goodsType}
+                  <b>Loại hàng hóa:</b> {selectedCheckin.goodsType}
                 </span>
                 <span>
                   <b>Chất liệu:</b> {selectedCheckin.material}
@@ -4212,7 +4573,7 @@ export default function StaffApp({
                 {(!fitEvaluation.weightFits || !fitEvaluation.volumeFits) && (
                   <p className="mt-2 font-medium text-red-700">
                     {
-                      "Không thể hoàn tất Nhận kho. Hãy yêu cầu quản lý đổi cỡ kho hoặc gian kho khác."
+                      "Không thể hoàn tất nhận kho. Hãy yêu cầu quản lý đổi cỡ kho hoặc gian kho khác."
                     }
                   </p>
                 )}
@@ -4241,7 +4602,7 @@ export default function StaffApp({
                 <span>
                   <b>{"Tiền cọc"}:</b>{" "}
                   {reservationForCheckin?.paid
-                    ? "40% · đã thu"
+                    ? "20% · đã thu"
                     : "Chưa xác nhận"}
                 </span>
                 <span>
@@ -4332,7 +4693,7 @@ export default function StaffApp({
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
               {
-                "Nhân viên hoàn tất Nhận kho để kích hoạt hợp đồng thuê. Khách hàng sẽ tự bấm “Tôi đã nhận kho”; trước thời điểm đó hồ sơ mang nhãn “Chờ khách xác nhận bàn giao”."
+                "Nhân viên hoàn tất nhận kho để kích hoạt hợp đồng thuê. Khách hàng sẽ tự bấm “Tôi đã nhận kho”. Trước thời điểm đó, hồ sơ mang nhãn “Chờ khách hàng xác nhận bàn giao”."
               }
             </div>
             <div className="space-y-1">
@@ -4362,7 +4723,7 @@ export default function StaffApp({
                   )
 
                   if (!sharedHold) {
-                    showToast("Không tìm thấy đơn đặt kho dùng chung.")
+                    showToast("Không tìm thấy đơn đặt giữ kho dùng chung.")
 
                     return
                   }
@@ -4409,7 +4770,7 @@ export default function StaffApp({
                     setPendingCheckinCompletionId(selectedCheckin.id)
 
                     showToast(
-                      "Đã ghi nhận hợp đồng và thanh toán. Hệ thống đang hoàn tất Nhận kho…",
+                      "Đã ghi nhận hợp đồng và thanh toán. Hệ thống đang hoàn tất nhận kho…",
                     )
                   } catch (error) {
                     showToast(staffErrorMessage(error, "Không thể chuẩn bị hồ sơ nhận kho."))
@@ -4417,8 +4778,8 @@ export default function StaffApp({
                 }}
               >
                 {isEarlyCheckin
-                  ? "Xác nhận nhận kho sớm & hoàn tất"
-                  : "Hoàn tất Nhận kho"}
+                  ? "Xác nhận nhận kho sớm và hoàn tất"
+                  : "Hoàn tất nhận kho"}
               </Button>
             </div>
           </div>
@@ -4554,7 +4915,7 @@ export default function StaffApp({
             />
             <p className="text-xs text-stone-500">
               {
-                "Thao tác này hủy Nhận kho và ghi nhận yêu cầu giải phóng gian kho/thu hồi quyền truy cập chờ kích hoạt."
+                "Thao tác này hủy quy trình nhận kho và ghi nhận yêu cầu giải phóng gian kho hoặc thu hồi quyền truy cập chờ kích hoạt."
               }
             </p>
             <div className="flex justify-end gap-2">
@@ -4579,7 +4940,7 @@ export default function StaffApp({
                               evidence: [
                                 ...item.evidence,
 
-                                `NO-SHOW-${Date.now()} · ${user.name}: ${noShowReason.trim()} · hủy Nhận kho, giải phóng kho, thu hồi quyền truy cập`,
+                                `NO-SHOW-${Date.now()} · ${user.name}: ${noShowReason.trim()} · Hủy quy trình nhận kho, giải phóng gian kho, thu hồi quyền truy cập`,
                               ],
                             }
                           : item,
@@ -4589,7 +4950,7 @@ export default function StaffApp({
                     setNoShowTarget(null)
 
                     showToast(
-                      "Đã ghi nhận khách không đến; khách hàng và kho đã được cập nhật.",
+                      "Đã ghi nhận khách không đến. Khách hàng và kho đã được cập nhật.",
                     )
                   } catch (error) {
                     showToast(staffErrorMessage(error, "Không thể ghi nhận khách không đến."))
@@ -4929,6 +5290,14 @@ export default function StaffApp({
           </div>
         )}
       </Modal>
+
+      <ReturnSettlementModal
+        open={settlementModalOpen}
+        onClose={() => setSettlementModalOpen(false)}
+        returnCase={settlementTarget}
+        payments={hub.payments}
+        role="staff"
+      />
     </Layout>
   )
 }

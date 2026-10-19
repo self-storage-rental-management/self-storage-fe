@@ -15,6 +15,7 @@ import type {
 import ApiPager from "../rental-api/ApiPager"
 import SupportReadState from "./SupportReadState"
 import SupportStaffPicker from "./SupportStaffPicker"
+import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
 import {
   supportActions,
   supportInputClass,
@@ -22,42 +23,50 @@ import {
 } from "./presentation"
 
 const labels: Record<string, string> = {
-  assign: "Giao / Giao lại Staff",
+  assign: "Phân công nhân viên",
   accept: "Nhận xử lý",
   message: "Gửi trao đổi",
-  information: "Yêu cầu Customer bổ sung",
+  information: "Yêu cầu khách hàng bổ sung",
   resolve: "Báo kết quả xử lý",
   close: "Xác nhận kết quả và đóng",
   reopen: "Mở lại yêu cầu",
-  escalate: "Đề nghị điều phối module",
-  decision: "Điều phối escalation",
+  escalate: "Đề nghị chuyển bộ phận",
+  decision: "Xử lý yêu cầu chuyển bộ phận",
 }
 export default function SupportActionForm({
   role,
   ticket: t,
   command,
+  onUploadBusy,
+  mode = "all",
+  internal = false,
 }: {
   role: SupportRole
   ticket: SupportTicket
   command: ReturnType<typeof useSupportCommand>
+  onUploadBusy?: (busy: boolean) => void
+  internal?: boolean
+  mode?: "all" | "message" | "operations"
 }) {
   const { manager, copy } = useManagerPresentation()
 
   const actor = getAuthenticatedActor()
   const actions = supportActions(actor, role, t).filter(
-    (a) => a !== "follow-up",
+    (a) => a !== "follow-up" && (mode === "message" ? a === "message" : mode === "operations" ? a !== "message" && a !== "escalate" && !(role === "staff" && ["information", "resolve"].includes(a)) : true),
   )
   const [action, setAction] = useState(actions[0] ?? "")
   const [body, setBody] = useState(""),
     [staffId, setStaffId] = useState("")
-  const [visibility, setVisibility] = useState<"PUBLIC" | "INTERNAL">("PUBLIC")
+  const visibility = internal ? "INTERNAL" as const : "PUBLIC" as const
+  const [files, setFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
   const [module, setModule] = useState<SupportModule>("PAYMENT")
   const [escalationId, setEscalationId] = useState(""),
     [decision, setDecision] = useState<"ROUTE" | "REJECT">("ROUTE")
+  if (actions.length === 0 && mode !== "all") return null
   if (!actions.includes(action) || t.version === null)
     return (
       <p className="text-sm text-stone-500">
-        Không có thao tác phù hợp theo role/trạng thái hiện tại.
+        Không có thao tác phù hợp với quyền và trạng thái hiện tại.
       </p>
     )
   const limit = ["assign", "reopen", "escalate", "decision", "close"].includes(
@@ -65,22 +74,24 @@ export default function SupportActionForm({
   )
     ? 2000
     : 4000
-  const needsBody = !["accept", "close"].includes(action)
+  const canResolve = !internal && role === "staff" && body.length <= 4000 && (!!body.trim() || files.length > 0)
+  const needsBody = !["accept", "close", "resolve"].includes(action)
   const valid =
     (!needsBody || !!body.trim()) &&
     body.length <= limit &&
+    (action !== "resolve" || canResolve) &&
     (action !== "assign" || (!!staffId && staffId !== t.assignedStaffId)) &&
     (action !== "decision" || !!escalationId)
-  const submit = () => {
+  const submit = (requestedAction = action) => {
     if (
-      !valid ||
-      !supportActions(getAuthenticatedActor(), role, t).includes(action)
+      !(requestedAction === "resolve" ? canResolve : valid) || uploading || command.locked || command.conflict ||
+      !supportActions(getAuthenticatedActor(), role, t).includes(requestedAction)
     )
       return
     const version = { expectedVersion: t.version! },
       reason = body.trim()
     let input: SupportCommand
-    switch (action) {
+    switch (requestedAction) {
       case "assign":
         input = { kind: "assign", ...version, assignedStaffId: staffId, reason }
         break
@@ -89,15 +100,15 @@ export default function SupportActionForm({
         break
       case "message":
         input =
-          role === "staff"
-            ? { kind: "message", body: reason, visibility }
-            : { kind: "message", body: reason, ...version }
+          role !== "customer"
+            ? { kind: "message", body: reason, visibility, evidenceFileIds: files }
+            : { kind: "message", body: reason, ...version, evidenceFileIds: files }
         break
       case "information":
-        input = { kind: "information", ...version, message: reason }
+        input = { kind: "information", ...version, message: reason, evidenceFileIds: files }
         break
       case "resolve":
-        input = { kind: "resolve", ...version, summary: reason }
+        input = { kind: "resolve", ...version, summary: reason, evidenceFileIds: files }
         break
       case "close":
         input = { kind: "close", ...version, feedback: reason || undefined }
@@ -106,7 +117,7 @@ export default function SupportActionForm({
         input = { kind: "reopen", ...version, reason }
         break
       case "escalate":
-        input = { kind: "escalate", ...version, targetModule: module, reason }
+        input = { kind: "escalate", ...version, targetModule: module, reason, evidenceFileIds: files }
         break
       case "decision":
         input = {
@@ -124,21 +135,22 @@ export default function SupportActionForm({
   }
   return (
     <form
-      className="space-y-4 rounded-lg border border-stone-200 p-4"
+      className={mode === "message" ? "space-y-4" : "space-y-4 rounded-lg border border-stone-200 p-4"}
       onSubmit={(e) => {
         e.preventDefault()
         submit()
       }}
     >
-      <h3 className="font-semibold">Thao tác theo role</h3>
-      <label className="block text-sm">
+      {mode !== "message" && <h3 className="font-semibold">{actions.length === 1 ? copy(labels[action]) : "Xử lý yêu cầu"}</h3>}
+      {actions.length > 1 && <label className="block text-sm">
         Thao tác
         <select
           className={supportInputClass}
           value={action}
-          disabled={command.locked}
+          disabled={command.locked || uploading}
           onChange={(e) => {
             setAction(e.target.value)
+            setFiles([])
             setBody("")
             setStaffId("")
             setEscalationId("")
@@ -150,7 +162,7 @@ export default function SupportActionForm({
             </option>
           ))}
         </select>
-      </label>
+      </label>}
       {action === "assign" && t.facilityId && (
         <SupportStaffPicker
           key={t.facilityId}
@@ -160,25 +172,9 @@ export default function SupportActionForm({
           disabled={command.locked}
         />
       )}
-      {action === "message" && role === "staff" && (
-        <label className="block text-sm">
-          Phạm vi trao đổi
-          <select
-            className={supportInputClass}
-            value={visibility}
-            disabled={command.locked}
-            onChange={(e) =>
-              setVisibility(e.target.value as "PUBLIC" | "INTERNAL")
-            }
-          >
-            <option value="PUBLIC">{copy("Công khai với Customer")}</option>
-            <option value="INTERNAL">{copy("Nội bộ — Customer không thấy")}</option>
-          </select>
-        </label>
-      )}
       {action === "escalate" && (
         <label className="block text-sm">
-          {copy("Module nhận điều phối")}<select
+          Bộ phận tiếp nhận<select
             className={supportInputClass}
             value={module}
             disabled={command.locked}
@@ -210,8 +206,8 @@ export default function SupportActionForm({
                 setDecision(e.target.value as "ROUTE" | "REJECT")
               }
             >
-              <option value="ROUTE">{copy("Chuyển tới module được phép")}</option>
-              <option value="REJECT">{copy("Từ chối điều phối, trả về Staff")}</option>
+              <option value="ROUTE">Chuyển tới bộ phận phụ trách</option>
+              <option value="REJECT">Từ chối chuyển, trả về nhân viên</option>
             </select>
           </label>
         </>
@@ -225,10 +221,12 @@ export default function SupportActionForm({
                 action === "reopen" ||
                 action === "escalate"
               ? "Lý do"
-              : "Nội dung / kết quả"}
+            : action === "message" ? mode === "message" ? null : "Nội dung trao đổi" : "Nội dung / kết quả"}
           <textarea
+            aria-label={mode === "message" ? "Nội dung tin nhắn" : undefined}
             className={supportInputClass}
-            rows={3}
+            rows={mode === "message" ? 3 : 2}
+            placeholder={mode === "message" ? "Nhập tin nhắn..." : undefined}
             maxLength={limit}
             value={body}
             required={needsBody}
@@ -237,18 +235,29 @@ export default function SupportActionForm({
           />
         </label>
       )}
-      {["close", "resolve", "escalate", "decision"].includes(action) && (
-        <p className="text-sm text-amber-800">
-          {copy("BE kiểm tra policy và kết quả từ nguồn chung. Chuyển module không đồng nghĩa đã xử lý xong; ghi chú không thay thế kết quả thanh toán/refund/bảo trì. Thiếu nguồn sẽ bị chặn, không tự giả lập thành công.")}</p>
-      )}
-      {!manager && <p className="text-xs text-stone-500">
-        Phiên bản {t.version} · Lần phân công {t.assignmentRevision}. Manager không có thao tác hoàn thành thay Staff.</p>}
+      <div className={mode === "message" ? "flex flex-wrap items-start gap-2" : "space-y-4"}>
+      {["message", "information", "resolve", "escalate"].includes(action) && <EvidenceUpload
+        compact={mode === "message"}
+        key={`${action}:${visibility}`}
+        entityType={internal || action === "escalate" ? "DUONG_SUPPORT_INTERNAL" : "DUONG_SUPPORT_PUBLIC"}
+        entityId={t.id} value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { setUploading(busy); onUploadBusy?.(busy) }}
+      />}
       <Button
         type="submit"
-        disabled={command.locked || command.conflict || !valid}
+        size={mode === "message" ? "sm" : "md"}
+        disabled={command.locked || uploading || command.conflict || !valid}
       >
-        {copy(labels[action])}
+        {mode === "message" ? command.busy ? "Đang gửi..." : "Gửi tin nhắn" : copy(labels[action])}
       </Button>
+      {mode === "message" && !internal && role === "staff" && supportActions(actor, role, t).includes("resolve") && <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={command.locked || uploading || command.conflict || !canResolve}
+        title="Nhập mô tả hoặc đính kèm minh chứng trước khi báo đã xử lý"
+        onClick={() => submit("resolve")}
+      >Báo đã xử lý</Button>}
+      </div>
     </form>
   )
 }
@@ -273,14 +282,14 @@ function EscalationPicker({
   return (
     <div className="space-y-2">
       <label className="block text-sm">
-        Escalation chờ điều phối
+        Yêu cầu chờ chuyển bộ phận
         <select
           className={supportInputClass}
           value={value}
           disabled={disabled || read.loading || !read.data}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="">Chọn yêu cầu đang REQUESTED</option>
+          <option value="">Chọn yêu cầu đang chờ xử lý</option>
           {value && !read.data?.data.some((e) => e.id === value) && (
             <option value={value}>{value}</option>
           )}
@@ -288,7 +297,7 @@ function EscalationPicker({
             .filter((e) => e.status === "REQUESTED")
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {copy(supportModuleLabels[e.targetModule])} · {e.id}
+                {copy(supportModuleLabels[e.targetModule])}, {e.id}
               </option>
             ))}
         </select>

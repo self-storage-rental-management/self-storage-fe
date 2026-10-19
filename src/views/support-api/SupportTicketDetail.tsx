@@ -1,135 +1,101 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useState } from "react"
-import { Badge, Button, Card } from "../../components/ui"
+import { useState, type ReactNode } from "react"
+import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { useSupportCommand } from "../../hooks/useSupportCommand"
 import { getAuthenticatedActor } from "../../services/authApi"
 import {
   getSupportTicket,
-  listSupportEscalations,
-  listSupportEvents,
   listSupportMessages,
 } from "../../services/supportApi"
 import type {
-  SupportEscalation,
-  SupportEvent,
   SupportMessage,
   SupportPage,
   SupportRole,
   SupportTicket,
 } from "../../types/supportApi"
 import ApiPager from "../rental-api/ApiPager"
-import { rentalDate } from "../rental-api/presentation"
 import SupportActionForm from "./SupportActionForm"
+import SupportNotificationReceipts from "../rental-support-integration/SupportNotificationReceipts"
+import { EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 import SupportReadState from "./SupportReadState"
 import {
   supportActions,
-  supportEventLabels,
-  supportModuleLabels,
   supportStatusLabels,
+  supportPriorityLabels,
+  supportLinkLabels,
   supportTicketVisible,
+  supportAssigneeLabel,
 } from "./presentation"
 
-export function SupportTicketSummary({ ticket: t }: { ticket: SupportTicket }) {
-  const { manager, copy, explain } = useManagerPresentation()
+export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket: SupportTicket; role?: SupportRole }) {
+  const { copy } = useManagerPresentation()
+  const [copied, setCopied] = useState(false)
+  const facilityName = t.facilityId ? getAuthenticatedActor()?.facilityNames?.[t.facilityId] : undefined
+  const otherFields: [string, string][] = [
+    ["Tạo lúc", supportDetailDate(t.createdAt)],
+    ...(t.facilityId ? [["Cơ sở", facilityName || `#${t.facilityId.slice(0, 8)}`] as [string, string]] : []),
+    ...(t.linkedId ? [["Hồ sơ liên kết", `${supportLinkLabels[t.linkedType || ""] || "Hồ sơ"} #${t.linkedId.slice(0, 8)}`] as [string, string]] : []),
+    ...(role === "customer" ? [] : [["Mã khách hàng", t.customerId] as [string, string]]),
+    ["Nhân viên phụ trách", supportAssigneeLabel(t, role)],
+    ...(t.parentTicketId ? [["Yêu cầu gốc", `#${t.parentTicketId.slice(0, 8)}`] as [string, string]] : []),
+    ...(t.resolvedBy && role !== "customer" ? [["Người xử lý xong", t.resolvedBy] as [string, string]] : []),
+    ...([
+      ["Phân công lúc", t.assignedAt],
+      ["Nhân viên nhận lúc", t.acceptedAt],
+      ["Xử lý xong lúc", t.resolvedAt],
+      ["Đóng lúc", t.closedAt],
+    ] as const).filter(([, date]) => Boolean(date)).map(([label, date]) => [label, supportDetailDate(date)] as [string, string]),
+  ]
 
   return (
     <div className="space-y-4 text-sm">
-      <div>
-        <h3 className="break-words text-lg font-semibold">{t.subject}</h3>
-        <p className="break-all text-xs text-stone-500">Mã yêu cầu: {t.id}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          <h3 className="break-words text-lg font-semibold text-stone-900">{t.subject}</h3>
+          <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.id}>Mã yêu cầu: <span className="font-mono">#{t.id.slice(0, 8)}</span>
+            <button type="button" className="rounded p-0.5 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
+              try { await navigator.clipboard.writeText(t.id); setCopied(true) }
+              catch { setCopied(false) }
+            }}>{copied ? "✓" : "⧉"}</button>
+          </span>
+        </div>
+        <span className={`inline-flex shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${t.status === "open" ? "bg-slate-100 text-slate-700" : t.status === "in_progress" ? "bg-blue-50 text-blue-700" : t.status === "resolved" || t.status === "closed" ? "bg-green-100 text-green-700" : "bg-amber-50 text-amber-800"}`}>{copy(supportStatusLabels[t.status])}</span>
       </div>
-      <Badge
-        variant={
-          t.status === "closed" || t.status === "resolved"
-            ? "success"
-            : "warning"
-        }
-      >
-        {copy(supportStatusLabels[t.status])}
-      </Badge>
-      <p className="whitespace-pre-wrap break-words rounded bg-stone-50 p-3">
-        {t.description}
-      </p>
-      <dl className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-        {([
-          [copy("Customer"), t.customerId],
-          ["Cơ sở", t.facilityId ?? "Chưa có nguồn xác thực"],
-          [copy("Staff phụ trách"), t.assignedStaffId ?? "Chưa phân công"],
-          [
-            "Hồ sơ liên kết",
-            t.linkedId ? `${copy(t.linkedType || 'Hồ sơ')}: ${t.linkedId}` : "Không liên kết",
-          ],
-          ["Yêu cầu gốc", t.parentTicketId ?? "Không có"],
-          ["Người xử lý xong", t.resolvedBy ?? "Chưa có bản ghi"],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-stone-500">{label}</dt>
-            <dd className="break-all">{value}</dd>
-          </div>
-        ))}
-        {([
-          ["Tạo lúc", t.createdAt],
-          ["Phân công lúc", t.assignedAt],
-          [copy("Staff nhận lúc"), t.acceptedAt],
-          ["Xử lý xong lúc", t.resolvedAt],
-          ["Đóng lúc", t.closedAt],
-        ] as const).map(([label, date]) => (
-          <div key={label}>
-            <dt className="text-stone-500">{label}</dt>
-            <dd>{rentalDate(date)}</dd>
-          </div>
-        ))}
-      </dl>
-      {!t.workflowReady && (
-        <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
-          {copy("Hồ sơ cũ chưa có workflow metadata được xác thực. Chỉ đọc; không tự backfill hoặc gán version 0.")}</p>
-      )}
-      {t.status === "resolved" && (
-        <p role="status" className="rounded bg-blue-50 p-3 text-blue-900">
-          {copy("Đã xử lý xong, chưa đóng. Customer có thể xác nhận kết quả hoặc yêu cầu mở lại; backend vẫn kiểm tra policy và quyền. Không mặc định ticket sẽ tự đóng: tự đóng còn cần policy chung và bằng chứng notification đúng lần xử lý này.")}</p>
-      )}
-      <div
-        role="status"
-        className="space-y-1 rounded border border-amber-200 bg-amber-50 p-3 text-amber-900"
-      >
-        {t.slaCompleteness === "UNKNOWN" || !t.sla ? (
-          <>
-            <p>{copy("SLA / mức ưu tiên: Chưa có nguồn policy/lịch làm việc chung.")}</p>
-            <p>Không kết luận yêu cầu đang đúng hạn hoặc quá hạn.</p>
-            {t.missingSourceReason && (
-              <p className="break-words text-xs">{explain(t.missingSourceReason)}</p>
-            )}
-          </>
-        ) : (
-          <>
-            <p>
-              {!manager && <>Policy: {t.sla.policyRef} · {t.sla.policyVersion} · </>}Ưu tiên{" "}
-              {copy(t.sla.priority)}
-            </p>
-            <p>Hạn phản hồi đầu: {rentalDate(t.sla.firstReplyDueAt)}</p>
-            <p>Hạn cập nhật tiếp: {rentalDate(t.sla.nextUpdateDueAt)}</p>
-            <p>
-              {t.sla.activeWorkPaused
-                ? copy("Tạm dừng thời gian xử lý do đang chờ Customer.")
-                : "Không tạm dừng thời gian xử lý."}
-            </p>
-          </>
-        )}
+      <div className="space-y-1 rounded-lg bg-stone-50 px-3 py-2">
+        <p className="text-xs text-stone-500">Nội dung yêu cầu</p>
+        <p className="whitespace-pre-wrap break-words leading-relaxed text-stone-800 [overflow-wrap:anywhere]">{t.description}</p>
       </div>
+      <details className="rounded-lg border border-stone-200 px-3 py-2 text-stone-700">
+        <summary className="cursor-pointer font-medium">Thông tin chi tiết</summary>
+        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">{otherFields.map(([label, value]) => <div key={label} className="min-w-0">
+          <dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-medium leading-relaxed text-stone-900 [overflow-wrap:anywhere]">{value}</dd>
+        </div>)}</dl>
+      </details>
     </div>
   )
+}
+
+function supportDetailDate(value: string | null) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "Chưa ghi nhận"
+  return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value))
 }
 export default function SupportTicketDetail({
   role,
   id,
   command,
   onFollowUp,
+  onUploadBusy,
+  conversation = "messages",
+  onConversationChange,
 }: {
   role: SupportRole
   id: string
   command: ReturnType<typeof useSupportCommand>
   onFollowUp: (parent: SupportTicket) => void
+  onUploadBusy?: (busy: boolean) => void
+  conversation?: "messages" | "internal"
+  onConversationChange?: (tab: "messages" | "internal") => void
 }) {
   const { manager, copy } = useManagerPresentation()
 
@@ -137,38 +103,43 @@ export default function SupportTicketDetail({
   const identity = `${actor?.id}:${role}:${id}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
   const read = useRentalApiResource(identity, () => getSupportTicket(role, id))
   const t = read.data
+  const refresh = () => {
+    if (!command.locked) read.refresh()
+  }
   if (t && (!actor || !supportTicketVisible(actor, role, t)))
     return (
       <p role="alert">
-        Bạn không còn quyền với yêu cầu này. Vui lòng tải lại hàng đợi.
+        Bạn không còn quyền với yêu cầu này. Vui lòng quay về danh sách yêu cầu.
       </p>
     )
   return (
     <div className="min-w-0 space-y-5">
-      {!manager && (<Button
-        variant="outline"
-        disabled={command.locked}
-        onClick={read.refresh}
-      >
-        Tải lại chi tiết
-      </Button>)}
-      <SupportReadState {...read} retry={read.refresh} />
+      <SupportReadState {...read} retry={refresh} />
       {t && (
         <>
-          <SupportTicketSummary ticket={t} />
+          <SupportTicketSummary ticket={t} role={role} />
+          {role === "customer" && <SupportNotificationReceipts key={identity} ticketId={id} locked={command.locked} />}
           <SupportTimeline
             key={`${identity}:${t.version}`}
             role={role}
             id={id}
             identity={identity}
             locked={command.locked}
+            initialDescription={t.description}
+            initialCreatedAt={t.createdAt}
+            initialTab={role === "customer" ? "messages" : conversation}
+            onTabChange={onConversationChange}
+            composer={role !== "manager" ? <SupportActionForm key={`${id}:${t.version}:message`} role={role} ticket={t} command={command} onUploadBusy={onUploadBusy} mode="message" /> : undefined}
+            internalComposer={role !== "customer" ? <SupportActionForm key={`${id}:${t.version}:internal`} role={role} ticket={t} command={command} onUploadBusy={onUploadBusy} mode="message" internal /> : undefined}
           />
-          <SupportActionForm
+          {role !== "manager" && <SupportActionForm
             key={`${id}:${t.version}`}
             role={role}
             ticket={t}
             command={command}
-          />
+            onUploadBusy={onUploadBusy}
+            mode="operations"
+          />}
           {supportActions(actor, role, t).includes("follow-up") && (
             <Button disabled={command.locked} onClick={() => onFollowUp(t)}>
               Tạo yêu cầu tiếp nối
@@ -184,158 +155,104 @@ function SupportTimeline({
   id,
   identity,
   locked,
+  initialDescription,
+  initialCreatedAt,
+  composer,
+  internalComposer,
+  initialTab,
+  onTabChange,
 }: {
   role: SupportRole
   id: string
   identity: string
   locked: boolean
+  initialDescription: string
+  initialCreatedAt: string
+  composer?: ReactNode
+  internalComposer?: ReactNode
+  initialTab: "messages" | "internal"
+  onTabChange?: (tab: "messages" | "internal") => void
 }) {
-  const [tab, setTab] = useState<"messages" | "events" | "escalations">(
-    "messages",
+  const [tab, setTab] = useState<"messages" | "internal">(
+    initialTab,
   )
   const [page, setPage] = useState(0)
-  const read =
-    useRentalApiResource<SupportPage<SupportMessage | SupportEvent | SupportEscalation>>(
-      `${identity}:${tab}:${page}`,
-      () =>
-        tab === "messages"
-          ? listSupportMessages(role, id, page)
-          : tab === "events"
-            ? listSupportEvents(role, id, page)
-            : listSupportEscalations(role, id, page),
-    )
-  const tabs =
-    role === "customer"
-      ? ["messages"] as const
-      : ["messages", "events", "escalations"] as const
+  const read = useRentalApiResource<SupportPage<SupportMessage>>(
+    `${identity}:${tab}:${page}`,
+    () => listSupportMessages(role, id, page, 20, tab === "internal" ? "INTERNAL" : "PUBLIC"),
+  )
+  const tabs = role === "customer" ? ["messages"] as const : ["messages", "internal"] as const
+  const isRepeatedOpeningMessage = (message: SupportMessage, index: number) =>
+    role === "customer" && tab === "messages" && page === 0 && index === 0 &&
+    message.authorRole === "CUSTOMER" && message.body.trim() === initialDescription.trim() &&
+    Date.parse(message.sentAt) === Date.parse(initialCreatedAt)
   return (
     <Card className="min-w-0 space-y-3 p-4">
-      <div className="flex flex-wrap gap-2">
+      {role === "customer" ? <h3 className="font-semibold">Trao đổi</h3> : <div className="flex gap-1 border-b border-stone-200" role="group" aria-label="Đối tượng trao đổi">
         {tabs.map((t) => (
-          <Button
+          <button
             key={t}
-            variant={tab === t ? "primary" : "outline"}
+            type="button"
+            aria-pressed={tab === t}
+            className={`-mb-px whitespace-nowrap rounded-t-md border-b-2 px-4 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50 ${tab === t ? "border-amber-500 font-semibold text-stone-900" : "border-transparent text-stone-500 hover:bg-stone-50 hover:text-stone-900"}`}
             disabled={locked}
             onClick={() => {
               setTab(t)
+              onTabChange?.(t)
               setPage(0)
             }}
           >
-            {t === "messages"
-              ? "Trao đổi"
-              : t === "events"
-                ? "Lịch sử nội bộ"
-                : "Điều phối nội bộ"}
-          </Button>
+            {t === "messages" ? "Khách hàng" : role === "manager" ? "Nhân viên" : "Quản lý"}
+          </button>
         ))}
-      </div>
+      </div>}
       <SupportReadState {...read} retry={read.refresh} />
       {read.data && (
         <>
-          {read.data.data.map((row) => (
+          {read.data.data.map((row, index) => {
+            const message = row as SupportMessage
+            const repeatedOpeningMessage = isRepeatedOpeningMessage(message, index)
+            if (repeatedOpeningMessage && !message.evidenceFileIds?.length && message.evidenceCompleteness !== "UNKNOWN") return null
+            return (
             <div
               key={row.id}
-              className="min-w-0 space-y-1 rounded border border-stone-200 p-3 text-sm"
+              className={`w-fit min-w-0 max-w-[90%] space-y-2 rounded-lg border px-3 py-2 text-sm ${message.authorId === getAuthenticatedActor()?.id ? "ml-auto border-amber-200 bg-amber-100" : "mr-auto border-stone-200 bg-stone-100"}`}
             >
-              {tab === "messages" ? (
-                <MessageRow message={row as SupportMessage} />
-              ) : tab === "events" ? (
-                <EventRow event={row as SupportEvent} />
-              ) : (
-                <EscalationRow escalation={row as SupportEscalation} />
-              )}
+              <MessageRow message={message} hideBody={repeatedOpeningMessage} />
             </div>
-          ))}
-          {read.data.data.length === 0 && (
+          )})}
+          {(read.data.data.length === 0 || (tab === "messages" && read.data.data.length === 1 &&
+            isRepeatedOpeningMessage(read.data.data[0] as SupportMessage, 0) &&
+            !(read.data.data[0] as SupportMessage).evidenceFileIds?.length &&
+            (read.data.data[0] as SupportMessage).evidenceCompleteness !== "UNKNOWN")) && (
             <p className="text-sm text-stone-500">
-              Chưa có bản ghi trong phạm vi này.
+              Chưa có trao đổi mới.
             </p>
           )}
-          <ApiPager
+          {read.data.pagination.totalPages > 1 && <ApiPager
             pagination={read.data.pagination}
             onPage={setPage}
             disabled={locked}
-          />
+          />}
         </>
       )}
+      {tab === "messages" ? composer : internalComposer}
     </Card>
   )
 }
-function MessageRow({ message: m }: { message: SupportMessage }) {
-  const { manager, copy } = useManagerPresentation()
+function MessageRow({ message: m, hideBody }: { message: SupportMessage; hideBody: boolean }) {
 
   return (
     <>
-      <p>
-        {m.authorRole === "STAFF" ? copy("Staff") : copy("Customer")} ·{" "}
-        {rentalDate(m.sentAt)}{" "}
-        <Badge variant={m.visibility === "INTERNAL" ? "warning" : "muted"}>
-          {m.visibility === "INTERNAL" ? "Nội bộ" : "Công khai"}
-        </Badge>
+      <p className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
+        <span className="font-semibold text-stone-900">{m.authorId === getAuthenticatedActor()?.id ? "Bạn" : m.authorRole === "MANAGER" ? "Quản lý" : m.authorRole === "STAFF" ? "Nhân viên" : "Khách hàng"}</span>
+        <time dateTime={m.sentAt}>{supportDetailDate(m.sentAt)}</time>
       </p>
-      <p className="break-all text-xs text-stone-500">
-        Người gửi: {m.authorId}
-      </p>
-      <p className="whitespace-pre-wrap break-words">{m.body}</p>
-      <p className="text-xs text-stone-500">
-        {m.evidenceCompleteness === "UNKNOWN"
-          ? "Minh chứng: chưa có nguồn xác thực quyền đọc, không hiển thị mã file."
-          : m.evidenceFileIds?.length
-            ? copy("Mã minh chứng được BE cho phép đọc; tải file chờ tích hợp quyền chung.")
-            : "Không đính kèm file."}
-      </p>
-      {m.evidenceCompleteness === "COMPLETE" &&
-        m.evidenceFileIds?.map((id) => (
-          <p key={id} className="break-all text-xs">
-            {id}
-          </p>
-        ))}
-    </>
-  )
-}
-function EventRow({ event: e }: { event: SupportEvent }) {
-  const { manager, copy } = useManagerPresentation()
-
-  return (
-    <>
-      <p className="font-semibold">
-        {copy(supportEventLabels[e.type] ?? e.type)} · Lần phân công{" "}
-        {e.assignmentRevision}
-      </p>
-      <p>{rentalDate(e.recordedAt)}</p>
-      <p className="whitespace-pre-wrap break-words">{e.reason}</p>
-      <p className="break-all text-xs text-stone-500">
-        Người thao tác: {e.actorId ?? "Tác vụ hệ thống"} {copy("· Staff:")}{" "}
-        {e.assignedStaffId ?? "Chưa phân công"}
-      </p>
-    </>
-  )
-}
-function EscalationRow({ escalation: e }: { escalation: SupportEscalation }) {
-  const { manager, copy } = useManagerPresentation()
-
-  return (
-    <>
-      <p className="font-semibold">
-        {copy(supportModuleLabels[e.targetModule])} ·{" "}
-        {e.status === "REQUESTED"
-          ? copy("Chờ Manager điều phối")
-          : e.status === "ROUTED"
-            ? copy("Đã chuyển module — chưa đồng nghĩa hoàn thành")
-            : copy("Manager từ chối điều phối")}
-      </p>
-      <p className="break-all text-xs text-stone-500">{e.id}</p>
-      <p className="whitespace-pre-wrap break-words">{e.reason}</p>
-      {e.decisionReason && (
-        <p className="whitespace-pre-wrap break-words">
-          Quyết định: {e.decisionReason}
-        </p>
-      )}
-      <p>Gửi lúc: {rentalDate(e.requestedAt)}</p>
-      <p>{copy("Kết quả module nhận: ")}{copy(e.receiverStatus ?? "Chưa có nguồn xác thực")}</p>
-      {e.resultRef && (
-        <p className="break-all">Mã kết quả thật: {e.resultRef}</p>
-      )}
+      {!hideBody && <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.body}</p>}
+      {(m.evidenceCompleteness === "UNKNOWN" || !!m.evidenceFileIds?.length) && <p className="text-xs text-stone-500">
+        {m.evidenceCompleteness === "UNKNOWN" ? "Chưa thể xem tệp đính kèm." : "Tệp đính kèm:"}
+      </p>}
+      {m.evidenceCompleteness !== "UNKNOWN" && m.evidenceFileIds?.map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} asLink />)}
     </>
   )
 }

@@ -154,14 +154,14 @@ function downloadFileName(response: Response) {
   return disposition.match(/filename="?([^";]+)"?/i)?.[1] || null
 }
 
-export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): Promise<ApiDownload> {
+export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, method: "GET" | "HEAD" = "GET"): Promise<ApiDownload> {
   const headers = new Headers()
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   const controller = new AbortController()
   const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { headers, signal: controller.signal })
+    response = await fetch(`${API_BASE_URL}${path}`, { method, headers, signal: controller.signal })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new ApiClientError('Backend phản hồi quá lâu. Vui lòng kiểm tra backend StorageHub.', { code: 'TIMEOUT' })
@@ -171,7 +171,7 @@ export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIME
     globalThis.clearTimeout(timeoutId)
   }
 
-  if (response.status === 401 && await refreshAccessToken()) return apiDownload(path, timeoutMs)
+  if (response.status === 401 && await refreshAccessToken()) return apiDownload(path, timeoutMs, method)
   if (!response.ok) {
     const payload = await readPayload(response)
     const error = isRecord(payload) && isRecord(payload.error) ? payload.error : {}

@@ -73,6 +73,16 @@ export function addMonthsToDate(value: string, months: number): string {
   return new Date(Date.UTC(targetYear, targetMonth, Math.min(day, lastDay))).toISOString().slice(0, 10)
 }
 
+/**
+ * Calculates the inclusive calendar-month rental end date (e.g. 15/10/2026 + 3M -> 14/01/2027).
+ */
+export function calculateCalendarRentalEndDate(startDate: string, months: number): string {
+  const targetDateStr = addMonthsToDate(startDate, months)
+  const targetDate = new Date(targetDateStr + 'T00:00:00Z')
+  targetDate.setUTCDate(targetDate.getUTCDate() - 1)
+  return targetDate.toISOString().slice(0, 10)
+}
+
 export function billingPeriodsDue(nextDue: string, asOf = new Date().toISOString().slice(0, 10)): number {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDue) || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return 1
   if (nextDue > asOf) return 1

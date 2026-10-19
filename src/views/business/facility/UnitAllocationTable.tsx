@@ -1043,7 +1043,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-2">
                                       <div className="flex items-center gap-2">
                                         <span className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs select-none">
-                                          🏷️
+
                                         </span>
                                         <div>
                                           <div className="flex items-center gap-2">
@@ -1076,7 +1076,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                                 : 'Apply these package settings to all other sizes'
                                             }
                                           >
-                                            <span>⚡</span>
+
                                             <span>
                                               {lang === 'vi'
                                                 ? 'Áp dụng cho tất cả cỡ kho còn lại'
@@ -1099,7 +1099,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
 
                                     {appliedMessage && (
                                       <div className="flex items-center gap-2 p-2 px-3 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold shadow-2xs">
-                                        <span>✅</span>
+
                                         <span>{appliedMessage}</span>
                                       </div>
                                     )}

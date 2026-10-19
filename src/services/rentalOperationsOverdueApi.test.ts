@@ -45,6 +45,19 @@ afterEach(() => {
   clearAuthTokens()
 })
 describe("D3 real API transport", () => {
+  it("accepts verified fault-review history without replacing API response", async () => {
+    const event = { ...operationEvent, kind: "FAULT_REVIEW", data: {
+      incidentId: ids.event, facilityFault: true, reason: "Đã kiểm tra tại cơ sở", evidenceFileIds: [],
+    } }
+    respond(apiPage([event]))
+    expect((await listRenewalOperationEvents("manager", ids.renewal, "facility-incidents")).data).toEqual([event])
+  })
+  it("rejects a fault review without a real verdict", async () => {
+    respond(apiPage([{ ...operationEvent, kind: "FAULT_REVIEW", data: {
+      incidentId: ids.event, reason: "Chưa xác minh", evidenceFileIds: [],
+    } }]))
+    await expect(listRenewalOperationEvents("manager", ids.renewal, "facility-incidents")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
   it.each(["customer", "manager", "staff"] as const)(
     "reads %s operational route without demo fallback",
     async (role) => {
@@ -123,12 +136,6 @@ describe("D3 real API transport", () => {
   })
   const commands: [RenewalOperationCommand, string, string, string][] = [
     [
-      { action: "deposit", body: { expectedVersion: 4 } },
-      "customer",
-      "POST",
-      "simulated-payment",
-    ],
-    [
       {
         action: "appointment",
         body: { expectedVersion: 4, appointmentAt: instant },
@@ -188,7 +195,7 @@ describe("D3 real API transport", () => {
         body: {
           expectedVersion: 4,
           payableStatementRef: ids.statement,
-          receiptReference: "REAL-RECEIPT",
+          receiptReference: "REAL-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001",
           received: true,
         },
       },
@@ -251,7 +258,6 @@ describe("D3 real API transport", () => {
     "sends exact action $action role/payload/version/key",
     async (command, role, method, route) => {
       const kinds = {
-        deposit: "DEPOSIT",
         appointment: "APPOINTMENT",
         reschedule: "APPOINTMENT",
         confirmation: "CONFIRMATION",
@@ -263,9 +269,7 @@ describe("D3 real API transport", () => {
         refund: "REFUND",
       }
       const data =
-        command.action === "deposit"
-          ? operationEvent.data
-          : command.action === "cash"
+        command.action === "cash"
             ? {
                 reference: ids.event,
                 renewalId: ids.renewal,
@@ -296,7 +300,7 @@ describe("D3 real API transport", () => {
     },
   )
   it.each([
-    { action: "deposit", body: { expectedVersion: null } },
+    { action: "cash", body: { expectedVersion: null, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001", received: true } },
     {
       action: "arrival",
       body: {
@@ -335,7 +339,7 @@ describe("D3 real API transport", () => {
       body: {
         expectedVersion: 4,
         payableStatementRef: ids.statement,
-        receiptReference: "x",
+        receiptReference: "x", receiptFileId: "00000000-0000-4000-8000-000000000001",
         received: false,
       },
     },
@@ -453,7 +457,7 @@ describe("D3 real API transport", () => {
     await expect(
       sendRenewalOperation(
         ids.renewal,
-        { action: "deposit", body: { expectedVersion: 4 } },
+        { action: "cash", body: { expectedVersion: 4, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001", received: true } },
         "key",
       ),
     ).rejects.toMatchObject({
@@ -489,7 +493,7 @@ describe("D3 real API transport", () => {
       await expect(
         sendRenewalOperation(
           ids.renewal,
-          { action: "deposit", body: { expectedVersion: 4 } },
+          { action: "cash", body: { expectedVersion: 4, payableStatementRef: ids.statement, receiptReference: "TEST-RECEIPT", receiptFileId: "00000000-0000-4000-8000-000000000001", received: true } },
           "key",
         ),
       ).rejects.toMatchObject({ code: "INVALID_RESPONSE" })

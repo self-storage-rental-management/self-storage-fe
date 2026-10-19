@@ -48,19 +48,19 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
     'contracts:read', 'rentals:read', 'payments:read', 'support:read'
   ),
   staff: makePermissions(
-    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
+    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'reservations:approve', 'storage_units:assign', 'contracts:read',
     'checkins:read', 'checkins:process', 'rentals:read', 'returns:read', 'returns:process',
     'support:read', 'support:update'
   ),
   manager: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read',
     'reservations:approve', 'storage_units:assign', 'contracts:read', 'checkins:read', 'rentals:read',
-    'returns:read', 'payments:read', 'payments:collect', 'support:read', 'support:update',
+    'returns:read', 'returns:process', 'payments:read', 'payments:collect', 'support:read', 'support:update',
     'inventory:update', 'policies:read', 'staff_tasks:update', 'reports:read'
   ),
   business: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
-    'rentals:read', 'payments:read', 'reports:read', 'support:read', 'policies:read', 'policies:update'
+    'rentals:read', 'returns:read', 'returns:process', 'rentals:update', 'payments:read', 'reports:read', 'support:read', 'policies:read', 'policies:update'
   ),
   admin: makePermissions('users:manage', 'roles:manage', 'settings:manage', 'audit_logs:read'),
 }
@@ -80,7 +80,8 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   // when reading legacy localStorage data.
   normalized.customer['returns:process'] = false
   normalized.customer['rentals:update'] = false
-  normalized.staff['reservations:approve'] = false
+  normalized.staff['reservations:approve'] = true
+  normalized.staff['storage_units:assign'] = true
   normalized.staff['payments:collect'] = false
   normalized.staff['policies:update'] = false
   normalized.staff['staff_tasks:update'] = false
@@ -88,6 +89,9 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   normalized.manager['policies:read'] = true
   normalized.business['policies:read'] = true
   normalized.business['policies:update'] = true
+  normalized.business['returns:read'] = true
+  normalized.business['returns:process'] = true
+  normalized.business['rentals:update'] = true
   normalized.business['settings:manage'] = false
   normalized.business['payments:collect'] = false
   normalized.business['reservations:approve'] = false

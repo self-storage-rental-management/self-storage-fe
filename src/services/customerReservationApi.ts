@@ -1,6 +1,6 @@
 import { apiDownload, apiRequest } from './apiClient'
 
-export type FacilityStatus = 'active' | 'maintenance' | 'inactive' | 'coming_soon'
+export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
 export type ReservationStatus =
@@ -11,9 +11,10 @@ export type ReservationStatus =
 
 export interface Pagination {
   page: number
-  size: number
-  totalElements: number
+  pageSize: number
+  totalItems: number
   totalPages: number
+  sort?: string
 }
 
 export interface PageResponse<T> {
@@ -31,14 +32,28 @@ export interface CustomerFacility {
   id: string
   code: string
   name: string
+  description?: string | null
   address: string
   city: string
+  phone?: string | null
+  accessHours?: string | null
+  imageUrl?: string | null
+  climateControlled?: boolean
+  securityDescription?: string | null
+  managerNames?: string[]
+  totalUnits?: number
+  availableUnits?: number
+  occupiedUnits?: number
+  minimumMonthlyPrice?: number | null
+  monthRevenue?: number
   status: FacilityStatus
   createdAt: string
   updatedAt: string
 }
 
 export interface CustomerUnitType {
+  detailImageUrl?: string | null
+  description?: string | null
   id: string
   facilityId: string
   code: string
@@ -56,7 +71,13 @@ export interface CustomerUnitType {
   rackLengthM: number
   rackWidthM: number
   rackHeightM: number
-  status: UnitTypeStatus
+  aisleWidthM?: number | null
+  trolleyType?: string | null
+  smallBoxCapacity?: number | null
+  largeBoxCapacity?: number | null
+  status: UnitTypeStatus | 'draft' | 'awaiting_pricing'
+  totalCount?: number | null
+  occupiedCount?: number
   availableCount: number | null
   createdAt: string
   updatedAt: string
@@ -122,6 +143,15 @@ export interface CompatibilityCheckResult {
 
 export interface ReservationQuoteInput extends ReservationSelectionInput {
   pricingPackageCode: string
+  voucherCode?: string | null
+}
+
+export interface ReservationRentalPackage {
+  code: string
+  name: string
+  rentalMonths: number
+  discountRate: number
+  policyVersion: string
 }
 
 export interface ReservationQuote {
@@ -142,15 +172,21 @@ export interface ReservationQuote {
   dueAtCheckIn: number
   totalInitialObligation: number
   policyVersion: string
+  voucherCode?: string | null
+  voucherDiscountAmount?: number | null
   quotedAt: string
   expiresAt: string
 }
 
 export interface CreateReservationInput {
   quoteId: string
+  identityDocumentNumber: string
+  customerPhone?: string | null
+  customerAddress?: string | null
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
+  appointmentAt?: string | null
 }
 
 export interface CustomerReservation {
@@ -170,9 +206,38 @@ export interface CustomerReservation {
   remainingRentalAmount: number
   dueAtCheckIn: number
   totalInitialObligation: number
+  pricingPackageCode?: string | null
+  rentalMonths?: number
+  monthlyPrice?: number
+  grossRentalAmount?: number
+  discountRate?: number
+  discountAmount?: number
+  voucherCode?: string | null
+  voucherDiscountAmount?: number
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
   holdExpiresAt: string
+  appointmentAt?: string | null
+  assignedUnitId?: string | null
+  assignedUnitCode?: string | null
+  assignedUnitStatus?: string | null
+  customerName?: string | null
+  customerEmail?: string | null
+  customerPhone?: string | null
+  customerAddress?: string | null
+  identityDocumentNumber?: string | null
+  createdAt: string
+}
+
+export interface CheckInDocument {
+  id: string
+  originalName: string
+  contentType: string
+  sizeBytes: number
+  checksumSha256: string
+  entityType: 'CHECK_IN'
+  entityId: string
+  status: string
   createdAt: string
 }
 
@@ -181,6 +246,17 @@ export interface ReservationGoodsItem extends GoodsItemInput {
   requiresStaffReview: boolean
   reviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
   reviewNote: string | null
+  images: Array<{
+    id: string
+    originalName: string
+    contentType: string
+    sizeBytes: number
+    checksumSha256: string
+    entityType: string
+    entityId: string
+    status: string
+    createdAt: string
+  }>
 }
 
 export interface CustomerReservationDetail {
@@ -194,6 +270,7 @@ export interface CustomerReservationDetail {
   cancelledAt: string | null
   cancelReason: string | null
   goodsItems: ReservationGoodsItem[]
+  payments: ReservationPaymentResult[]
 }
 
 export interface ReservationEmailVerificationResult {
@@ -221,6 +298,12 @@ export interface ReservationPaymentResult {
   message: string
   processedAt: string | null
   lastReconciledAt: string | null
+  purpose?: string
+  paymentMethod?: string | null
+  paidAt?: string | null
+  initiatedByName?: string | null
+  createdAt?: string | null
+  reservationCode?: string
 }
 
 export interface VnpayPaymentUrlResult {
@@ -334,6 +417,17 @@ export async function getReservationPayment(reservationId: string) {
   return response.data
 }
 
+export async function listReservationPayments(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationPaymentResult[]>>(
+    `/api/customer/reservations/${reservationId}/payments`,
+  )
+  return response.data
+}
+
+export async function listCustomerPaymentHistory(page = 0, size = 50) {
+  return apiRequest<PageResponse<ReservationPaymentResult>>(`/api/customer/reservations/payment-history?page=${page}&size=${size}`)
+}
+
 function query(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
@@ -367,6 +461,13 @@ export async function listCustomerUnitTypes(facilityId: string, options: {
   return apiRequest<PageResponse<CustomerUnitType>>(`/api/facilities/${facilityId}/unit-types${suffix}`)
 }
 
+/** Back-office catalog view. Unlike the customer query, this includes types waiting for pricing. */
+export async function listAccessibleUnitTypes(facilityId: string, page = 0, size = 100) {
+  return apiRequest<PageResponse<CustomerUnitType>>(
+    `/api/facilities/${facilityId}/unit-types${query({ page, size })}`,
+  )
+}
+
 export async function getAvailability(input: Omit<ReservationSelectionInput, 'goodsCondition' | 'goodsItems'>) {
   const suffix = query(input)
   const response = await apiRequest<ApiEnvelope<AvailabilityResult>>(`/api/availability${suffix}`)
@@ -386,6 +487,13 @@ export async function createReservationQuote(input: ReservationQuoteInput) {
     method: 'POST',
     body: JSON.stringify(input),
   })
+  return response.data
+}
+
+export async function listReservationRentalPackages(facilityId: string, startDate?: string) {
+  const response = await apiRequest<ApiEnvelope<ReservationRentalPackage[]>>(
+    `/api/customer/reservations/rental-packages${query({ facilityId, startDate })}`,
+  )
   return response.data
 }
 
@@ -409,6 +517,36 @@ export async function getCustomerReservation(reservationId: string) {
     `/api/customer/reservations/${reservationId}`,
   )
   return response.data
+}
+export async function confirmCustomerReceipt(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
+    { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function setCustomerCheckInAppointment(reservationId: string, appointmentAt: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservation>>(
+    `/api/customer/reservations/${reservationId}/check-in-appointment`,
+    { method: 'POST', body: JSON.stringify({ appointmentAt }) },
+  )
+  return response.data
+}
+
+export async function getCustomerCheckInDocuments(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CheckInDocument[]>>(
+    `/api/customer/reservations/${reservationId}/check-in-documents`,
+  )
+  return response.data
+}
+
+export function downloadCustomerCheckInDocument(assetId: string) {
+  return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
+}
+
+export function downloadCustomerReservationGoodsImage(assetId: string) {
+  return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
 }
 
 export async function cancelCustomerReservation(reservationId: string, reason: string) {

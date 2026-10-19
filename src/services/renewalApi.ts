@@ -6,15 +6,25 @@ import type {
   RenewalApiQuery,
   RenewalApiQuote,
   RenewalApiRecord,
+  RenewalVnpayPaymentResponse,
 } from "../types/renewalApi"
 
 type AcceptedTerms = NonNullable<RenewalApiRecord["acceptedTerms"]>
+function validPeriodMetadata(t: AcceptedTerms): boolean {
+  if (t.endDateConvention == null && t.rentalStartDate == null) return true // Readable legacy snapshot, not permission to execute.
+  if (!["INCLUSIVE", "EXCLUSIVE"].includes(t.endDateConvention ?? "") || typeof t.rentalStartDate !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(t.rentalStartDate) || !Number.isFinite(Date.parse(t.rentalStartDate))
+    || new Date(t.rentalStartDate).toISOString().slice(0, 10) !== t.rentalStartDate) return false
+  const rawEnd = Date.parse(t.oldEndDate), extension = Date.parse(t.extensionStartDate)
+  return Date.parse(t.rentalStartDate) < extension
+    && extension - rawEnd === (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
+}
 function isAcceptedTerms(value: unknown): value is AcceptedTerms {
   if (!value || typeof value !== "object") return false
   const t = value as AcceptedTerms
   const money = [t.monthlyPrice, t.subtotal, t.discountAmount, t.totalAfterDiscount,
     t.renewalDepositAmount, t.remainingRentalAmount]
-  return money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
+  return validPeriodMetadata(t) && money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
     typeof t.discountRate === "number" && Number.isFinite(t.discountRate) && t.discountRate >= 0 && t.discountRate <= 1 &&
     Number.isInteger(t.rentalMonths) && t.rentalMonths > 0 &&
     [t.unitTypeId, t.storageUnitId, t.facilityId, t.pricingPackageCode, t.packagePolicyRef,
@@ -35,7 +45,9 @@ export function isRenewalRecord(value: unknown): boolean {
     !!r.storageUnit?.id &&
     [
       "pending",
+      "accepted",
       "deposit_paid",
+      "full_rent_paid",
       "approved",
       "appointment_scheduled",
       "payment_processing",
@@ -50,10 +62,17 @@ export function isRenewalRecord(value: unknown): boolean {
     ) &&
     Array.isArray(r.allowedActions) &&
     r.allowedActions.every((a) =>
-      ["CANCEL", "ACCEPT_REVISED_QUOTE", "APPROVE", "REJECT"].includes(a),
+      ["CANCEL", "ACCEPT_REVISED_QUOTE"].includes(a),
     ) &&
     Array.isArray(r.disabledReasons) &&
     r.disabledReasons.every((reason) => typeof reason === "string") &&
+    (r.systemVerification == null || (
+      ["VERIFIED", "BLOCKED", "INCOMPLETE", "UNKNOWN"].includes(r.systemVerification.status) &&
+      Array.isArray(r.systemVerification.verifiedChecks) &&
+      r.systemVerification.verifiedChecks.every((check) => typeof check === "string") &&
+      Array.isArray(r.systemVerification.blockingReasons) &&
+      r.systemVerification.blockingReasons.every((reason) => typeof reason === "string")
+    )) &&
     !!r.financialCheck &&
     typeof r.financialCheck.completeness === "string" &&
     (r.financialCheck.blockingObligationRefs === null ||
@@ -113,6 +132,7 @@ export async function getRenewalOptions(rentalId: string) {
       data.every(
         (o) =>
           typeof o?.pricingPackageCode === "string" &&
+            (o.pricingPackageName === undefined || o.pricingPackageName === null || typeof o.pricingPackageName === "string") &&
           Number.isInteger(o.rentalMonths) &&
           o.rentalMonths > 0,
       ),
@@ -221,20 +241,47 @@ export function cancelRenewal(
     record => record.id === id,
   )
 }
-export function decideRenewal(
-  id: string,
-  decision: "APPROVE" | "REJECT",
-  reason: string,
-  expectedVersion: number,
-  key: string,
-) {
-  version(expectedVersion)
-  text(reason, decision === "REJECT")
-  return command(
-    `/api/manager/renewals/${encodeURIComponent(id)}/decision`,
-    "POST",
-    { decision, reason, expectedVersion },
-    key,
-    record => record.id === id,
+
+function isRenewalPaymentResponse(value: unknown,renewalId: string): value is RenewalVnpayPaymentResponse {
+  const result=value as RenewalVnpayPaymentResponse|null
+  return !!result&&typeof result.paymentId==="string"&&result.renewalId===renewalId
+    &&(result.acceptedRevisionId===null||typeof result.acceptedRevisionId==="string")
+    &&typeof result.transactionReference==="string"&&Number.isFinite(result.amount)&&result.amount>0
+    &&result.currency==="VND"
+    &&["PENDING","PROCESSING","PAID","NOT_RECEIVED","FAILED","CANCELLED"].includes(result.paymentStatus)
+    &&(result.paymentDeadline===null||Number.isFinite(Date.parse(result.paymentDeadline)))
+    &&(result.paidAt===null||Number.isFinite(Date.parse(result.paidAt)))
+    &&typeof result.reconciliationRequired==="boolean"&&typeof result.message==="string"
+    &&(result.paymentUrl===null||typeof result.paymentUrl==="string")
+    &&(result.settlementStage===undefined||["AWAITING_PAYMENT","VERIFIED_AWAITING_ALLOCATION","ALLOCATED_AWAITING_SIGNING","AWAITING_SIGNING","COMPLETED","RECONCILIATION_REQUIRED"].includes(result.settlementStage))
+}
+
+export function renewalPaymentRedirectUrl(payment: RenewalVnpayPaymentResponse): string {
+  if(!payment.paymentUrl)throw new Error("Backend chưa trả về đường dẫn thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.")
+  let url: URL
+  try { url=new URL(payment.paymentUrl) } catch { throw new Error("Đường dẫn thanh toán VNPay không hợp lệ.") }
+  if(url.protocol!=="https:"||!["sandbox.vnpayment.vn","pay.vnpay.vn"].includes(url.hostname)
+    ||url.port||url.username||url.password||url.pathname!=="/paymentv2/vpcpay.html"
+    ||url.searchParams.get("vnp_TxnRef")!==payment.transactionReference
+    ||url.searchParams.get("vnp_Amount")!==String(Math.round(payment.amount*100)))
+    throw new Error("Đường dẫn thanh toán không khớp giao dịch VNPay. Vui lòng liên hệ hỗ trợ.")
+  return url.href
+}
+
+export async function createRenewalVnpayPaymentIntent(renewalId:string,idempotencyKey:string) {
+  if(!idempotencyKey||new TextEncoder().encode(idempotencyKey).length>100)
+    throw new Error("Idempotency-Key thanh toán gia hạn không hợp lệ.")
+  return readRentalEnvelope<RenewalVnpayPaymentResponse>(
+    await apiRequest(`/api/customer/renewals/${encodeURIComponent(renewalId)}/payment-intents`,{
+      method:"POST",headers:{"Idempotency-Key":idempotencyKey},
+    }),
+    value=>isRenewalPaymentResponse(value,renewalId),
+  )
+}
+
+export async function getRenewalVnpayPayment(renewalId:string) {
+  return readRentalEnvelope<RenewalVnpayPaymentResponse>(
+    await apiRequest(`/api/customer/renewals/${encodeURIComponent(renewalId)}/payment`),
+    value=>isRenewalPaymentResponse(value,renewalId),
   )
 }

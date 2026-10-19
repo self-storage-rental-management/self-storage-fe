@@ -69,17 +69,17 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
       .forEach(item => {
         const reasons = [
           item.status === 'disputed' ? `Khách hàng không đồng ý quyết toán${item.customerDecisionNote ? `: ${item.customerDecisionNote}` : ''}` : '',
-          item.status === 'payment_due' ? 'Tiền đảm bảo không đủ, còn khoản khách hàng phải thanh toán' : '',
+          item.status === 'payment_due' ? 'Tiền duy trì CSVC không đủ, còn khoản khách hàng phải thanh toán' : '',
           item.damageClassification && item.damageClassification !== 'no_damage' ? damageLabels[item.damageClassification] || item.damageClassification : '',
           item.inventoryMatch && item.inventoryMatch !== 'match' ? inventoryLabels[item.inventoryMatch] || item.inventoryMatch : ''
         ].filter(Boolean)
         if (!reasons.length) return
-        items.push({ id: item.id, kind: 'return', title: `Hồ sơ trả kho ${item.id}`, subject: `${item.customerName} · ${item.unitId}`, reason: reasons.join(' · '), status: item.status, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, evidenceCount: item.evidence.length, destination: 'move-outs' })
+        items.push({ id: item.id, kind: 'return', title: `Hồ sơ trả kho ${item.id}`, subject: `${item.customerName}, ${item.unitId}`, reason: reasons.join(', '), status: item.status, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, evidenceCount: item.evidence.length, destination: 'move-outs' })
       })
 
     hub.checkins
       .filter(item => unitIds.has(item.unitId) && item.status === 'completed' && !item.actualMeasurements.varianceAccepted)
-      .forEach(item => items.push({ id: item.id, kind: 'checkin', title: `Biên bản nhận kho ${item.id}`, subject: `${item.customerName} · ${item.unitId}`, reason: item.actualMeasurements.varianceNotes || 'Sai lệch đo đạc chưa được xác nhận chấp nhận', status: item.status, date: item.completedAt || item.scheduledDate, evidenceCount: item.evidencePhotos.length, destination: 'move-ins' }))
+      .forEach(item => items.push({ id: item.id, kind: 'checkin', title: `Biên bản nhận kho ${item.id}`, subject: `${item.customerName}, ${item.unitId}`, reason: item.actualMeasurements.varianceNotes || 'Sai lệch đo đạc chưa được xác nhận chấp nhận', status: item.status, date: item.completedAt || item.scheduledDate, evidenceCount: item.evidencePhotos.length, destination: 'move-ins' }))
 
     holds
       .filter(item => !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && (item.exceptionReason || ['PENDING', 'REJECTED'].includes(item.goodsReviewStatus || '')))
@@ -91,7 +91,7 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
           item.exceptionDetails || ''
         ].filter(Boolean)
         const goodsImages = item.goods.items?.flatMap(goodsItem => goodsItem.images || []) || []
-        items.push({ id: item.id, kind: 'reservation', title: `Đặt chỗ ${item.id}`, subject: `${item.customerName} · ${item.unitTypeName}`, reason: reasons.join(' · '), status: item.status, date: item.goodsReviewSubmittedAt || item.createdAt, evidenceCount: item.evidence.length + goodsImages.length, destination: 'move-ins' })
+        items.push({ id: item.id, kind: 'reservation', title: `Đặt chỗ ${item.id}`, subject: `${item.customerName}, ${item.unitTypeName}`, reason: reasons.join(', '), status: item.status, date: item.goodsReviewSubmittedAt || item.createdAt, evidenceCount: item.evidence.length + goodsImages.length, destination: 'move-ins' })
       })
 
     const facilityReturns = hub.returns.filter(item => isManagerFacilityVisible(user, item.facilityId, item.facilityName))
@@ -101,7 +101,7 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
 
     rentals
       .filter(item => isManagerRentalOverdue(item))
-      .forEach(item => items.push({ id: item.id, kind: 'payment', title: `Công nợ ${item.id}`, subject: `${item.customerName} · ${item.unitId}`, reason: `Quá hạn kỳ thanh toán ${item.nextDue}`, status: 'overdue', date: item.nextDue, evidenceCount: hub.payments.filter(payment => payment.rentalId === item.id && Boolean(payment.proofImage)).length, destination: 'payments' }))
+      .forEach(item => items.push({ id: item.id, kind: 'payment', title: `Công nợ ${item.id}`, subject: `${item.customerName}, ${item.unitId}`, reason: `Quá hạn kỳ thanh toán ${item.nextDue}`, status: 'overdue', date: item.nextDue, evidenceCount: hub.payments.filter(payment => payment.rentalId === item.id && Boolean(payment.proofImage)).length, destination: 'payments' }))
 
     return items.sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
   }, [hub.holds, hub.rentals, hub.units, hub.returns, hub.checkins, hub.maintenanceTasks, hub.payments, user])

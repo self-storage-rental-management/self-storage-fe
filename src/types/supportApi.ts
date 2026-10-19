@@ -24,8 +24,10 @@ export type SupportVisibility = "PUBLIC" | "INTERNAL"
 export interface SupportTicket {
   id: string
   customerId: string
+  customerName?: string | null
   facilityId: string | null
   assignedStaffId: string | null
+  assignedStaffName?: string | null
   status: SupportStatus
   subject: string
   description: string
@@ -56,7 +58,7 @@ export interface SupportMessage {
   id: string
   ticketId: string
   authorId: string
-  authorRole: "CUSTOMER" | "STAFF"
+  authorRole: "CUSTOMER" | "STAFF" | "MANAGER"
   visibility: SupportVisibility
   body: string
   sentAt: string
@@ -90,6 +92,13 @@ export interface SupportStaffOption {
   id: string
   fullName: string
 }
+export interface SupportQueueItem {
+  id: string
+  facilityId: string
+  subject: string
+  createdAt: string
+  version: number
+}
 export type SupportPage<T> = RentalApiPage<T>
 export interface SupportQuery {
   page?: number
@@ -116,7 +125,7 @@ export type SupportCommand = {
   kind: "assign"
   assignedStaffId: string
   reason: string
-} & Versioned | { kind: "accept" } & Versioned | {
+} & Versioned | { kind: "claim" } & Versioned | { kind: "accept" } & Versioned | {
   kind: "message"
   body: string
   visibility?: never

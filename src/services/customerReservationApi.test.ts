@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createCustomerReservation,
+  confirmCustomerReceipt,
   cancelCustomerReservation,
   getAvailability,
   listCustomerFacilities,
   listCustomerUnitTypes,
+  listReservationRentalPackages,
   resendReservationOtp,
   verifyReservationOtp,
-  payReservationDeposit,
+  createVnpayPaymentUrl,
   getReservationPayment,
   generateBookingDocument,
   downloadBookingDocument,
@@ -22,6 +24,18 @@ const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), {
 
 describe('customerReservationApi', () => {
   afterEach(() => { clearAuthTokens(); vi.unstubAllGlobals() })
+  it('confirms receipt through the existing backend endpoint and returns committed state', async () => {
+    const detail = { reservation: { id: 'reservation-1', status: 'COMPLETED' } }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: detail }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await confirmCustomerReceipt('reservation-1')).toEqual(detail)
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/customer/reservations/reservation-1/receipt-confirmation')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+  })
+  it('does not fabricate receipt success when the backend rejects confirmation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: 'CONFLICT', message: 'Handover incomplete' } }), { status: 409, headers: { 'Content-Type': 'application/json' } })))
+    await expect(confirmCustomerReceipt('reservation-1')).rejects.toMatchObject({ status: 409 })
+  })
 
   it('reloads stored payment details from the backend for receipts', async () => {
     const result = { paymentId: 'payment-1', reservationId: 'reservation-1', paymentStatus: 'PAID', amount: 600000 }
@@ -31,13 +45,13 @@ describe('customerReservationApi', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/customer/reservations/reservation-1/payment')
   })
 
-  it.each(['SUCCESS', 'FAILED', 'NOT_RECEIVED'])('keeps backend payment outcome %s authoritative', async outcome => {
-    const result = { reservationId: 'reservation-1', outcome, reservationStatus: outcome === 'SUCCESS' ? 'CONFIRMED' : 'AWAITING_PAYMENT' }
+  it('creates a VNPay URL with an idempotency key', async () => {
+    const result = { reservationId: 'reservation-1', paymentId: 'payment-1', paymentUrl: 'https://sandbox.vnpayment.vn/test' }
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: result }))
     vi.stubGlobal('fetch', fetchMock)
-    expect(await payReservationDeposit('reservation-1', 'payment-key-1')).toEqual(result)
+    expect(await createVnpayPaymentUrl('reservation-1', 'payment-key-1')).toEqual(result)
     const [url, request] = fetchMock.mock.calls[0]
-    expect(url).toBe('http://localhost:8080/api/customer/reservations/reservation-1/simulated-payment')
+    expect(url).toBe('http://localhost:8080/api/customer/reservations/reservation-1/vnpay/payment-url')
     expect(request.method).toBe('POST')
     expect(new Headers(request.headers).get('Idempotency-Key')).toBe('payment-key-1')
     expect(request.body).toBeUndefined()
@@ -86,12 +100,28 @@ describe('customerReservationApi', () => {
     })).resolves.toEqual(availability)
   })
 
+  it('loads persisted rental package codes for the selected facility and start date', async () => {
+    const packages = [{
+      code: 'PKG-3M', name: 'Gói 3 tháng', rentalMonths: 3,
+      discountRate: 0.05, policyVersion: 'v1.0',
+    }]
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: packages }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(listReservationRentalPackages('facility-1', '2026-10-10'))
+      .resolves.toEqual(packages)
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://localhost:8080/api/customer/reservations/rental-packages?facilityId=facility-1&startDate=2026-10-10',
+    )
+  })
+
   it('sends an idempotency key when creating a reservation', async () => {
     const reservation = { id: 'reservation-1', reservationCode: 'RSV-1' }
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: reservation }))
     vi.stubGlobal('fetch', fetchMock)
     const input = {
       quoteId: 'quote-1',
+      identityDocumentNumber: '079203009988',
       goodsCondition: 'Packed',
       notes: 'FE integration',
       goodsItems: [{

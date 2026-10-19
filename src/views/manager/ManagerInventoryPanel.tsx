@@ -1,8 +1,7 @@
 import { managerDisplayError } from './managerPresentation'
 import { useEffect, useMemo, useState } from 'react'
-import { Badge, Button, Card, Input, Modal, ProgressBar, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { Badge, Button, Card, Input, Modal, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
 import type { ActivityRecord, CheckInRecord, MaintenanceTask, RentalRecord, ReturnCase, StorageReservation, StorageUnit, UnitType } from '../../types/storageHub'
 import { isManagerFacilityVisible, isManagerRentalOverdue, managerUnitHasOperationalLock, parseManagerActivityTimestamp } from '../../domain/managerRules'
@@ -10,11 +9,13 @@ import { managerActivityLabel, managerStatusLabel, managerUnitTypeLabel } from '
 import ManagerUnitEditor from './ManagerUnitEditor'
 import ManagerActionNotice from './ManagerActionNotice'
 import ManagerPagination from './ManagerPagination'
-import { formatManagerMoney, matchesManagerSearch, normalizeManagerMoney, paginateManagerItems } from './managerList'
+import { formatManagerMoney, matchesManagerSearch, paginateManagerItems } from './managerList'
 import useManagerSoftDelete from './useManagerSoftDelete'
 import { isApiAuthenticated } from '../../services/authApi'
 import ManagerFacilityCatalog from './ManagerFacilityCatalog'
 import { facilityCatalogTypeName } from './managerFacilityCatalogApi'
+import ManagerInventoryApiPanel from './ManagerInventoryApiPanel'
+import { inventoryLocation } from './managerInventoryDetailsApi'
 
 interface Props {
   user: User
@@ -34,6 +35,8 @@ interface Props {
   updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
   onCreateMaintenanceWork: (draft: { referenceId: string; title: string; notes: string }) => void
   showToast: (message: string) => void
+  onOpenRental?: (rentalId: string) => void
+  onOpenMaintenance?: (unitId: string, unitCode: string) => void
 }
 
 const statusVariants: Record<string, string> = {
@@ -110,7 +113,11 @@ const normalizeOperationalText = (value?: string) => {
     .replace(/\bRESERVED\b/g, 'đã giữ chỗ')
 }
 
-export default function ManagerInventoryPanel({
+export default function ManagerInventoryPanel(props: Props) {
+  return isApiAuthenticated() ? <ManagerInventoryApiPanel onOpenRental={props.onOpenRental} onOpenMaintenance={props.onOpenMaintenance} /> : <DemoManagerInventoryPanel {...props} />
+}
+
+function DemoManagerInventoryPanel({
   user,
   units,
   rentals,
@@ -126,7 +133,6 @@ export default function ManagerInventoryPanel({
   updateUnit,
   deleteUnit,
   updateUnitStatus,
-  onCreateMaintenanceWork,
   showToast
 }: Props) {
   const [query, setQuery] = useState('')
@@ -134,7 +140,6 @@ export default function ManagerInventoryPanel({
   const [typeFilter, setTypeFilter] = useState('all')
   const [floorFilter, setFloorFilter] = useState('all')
   const [zoneFilter, setZoneFilter] = useState('all')
-  const [maintenanceFilter, setMaintenanceFilter] = useState('all')
   const [sortBy, setSortBy] = useState('attention')
   const [unitPage, setUnitPage] = useState(1)
   const [unitPageSize, setUnitPageSize] = useState(10)
@@ -247,7 +252,6 @@ export default function ManagerInventoryPanel({
         (typeFilter === 'all' || unit.type === typeFilter) &&
         (floorFilter === 'all' || String(unit.floor) === floorFilter) &&
         (zoneFilter === 'all' || unit.zone === zoneFilter) &&
-        (maintenanceFilter === 'all' || (maintenanceFilter === 'maintenance' ? unit.status === 'maintenance' : unit.status !== 'maintenance')) &&
         matchesManagerSearch(query, searchValues)
       )
     })
@@ -266,7 +270,7 @@ export default function ManagerInventoryPanel({
       }
       return left.code.localeCompare(right.code)
     })
-  }, [facilityUnits, facilityRentals, facilityReservations, facilityMaintenance, facilityReturns, query, statusFilter, typeFilter, floorFilter, zoneFilter, maintenanceFilter, sortBy])
+  }, [facilityUnits, facilityRentals, facilityReservations, facilityMaintenance, facilityReturns, query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy])
   const unitPagination = paginateManagerItems(visibleUnits, unitPage, unitPageSize)
 
   const availableCount = facilityUnits.filter(unit => unit.status === 'available').length
@@ -278,30 +282,6 @@ export default function ManagerInventoryPanel({
   const knownUnitStatuses: StorageUnit['status'][] = ['available', 'reserved', 'assigned', 'held', 'occupied', 'maintenance']
   const unclassifiedUnits = facilityUnits.filter(unit => !knownUnitStatuses.includes(unit.status))
   const inconsistentOccupiedUnits = facilityUnits.filter(unit => unit.status === 'occupied' && !operationalRentalFor(unit))
-  const occupancy = facilityUnits.length ? Math.round((occupiedCount / facilityUnits.length) * 100) : 0
-  const totalArea = facilityUnits.reduce((sum, unit) => sum + unit.areaM2, 0)
-  const totalVolume = facilityUnits.reduce((sum, unit) => sum + unit.volumeM3, 0)
-  const totalLoad = facilityUnits.reduce((sum, unit) => sum + unit.maxLoadKg, 0)
-  const totalListedRent = facilityUnits.reduce((sum, unit) => sum + (normalizeManagerMoney(unit.price) ?? 0), 0)
-
-  const capacityByType = useMemo(() => {
-    return types.map(type => {
-      const typeUnits = facilityUnits.filter(unit => unit.type === type)
-      const used = typeUnits.filter(unit => unit.status === 'occupied').length
-      return {
-        key: type,
-        label: managerUnitTypeLabel(type, 'vi'),
-        total: typeUnits.length,
-        available: typeUnits.filter(unit => unit.status === 'available').length,
-        used,
-        reserved: typeUnits.filter(unit => ['reserved', 'assigned'].includes(unit.status)).length,
-        held: typeUnits.filter(unit => unit.status === 'held').length,
-        maintenance: typeUnits.filter(unit => unit.status === 'maintenance').length,
-        occupancy: typeUnits.length ? Math.round((used / typeUnits.length) * 100) : 0
-      }
-    })
-  }, [facilityUnits, types])
-
   const capacityByZone = useMemo(() => {
     return zones.map(zone => {
       const zoneUnits = facilityUnits.filter(unit => unit.zone === zone)
@@ -375,17 +355,12 @@ export default function ManagerInventoryPanel({
     setTypeFilter('all')
     setFloorFilter('all')
     setZoneFilter('all')
-    setMaintenanceFilter('all')
     setSortBy('attention')
   }
 
-  const openMaintenanceTasks = facilityMaintenance
-    .filter(task => task.status !== 'completed')
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-
   useEffect(() => {
     setUnitPage(1)
-  }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, maintenanceFilter, sortBy, unitPageSize])
+  }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy, unitPageSize])
 
   return (
     <div className="fade-in space-y-6">
@@ -435,11 +410,6 @@ export default function ManagerInventoryPanel({
             <option value="all">Tất cả khu vực</option>
             {zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}
           </Select>
-          <Select label="Trạng thái bảo trì" value={maintenanceFilter} onChange={event => setMaintenanceFilter(event.target.value)}>
-            <option value="all">Tất cả gian kho</option>
-            <option value="maintenance">Kho đang bảo trì</option>
-            <option value="none">Kho không bảo trì</option>
-          </Select>
           <Select label="Sắp xếp" value={sortBy} onChange={event => setSortBy(event.target.value)}>
             <option value="attention">Cần chú ý trước</option>
             <option value="code">Sắp xếp theo mã gian</option>
@@ -456,136 +426,67 @@ export default function ManagerInventoryPanel({
       </Card>
 
       <Card>
-        <Table>
+        <Table tableClassName="min-w-[1100px] table-fixed">
+          <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
+          <colgroup>
+            <col className="w-[20%]" />
+            <col className="w-[13%]" />
+            <col className="w-[15%]" />
+            <col className="w-[13%]" />
+            <col className="w-[12%]" />
+            <col className="w-[17%]" />
+            <col className="w-[10%]" />
+          </colgroup>
           <Thead>
             <tr>
-              <Th>Gian kho</Th><Th>Loại / Kích thước</Th><Th>Vị trí</Th><Th>Trạng thái</Th><Th>Thuê hiện tại</Th><Th>Giá áp dụng</Th><Th>Khả dụng</Th><Th>Thao tác</Th>
+              <Th className="text-left align-middle">Gian kho</Th>
+              <Th className="text-left align-middle">Loại gian kho</Th>
+              <Th className="text-left align-middle">Vị trí</Th>
+              <Th className="text-left align-middle">Trạng thái</Th>
+              <Th className="text-left align-middle">Giá áp dụng</Th>
+              <Th className="text-left align-middle">Khả dụng</Th>
+              <Th className="text-center align-middle">Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
             {unitPagination.items.map(unit => {
-              const rental = operationalRentalFor(unit)
-              const reservation = activeReservationFor(unit)
               const maintenance = openMaintenanceFor(unit)
               const availability = availabilityFor(unit)
               return (
-                <Tr key={unit.id}>
-                  <Td>
-                    <p className="font-mono font-bold text-stone-900">{unit.code}</p>
+                <Tr key={unit.id} className="odd:bg-white even:bg-stone-50/50">
+                  <Td className="align-middle">
+                    <p className="break-all font-mono text-sm font-semibold leading-5 text-stone-900">{unit.code}</p>
                   </Td>
-                  <Td>
-                    <p className="font-semibold">{managerUnitTypeLabel(unit.type, 'vi')}</p>
-                    <p className="mt-1 text-xs text-stone-500">{unit.areaM2.toLocaleString('vi-VN')} m² · {unit.volumeM3.toLocaleString('vi-VN')} m³</p>
-                    <p className="text-xs text-stone-500">Tối đa {unit.maxLoadKg.toLocaleString('vi-VN')} kg</p>
+                  <Td className="align-middle">
+                    <p className="font-semibold leading-5 text-stone-900">{managerUnitTypeLabel(unit.type, 'vi')}</p>
                   </Td>
-                  <Td>
-                    <p>Tầng {unit.floor} · {unit.zone}</p>
-                    <p className="mt-1 text-xs text-stone-500">{unit.climate ? 'Có kiểm soát nhiệt độ' : 'Không kiểm soát nhiệt độ'}</p>
+                  <Td className="align-middle">
+                    <p className="font-medium text-stone-800">{inventoryLocation(unit.floor, unit.zone)}</p>
+                    <p className="mt-1 text-xs leading-4 text-stone-500">{unit.climate ? 'Có kiểm soát nhiệt độ' : 'Không kiểm soát nhiệt độ'}</p>
                   </Td>
-                  <Td>
+                  <Td className="align-middle">
                     <Badge variant={statusVariants[unit.status] || 'muted'}>{unitStatusLabel(unit.status)}</Badge>
-                    {unit.status === 'maintenance' && maintenance && <p className="mt-1 text-xs text-amber-700">Có phiếu bảo trì đang mở</p>}
+                    {unit.status === 'maintenance' && maintenance && <p className="mt-1 text-xs leading-4 text-amber-700">Có phiếu bảo trì đang mở</p>}
                   </Td>
-                  <Td>
-                    {rental ? <><p className="font-semibold text-stone-900">{rental.customerName}</p><p className="text-xs text-stone-500">Hồ sơ thuê {rental.id}</p><p className="mt-1 text-xs text-stone-500">Dự kiến kết thúc {formatDate(rental.endDate)} · {managerStatusLabel(rental.status, 'vi')}</p></> : reservation ? <><p className="font-semibold text-stone-900">{reservation.customerName}</p><p className="text-xs text-stone-500">Đơn đặt chỗ {reservation.id}</p></> : unit.status === 'occupied' ? <p className="text-xs font-medium text-red-700">Thiếu hồ sơ thuê tương ứng với trạng thái đang sử dụng</p> : <p className="text-sm text-stone-500">Chưa có người sử dụng</p>}
+                  <Td className="align-middle">
+                    <p className="whitespace-nowrap font-semibold text-stone-900">{formatManagerMoney(unit.price)}</p>
+                    <p className="mt-1 text-xs text-stone-500">/tháng</p>
                   </Td>
-                  <Td>
-                    <p className="font-semibold">{formatManagerMoney(unit.price)}/tháng</p>
-                    <p className="mt-1 text-xs text-stone-500">Giá chuẩn theo loại gian</p>
+                  <Td className="align-middle">
+                    <p className="font-medium leading-5 text-stone-800">{availability.label}</p>
+                    {availability.detail && <p title={availability.detail} className="mt-1 line-clamp-2 text-xs leading-4 text-stone-500">{availability.detail}</p>}
                   </Td>
-                  <Td>
-                    <p className="font-medium">{availability.label}</p>
-                    {availability.detail && <p className="mt-1 text-xs text-stone-500">{availability.detail}</p>}
-                  </Td>
-                  <Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedUnitId(unit.id)}>Xem chi tiết</Button></Td>
+                  <Td className="align-middle text-center"><Button size="sm" variant="outline" className="whitespace-nowrap" onClick={() => setSelectedUnitId(unit.id)}>Chi tiết</Button></Td>
                 </Tr>
               )
             })}
-            {!visibleUnits.length && <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-stone-500">Không có gian kho phù hợp với bộ lọc.</td></tr>}
+            {!visibleUnits.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">Không có gian kho phù hợp với bộ lọc.</td></tr>}
           </Tbody>
         </Table>
         <ManagerPagination {...unitPagination} pageSize={unitPageSize} onPageChange={setUnitPage} onPageSizeChange={setUnitPageSize} />
       </Card>
 
-      <section>
-        <div className="mb-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Theo dõi xử lý</p>
-          <h2 className="mt-1 text-lg font-bold text-stone-900">Hàng đợi bảo trì</h2>
-        </div>
-        {openMaintenanceTasks.length ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {openMaintenanceTasks.map(task => {
-              const unit = facilityUnits.find(item => matchesUnit(task.unitId, item))
-              return <Card key={task.id} className="p-4">
-                <div className="flex items-start justify-between gap-3"><div><p className="font-mono font-bold text-stone-900">{unit?.code || task.unitId}</p><p className="mt-1 text-xs text-stone-500">Tạo lúc {formatDateTime(task.createdAt)}</p></div><Badge variant={task.status === 'in_progress' ? 'info' : 'warning'}>{managerStatusLabel(task.status, 'vi')}</Badge></div>
-                <p className="mt-3 text-sm text-stone-700">{normalizeOperationalText(task.reason)}</p>
-                <div className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-500"><p>Người phụ trách: <b className="text-stone-700">{task.assignedStaffName || 'Chưa phân công'}</b></p><p className="mt-1">Mức hư hỏng: <b className="text-stone-700">{damageLabel(task.damageClassification)}</b></p></div>
-                {unit && <div className="mt-3 grid grid-cols-2 gap-2"><Button size="sm" variant="outline" onClick={() => setSelectedUnitId(unit.id)}>Xem gian kho</Button><Button size="sm" onClick={() => onCreateMaintenanceWork({ referenceId: task.id, title: `Bảo trì hoặc vệ sinh gian ${unit.code}`, notes: normalizeOperationalText(task.reason) })}>Phân công staff</Button></div>}
-              </Card>
-            })}
-          </div>
-        ) : <Card className="p-8 text-center text-sm text-stone-500">Không có nhiệm vụ bảo trì đang mở.</Card>}
-      </section>
-
-      <Card className="p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="font-bold text-stone-900">Năng lực khai thác hiện có</h2>
-            <p className="mt-1 text-xs text-stone-500">Phân tích thứ cấp, tổng hợp trực tiếp từ các gian kho thuộc cơ sở</p>
-          </div>
-          <b>{occupiedCount}/{facilityUnits.length} gian đang sử dụng · {occupancy}% lấp đầy</b>
-        </div>
-        <ProgressBar value={occupiedCount} max={Math.max(1, facilityUnits.length)} />
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">Tổng diện tích</p><b className="mt-1 block text-lg">{totalArea.toLocaleString('vi-VN')} m²</b></div>
-          <div className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">Tổng thể tích</p><b className="mt-1 block text-lg">{totalVolume.toLocaleString('vi-VN')} m³</b></div>
-          <div className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">Tổng tải trọng cho phép</p><b className="mt-1 block text-lg">{totalLoad.toLocaleString('vi-VN')} kg</b></div>
-          <div className="rounded-lg bg-amber-50 p-3"><p className="text-xs text-amber-700">Tổng giá niêm yết của toàn bộ gian / tháng</p><b className="mt-1 block text-lg text-amber-900">{formatVnd(totalListedRent)}</b><p className="mt-1 text-[11px] text-amber-700">Không phải doanh thu thực thu</p></div>
-        </div>
-      </Card>
-
-      <div className="grid items-start gap-4 2xl:grid-cols-2">
-        <Card className="overflow-hidden">
-          <div className="border-b border-stone-200 p-4">
-            <h2 className="font-bold text-stone-900">Công suất theo loại gian kho</h2>
-            <p className="mt-1 text-xs text-stone-500">Tỷ lệ sử dụng và cơ cấu trạng thái của từng loại gian.</p>
-          </div>
-          <div className="divide-y divide-stone-200">
-            {capacityByType.map(item => (
-              <div key={item.key} className="p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-stone-900">{item.label}</p>
-                    <p className="mt-1 text-xs text-stone-500">Tổng cộng {item.total} gian</p>
-                  </div>
-                  <div className="w-36 max-w-full">
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-stone-500">Lấp đầy</span>
-                      <b className="text-stone-900">{item.occupancy}%</b>
-                    </div>
-                    <ProgressBar value={item.occupancy} />
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6 2xl:grid-cols-3">
-                  {[
-                    ['Tổng', item.total],
-                    ['Trống', item.available],
-                    ['Đang dùng', item.used],
-                    ['Đã phân', item.reserved],
-                    ['Giữ tạm', item.held],
-                    ['Bảo trì', item.maintenance]
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="rounded-lg bg-stone-50 px-3 py-2">
-                      <p className="text-[11px] text-stone-500">{label}</p>
-                      <b className="mt-0.5 block text-stone-900">{value}</b>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
+      <div>
         <Card className="overflow-hidden">
           <div className="border-b border-stone-200 p-4">
             <h2 className="font-bold text-stone-900">Phân bổ theo khu vực</h2>
@@ -634,10 +535,10 @@ export default function ManagerInventoryPanel({
             return <Tr key={definition.id}>
               <Td><p className="font-semibold text-stone-900">{facilityCatalogTypeName(definition.name, definition.id)}</p><p className="mt-1 max-w-xs text-xs text-stone-500">{definition.descriptionVi}</p></Td>
               <Td>{definition.lengthM.toLocaleString('vi-VN')} × {definition.widthM.toLocaleString('vi-VN')} × {definition.heightM.toLocaleString('vi-VN')} m</Td>
-              <Td>{definition.areaM2.toLocaleString('vi-VN')} m² · {definition.volumeM3.toLocaleString('vi-VN')} m³</Td>
+              <Td>{definition.areaM2.toLocaleString('vi-VN')} m², {definition.volumeM3.toLocaleString('vi-VN')} m³</Td>
               <Td>{definition.maxLoadKg.toLocaleString('vi-VN')} kg</Td>
               <Td><b>{formatManagerMoney(definition.monthlyPrice)}/tháng</b><p className="mt-1 text-xs text-stone-500">{formatManagerMoney(definition.pricePerM3)}/m³</p></Td>
-              <Td><b>{actualUnits.length} gian</b><p className="mt-1 text-xs text-stone-500">{actualUnits.filter(unit => unit.status === 'available').length} trống · {actualUnits.filter(unit => unit.status === 'occupied').length} đang dùng · {actualUnits.filter(unit => unit.status === 'maintenance').length} bảo trì</p></Td>
+              <Td><b>{actualUnits.length} gian</b><p className="mt-1 text-xs text-stone-500">{actualUnits.filter(unit => unit.status === 'available').length} trống, {actualUnits.filter(unit => unit.status === 'occupied').length} đang dùng, {actualUnits.filter(unit => unit.status === 'maintenance').length} bảo trì</p></Td>
             </Tr>
           })}</Tbody>
         </Table>
@@ -661,7 +562,7 @@ export default function ManagerInventoryPanel({
           const hiddenActivityCount = allUnitActivities.length - allUnitActivities.filter(item => !activityHistory.isHidden(item.id)).length
           const hasOperationalLock = managerUnitHasOperationalLock(selectedUnit.id, facilityReservations, facilityRentals)
           return <div className="space-y-5 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 p-4"><div><p className="font-mono text-lg font-bold text-stone-900">{selectedUnit.code}</p><p className="mt-1 text-stone-500">{selectedUnit.facilityName} · Tầng {selectedUnit.floor} · {selectedUnit.zone}</p></div><Badge variant={statusVariants[selectedUnit.status] || 'muted'}>{unitStatusLabel(selectedUnit.status)}</Badge></div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 p-4"><div><p className="font-mono text-lg font-bold text-stone-900">{selectedUnit.code}</p><p className="mt-1 text-stone-500">{selectedUnit.facilityName}, {inventoryLocation(selectedUnit.floor, selectedUnit.zone)}</p></div><Badge variant={statusVariants[selectedUnit.status] || 'muted'}>{unitStatusLabel(selectedUnit.status)}</Badge></div>
 
             <div>
               <h3 className="mb-3 font-bold text-stone-900">Thông số vật lý</h3>
@@ -676,7 +577,7 @@ export default function ManagerInventoryPanel({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Chi phí và khả dụng</h3><div className="space-y-2"><p className="flex justify-between gap-3"><span className="text-stone-500">Giá áp dụng hiện tại</span><b>{formatManagerMoney(selectedUnit.price)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Tiền đảm bảo theo chính sách hiện hành</span><b>{formatManagerMoney(selectedUnit.deposit)}</b></p><div className="flex justify-between gap-3"><span className="text-stone-500">Khả dụng thực tế</span><div className="text-right"><b>{availability.label}</b>{availability.detail && <p className="mt-1 text-xs font-normal text-stone-500">{availability.detail}</p>}</div></div>{selectedUnit.heldUntil && <p className="flex justify-between gap-3"><span className="text-stone-500">Thời hạn giữ tạm</span><b>{formatDateTime(selectedUnit.heldUntil)}</b></p>}</div></Card>
+              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Chi phí và khả dụng</h3><div className="space-y-2"><p className="flex justify-between gap-3"><span className="text-stone-500">Giá áp dụng hiện tại</span><b>{formatManagerMoney(selectedUnit.price)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Tiền duy trì CSVC theo chính sách hiện hành</span><b>{formatManagerMoney(selectedUnit.deposit)}</b></p><div className="flex justify-between gap-3"><span className="text-stone-500">Khả dụng thực tế</span><div className="text-right"><b>{availability.label}</b>{availability.detail && <p className="mt-1 text-xs font-normal text-stone-500">{availability.detail}</p>}</div></div>{selectedUnit.heldUntil && <p className="flex justify-between gap-3"><span className="text-stone-500">Thời hạn giữ tạm</span><b>{formatDateTime(selectedUnit.heldUntil)}</b></p>}</div></Card>
               <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Tình trạng khai thác</h3>{rental ? <div className="space-y-2"><p>Khách hàng: <b>{rental.customerName}</b></p><p>Mã hồ sơ thuê: <b className="font-mono">{rental.id}</b></p><p>Thời hạn: <b>{parseDisplayDate(rental.startDate) && parseDisplayDate(rental.endDate) ? `${formatDate(rental.startDate)} - ${formatDate(rental.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái hồ sơ: <Badge variant="info">{managerStatusLabel(rental.status, 'vi')}</Badge></p><p>Kỳ thanh toán tiếp theo: <b>{formatDate(rental.nextDue)}</b></p><p>Thanh toán: <Badge variant={isManagerRentalOverdue(rental) ? 'error' : rental.paymentStatus === 'paid' ? 'success' : 'warning'}>{managerStatusLabel(isManagerRentalOverdue(rental) ? 'overdue' : rental.paymentStatus, 'vi')}</Badge></p></div> : reservation ? <div className="space-y-2"><p>Khách hàng: <b>{reservation.customerName}</b></p><p>Mã đơn đặt chỗ: <b className="font-mono">{reservation.id}</b></p><p>Thời gian dự kiến: <b>{parseDisplayDate(reservation.startDate) && parseDisplayDate(reservation.endDate) ? `${formatDate(reservation.startDate)} - ${formatDate(reservation.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái: <Badge variant="warning">{managerStatusLabel(reservation.status, 'vi')}</Badge></p></div> : selectedUnit.status === 'occupied' ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800"><b>Dữ liệu trạng thái chưa nhất quán</b><p className="mt-1 text-xs">Gian được đánh dấu đang sử dụng nhưng không tìm thấy hồ sơ thuê vận hành tương ứng.</p></div> : <p className="text-stone-500">Gian kho chưa có hồ sơ thuê hoặc đơn đặt chỗ hiệu lực.</p>}</Card>
             </div>
 
@@ -692,7 +593,7 @@ export default function ManagerInventoryPanel({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Card className="p-4"><div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-bold text-stone-900">Lịch sử bảo trì</h3>{hiddenMaintenanceCount > 0 && <Button size="sm" variant="outline" onClick={() => maintenanceHistory.restoreAll()}>Khôi phục</Button>}</div>{visibleUnitMaintenance.length ? <div className="space-y-3">{visibleUnitMaintenance.slice(0, 5).map(task => <div key={task.id} className="border-b border-stone-100 pb-3 last:border-0 last:pb-0"><div className="flex items-center justify-between gap-3"><b>{formatDateTime(task.createdAt)}</b><div className="flex items-center gap-2"><Badge variant={task.status === 'completed' ? 'success' : task.status === 'in_progress' ? 'info' : 'warning'}>{managerStatusLabel(task.status, 'vi')}</Badge>{task.status === 'completed' && <Button size="sm" variant="danger" onClick={() => { maintenanceHistory.hide(task.id); showToast(`Đã ẩn lịch sử bảo trì ${task.id}.`) }}>Xóa</Button>}</div></div><p className="mt-1 text-stone-600">{normalizeOperationalText(task.reason)}</p><p className="mt-1 text-xs text-stone-500">Người phụ trách: {task.assignedStaffName || 'Chưa phân công'}</p></div>)}</div> : <p className="text-stone-500">{hiddenMaintenanceCount ? 'Các nhiệm vụ bảo trì cũ đang được ẩn.' : 'Chưa có nhiệm vụ bảo trì.'}</p>}</Card>
-              <Card className="p-4"><div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-bold text-stone-900">Hoạt động gần đây</h3>{hiddenActivityCount > 0 && <Button size="sm" variant="outline" onClick={() => activityHistory.restoreAll()}>Khôi phục</Button>}</div>{unitActivities.length ? <div className="space-y-3">{unitActivities.map(activity => <div key={activity.id} className="border-b border-stone-100 pb-3 last:border-0 last:pb-0"><div className="flex items-start justify-between gap-2"><div><p className="font-semibold">{managerActivityLabel(activity.action, 'vi')}</p><p className="mt-1 text-xs text-stone-500">{formatDateTime(activity.timestamp)} · {activity.actorName}</p></div><Button size="sm" variant="danger" onClick={() => { activityHistory.hide(activity.id); showToast("Đã ẩn bản ghi hoạt động khỏi giao diện quản lý cơ sở.") }}>Xóa</Button></div></div>)}</div> : <p className="text-stone-500">{hiddenActivityCount ? 'Các hoạt động cũ đang được ẩn.' : 'Chưa có hoạt động nào được ghi nhận.'}</p>}</Card>
+              <Card className="p-4"><div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-bold text-stone-900">Hoạt động gần đây</h3>{hiddenActivityCount > 0 && <Button size="sm" variant="outline" onClick={() => activityHistory.restoreAll()}>Khôi phục</Button>}</div>{unitActivities.length ? <div className="space-y-3">{unitActivities.map(activity => <div key={activity.id} className="border-b border-stone-100 pb-3 last:border-0 last:pb-0"><div className="flex items-start justify-between gap-2"><div><p className="font-semibold">{managerActivityLabel(activity.action, 'vi')}</p><p className="mt-1 text-xs text-stone-500">{formatDateTime(activity.timestamp)}, {activity.actorName}</p></div><Button size="sm" variant="danger" onClick={() => { activityHistory.hide(activity.id); showToast("Đã ẩn bản ghi hoạt động khỏi giao diện quản lý cơ sở.") }}>Xóa</Button></div></div>)}</div> : <p className="text-stone-500">{hiddenActivityCount ? 'Các hoạt động cũ đang được ẩn.' : 'Chưa có hoạt động nào được ghi nhận.'}</p>}</Card>
             </div>
 
             {selectedUnit.conditionNotes && <div className="rounded-lg bg-amber-50 p-4"><p className="font-semibold text-amber-900">Ghi chú tình trạng</p><p className="mt-1 text-amber-800">{normalizeOperationalText(selectedUnit.conditionNotes)}</p></div>}
@@ -706,7 +607,7 @@ export default function ManagerInventoryPanel({
       </Modal>
 
       <Modal open={Boolean(statusUnit)} onClose={() => setStatusUnitId(null)} title={targetStatus === 'maintenance' ? 'Chuyển sang bảo trì' : 'Xác nhận mở lại gian kho'}>
-        {statusUnit && <div className="space-y-4"><div className="rounded-lg bg-stone-50 p-3 text-sm"><b className="font-mono">{statusUnit.code}</b> · {managerUnitTypeLabel(statusUnit.type, 'vi')} · {statusUnit.facilityName}</div><Input label="Lý do hoặc ghi chú xác nhận" value={reason} onChange={event => setReason(event.target.value)} /><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setStatusUnitId(null)}>Hủy</Button><Button disabled={!reason.trim()} onClick={saveStatus}>Xác nhận</Button></div></div>}
+        {statusUnit && <div className="space-y-4"><div className="rounded-lg bg-stone-50 p-3 text-sm"><b className="font-mono">{statusUnit.code}</b>, {managerUnitTypeLabel(statusUnit.type, 'vi')}, {statusUnit.facilityName}</div><Input label="Lý do hoặc ghi chú xác nhận" value={reason} onChange={event => setReason(event.target.value)} /><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setStatusUnitId(null)}>Hủy</Button><Button disabled={!reason.trim()} onClick={saveStatus}>Xác nhận</Button></div></div>}
       </Modal>
 
       <ManagerUnitEditor

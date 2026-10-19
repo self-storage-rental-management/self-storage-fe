@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { listRenewalAppointments } from "../../services/renewalOperationsApi"
@@ -9,8 +9,7 @@ import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
-import { rentalDate } from "../rental-api/presentation"
-import { staffErrorMessage } from "./staffPresentation"
+import { rentalDate, rentalError } from "../rental-api/presentation"
 
 export default function StaffRenewalOperationsApiPanel() {
   return <StaffRenewalWorkspace />
@@ -32,31 +31,35 @@ function StaffRenewalWorkspace() {
       </Card>
     )
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
-  return <StaffSession key={identity} identity={identity} />
+  return <StaffWorkspaceTabs key={identity} identity={identity} />
 }
-function StaffSession({ identity }: { identity: string }) {
+function StaffWorkspaceTabs({ identity }: { identity: string }) {
+  const [, setLocked] = useState(false)
+  return <div className="space-y-4">
+    <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở</h1>
+    <StaffSession identity={identity} onLocked={setLocked} />
+  </div>
+}
+function StaffSession({ identity, onLocked }: { identity: string; onLocked: (value: boolean) => void }) {
   const actor = getAuthenticatedActor()!
   const [query, setQuery] = useState<RenewalAppointmentQuery>({
     page: 0,
     size: 20,
   })
   const [selected, setSelected] = useState<string>()
-  const [locked, setLocked] = useState(false)
+  const lockRef = useRef(false)
+  const setLocked = useCallback((value: boolean) => { lockRef.current = value; onLocked(value) }, [onLocked])
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
     () => listRenewalAppointments(query),
   )
   const change = (patch: RenewalAppointmentQuery) => {
+    if (lockRef.current) return
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
     setSelected(undefined)
   }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Ký gia hạn tại cơ sở (D3)</h1>
-      <p className="text-sm text-stone-500">
-        Chỉ hiển thị hồ sơ được phân công và thuộc cơ sở bạn được
-        phép vận hành.
-      </p>
       <Card className="p-4 flex flex-wrap gap-3 items-end">
         <label>
           Cơ sở
@@ -78,7 +81,7 @@ function StaffSession({ identity }: { identity: string }) {
           </select>
         </label>
         <label>
-          Ngày hẹn (Việt Nam)
+          Ngày hẹn
           <input
             className={operationsInputClass}
             type="date"
@@ -106,23 +109,6 @@ function StaffSession({ identity }: { identity: string }) {
             ))}
           </select>
         </label>
-        <label>
-          Số hồ sơ
-          <select
-            className={operationsInputClass}
-            value={query.size}
-            onChange={(e) => change({ size: Number(e.target.value) })}
-          >
-            {[10, 20, 50].map((n) => (
-              <option key={n} value={n}>
-                {n}/trang
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button variant="outline" onClick={read.refresh}>
-          Tải lại
-        </Button>
       </Card>
       {read.loading && (
         <p role="status" className="p-4 text-stone-500">
@@ -134,10 +120,7 @@ function StaffSession({ identity }: { identity: string }) {
           role="alert"
           className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4"
         >
-          <p>{staffErrorMessage(read.error, "Không thể tải lịch gia hạn.")}</p>
-          <Button variant="outline" onClick={read.refresh}>
-            Tải lại
-          </Button>
+          <p>{rentalError(read.error)}</p>
         </div>
       )}
       {read.data && (
@@ -151,25 +134,25 @@ function StaffSession({ identity }: { identity: string }) {
                 <p className="break-all">Gia hạn: {s.renewalId}</p>
                 <p>{phaseLabels[s.phase]}</p>
                 <p>
-                  {rentalDate(s.appointmentStart)} →{" "}
+                  {rentalDate(s.appointmentStart)} -{" "}
                   {rentalDate(s.appointmentEnd)}
                 </p>
                 <p>Hạn ký: {rentalDate(s.effectiveSigningDeadline)}</p>
               </div>
               <Button
                 variant="outline"
-                onClick={() => setSelected(s.renewalId)}
+                onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}
               >
                 Xử lý
               </Button>
             </div>
           ))}
           {read.data.data.length === 0 && (
-            <p>Không có lịch phù hợp với phân công hiện tại.</p>
+            <p>Không có dữ liệu</p>
           )}
           <ApiPager
             pagination={read.data.pagination}
-            onPage={(page) => setQuery((q) => ({ ...q, page }))}
+            onPage={(page) => { if (!lockRef.current) setQuery((q) => ({ ...q, page })) }}
           />
         </Card>
       )}
@@ -177,9 +160,9 @@ function StaffSession({ identity }: { identity: string }) {
         <Modal
           open
           size="xl"
-          title="Xử lý ký gia hạn — Nhân viên"
+          title="Xử lý ký gia hạn - Nhân viên"
           onClose={() => {
-            if (!locked) setSelected(undefined)
+            if (!lockRef.current) setSelected(undefined)
           }}
         >
           <RenewalOperationsPanel

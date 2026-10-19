@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, type Context, type ReactNode } from 'react'
 import type {
   Facility,
   StorageUnit,
@@ -22,7 +22,11 @@ import type {
   ReservedPeriod,
   FacilityTask,
   FacilityUnitDistribution,
-  RentalPackage
+  RentalPackage,
+  StructuralInspection,
+  MoistureOrigin,
+  MaintenancePriority,
+  FacilityIssueCategory
 } from '../types/storageHub'
 import { generateDefaultRentalPackages } from '../domain/packageRules'
 import { calculateRenewalPaymentSplit } from '../domain/renewalPricing'
@@ -111,7 +115,7 @@ export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   dimDivisor: 5000,
   gracePeriodDays: 3,
   lateFeeAmount: 25,
-  defaultDepositRatio: 0.4,
+  defaultDepositRatio: 0.2,
   holdExpiryHours: 1 / 6
 }
 
@@ -208,10 +212,10 @@ function nextCalendarDay(value: string): string {
 }
 
 function assertFacilityManager(user: User, facilityId: string, facilityName: string) {
-  if (user.role !== 'manager' && user.role !== 'admin') {
-    throw new Error('Chỉ Facility Manager được thực hiện thao tác này.')
+  if (user.role !== 'manager' && user.role !== 'admin' && user.role !== 'business') {
+    throw new Error('Chỉ Facility Manager hoặc Ban Điều Hành được thực hiện thao tác này.')
   }
-  if (user.role === 'admin' || isManagerFacilityVisible(user, facilityId, facilityName)) return
+  if (user.role === 'admin' || user.role === 'business' || isManagerFacilityVisible(user, facilityId, facilityName)) return
   throw new Error('Bạn không có quyền thao tác dữ liệu của cơ sở khác.')
 }
 
@@ -254,11 +258,117 @@ const LEGACY_FACILITY_NAMES: Record<string, string> = {
   'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
 }
 
-export const isExcludedFacility = (_f: { code?: string; id?: string; city?: string; name?: string }) => false
+export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address?: string; city?: string }> = {
+  'FAC-Q1': {
+    name: 'StorageHub Chi nhánh Quận 1',
+    address: '123 Nguyễn Huệ, Phường Bến Nghé, Quận 1',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q1-F01': {
+    name: 'Kho Việt – Cơ sở Quận 1',
+    address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'HCM-Q7-F01': {
+    name: 'Kho Việt – Cơ sở Quận 7 (Phú Mỹ Hưng)',
+    address: '105 Nguyễn Lương Bằng, Phường Tân Phú, Quận 7, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
+  },
+  'BD-F01': {
+    name: 'Kho Việt – Cơ sở Bình Dương',
+    address: '468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
+    city: 'Bình Dương'
+  },
+  'HCM-TD-F01': {
+    name: 'Kho Việt – Cơ sở Thủ Đức',
+    address: 'Số 1 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức',
+    city: 'TP. Hồ Chí Minh'
+  }
+}
 
-export const isExcludedUnit = (_u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => false
+export function sanitizeFacilityStrings<T extends { code?: string; id?: string; name?: string; address?: string; city?: string }>(f: T): T {
+  if (!f) return f
+  const code = (f.code || f.id || '').toUpperCase()
+  let fix = KNOWN_FACILITY_CORRECTIONS[code]
+  if (!fix && f.id) {
+    fix = KNOWN_FACILITY_CORRECTIONS[f.id.toUpperCase()]
+  }
+  if (!fix) {
+    const addr = f.address || ''
+    const nm = f.name || ''
+    if (addr.includes('123 Nguy') || addr.includes('Huß') || addr.includes('Nguyß') || addr.includes('Phã') || (nm.includes('Quận 1') && nm.includes('StorageHub'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['FAC-Q1']
+    } else if (addr.includes('Võ Văn Ngân') || nm.includes('Thủ Đức')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-TD-F01']
+    } else if (addr.includes('Bình Dương') || nm.includes('Bình Dương')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['BD-F01']
+    } else if (addr.includes('Lương Bằng') || nm.includes('Quận 7')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q7-F01']
+    } else if (addr.includes('Bỉnh Khiêm') || (nm.includes('Quận 1') && nm.includes('Kho Việt'))) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HCM-Q1-F01']
+    }
+  }
+  if (fix) {
+    return {
+      ...f,
+      name: fix.name || f.name,
+      address: fix.address || f.address,
+      city: fix.city || f.city
+    }
+  }
+  return f
+}
 
-export const isExcludedRelated = (_item: any) => false
+export const isExcludedFacility = (f: { code?: string; id?: string; city?: string; name?: string }) => {
+  if (!f) return false
+  const id = (f.id || '').toUpperCase()
+  const code = (f.code || '').toUpperCase()
+  const name = (f.name || '').toLowerCase()
+  return (
+    id === 'FAC-001' ||
+    id === 'FAC-002' ||
+    code === 'HCM-Q1-F01' ||
+    code === 'BD-F01' ||
+    name.includes('quận 1') ||
+    name.includes('bình dương') ||
+    name.includes('downtown storage') ||
+    name.includes('riverside storage')
+  )
+}
+
+export const isExcludedUnit = (u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => {
+  if (!u) return false
+  const facId = (u.facilityId || '').toUpperCase()
+  const fac = (u.facility || '').toLowerCase()
+  const facName = (u.facilityName || '').toLowerCase()
+  const code = (u.code || u.id || '').toUpperCase()
+  return (
+    facId === 'FAC-001' ||
+    facId === 'FAC-002' ||
+    facId === 'HCM-Q1-F01' ||
+    facId === 'BD-F01' ||
+    fac.includes('quận 1') ||
+    fac.includes('bình dương') ||
+    facName.includes('quận 1') ||
+    facName.includes('bình dương') ||
+    code.startsWith('HCM-Q1-F01') ||
+    code.startsWith('BD-F01')
+  )
+}
+
+export const isExcludedRelated = (item: any) => {
+  if (!item) return false
+  const facId = (item.facilityId || '').toUpperCase()
+  const facName = (item.facilityName || item.facility || '').toLowerCase()
+  return (
+    facId === 'FAC-001' ||
+    facId === 'FAC-002' ||
+    facId === 'HCM-Q1-F01' ||
+    facId === 'BD-F01' ||
+    facName.includes('quận 1') ||
+    facName.includes('bình dương')
+  )
+}
 
 const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
   const normalizedName = facilityName ? LEGACY_FACILITY_NAMES[facilityName] || facilityName : undefined
@@ -266,9 +376,10 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 }
 
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
-  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES
-  const cleaned = facilities.filter(f => !isExcludedFacility(f))
+  if (!Array.isArray(facilities)) return []
+  const cleaned = facilities.filter(f => !isExcludedFacility(f)).map(sanitizeFacilityStrings)
   const mapped = cleaned.map(stored => {
+    stored = sanitizeFacilityStrings(stored)
     const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
     if (!canonical) return stored
     if (canonical.id === 'fac-001') {
@@ -406,18 +517,18 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     price,
     deposit: price,
     climate: u.climate,
-    status: isOccupiedDemo ? 'occupied' : 'available',
+    status: (isOccupiedDemo ? 'occupied' : 'available') as 'occupied' | 'available',
     reservedPeriods,
     nextAvailableDate: u.id === 'HCM-Q1-F01-S-001' ? '2027-01-12' : u.id === 'HCM-Q1-F01-M-001' ? '2027-05-01' : u.id === 'HCM-Q1-F01-L-001' ? '2026-09-18' : u.id === 'A-104' ? '2027-03-21' : u.id === 'B-112' ? '2026-12-23' : undefined,
     currentRentalId: demoRentalByUnit[u.id],
     version: 1
   }
-})
+}).filter(u => !isExcludedUnit(u))
 
 // Keep runtime state (status, reservations, next available date) while
 // upgrading older browser snapshots to the current Customer catalog metadata.
 const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
-  if (!Array.isArray(units) || units.length === 0) return INITIAL_UNITS
+  if (!Array.isArray(units)) return []
   const cleaned = units.filter(u => !isExcludedUnit(u))
   const mapped = cleaned.map(stored => {
     const canonical = INITIAL_UNITS.find(unit => unit.id === stored.id || unit.code === stored.code)
@@ -444,7 +555,7 @@ const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
   })
   const existingIds = new Set(mapped.map(u => u.id))
   for (const initUnit of INITIAL_UNITS) {
-    if (!existingIds.has(initUnit.id)) {
+    if (!existingIds.has(initUnit.id) && !isExcludedUnit(initUnit)) {
       mapped.push(initUnit)
     }
   }
@@ -476,7 +587,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     moveInDate: '2026-09-20',
     status: 'READY_FOR_CHECKIN',
     approvalType: 'AUTO',
-    reservationDepositAmount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.4 * 100) / 100,
+    reservationDepositAmount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
     securityDepositAmount: DEMO_SMALL_MONTHLY,
     depositConvertedAt: '2026-09-17T10:00:00Z',
     remainingAmount: 0,
@@ -512,7 +623,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: '2026-09-21T08:30:00Z'
     },
     payment: {
-      amount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.4 * 100) / 100,
+      amount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
       status: 'paid',
       method: 'Chuyển khoản VietQR',
       transactionId: 'VNPAY-204899',
@@ -545,9 +656,9 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     moveInDate: '2026-09-22',
     status: 'DEPOSIT_PAID',
     approvalType: 'AUTO',
-    reservationDepositAmount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.4 * 100) / 100,
+    reservationDepositAmount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
     securityDepositAmount: DEMO_MEDIUM_MONTHLY,
-    remainingAmount: Math.round((DEMO_MEDIUM_MONTHLY * 3 * 0.6 + DEMO_MEDIUM_MONTHLY) * 100) / 100,
+    remainingAmount: Math.round((DEMO_MEDIUM_MONTHLY * 3 * 0.8 + DEMO_MEDIUM_MONTHLY) * 100) / 100,
     firstMonthRent: DEMO_MEDIUM_MONTHLY,
     totalInitialAmount: DEMO_MEDIUM_MONTHLY * 4,
     paymentExpiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString(),
@@ -580,14 +691,14 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString()
     },
     payment: {
-      amount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.4 * 100) / 100,
+      amount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
       status: 'paid',
       method: 'Cọc giữ chỗ qua VietQR',
       transactionId: 'TX-DEP-2049',
       paidAt: new Date().toISOString()
     },
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    evidence: ['RSV-2049 · Đã cọc giữ chỗ 40%, gian kho đã được xác định từ lúc đặt'],
+    evidence: ['RSV-2049 · Đã cọc giữ chỗ 20%, gian kho đã được xác định từ lúc đặt'],
     createdAt: new Date().toISOString()
   }
 ]
@@ -968,7 +1079,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'policy',
     entityId: 'sec-policy-01',
-    notes: 'Cập nhật chính sách tỷ lệ đặt cọc 40% và chu kỳ đổi mã PIN an ninh.',
+    notes: 'Cập nhật chính sách tỷ lệ đặt cọc 20% và chu kỳ đổi mã PIN an ninh.',
     timestamp: '2026-09-18 11:58:14'
   },
   {
@@ -980,7 +1091,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'hold',
     entityId: 'RSV-2048',
-    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 40% (${formatVnd(72)}) thành công.`,
+    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 20% (${formatVnd(36)}) thành công.`,
     timestamp: '2026-09-17 08:30:00'
   },
   {
@@ -1194,15 +1305,43 @@ interface StorageHubContextValue extends StorageHubState {
     staffNotes: string
     evidencePhotos: string[]
     returnedItems: { key: boolean; card: boolean; lock: boolean }
+    structuralInspection?: StructuralInspection
+    moistureOrigin?: MoistureOrigin
+    sanitizationFee?: number
+    facilityCompensationAmount?: number
   }) => void
   confirmReturnSettlement: (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => void
   payReturnBalance: (returnId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string) => void
   completeReturnRefund: (returnId: string, staffUser: User, transactionReference: string) => void
-  reviewReturnDispute: (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => void
-  createMaintenanceTask: (unitId: string, reason: string, staffUser?: User) => MaintenanceTask
+  assignReturnInspection: (returnId: string, staffId: string, scheduledDate: string, notes: string, manager: User) => void
+  completeReturnCase: (returnId: string, manager: User, notes?: string) => void
+  reviewReturnDispute: (
+    returnId: string,
+    manager: User,
+    resolutionNote?: string,
+    settlement?: ManagerReturnSettlementFees,
+    preset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement',
+    facilityCompensationAmount?: number
+  ) => void
+  createMaintenanceTask: (unitId: string, reason: string, staffUser?: User, priority?: MaintenancePriority, faultCategory?: FacilityIssueCategory) => MaintenanceTask
   completeMaintenanceTask: (taskId: string, managerUser: User) => void
   releaseMaintenanceUnit: (unitId: string, staffUser: User) => void
-  updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
+  updateUnitStatus: (
+    unitId: string,
+    status: 'available' | 'maintenance',
+    manager: User,
+    reason?: string,
+    priority?: MaintenancePriority,
+    faultCategory?: FacilityIssueCategory
+  ) => void
+  emergencyRelocateRental: (params: {
+    rentalId: string
+    targetUnitId: string
+    reason: string
+    faultCategory: FacilityIssueCategory
+    manager: User
+    goodwillDiscountPercent?: number
+  }) => void
   recordRentalPayment: (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => void
   applyRentalLateFee: (rentalId: string, amount: number, manager: User) => void
   waiveRentalLateFee: (rentalId: string, manager: User) => void
@@ -1226,24 +1365,25 @@ interface StorageHubContextValue extends StorageHubState {
   // Facility & Unit CRUD
   createFacility: (data: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => Facility
   updateFacility: (facilityId: string, updates: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => void
-  deleteFacility: (facilityId: string, actor?: User) => { success: boolean; reason?: string }
+  deleteFacility: (facilityId: string, actor?: User, force?: boolean) => { success: boolean; reason?: string }
   createUnit: (data: Partial<StorageUnit>, actor: User) => StorageUnit
   updateUnit: (unitId: string, updates: Partial<StorageUnit>, actor: User) => void
   deleteUnit: (unitId: string, actor: User) => { success: boolean; reason?: string }
 }
 
-const StorageHubContext = createContext<StorageHubContextValue | null>(null)
+// Keep provider and consumers on the same context during Vite hot updates.
+const StorageHubContext: Context<StorageHubContextValue | null> =
+  import.meta.hot?.data.storageHubContext ?? createContext<StorageHubContextValue | null>(null)
+if (import.meta.hot) {
+  import.meta.hot.dispose(data => {
+    data.storageHubContext = StorageHubContext
+  })
+}
 
 const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
 
 function normalizeRuntimeRolePermissions(value: unknown) {
-  const empty = Object.fromEntries(
-    (['customer', 'staff', 'manager', 'business', 'admin'] as Role[]).map(role => [
-      role,
-      Object.fromEntries(PERMISSION_KEYS.map(key => [key, false]))
-    ])
-  ) as RolePermissionsState
-  const normalized = !DEMO_DATA_ENABLED && !value ? empty : normalizeRolePermissions(value)
+  const normalized = normalizeRolePermissions(value)
   try {
     if (DEMO_DATA_ENABLED && !localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
       normalized.manager['storage_units:assign'] = true
@@ -1278,7 +1418,7 @@ const normalizeReservationPricing = (hold: StorageReservation): StorageReservati
   const expectedTotal = rentalTermAmount + securityDepositAmount
   if (!shouldReprice && (normalizedHold.remainingAmount <= 0 || Math.abs((normalizedHold.totalInitialAmount || 0) - expectedTotal) <= 0.01)) return normalizedHold
 
-  const calculatedBookingDeposit = Math.round(rentalTermAmount * 0.4 * 100) / 100
+  const calculatedBookingDeposit = Math.round(rentalTermAmount * 0.2 * 100) / 100
   const bookingDeposit = shouldReprice || normalizedHold.payment.status !== 'paid' ? calculatedBookingDeposit : normalizedHold.reservationDepositAmount
   const isPaidInFull = normalizedHold.payment.status === 'paid' && normalizedHold.remainingAmount <= 0
   return {
@@ -1329,6 +1469,18 @@ const reconcileReservationCheckins = (holds: StorageReservation[], records: Chec
 export function StorageHubProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StorageHubState>(() => {
     try {
+      if (!DEMO_DATA_ENABLED) {
+        localStorage.removeItem('storagehub:facilities')
+        localStorage.removeItem('storagehub:units')
+        localStorage.removeItem('storagehub:rentals')
+        localStorage.removeItem('storagehub:holds')
+        localStorage.removeItem('storagehub:contracts')
+        localStorage.removeItem('storagehub:payments')
+        localStorage.removeItem('storagehub:returns')
+        localStorage.removeItem('storagehub:durationDiscounts')
+        localStorage.removeItem('storagehub:facility-pricing')
+        localStorage.removeItem(STORAGE_KEY)
+      }
       const saved = localStorage.getItem(STORAGE_KEY)
       if (DEMO_DATA_ENABLED && saved) {
         const parsed = JSON.parse(saved)
@@ -1350,7 +1502,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             if (Array.isArray(directFacs)) {
               const knownIds = new Set(rawFacilities.map((f: any) => f.id))
               const knownCodes = new Set(rawFacilities.map((f: any) => (f.code || '').toUpperCase()))
-              for (const df of directFacs) {
+              for (let df of directFacs) {
+                df = sanitizeFacilityStrings(df)
                 if (df && df.id && !knownIds.has(df.id) && (!df.code || !knownCodes.has(df.code.toUpperCase()))) {
                   rawFacilities.push(df)
                   knownIds.add(df.id)
@@ -1456,7 +1609,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     return {
-      users: DEMO_DATA_ENABLED ? USERS : [],
+      users: USERS,
       rolePermissions: normalizeRuntimeRolePermissions(undefined),
       facilities: fallbackFacilities,
       units: fallbackUnits,
@@ -1854,7 +2007,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
-  // 1. Customer: Validate and create reservation with 40% Reservation Deposit
+  // 1. Customer: Validate and create reservation with 20% Reservation Deposit
   const validateAndCreateReservation = (params: {
     customer: User
     unitTypeId: string
@@ -2025,7 +2178,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Pricing policy: the 40% booking deposit is credited toward rent, while a
+    // Pricing policy: the 20% booking deposit is credited toward rent, while a
     // separate one-month security deposit is collected at check-in and may be
     // refunded only after the move-out inspection and settlement.
     const firstMonthRent = effectiveMonthlyPrice
@@ -2033,7 +2186,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const discountAmount = Math.min(grossRentalTermAmount, Math.max(0, params.discountAmount || 0))
     const rentalTermAmount = grossRentalTermAmount - discountAmount
     const securityDepositAmount = effectiveMonthlyPrice
-    const reservationDepositAmount = Math.round(rentalTermAmount * 0.4 * 100) / 100
+    const reservationDepositAmount = Math.round(rentalTermAmount * 0.2 * 100) / 100
     const remainingAmount = rentalTermAmount - reservationDepositAmount + securityDepositAmount
     const totalInitialAmount = rentalTermAmount + securityDepositAmount
 
@@ -2115,7 +2268,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       expiresAt: paymentExpiresAt || emailExpiresAt,
       evidence: [requiresGoodsReview
         ? `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ khách xác minh email trước khi gửi Staff duyệt hàng hóa “Khác”.`
-        : `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ thanh toán cọc 40% trước ${paymentExpiresAt}.`],
+        : `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
       createdAt: now.toISOString()
     }
 
@@ -2135,7 +2288,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityId: holdId,
           notes: requiresGoodsReview
             ? `Khách hàng chọn loại kho ${unitType.name}. Chờ xác minh email trước khi Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
-            : `Khách hàng chọn loại kho ${unitType.name}. Chờ cọc 40% (${formatVnd(reservationDepositAmount)}) trong 24 giờ.`,
+            : `Khách hàng chọn loại kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 24 giờ.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -2177,8 +2330,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       if (capacity <= earlierCapacityHolds) throw new Error('Loại kho này không còn suất trống để duyệt hồ sơ.')
     }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
-    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
-    const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.4 * 100) / 100 : reservation.reservationDepositAmount
+    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
+    const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
       units: prev.units,
@@ -2556,7 +2709,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền đảm bảo kho: ${formatVnd(contract.securityDeposit)}.`,
+            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền duy trì CSVC: ${formatVnd(contract.securityDeposit)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -2584,7 +2737,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!reservation) throw new Error('Không tìm thấy đơn đặt chỗ.')
     if (paymentDetails.amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.')
     if (Math.abs(paymentDetails.amount - reservation.remainingAmount) > 0.01) {
-      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền đảm bảo kho.`)
+      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền duy trì CSVC.`)
     }
     if (!paymentDetails.transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
 
@@ -2604,7 +2757,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       status: 'PAID',
       paidAt: now.toISOString(),
       recordedBy: staffUser.id,
-      description: `Tiền thuê còn lại và tiền đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}`
+      description: `Tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}`
     }
 
     setState(prev => {
@@ -2656,7 +2809,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'payment',
             entityId: txId,
-            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}.`,
+            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -2991,7 +3144,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const expireRenewalPayment = (renewalId: string) => {
     const renewal = state.renewals.find(item => item.id === renewalId)
     if (!renewal || renewal.status !== 'approved' || !renewal.paymentDueAt || new Date(renewal.paymentDueAt).getTime() > Date.now()) return
-    setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá 72 giờ thanh toán cọc gia hạn.' } : item) }))
+    setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá hạn thanh toán toàn kỳ gia hạn.' } : item) }))
   }
 
   const payRenewal = (renewalId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionId: string, termsAccepted: boolean, appointmentDate: string, appointmentTime: string) => {
@@ -2999,12 +3152,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'approved') throw new Error('Đơn gia hạn chưa được Manager duyệt.')
     if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
+    if ((renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.renewalFee).depositAmount) === 0)
+      throw new Error('Gia hạn không thu cọc. Cổng VNPay Sandbox thanh toán toàn kỳ chưa được tích hợp; chưa thể ghi nhận thanh toán.')
     if (!termsAccepted) throw new Error('Vui lòng xác nhận thông tin và điều khoản gia hạn.')
     if (!transactionId.trim()) throw new Error('Vui lòng nhập mã giao dịch thanh toán.')
     if (!appointmentDate || !appointmentTime) throw new Error('Vui lòng chọn ngày và giờ đến cơ sở ký phụ lục.')
     if (appointmentTime < '08:00' || appointmentTime > '17:00') throw new Error('Giờ hẹn phải nằm trong giờ làm việc 08:00–17:00.')
     if (!renewal.paymentDueAt || new Date(renewal.paymentDueAt).getTime() < Date.now()) {
-      setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá 72 giờ thanh toán cọc gia hạn.' } : item) }))
+      setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá hạn thanh toán toàn kỳ gia hạn.' } : item) }))
       throw new Error('Đã quá thời hạn thanh toán 72 giờ. Vui lòng gửi yêu cầu gia hạn mới.')
     }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
@@ -3064,12 +3219,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           paidAt: now.toISOString(),
           recordedBy: renewal.customerId,
           invoiceNumber: renewal.invoiceNumber,
-          description: `Cọc giữ chỗ gia hạn 40% cho ${renewal.renewalMonths} tháng (${renewal.oldEndDate} → ${renewal.newEndDate})`,
+          description: `Cọc giữ chỗ gia hạn 20% cho ${renewal.renewalMonths} tháng (${renewal.oldEndDate} → ${renewal.newEndDate})`,
           gatewayVerifiedAt: now.toISOString()
         },
         ...prev.payments
       ],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 40% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 20% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -3089,7 +3244,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Hoàn tất ký gia hạn tại cơ sở thuộc nghiệp vụ của Facility Staff.')
     if (staffUser.role !== 'staff') throw new Error('Chỉ nhân viên cơ sở được hoàn tất gia hạn.')
     const renewal = state.renewals.find(item => item.id === renewalId)
-    if (!renewal || renewal.status !== 'appointment_scheduled') throw new Error('Yêu cầu chưa cọc hoặc chưa có lịch ký hợp lệ.')
+    if (!renewal || renewal.status !== 'appointment_scheduled') throw new Error('Yêu cầu chưa có lịch ký hợp lệ.')
+    if ((renewal.bookingDepositAmount ?? 0) <= 0) throw new Error('Renewal mới không thu cọc và không thể ghi nhận tiền mặt tại quầy. Cần xác minh thanh toán toàn kỳ qua VNPay Sandbox trước khi hoàn tất.')
     if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã phiếu thu hoặc mã giao dịch.')
     if (!identityVerified) throw new Error('Cần đối chiếu giấy tờ khách hàng trước khi hoàn tất gia hạn.')
     if (!unitAndTermsVerified) throw new Error('Cần kiểm tra gian kho và xác nhận lại điều khoản gia hạn.')
@@ -3122,9 +3278,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // 8. Return & Checkout: Separate Refund Calculation vs Unit Condition
   const requestReturn = (rentalId: string, scheduledDate: string, customer: User, reason?: string): ReturnCase => {
-    assertPermission(customer, 'returns:process')
     const rental = state.rentals.find(r => r.id === rentalId)
     if (!rental || rental.status !== 'active') throw new Error('Chỉ hợp đồng đang hoạt động mới được gửi yêu cầu trả kho.')
+    if (customer.role === 'customer' && customer.id !== rental.customerId) {
+      throw new Error('Khách hàng chỉ có thể yêu cầu trả kho cho hợp đồng của chính mình.')
+    }
     const requestedReturnDate = toValidDate(scheduledDate)
     requestedReturnDate.setHours(0, 0, 0, 0)
     const today = new Date()
@@ -3180,6 +3338,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     staffNotes: string
     evidencePhotos: string[]
     returnedItems: { key: boolean; card: boolean; lock: boolean }
+    structuralInspection?: StructuralInspection
+    moistureOrigin?: MoistureOrigin
+    sanitizationFee?: number
+    facilityCompensationAmount?: number
   }) => {
     assertPermission(params.staffUser, 'returns:process')
     const returnCase = state.returns.find(r => r.id === params.returnId)
@@ -3194,25 +3356,58 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const overdueDays = inspectionDay.getTime() > contractEndDay.getTime() ? Math.floor((inspectionDay.getTime() - contractEndDay.getTime()) / 86_400_000) : 0
     const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
     const calculatedOverdueFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
-    const totalFees = params.damageFee + params.cleaningFee + params.lostItemFee + calculatedOverdueFee + params.outstandingFee
-    const netRefund = Math.max(0, returnCase.depositAmount - totalFees)
+
+    // VẤN ĐỀ 2: Nếu lỗi phát sinh do cơ sở (thấm dột trần/vách, máy lạnh hỏng), khách hàng được miễn trừ phí hư hỏng/vệ sinh
+    const isFacilityFault = params.moistureOrigin === 'facility_fault' || params.structuralInspection?.ceiling === 'leaking' || params.structuralInspection?.wall === 'damp_seepage'
+    const effectiveDamageFee = isFacilityFault ? 0 : params.damageFee
+    const effectiveCleaningFee = isFacilityFault ? 0 : (params.cleaningFee + (params.sanitizationFee || 0))
+    const totalFees = effectiveDamageFee + effectiveCleaningFee + params.lostItemFee + calculatedOverdueFee + params.outstandingFee
+
+    const compensation = isFacilityFault ? (params.facilityCompensationAmount || 0) : 0
+    const netRefund = Math.max(0, (returnCase.depositAmount + compensation) - totalFees)
     const amountDueFromCustomer = Math.max(0, Math.round((totalFees - returnCase.depositAmount) * 100) / 100)
 
-    // UNIT CONDITION: Separate from fees! Only physical repair/cleaning needs MAINTENANCE
-    const needsPhysicalRepair = params.damageClassification !== 'no_damage' || params.cleaningFee > 0 || params.inventoryMatch === 'excess'
+    // UNIT CONDITION: Nếu phát sinh hư hại kết cấu (dột nóc, vách thấm, sàn nứt) hoặc vệ sinh kho thì cần bảo trì
+    const hasStructuralDamage = params.structuralInspection && (
+      params.structuralInspection.ceiling !== 'dry_intact' ||
+      params.structuralInspection.wall !== 'dry_intact' ||
+      params.structuralInspection.floor !== 'dry_intact'
+    )
+    const needsPhysicalRepair = params.damageClassification !== 'no_damage' || effectiveCleaningFee > 0 || params.inventoryMatch === 'excess' || isFacilityFault || hasStructuralDamage
     const nextUnitStatus: 'available' | 'maintenance' = needsPhysicalRepair ? 'maintenance' : 'available'
+
+    // Tự động tạo phiếu bảo trì khẩn cấp nếu phát hiện hỏng hóc kết cấu cơ sở
+    const facilityFaultTask: MaintenanceTask | undefined = isFacilityFault || hasStructuralDamage ? {
+      id: `MNT-${Date.now().toString().slice(-6)}`,
+      unitId: unit.id,
+      facilityId: unit.facilityId,
+      reason: `[SỰ CỐ KẾT CẤU KHI TRẢ KHO] ${isFacilityFault ? 'Nghiệm thu trả kho: phát hiện thấm dột / sự cố cơ sở làm ẩm mốc.' : 'Hư hại kết cấu ghi nhận khi trả kho.'} ${params.staffNotes ? `Ghi chú: ${params.staffNotes}` : ''}`,
+      priority: isFacilityFault ? 'P1_CRITICAL' : 'P2_MEDIUM',
+      faultCategory: params.structuralInspection?.ceiling === 'leaking' ? 'roof_leak' : params.structuralInspection?.floor === 'cracked' ? 'floor_cracked' : 'wall_seepage',
+      status: 'pending',
+      createdAt: now.toISOString()
+    } : undefined
 
     setState(prev => ({
       ...prev,
-      units: prev.units.map(u => (u.id === unit.id ? { ...u, status: 'maintenance' } : u)),
+      units: prev.units.map(u => (u.id === unit.id ? {
+        ...u,
+        status: 'maintenance',
+        activeFacilityIssue: isFacilityFault || hasStructuralDamage ? {
+          reportedAt: now.toISOString(),
+          category: params.structuralInspection?.ceiling === 'leaking' ? 'roof_leak' : params.structuralInspection?.floor === 'cracked' ? 'floor_cracked' : 'wall_seepage',
+          priority: isFacilityFault ? 'P1_CRITICAL' : 'P2_MEDIUM',
+          notes: params.staffNotes || 'Sự cố kết cấu ghi nhận khi nghiệm thu trả kho'
+        } : u.activeFacilityIssue
+      } : u)),
       rentals: prev.rentals.map(r => (r.id === rental.id ? { ...r, status: 'closing' } : r)),
       returns: prev.returns.map(r => r.id === returnCase.id ? {
         ...r,
         status: 'awaiting_customer_confirmation',
         inspectedAt: now.toISOString(),
         damageClassification: params.damageClassification,
-        damageFee: params.damageFee,
-        cleaningFee: params.cleaningFee,
+        damageFee: effectiveDamageFee,
+        cleaningFee: effectiveCleaningFee,
         lostItemFee: params.lostItemFee,
         overdueFee: calculatedOverdueFee,
         overdueDays,
@@ -3224,8 +3419,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         customerConfirmed: false,
         returnedItems: params.returnedItems,
         staffId: params.staffUser.id,
-        proposedUnitStatus: nextUnitStatus
+        proposedUnitStatus: nextUnitStatus,
+        structuralInspection: params.structuralInspection,
+        moistureOrigin: params.moistureOrigin,
+        sanitizationFee: params.sanitizationFee,
+        facilityCompensationAmount: compensation
       } : r),
+      maintenanceTasks: facilityFaultTask ? [facilityFaultTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3236,7 +3436,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: unit.facilityId,
           entityType: 'return',
           entityId: returnCase.id,
-          notes: `Đã nghiệm thu kho ${unit.code}. Quá hạn ${overdueDays} ngày, phí trễ ${formatVnd(calculatedOverdueFee)}. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
+          notes: `Đã nghiệm thu kho ${unit.code}. ${isFacilityFault ? 'Ghi nhận lỗi cơ sở gây ẩm; miễn trừ phạt cho khách.' : ''} Quá hạn ${overdueDays} ngày. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -3245,19 +3445,36 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   // 9. Facility Manager: Maintenance Task Handling
-  const createMaintenanceTask = (unitId: string, reason: string, staffUser?: User): MaintenanceTask => {
+  const createMaintenanceTask = (
+    unitId: string,
+    reason: string,
+    staffUser?: User,
+    priority: MaintenancePriority = 'P2_MEDIUM',
+    faultCategory: FacilityIssueCategory = 'other'
+  ): MaintenanceTask => {
     if (staffUser) assertPermission(staffUser, 'inventory:update')
     const task: MaintenanceTask = {
       id: `MNT-${Date.now().toString().slice(-6)}`,
       unitId,
       facilityId: state.units.find(u => u.id === unitId)?.facilityId || 'fac-001',
       reason,
+      priority,
+      faultCategory,
       status: 'pending',
       createdAt: new Date().toISOString()
     }
     setState(prev => ({
       ...prev,
-      units: prev.units.map(u => u.id === unitId ? { ...u, status: 'maintenance' } : u),
+      units: prev.units.map(u => u.id === unitId ? {
+        ...u,
+        status: 'maintenance',
+        activeFacilityIssue: {
+          reportedAt: new Date().toISOString(),
+          category: faultCategory,
+          priority,
+          notes: reason
+        }
+      } : u),
       maintenanceTasks: [task, ...prev.maintenanceTasks]
     }))
     return task
@@ -3274,7 +3491,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({
       ...prev,
       maintenanceTasks: prev.maintenanceTasks.map(t => t.id === taskId ? { ...t, status: 'completed', completedAt: now.toISOString() } : t),
-      units: prev.units.map(u => u.id === task.unitId ? { ...u, status: 'available' } : u),
+      units: prev.units.map(u => u.id === task.unitId ? { ...u, status: 'available', activeFacilityIssue: undefined } : u),
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3304,12 +3521,19 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } else {
       setState(prev => ({
         ...prev,
-        units: prev.units.map(u => u.id === unitId ? { ...u, status: 'available' } : u)
+        units: prev.units.map(u => u.id === unitId ? { ...u, status: 'available', activeFacilityIssue: undefined } : u)
       }))
     }
   }
 
-  const updateUnitStatus = (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => {
+  const updateUnitStatus = (
+    unitId: string,
+    status: 'available' | 'maintenance',
+    manager: User,
+    reason?: string,
+    priority: MaintenancePriority = 'P2_MEDIUM',
+    faultCategory: FacilityIssueCategory = 'other'
+  ) => {
     assertPermission(manager, 'inventory:update')
     const unit = state.units.find(item => item.id === unitId)
     if (!unit) throw new Error('Không tìm thấy gian kho.')
@@ -3327,18 +3551,153 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         unitId,
         facilityId: unit.facilityId,
         reason: reason?.trim() || 'Manager chuyển gian kho sang bảo trì.',
+        priority,
+        faultCategory,
         status: 'pending',
         createdAt: now.toISOString()
       } : undefined
       return {
         ...prev,
-        units: prev.units.map(item => item.id === unitId ? { ...item, status, conditionNotes: reason?.trim() || item.conditionNotes, version: item.version + 1 } : item),
+        units: prev.units.map(item => item.id === unitId ? {
+          ...item,
+          status,
+          conditionNotes: reason?.trim() || item.conditionNotes,
+          activeFacilityIssue: status === 'maintenance' ? {
+            reportedAt: now.toISOString(),
+            category: faultCategory,
+            priority,
+            notes: reason?.trim() || 'Bảo trì cơ sở'
+          } : undefined,
+          version: item.version + 1
+        } : item),
         maintenanceTasks: status === 'available'
           ? prev.maintenanceTasks.map(task => task.unitId === unitId && task.status !== 'completed' ? { ...task, status: 'completed', completedAt: now.toISOString(), notes: reason?.trim() || task.notes } : task)
           : maintenanceTask ? [maintenanceTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
         activities: [{ id: `act-${Date.now()}`, action: status === 'maintenance' ? 'UNIT_MAINTENANCE_STARTED' : 'UNIT_RELEASED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: unit.facilityId, entityType: 'unit', entityId: unit.id, beforeState: { status: unit.status, conditionNotes: unit.conditionNotes }, afterState: { status, conditionNotes: reason?.trim() || unit.conditionNotes }, notes: reason?.trim() || `Trạng thái gian kho chuyển sang ${status.toUpperCase()}.`, timestamp: now.toISOString() }, ...prev.activities]
       }
     })
+  }
+
+  // VẤN ĐỀ 1: Luồng Di dời gian kho khẩn cấp (Emergency Unit Relocation) khi sự cố kết cấu (sàn vỡ, nóc dột...)
+  const emergencyRelocateRental = (params: {
+    rentalId: string
+    targetUnitId: string
+    reason: string
+    faultCategory: FacilityIssueCategory
+    manager: User
+    goodwillDiscountPercent?: number
+  }) => {
+    assertPermission(params.manager, 'inventory:update')
+    const rental = state.rentals.find(r => r.id === params.rentalId)
+    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
+    if (rental.status !== 'active') throw new Error('Chỉ có thể di dời hợp đồng đang hoạt động.')
+    assertFacilityManager(params.manager, rental.facilityId, rental.facilityName)
+
+    const sourceUnit = state.units.find(u => u.id === rental.unitId)
+    const targetUnit = state.units.find(u => u.id === params.targetUnitId)
+    if (!sourceUnit || !targetUnit) throw new Error('Không tìm thấy gian kho nguồn hoặc gian kho đích.')
+    if (targetUnit.facilityId !== sourceUnit.facilityId) throw new Error('Gian kho thay thế phải thuộc cùng cơ sở lưu trữ.')
+    if (targetUnit.status !== 'available') throw new Error(`Gian kho ${targetUnit.code} không khả dụng (hiện trạng: ${targetUnit.status}).`)
+
+    const now = new Date()
+    const newPin = Math.floor(100000 + Math.random() * 900000).toString()
+    const newCredentialId = `cred-${Date.now()}`
+
+    const newCredential: AccessCredential = {
+      id: newCredentialId,
+      rentalId: rental.id,
+      unitId: targetUnit.id,
+      type: 'PIN',
+      pinCode: newPin,
+      status: 'ACTIVE',
+      generatedAt: now.toISOString(),
+      activatedAt: now.toISOString()
+    }
+
+    const maintenanceTaskId = `MNT-EMG-${Date.now().toString().slice(-6)}`
+    const emergencyTask: MaintenanceTask = {
+      id: maintenanceTaskId,
+      unitId: sourceUnit.id,
+      facilityId: sourceUnit.facilityId,
+      reason: `[SỰ CỐ KHẨN CẤP P1 - DI DỜI KHO] ${params.reason} (Đã di dời khách sang ${targetUnit.code})`,
+      priority: 'P1_CRITICAL',
+      faultCategory: params.faultCategory,
+      isEmergencyRelocation: true,
+      relocatedFromRentalId: rental.id,
+      status: 'pending',
+      createdAt: now.toISOString()
+    }
+
+    const relocationRecord = {
+      fromUnitId: sourceUnit.id,
+      toUnitId: targetUnit.id,
+      relocatedAt: now.toISOString(),
+      reason: params.reason,
+      faultCategory: params.faultCategory
+    }
+
+    setState(prev => ({
+      ...prev,
+      units: prev.units.map(u => {
+        if (u.id === sourceUnit.id) {
+          return {
+            ...u,
+            status: 'maintenance',
+            conditionNotes: `[SỰ CỐ HẠ TẦNG] ${params.reason}`,
+            activeFacilityIssue: {
+              reportedAt: now.toISOString(),
+              category: params.faultCategory,
+              priority: 'P1_CRITICAL',
+              notes: params.reason
+            },
+            version: u.version + 1
+          }
+        }
+        if (u.id === targetUnit.id) {
+          return {
+            ...u,
+            status: 'occupied',
+            currentRentalId: rental.id,
+            version: u.version + 1
+          }
+        }
+        return u
+      }),
+      rentals: prev.rentals.map(r => {
+        if (r.id === rental.id) {
+          return {
+            ...r,
+            unitId: targetUnit.id,
+            previousUnitId: sourceUnit.id,
+            gateCode: newPin,
+            relocationHistory: [...(r.relocationHistory || []), relocationRecord]
+          }
+        }
+        return r
+      }),
+      accessCredentials: [
+        ...prev.accessCredentials.map(c => c.rentalId === rental.id && c.unitId === sourceUnit.id ? { ...c, status: 'REVOKED' as const, revokedAt: now.toISOString() } : c),
+        newCredential
+      ],
+      maintenanceTasks: [emergencyTask, ...prev.maintenanceTasks],
+      activities: [
+        {
+          id: `act-${Date.now()}`,
+          action: 'EMERGENCY_UNIT_RELOCATED',
+          actorId: params.manager.id,
+          actorName: params.manager.name,
+          actorRole: params.manager.role,
+          facilityId: sourceUnit.facilityId,
+          entityType: 'unit',
+          entityId: sourceUnit.id,
+          beforeState: { unitId: sourceUnit.id, code: sourceUnit.code, status: 'occupied' },
+          afterState: { unitId: targetUnit.id, code: targetUnit.code, status: 'occupied', newPin },
+          notes: `Di dời khẩn cấp khách ${rental.customerName} từ gian ${sourceUnit.code} sang gian ${targetUnit.code} do sự cố ${params.reason}. Đã cấp PIN mới: ${newPin}.`,
+          timestamp: now.toISOString()
+        },
+        ...prev.activities
+      ]
+    }))
   }
 
   const recordRentalPayment = (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => {
@@ -4524,14 +4883,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const deleteFacility = (facilityId: string, actor?: User): { success: boolean; reason?: string } => {
+  const deleteFacility = (facilityId: string, actor?: User, force: boolean = false): { success: boolean; reason?: string } => {
     if (actor) assertPermission(actor, 'facilities:read')
     const targetFac = state.facilities.find(f => f.id === facilityId || f.code === facilityId)
     const hasActiveHolds = state.holds.some(h => (h.facilityId === facilityId || (targetFac && (h.facilityId === targetFac.id || h.facilityId === targetFac.code)) || h.facilityName?.includes(facilityId)) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status))
     const hasActiveRentals = state.rentals.some(r => (r.facilityId === facilityId || (targetFac && (r.facilityId === targetFac.id || r.facilityId === targetFac.code)) || r.facilityName?.includes(facilityId)) && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status))
     const hasOccupiedUnits = state.units.some(u => (u.facilityId === facilityId || (targetFac && (u.facilityId === targetFac.id || u.facilityId === targetFac.code))) && (u.status === 'occupied' || (u.status as string) === 'rented'))
 
-    if (hasActiveHolds || hasActiveRentals || hasOccupiedUnits) {
+    if (!force && (hasActiveHolds || hasActiveRentals || hasOccupiedUnits)) {
       return {
         success: false,
         reason: 'Không thể xóa cơ sở đang có gian kho cho thuê hoạt động hoặc có đơn giữ chỗ chưa hoàn tất.'
@@ -4853,17 +5212,17 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const payStorageHold = (holdId: string, paymentMethod: string = 'Chuyển khoản VietQR', customer: User) => {
     const paidAt = new Date()
-    const checkInDeadline = new Date(paidAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const checkInDeadline = new Date(paidAt.getTime() + 7 * 24 * 60 * 60 * 1000)
     const targetHold = assertHoldPermission(holdId, 'reservations:create')
     if (targetHold.customerId !== customer.id && targetHold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
     assertPermission(customer, 'reservations:create')
     if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
-    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 24 giờ thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
+    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 15 phút thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
     const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
-    if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong 14 ngày sau khi thanh toán cọc. Vui lòng đổi lịch trước khi thanh toán.')
+    if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong cửa sổ 7 ngày. Vui lòng đổi lịch trước khi thanh toán.')
     setState(prev => {
       const nextHolds = prev.holds.map(h => {
         if (h.id === holdId) {
@@ -4880,7 +5239,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               paidAt: paidAt.toISOString(),
               transactionId: `TX-DEP-${Date.now().toString().slice(-6)}`
             },
-            evidence: [...h.evidence, `DEPOSIT_PAID · Đã thanh toán cọc 40% qua ${paymentMethod}.`]
+            evidence: [...h.evidence, `DEPOSIT_PAID · Đã thanh toán cọc 20% qua ${paymentMethod}.`]
           }
         }
         return h
@@ -4946,7 +5305,6 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const confirmReturnSettlement = (returnId: string, customer: User, decision: 'accepted' | 'disputed', note?: string) => {
-    assertPermission(customer, 'returns:process')
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.customerId !== customer.id) throw new Error('Không tìm thấy hồ sơ trả kho thuộc tài khoản này.')
     if (returnCase.status !== 'awaiting_customer_confirmation') throw new Error('Hồ sơ chưa sẵn sàng để xác nhận quyết toán.')
@@ -5016,11 +5374,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const now = new Date()
     const paymentId = `PAY-RET-BAL-${Date.now().toString().slice(-8)}`
     const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId: rental.id, type: 'DAMAGE_FEE', amount: amountDue, paymentMethod, transactionReference: transactionReference.trim(), status: 'PAID', paidAt: now.toISOString(), recordedBy: customer.id, description: `Thanh toán phần quyết toán trả kho vượt tiền đảm bảo: ${formatVnd(amountDue)}` }
+    const isMaintNeeded = returnCase.proposedUnitStatus === 'maintenance' || state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed')
     setState(prev => ({
       ...prev,
       payments: [payment, ...prev.payments],
+      units: prev.units.map(u => u.id === returnCase.unitId ? { ...u, status: isMaintNeeded ? 'maintenance' : 'available', currentRentalId: undefined } : u),
       rentals: prev.rentals.map(item => item.id === rental.id ? { ...item, status: 'completed', checkedOutAt: now.toISOString(), accessRevokedAt: item.accessRevokedAt || now.toISOString(), gateCode: '' } : item),
       returns: prev.returns.map(item => item.id === returnId ? { ...item, status: 'completed', settlementPaymentId: paymentId, settlementPaidAt: now.toISOString(), completedAt: now.toISOString() } : item),
+      accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === rental.id ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
       activities: [{ id: `act-${Date.now()}`, action: 'RETURN_BALANCE_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'payment', entityId: paymentId, notes: `Khách đã thanh toán thêm ${formatVnd(amountDue)} do quyết toán trả kho vượt tiền đảm bảo. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
@@ -5036,20 +5397,65 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (staffUser.role === 'manager' && state.payments.some(item => item.transactionReference?.trim().toLocaleLowerCase() === transactionReference.trim().toLocaleLowerCase())) {
       throw new Error('Mã giao dịch hoàn cọc đã được sử dụng.')
     }
-    const refundPayment = state.payments.find(item => item.rentalId === returnCase.rentalId && item.type === 'REFUND' && item.status === 'PENDING')
-    if (!refundPayment) throw new Error('Không tìm thấy lệnh hoàn cọc đang chờ xử lý.')
+    const existingRefundPayment = state.payments.find(item => item.rentalId === returnCase.rentalId && item.type === 'REFUND' && item.status === 'PENDING')
+    const refundPaymentId = existingRefundPayment?.id || `RF-${Date.now().toString().slice(-8)}`
     const now = new Date()
+    const isMaintenanceNeeded = returnCase.proposedUnitStatus === 'maintenance' || state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed')
+
+    const newRefundPayment: StoragePayment = existingRefundPayment ? {
+      ...existingRefundPayment,
+      status: 'PAID',
+      transactionReference: transactionReference.trim(),
+      paidAt: now.toISOString(),
+      receivedBy: staffUser.id,
+      recordedBy: staffUser.id
+    } : {
+      id: refundPaymentId,
+      reservationId: returnCase.rentalId,
+      rentalId: returnCase.rentalId,
+      type: 'REFUND',
+      amount: returnCase.netRefundAmount,
+      paymentMethod: 'BANK_TRANSFER',
+      transactionReference: transactionReference.trim(),
+      status: 'PAID',
+      paidAt: now.toISOString(),
+      receivedBy: staffUser.id,
+      recordedBy: staffUser.id
+    }
+
     setState(prev => ({
       ...prev,
-      payments: prev.payments.map(item => item.id === refundPayment.id ? { ...item, status: 'PAID', transactionReference: transactionReference.trim(), paidAt: now.toISOString(), receivedBy: staffUser.id, recordedBy: staffUser.id } : item),
-      rentals: prev.rentals.map(item => item.id === returnCase.rentalId ? { ...item, status: 'completed', checkedOutAt: now.toISOString() } : item),
-      returns: prev.returns.map(item => item.id === returnId ? { ...item, status: 'completed', completedAt: now.toISOString(), refundTransaction: { id: refundPayment.id, type: 'refund', amount: item.netRefundAmount, status: 'paid', recordedAt: now.toISOString() } } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_REFUND_COMPLETED', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `Đã chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}. Mã giao dịch: ${transactionReference.trim()}.`, timestamp: now.toISOString() }, ...prev.activities]
+      payments: existingRefundPayment
+        ? prev.payments.map(item => item.id === existingRefundPayment.id ? newRefundPayment : item)
+        : (returnCase.netRefundAmount > 0 ? [newRefundPayment, ...prev.payments] : prev.payments),
+      units: prev.units.map(u => u.id === returnCase.unitId ? {
+        ...u,
+        status: isMaintenanceNeeded ? 'maintenance' : 'available',
+        currentRentalId: undefined
+      } : u),
+      rentals: prev.rentals.map(item => item.id === returnCase.rentalId ? { ...item, status: 'completed', checkedOutAt: now.toISOString(), gateCode: '' } : item),
+      returns: prev.returns.map(item => item.id === returnId ? {
+        ...item,
+        status: 'completed',
+        completedAt: now.toISOString(),
+        refundTransaction: { id: refundPaymentId, type: 'refund', amount: item.netRefundAmount, status: 'paid', recordedAt: now.toISOString() }
+      } : item),
+      accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === returnCase.rentalId ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_REFUND_COMPLETED', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `Đã hoàn tất hoàn cọc ${formatVnd(returnCase.netRefundAmount)}. Mã GD: ${transactionReference.trim()}. Gian kho ${returnCase.unitId} chuyển sang ${isMaintenanceNeeded ? 'BẢO TRÌ' : 'AVAILABLE'}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
-  const reviewReturnDispute = (returnId: string, manager: User, resolutionNote?: string, settlement?: ManagerReturnSettlementFees) => {
-    assertPermission(manager, 'returns:process')
+  const reviewReturnDispute = (
+    returnId: string,
+    manager: User,
+    resolutionNote?: string,
+    settlement?: ManagerReturnSettlementFees,
+    preset?: 'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement',
+    facilityCompensationAmount?: number
+  ) => {
+    if (manager.role !== 'business') {
+      assertPermission(manager, 'returns:process')
+    }
     const returnCase = state.returns.find(r => r.id === returnId)
     if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
     assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
@@ -5062,6 +5468,20 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       ? calculateManagerReturnSettlement(returnCase.depositAmount, settlement)
       : undefined
     const now = new Date()
+
+    // Nếu phán quyết lỗi cơ sở (thấm dột): tạo task bảo trì sửa chữa trần/vách kho khẩn cấp
+    const isFacilityFaultVerdict = preset === 'facility_fault_full_refund' || returnCase.moistureOrigin === 'facility_fault'
+    const facilityFaultTask: MaintenanceTask | undefined = isFacilityFaultVerdict && !state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed') ? {
+      id: `MNT-LEAK-${Date.now().toString().slice(-6)}`,
+      unitId: returnCase.unitId,
+      facilityId: returnCase.facilityId,
+      reason: `[SỬA CHỮA HẠ TẦNG SAU TRANH CHẤP] Xử lý sự cố dột nóc / nứt sàn / thấm tường theo kết luận phân xử: ${resolutionNote?.trim()}`,
+      priority: 'P1_CRITICAL',
+      faultCategory: 'roof_leak',
+      status: 'pending',
+      createdAt: now.toISOString()
+    } : undefined
+
     setState(prev => ({
       ...prev,
       returns: prev.returns.map(r => r.id === returnId ? {
@@ -5076,8 +5496,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           netRefundAmount: recalculated?.netRefundAmount ?? r.netRefundAmount,
           amountDueFromCustomer: recalculated?.amountDueFromCustomer ?? r.amountDueFromCustomer
         } : {}),
-        staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager: ${resolutionNote?.trim() || 'Đã rà soát và giữ nguyên quyết toán.'}`
+        disputeResolutionPreset: preset,
+        facilityCompensationAmount: facilityCompensationAmount || r.facilityCompensationAmount,
+        staffNotes: `${r.staffNotes || ''}${r.staffNotes ? ' · ' : ''}Manager (${preset ? (preset === 'facility_fault_full_refund' ? 'Lỗi cơ sở kho' : preset === 'customer_fault_deduct' ? 'Lỗi khách hàng' : 'Hòa giải') : 'Phân xử'}): ${resolutionNote?.trim() || 'Đã rà soát quyết toán.'}`
       } : r),
+      units: isFacilityFaultVerdict ? prev.units.map(u => u.id === returnCase.unitId ? { ...u, status: 'maintenance' } : u) : prev.units,
+      maintenanceTasks: facilityFaultTask ? [facilityFaultTask, ...prev.maintenanceTasks] : prev.maintenanceTasks,
       activities: [{
         id: `act-${Date.now()}`,
         action: 'RETURN_DISPUTE_REVIEWED',
@@ -5096,9 +5520,108 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           netRefundAmount: returnCase.netRefundAmount,
           amountDueFromCustomer: returnCase.amountDueFromCustomer || 0
         } : undefined,
-        afterState: settlement ? { ...settlement, ...recalculated } : undefined,
+        afterState: settlement ? { ...settlement, ...recalculated, preset } : undefined,
         evidence: returnCase.evidence,
         notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.',
+        timestamp: now.toISOString()
+      }, ...prev.activities]
+    }))
+  }
+
+  const assignReturnInspection = (returnId: string, staffId: string, scheduledDate: string, notes: string, manager: User) => {
+    assertPermission(manager, 'returns:process')
+    const returnCase = state.returns.find(r => r.id === returnId)
+    if (!returnCase) throw new Error('Không tìm thấy hồ sơ trả kho.')
+    assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
+    const assignedStaff = state.users.find(u => u.id === staffId)
+    if (!assignedStaff) throw new Error('Không tìm thấy nhân viên được chọn.')
+    const now = new Date()
+
+    const task: FacilityTask = {
+      id: `TSK-${Date.now().toString().slice(-7)}`,
+      facilityId: returnCase.facilityId,
+      facilityName: returnCase.facilityName,
+      type: 'return',
+      title: `Nghiệm thu trả kho gian ${returnCase.unitId} - ${returnCase.customerName}`,
+      referenceId: returnCase.id,
+      assignedStaffId: staffId,
+      assignedStaffName: assignedStaff.name,
+      assignedAt: now.toISOString(),
+      dueAt: scheduledDate,
+      priority: 'high',
+      status: 'open',
+      notes: notes?.trim() || `Kiểm tra hiện trạng gian kho, thu hồi chìa khóa/thẻ từ, kiểm tra ẩm mốc/hư hại kết cấu.`,
+      createdAt: now.toISOString()
+    }
+
+    setState(prev => ({
+      ...prev,
+      returns: prev.returns.map(r => r.id === returnId ? {
+        ...r,
+        status: r.status === 'requested' ? 'scheduled' : r.status,
+        staffId,
+        scheduledDate
+      } : r),
+      rentals: prev.rentals.map(rental => rental.id === returnCase.rentalId ? {
+        ...rental,
+        status: rental.status === 'return_requested' ? 'return_inspection' : rental.status
+      } : rental),
+      staffTasks: [task, ...prev.staffTasks],
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'RETURN_INSPECTION_ASSIGNED',
+        actorId: manager.id,
+        actorName: manager.name,
+        actorRole: manager.role,
+        facilityId: returnCase.facilityId,
+        entityType: 'return',
+        entityId: returnId,
+        notes: `Manager phân công ${assignedStaff.name} nghiệm thu trả kho gian ${returnCase.unitId} vào ngày ${scheduledDate}.`,
+        timestamp: now.toISOString()
+      }, ...prev.activities]
+    }))
+  }
+
+  const completeReturnCase = (returnId: string, manager: User, notes?: string) => {
+    assertPermission(manager, 'returns:process')
+    const returnCase = state.returns.find(r => r.id === returnId)
+    if (!returnCase) throw new Error('Không tìm thấy hồ sơ trả kho.')
+    assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
+    const rental = state.rentals.find(r => r.id === returnCase.rentalId)
+    const unit = state.units.find(u => u.id === returnCase.unitId)
+    const now = new Date()
+    const isMaintenanceNeeded = returnCase.proposedUnitStatus === 'maintenance' || (returnCase.damageClassification && returnCase.damageClassification !== 'no_damage') || state.maintenanceTasks.some(t => t.unitId === returnCase.unitId && t.status !== 'completed')
+
+    setState(prev => ({
+      ...prev,
+      units: prev.units.map(u => u.id === returnCase.unitId ? {
+        ...u,
+        status: isMaintenanceNeeded ? 'maintenance' : 'available',
+        currentRentalId: undefined
+      } : u),
+      rentals: prev.rentals.map(item => item.id === returnCase.rentalId ? {
+        ...item,
+        status: 'completed',
+        checkedOutAt: now.toISOString(),
+        gateCode: ''
+      } : item),
+      returns: prev.returns.map(item => item.id === returnId ? {
+        ...item,
+        status: 'completed',
+        completedAt: now.toISOString(),
+        staffNotes: notes?.trim() ? `${item.staffNotes ? item.staffNotes + '\n' : ''}[Quản lý nghiệm thu đóng hồ sơ]: ${notes.trim()}` : item.staffNotes
+      } : item),
+      accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === returnCase.rentalId ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
+      activities: [{
+        id: `act-${Date.now()}`,
+        action: 'RETURN_COMPLETED',
+        actorId: manager.id,
+        actorName: manager.name,
+        actorRole: manager.role,
+        facilityId: returnCase.facilityId,
+        entityType: 'return',
+        entityId: returnId,
+        notes: `Manager xác nhận hoàn tất hồ sơ trả kho ${returnId}. Gian kho ${returnCase.unitId} chuyển sang ${isMaintenanceNeeded ? 'BẢO TRÌ' : 'AVAILABLE'}.`,
         timestamp: now.toISOString()
       }, ...prev.activities]
     }))
@@ -5123,7 +5646,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               : h.goodsReviewDueAt
             const paymentExpiresAt = requiresGoodsReview
               ? h.paymentExpiresAt
-              : new Date(verifiedAt.getTime() + 24 * 60 * 60 * 1000).toISOString()
+              : new Date(verifiedAt.getTime() + 15 * 60 * 1000).toISOString()
             return {
               ...h,
               status: requiresGoodsReview ? transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL') : 'awaiting_payment',
@@ -5189,10 +5712,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const paidAt = reservation.depositPaidAt || reservation.payment.paidAt
       const deadline = reservation.checkInDeadline
         ? toValidDate(reservation.checkInDeadline)
-        : new Date(toValidDate(paidAt || reservation.createdAt).getTime() + 14 * 24 * 60 * 60 * 1000)
+        : new Date(toValidDate(paidAt || reservation.createdAt).getTime() + 7 * 24 * 60 * 60 * 1000)
       deadline.setHours(23, 59, 59, 999)
       if (requestedDate < today || requestedDate > deadline) {
-        throw new Error(`Lịch Check-in phải từ hôm nay đến ${toDateInputValue(deadline)} (trong 14 ngày sau khi đóng cọc).`)
+        throw new Error(`Lịch Check-in phải từ hôm nay đến ${toDateInputValue(deadline)} (trong cửa sổ 7 ngày).`)
       }
       const nextEndDate = addCalendarMonths(appointmentDate, reservation.rentalMonths)
       if (reservation.assignedUnitId) {
@@ -5253,8 +5776,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, contracts: prev.contracts.map(item => item.id === contractId ? { ...item, customerArchivedAt: new Date().toISOString() } : item) }))
   }
 
+  const sanitizedFacilities = useMemo(
+    () => state.facilities.map(sanitizeFacilityStrings),
+    [state.facilities]
+  )
+
   const contextValue: StorageHubContextValue = {
     ...state,
+    facilities: sanitizedFacilities,
     unitTypes: UNIT_TYPES,
     can,
     updateRolePermissions,
@@ -5297,11 +5826,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     confirmReturnSettlement,
     payReturnBalance,
     completeReturnRefund,
+    assignReturnInspection,
+    completeReturnCase,
     reviewReturnDispute,
     createMaintenanceTask,
     completeMaintenanceTask,
     releaseMaintenanceUnit,
     updateUnitStatus,
+    emergencyRelocateRental,
     recordRentalPayment,
     applyRentalLateFee,
     waiveRentalLateFee,

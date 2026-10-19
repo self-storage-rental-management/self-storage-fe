@@ -37,13 +37,13 @@ export default function SupportStaffPicker({
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="">{copy("Chọn Staff theo mã")}</option>
+          <option value="">Chọn nhân viên</option>
           {value && !read.data?.data.some((s) => s.id === value) && (
             <option value={value}>{value}</option>
           )}
           {read.data?.data.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.fullName} · {s.id}
+              {s.fullName}, {s.id}
             </option>
           ))}
         </select>
@@ -58,9 +58,7 @@ export default function SupportStaffPicker({
           />
           {read.data.data.length === 0 && (
             <p className="text-sm text-amber-800">
-              {manager
-                ? "Chưa có nhân viên đang hoạt động, thuộc đúng cơ sở và có quyền xử lý yêu cầu hỗ trợ."
-                : "Chưa có Staff đủ điều kiện. BE yêu cầu ACTIVE, đúng cơ sở, support:read và support:update; không tự cấp quyền hoặc so tên."}
+              Không có dữ liệu
             </p>
           )}
         </>

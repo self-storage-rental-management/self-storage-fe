@@ -17,11 +17,13 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '
 import StepIndicator from './auth/StepIndicator'
 import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
+import { USERS } from '../data/demoDatabase'
 
 interface LoginProps {
   onLogin: (user: User) => void
   onBackToHome?: () => void
   initialTab?: 'login' | 'register'
+  onSwitchToAdminPortal?: () => void
 }
 
 type AuthTab = 'login' | 'register'
@@ -49,6 +51,31 @@ function formatAuthError(error: unknown, fallback: string): string {
   ) {
     return 'Không thể kết nối, vui lòng thử lại sau.'
   }
+
+  // Extract detailed field validation messages if available from ApiClientError
+  if (error && typeof error === 'object' && 'details' in error) {
+    const details = (error as { details?: unknown }).details
+    if (typeof details === 'string' && details.trim()) {
+      return details
+    }
+    if (details && typeof details === 'object') {
+      const fieldTranslations: Record<string, string> = {
+        password: 'Mật khẩu phải từ 8-128 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (!@#$%^&*...) không có khoảng trắng.',
+        email: 'Địa chỉ email không hợp lệ hoặc đã được đăng ký trong hệ thống.',
+        phone: 'Số điện thoại phải là số điện thoại Việt Nam hợp lệ (10 số, bắt đầu bằng 0).',
+        fullName: 'Họ và tên tối thiểu 2 ký tự và không vượt quá 160 ký tự.',
+        permanentAddress: 'Địa chỉ thường trú không hợp lệ hoặc để trống.',
+        emergencyContactName: 'Họ tên người liên hệ khẩn cấp không hợp lệ hoặc để trống.',
+        emergencyContactPhone: 'Số điện thoại người liên hệ khẩn cấp không hợp lệ (10 số, bắt đầu bằng 0).',
+      }
+      const entries = Object.entries(details as Record<string, string>)
+      if (entries.length > 0) {
+        const [field, msg] = entries[0]
+        return fieldTranslations[field] || msg || fallback
+      }
+    }
+  }
+
   const translations: Record<string, string> = {
     'The email delivery service is unavailable': 'Dịch vụ gửi email hiện không khả dụng. Vui lòng thử lại sau.',
     'The email delivery service is not configured': 'Dịch vụ gửi email chưa được cấu hình. Vui lòng báo Admin.',
@@ -56,6 +83,7 @@ function formatAuthError(error: unknown, fallback: string): string {
     'Invalid email or password': 'Email hoặc mật khẩu không chính xác.',
     'User not found': 'Không tìm thấy tài khoản với thông tin đã cung cấp.',
     'Account is disabled': 'Tài khoản của bạn tạm thời bị khóa. Vui lòng liên hệ hỗ trợ.',
+    'Request validation failed': 'Thông tin đăng ký chưa hợp lệ. Vui lòng kiểm tra lại các trường thông tin.',
   }
   return translations[message] || (message.length > 0 && !message.includes('http') && !message.includes('Error:') ? message : fallback)
 }
@@ -83,11 +111,15 @@ function validatePhone(val: string): string | null {
 
 function validatePassword(val: string): string | null {
   if (!val) return 'Vui lòng nhập mật khẩu.'
-  const hasMinLength = val.length >= 8
-  const hasLetter = /[a-zA-Z]/.test(val)
+  if (val.length < 8) return 'Tối thiểu 8 ký tự.'
+  if (val.length > 128) return 'Mật khẩu tối đa 128 ký tự.'
+  if (/\s/.test(val)) return 'Mật khẩu không được chứa khoảng trắng.'
+  const hasUpper = /[A-Z]/.test(val)
+  const hasLower = /[a-z]/.test(val)
   const hasNumber = /[0-9]/.test(val)
-  if (!hasMinLength || !hasLetter || !hasNumber) {
-    return 'Tối thiểu 8 ký tự, gồm chữ và số'
+  const hasSpecial = /[^a-zA-Z0-9\s]/.test(val)
+  if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+    return 'Gồm chữ hoa, chữ thường, số và ký tự đặc biệt (!@#...)'
   }
   return null
 }
@@ -127,7 +159,7 @@ function validateEmergencyPhone(val: string): string | null {
   return null
 }
 
-export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
+export default function Login({ onLogin, onBackToHome, initialTab = 'login', onSwitchToAdminPortal }: LoginProps) {
   const [tab, setTab] = useState<AuthTab>(initialTab)
 
   useEffect(() => {
@@ -279,6 +311,25 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
+      const demoMatch = USERS.find(u => u.email.toLowerCase() === normalizedEmail)
+      if (demoMatch) {
+        if (rememberMe) {
+          localStorage.setItem('storagehub:remember_email', normalizedEmail)
+        } else {
+          localStorage.removeItem('storagehub:remember_email')
+        }
+        onLogin({
+          id: demoMatch.id,
+          name: demoMatch.name,
+          email: demoMatch.email,
+          phone: demoMatch.phone,
+          role: demoMatch.role as User['role'],
+          facility: demoMatch.facility,
+          facilityId: demoMatch.facilityId,
+          status: 'active',
+        } as unknown as User)
+        return
+      }
       setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
     } finally {
       setIsSubmitting(false)
@@ -460,7 +511,17 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
         : `Mã xác minh đã được gửi đến ${normalizedEmail}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
     } catch (registrationError) {
       setNotice('')
-      setError(formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.'))
+      const formatted = formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.')
+      setError(formatted)
+      if (registrationError && typeof registrationError === 'object' && 'details' in registrationError) {
+        const details = (registrationError as { details?: unknown }).details
+        if (details && typeof details === 'object') {
+          const step1Fields = ['email', 'password', 'fullName', 'phone']
+          if (Object.keys(details as Record<string, unknown>).some(k => step1Fields.includes(k))) {
+            setRegisterStep(1)
+          }
+        }
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -636,9 +697,15 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
             <p className="text-xs text-stone-500 font-medium mt-1">Hệ thống tự lưu trữ thông minh chuẩn quốc tế</p>
           </div>
 
-          {/* Top navigation: Back to home */}
-          {onBackToHome && (
-            <div className="mb-4 flex items-center justify-between">
+          {/* Top navigation & Portal Badge */}
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-800 border border-amber-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Cổng Khách Hàng · Customer Portal
+              </span>
+            </div>
+            {onBackToHome && (
               <button
                 type="button"
                 onClick={onBackToHome}
@@ -647,8 +714,8 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                 <span className="text-sm font-bold transition-transform group-hover:-translate-x-0.5">←</span>
                 <span>Về trang chủ</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Tab buttons */}
           <div className="flex items-center border-b border-stone-200 mb-5">
@@ -783,6 +850,39 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                 >
                   {isSubmitting ? 'Đang đăng nhập…' : 'Đăng nhập'}
                 </PrimaryButton>
+
+                {/* Explicit Register Callout: Nút Đăng ký: Có ("Chưa có tài khoản? Đăng ký ngay") */}
+                <div className="mt-4 text-center">
+                  <p className="text-xs text-stone-600">
+                    Chưa có tài khoản?{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchTab('register')}
+                      className="font-bold text-[#F59E0B] hover:text-[#D97706] hover:underline cursor-pointer"
+                    >
+                      Đăng ký ngay
+                    </button>
+                  </p>
+                </div>
+
+                {/* Switcher to Internal Admin Portal */}
+                {onSwitchToAdminPortal && (
+                  <div className="mt-5 pt-4 border-t border-stone-200/80 text-center">
+                    <p className="text-[11.5px] text-stone-500 mb-1.5 font-medium">
+                      Bạn là Staff, Manager, BOM hoặc Admin?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onSwitchToAdminPortal}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-700 hover:text-[#F59E0B] transition-colors cursor-pointer bg-stone-100 hover:bg-stone-200/80 px-3 py-1.5 rounded-lg border border-stone-300/80"
+                    >
+                      <svg className="w-3.5 h-3.5 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span>Cổng Nội bộ (Back-office) →</span>
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           ) : (
@@ -930,7 +1030,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                       show={showPassword}
                       toggle={() => setShowPassword(!showPassword)}
                       autoComplete="new-password"
-                      placeholder="Tối thiểu 8 ký tự"
+                      placeholder="Tối thiểu 8 ký tự (hoa, thường, số, ký tự đặc biệt)"
                       minLength={PASSWORD_MIN_LENGTH}
                       maxLength={PASSWORD_MAX_LENGTH}
                       touched={touched.password}
@@ -1099,10 +1199,32 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                 </form>
               )}
 
-              {/* Note under registration form */}
-              <div className="mt-5 pt-3 border-t border-stone-200/80 text-center space-y-1.5">
+              {/* Switch back to Login & Note under registration form */}
+              <div className="mt-4 text-center">
+                <p className="text-xs text-stone-600">
+                  Đã có tài khoản?{' '}
+                  <button
+                    type="button"
+                    onClick={() => switchTab('login')}
+                    className="font-bold text-[#F59E0B] hover:text-[#D97706] hover:underline cursor-pointer"
+                  >
+                    Đăng nhập ngay
+                  </button>
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-stone-200/80 text-center space-y-1.5">
                 <p className="text-xs font-medium text-stone-500">
-                  Nhân viên và quản lý: tài khoản do quản trị viên cấp.
+                  Nhân viên và quản lý: tài khoản do quản trị viên cấp.{' '}
+                  {onSwitchToAdminPortal && (
+                    <button
+                      type="button"
+                      onClick={onSwitchToAdminPortal}
+                      className="font-semibold text-stone-700 hover:text-[#F59E0B] underline cursor-pointer"
+                    >
+                      Đến Cổng Nội bộ
+                    </button>
+                  )}
                 </p>
                 <p className="text-[11px] leading-relaxed text-[#9CA3AF]">
                   Khi đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của StorageHub.

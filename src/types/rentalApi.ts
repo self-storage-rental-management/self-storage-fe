@@ -34,6 +34,12 @@ export interface RentalApiRecord {
   status: RentalApiStatus
   startDate: string | null
   contractEndDate: string | null
+  dateSemantics?: {
+    completeness: "COMPLETE" | "UNKNOWN"
+    convention: "INCLUSIVE" | "EXCLUSIVE" | null
+    lastPermittedDate: string | null
+    endExclusive: string | null
+  } | null
   monthlyPrice: number | null
   currency: string
   dataWarnings: {
@@ -42,6 +48,7 @@ export interface RentalApiRecord {
   }[]
 }
 export interface RentalApiDetail extends RentalApiRecord {
+  bookingEvidence?: RentalBookingEvidence | null
   reservationId: string | null
   actualReturnedAt: string | null
   completedAt: string | null
@@ -60,6 +67,29 @@ export interface RentalApiDetail extends RentalApiRecord {
     status: string | null
     reason: string | null
   }
+}
+export interface RentalBookingEvidence {
+  rentalId: string
+  reservationId: string
+  currency: "VND"
+  agreedAmounts: {
+    netRentalAmount: number
+    reservationDepositAmount: number
+    securityDepositAmount: number
+    remainingRentalAmount: number
+    dueAtCheckIn: number
+    totalInitialObligation: number
+  } | null
+  payments: {
+    id: string
+    purpose: "RESERVATION_DEPOSIT" | "RENTAL_BALANCE" | "MONTHLY_RENT" | "RENEWAL" | "DAMAGE_FEE" | "OTHER"
+    status: "PENDING" | "PROCESSING" | "PAID" | "NOT_RECEIVED" | "FAILED" | "CANCELLED"
+    amount: number
+    processedAt: string | null
+    verification: "SIMULATED" | "UNVERIFIED" | "VERIFIED" | "SANDBOX" | "DISPUTED" | "ATTEMPT"
+    projectRecognition?: { environment: string; enabled: boolean; eligibleForReconciliation: boolean; reason: string }
+  }[]
+  paymentsTruncated: boolean
 }
 export interface RentalApiQuery {
   page?: number

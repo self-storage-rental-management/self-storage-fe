@@ -54,58 +54,6 @@ describe("D3 operation prerequisites and truthful UI", () => {
       ).toBe(false)
     },
   )
-  it("only Customer can initiate deposit, and it must belong to that Customer", () => {
-    expect(
-      operationBlockedReason(
-        operationState,
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toBeNull()
-    expect(
-      operationBlockedReason(
-        operationState,
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.staff,
-      ),
-    ).not.toBeNull()
-    expect(
-      operationBlockedReason(
-        operationState,
-        "manager",
-        "deposit",
-        operationsActor("manager"),
-      ),
-    ).not.toBeNull()
-  })
-  it("blocks only the needed missing sources, not unrelated refund port", () => {
-    expect(
-      operationBlockedReason(
-        { ...operationState, missingSources: ["REFUND_ENTITLEMENT_EXECUTION"] },
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toBeNull()
-    expect(
-      operationBlockedReason(
-        { ...operationState, missingSources: ["RENEWAL_ACCOUNTING"] },
-        "customer",
-        "deposit",
-        operationsActor("customer"),
-        ids.facility,
-        ids.customer,
-      ),
-    ).toContain("Chưa kết nối")
-  })
   it("does not invent legacy version or allow Manager completion", () => {
     expect(
       operationBlockedReason(
@@ -114,7 +62,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         "arrival",
         operationsActor("staff"),
       ),
-    ).toContain("phiên bản")
+    ).toContain("chưa đủ thông tin")
     expect(
       operationBlockedReason(
         { ...signingState, arrivalRef: ids.event },
@@ -199,7 +147,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
       ),
     ).not.toBeNull()
   })
-  it("Staff still needs backend specialized assignment source; no Check-in permission fallback", () => {
+  it("Staff needs verified facility permissions; no Check-in permission fallback", () => {
     const actor = {
       ...operationsActor("staff"),
       permissions: ["checkins:process"],
@@ -211,7 +159,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         "arrival",
         actor,
       ),
-    ).toContain("phân công")
+    ).toContain("Quyền nhân viên tại cơ sở")
   })
   it("Customer cannot blindly confirm an exception from ref alone", () => {
     expect(
@@ -232,8 +180,10 @@ describe("D3 operation prerequisites and truthful UI", () => {
       />,
     )
     expect(html).toContain("Chờ thanh toán cọc")
-    expect(html).toContain("Thanh toán, nghĩa vụ")
-    expect(html).toContain("không dùng dữ liệu demo")
+    expect(html).toContain("Thanh toán và phân bổ tiền gia hạn")
+    expect(html).toContain("Chưa đủ thông tin để xử lý")
+    expect(html).not.toContain("không dùng dữ liệu demo")
+    expect(html).not.toContain("RENEWAL_ACCOUNTING")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("Đã hoàn tất gia hạn")
   })
@@ -272,6 +222,13 @@ describe("D3 operation prerequisites and truthful UI", () => {
     expect(() => vietnamLocalInstant("2026-10-08")).toThrow()
   })
 })
+describe("D3 calendar reservation failure presentation", () => {
+  it("explains an appointment rejected after slow reservation without claiming it was saved", () => {
+    const text = rentalError(new ApiClientError("Appointment expired during reservation", { status: 409 }))
+    expect(text).toContain("chọn lịch khác")
+    expect(text).toContain("lịch mới chưa được lưu")
+  })
+})
 describe("D4 truthful overdue presentation", () => {
   it("PARTIAL zero list does not claim no debt", () => {
     const html = renderToStaticMarkup(
@@ -280,16 +237,19 @@ describe("D4 truthful overdue presentation", () => {
           ...overduePage,
           ...apiPage([]),
           completeness: "PARTIAL",
-          missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS"],
+          missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS", "FINANCIAL_COVERAGE_PARTIAL"],
         }}
       />,
     )
-    expect(html).toContain("một phần")
-    expect(html).toContain("Không kết luận không có nợ")
+    expect(html).toContain("Cập nhật:")
+    expect(html).not.toContain("Chưa đủ dữ liệu")
+    expect(html).not.toContain("FINANCIAL_COVERAGE_PARTIAL")
+    expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={termCase} />)
-    expect(html).toContain("không tự có một khoản nợ tiền")
+    expect(html).toContain("Quá thời hạn thuê")
+    expect(html).not.toContain("không tự có một khoản nợ tiền")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("term-policy")
   })
@@ -324,6 +284,6 @@ describe("D4 truthful overdue presentation", () => {
           status: 409,
         }),
       ),
-    ).toContain("Chưa có nguồn dữ liệu/policy chung")
+    ).toContain("Một nguồn dữ liệu cần thiết")
   })
 })

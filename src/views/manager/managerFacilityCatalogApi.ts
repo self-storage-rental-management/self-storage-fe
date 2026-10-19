@@ -13,7 +13,7 @@ export interface FacilityCatalogType {
   volumeM3: number | null
   maxLoadKg: number | null
   monthlyPrice: number | null
-  status: 'active' | 'inactive'
+  status: 'draft' | 'awaiting_pricing' | 'active' | 'inactive'
 }
 
 const unitStatuses = ['available', 'reserved', 'occupied', 'maintenance', 'held', 'assigned'] as const
@@ -32,7 +32,7 @@ function invalidCatalog(): never {
 }
 
 /** All pages must be read before a count may be presented as a facility total. */
-async function readAll<T extends { id: string }>(path: string, validate: (value: unknown) => boolean): Promise<T[]> {
+export async function readAllFacilityRows<T extends { id: string }>(path: string, validate: (value: unknown) => boolean): Promise<T[]> {
   const rows: T[] = []
   const ids = new Set<string>()
   let total: number | undefined
@@ -67,14 +67,21 @@ export async function loadManagerFacilityCatalog(facilityId: string): Promise<Fa
   if (!facilityId.trim()) throw new Error('Chưa được phân công cơ sở.')
   const encoded = encodeURIComponent(facilityId)
   const [types, units] = await Promise.all([
-    readAll<FacilityCatalogType>(`/api/facilities/${encoded}/unit-types`, value => record(value)
-      && text(value.id) && value.facilityId === facilityId && text(value.code) && text(value.name)
-      && ['active', 'inactive'].includes(String(value.status))
-      && ['lengthM', 'widthM', 'heightM', 'areaM2', 'volumeM3', 'maxLoadKg', 'monthlyPrice'].every(field => measure(value[field]))),
-    readAll<CatalogUnit>(`/api/storage-units?facilityId=${encoded}`, value => record(value)
+    readAllFacilityRows<FacilityCatalogType>(`/api/facilities/${encoded}/unit-types`, value => isFacilityCatalogType(value, facilityId)),
+    readAllFacilityRows<CatalogUnit>(`/api/storage-units?facilityId=${encoded}`, value => record(value)
       && text(value.id) && value.facilityId === facilityId && text(value.unitTypeId)
       && unitStatuses.includes(value.status as UnitStatus)),
   ])
+  return summarizeFacilityCatalog(types, units)
+}
+
+export function isFacilityCatalogType(value: unknown, facilityId: string): value is FacilityCatalogType {
+  return record(value) && text(value.id) && value.facilityId === facilityId && text(value.code) && text(value.name)
+    && ['draft', 'awaiting_pricing', 'active', 'inactive'].includes(String(value.status))
+    && ['lengthM', 'widthM', 'heightM', 'areaM2', 'volumeM3', 'maxLoadKg', 'monthlyPrice'].every(field => measure(value[field]))
+}
+
+export function summarizeFacilityCatalog(types: FacilityCatalogType[], units: CatalogUnit[]): FacilityCatalogRow[] {
   const rows = types.map(type => ({ ...type, total: 0, counts: Object.fromEntries(unitStatuses.map(status => [status, 0])) as Record<UnitStatus, number> }))
   const byId = new Map(rows.map(row => [row.id, row]))
   for (const unit of units) {

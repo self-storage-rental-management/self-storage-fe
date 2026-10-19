@@ -40,19 +40,41 @@ beforeEach(() => {
 })
 
 describe("D5 role and lifecycle boundaries", () => {
+  it("labels an unassigned Customer ticket as awaiting Staff reception", () => {
+    const html = renderToStaticMarkup(<SupportTicketSummary ticket={supportTicket} role="customer" />)
+    expect(html).toContain("Chờ nhân viên tiếp nhận")
+    expect(html).not.toContain("Chờ quản lý phân công")
+  })
+  it("shows the authoritative assignee name to Manager and Staff while Customer remains generic", () => {
+    const ticket = { ...supportActive, assignedStaffName: "Nhân viên kiểm thử" }
+    for (const role of ["manager", "staff"] as const) {
+      const html = renderToStaticMarkup(<SupportTicketSummary ticket={ticket} role={role} />)
+      expect(html).toContain("Nhân viên kiểm thử")
+      expect(html).not.toContain(supportIds.staff)
+    }
+    const customer = renderToStaticMarkup(<SupportTicketSummary ticket={ticket} role="customer" />)
+    expect(customer).toContain("Đã phân công")
+    expect(customer).not.toContain("Nhân viên kiểm thử")
+  })
+  it("does not present a missing assignee name as unassigned or as a raw UUID", () => {
+    const html = renderToStaticMarkup(<SupportTicketSummary ticket={supportActive} role="manager" />)
+    expect(html).toContain("Đã phân công (chưa có tên nhân viên)")
+    expect(html).not.toContain(supportIds.staff)
+  })
   it("does not promise auto-close from resolved timestamp or invent a delivery deadline", () => {
     const html = renderToStaticMarkup(<SupportTicketSummary ticket={{
       ...supportActive, status: "resolved", resolvedAt: "2026-10-08T03:00:00Z",
       resolvedBy: supportIds.staff,
     }} />)
-    expect(html).toContain("Đã xử lý xong, chưa đóng")
-    expect(html).toContain("bằng chứng notification đúng lần xử lý này")
+    expect(html).toContain("Đã xử lý - chờ xác nhận")
+    expect(html).not.toContain("Đã xử lý xong, chờ khách hàng xác nhận")
+    expect(html).not.toContain("notification")
     expect(html).not.toContain("Tự đóng sau 7 ngày")
   })
-  it("Manager coordinates only; cannot resolve, reply or accept as Staff", () => {
+  it("Manager can message internally but cannot change workflow", () => {
     expect(
       supportActions(supportActor("manager"), "manager", supportActive),
-    ).toEqual(["assign", "decision"])
+    ).toEqual(["message"])
   })
   it.each(["READ", "OPERATE"] as const)(
     "Manager %s scope is read-only",
@@ -190,32 +212,36 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
         ticket={{ ...supportTicket, subject: "<script>alert(1)</script>" }}
       />,
     )
-    expect(html).toContain("Không kết luận yêu cầu đang đúng hạn hoặc quá hạn")
+    expect(html).toContain("Chưa đủ thông tin để xác định hạn xử lý và mức ưu tiên")
     expect(html).toContain("8/10/2026")
     expect(html).toContain("&lt;script&gt;")
     expect(html).not.toContain("<script>")
     expect(html).not.toContain("9004#")
   })
-  it("Manager assignment submit stays disabled until an actual Staff ID and reason are selected", () => {
+  it("Manager internal composer uses the chat controls without workflow actions", () => {
     session.actor = supportActor("manager")
     const html = renderToStaticMarkup(
       <SupportActionForm
         role="manager"
-        ticket={supportTicket}
+        ticket={supportActive}
         command={command}
+        mode="message"
+        internal
       />,
     )
-    expect(html).toContain("Chọn Staff theo mã")
+    expect(html).toContain("Nhập tin nhắn...")
+    expect(html).toContain("Gửi tin nhắn")
     expect(html).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>/)
     expect(html).not.toContain("Báo kết quả xử lý")
     expect(html).not.toContain("Nhận xử lý")
+    expect(html).not.toContain("Báo đã xử lý")
   })
   it("shows a Staff permission gate without impersonation or demo fallback", () => {
     session.actor = { ...supportActor("staff"), permissions: ["support:read"] }
     const html = renderToStaticMarkup(<SupportApiWorkspace role="staff" />)
-    expect(html).toContain("support:update hiện phải được owner cấp trên BE")
+    expect(html).toContain("Bạn chưa có quyền truy cập hỗ trợ")
     expect(html).not.toContain("manage_support")
-    expect(html).toContain("Không lấy yêu cầu demo để thay thế dữ liệu API")
+    expect(html).not.toContain("Không lấy yêu cầu demo")
     expect(html).not.toContain("Tạo yêu cầu</button>")
   })
   it.each(["customer", "staff"] as const)(
@@ -228,7 +254,8 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
       )
       expect(html).toContain('data-owner="unchanged"')
       expect(html).toContain("Original workspace")
-      expect(html).toContain("Hỗ trợ (D5 API)")
+      expect(html).toContain("Hỗ trợ khách hàng")
+      expect(html).not.toContain("D5 API")
       expect(html).not.toContain("Hỗ trợ vận hành (D5 API)")
     },
   )
