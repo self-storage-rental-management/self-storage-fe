@@ -786,7 +786,7 @@ const statusLabelMap: Record<string, string> = {
 
   "waiting-customer": "Chờ khách hàng phản hồi",
 
-  disputed: "Khách yêu cầu tính lại",
+  disputed: "Đang khiếu nại - Cần BO giải quyết",
 
   "payment-due": "Chờ khách thanh toán thêm",
 
@@ -3166,7 +3166,7 @@ export default function StaffApp({
                 <option value="waiting-customer">
                   {"Chờ khách hàng phản hồi"}
                 </option>
-                <option value="disputed">{"Khách yêu cầu tính lại"}</option>
+                <option value="disputed">{"Đang khiếu nại - Cần BO giải quyết"}</option>
                 <option value="payment-due">
                   {"Chờ khách thanh toán thêm"}
                 </option>
@@ -4200,11 +4200,25 @@ export default function StaffApp({
               />
             </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              {selectedSharedReturn?.status === "disputed"
-                ? "Khách hàng đã yêu cầu tính lại. Quản lý cơ sở là người xem xét và gửi lại quyết toán. Nhân viên không sửa hoặc đóng hồ sơ tại bước này."
-                : "Sau khi nhân viên gửi, hồ sơ chuyển sang “Chờ khách hàng xác nhận”. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng."}
-            </div>
+            {selectedSharedReturn?.status === "disputed" ? (
+              <div className="rounded-lg border border-red-300 bg-red-50 p-3.5 text-sm text-red-900">
+                <p className="font-bold">⚠️ Đang khiếu nại - Cần BO giải quyết</p>
+                <p className="mt-1 text-xs leading-relaxed text-red-800">
+                  Khách hàng đã gửi khiếu nại về các khoản phí quyết toán ({selectedSharedReturn?.customerDecisionNote || "Cần xem xét lại"}). Quản lý cơ sở hoặc Ban Điều Hành (BO) là người xem xét thẩm định. Nhân viên không đóng hồ sơ hoặc hoàn cọc tại bước này để tránh xung đột dữ liệu (lỗi 409 Conflict).
+                </p>
+              </div>
+            ) : selectedSharedReturn?.status === "awaiting_customer_confirmation" ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900">
+                <p className="font-bold">⏳ Chờ khách hàng phản hồi duyệt quyết toán</p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                  Biên bản nghiệm thu đã lập và đang chờ khách hàng duyệt. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng để tránh xung đột hệ thống (lỗi 409 Conflict).
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                Sau khi nhân viên gửi, hồ sơ chuyển sang “Chờ khách hàng xác nhận”. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng.
+              </div>
+            )}
             {selectedSharedReturn?.status === "refund_pending" && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                 <p className="font-semibold text-emerald-950">

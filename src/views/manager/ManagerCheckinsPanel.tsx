@@ -358,7 +358,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">2. {'Ký cam kết & quy chế lưu kho'}</span>
+                  <span className="font-medium text-stone-700">2. {'Ký cam kết & quy định cho thuê'}</span>
                   <Badge variant={selectedCheckin.checklist.termsAccepted ? 'success' : 'muted'}>
                     {selectedCheckin.checklist.termsAccepted ? ('Đã ký cam kết') : ('Chưa ký')}
                   </Badge>
