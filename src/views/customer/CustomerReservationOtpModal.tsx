@@ -31,7 +31,7 @@ export default function CustomerReservationOtpModal({
   return <Modal open={Boolean(reservation)} onClose={onClose} title="Xác minh email cho đơn giữ kho">
     <div className="space-y-4">
       <p className="text-sm text-stone-600">
-        Nhập mã OTP 6 chữ số đã gửi tới email của bạn cho đơn <b>{reservation?.reservationCode}</b>.
+        Nhập mã OTP 6 chữ số đã gửi tới <b className="text-stone-900">{reservation?.customerEmail || 'email tài khoản của bạn'}</b> cho đơn <b>{reservation?.reservationCode}</b>.
       </p>
       <Input
         label="Mã OTP"
