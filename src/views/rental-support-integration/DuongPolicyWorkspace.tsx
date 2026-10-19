@@ -492,7 +492,7 @@ function PolicyEditor({
               <section className="rounded-xl border border-stone-200 p-4">
                 <h4 className="font-semibold text-stone-900">Điều kiện gia hạn</h4>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  {field("quoteTtlHours")}{field("paymentWindowHours")}
+                  {field("quoteTtlHours")}<p className="self-end rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Thời hạn giao dịch thanh toán gia hạn: <strong>15 phút</strong> kể từ khi mở thanh toán.</p>
                   <label className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-3 font-medium text-stone-700 sm:col-span-2">
                     <input type="checkbox" checked={draft.unrestrictedRenewalWindow === "true"} onChange={(e) => setDraft((d) => ({ ...d, unrestrictedRenewalWindow: String(e.target.checked), requestWindowDays: e.target.checked ? "36500" : "30" }))} />
                     Cho phép gửi yêu cầu gia hạn bất kỳ lúc nào (chế độ demo)
