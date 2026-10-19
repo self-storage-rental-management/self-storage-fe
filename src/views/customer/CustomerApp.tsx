@@ -2208,7 +2208,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     if (res.developmentCode) {
                       setBackendOtpDevelopmentCode(res.developmentCode)
                     }
-                  }).catch(() => {})
+                    setBackendOtpMessage(`Đã gửi OTP tới ${reservation.customerEmail || 'email tài khoản của bạn'}. Vui lòng kiểm tra cả hộp thư rác.`)
+                  }).catch(error => {
+                    setBackendOtpMessage(error instanceof Error ? error.message : 'Không thể gửi OTP. Hãy kiểm tra kết nối tới backend và thử lại.')
+                  })
                 }}
                 onCancel={() => cancelBackendReservation(reservation)}
                 onRefresh={refreshBackendReservations}
