@@ -15,6 +15,17 @@ function formatGatewayPayDate(value: string | null) {
   return `${day}/${month}/${year} ${hour}:${minute}:${second}`
 }
 
+function formatGatewayPayDate(value: string | null) {
+  if (!value || !/^\d{14}$/.test(value)) return null
+  const year = value.slice(0, 4)
+  const month = value.slice(4, 6)
+  const day = value.slice(6, 8)
+  const hour = value.slice(8, 10)
+  const minute = value.slice(10, 12)
+  const second = value.slice(12, 14)
+  return `${day}/${month}/${year} ${hour}:${minute}:${second}`
+}
+
 export default function ReservationReceipt({ payment, reservationCode }: { payment: ReservationPaymentResult; reservationCode: string }) {
   if (payment.paymentStatus !== 'PAID') return <p className="text-sm text-amber-900">Giao dịch chưa được ghi nhận thành công, chưa có biên lai thanh toán.</p>
   const accepted = bookingDepositAccepted(payment)
