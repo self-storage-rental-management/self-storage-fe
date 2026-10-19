@@ -7,9 +7,12 @@ export const CHECK_IN_CLOSING_HOUR = 17
 export const LAST_CHECK_IN_SLOT_HOUR = 16
 export const LAST_CHECK_IN_SLOT_MINUTE = 30
 
-const HOUR_MS = 60 * 60 * 1000
-const DAY_MS = 24 * HOUR_MS
 const SLOT_MS = 30 * 60 * 1000
+const WORKING_DAYS = new Set([0, 1, 2, 3, 4, 5, 6])
+
+function isWorkingDay(value: Date) {
+  return WORKING_DAYS.has(value.getDay())
+}
 
 function ceilToAppointmentSlot(value: Date) {
   return new Date(Math.ceil(value.getTime() / SLOT_MS) * SLOT_MS)
@@ -17,9 +20,27 @@ function ceilToAppointmentSlot(value: Date) {
 
 function startOfNextWorkingDay(value: Date) {
   const next = new Date(value)
-  next.setDate(next.getDate() + 1)
-  next.setHours(CHECK_IN_OPENING_HOUR, 0, 0, 0)
+  do {
+    next.setDate(next.getDate() + 1)
+    next.setHours(CHECK_IN_OPENING_HOUR, 0, 0, 0)
+  } while (!isWorkingDay(next))
   return next
+}
+
+export function addWorkingDays(value: Date, days: number) {
+  const result = new Date(value)
+  let remaining = days
+  while (remaining > 0) {
+    result.setDate(result.getDate() + 1)
+    if (isWorkingDay(result)) remaining -= 1
+  }
+  return result
+}
+
+function endOfWorkingDay(value: Date) {
+  const result = new Date(value)
+  result.setHours(LAST_CHECK_IN_SLOT_HOUR, LAST_CHECK_IN_SLOT_MINUTE, 0, 0)
+  return result
 }
 
 export function addWorkingHours(value: Date, hours: number) {
@@ -27,6 +48,10 @@ export function addWorkingHours(value: Date, hours: number) {
   let remainingMinutes = hours * 60
 
   while (remainingMinutes > 0) {
+    if (!isWorkingDay(cursor)) {
+      cursor = startOfNextWorkingDay(cursor)
+      continue
+    }
     const minuteOfDay = cursor.getHours() * 60 + cursor.getMinutes()
     const openingMinute = CHECK_IN_OPENING_HOUR * 60
     const closingMinute = CHECK_IN_CLOSING_HOUR * 60
@@ -49,6 +74,7 @@ export function addWorkingHours(value: Date, hours: number) {
 
 function normalizeCheckInSlot(value: Date) {
   let candidate = new Date(value)
+  if (!isWorkingDay(candidate)) return startOfNextWorkingDay(candidate)
   const openingMinute = CHECK_IN_OPENING_HOUR * 60
   const lastSlotMinute = LAST_CHECK_IN_SLOT_HOUR * 60 + LAST_CHECK_IN_SLOT_MINUTE
   const minuteOfDay = candidate.getHours() * 60 + candidate.getMinutes()
@@ -74,12 +100,13 @@ export function plannedCheckInWindow(registeredAt: Date | string | number, revie
 
   return {
     availableAt,
-    deadlineAt: new Date(availableAt.getTime() + CHECK_IN_WINDOW_DAYS * DAY_MS),
+    // The availability date is day 1, so move forward only six more operating days.
+    deadlineAt: endOfWorkingDay(addWorkingDays(availableAt, CHECK_IN_WINDOW_DAYS - 1)),
   }
 }
 
 export function isCheckInAppointmentAllowed(value: Date, window: ReturnType<typeof plannedCheckInWindow>) {
-  if (Number.isNaN(value.getTime()) || value < window.availableAt || value > window.deadlineAt) return false
+  if (Number.isNaN(value.getTime()) || !isWorkingDay(value) || value < window.availableAt || value > window.deadlineAt) return false
   const minutes = value.getHours() * 60 + value.getMinutes()
   return minutes >= CHECK_IN_OPENING_HOUR * 60
     && minutes <= LAST_CHECK_IN_SLOT_HOUR * 60 + LAST_CHECK_IN_SLOT_MINUTE
