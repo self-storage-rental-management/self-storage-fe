@@ -130,8 +130,17 @@ export function staffErrorMessage(error: unknown, fallback: string) {
   if (status === 403)
     return "Bạn không có quyền thực hiện thao tác này tại cơ sở hiện tại."
   if (status === 404) return "Không tìm thấy hồ sơ cần xử lý."
+  const message = typeof (candidate as { message?: unknown }).message === "string" ? String((candidate as { message?: unknown }).message) : ""
+  if (message.includes("not pending refund"))
+    return "Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang khiếu nại)."
+  if (message.includes("not in a state awaiting inspection"))
+    return "Hồ sơ hiện không ở trạng thái chờ nghiệm thu hiện trường."
+  if (message.includes("not awaiting customer confirmation"))
+    return "Hồ sơ chưa ở trạng thái chờ khách hàng xác nhận."
+  if (message.includes("not in disputed status"))
+    return "Hồ sơ không ở trạng thái khiếu nại."
   if (status === 409)
-    return "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại."
+    return code === "OPTIMISTIC_LOCK" ? "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại." : "Xung đột trạng thái (409): Hồ sơ đang chờ khách duyệt hoặc đang khiếu nại. Vui lòng tải lại và thử lại."
   if (status === 413)
     return "Tệp tải lên vượt quá dung lượng cho phép."
   if (status === 422 || status === 400)
