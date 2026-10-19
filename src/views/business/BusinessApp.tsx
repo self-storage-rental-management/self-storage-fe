@@ -3618,7 +3618,7 @@ export default function BusinessApp({
       onLogout={() => { if (!integrationLocked) onLogout() }}
       canAccess={(permission) => (permission === "returns:read" || permission === "rentals:update" ? true : hub?.can ? hub.can(user, permission) : true)}
       roleLabel={"Giám Đốc Thương Mại"}
-      roleColor="bg-amber-100 text-amber-700"
+      roleColor="bg-[#F2BDCC] text-[#7A364B] border-[#D99BAE]"
     >
       {page === "rental-source-policies" && <DuongPolicyWorkspace user={user} onLocked={setIntegrationLocked} />}
       {page === "returns" && (

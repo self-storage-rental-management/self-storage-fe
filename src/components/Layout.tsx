@@ -96,8 +96,16 @@ interface LayoutProps {
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, roleColor, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
 }: LayoutProps) {
+  const roleTaskbarColor: Record<Role, string> = {
+    customer: '#F4C542',
+    staff: '#22C55E',
+    manager: '#2F80ED',
+    business: '#F2BDCC',
+    admin: '#EF4444',
+  }
+  const taskbarColor = roleTaskbarColor[user.role] ?? '#F2BDCC'
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -397,7 +405,8 @@ export default function Layout({
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col transition-transform duration-200
+        style={{ borderTopColor: taskbarColor }}
+        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 border-t-4 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
@@ -408,7 +417,7 @@ export default function Layout({
         {/* Role & Facility badge */}
         <div className="px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold bg-[#3a3933] text-[#f3c675] border border-[#4b4940]">
+            <span className={`inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold border ${roleColor || 'bg-[#3a3933] text-[#f3c675] border-[#4b4940]'}`}>
               {getTranslatedRole()}
             </span>
           </div>

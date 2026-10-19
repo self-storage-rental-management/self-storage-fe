@@ -61,6 +61,10 @@ const emptyChecklist = () =>
     checklistLabels.map(([key]) => [key, false]),
   ) as unknown as CheckInChecklist
 
+function normalizeIdentityDocument(value: string | null | undefined) {
+  return value?.trim().replace(/[\s.-]/g, "").toUpperCase() || ""
+}
+
 function hasMaterialVariance(
   actual: string,
   declared: number,
@@ -452,6 +456,13 @@ export default function StaffCheckInOperationsPanel({
       !Number.isFinite(Number(weightKg)) ||
       !Number.isFinite(Number(volumeM3))
     ) return
+
+    const declaredIdentity = normalizeIdentityDocument(handoverTarget.identityDocumentNumber)
+    const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
+    if (!declaredIdentity || !providedIdentity || declaredIdentity !== providedIdentity) {
+      setError("CCCD/Hộ chiếu không khớp thông tin đơn đặt kho. Chưa thể tiếp tục bàn giao.")
+      return
+    }
 
     setSubmitting(true)
 
