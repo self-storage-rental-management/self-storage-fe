@@ -4,7 +4,7 @@ import { Card, Button, Input, PasswordField, Badge, Avatar, Modal } from '../com
 import { useStorageHub } from '../store/StorageHubContext'
 import { actorToUser, changePasswordWithApi, getAuthenticatedActor, isApiAuthenticated, listMySessions, updateCurrentProfileWithApi, type ApiSession } from '../services/authApi'
 import { listAccessibleFacilities, listCustomerFacilities, type CustomerFacility } from '../services/customerReservationApi'
-import { listCustomerRentals, type CustomerRental } from '../services/customerRentalApi'
+import { listAllCustomerRentals, type CustomerRental } from '../services/customerRentalApi'
 import { listManagerMaintenanceTasks, listStaffMaintenanceTasks, type MaintenanceTask } from '../services/maintenanceApi'
 import { getManagerReportSummary, type ManagerReportSummary } from '../services/managerReportingApi'
 import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
@@ -281,6 +281,8 @@ function cleanProfilePhone(value: string): string {
   return phone
 }
 
+const PROFILE_PHONE_PATTERN = /^(?:\+?[1-9]\d{7,14}|0\d{9,10})$/
+
 function validateProfileForm(fields: {
   name: string
   phone: string
@@ -295,10 +297,12 @@ function validateProfileForm(fields: {
   const emergencyPhone = cleanProfilePhone(fields.emergencyContactPhone.trim())
 
   if (name.length < 2) return 'Họ và tên phải có ít nhất 2 ký tự.'
-  if (fields.phone.trim() && !/^0\d{9}$/.test(phone)) return 'Số điện thoại phải gồm 10 số và bắt đầu bằng 0.'
-  if (address.length < 5) return 'Địa chỉ thường trú phải có ít nhất 5 ký tự.'
-  if (emergencyName.length < 2) return 'Tên người liên hệ khẩn cấp phải có ít nhất 2 ký tự.'
-  if (!/^0\d{9}$/.test(emergencyPhone)) return 'SĐT liên hệ khẩn cấp phải gồm 10 số và bắt đầu bằng 0.'
+  if (fields.phone.trim() && !PROFILE_PHONE_PATTERN.test(phone)) return 'Số điện thoại không đúng định dạng.'
+  if (address && address.length < 5) return 'Địa chỉ thường trú phải có ít nhất 5 ký tự.'
+  if (emergencyName && emergencyName.length < 2) return 'Tên người liên hệ khẩn cấp phải có ít nhất 2 ký tự.'
+  if (fields.emergencyContactPhone.trim() && !PROFILE_PHONE_PATTERN.test(emergencyPhone)) return 'SĐT liên hệ khẩn cấp không đúng định dạng.'
+  if (emergencyName && !fields.emergencyContactPhone.trim()) return 'Vui lòng nhập SĐT cho người liên hệ khẩn cấp.'
+  if (fields.emergencyContactPhone.trim() && !emergencyName) return 'Vui lòng nhập tên người liên hệ khẩn cấp.'
   return null
 }
 
@@ -671,9 +675,9 @@ setSavingProfile(true)
 
     let cancelled = false
     setApiRentalsError(false)
-    listCustomerRentals()
-      .then(response => {
-        if (!cancelled) setApiRentals(Array.isArray(response.data) ? response.data : [])
+    listAllCustomerRentals()
+      .then(rentals => {
+        if (!cancelled) setApiRentals(Array.isArray(rentals) ? rentals : [])
       })
       .catch(() => {
         if (!cancelled) {
@@ -865,36 +869,64 @@ setSavingProfile(true)
     }
 
     if (user.role === 'customer') {
-      const visibleRentals = apiMode ? apiRentals.filter(rental => ['active', 'return_requested'].includes(rental.status)) : activeRentals
+      const visibleApiRentals = apiRentals.filter(rental => ['active', 'return_requested'].includes(rental.status))
+      const visibleRentals = apiMode ? visibleApiRentals : activeRentals
       return (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card className="p-6 xl:col-span-2">
             <SectionTitle title={`Kho đang thuê (${visibleRentals.length})`} description="Các hợp đồng còn hiệu lực thuộc tài khoản của bạn." />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {apiMode && apiRentals.filter(rental => ['active', 'return_requested'].includes(rental.status)).map(rental => (
-                <div key={rental.id} className="rounded-xl border border-stone-200 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-stone-900">{rental.storageUnitCode}</p>
-                    <Badge variant={rental.status === 'active' ? 'success' : 'warning'}>{rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}</Badge>
+              {apiMode && visibleApiRentals.map(rental => {
+                const unitCode = rental.storageUnit?.code || rental.storageUnitCode || rental.id
+                const facId = rental.facility?.id || rental.facilityId
+                const facCode = rental.facility?.code
+                const matchedFacility = apiFacilities.find(f => (facId && f.id === facId) || (facCode && f.code === facCode))
+                  || facilities.find(f => (facId && f.id === facId) || (facCode && f.code === facCode))
+                const facName = rental.facility?.name || rental.facilityName || matchedFacility?.name || 'Cơ sở lưu trữ'
+                const facAddress = matchedFacility?.address
+                  ? (matchedFacility.city && !matchedFacility.address.includes(matchedFacility.city) ? `${matchedFacility.address}, ${matchedFacility.city}` : matchedFacility.address)
+                  : (rental.facilityAddress || 'Chưa cập nhật địa chỉ cơ sở')
+                const unitTypeName = rental.unitType?.name
+
+                return (
+                  <div key={rental.id} className="rounded-xl border border-stone-200 bg-white p-4 shadow-xs">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-stone-900 text-base">{unitCode}</p>
+                        {unitTypeName && <p className="text-xs text-stone-500 font-normal">{unitTypeName}</p>}
+                      </div>
+                      <Badge variant={rental.status === 'active' ? 'success' : 'warning'}>
+                        {rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-stone-700">{facName}</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      Hết hạn: {rental.contractEndDate ? new Date(rental.contractEndDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}
+                    </p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      Địa chỉ cơ sở: <span className="text-stone-700">{facAddress}</span>
+                    </p>
                   </div>
-                  <p className="mt-2 text-sm text-stone-600">{rental.facilityName}</p>
-                  <p className="mt-1 text-xs text-stone-500">Hết hạn: {new Date(rental.contractEndDate).toLocaleDateString('vi-VN')}</p>
-                  <p className="mt-1 text-xs text-stone-500">Địa chỉ: {rental.facilityAddress}</p>
-                </div>
-              ))}
-              {!apiMode && activeRentals.map(rental => (
-                <div key={rental.id} className="rounded-xl border border-stone-200 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-stone-900">{rental.unitId}</p>
-                    <Badge variant="success">Đang thuê</Badge>
+                )
+              })}
+              {!apiMode && activeRentals.map(rental => {
+                const fac = facilities.find(f => f.id === rental.facilityId || f.name === rental.facilityName)
+                const facAddress = fac?.address || 'Chưa cập nhật địa chỉ cơ sở'
+                return (
+                  <div key={rental.id} className="rounded-xl border border-stone-200 bg-white p-4 shadow-xs">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-bold text-stone-900 text-base">{rental.unitId}</p>
+                      <Badge variant="success">Đang thuê</Badge>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-stone-700">{rental.facilityName}</p>
+                    <p className="mt-1 text-xs text-stone-500">Hết hạn: {new Date(rental.endDate).toLocaleDateString('vi-VN')}</p>
+                    <p className="mt-1 text-xs text-stone-500">Địa chỉ cơ sở: <span className="text-stone-700">{facAddress}</span></p>
+                    <p className="mt-1 text-xs text-stone-500">Mã PIN: {rental.gateCode || 'Được cấp khi bàn giao'}</p>
                   </div>
-                  <p className="mt-2 text-sm text-stone-600">{rental.facilityName}</p>
-                  <p className="mt-1 text-xs text-stone-500">Hết hạn: {new Date(rental.endDate).toLocaleDateString('vi-VN')}</p>
-                  <p className="mt-1 text-xs text-stone-500">Mã PIN: {rental.gateCode || 'Được cấp khi bàn giao'}</p>
-                </div>
-              ))}
+                )
+              })}
               {apiMode && apiRentalsError && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700 md:col-span-2">Không tải được hồ sơ thuê từ backend.</p>}
-              {apiMode && !apiRentalsError && !visibleRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-500 md:col-span-2">Chưa có hồ sơ thuê đang hiệu lực.</p>}
+              {apiMode && !apiRentalsError && !visibleApiRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-500 md:col-span-2">Chưa có hồ sơ thuê đang hiệu lực.</p>}
               {!apiMode && !activeRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-500 md:col-span-2">Chưa có kho đang thuê trong dữ liệu tài khoản.</p>}
             </div>
           </Card>
@@ -1184,33 +1216,39 @@ setSavingProfile(true)
                   </div>
 
                   <label className="space-y-1 block text-sm font-medium text-stone-700">
-                    <span>Địa chỉ thường trú</span>
+                    <div className="flex items-center justify-between">
+                      <span>Địa chỉ thường trú</span>
+                      <span className="text-xs text-stone-400 font-normal">Tối thiểu 5 ký tự</span>
+                    </div>
                     <textarea
                       value={permanentAddress}
                       onChange={e => setPermanentAddress(e.target.value)}
                       placeholder="Nhập số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
                       rows={3}
                       className="w-full resize-y rounded-lg border border-stone-300 px-3 py-2 text-sm font-normal text-stone-800 placeholder-stone-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
                     />
                   </label>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Input
-                      label="Người liên hệ khẩn cấp"
-                      value={emergencyContactName}
-                      onChange={e => setEmergencyContactName(e.target.value)}
-                      placeholder="Họ và tên người liên hệ"
-                      required
-                    />
-                    <Input
-                      label="SĐT liên hệ khẩn cấp"
-                      value={emergencyContactPhone}
-                      onChange={e => setEmergencyContactPhone(e.target.value)}
-                      placeholder="0901 234 567"
-                      inputMode="tel"
-                      required
-                    />
+                    <div>
+                      <Input
+                        label="Người liên hệ khẩn cấp"
+                        value={emergencyContactName}
+                        onChange={e => setEmergencyContactName(e.target.value)}
+                        placeholder="Họ và tên người liên hệ"
+                      />
+                      <p className="mt-1 text-[11px] text-stone-400">Tối thiểu 2 ký tự</p>
+                    </div>
+                    <div>
+                      <Input
+                        label="SĐT liên hệ khẩn cấp"
+                        value={emergencyContactPhone}
+                        onChange={e => setEmergencyContactPhone(e.target.value)}
+                        placeholder="0901 234 567"
+                        inputMode="tel"
+                      />
+                      <p className="mt-1 text-[11px] text-stone-400">10–11 số bắt đầu bằng 0 hoặc số quốc tế</p>
+                    </div>
                   </div>
 
                   <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
