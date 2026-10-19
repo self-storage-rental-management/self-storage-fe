@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, Select, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
 import { formatVnd } from '../../i18n/currency'
@@ -649,7 +650,7 @@ export default function BusinessDiscountsPanel({ user, lang = 'vi', facilitiesLi
                 <label className="font-semibold text-stone-700 block mb-1">
                   {isVi ? 'Ngày bắt đầu hiệu lực *' : 'Effective From *'}
                 </label>
-                <input
+                <LocalizedDateInput
                   type="date"
                   value={formEffectiveFrom}
                   onChange={e => setFormEffectiveFrom(e.target.value)}
@@ -661,7 +662,7 @@ export default function BusinessDiscountsPanel({ user, lang = 'vi', facilitiesLi
                 <label className="font-semibold text-stone-700 block mb-1">
                   {isVi ? 'Ngày kết thúc (Tùy chọn)' : 'Effective To (Optional)'}
                 </label>
-                <input
+                <LocalizedDateInput
                   type="date"
                   value={formEffectiveTo}
                   onChange={e => setFormEffectiveTo(e.target.value)}

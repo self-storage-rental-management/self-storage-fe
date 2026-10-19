@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useState } from "react"
 import {
   Badge,
@@ -120,7 +121,7 @@ export default function StaffSupportPanel({
         <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-2">
           <label className="text-sm font-medium text-slate-700">
             Ngày cập nhật
-            <input
+            <LocalizedDateInput
               className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
               type="date"
               value={dateFilter}
