@@ -474,7 +474,7 @@ function WorkspaceData({
                   {[
                     "Mã hồ sơ",
                     role === 'customer' ? 'Trạng thái' : 'Khách hàng',
-                    "Gian kho / Loại",
+                    role === "manager" ? "Gian kho" : "Gian kho / Loại",
                     "Thời hạn",
                     "Thao tác",
                   ].map((h, i) => (
@@ -501,8 +501,8 @@ function WorkspaceData({
                     </td>
                     <td className="p-3 align-middle">
                       <p className="font-mono text-sm font-semibold text-stone-800">{row.storageUnit.code}</p>
-                      {'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
-                      {"unitType" in row && (
+                      {role !== "manager" && 'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
+                      {role !== "manager" && "unitType" in row && (
                         <p className="mt-1 text-xs leading-4 text-stone-500">{copy(row.unitType.name)}</p>
                       )}
                     </td>

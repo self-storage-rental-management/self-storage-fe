@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
 import { formatVnd } from '../../i18n/currency'
@@ -1801,7 +1802,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
             <div>
               <label className="block text-xs font-bold text-stone-700 mb-1">Ngày hẹn trả kho dự kiến (*):</label>
-              <input
+              <LocalizedDateInput
                 type="date"
                 value={newScheduledDate}
                 onChange={(e) => setNewScheduledDate(e.target.value)}

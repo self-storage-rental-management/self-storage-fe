@@ -7,12 +7,10 @@ import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
-  completeRefund,
   confirmReturn,
   feeKeys,
   inspectReturn,
   listReturns,
-  paySettlement,
   requestReturn,
   updateReturnRequest,
   reviewDispute,
@@ -185,7 +183,7 @@ function ReturnWorkspace({
       {rows.map((record) => <div key={record.id} className="rounded-xl border border-stone-200 bg-white p-4">
         <ReturnActions role={role} record={record} run={run} busy={busy || read.loading || (recoveryBusy && !recoveryLocks.current.has(record.id))} recoveryLocked={recoveryBusy}
           onRecoveryLocked={value => { if (value) recoveryLocks.current.add(record.id); else recoveryLocks.current.delete(record.id); recoveryLock.current = recoveryLocks.current.size > 0; setRecoveryBusy(recoveryLock.current) }}
-          onRecoveryChanged={() => { setFeedback('Đã cập nhật hồ sơ thu hồi.'); read.refresh(); onChanged?.() }} />
+          onRecoveryChanged={() => { setFeedback('Đã cập nhật hồ sơ trả kho.'); read.refresh(); onChanged?.() }} />
         {role === 'customer' && record.status === 'requested' && editing !== record.id && <div className="mt-3 flex justify-end border-t border-stone-100 pt-3"><Button type="button" variant="outline" disabled={busy || read.loading} onClick={() => { setEditing(record.id); setDate(record.scheduledDate); setNotes(record.customerNotes || '') }}>Chỉnh sửa yêu cầu</Button></div>}
       </div>)}
       {!rentalId && rows.length > 0 && <div className="flex gap-2"><Button disabled={busy || recoveryBusy || page === 0} onClick={() => { if (!recoveryLock.current) setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || recoveryBusy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { if (!recoveryLock.current) setPage((value) => value + 1) }}>Trang sau</Button></div>}
@@ -203,10 +201,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
   const [returned, setReturned] = useState({ returnedKey: false, returnedCard: false, returnedLock: false })
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
-  const [refundReference, setRefundReference] = useState('')
-  const [refundNotes, setRefundNotes] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState('Chuyển khoản')
-  const [paymentNotes, setPaymentNotes] = useState('')
   const initialized = useRef(false)
 
   useEffect(() => {
@@ -221,8 +215,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const recovery = record.sourceType === 'RECOVERY'
   const canInspect = !recovery && write && role === 'staff' && ['requested', 'scheduled'].includes(record.status)
   const canReview = write && role === 'manager' && record.status === 'disputed'
-  const canRefund = !recovery && write && role === 'staff' && record.status === 'refund_pending'
-  const canPaySettlement = !recovery && role === 'customer' && record.status === 'payment_due'
   const recoveryNextStep = !recovery ? null : record.recoveryTaskStatus === 'CLOSED'
     ? 'Thu hồi đã hoàn tất. Hồ sơ thuê đã kết thúc và trạng thái kho đã được cập nhật.'
     : record.status === 'completed' ? 'Quyết toán đã hoàn tất. Hồ sơ thuê chỉ kết thúc sau khi nhân viên hoàn tất xử lý tài sản và giải phóng kho.'
@@ -268,7 +260,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       </div>
       {(canInspect || canReview || (role === 'customer' && record.status === 'awaiting_customer_confirmation')) && <label className="block">Ghi chú / lý do<textarea className="block w-full rounded border p-2" disabled={busy} value={note} maxLength={2000} onChange={(event) => setNote(event.target.value)} /></label>}
       {(canInspect || canReview) && <form onSubmit={(event) => { event.preventDefault(); void run(canInspect ? submitInspection : () => reviewDispute(id, { ...fees, resolutionNote: note, proposedUnitStatus: unit })) }} className="space-y-2">
-        {feeKeys.map((key, index) => <label key={key} className="block">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]} (VND)<input type="number" min="0" step="0.01" required disabled={busy} value={Number.isNaN(fees[key]) ? '' : fees[key]} onChange={(event) => setFees((current) => ({ ...current, [key]: event.target.value === '' ? NaN : Number(event.target.value) }))} className="block rounded border p-2" /></label>)}
+        {feeKeys.map((key, index) => <label key={key} className="block">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]} (VND)<input type="number" min="0" step="1" required readOnly={key === 'outstandingFee'} disabled={busy} value={Number.isNaN(fees[key]) ? '' : fees[key]} onChange={(event) => setFees((current) => ({ ...current, [key]: event.target.value === '' ? NaN : Number(event.target.value) }))} className="block rounded border p-2" /></label>)}
         {canInspect && <>
           <label className="block">Đối chiếu hàng hóa<select value={inventory} disabled={busy} onChange={(event) => setInventory(event.target.value as typeof inventory)}><option value="match">Khớp</option><option value="missing">Thiếu</option><option value="excess">Dư</option></select></label>
           <label className="block">Hiện trạng<select value={damage} disabled={busy} onChange={(event) => setDamage(event.target.value as typeof damage)}><option value="no_damage">Không hư hỏng</option><option value="minor_damage">Hư hỏng nhẹ</option><option value="major_damage">Hư hỏng nặng</option><option value="abandoned_goods">Bỏ lại hàng hóa</option></select></label>
@@ -280,19 +272,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         <Button type="submit" disabled={busy || (canReview && !note.trim())}>{canInspect ? 'Ghi nhận nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</Button>
       </form>}
       {recovery && role !== 'customer' && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
-      {recovery && write && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
-      {canRefund && <form className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3" onSubmit={(event) => { event.preventDefault(); void run(() => completeRefund(id, { transactionReference: refundReference.trim() || undefined, notes: refundNotes.trim() || undefined })) }}>
-        <h5 className="font-semibold">Hoàn cọc cho khách hàng</h5>
-        <label className="block">Mã giao dịch hoàn cọc<input className="block w-full rounded border p-2" maxLength={120} required disabled={busy} value={refundReference} onChange={(event) => setRefundReference(event.target.value)} placeholder="Ví dụ: REFUND-VCB-883921" /></label>
-        <label className="block">Ghi chú chuyển tiền<textarea className="block w-full rounded border p-2" maxLength={1000} disabled={busy} value={refundNotes} onChange={(event) => setRefundNotes(event.target.value)} /></label>
-        <Button type="submit" disabled={busy || !refundReference.trim()}>Xác nhận đã hoàn cọc</Button>
-      </form>}
-      {canPaySettlement && <form className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3" onSubmit={(event) => { event.preventDefault(); void run(() => paySettlement(id, paymentMethod, paymentNotes)) }}>
-        <h5 className="font-semibold">Thanh toán phần quyết toán còn thiếu</h5>
-        <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" disabled={busy} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option>Chuyển khoản</option><option>Tiền mặt</option><option>Ví điện tử</option></select></label>
-        <label className="block">Ghi chú<textarea className="block w-full rounded border p-2" maxLength={1000} disabled={busy} value={paymentNotes} onChange={(event) => setPaymentNotes(event.target.value)} /></label>
-        <Button type="submit" disabled={busy || !paymentMethod.trim()}>Ghi nhận thanh toán</Button>
-      </form>}
+      {write && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && <div className="flex gap-2"><Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button><Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button></div>}
     </section>
   )

@@ -1,4 +1,5 @@
 import { ApiClientError, apiRequest } from "./apiClient"
+import { isUuid } from "./renewalOperationsApi"
 import type {
   ManagerPaymentHistoryItem,
   ManagerPaymentHistoryPage,
@@ -34,6 +35,8 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
     && typeof row.refundedAmount === "number" && Number.isFinite(row.refundedAmount) && row.refundedAmount >= 0
     && (row.paymentMethod === null || typeof row.paymentMethod === "string")
     && typeof row.occurredAt === "string" && Number.isFinite(Date.parse(row.occurredAt))
+    && (row.renewalId == null || isUuid(row.renewalId))
+    && (row.receiptFileId == null || isUuid(row.receiptFileId))
 }
 
 export async function listManagerPaymentHistory(

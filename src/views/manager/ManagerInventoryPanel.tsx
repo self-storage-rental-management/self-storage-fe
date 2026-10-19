@@ -363,7 +363,7 @@ function DemoManagerInventoryPanel({
   }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy, unitPageSize])
 
   return (
-    <div className="fade-in space-y-6">
+    <div className="fade-in min-w-0 max-w-full space-y-6">
       <SectionHeader
         eyebrow="Vận hành cơ sở"
         title="Quản lý gian kho"
