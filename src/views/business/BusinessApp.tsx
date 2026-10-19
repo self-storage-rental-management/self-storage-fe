@@ -418,12 +418,15 @@ export default function BusinessApp({
     const refresh = async () => {
       try {
         const facilities = await listAllFacilitiesApi()
-        if (facilities.some(f => f.totalUnits == null || f.monthRevenue == null)) throw new Error('Chưa tải được số liệu cơ sở mới. Vui lòng khởi động lại Backend và tải lại trang.')
         if (mounted) setFacilityDataError(undefined)
         if (mounted) setBackendFacilityStats(Object.fromEntries(facilities.map(facility => [facility.code.trim().toUpperCase(), {
           total: facility.totalUnits ?? 0, occupied: facility.occupiedUnits ?? 0, price: facility.minimumMonthlyPrice ?? null, revenue: facility.monthRevenue ?? 0,
         }])))
-      } catch (error) { if (mounted) setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.') }
+      } catch (error) {
+        if (mounted && isApiAuthenticated()) {
+          setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.')
+        }
+      }
     }
     const timer = window.setInterval(() => void refresh(), 30000)
     window.addEventListener('focus', refresh)
@@ -435,7 +438,7 @@ export default function BusinessApp({
     listAllFacilitiesApi()
       .then((backendFacs) => {
         if (!isMounted || !Array.isArray(backendFacs)) return
-        if (backendFacs.some(f => f.totalUnits == null || f.monthRevenue == null)) throw new Error('Chưa tải được số liệu cơ sở mới. Vui lòng khởi động lại Backend và tải lại trang.')
+        if (isMounted) setFacilityDataError(undefined)
         setBackendFacilityIdsByCode(Object.fromEntries(
           backendFacs.map((facility) => [facility.code.trim().toUpperCase(), facility.id]),
         ))
@@ -446,7 +449,7 @@ export default function BusinessApp({
           revenue: facility.monthRevenue ?? 0,
         }])))
 
-        if (isApiAuthenticated()) {
+        if (isApiAuthenticated() && backendFacs.length > 0) {
           const backendIds = new Set(backendFacs.map(bf => bf.id))
           const backendCodes = new Set(backendFacs.map(bf => (bf.code || '').trim().toUpperCase()))
           facilitiesList.forEach(f => {
@@ -476,9 +479,9 @@ export default function BusinessApp({
                 security: cleanBf.securityDescription || '',
                 manager: cleanBf.managerNames?.join(', ') || 'Chưa phân công',
                 status: cleanBf.status,
-                units: 0,
-                available: 0,
-                occupied: 0,
+                units: cleanBf.totalUnits || 0,
+                available: cleanBf.availableUnits || 0,
+                occupied: cleanBf.occupiedUnits || 0,
               },
               user,
             )
@@ -519,7 +522,12 @@ export default function BusinessApp({
           }
         })
       })
-      .catch(error => { if (isMounted) setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.') })
+      .catch(error => {
+        if (!isMounted) return
+        if (isApiAuthenticated()) {
+          setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.')
+        }
+      })
     return () => {
       isMounted = false
     }
@@ -609,18 +617,10 @@ export default function BusinessApp({
       group: "Giá & Khuyến Mãi",
       permission: "policies:read",
     },
-    {
-      id: "discounts",
-      label: "Mã Voucher Ưu Đãi",
-      icon: Icon.tag,
-      group: "Giá & Khuyến Mãi",
-      permission: "policies:read",
-    },
-
     // ── QUY ĐỊNH & PHÁP LÝ ──
     {
       id: "rental-regulations",
-      label: "Quy Chế Lưu Kho",
+      label: "Quy Định Cho Thuê",
       icon: Icon.clipboard,
       group: "Quy Định & Pháp Lý",
       permission: "policies:read",
@@ -2361,8 +2361,7 @@ export default function BusinessApp({
       performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Bảng Giá Loại Kho',
       policies: 'Gói Thuê Kỳ Hạn',
-      discounts: 'Mã Voucher Ưu Đãi',
-      'rental-regulations': 'Quy Chế Lưu Kho',
+      'rental-regulations': 'Quy Định Cho Thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
       returns: 'Trả Kho & Quyết Toán',
       'damage-incidents': 'Xử Lý Sự Cố Kho',
@@ -4473,14 +4472,6 @@ export default function BusinessApp({
         </div>
       )}
 
-      {/* ── DISCOUNTS & VOUCHERS (NHÓM 2) ── */}
-      {page === "discounts" && (
-        <BusinessDiscountsPanel
-          user={user}
-          lang={lang}
-          facilitiesList={facilitiesList}
-        />
-      )}
 
       {/* ── DAMAGE INCIDENTS (NHÓM 3) ── */}
       {page === "damage-incidents" && (
