@@ -30,7 +30,7 @@ export const statusLabels: Record<string, string> = {
   scheduled: 'Đã hẹn nghiệm thu',
   inspected: 'Đã nghiệm thu hiện trường',
   awaiting_customer_confirmation: 'Chờ khách xác nhận quyết toán',
-  disputed: 'Đang khiếu nại (Cần BO xử lý)',
+  disputed: 'Đang khiếu nại - Cần BO giải quyết',
   payment_due: 'Chờ khách nộp phụ phí',
   refund_pending: 'Chờ giải ngân hoàn cọc',
   completed: 'Đã hoàn tất thanh lý & trả kho',
