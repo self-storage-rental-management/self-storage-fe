@@ -1546,7 +1546,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!isApiAuthenticated() && allPackageSamplesValid && !hasUnplaceablePackage && totalFramesRequired > selectedRackCount) errors.capacity = `Kho không chứa vừa: cần ${totalFramesRequired} khung nhưng kho chỉ có ${selectedRackCount} khung.`
     if (!Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Vui lòng nhập cân nặng mỗi kiện cho tất cả mẫu hàng.'
     if (goodsWeightNumber > selectedUnit.maxLoadKg) errors.weightLimit = `${'Tổng cân nặng vượt tải trọng sàn'} (${selectedUnit.maxLoadKg} kg).`
-    if (!requestedAt || !isCheckInAppointmentAllowed(requestedAt, checkInWindow)) errors.moveInDate = `Lịch nhận kho phải từ ${formatPolicyDateTime(checkInWindow.availableAt)} đến ${formatPolicyDateTime(checkInWindow.deadlineAt)}, từ Thứ Hai đến Thứ Sáu, trong giờ làm việc 08:00–17:00 và theo khung 30 phút.`
+    if (!requestedAt || !isCheckInAppointmentAllowed(requestedAt, checkInWindow)) errors.moveInDate = `Lịch nhận kho phải từ ${formatPolicyDateTime(checkInWindow.availableAt)} đến ${formatPolicyDateTime(checkInWindow.deadlineAt)}, áp dụng cả Thứ Bảy và Chủ Nhật, trong giờ làm việc 08:00–17:00 và theo khung 30 phút.`
     if (!/^\d{4}-\d{2}-\d{2}$/.test(moveInDate) || !requestedAt || Number.isNaN(requestedAt.getTime()) || policyDateInput(requestedAt) !== moveInDate) errors.moveInDate = 'Vui lòng nhập ngày hợp lệ theo định dạng DD/MM/YYYY.'
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(bookingAppointmentTime)) errors.appointmentTime = 'Vui lòng nhập giờ hợp lệ theo định dạng HH:mm (24 giờ).'
     else if (!withinFacilityHours(bookingAppointmentTime, selectedTarget?.facility.accessHours)) errors.appointmentTime = `Giờ nhận kho nằm ngoài giờ hoạt động của cơ sở: ${selectedTarget?.facility.accessHours}. Vui lòng chọn giờ khác.`
@@ -3430,7 +3430,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <p className="text-sm font-semibold text-stone-900">Chọn ngày giờ nhận kho</p>
                 <p className="mt-1 text-xs leading-5 text-stone-600">
                   Lịch hợp lệ từ <b>{formatPolicyDateTime(checkInWindow.availableAt)}</b> đến <b>{formatPolicyDateTime(checkInWindow.deadlineAt)}</b>.
-                  {' Chỉ nhận lịch từ Thứ Hai đến Thứ Sáu trong cửa sổ 7 ngày làm việc.'}
+                  {' Nhận lịch tất cả các ngày trong tuần, kể cả Thứ Bảy và Chủ Nhật. Ngày kho sẵn sàng được tính là ngày thứ nhất của cửa sổ 7 ngày làm việc.'}
                   {hasOtherGoods ? ' Mốc này đã bao gồm tối đa một ngày làm việc để nhân viên duyệt hàng “Khác”, 15 phút thanh toán và một ngày làm việc để quản lý phân kho.' : ' Mốc này đã bao gồm 15 phút thanh toán và một ngày làm việc để quản lý phân kho.'}
                 </p>
               </div>
