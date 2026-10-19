@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
 import ReservationReceipt from './ReservationReceipt'
 import { paymentMethodLabel } from './paymentLabels'
-import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateTimeInput } from '../../domain/reservationCheckInPolicy'
+import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput } from '../../domain/reservationCheckInPolicy'
+import ReservationQuoteSummary from './ReservationQuoteSummary'
 
 const GOODS_CATEGORY_LABELS: Record<string, string> = {
   FURNITURE: 'Nội thất', KITCHENWARE: 'Đồ dùng nhà bếp', DECOR: 'Đồ trang trí',
@@ -60,13 +61,13 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [busy, setBusy] = useState(false)
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
   const receiptLock = useRef(false)
-  const [goodsDetailOpen, setGoodsDetailOpen] = useState(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
   const [handoverDocuments, setHandoverDocuments] = useState<CheckInDocument[]>([])
   const [handoverDocumentsOpen, setHandoverDocumentsOpen] = useState(false)
   const [paymentReceipt, setPaymentReceipt] = useState<ReservationPaymentResult | null>(null)
   const [appointmentInput, setAppointmentInput] = useState(() => localDateTimeInput(r.appointmentAt))
+  const [appointmentErrors, setAppointmentErrors] = useState<{ date?: string; time?: string }>({})
   const [savedAppointmentAt, setSavedAppointmentAt] = useState(r.appointmentAt)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [now, setNow] = useState(Date.now())
@@ -92,6 +93,40 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const progress = reservationProgress(r.status)
   const inactive = progress === null
   const remainingPayment = detail?.payments?.find(payment => payment.purpose === 'RENTAL_BALANCE' && payment.paymentStatus === 'PAID') || null
+  const goodsItems = detail?.goodsItems ?? []
+  const totalGoodsQuantity = goodsItems.reduce((total, item) => total + item.quantity, 0)
+  const calculatedGoodsVolumeM3 = goodsItems.reduce((total, item) => total + (
+    item.quantity * item.lengthCm * item.widthCm * item.heightCm / 1_000_000
+  ), 0)
+  const calculatedGoodsWeightKg = goodsItems.reduce((total, item) => total + item.quantity * item.weightPerItemKg, 0)
+  const formatMeasurement = (value: number) => value.toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+  const rentalMonths = r.rentalMonths && r.rentalMonths > 0 ? r.rentalMonths : Math.max(1, Math.round((new Date(r.endDate).getTime() - new Date(r.startDate).getTime()) / (30.4375 * 86_400_000)))
+  const discountAmount = r.discountAmount ?? 0
+  const voucherDiscountAmount = r.voucherDiscountAmount ?? 0
+  const grossRentalAmount = r.grossRentalAmount ?? r.totalRentalAmount + discountAmount + voucherDiscountAmount
+  const savedQuote = {
+    quoteId: r.quoteId,
+    facilityId: r.facilityId,
+    unitTypeId: r.unitTypeId,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    rentalMonths,
+    monthlyPrice: r.monthlyPrice ?? grossRentalAmount / rentalMonths,
+    subtotal: grossRentalAmount,
+    discountRate: r.discountRate ?? (grossRentalAmount > 0 ? discountAmount / grossRentalAmount : 0),
+    discountAmount,
+    totalAfterDiscount: r.totalRentalAmount,
+    reservationDepositAmount: r.reservationDepositAmount,
+    securityDepositAmount: r.securityDepositAmount,
+    remainingRentalAmount: r.remainingRentalAmount,
+    dueAtCheckIn: r.dueAtCheckIn,
+    totalInitialObligation: r.totalInitialObligation,
+    policyVersion: r.pricingPackageCode ?? 'Đã lưu cùng đơn',
+    voucherCode: r.voucherCode,
+    voucherDiscountAmount,
+    quotedAt: r.createdAt,
+    expiresAt: r.holdExpiresAt,
+  }
   const steps = [
     { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
     { label: 'Phê duyệt hồ sơ', detail: r.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa' : 'Hồ sơ được duyệt tự động' },
@@ -160,11 +195,39 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const saveAppointment = async () => {
     if (!appointmentInput || busy) return
+    const [appointmentDate = '', appointmentTime = ''] = appointmentInput.split('T')
+    const earliestDate = policyDateInput(appointmentWindow.availableAt)
+    const latestDate = policyDateInput(appointmentWindow.deadlineAt)
     const appointment = new Date(`${appointmentInput}:00+07:00`)
-    if (!isCheckInAppointmentAllowed(appointment, appointmentWindow)) {
-      setMessage('Lịch nhận kho phải nằm trong thời hạn cho phép, trong giờ làm việc từ 08:00 đến 17:00 và theo khung 30 phút.')
+    const errors: { date?: string; time?: string } = {}
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)) {
+      errors.date = 'Vui lòng chọn ngày nhận kho hợp lệ.'
+    } else if (appointmentDate < earliestDate || appointmentDate > latestDate) {
+      errors.date = `Ngày nhận kho phải từ ${appointmentWindow.availableAt.toLocaleDateString('vi-VN')} đến ${appointmentWindow.deadlineAt.toLocaleDateString('vi-VN')}.`
+    }
+
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(appointmentTime)) {
+      errors.time = 'Vui lòng chọn giờ nhận kho hợp lệ.'
+    } else {
+      const [hour, minute] = appointmentTime.split(':').map(Number)
+      const minutes = hour * 60 + minute
+      if (minutes < 8 * 60 || minutes > 16 * 60 + 30 || minute % 30 !== 0) {
+        errors.time = 'Giờ nhận kho phải nằm trong khoảng 08:00–16:30 và theo khung 30 phút.'
+      } else if (!errors.date && appointmentDate === earliestDate && appointment < appointmentWindow.availableAt) {
+        errors.time = `Trong ngày ${appointmentWindow.availableAt.toLocaleDateString('vi-VN')}, giờ nhận kho sớm nhất là ${policyTimeInput(appointmentWindow.availableAt)}.`
+      }
+    }
+
+    if (!errors.date && !errors.time && !isCheckInAppointmentAllowed(appointment, appointmentWindow)) {
+      errors.time = 'Giờ nhận kho không nằm trong khung giờ được phép.'
+    }
+    if (errors.date || errors.time) {
+      setAppointmentErrors(errors)
+      setMessage(null)
       return
     }
+    setAppointmentErrors({})
     setBusy(true); setMessage(null)
     try {
       const saved = await setCustomerCheckInAppointment(r.id, appointment.toISOString())
@@ -201,6 +264,20 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       setMessage(error instanceof Error ? error.message : 'Không thể mở văn bản bàn giao.')
     }
   }
+  const viewGoodsImage = async (assetId: string) => {
+    const preview = window.open('', '_blank')
+    if (preview) preview.opener = null
+    try {
+      const file = await downloadCustomerReservationGoodsImage(assetId)
+      const url = URL.createObjectURL(file.blob)
+      if (preview) preview.location.href = url
+      else window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) {
+      preview?.close()
+      setMessage(error instanceof Error ? error.message : 'Không thể mở hình ảnh hàng hóa.')
+    }
+  }
   const saveHandoverDocument = async (fileDocument: CheckInDocument) => {
     try {
       const file = await downloadCustomerCheckInDocument(fileDocument.id)
@@ -227,42 +304,60 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
-        <p className="text-xs text-stone-500">Lịch thuê: <b>{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
-        <p className="text-xs text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? new Date(savedAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa đặt lịch'}</b></p>
-        <p className="text-xs text-emerald-800">Gian kho được gán: <b>{r.assignedUnitCode || 'Chưa được phân gian kho cụ thể'}</b></p>
+        <div className="mt-3 space-y-2">
+          <p className="text-xs leading-5 text-stone-600">Lịch thuê: <b className="text-stone-900">{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
+          <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? new Date(savedAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa đặt lịch'}</b></p>
+        </div>
         {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
           <div className="grid w-full gap-3 sm:grid-cols-2">
-            <VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
-              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '09:00'}`); setMessage(null) }} />
-            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="1800" value={appointmentInput.split('T')[1] || ''}
-              onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setMessage(null) }} /></label>
+            <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
+              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '09:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
+              {appointmentErrors.date && <p className="mt-1 text-xs text-red-700">{appointmentErrors.date}</p>}</div>
+            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input aria-invalid={Boolean(appointmentErrors.time)} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="1800" value={appointmentInput.split('T')[1] || ''}
+              onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
           </div>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
           <span className="basis-full text-[11px]">Lịch hợp lệ từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
           {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
         </div>}
-        <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 space-y-1.5">
-          <p><b>Hàng hóa khai báo:</b> {detail?.goodsItems.map(item => `${item.description || item.customGoodsName || item.category} (${item.quantity} kiện)`).join(' · ') || 'Đang tải chi tiết…'}</p>
-          <p><b>Thể tích / trọng lượng:</b> {r.totalGoodsVolumeM3} m³ · {r.totalGoodsWeightKg} kg</p>
-          <Button type="button" variant="outline" size="sm" className="mt-2" disabled={!detail} onClick={() => setGoodsDetailOpen(open => !open)}>{goodsDetailOpen ? 'Ẩn thông tin đã khai báo' : 'Xem thông tin đã khai báo'}</Button>
-          {goodsDetailOpen && detail && <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
-            <div><p className="font-bold text-stone-900">Tình trạng đóng gói chung</p><p className="mt-1">{detail.goodsCondition || 'Không có mô tả'}</p></div>
-            {detail.goodsItems.map((item, index) => <div key={item.id} className="rounded-lg border border-stone-200 bg-white p-3 leading-5">
-              <p className="font-bold text-stone-900">Hàng hóa {index + 1}: {item.customGoodsName || GOODS_CATEGORY_LABELS[item.category] || item.category}</p>
-              <p><b>Mô tả:</b> {item.description || 'Không có'}</p>
-              <p><b>Chất liệu:</b> {item.customMaterial || item.materialName || 'Không có'}</p>
-              <p><b>Số lượng:</b> {item.quantity} kiện</p>
-              <p><b>Kích thước mỗi kiện:</b> {item.lengthCm} × {item.widthCm} × {item.heightCm} cm</p>
-              <p><b>Cân nặng:</b> {item.weightPerItemKg} kg/kiện · tổng {(item.quantity * item.weightPerItemKg).toLocaleString('vi-VN')} kg</p>
-              <p><b>Hàng dễ bể / dễ vỡ:</b> {item.fragile ? 'Có' : 'Không'}</p>
-              {item.customerNote && <p><b>Ghi chú:</b> {item.customerNote}</p>}
-            </div>)}
-          </div>}
-          <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
-            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</p><p>Tiền thuê cả kỳ: {formatVnd(r.totalRentalAmount)}</p><p>Cọc giữ chỗ: {formatVnd(r.reservationDepositAmount)}</p><p>Tiền thuê còn lại: {formatVnd(r.remainingRentalAmount)}</p></div>
-            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">Khoản thu khi nhận kho</p><p>Tiền duy trì CSVC: {formatVnd(r.securityDepositAmount)}</p><p className="border-t border-amber-200 pt-1 font-bold">Tổng thu khi nhận kho: {formatVnd(r.dueAtCheckIn)}</p></div>
-          </div>
-            {remainingPayment && <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+        <div className="mt-3 space-y-4">
+          <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
+            <h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3>
+            {!detail && <p className="mt-3 text-stone-500">Đang tải chi tiết hàng hóa…</p>}
+            {detail && <>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng loại hàng</span><b className="mt-1 block text-base text-stone-900">{goodsItems.length}</b></div>
+                <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng số lượng</span><b className="mt-1 block text-base text-stone-900">{totalGoodsQuantity.toLocaleString('vi-VN')} kiện</b></div>
+                <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng kích thước cần dùng</span><b className="mt-1 block text-base text-stone-900">{formatMeasurement(calculatedGoodsVolumeM3)} m³</b></div>
+                <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng cân nặng</span><b className="mt-1 block text-base text-stone-900">{formatMeasurement(calculatedGoodsWeightKg)} kg</b></div>
+              </div>
+              <div className="mt-3 rounded-lg border border-stone-200 bg-white p-3"><b className="text-stone-900">Tình trạng đóng gói chung:</b> {detail.goodsCondition || 'Không có mô tả'}</div>
+              <div className="mt-3 space-y-3">
+                {goodsItems.map((item, index) => {
+                  const itemVolumeM3 = item.lengthCm * item.widthCm * item.heightCm / 1_000_000
+                  return <article key={item.id} className="rounded-lg border border-stone-200 bg-white p-4 leading-5">
+                    <p className="font-bold text-stone-900">Hàng hóa {index + 1}: {item.customGoodsName || GOODS_CATEGORY_LABELS[item.category] || item.category}</p>
+                    <div className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                      <p><b>Loại hàng:</b> {GOODS_CATEGORY_LABELS[item.category] || item.category}</p>
+                      <p><b>Chất liệu:</b> {item.customMaterial || item.materialName || 'Không có'}</p>
+                      <p className="sm:col-span-2"><b>Mô tả:</b> {item.description || 'Không có'}</p>
+                      <p><b>Số lượng:</b> {item.quantity.toLocaleString('vi-VN')} kiện</p>
+                      <p><b>Kích thước mỗi kiện:</b> {formatMeasurement(item.lengthCm)} × {formatMeasurement(item.widthCm)} × {formatMeasurement(item.heightCm)} cm</p>
+                      <p><b>Thể tích:</b> {formatMeasurement(itemVolumeM3)} m³/kiện · tổng {formatMeasurement(itemVolumeM3 * item.quantity)} m³</p>
+                      <p><b>Cân nặng:</b> {formatMeasurement(item.weightPerItemKg)} kg/kiện · tổng {formatMeasurement(item.quantity * item.weightPerItemKg)} kg</p>
+                      <p><b>Hàng dễ bể / dễ vỡ:</b> {item.fragile ? 'Có' : 'Không'}</p>
+                      <div><b>Hình ảnh:</b> {item.images.length ? <span className="mt-1 flex flex-wrap gap-1.5">{item.images.map(image => <button key={image.id} type="button" className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-left text-[11px] text-stone-700 hover:border-amber-400 hover:bg-amber-50" onClick={() => void viewGoodsImage(image.id)}>{image.originalName}</button>)}</span> : 'Không có'}</div>
+                      {item.customerNote && <p className="sm:col-span-2"><b>Ghi chú:</b> {item.customerNote}</p>}
+                    </div>
+                  </article>
+                })}
+              </div>
+              <p className="mt-3 text-[11px] text-stone-500">Số liệu đối chiếu đã lưu: {formatMeasurement(r.totalGoodsVolumeM3)} m³ · {formatMeasurement(r.totalGoodsWeightKg)} kg.</p>
+            </>}
+          </section>
+
+          <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" />
+            {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
               <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
               <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai</Button>

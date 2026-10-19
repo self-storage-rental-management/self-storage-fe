@@ -2330,7 +2330,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       if (capacity <= earlierCapacityHolds) throw new Error('Loại kho này không còn suất trống để duyệt hồ sơ.')
     }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
-    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
+    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
     const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
@@ -5218,7 +5218,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     assertPermission(customer, 'reservations:create')
     if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
-    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 6 giờ thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
+    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 15 phút thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
     const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
@@ -5646,7 +5646,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               : h.goodsReviewDueAt
             const paymentExpiresAt = requiresGoodsReview
               ? h.paymentExpiresAt
-              : new Date(verifiedAt.getTime() + 6 * 60 * 60 * 1000).toISOString()
+              : new Date(verifiedAt.getTime() + 15 * 60 * 1000).toISOString()
             return {
               ...h,
               status: requiresGoodsReview ? transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL') : 'awaiting_payment',
