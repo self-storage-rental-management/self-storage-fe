@@ -1383,13 +1383,7 @@ if (import.meta.hot) {
 const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
 
 function normalizeRuntimeRolePermissions(value: unknown) {
-  const empty = Object.fromEntries(
-    (['customer', 'staff', 'manager', 'business', 'admin'] as Role[]).map(role => [
-      role,
-      Object.fromEntries(PERMISSION_KEYS.map(key => [key, false]))
-    ])
-  ) as RolePermissionsState
-  const normalized = !DEMO_DATA_ENABLED && !value ? empty : normalizeRolePermissions(value)
+  const normalized = normalizeRolePermissions(value)
   try {
     if (DEMO_DATA_ENABLED && !localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
       normalized.manager['storage_units:assign'] = true
