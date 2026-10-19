@@ -241,7 +241,6 @@ export default function Layout({
       'performance': 'Hiệu Suất Mặt Bằng',
       'policies': 'Gói Thuê Kỳ Hạn',
       'pricing': 'Bảng Giá Loại Kho',
-      'discounts': 'Mã Voucher Ưu Đãi',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',
       'roles': 'Vai Trò & Phân Quyền',
@@ -250,7 +249,7 @@ export default function Layout({
       'settings': 'Cài Đặt Hệ Thống',
       'profile': 'Hồ Sơ Cá Nhân',
       'returns': 'Trả Kho & Quyết Toán',
-      'rental-regulations': 'Quy Chế Lưu Kho',
+      'rental-regulations': 'Quy Định Cho Thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
       'damage-incidents': 'Xử Lý Sự Cố Kho',
     }

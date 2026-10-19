@@ -3478,25 +3478,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             {bookingStep === 3 && <>
 
-            {/* Voucher / Promotion Code Input */}
-            <div className="space-y-1.5 border-t border-stone-200 pt-3">
-              <label className="text-xs font-semibold text-stone-700 block">
-                Mã ưu đãi / Voucher giảm giá (Tùy chọn)
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nhập mã ưu đãi nếu có (VD: HELLO2026)..."
-                  value={bookingVoucherCode}
-                  onChange={e => setBookingVoucherCode(e.target.value.toUpperCase())}
-                  className="w-full text-xs border border-stone-300 rounded-lg px-3 py-2 bg-white uppercase font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-              <p className="text-[10px] text-stone-500">
-                Chiết khấu voucher được áp dụng trên phần tiền thuê sau chiết khấu kỳ hạn (tối đa 1 voucher/đơn).
-              </p>
-            </div>
-
             {/* Storage Space & Cost Breakdown */}
             {(() => {
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
