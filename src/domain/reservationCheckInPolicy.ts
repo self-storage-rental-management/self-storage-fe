@@ -8,10 +8,10 @@ export const LAST_CHECK_IN_SLOT_HOUR = 16
 export const LAST_CHECK_IN_SLOT_MINUTE = 30
 
 const SLOT_MS = 30 * 60 * 1000
+const WORKING_DAYS = new Set([0, 1, 2, 3, 4, 5, 6])
 
 function isWorkingDay(value: Date) {
-  const day = value.getDay()
-  return day >= 1 && day <= 5
+  return WORKING_DAYS.has(value.getDay())
 }
 
 function ceilToAppointmentSlot(value: Date) {
@@ -34,6 +34,12 @@ export function addWorkingDays(value: Date, days: number) {
     result.setDate(result.getDate() + 1)
     if (isWorkingDay(result)) remaining -= 1
   }
+  return result
+}
+
+function endOfWorkingDay(value: Date) {
+  const result = new Date(value)
+  result.setHours(LAST_CHECK_IN_SLOT_HOUR, LAST_CHECK_IN_SLOT_MINUTE, 0, 0)
   return result
 }
 
@@ -94,7 +100,8 @@ export function plannedCheckInWindow(registeredAt: Date | string | number, revie
 
   return {
     availableAt,
-    deadlineAt: addWorkingDays(availableAt, CHECK_IN_WINDOW_DAYS),
+    // The availability date is day 1, so move forward only six more operating days.
+    deadlineAt: endOfWorkingDay(addWorkingDays(availableAt, CHECK_IN_WINDOW_DAYS - 1)),
   }
 }
 
