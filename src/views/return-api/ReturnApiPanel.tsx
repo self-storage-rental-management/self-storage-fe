@@ -29,7 +29,7 @@ const labels: Record<ApiReturn['status'], string> = {
   scheduled: 'Đã hẹn nghiệm thu',
   inspected: 'Đã nghiệm thu',
   awaiting_customer_confirmation: 'Chờ khách xác nhận',
-  disputed: 'Đang xem xét khiếu nại',
+  disputed: 'Đang khiếu nại - Cần BO giải quyết',
   payment_due: 'Chờ thanh toán quyết toán',
   refund_pending: 'Chờ hoàn cọc',
   completed: 'Đã hoàn tất',
@@ -41,18 +41,25 @@ const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
   ['scheduled', 'Đã hẹn nghiệm thu'],
   ['inspected', 'Đã nghiệm thu'],
   ['awaiting_customer_confirmation', 'Chờ khách xác nhận'],
-  ['disputed', 'Đang xem xét khiếu nại'],
+  ['disputed', 'Đang khiếu nại - Cần BO giải quyết'],
   ['payment_due', 'Chờ thanh toán quyết toán'],
   ['refund_pending', 'Chờ hoàn cọc'],
   ['completed', 'Đã hoàn tất'],
 ]
 
 export function ReturnSummary({ record }: { record: ApiReturn }) {
+  const badgeClass =
+    record.status === 'disputed'
+      ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
+      : record.status === 'completed'
+      ? 'bg-emerald-50 text-emerald-700'
+      : 'bg-amber-50 text-amber-800'
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div><h4 className="text-lg font-bold text-stone-900">{record.unitNumber}</h4><p className="mt-1 text-sm text-stone-500">{record.facilityName}</p></div>
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{record.sourceType === 'RECOVERY' && record.status === 'completed' ? record.recoveryTaskStatus === 'CLOSED' ? 'Đã hoàn tất thu hồi' : 'Quyết toán xong, chờ thu hồi' : labels[record.status]}</span>
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{record.sourceType === 'RECOVERY' && record.status === 'completed' ? record.recoveryTaskStatus === 'CLOSED' ? 'Đã hoàn tất thu hồi' : 'Quyết toán xong, chờ thu hồi' : labels[record.status]}</span>
       </div>
       <p className="text-sm text-stone-600">{record.sourceType === 'RECOVERY' ? 'Hồ sơ từ thu hồi kho - Ngày kiểm kê: ' : 'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -242,7 +249,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       <ReturnSummary record={record} />
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <p className="font-semibold">Bước tiếp theo</p>
-        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Quản lý cơ sở đang xem xét khiếu nại và các khoản phí.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
+        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban Điều Hành (BO) hoặc Quản lý giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-stone-200 p-4">
@@ -251,11 +258,12 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             {([
               ['Khách hàng', record.customerName], ['Lý do trả kho', record.customerNotes || 'Chưa ghi nhận'],
               ['Ghi chú nghiệm thu', record.inspectionNotes || 'Chưa ghi nhận'],
+              ...(record.customerDecisionNote ? [['Ý kiến khiếu nại của khách', record.customerDecisionNote]] : []),
               ['Kết quả xem xét', record.managerResolutionNote || 'Chưa có'],
               ['Khách xác nhận quyết toán', record.customerConfirmed ? 'Đã xác nhận' : 'Chưa xác nhận'],
               ['Hiện trạng kho đề xuất', record.proposedUnitStatus === 'available' ? 'Sẵn sàng' : record.proposedUnitStatus === 'maintenance' ? 'Cần bảo trì' : 'Chưa ghi nhận'],
               ['Bằng chứng nghiệm thu', `${record.evidencePhotos?.length ?? 0} tệp`],
-            ] as const).map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words font-medium text-stone-800">{value}</dd></div>)}
+            ] as Array<[string, string]>).map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words font-medium text-stone-800">{value}</dd></div>)}
           </dl>
         </div>
         <div className="rounded-xl border border-stone-200 p-4">
@@ -279,6 +287,54 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         <label className="block">Hiện trạng kho đề xuất<select value={unit} disabled={busy} onChange={(event) => setUnit(event.target.value as typeof unit)}><option value="available">Sẵn sàng</option><option value="maintenance">Cần bảo trì</option></select></label>
         <Button type="submit" disabled={busy || (canReview && !note.trim())}>{canInspect ? 'Ghi nhận nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</Button>
       </form>}
+      {role === 'staff' && !recovery && record.status === 'awaiting_customer_confirmation' && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-900">⏳ Đang chờ khách hàng xác nhận quyết toán</span>
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 border border-amber-300">Chưa đủ điều kiện hoàn cọc</span>
+          </div>
+          <p className="text-xs text-amber-800">
+            Biên bản nghiệm thu đã được ghi nhận và đang chờ khách hàng duyệt phương án quyết toán. Nút hoàn cọc tạm thời bị vô hiệu hóa để tránh lỗi xung đột hệ thống (409 Conflict).
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" disabled variant="outline" className="opacity-50 cursor-not-allowed border-amber-300 text-amber-800 bg-white" title="Hồ sơ đang chờ khách duyệt - Nút bị vô hiệu hóa để tránh lỗi xung đột 409">
+              Hoàn cọc (Đang chờ khách duyệt)
+            </Button>
+          </div>
+        </div>
+      )}
+      {role === 'staff' && !recovery && record.status === 'disputed' && (
+        <div className="rounded-xl border border-rose-300 bg-rose-50/80 p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-900">⚠️ Đang khiếu nại - Cần BO giải quyết</span>
+            <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800 border border-rose-300">Khóa thao tác nhân viên</span>
+          </div>
+          <p className="text-xs text-rose-800">
+            Khách hàng đã khiếu nại kết quả quyết toán ({record.customerDecisionNote || 'Cần xem xét lại'}). Nút hoàn cọc và nghiệm thu bị khóa để tránh lỗi xung đột (409 Conflict) cho đến khi Ban Điều Hành (BO) hoặc Quản lý cơ sở thẩm định giải quyết.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" disabled variant="outline" className="opacity-50 cursor-not-allowed border-rose-300 text-rose-700 bg-white" title="Hồ sơ đang khiếu nại - Cần BO giải quyết trước khi hoàn cọc (tránh lỗi xung đột 409)">
+              Hoàn cọc (Bị khóa do khiếu nại)
+            </Button>
+          </div>
+        </div>
+      )}
+      {role === 'staff' && !recovery && record.status === 'payment_due' && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-900">💵 Chờ khách thanh toán quyết toán</span>
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 border border-amber-300">Khách nộp thêm: {rentalMoney(record.amountDueFromCustomer, 'VND')}</span>
+          </div>
+          <p className="text-xs text-amber-800">
+            Tổng chi phí nghiệm thu vượt quá tiền cọc. Khách hàng cần thanh toán phần phụ phí còn thiếu trước khi hoàn tất đóng hồ sơ trả kho.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" disabled variant="outline" className="opacity-50 cursor-not-allowed border-amber-300 text-amber-800 bg-white" title="Hồ sơ chờ khách nộp thêm phụ phí - Nút bị vô hiệu hóa">
+              Hoàn tất (Chờ khách thanh toán)
+            </Button>
+          </div>
+        </div>
+      )}
       {recovery && role !== 'customer' && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {recovery && write && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
       {canRefund && <form className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3" onSubmit={(event) => { event.preventDefault(); void run(() => completeRefund(id, { transactionReference: refundReference.trim() || undefined, notes: refundNotes.trim() || undefined })) }}>

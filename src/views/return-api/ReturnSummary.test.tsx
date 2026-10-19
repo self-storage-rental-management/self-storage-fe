@@ -17,4 +17,10 @@ describe('Return summary', () => {
     const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, settlementBlocker: 'UNKNOWN' }} />)
     expect(html).toContain('Hồ sơ chưa được xác nhận thanh toán/hoàn tiền thành công')
   })
+  it('displays prominent red warning badge when return is disputed', () => {
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, status: 'disputed' }} />)
+    expect(html).toContain('Đang khiếu nại - Cần BO giải quyết')
+    expect(html).toContain('bg-rose-100')
+    expect(html).toContain('text-rose-800')
+  })
 })
