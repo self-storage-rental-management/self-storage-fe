@@ -6,17 +6,54 @@ function formatDisplayDate(value: string) {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replace(/-/g, '/')
 }
 
-export default function ReservationQuoteSummary({ quote: q, needsReview }: { quote: ReservationQuote; needsReview: boolean }) {
+export default function ReservationQuoteSummary({ quote: q, needsReview, context = 'quote' }: { quote: ReservationQuote; needsReview: boolean; context?: 'quote' | 'reservation' }) {
   const depositPercent = q.totalAfterDiscount > 0 ? Math.round(q.reservationDepositAmount / q.totalAfterDiscount * 100) : 0
   const amountClass = 'min-w-[8.5rem] text-right font-semibold tabular-nums'
   const payableAmountClass = `${amountClass} text-base font-bold text-amber-700`
   const deductionAmountClass = `${amountClass} text-base font-bold text-emerald-700`
 
+  if (context === 'reservation') {
+    return (
+      <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-stone-200 pb-3">
+          <div>
+            <h3 className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</h3>
+            <p className="mt-0.5 text-xs text-stone-500">{formatDisplayDate(q.startDate)}–{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng</p>
+          </div>
+          <div className="text-right"><span className="text-xs text-stone-500">Đơn giá/tháng</span><b className="block tabular-nums text-stone-900">{formatVndAmount(q.monthlyPrice)}</b></div>
+        </div>
+
+        <div className="grid gap-4 py-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Cách tính tiền thuê</p>
+            <div className="flex justify-between gap-3"><span>Tiền thuê trước giảm</span><b className="tabular-nums">{formatVndAmount(q.subtotal)}</b></div>
+            {q.discountAmount > 0 && <div className="flex justify-between gap-3 text-emerald-700"><span>Giảm kỳ hạn ({Math.round(q.discountRate * 100)}%)</span><b className="tabular-nums">− {formatVndAmount(q.discountAmount)}</b></div>}
+            {q.voucherCode && (q.voucherDiscountAmount ?? 0) > 0 && <div className="flex justify-between gap-3 text-emerald-700"><span>Voucher {q.voucherCode}</span><b className="tabular-nums">− {formatVndAmount(q.voucherDiscountAmount!)}</b></div>}
+            <div className="flex justify-between gap-3 border-t border-stone-200 pt-2"><b>Tiền thuê sau giảm</b><b className="tabular-nums text-amber-700">{formatVndAmount(q.totalAfterDiscount)}</b></div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Lộ trình thanh toán</p>
+            <div className="flex justify-between gap-3"><span>Cọc giữ chỗ ({depositPercent}%)</span><b className="tabular-nums text-amber-700">{formatVndAmount(q.reservationDepositAmount)}</b></div>
+            <div className="flex justify-between gap-3"><span>Tiền thuê còn lại</span><b className="tabular-nums">{formatVndAmount(q.remainingRentalAmount)}</b></div>
+            <div className="flex justify-between gap-3"><span>Tiền duy trì CSVC <small className="text-stone-500">(hoàn trả)</small></span><b className="tabular-nums">{formatVndAmount(q.securityDepositAmount)}</b></div>
+            <div className="flex justify-between gap-3 border-t border-stone-200 pt-2"><b>Khoản thu khi nhận kho</b><b className="tabular-nums text-amber-700">{formatVndAmount(q.dueAtCheckIn)}</b></div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-stone-900 px-3 py-2.5 text-white">
+          <div><b>Tổng nghĩa vụ tài chính</b><p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền duy trì CSVC</p></div>
+          <b className="text-base tabular-nums">{formatVndAmount(q.totalInitialObligation)}</b>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-5 text-sm sm:p-6">
       {/* ── HEADER BÁO GIÁ ── */}
       <div className="border-b border-stone-200 pb-4">
-        <h3 className="text-lg font-bold text-stone-900">Xác nhận báo giá đặt kho</h3>
+        <h3 className="text-lg font-bold text-stone-900">{context === 'quote' ? 'Xác nhận báo giá đặt kho' : 'Tiền thuê và cọc giữ chỗ'}</h3>
         <p className="mt-1 text-xs text-stone-600">
           Kỳ thuê: <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate)}</b> · {q.rentalMonths} tháng
         </p>
@@ -105,7 +142,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview }: { quo
           </div>
 
           <div className="mt-2 flex items-center justify-between border-t border-stone-200/60 pt-2 text-sm">
-            <span className="font-bold text-stone-900">Tổng thanh toán lúc nhận kho</span>
+            <span className="font-bold text-stone-900">Khoản thu khi nhận kho</span>
             <span className={payableAmountClass}>{formatVndAmount(q.dueAtCheckIn)}</span>
           </div>
         </div>
@@ -123,9 +160,9 @@ export default function ReservationQuoteSummary({ quote: q, needsReview }: { quo
       </div>
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}
-      <p className="text-xs text-stone-500">
+      {context === 'quote' && <p className="text-xs text-stone-500">
         Báo giá có hiệu lực đến {new Date(q.expiresAt).toLocaleString('vi-VN')}. Số tiền được lưu theo báo giá này khi tạo đơn.
-      </p>
+      </p>}
 
       {needsReview && (
         <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 sm:text-sm">
