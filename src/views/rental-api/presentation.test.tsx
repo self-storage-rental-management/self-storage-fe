@@ -147,7 +147,7 @@ describe("Rental/Renewal business presentation", () => {
       rentalError(
         new ApiClientError("DEFERRED_SOURCE: Eligibility UNKNOWN", { status: 409 }),
       ),
-    ).toBe("Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau; nếu vẫn gặp lỗi, liên hệ quản lý cơ sở.")
+    ).toBe("Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau, nếu vẫn gặp lỗi, liên hệ quản lý cơ sở.")
   })
   it("explains when the rental is outside the renewal request window", () => {
     expect(

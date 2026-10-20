@@ -59,6 +59,7 @@ export function isOperationState(
   const r = value as RenewalOperationState | null
   return (
     !!r &&
+    (r.displayCode == null || (typeof r.displayCode === "string" && /^GH-\d{4}-\d{6}$/.test(r.displayCode))) &&
     isUuid(r.renewalId) &&
     nullable(r.expectedVersion, isVersion) &&
     [
