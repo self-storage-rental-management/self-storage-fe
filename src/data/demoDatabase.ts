@@ -347,7 +347,7 @@ export const SUPPORT_TICKETS = TICKETS
 export const TASKS = [
   { id: 'task-1', title: 'Kiểm tra HCM-Q1-F01-S-001 trước bàn giao', time: '09:00 AM', priority: 'high', done: false },
   { id: 'task-2', title: 'Verify reservation R-2048', time: '10:30 AM', priority: 'medium', done: true },
-  { id: 'task-3', title: 'Check corridor cameras', time: '02:00 PM', priority: 'low', done: false }
+  { id: 'task-3', title: 'Kiểm tra hệ thống đèn hành lang', time: '02:00 PM', priority: 'low', done: false }
 ]
 
 export const RESERVATIONS = [

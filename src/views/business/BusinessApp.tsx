@@ -13,8 +13,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   AreaChart,
   Area,
 } from "recharts"
@@ -55,7 +53,6 @@ import {
   UNIT_SPECS,
   REVENUE_DATA,
   REVENUE_BREAKDOWN,
-  CONVERSION_DATA,
   PRICING_TIERS,
   DISCOUNTS,
   POLICIES,
@@ -100,7 +97,6 @@ import {
 
 const RUNTIME_REVENUE_DATA = DEMO_DATA_ENABLED ? REVENUE_DATA : []
 const RUNTIME_REVENUE_BREAKDOWN = DEMO_DATA_ENABLED ? REVENUE_BREAKDOWN : []
-const RUNTIME_CONVERSION_DATA = DEMO_DATA_ENABLED ? CONVERSION_DATA : []
 const RUNTIME_PRICING_TIERS = DEMO_DATA_ENABLED ? PRICING_TIERS : []
 const RUNTIME_DISCOUNTS = DEMO_DATA_ENABLED ? DISCOUNTS : []
 const RUNTIME_FEES = DEMO_DATA_ENABLED ? FEES : []
@@ -593,13 +589,6 @@ export default function BusinessApp({
       icon: Icon.building,
       group: "Cơ Sở & Mặt Bằng",
       permission: "facilities:read",
-    },
-    {
-      id: "performance",
-      label: "Hiệu Suất Mặt Bằng",
-      icon: Icon.eye,
-      group: "Cơ Sở & Mặt Bằng",
-      permission: "reports:read",
     },
 
     // ── GIÁ & KHUYẾN MÃI ──
@@ -2358,7 +2347,6 @@ export default function BusinessApp({
   const showToast = (msg: string) => {
     const pageTitles: Record<string, string> = {
       facilities: 'Quản Lý Cơ Sở',
-      performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Bảng Giá Loại Kho',
       policies: 'Gói Thuê Kỳ Hạn',
       'rental-regulations': 'Quy Định Cho Thuê',
@@ -5345,183 +5333,7 @@ export default function BusinessApp({
         </div>
       )}
 
-      {/* ── PERFORMANCE REPORTS ───────────────────────────────── */}
-      {page === "performance" && (
-        <div className="fade-in space-y-5">
-          <SectionHeader
-            title={
-              lang === "vi"
-                ? "Báo Cáo Hiệu Suất Hoạt Động"
-                : "Performance Reports"
-            }
-            subtitle={
-              lang === "vi"
-                ? "Các chỉ số KPI vận hành trọng yếu trên toàn bộ hệ thống cơ sở"
-                : "Operational KPIs across all facilities"
-            }
-          />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              title={lang === "vi" ? "Lấp đầy trung bình" : "Avg Occupancy"}
-              value={`${totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0}%`}
-              icon={Icon.chart}
-              iconBg="bg-blue-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Tỷ lệ chuyển đổi" : "Conversion Rate"}
-              value="0%"
-              icon={Icon.check}
-              iconBg="bg-green-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Thời gian thuê TB" : "Avg Tenure"}
-              value={lang === "vi" ? "0 tháng" : "0 mo"}
-              icon={Icon.calendar}
-              iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Tỷ lệ rời bỏ (Churn)" : "Churn Rate"}
-              value="0%"
-              icon={Icon.refresh}
-              iconBg="bg-amber-50"
-            />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">
-                {lang === "vi"
-                  ? "Tỷ Lệ Chuyển Đổi Khách Thăm Kho"
-                  : "Inquiry Conversion Rate"}
-              </h3>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart
-                  data={RUNTIME_CONVERSION_DATA}
-                  margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <Tooltip
-                    formatter={
-                      ((v: number) => [
-                        `${v}%`,
-                        lang === "vi" ? "Chuyển đổi" : "Conversion",
-                      ]) as any
-                    }
-                    contentStyle={{
-                      borderRadius: 8,
-                      border: "1px solid #e2e8f0",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="rate"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={{ fill: "#10b981", r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">
-                {lang === "vi"
-                  ? "Điểm Hiệu Suất Từng Cơ Sở"
-                  : "Facility Performance Scores"}
-              </h3>
-              {facilitiesList
-                .filter((f) => f.status === "active")
-                .map((f) => {
-                  const occ = getFacilityOccupiedCount(f)
-                  const tot = getFacilityTotalUnits(f)
-                  const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
-                  return (
-                    <div key={f.id} className="mb-4">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-700 font-medium">
-                          {f.name}
-                        </span>
-                        <span className="text-slate-800 font-semibold">
-                          {pct}%
-                        </span>
-                      </div>
-                      <ProgressBar
-                        value={occ}
-                        max={tot || 1}
-                        color={pct >= 85 ? "bg-green-500" : "bg-blue-500"}
-                      />
-                    </div>
-                  )
-                })}
-            </Card>
-          </div>
-          <Card>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{lang === "vi" ? "Cơ Sở" : "Facility"}</Th>
-                  <Th>{lang === "vi" ? "Tỷ Lệ Lấp Đầy" : "Occupancy"}</Th>
-                  <Th>{lang === "vi" ? "Thời Hạn TB" : "Avg Length"}</Th>
-                  <Th>{lang === "vi" ? "Rời Bỏ" : "Churn"}</Th>
-                  <Th>{lang === "vi" ? "Độ Hài Lòng" : "Satisfaction"}</Th>
-                  <Th>
-                    {lang === "vi" ? "Doanh Thu / Năm" : "Revenue / Year"}
-                  </Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {facilitiesList
-                  .filter((f) => f.status === "active")
-                  .map((f) => {
-                    const occ = getFacilityOccupiedCount(f)
-                    const tot = getFacilityTotalUnits(f)
-                    const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
-                    return (
-                      <Tr key={f.id}>
-                        <Td className="font-medium">{f.name}</Td>
-                        <Td>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">
-                              {pct}%
-                            </span>
-                            <ProgressBar
-                              value={occ}
-                              max={tot || 1}
-                              color="bg-blue-500"
-                            />
-                          </div>
-                        </Td>
-                        <Td>{lang === "vi" ? "0 tháng" : "0 mo"}</Td>
-                        <Td>0%</Td>
-                        <Td>
-                          <div className="flex items-center gap-1 text-slate-400">
-                            ★ 0.0
-                          </div>
-                        </Td>
-                        <Td className="font-semibold text-slate-800 font-mono">
-                          {formatCurrency(getFacilityActualRevenue(f) * 12)} /{" "}
-                          {lang === "vi" ? "năm" : "yr"}
-                        </Td>
-                      </Tr>
-                    )
-                  })}
-              </Tbody>
-            </Table>
-          </Card>
-        </div>
-      )}
+
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
       {page === "profile" && (

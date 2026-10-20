@@ -238,7 +238,6 @@ export default function Layout({
       'rentals': 'Hợp Đồng & Cước Thuê',
       'overdue': 'Quản Lý Nợ Quá Hạn',
       'facilities': 'Quản Lý Cơ Sở',
-      'performance': 'Hiệu Suất Mặt Bằng',
       'policies': 'Gói Thuê Kỳ Hạn',
       'pricing': 'Bảng Giá Loại Kho',
       'revenue': 'Báo Cáo Doanh Thu',

@@ -777,7 +777,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
               <div className="relative pt-3.5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-400">
                 <span className="flex items-center gap-1.5 text-stone-300 font-medium">
                   <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Bảo vệ &amp; Giám sát CCTV 24/7</span>
+                  <span>Bảo vệ &amp; Kiểm soát ra vào 24/7</span>
                 </span>
                 <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60 text-[10px] sm:text-[11px]">
                   {publicCatalogLoading ? '…' : facilityCodes || `${facilitiesList.length} cơ sở`}
@@ -807,7 +807,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
               <div className="w-12 h-12 rounded-xl bg-amber-100 text-[#9A5A05] flex items-center justify-center mb-4">
                 <ShieldCheckIcon className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-stone-900 mb-2">An Ninh Giám Sát 24/7</h3>
+              <h3 className="text-base font-bold text-stone-900 mb-2">Bảo Vệ & Kiểm Soát An Ninh</h3>
               <p className="text-xs text-stone-600 leading-relaxed">
                 Kiểm tra thông tin an ninh và điều kiện ra vào của từng cơ sở trước khi đặt thuê.
               </p>
@@ -962,7 +962,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
                     </div>
                     <div>
                       <span className="text-stone-400 text-[10px] block">AN NINH</span>
-                      <span className="font-bold text-stone-800">24/7 CCTV & PIN</span>
+                      <span className="font-bold text-stone-800">Bảo vệ & Khóa PIN</span>
                     </div>
                   </div>
                 </div>
@@ -1132,7 +1132,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
             {activeModal === 'facilities' && (
               <div className="mt-4 space-y-4 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub hiện đang vận hành các cơ sở lưu trữ tại các vị trí giao thông thuận tiện, trang bị camera giám sát và đội ngũ quản lý chuyên nghiệp:
+                  StorageHub hiện đang vận hành các cơ sở lưu trữ tại các vị trí giao thông thuận tiện, trang bị hệ thống kiểm soát an ninh và đội ngũ quản lý chuyên nghiệp:
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {facilitiesList.map(f => (

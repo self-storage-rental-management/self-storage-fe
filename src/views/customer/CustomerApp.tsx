@@ -2039,10 +2039,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       </div>
                       {facility.rating > 0 && <span className="text-sm font-semibold text-amber-700">★ {facility.rating}</span>}
                     </div>
-                    <div className="my-4 flex flex-wrap gap-2">
-                      <Badge variant="muted">{'Camera 24/7'}</Badge>
-                      {facility.climate && <Badge variant="info">{'Điều hòa độ ẩm'}</Badge>}
-                    </div>
+                    {facility.climate ? (
+                      <div className="my-4 flex flex-wrap gap-2">
+                        <Badge variant="info">{'Điều hòa độ ẩm'}</Badge>
+                      </div>
+                    ) : (
+                      <div className="my-3" />
+                    )}
                     <div className="flex items-end justify-between border-t border-stone-100 pt-4">
                       <div>
                         <p className="text-xs text-stone-500">{'Giá chỉ từ'}</p>
