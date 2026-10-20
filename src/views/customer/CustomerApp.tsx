@@ -672,7 +672,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [selectedUnit, setSelectedUnit] = useState<StorageUnit | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [bookOpen, setBookOpen] = useState(false)
-  const [bookingStep, setBookingStep] = useState<1 | 2 | 3>(1)
+  const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1)
   const [bookingReview, setBookingReview] = useState(false)
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
@@ -3299,11 +3299,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       >
         {selectedUnit && (
           <div className="space-y-4">
-            <ol className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Các bước đặt kho">
+            <ol className="grid grid-cols-1 gap-2 sm:grid-cols-4" aria-label="Các bước đặt kho">
               {[
                 [1, 'Thông tin cá nhân'],
-                [2, 'Hàng hóa & sức chứa'],
-                [3, 'Báo giá & lịch nhận kho'],
+                [2, 'Hàng hóa & số liệu'],
+                [3, 'Báo giá'],
+                [4, 'Lịch check-in'],
               ].map(([step, label]) => {
                 const stepNumber = Number(step)
                 const active = bookingStep === stepNumber
@@ -3459,7 +3460,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {/* Check-in schedule is intentionally placed after goods declaration because OTHER goods add a review stage. */}
             </>}
 
-            {bookingStep === 3 && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
+            {bookingStep === 4 && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
               <div>
                 <p className="text-sm font-semibold text-stone-900">Chọn ngày giờ nhận kho</p>
                 <p className="mt-1 text-xs leading-5 text-stone-600">
@@ -3476,7 +3477,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
             </div>}
 
-            {bookingStep === 3 && <>
+            {bookingStep === 2 && <>
 
             {/* Storage Space & Cost Breakdown */}
             {(() => {
@@ -3635,12 +3636,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         setServerQuote(null)
                         setReservationSubmitError(null)
                       }
-                      setBookingStep(current => Math.max(1, current - 1) as 1 | 2 | 3)
+                      setBookingStep(current => Math.max(1, current - 1) as 1 | 2 | 3 | 4)
                     }}>Quay lại</Button>}
               </div>
               {bookingStep === 1 && <Button onClick={continueFromPersonalDetails}>Tiếp theo: Hàng hóa</Button>}
-              {bookingStep === 2 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && (rentalPackagesLoading || !selectedBackendRentalPackage))} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang lập báo giá...' : 'Tiếp tục: Xem báo giá'}</Button>}
-              {bookingStep === 3 && <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận và đặt kho'}</Button>}
+              {bookingStep === 2 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && (rentalPackagesLoading || !selectedBackendRentalPackage))} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang lập báo giá...' : 'Kiểm tra và lấy báo giá'}</Button>}
+              {bookingStep === 3 && <Button onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
+              {bookingStep === 4 && <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
         )}
