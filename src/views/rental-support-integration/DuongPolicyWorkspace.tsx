@@ -456,8 +456,8 @@ function PolicyEditor({
               {overdueTerm && <section className="rounded-xl border border-stone-200 p-4">
                 <h4 className="font-semibold text-stone-900">Quá hạn và thu hồi</h4>
                 <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
-                  <div><dt className="text-stone-500">Ngày 1–{overdueTerm.warningThroughDay}</dt><dd className="font-medium text-stone-900">Nhắc khách gia hạn hoặc trả kho</dd></div>
-                  <div><dt className="text-stone-500">Ngày {overdueTerm.warningThroughDay + 1}–{overdueTerm.seriousThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo quá hạn nghiêm trọng</dd></div>
+                  <div><dt className="text-stone-500">Ngày 1 đến {overdueTerm.warningThroughDay}</dt><dd className="font-medium text-stone-900">Nhắc khách gia hạn hoặc trả kho</dd></div>
+                  <div><dt className="text-stone-500">Ngày {overdueTerm.warningThroughDay + 1} đến {overdueTerm.seriousThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo quá hạn nghiêm trọng</dd></div>
                   <div><dt className="text-stone-500">Ngày {overdueTerm.urgentThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo khẩn cấp</dd></div>
                   <div><dt className="text-stone-500">Từ {overdueTerm.recoveryStartTime.slice(0, 5)} ngày {overdueTerm.recoveryFromDay}</dt><dd className="font-medium text-stone-900">Chuyển sang xử lý thu hồi</dd></div>
                 </dl>
@@ -514,7 +514,7 @@ function PolicyEditor({
         <>
           <p role="status">
             {uncertain
-              ? "Chưa xác định được kết quả. Không đổi nội dung hoặc tải lại trang; cần đối chiếu chính sách hoặc thử lại cùng yêu cầu."
+              ? "Chưa xác định được kết quả. Không đổi nội dung hoặc tải lại trang, cần đối chiếu chính sách hoặc thử lại cùng yêu cầu."
               : "Chính sách đã thay đổi hoặc chưa đủ điều kiện. Đọc lại chính sách trước khi tiếp tục."}
           </p>
           <Button
