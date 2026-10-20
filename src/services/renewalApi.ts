@@ -154,7 +154,7 @@ export async function quoteRenewal(
         typeof q.id === "string" &&
         q.rentalId === rentalId &&
         isAcceptedTerms(q) &&
-        Number.isFinite(Date.parse(q.expiresAt)) &&
+        (q.expiresAt == null || Number.isFinite(Date.parse(q.expiresAt))) &&
         [
           "monthlyPrice",
           "subtotal",

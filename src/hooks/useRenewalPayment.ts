@@ -73,17 +73,46 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
     const timer=typeof document==="undefined"?null:globalThis.setInterval(()=>{
       if(document.visibilityState!=="hidden")void read()
     },5000)
-    return ()=>{active=false;if(timer!==null)globalThis.clearInterval(timer)}
+    // Back from the gateway can restore this component from the browser cache,
+    // including a suspended request and its submission lock.
+    const releaseNavigation=()=>{
+      ++epoch.current;lock.current=false;reading=false;setBusy(false)
+    }
+    const restore=()=>{releaseNavigation();void read()}
+    if(typeof window!=="undefined") {
+      window.addEventListener?.("pagehide",releaseNavigation)
+      window.addEventListener?.("pageshow",restore)
+    }
+    return ()=>{
+      active=false;if(timer!==null)globalThis.clearInterval(timer)
+      if(typeof window!=="undefined") {
+        window.removeEventListener?.("pagehide",releaseNavigation)
+        window.removeEventListener?.("pageshow",restore)
+      }
+    }
   },[enabled,scope,renewal.id,renewal.version])
 
   const pay=async()=>{
     if(lock.current||!enabled||renewal.status!=="accepted"||renewal.acceptedRevision===null||payment?.paymentStatus==="PAID")return
-    lock.current=true;++epoch.current;setBusy(true);setError(null)
+    lock.current=true;const request=++epoch.current;setBusy(true);setError(null)
+    const isCurrent=()=>mounted.current&&currentScope.current===scope&&currentEnabled.current&&request===epoch.current
     try {
+      // Read the authoritative outcome before reusing a persisted retry key.
+      // A cancelled/failed gateway attempt must not consume an extra click.
+      try {
+        const latest=await getRenewalVnpayPayment(renewal.id)
+        if(!isCurrent())return
+        setPayment(latest)
+        if(latest.paymentStatus==="PAID") {refresh.current?.();return}
+        if(latest.paymentStatus==="FAILED"||latest.paymentStatus==="CANCELLED")forget()
+      } catch(e) {
+        if(!isCurrent())return
+        if(!(e instanceof ApiClientError&&e.status===404))throw e
+      }
       const operations=await getRenewalOperations("customer",renewal.id)
+      if(!isCurrent())return
       if(!operations.appointmentRef || !operations.appointmentStart || Date.parse(operations.appointmentStart)<=Date.now())
         throw new Error("Vui lòng chọn lịch ký gia hạn trước khi thanh toán.")
-      if(!mounted.current||currentScope.current!==scope||!currentEnabled.current)return
       if(attempt.current?.scope!==scope)attempt.current=null
       let key=attempt.current?.key
       if(!key) { try { key=sessionStorage.getItem(scope)??undefined } catch {} }
@@ -91,7 +120,7 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
       attempt.current={scope,key}
       try { sessionStorage.setItem(scope,key) } catch {}
       const result=await createRenewalVnpayPaymentIntent(renewal.id,key)
-      if(!mounted.current||currentScope.current!==scope||!currentEnabled.current)return
+      if(!isCurrent())return
       setPayment(result);refresh.current?.()
       if(result.paymentStatus==="PAID")return
       if(result.paymentStatus==="FAILED"||result.paymentStatus==="CANCELLED") {
@@ -99,8 +128,8 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
       }
       window.location.assign(renewalPaymentRedirectUrl(result))
     } catch(e) {
-      if(mounted.current&&currentScope.current===scope)setError(renewalPaymentError(e))
-    } finally { lock.current=false;if(mounted.current)setBusy(false) }
+      if(isCurrent())setError(renewalPaymentError(e))
+    } finally { if(request===epoch.current){lock.current=false;if(mounted.current)setBusy(false)} }
   }
   return {payment,busy,error,pay,appointmentSelected}
 }

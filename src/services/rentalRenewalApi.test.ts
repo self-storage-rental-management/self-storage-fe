@@ -6,7 +6,7 @@ import {
   setRefreshToken,
 } from "./apiClient"
 import { getRental, listRentals } from "./rentalApi"
-import { listCustomerRentals } from "./customerRentalApi"
+import { listAllCustomerRentals, listCustomerRentals } from "./customerRentalApi"
 import {
   cancelRenewal,
   getRenewal,
@@ -148,6 +148,19 @@ describe("D1/D2 wire contracts", () => {
     const fetch = response(shared)
     expect(await listCustomerRentals("active", 0, 20)).toEqual(shared)
     expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/api/customer/rentals")
+  })
+  it("loads all Customer rental pages for the profile view", async () => {
+    const firstPage = { ...page([rental]), pagination: { ...page([rental]).pagination, page: 0, totalItems: 2, totalPages: 2 } }
+    const secondRental = { ...rental, id: "r2", storageUnitCode: "A-02" }
+    const secondPage = { ...page([secondRental]), pagination: { ...page([secondRental]).pagination, page: 1, totalItems: 2, totalPages: 2 } }
+    const fetch = vi.fn().mockImplementation(async (input: string) => {
+      const pageNumber = new URL(input).searchParams.get("page")
+      return json(pageNumber === "0" ? firstPage : secondPage)
+    })
+    vi.stubGlobal("fetch", fetch)
+
+    expect(await listAllCustomerRentals()).toEqual([rental, secondRental])
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
   it("does not fallback to the shared Customer list when D1 is unavailable", async () => {
     const fetch = vi.fn().mockResolvedValue(json({ error: { code: "NOT_FOUND", message: "Unavailable" } }, 404))

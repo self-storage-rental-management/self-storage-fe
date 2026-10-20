@@ -138,6 +138,7 @@ export function isOperationEvent(
         "CONFIRMATION",
         "REFUND",
         "DEPOSIT_DISPOSITION",
+        "DEPOSIT_REVIEW_REQUIRED",
         "REFUND_EXECUTION",
         "COMPLETION",
         "EXPIRY",
@@ -150,6 +151,7 @@ export function isOperationEvent(
   )
     return false
   const d = e.data as Record<string, unknown>
+  if (e.kind === "DEPOSIT_REVIEW_REQUIRED") return ["AWAITING_FAULT_REVIEW", "FACILITY_FAULT"].includes(String(d.status))
   if (e.kind === "FAULT_REVIEW")
     return isUuid(d.incidentId) && typeof d.facilityFault === "boolean" &&
       typeof d.reason === "string" && d.reason.trim().length > 0 &&
@@ -439,9 +441,8 @@ export async function sendRenewalOperation(
       throw new Error("Tham chiếu hồ sơ/minh chứng không hợp lệ.")
   }
   if ("reason" in b)
-    validateText(b.reason ?? "", !["appointment"].includes(command.action))
+    validateText(b.reason ?? "", !["appointment", "reschedule"].includes(command.action))
   if ("completionNote" in b) validateText(b.completionNote ?? "", false)
-  if (command.action === "reschedule") validateText(command.body.reason ?? "")
   if ("appointmentAt" in b && !isInstant(b.appointmentAt))
     throw new Error("Thời điểm hẹn cần ISO instant.")
   if (command.action === "exception") {
@@ -469,11 +470,12 @@ export async function sendRenewalOperation(
   if (command.action === "cash") {
     if (command.body.paymentMethod && !["CASH", "BANK_TRANSFER"].includes(command.body.paymentMethod)) throw new Error("Phương thức thanh toán không hợp lệ.")
     if (!isUuid(command.body.receiptFileId)) throw new Error("Cần chứng từ thu tiền mặt.")
-    validateText(command.body.receiptReference, true, 100)
+    if (command.body.paymentMethod === "BANK_TRANSFER") validateText(command.body.receiptReference ?? "", true, 100)
+    else if (command.body.receiptReference !== undefined) validateText(command.body.receiptReference, false, 100)
     if (command.body.received !== true)
       throw new Error("Cần xác nhận đã nhận tiền thật.")
   }
-  if (command.action === "completion" && command.body.identityVerified !== true)
+  if (command.action === "completion" && command.body.identityVerified !== undefined && command.body.identityVerified !== true)
     throw new Error("Cần xác minh danh tính.")
   const [role, method, route] = routes[command.action]
   const result = readRentalEnvelope<RenewalOperationResult>(

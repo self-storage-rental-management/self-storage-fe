@@ -39,7 +39,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   closing: labels('Closing', 'Đang tất toán'),
   requested: labels('Requested', 'Đã yêu cầu'),
   inspected: labels('Inspected', 'Đã nghiệm thu'),
-  disputed: labels('Disputed', 'Đang khiếu nại'),
+  disputed: labels('Disputed - Needs BO Resolution', 'Đang khiếu nại - Cần BO giải quyết'),
   refund_pending: labels('Refund pending', 'Chờ hoàn tiền'),
   payment_due: labels('Payment due', 'Chờ thanh toán'),
   awaiting_customer_confirmation: labels('Awaiting customer confirmation', 'Chờ khách xác nhận'),
@@ -208,8 +208,13 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return includeTime
-    ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')
-    : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US')
+    ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    })
+    : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    })
 }
 
 export const managerTimeLabel = (value: string | undefined, lang: Language) => {

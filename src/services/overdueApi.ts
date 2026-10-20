@@ -42,6 +42,8 @@ export function isOverdueCase(value: unknown): value is OverdueCase {
     typeof r.recoveryEligible !== "boolean"
   )
     return false
+  if (r.workflowStatus != null && !["WARNING", "SERIOUS", "URGENT", "WAITING_RECOVERY", "RECOVERING", "COMPLETED", "PAYMENT_DUE"].includes(r.workflowStatus)) return false
+  if (r.recoveryTaskId != null && (!isUuid(r.recoveryTaskId) || r.kind !== "RENTAL_TERM" || r.recoveryEligible)) return false
   if (r.kind === "PAYMENT_DUE")
     return (
       r.priority === "PAYMENT_DUE" &&

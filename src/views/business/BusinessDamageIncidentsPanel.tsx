@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, Select, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
 import { isApiAuthenticated } from '../../services/authApi'
@@ -504,7 +505,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
               <label className="font-semibold text-stone-700 block mb-1">
                 {isVi ? 'Thời gian phát sinh sự cố *' : 'Occurred At *'}
               </label>
-              <input
+              <LocalizedDateInput
                 type="datetime-local"
                 value={formOccurredAt}
                 onChange={e => setFormOccurredAt(e.target.value)}
