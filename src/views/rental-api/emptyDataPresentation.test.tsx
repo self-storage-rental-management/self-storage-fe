@@ -30,6 +30,7 @@ vi.mock("../../hooks/useRentalApiResource", () => ({
     error: state.error,
     refresh: vi.fn(),
     data: state.loading || state.error ? undefined
+      : key.endsWith(':payment-events') || key.includes(':coordination:') ? page([])
       : key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } }
       : key.includes(":summary:") ? { counts: { open: 0, in_progress: 0, resolved: 0, closed: 0 }, unassignedOpen: 0 }
       : state.mode === "rental" ? key.endsWith(":counts") ? [0, 0, 0, 0] : { kind: "rental", page: page([]) }
@@ -71,7 +72,7 @@ function verifyEmptyOnlyAfterSuccess(view: ReactElement, emptyText = "Không có
 describe("Dương verified empty-data presentation", () => {
   it.each(["customer", "manager"] as const)("D1 %s empty rental list", role => {
     state.actor = operationsActor(role); state.mode = "rental"
-    verifyEmptyOnlyAfterSuccess(<RentalApiWorkspace role={role} />)
+    verifyEmptyOnlyAfterSuccess(<RentalApiWorkspace role={role} />, role === 'customer' ? 'Không có hồ sơ thuê phù hợp với bộ lọc.' : 'Không có dữ liệu')
   })
   it("D2 Customer empty renewal options", () => {
     state.actor = operationsActor("customer"); state.mode = "options"
@@ -81,7 +82,7 @@ describe("Dương verified empty-data presentation", () => {
   })
   it("D3 Staff empty appointment list", () => {
     state.actor = operationsActor("staff")
-    verifyEmptyOnlyAfterSuccess(<StaffRenewalOperationsApiPanel />)
+    verifyEmptyOnlyAfterSuccess(<StaffRenewalOperationsApiPanel />, 'Không có lịch ký phù hợp với bộ lọc.')
   })
   it.each(["customer", "staff", "manager"] as const)("D3 %s hides verified empty event history and preserves loading/errors", role => {
     state.actor = operationsActor(role); state.mode = "operations"
@@ -94,7 +95,7 @@ describe("Dương verified empty-data presentation", () => {
   })
   it.each(["customer", "staff", "manager"] as const)("D5 %s empty ticket list", role => {
     state.actor = supportActor(role)
-    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />, role === "staff" ? "Không có yêu cầu chờ tiếp nhận" : "Không có dữ liệu")
+    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />, "Không có dữ liệu")
   })
   it("D5 Customer empty available records", () => {
     state.actor = supportActor("customer")
@@ -106,7 +107,7 @@ describe("Dương verified empty-data presentation", () => {
   })
   it("D5 Customer empty conversation history", () => {
     state.actor = supportActor("customer"); state.mode = "ticket"
-    verifyEmptyOnlyAfterSuccess(<SupportTicketDetail id={supportIds.ticket} role="customer" command={command} onFollowUp={vi.fn()} />)
+    verifyEmptyOnlyAfterSuccess(<SupportTicketDetail id={supportIds.ticket} role="customer" command={command} onFollowUp={vi.fn()} />, 'Chưa có trao đổi mới.')
   })
   it("denied rental and Support sessions never show a successful empty state", () => {
     for (const view of [<RentalApiWorkspace role="manager" />, <SupportApiWorkspace role="manager" />]) {
