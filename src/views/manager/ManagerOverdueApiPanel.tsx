@@ -50,6 +50,7 @@ export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: 
   const statusClass = status === "COMPLETED" ? "bg-green-50 text-green-700" : status === "URGENT" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"
   return (
     <section className="min-w-0 space-y-4 text-sm">
+      {r.displayCode && <p className="font-mono text-sm font-semibold">{r.displayCode}</p>}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-4">
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-xs text-stone-500">Gian kho</p>
@@ -107,7 +108,7 @@ export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
       )}
       {e.type === "RECOVERY_HANDOFF" && (
         <p className="text-xs leading-relaxed text-stone-500">
-          Nhiệm vụ đã được tiếp nhận; gian kho chỉ được giải phóng sau khi hoàn tất thu hồi.
+          Nhiệm vụ đã được tiếp nhận, gian kho chỉ được giải phóng sau khi hoàn tất thu hồi.
         </p>
       )}
       <details className="text-xs text-stone-500">
@@ -240,7 +241,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
                 </thead>
                 <tbody className="divide-y divide-stone-200">
                   {read.data.data.map(r => <tr key={r.caseRef} className="hover:bg-stone-50">
-                    <td className="break-words px-4 py-3 align-middle"><p className="font-semibold">{r.customerName}</p><p className="mt-1 text-xs text-stone-500">{r.storageUnitCode}</p></td>
+                    <td className="break-words px-4 py-3 align-middle"><p className="font-semibold">{r.customerName}</p>{r.displayCode && <p className="mt-1 font-mono text-xs text-stone-600">{r.displayCode}</p>}<p className="mt-1 text-xs text-stone-500">{r.storageUnitCode}</p></td>
                     <td className="px-4 py-3 align-middle"><p>{r.kind === "PAYMENT_DUE" ? "Thanh toán quá hạn" : "Quá thời hạn thuê"}</p>{r.kind === "PAYMENT_DUE" && <p className="mt-1 text-xs text-stone-500">{rentalMoney(r.outstanding, r.currency!)}</p>}</td>
                     <td className="px-4 py-3 align-middle">{r.overdueDays} ngày</td>
                     <td className="px-4 py-3 align-middle">{priorityLabels[r.workflowStatus ?? r.priority]}</td>
@@ -274,10 +275,13 @@ function OverdueSession({ identity, facilityId, onLocked }: {
         </label>
         <Button
           variant="outline"
-          onClick={() => {
+          onClick={async () => {
             const ref = historyRef.trim()
-            setRefError(!validOverdueRef(ref))
-            if (validOverdueRef(ref)) setSelected(ref)
+            if (validOverdueRef(ref)) { setRefError(false); setSelected(ref); return }
+            if (/^QH-\d{4}-\d{6}$/i.test(ref)) {
+              try { const record = await getOverdueCase(ref); setRefError(false); setSelected(record.caseRef) }
+              catch { setRefError(true) }
+            } else setRefError(true)
           }}
         >
           Mở lịch sử

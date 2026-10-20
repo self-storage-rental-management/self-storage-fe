@@ -95,7 +95,7 @@ function CustomerRentalOverviewSession({ identity, customerId, onOpen }: { ident
     {!read.loading && !read.error && read.data && read.data.data.length === 0 && <p className="p-6 text-center text-sm text-stone-500">Bạn chưa có hồ sơ thuê đang hoạt động.</p>}
     <div className="space-y-3 p-4">{visible.map(record => <CustomerRentalOverviewRow key={record.id} record={record} onOpen={onOpen} />)}</div>
     {total > 5 && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 px-4 py-3">
-      <p className="text-xs text-stone-500">{currentPage * 5 + 1}–{Math.min((currentPage + 1) * 5, total)} / {total} hồ sơ</p>
+      <p className="text-xs text-stone-500">{currentPage * 5 + 1} đến {Math.min((currentPage + 1) * 5, total)} / {total} hồ sơ</p>
       <div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Trước</Button><span className="text-xs text-stone-600">Trang {currentPage + 1}/{pages}</span><Button size="sm" variant="outline" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Sau</Button></div>
     </div>}
   </Card>

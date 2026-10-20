@@ -95,7 +95,7 @@ export function managerDisplayExplanation(value: string): string {
 export function managerDisplayError(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === 'FEATURE_DISABLED') return 'Chức năng này chưa được bật trên hệ thống.'
-    if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu phản hồi chưa đúng định dạng. Vui lòng tải lại; nếu vẫn lỗi, cần kiểm tra Backend.'
+    if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu phản hồi chưa đúng định dạng. Vui lòng tải lại, nếu vẫn lỗi, cần kiểm tra Backend.'
     if (error.code === 'DEFERRED_SOURCE' || error.message.includes('DEFERRED_SOURCE'))
       return 'Chưa đủ dữ liệu hoặc chính sách để thực hiện thao tác này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'

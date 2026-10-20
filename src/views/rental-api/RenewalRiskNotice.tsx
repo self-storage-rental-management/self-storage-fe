@@ -43,19 +43,19 @@ export default function RenewalRiskNotice({ rentalId,renewalId,role="customer",r
   const r=read.data
   if(read.loading&&!r)return null
   if(r&&["REPOSSESSION_STARTED","REPOSSESSION_CLOSED"].includes(r.repossessionStatus??""))return <section role="status" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 space-y-1">
-    <p className="font-semibold">{r.repossessionStatus==="REPOSSESSION_STARTED"?"Hồ sơ đã chuyển sang xử lý thu hồi":"Nhiệm vụ thu hồi đã đóng"}</p>
-    <p>Hồ sơ được tiếp nhận thu hồi lúc {rentalDate(r.repossessionStartedAt??null)}.</p>
-    <p>Gia hạn theo luồng thông thường đã bị khóa. Vui lòng liên hệ cơ sở để xử lý hợp đồng, tài sản và tiền cọc.</p>
+    <p className="font-semibold">{r.repossessionStatus==="REPOSSESSION_STARTED"?"Đang xử lý thu hồi kho":"Đã đóng hồ sơ thu hồi"}</p>
+    <p>Vui lòng liên hệ cơ sở để được hỗ trợ về tài sản và tiền cọc.</p>
     {role !== "customer" && facilityId && r.recoveryTaskId && <RecoveryTaskLink role={role} taskId={r.recoveryTaskId} facilityId={facilityId} onChanged={read.refresh} />}
   </section>
   if(read.error||!r||r.completeness==="UNKNOWN")return null
   if(r.severity==="NONE")return null
-  return <section role="status" className={`rounded-lg border p-3 text-sm space-y-1 ${["URGENT","RENEWAL_CLOSED"].includes(r.severity)?"border-red-200 bg-red-50 text-red-900":"border-amber-200 bg-amber-50 text-amber-900"}`}>
-    <p className="font-semibold">{r.severity==="RENEWAL_CLOSED"?"Đã hết hạn gia hạn theo luồng thông thường":r.severity==="URGENT"?"Hạn cuối hoàn tất gia hạn hôm nay":r.severity==="SERIOUS"?"Sắp đến hạn thu hồi kho":"Hợp đồng đã quá hạn"}</p>
-    <p>Hợp đồng đã quá hạn {r.overdueDays}/7 ngày. Hạn cuối trước thu hồi: {rentalDate(r.repossessionDeadline)}. Thời điểm đủ điều kiện chuyển sang thu hồi: {rentalDate(r.repossessionStartsAt)}.</p>
-    {r.signingDeadline&&<p>Hạn hoàn tất ký: {rentalDate(r.signingDeadline)}.</p>}
-    <p>Thanh toán cọc hoặc đặt lịch không thay đổi hạn thu hồi. Khách hàng phải hoàn tất ký gia hạn trước hạn ký và hạn cuối trước thu hồi.</p>
-    {r.remainingRentalAmount!==null&&<p>Tiền thuê còn lại theo báo giá: {rentalMoney(r.remainingRentalAmount,r.currency)}.</p>}
+  const deadline=r.signingDeadline&&r.repossessionDeadline&&Date.parse(r.signingDeadline)<Date.parse(r.repossessionDeadline)?r.signingDeadline:r.repossessionDeadline
+  const closed=r.severity==="RENEWAL_CLOSED"
+  return <section role="status" className={`rounded-lg border p-3 text-sm space-y-1 ${(r.overdueDays??0)>=8?"border-red-200 bg-red-50 text-red-900":"border-orange-200 bg-orange-50 text-orange-900"}`}>
+    <p className="font-semibold">{closed?"Đã hết hạn gia hạn":`Hợp đồng quá hạn ${r.overdueDays} ngày`}</p>
+    {closed?<p>Hạn gia hạn đã kết thúc lúc <strong>{rentalDate(r.repossessionDeadline)}</strong>. Vui lòng liên hệ cơ sở để được hỗ trợ.</p>:<p>Vui lòng đến cơ sở ký gia hạn trước <strong>{rentalDate(deadline)}</strong>. Đặt cọc hoặc đặt lịch chưa hoàn tất gia hạn.</p>}
+    <p>Dự kiến xử lý thu hồi từ {rentalDate(r.repossessionStartsAt)}.</p>
+    {r.remainingRentalAmount!==null&&<p>Tiền thuê còn lại: {rentalMoney(r.remainingRentalAmount,r.currency)}.</p>}
     {r.estimatedOverdueFee!==null&&<p>Phí quá hạn dự kiến: {rentalMoney(r.estimatedOverdueFee,r.currency)}.</p>}
   </section>
 }

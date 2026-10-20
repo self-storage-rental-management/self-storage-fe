@@ -14,7 +14,7 @@ export function renewalPaymentError(error: unknown): string {
     if(error.status===409)return `Chưa thể mở thanh toán: ${error.message}. Vui lòng cập nhật hồ sơ hoặc liên hệ hỗ trợ.`
     if(error.status!==null&&error.status>=500)
       return "Hệ thống gặp lỗi khi xử lý thanh toán gia hạn. Vui lòng thử lại sau hoặc liên hệ hỗ trợ."
-    if(error.status===null)return "Chưa xác định kết quả do lỗi kết nối. Hãy thử lại; hệ thống sẽ dùng lại yêu cầu thanh toán này."
+    if(error.status===null)return "Chưa xác định kết quả do lỗi kết nối. Hãy thử lại, hệ thống sẽ dùng lại yêu cầu thanh toán này."
   }
   return error instanceof Error?error.message:"Không thể mở thanh toán gia hạn. Vui lòng thử lại."
 }
