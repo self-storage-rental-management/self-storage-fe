@@ -107,7 +107,7 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
       ? {
           ...base,
           quoteTtlMinutes: resolveQuoteMinutes(),
-          paymentWindowHours: n("paymentWindowHours"),
+          paymentWindowHours: d.paymentWindowHours?.trim() ? n("paymentWindowHours") : 24,
           requestWindowDays: d.unrestrictedRenewalWindow === "true" ? 36_500 : n("requestWindowDays"),
           // Retained in the legacy policy DTO; new Renewal terms do not collect a deposit.
           depositRate: 0,
@@ -213,6 +213,158 @@ export function policyMatches(
       equal((policy as unknown as Record<string, unknown>)[k], v),
     )
 }
+
+function findFirstInvalidField(
+  kind: PolicyKind,
+  draft: Draft,
+): { key: string; message: string } | null {
+  if (kind === "renewal") {
+    if (!draft.effectiveFrom?.trim()) {
+      return { key: "effectiveFrom", message: "Vui lòng chọn ngày có hiệu lực." }
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.effectiveFrom.trim())) {
+      return { key: "effectiveFrom", message: "Ngày có hiệu lực không đúng định dạng YYYY-MM-DD." }
+    }
+
+    if (draft.effectiveTo?.trim()) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.effectiveTo.trim())) {
+        return { key: "effectiveTo", message: "Ngày kết thúc không đúng định dạng YYYY-MM-DD." }
+      }
+      if (draft.effectiveTo.trim() < draft.effectiveFrom.trim()) {
+        return { key: "effectiveTo", message: "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu có hiệu lực." }
+      }
+    }
+
+    if (!draft.quoteTtlHours?.trim()) {
+      return { key: "quoteTtlHours", message: "Vui lòng nhập thời hạn báo giá (giờ)." }
+    }
+    const quoteHours = Number(draft.quoteTtlHours)
+    if (isNaN(quoteHours) || quoteHours <= 0) {
+      return { key: "quoteTtlHours", message: "Thời hạn báo giá phải là số lớn hơn 0." }
+    }
+
+    if (draft.unrestrictedRenewalWindow !== "true") {
+      if (!draft.requestWindowDays?.trim()) {
+        return { key: "requestWindowDays", message: "Vui lòng nhập số ngày được gửi yêu cầu trước khi hết thuê." }
+      }
+      const reqDays = Number(draft.requestWindowDays)
+      if (isNaN(reqDays) || reqDays < 0) {
+        return { key: "requestWindowDays", message: "Số ngày gửi yêu cầu phải là số nguyên không âm." }
+      }
+    }
+
+    const packageIds = (draft.eligiblePackageIds || "").split(/[\s,]+/).filter(Boolean)
+    if (packageIds.length === 0) {
+      return { key: "eligiblePackageIds", message: "Vui lòng chọn ít nhất 1 gói gia hạn được áp dụng." }
+    }
+
+    if (draft.signingEnabled === "true") {
+      if (!draft.signingWindowMinutes?.trim()) {
+        return { key: "signingWindowMinutes", message: "Vui lòng nhập thời hạn ký (phút)." }
+      }
+      const signMins = Number(draft.signingWindowMinutes)
+      if (isNaN(signMins) || signMins <= 0) {
+        return { key: "signingWindowMinutes", message: "Thời hạn ký phải là số lớn hơn 0." }
+      }
+
+      if (!draft.exceptionExtensionLimitMinutes?.trim()) {
+        return { key: "exceptionExtensionLimitMinutes", message: "Vui lòng nhập giới hạn kéo dài hạn ký ngoại lệ (phút)." }
+      }
+      const extMins = Number(draft.exceptionExtensionLimitMinutes)
+      if (isNaN(extMins) || extMins <= 0) {
+        return { key: "exceptionExtensionLimitMinutes", message: "Giới hạn kéo dài hạn ký ngoại lệ phải là số lớn hơn 0." }
+      }
+    }
+
+    if (draft.termEnabled === "true") {
+      if (!draft.warningThroughDay?.trim()) {
+        return { key: "warningThroughDay", message: "Vui lòng nhập ngày quá hạn cuối của mức cảnh báo." }
+      }
+      const warnDay = Number(draft.warningThroughDay)
+      if (isNaN(warnDay) || warnDay <= 0) {
+        return { key: "warningThroughDay", message: "Ngày quá hạn cuối của mức cảnh báo phải là số nguyên dương." }
+      }
+
+      if (!draft.seriousThroughDay?.trim()) {
+        return { key: "seriousThroughDay", message: "Vui lòng nhập ngày quá hạn cuối của mức nghiêm trọng." }
+      }
+      const seriousDay = Number(draft.seriousThroughDay)
+      if (isNaN(seriousDay) || seriousDay <= warnDay) {
+        return { key: "seriousThroughDay", message: "Ngày quá hạn cuối của mức nghiêm trọng phải lớn hơn mức cảnh báo." }
+      }
+
+      if (!draft.urgentThroughDay?.trim()) {
+        return { key: "urgentThroughDay", message: "Vui lòng nhập ngày quá hạn cuối của mức khẩn cấp." }
+      }
+      const urgentDay = Number(draft.urgentThroughDay)
+      if (isNaN(urgentDay) || urgentDay <= seriousDay) {
+        return { key: "urgentThroughDay", message: "Ngày quá hạn cuối của mức khẩn cấp phải lớn hơn mức nghiêm trọng." }
+      }
+
+      if (!draft.recoveryFromDay?.trim()) {
+        return { key: "recoveryFromDay", message: "Vui lòng nhập ngày bắt đầu xem xét thu hồi." }
+      }
+      const recDay = Number(draft.recoveryFromDay)
+      if (isNaN(recDay) || recDay !== urgentDay + 1) {
+        return { key: "recoveryFromDay", message: `Ngày bắt đầu thu hồi phải là ngày ${urgentDay + 1} (ngay sau mức khẩn cấp).` }
+      }
+
+      if (!draft.recoveryCutoffTime?.trim()) {
+        return { key: "recoveryCutoffTime", message: "Vui lòng chọn giờ chốt xem xét thu hồi." }
+      }
+      if (!/^\d{2}:\d{2}$/.test(draft.recoveryCutoffTime.trim())) {
+        return { key: "recoveryCutoffTime", message: "Giờ chốt xem xét thu hồi không đúng định dạng HH:mm." }
+      }
+
+      if (!draft.recoveryStartTime?.trim()) {
+        return { key: "recoveryStartTime", message: "Vui lòng chọn giờ bắt đầu xử lý thu hồi." }
+      }
+      if (!/^\d{2}:\d{2}$/.test(draft.recoveryStartTime.trim())) {
+        return { key: "recoveryStartTime", message: "Giờ bắt đầu xử lý thu hồi không đúng định dạng HH:mm." }
+      }
+    }
+  } else {
+    if (draft.reminderCooldownMinutes?.trim()) {
+      const cd = Number(draft.reminderCooldownMinutes)
+      if (isNaN(cd) || cd <= 0 || cd > 525600) {
+        return { key: "reminderCooldownMinutes", message: "Khoảng cách nhắc phải từ 1 đến 525.600 phút." }
+      }
+    }
+    if (draft.supportEnabled === "true") {
+      if (!draft.supportReviewDays?.trim()) {
+        return { key: "supportReviewDays", message: "Vui lòng nhập thời gian khách hàng xem xét kết quả hỗ trợ." }
+      }
+      const sDays = Number(draft.supportReviewDays)
+      if (isNaN(sDays) || sDays < 7 || sDays > 365) {
+        return { key: "supportReviewDays", message: "Thời gian khách hàng xem xét kết quả hỗ trợ phải từ 7 đến 365 ngày." }
+      }
+      if (!["true", "false"].includes(draft.customerMayClose || "")) {
+        return { key: "customerMayClose", message: "Vui lòng chọn quy định khách hàng có thể đóng yêu cầu." }
+      }
+    }
+  }
+
+  return null
+}
+
+function jumpToField(key: string) {
+  const el =
+    document.getElementById(`policy-field-${key}`) ||
+    document.querySelector(`[name="${key}"]`) ||
+    document.getElementById(`policy-section-${key}`)
+
+  if (el) {
+    const details = el.closest("details")
+    if (details && !details.open) {
+      details.open = true
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    if (typeof (el as HTMLElement).focus === "function") {
+      (el as HTMLElement).focus()
+    }
+  }
+}
+
 function PolicyEditor({
   kind,
   facility,
@@ -241,7 +393,9 @@ function PolicyEditor({
     [uncertain, setUncertain] = useState(!!retained),
     [conflict, setConflict] = useState(retained?.conflict ?? false),
     [message, setMessage] = useState<string>(),
-    [error, setError] = useState<unknown>()
+    [error, setError] = useState<unknown>(),
+    [fieldErrorKey, setFieldErrorKey] = useState<string | null>(null),
+    [fieldErrorMessage, setFieldErrorMessage] = useState<string | null>(null)
   const pending = useRef<PolicyInput | undefined>(retained?.input),
     lock = useRef(false),
     autoSeedStarted = useRef(false)
@@ -315,26 +469,42 @@ function PolicyEditor({
   }, [uncertain])
   const inputClass =
     "mt-2 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:bg-stone-100"
-  const field = (key: string, optional = false) => (
-    <label key={key} className="block">
-      {labels[key]}
-      <input
-        className={inputClass}
-        required={!optional}
-        value={draft[key] || ""}
-        type={
-          key.startsWith("effective")
-            ? "date"
-            : key.endsWith("Time")
-              ? "time"
-              : "number"
-        }
-        min={0}
-        step={key === "depositRate" ? "any" : 1}
-        onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
-      />
-    </label>
-  )
+  const field = (key: string, optional = false) => {
+    const isError = fieldErrorKey === key
+    return (
+      <label key={key} className="block">
+        <span className={isError ? "font-semibold text-red-700" : ""}>{labels[key]}</span>
+        <input
+          id={`policy-field-${key}`}
+          name={key}
+          className={`${inputClass} ${isError ? "border-red-500 ring-2 ring-red-200 bg-red-50/40" : ""}`}
+          required={!optional}
+          value={draft[key] || ""}
+          type={
+            key.startsWith("effective")
+              ? "date"
+              : key.endsWith("Time")
+                ? "time"
+                : "number"
+          }
+          min={0}
+          step={key === "depositRate" ? "any" : 1}
+          onChange={(e) => {
+            if (fieldErrorKey === key) {
+              setFieldErrorKey(null)
+              setFieldErrorMessage(null)
+            }
+            setDraft((d) => ({ ...d, [key]: e.target.value }))
+          }}
+        />
+        {isError && (
+          <p className="mt-1 text-xs font-semibold text-red-600">
+            {fieldErrorMessage || "Vui lòng nhập hoặc sửa lại thông tin ô này."}
+          </p>
+        )}
+      </label>
+    )
+  }
   const toggle = (key: string, label: string) => (
     <label className="block">
       <input
@@ -409,9 +579,6 @@ function PolicyEditor({
       </div>
       <div className="space-y-4 p-5">
       {read.loading && <p role="status">Đang tải chính sách...</p>}
-      {read.error instanceof ApiClientError && read.error.status === 404 && kind === "renewal" && (
-        <p role="status">{busy ? "Đang lưu chính sách gia hạn mặc định..." : "Chưa có chính sách gia hạn. Đang khởi tạo chính sách mặc định..."}</p>
-      )}
       {!!read.error && !(read.error instanceof ApiClientError && read.error.status === 404 && kind === "renewal") &&
         <p role="alert">{integrationError(read.error)}</p>}
       {read.data && (
@@ -433,10 +600,26 @@ function PolicyEditor({
             (getAuthenticatedActor() && !getAuthenticatedActor()?.permissions.includes("policies:update"))
           )
             return
+
+          const invalid = findFirstInvalidField(kind, draft)
+          if (invalid) {
+            setFieldErrorKey(invalid.key)
+            setFieldErrorMessage(invalid.message)
+            setMessage("Thông tin chính sách chưa đầy đủ hoặc không hợp lệ.")
+            setTimeout(() => jumpToField(invalid.key), 50)
+            return
+          }
+
           let input: PolicyInput
           try {
             input = pending.current || buildPolicyInput(kind, draft)
           } catch {
+            const fallback = findFirstInvalidField(kind, draft)
+            if (fallback) {
+              setFieldErrorKey(fallback.key)
+              setFieldErrorMessage(fallback.message)
+              setTimeout(() => jumpToField(fallback.key), 50)
+            }
             setMessage("Thông tin chính sách chưa đầy đủ hoặc không hợp lệ.")
             return
           }
@@ -456,6 +639,8 @@ function PolicyEditor({
             setUncertain(false)
             setDraft(policyDraft(actual))
             setEditing(false)
+            setFieldErrorKey(null)
+            setFieldErrorMessage(null)
             setMessage("Đã lưu chính sách.")
             read.refresh()
           } catch (err) {
@@ -500,15 +685,23 @@ function PolicyEditor({
                   {draft.unrestrictedRenewalWindow !== "true" && field("requestWindowDays")}
                 </div>
               </section>
-              <section className="rounded-xl border border-stone-200 p-4">
+              <section id="policy-field-eligiblePackageIds" className={`rounded-xl border p-4 transition ${fieldErrorKey === "eligiblePackageIds" ? "border-red-500 ring-2 ring-red-200 bg-red-50/20" : "border-stone-200"}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div><h4 className="font-semibold text-stone-900">Gói gia hạn được áp dụng</h4><p className="mt-1 text-xs text-stone-500">Chỉ các gói được chọn trong chính sách mới xuất hiện cho khách.</p></div>
+                  <div>
+                    <h4 className={`font-semibold ${fieldErrorKey === "eligiblePackageIds" ? "text-red-700" : "text-stone-900"}`}>Gói gia hạn được áp dụng</h4>
+                    <p className="mt-1 text-xs text-stone-500">Chỉ các gói được chọn trong chính sách mới xuất hiện cho khách.</p>
+                  </div>
                   <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-600">{selectedPackageIds.size} gói đã chọn</span>
                 </div>
+                {fieldErrorKey === "eligiblePackageIds" && (
+                  <p className="mt-2 text-xs font-semibold text-red-600">
+                    {fieldErrorMessage || "Vui lòng chọn ít nhất 1 gói gia hạn được áp dụng."}
+                  </p>
+                )}
                 {packageRead.loading && <p className="mt-3 text-xs text-stone-500">Đang tải danh sách gói...</p>}
                 {Boolean(packageRead.error) && <p role="alert" className="mt-3 text-xs text-red-700">{integrationError(packageRead.error)}</p>}
                 {!packageRead.loading && !packageRead.error && !(packageRead.data || []).length && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Cơ sở chưa có gói thuê trong danh mục.</p>}
-                {!!packageRead.data?.length && <div className="mt-3 grid gap-2 sm:grid-cols-2">{packageRead.data.map((item) => <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedPackageIds.has(item.id) ? "border-amber-400 bg-amber-50/70" : "border-stone-200 hover:border-stone-300"}`}><input type="checkbox" className="mt-1 accent-amber-600" checked={selectedPackageIds.has(item.id)} onChange={(e) => setPackageSelected(item.id, e.target.checked)} /><span className="min-w-0 flex-1"><span className="block font-semibold text-stone-800">{item.name}</span><span className="mt-0.5 block text-xs text-stone-500">{item.rentalMonths} tháng | Giảm {Math.round(item.discountRate * 100)}%</span></span><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${item.active ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-500"}`}>{item.active ? "Đang hoạt động" : "Đã tạm ngưng"}</span></label>)}</div>}
+                {!!packageRead.data?.length && <div className="mt-3 grid gap-2 sm:grid-cols-2">{packageRead.data.map((item) => <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedPackageIds.has(item.id) ? "border-amber-400 bg-amber-50/70" : "border-stone-200 hover:border-stone-300"}`}><input type="checkbox" className="mt-1 accent-amber-600" checked={selectedPackageIds.has(item.id)} onChange={(e) => { if (fieldErrorKey === "eligiblePackageIds") { setFieldErrorKey(null); setFieldErrorMessage(null); } setPackageSelected(item.id, e.target.checked); }} /><span className="min-w-0 flex-1"><span className="block font-semibold text-stone-800">{item.name}</span><span className="mt-0.5 block text-xs text-stone-500">{item.rentalMonths} tháng | Giảm {Math.round(item.discountRate * 100)}%</span></span><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${item.active ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-500"}`}>{item.active ? "Đang hoạt động" : "Đã tạm ngưng"}</span></label>)}</div>}
               </section>
               <details className="rounded-xl border border-stone-200 p-4" open={draft.signingEnabled === "true"}>
                 <summary className="cursor-pointer font-semibold text-stone-900">Thời hạn ký</summary>
@@ -530,22 +723,33 @@ function PolicyEditor({
                 <>
                   {field("supportReviewDays")}
                   <label className="block">
-                    Khách hàng có thể đóng yêu cầu
+                    <span className={fieldErrorKey === "customerMayClose" ? "font-semibold text-red-700" : ""}>Khách hàng có thể đóng yêu cầu</span>
                     <select
-                      className={inputClass}
+                      id="policy-field-customerMayClose"
+                      name="customerMayClose"
+                      className={`${inputClass} ${fieldErrorKey === "customerMayClose" ? "border-red-500 ring-2 ring-red-200 bg-red-50/40" : ""}`}
                       required
                       value={draft.customerMayClose || ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        if (fieldErrorKey === "customerMayClose") {
+                          setFieldErrorKey(null)
+                          setFieldErrorMessage(null)
+                        }
                         setDraft((d) => ({
                           ...d,
                           customerMayClose: e.target.value,
                         }))
-                      }
+                      }}
                     >
                       <option value="">Chọn quy định</option>
                       <option value="true">Cho phép</option>
                       <option value="false">Không cho phép</option>
                     </select>
+                    {fieldErrorKey === "customerMayClose" && (
+                      <p className="mt-1 text-xs font-semibold text-red-600">
+                        {fieldErrorMessage || "Vui lòng chọn quy định."}
+                      </p>
+                    )}
                   </label>
                 </>
               )}
@@ -559,6 +763,8 @@ function PolicyEditor({
             setMessage(undefined)
             setError(undefined)
             setConflict(false)
+            setFieldErrorKey(null)
+            setFieldErrorMessage(null)
           }}>Hủy thay đổi</Button>}
           {!editing && canWrite && <Button type="button" disabled={busy || read.loading || uncertain || conflict} onClick={() => { setMessage(undefined); setError(undefined); if (!read.data) setDraft((current) => ({ ...current, expectedRevision: "0" })); setEditing(true) }}>Chỉnh sửa</Button>}
           {editing && <Button type="submit" disabled={!canWrite || busy || conflict || read.loading}>
