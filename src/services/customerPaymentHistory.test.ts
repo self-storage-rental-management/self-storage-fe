@@ -62,6 +62,30 @@ const payment = (
 })
 
 describe("Customer payment history", () => {
+  it.each([
+    ['REFUND', 'CASH', 'TM-refund', 3500000, 'refund', 'REFUNDED', 'Tiền mặt'],
+    ['COLLECTION', 'BANK_TRANSFER', 'BANK-collect', 2100000, 'damage', 'PAID', 'Chuyển khoản'],
+    ['OFFSET', 'DEPOSIT_OFFSET', 'OFFSET:return', 5500000, 'returnOffset', 'SETTLED', 'Khấu trừ cọc'],
+  ])('uses recorded %s amount and method instead of the zero remaining balance', async (direction, method, reference, amount, category, status, label) => {
+    vi.mocked(apiRequest).mockResolvedValue(page([{
+      id: 'return', customerId: 'customer', unitNumber: 'A1',
+      settlementPaymentId: direction === 'OFFSET' ? null : reference,
+      settlementPaidAt: direction === 'OFFSET' ? null : '2026-10-20T13:50:30Z',
+      amountDueFromCustomer: direction === 'COLLECTION' ? amount : 0,
+      netRefundAmount: direction === 'REFUND' ? amount : 0,
+      settlementReceipt: { direction, amount, paymentMethod: method, transactionReference: reference, receiptFileId: null, recordedAt: '2026-10-20T13:50:30Z' },
+    }]))
+    const result = await loadCustomerPaymentHistory()
+    expect(result.warnings).toEqual([])
+    expect(result.entries.find(entry => entry.id === reference)).toMatchObject({ amount, category, status, method: label })
+  })
+  it('does not invent a payment transaction when the settlement has no money movement or offset proof', async () => {
+    vi.mocked(apiRequest).mockResolvedValue(page([{
+      id: 'return', customerId: 'customer', unitNumber: 'A1', settlementPaymentId: 'legacy',
+      settlementPaidAt: '2026-10-20T13:50:30Z', amountDueFromCustomer: 0, netRefundAmount: 0,
+    }]))
+    expect((await loadCustomerPaymentHistory()).entries.map(entry => entry.id)).toEqual(['deposit'])
+  })
   beforeEach(() => {
     vi.resetAllMocks()
     vi.mocked(listCustomerPaymentHistory).mockResolvedValue(page([
@@ -99,7 +123,7 @@ describe("Customer payment history", () => {
   })
   it("combines reservation, renewal deposit, signing cash and recorded return payments", async () => {
     vi.mocked(listRenewals).mockResolvedValue(
-      page([{ id: "renewal" }]) as never,
+      page([{ id: "renewal", rentalId: "rental", storageUnit: { code: "A1" }, facility: { name: "Q1" } }]) as never,
     )
     vi.mocked(listRenewalOperationEvents).mockResolvedValue(
       page([
@@ -192,7 +216,7 @@ describe("Customer payment history", () => {
     expect(result.warnings).toEqual(['Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho.'])
   })
   it("keeps payments for other renewals when one renewal fails to load", async () => {
-    vi.mocked(listRenewals).mockResolvedValue(page([{ id: 'failed' }, { id: 'loaded' }]) as never)
+    vi.mocked(listRenewals).mockResolvedValue(page([{ id: 'failed', storageUnit: { code: 'A1' }, facility: { name: 'Q1' } }, { id: 'loaded', storageUnit: { code: 'A2' }, facility: { name: 'Q1' } }]) as never)
     vi.mocked(listRenewalOperationEvents).mockImplementation(async (_role, id) => {
       if (id === 'failed') throw new Error('unavailable')
       return page([{ kind: 'DEPOSIT', occurredAt: '2026-10-13T08:00:00Z', data: { paymentRef: 'renewal-payment', outcome: 'SUCCESS', amount: 200, paidAt: '2026-10-13T08:00:00Z' } }]) as never
@@ -203,7 +227,7 @@ describe("Customer payment history", () => {
   })
   it("still loads renewal payments when the reservation history source fails", async () => {
     vi.mocked(listCustomerPaymentHistory).mockRejectedValue(new Error('unavailable'))
-    vi.mocked(listRenewals).mockResolvedValue(page([{ id: 'renewal' }]) as never)
+    vi.mocked(listRenewals).mockResolvedValue(page([{ id: 'renewal', storageUnit: { code: 'A1' }, facility: { name: 'Q1' } }]) as never)
     vi.mocked(listRenewalOperationEvents).mockResolvedValue(page([{ kind: 'CASH', occurredAt: '2026-10-13T08:00:00Z', data: { reference: 'cash', amount: 200, receivedAt: '2026-10-13T08:00:00Z' } }]) as never)
     const result = await loadCustomerPaymentHistory()
     expect(result.entries.map(e => e.id)).toEqual(['cash'])
