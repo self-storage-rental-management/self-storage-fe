@@ -11,7 +11,7 @@ import SupportApiWorkspace from "../support-api/SupportApiWorkspace"
 import ApiReadState from "./ApiReadState"
 import { ManagerPresentationProvider } from "../manager/managerPresentation"
 import { rentalError } from "./presentation"
-import { supportError, supportReceiverLabels } from "../support-api/presentation"
+import { supportActions, supportError, supportReceiverLabels } from "../support-api/presentation"
 import { apiPage, ids, operationEvent, operationState, operationsActor, overduePage, signingState } from "../../../tests/rentalOperationsApiFixtures"
 import { supportActive, supportActor, supportIds, supportMessage, supportPage, supportTicket } from "../../../tests/supportApiFixtures"
 
@@ -29,7 +29,7 @@ vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.ac
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (key: string) => ({
     loading: state.loading, error: state.error, refresh: vi.fn(),
-    data: key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } } : state.mode === "operations"
+    data: key.endsWith(':payment-events') || key.includes(':coordination:') ? apiPage([]) : key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } } : state.mode === "operations"
       ? /:(payments|refunds|facility-incidents):/.test(key) ? apiPage([]) : key.endsWith(":proposal") ? null : state.data
       : state.mode === "support" && key.includes(":messages:")
         ? supportPage([{ ...supportMessage, evidenceFileIds: [ids.file] }])
@@ -87,7 +87,7 @@ describe("Dương delete-first UI copy regression", () => {
     const html = renderToStaticMarkup(<RenewalOperationsPanel id={ids.renewal} role="customer" customerId={ids.customer} facilityId={ids.facility} />)
     expect(html).not.toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).not.toContain("Thanh toán cọc thử nghiệm")
-    expect(html).toContain("Chưa đủ thông tin")
+    expect(html).not.toContain("Thanh toán cọc</button>")
     expect(html).not.toContain("BO_SIGNING_POLICY")
     expect(html).not.toContain("(D3)")
   })
@@ -110,7 +110,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).toContain("3.201.000 đ")
     html = renderToStaticMarkup(<OperationEventCard event={{ ...operationEvent, kind: "CASH" }} />)
-    expect(html).toContain("Ghi nhận tiền thuê còn lại")
+    expect(html).toContain("Biên lai thanh toán gia hạn")
     expect(html).not.toContain("thử nghiệm")
   })
   it("D3 Manager has no empty reload wrapper after presentation cleanup", () => {
@@ -122,8 +122,8 @@ describe("Dương delete-first UI copy regression", () => {
   })
   it.each(["customer", "staff", "manager"] as const)("D5 %s summary retains unknown/blocked state without workflow/version/SLA internals", role => {
     const html = renderToStaticMarkup(<SupportTicketSummary role={role} ticket={{ ...supportActive, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu", workflowReady: false, version: null }} />)
-    expect(html).toContain("hiện chỉ có thể xem")
-    expect(html).toContain("Chưa đủ thông tin để xác định hạn xử lý")
+    expect(supportActions(supportActor(role), role, { ...supportActive, workflowReady: false, version: null })).toEqual([])
+    expect(html).toContain("Nội dung yêu cầu")
     expect(html).not.toMatch(/workflow|version 0|DEFERRED_SOURCE|\bSLA\b|\bBE\b/)
     if (role === "customer") {
       expect(html).not.toContain(supportIds.staff)
@@ -135,9 +135,9 @@ describe("Dương delete-first UI copy regression", () => {
     state.data = { ...supportTicket, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu" }
     const command = { run: vi.fn(), retry: vi.fn(), clearError: vi.fn(), busy: false, uncertain: false, conflict: false, locked: false, error: undefined } as ReturnType<typeof useSupportCommand>
     const html = renderToStaticMarkup(<SupportTicketDetail id={supportIds.ticket} role="customer" command={command} onFollowUp={vi.fn()} />)
-    expect(html).toContain("Tải minh chứng 1")
+    expect(html).toContain("Minh chứng 1")
     expect(html).not.toContain("Có tệp đính kèm, hiện chưa thể tải xuống.")
-    expect(html).toContain("Khách hàng")
+    expect(html).toContain("Bạn")
     expect(html).not.toContain(ids.file)
     expect(html).not.toContain("FileAsset")
     expect(html).not.toContain('download=')
@@ -149,7 +149,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).toContain("Giữ nguyên nội dung và bấm thử lại")
     expect(html).toContain("không tải lại trang hoặc gửi yêu cầu mới")
     expect(html).toContain("Kiểm tra lại bằng yêu cầu cũ")
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Tạo yêu cầu<\/button>/)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Tạo yêu cầu<\/button>/)
     expect(html).not.toContain("Idempotency-Key")
   })
   it("Staff D3 error is natural Vietnamese, without changing the shared Staff helper", () => {

@@ -20,10 +20,11 @@ describe('rental deadline notices', () => {
     expect(html).toContain('Còn 7 ngày đến hết hạn')
     expect(html).toContain('Gia hạn chỉ thành công khi bạn đến cơ sở ký hợp đồng gia hạn')
   })
-  it('shows red financial notice after expiry without inventing amounts', () => {
+  it('shows an orange financial notice before day eight without inventing amounts', () => {
     const html = renderToStaticMarkup(createElement(RentalDeadlineBanner, { rental: rental('2026-10-13'), role: 'customer', now }))
     expect(html).toContain('Hồ sơ đã quá hạn')
-    expect(html).toContain('bg-red-800')
+    expect(html).toContain('bg-orange-700')
+    expect(html).not.toContain('bg-red-800')
     expect(html).toContain('text-white')
     expect(html).not.toContain('sử dụng — hạn')
     expect(html).toContain('Gia hạn chỉ thành công khi bạn đến cơ sở ký hợp đồng gia hạn')
@@ -31,6 +32,15 @@ describe('rental deadline notices', () => {
     expect(html).not.toContain('Chưa có dữ liệu xác thực')
     expect(html).toContain('Đã quá hạn 1 ngày')
     expect(html).toContain('Đang tải…')
+  })
+  it.each([
+    ['2026-10-07', 'bg-orange-700', 'Đã quá hạn 7 ngày'],
+    ['2026-10-06', 'bg-red-800', 'Đã quá hạn 8 ngày'],
+    ['2026-10-05', 'bg-red-800', 'Đã quá hạn 9 ngày'],
+  ])('uses the correct warning color for a contract ending %s', (date, color, message) => {
+    const html = renderToStaticMarkup(createElement(RentalDeadlineBanner, { rental: rental(date), role: 'customer', now }))
+    expect(html).toContain(color)
+    expect(html).toContain(message)
   })
   it('has no warning for a contract far from expiry', () => {
     expect(renderToStaticMarkup(createElement(RentalDeadlineBanner, { rental: rental('2026-11-14'), role: 'customer', now }))).toBe('')

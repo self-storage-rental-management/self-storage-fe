@@ -168,7 +168,7 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
                 ? <EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" previewOnly />
                 : ['PAID', 'REFUNDED'].includes(item.status)
                   ? <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={() => setReceipt(item)}>Xem trước</Button>
-                  : <span className="text-xs text-stone-400">—</span>}
+                  : <span className="text-xs text-stone-400">, </span>}
             </Td>
           </Tr>)}
           {result.data.length === 0 && <tr>

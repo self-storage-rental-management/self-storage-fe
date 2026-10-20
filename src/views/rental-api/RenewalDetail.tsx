@@ -68,7 +68,7 @@ export default function RenewalDetail({
           : 1
   const renewalTerminalMessage = r.status === "rejected" ? "Yêu cầu bị từ chối. Xem lý do quyết định bên dưới."
     : r.status === "cancelled" ? "Yêu cầu đã hủy. Các khoản đã thu cần được đối soát theo giao dịch."
-      : r.status === "payment_expired" ? "Yêu cầu đã hết hạn thanh toán; các bước tiếp theo đang tạm dừng."
+      : r.status === "payment_expired" ? "Yêu cầu đã hết hạn thanh toán, các bước tiếp theo đang tạm dừng."
         : null
   const actions: {
     action: RenewalApiAction
@@ -88,7 +88,8 @@ export default function RenewalDetail({
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-stone-50 p-3">
         <div>
           <p className="font-semibold text-stone-900">{r.storageUnit.code}</p>
-          <p className="text-sm text-stone-600">{r.facility.name.replace(/[–—]/g, "-")} — {r.customer.fullName}</p>
+          {r.displayCode && <p className="mt-1 font-mono text-xs text-stone-500">{r.displayCode}</p>}
+          <p className="text-sm text-stone-600">{r.facility.name.replace(/[–—]/g, "-")}, {r.customer.fullName}</p>
         </div>
         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{workflowStatusLabel}</span>
       </div>
@@ -129,7 +130,7 @@ export default function RenewalDetail({
           {role === "customer" && payment && <section className={`space-y-1 rounded-lg border p-3 ${payment.reconciliationRequired ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-stone-50"}`} aria-live="polite">
             <p className="font-semibold">{hasDeposit ? "Thanh toán cọc" : "Thanh toán toàn kỳ"}: {({ PENDING: "Đang chờ VNPay", PROCESSING: "Đang xử lý", PAID: payment.reconciliationRequired ? "Đã nhận tiền, cần đối soát" : "Đã ghi nhận thanh toán", NOT_RECEIVED: "Chưa xác nhận đã nhận tiền", FAILED: "Thanh toán thất bại", CANCELLED: "Giao dịch đã hủy" } as Record<string, string>)[payment.paymentStatus]}</p>
             <p>{payment.settlementStage ? ({ AWAITING_PAYMENT: "Chờ VNPay xác nhận thanh toán", VERIFIED_AWAITING_ALLOCATION: "Đã xác minh tiền, đang chờ phân bổ", ALLOCATED_AWAITING_SIGNING: "Đang kiểm tra điều kiện ký", AWAITING_SIGNING: "Đã thanh toán, chờ hoàn tất ký", COMPLETED: "Gia hạn đã hoàn tất", RECONCILIATION_REQUIRED: "Cần hỗ trợ đối soát" }[payment.settlementStage]) : payment.message}</p>
-            <p>{rentalMoney(payment.amount, payment.currency)}{payment.paidAt ? ` — ${rentalDate(payment.paidAt)}` : ""}</p>
+            <p>{rentalMoney(payment.amount, payment.currency)}{payment.paidAt ? `, ${rentalDate(payment.paidAt)}` : ""}</p>
             {payment.paymentDeadline && <p className="text-xs text-stone-600">Hạn thanh toán: {rentalDate(payment.paymentDeadline)}</p>}
             {canViewReceipt && <Button type="button" variant="outline" onClick={() => setReceiptOpen(true)}>Xem biên lai</Button>}
           </section>}
@@ -170,7 +171,7 @@ export default function RenewalDetail({
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
       {appointmentSelection}
-      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay; khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán cọc" : "thanh toán"}.</p>}
+      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán cọc" : "thanh toán"}.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
           disabled={operationsLocked||paymentBusy||paymentExpired||!appointmentSelected||payment?.paymentStatus==="PAID"}
