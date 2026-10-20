@@ -125,7 +125,7 @@ export function operationBlockedReason(
   )
     return "Chỉ thao tác trong bước ký đang hiệu lực."
   if (action === "appointment" && s.appointmentRef)
-    return "Đã có lịch; dùng đổi lịch."
+    return "Đã có lịch, dùng đổi lịch."
   if (
     ["reschedule", "arrival", "incident"].includes(action) &&
     !s.appointmentRef

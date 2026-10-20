@@ -328,7 +328,7 @@ describe("D3 real API transport", () => {
     },
     {
       action: "reschedule",
-      body: { expectedVersion: 4, appointmentAt: instant },
+      body: { expectedVersion: 4, appointmentAt: 'not-an-instant' },
     },
     {
       action: "appointment",

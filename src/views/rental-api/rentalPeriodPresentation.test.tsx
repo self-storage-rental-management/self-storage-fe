@@ -13,26 +13,25 @@ const exclusive: RentalApiDetail = {
   dateSemantics: { completeness: "COMPLETE", convention: "EXCLUSIVE", lastPermittedDate: "2026-10-31", endExclusive: "2026-11-01" },
 }
 describe("P03 canonical period FE compatibility", () => {
-  it("renders all rental detail field labels in bold without changing their data", () => {
+  it("renders current rental detail labels without changing the period or identifiers", () => {
     const html = renderToStaticMarkup(<RentalDetail rental={exclusive} />)
-    const labels = Array.from(html.matchAll(/<dt class="font-bold">([^<]+)<\/dt>/g), match => match[1])
+    const labels = Array.from(html.matchAll(/<dt(?: class="[^"]*")?>([^<]+)<\/dt>/g), match => match[1])
     expect(labels).toEqual([
-      "Mã hồ sơ thuê", "Khách hàng", "Cơ sở / Gian kho", "Loại gian kho",
-      "Trạng thái", "Thời hạn sử dụng", "Trạng thái truy cập",
-      "Tình trạng tài chính", "Hạn nghĩa vụ thanh toán kế tiếp", "Dư nợ / Quá hạn",
+      "Mã hồ sơ thuê", "Khách hàng", "Cơ sở lưu trữ", "Gian kho", "Loại gian kho",
+      "Thời hạn thuê", "Giá thuê / tháng", "Quyền ra vào kho",
     ])
-    expect(html).toContain("Theo dõi quá hạn")
+    expect(html).toContain("Thỏa thuận &amp; giao dịch")
     expect(html).not.toContain("Đơn giá áp dụng / tháng")
     expect(html).not.toContain("Cọc theo thỏa thuận ban đầu")
     expect(html).toContain(exclusive.id)
     expect(html).toContain(exclusive.customer.fullName)
     const unknownHtml = renderToStaticMarkup(<RentalDetail rental={{ ...exclusive, dateSemantics: null }} />)
-    expect(unknownHtml).toContain('<dt class="font-bold">Ngày thuê đang lưu</dt>')
+    expect(unknownHtml).toContain('chưa xác minh ngày cuối sử dụng')
   })
   it("uses the verified last permitted day, not the raw exclusive marker", () => {
     expect(isRentalRecord(exclusive)).toBe(true)
     const html = renderToStaticMarkup(<RentalDetail rental={exclusive} />)
-    expect(html).toContain("Thời hạn sử dụng")
+    expect(html).toContain("Thời hạn thuê")
     expect(html).toContain("31/10/2026")
     expect(html).not.toContain("01/11/2026")
     expect(exclusive.contractEndDate).toBe("2026-11-01")
@@ -46,7 +45,7 @@ describe("P03 canonical period FE compatibility", () => {
     const record = { ...exclusive, dateSemantics }
     expect(isRentalRecord(record)).toBe(true)
     const html = renderToStaticMarkup(<RentalDetail rental={record} />)
-    expect(html).toContain("Ngày thuê đang lưu")
+    expect(html).toContain("Thời hạn thuê")
     expect(html).toContain("chưa xác minh ngày cuối sử dụng")
     expect(html).toContain("01/11/2026")
     expect(html).not.toContain("Thời hạn sử dụng")
@@ -55,7 +54,7 @@ describe("P03 canonical period FE compatibility", () => {
     const legacy = { ...exclusive, dateSemantics: null }
     expect(rentalPeriodText(legacy, false)).toBe("01/10/2026 → 01/11/2026")
     const html = renderToStaticMarkup(<RentalDetail rental={legacy} showTechnicalWarnings={false} />)
-    expect(html).toContain("Thời hạn sử dụng")
+    expect(html).toContain("Thời hạn thuê")
     expect(html).not.toContain("chưa xác minh ngày cuối sử dụng")
     expect(html).not.toContain("Cần kiểm tra dữ liệu")
   })

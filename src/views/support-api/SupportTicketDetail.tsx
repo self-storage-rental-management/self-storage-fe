@@ -53,9 +53,9 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-3">
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="break-words text-lg font-semibold text-stone-900">{t.subject}</h3>
-          <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.id}>Mã yêu cầu: <span className="font-mono">#{t.id.slice(0, 8)}</span>
+          <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.id}>Mã yêu cầu: <span className="font-mono">{t.displayCode || `#${t.id.slice(0, 8)}`}</span>
             <button type="button" className="rounded p-0.5 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
-              try { await navigator.clipboard.writeText(t.id); setCopied(true) }
+              try { await navigator.clipboard.writeText(t.displayCode || t.id); setCopied(true) }
               catch { setCopied(false) }
             }}>{copied ? "✓" : "⧉"}</button>
           </span>

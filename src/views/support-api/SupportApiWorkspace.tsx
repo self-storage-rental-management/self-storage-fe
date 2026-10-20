@@ -28,10 +28,10 @@ import {
   supportAssigneeLabel,
 } from "./presentation"
 
-function TicketCode({ id }: { id: string }) {
+function TicketCode({ id, displayCode }: { id: string; displayCode?: string | null }) {
   const [copied, setCopied] = useState(false)
   return <div className="group mt-1 flex items-center gap-1.5 text-xs text-stone-500">
-    <code className="font-mono" title={id}>#{id.slice(0, 8)}</code>
+    <code className="font-mono" title={id}>{displayCode || `#${id.slice(0, 8)}`}</code>
     <button
       type="button"
       className="rounded p-0.5 text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
@@ -39,7 +39,7 @@ function TicketCode({ id }: { id: string }) {
       title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"}
       onClick={async () => {
         try {
-          await navigator.clipboard.writeText(id)
+          await navigator.clipboard.writeText(displayCode || id)
           setCopied(true)
         } catch {
           setCopied(false)
@@ -380,7 +380,7 @@ function SupportSession({
               </thead>
               <tbody className="divide-y divide-stone-200">
                 {queueRead.data.data.map((item) => <tr key={item.id}>
-                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}</td>
+                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}<TicketCode id={item.id} displayCode={item.displayCode} /></td>
                   <td className="px-4 py-3">{actor.facilityNames?.[item.facilityId] ?? item.facilityId}</td>
                   <td className="whitespace-nowrap px-4 py-3">{rentalDate(item.createdAt)}</td>
                   <td className="px-4 py-3">
@@ -433,7 +433,7 @@ function SupportSession({
                   {read.data.data.map((t) => <tr key={t.id} className="transition-colors hover:bg-stone-50">
                     <td className="break-words px-4 py-3 align-middle">
                       <div className="whitespace-normal break-words font-semibold leading-5 text-stone-900 [overflow-wrap:anywhere]" title={t.subject}>{t.subject}</div>
-                      <TicketCode id={t.id} />
+                      <TicketCode id={t.id} displayCode={t.displayCode} />
                     </td>
                     <td className="px-4 py-3 text-center align-middle"><span className={`inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold leading-4 ring-1 ${supportStatusClass(t.status)}`}>
                       {supportStatusLabels[t.status]}

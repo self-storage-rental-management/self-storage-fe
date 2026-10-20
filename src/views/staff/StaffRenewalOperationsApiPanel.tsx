@@ -152,7 +152,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
               <tbody className="divide-y divide-stone-100">
                 {read.data.data.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
                   <td className="px-4 py-4 align-middle">
-                    <span className="font-semibold text-stone-900" title={s.renewalId}>#{s.renewalId.slice(0, 8)}</span>
+                    <span className="font-semibold text-stone-900" title={s.renewalId}>{s.displayCode || `#${s.renewalId.slice(0, 8)}`}</span>
                   </td>
                   <td className="px-4 py-4 align-middle">
                     <Badge variant={s.phase === "COMPLETED" ? "success" : ["SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "error" : ["SIGNING", "AWAITING_DEPOSIT", "AWAITING_PAYMENT_INTENT"].includes(s.phase) ? "warning" : "muted"}>{phaseLabels[s.phase]}</Badge>
@@ -160,7 +160,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
                   <td className="px-4 py-4 align-middle">
                     <p className="whitespace-nowrap font-medium text-stone-900">{signingDate(s.appointmentStart)}</p>
                     {s.appointmentStart && <p className="mt-1 whitespace-nowrap text-xs text-stone-500">
-                      {signingDate(s.appointmentStart, true)}{s.appointmentEnd ? ` – ${signingDate(s.appointmentEnd, true)}` : ""}
+                      {signingDate(s.appointmentStart, true)}{s.appointmentEnd ? `, ${signingDate(s.appointmentEnd, true)}` : ""}
                       {s.appointmentEnd && signingDate(s.appointmentEnd) !== signingDate(s.appointmentStart) ? ` (${signingDate(s.appointmentEnd)})` : ""}
                     </p>}
                   </td>
