@@ -166,6 +166,5 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
         {view.completionFileId && <div><p className="mb-2 text-sm font-medium">Biên bản hoàn tất thu hồi</p><EvidenceDownload id={view.completionFileId} previewLabel="Xem trước" label="Tải biên bản" /></div>}
       </div>
     </details>}
-    <Button type="button" variant="outline" disabled={frozen} onClick={() => { if (!lockReader.current()) refresh() }}>Tải lại nhiệm vụ</Button>
   </div>
 }

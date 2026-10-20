@@ -36,7 +36,7 @@ export default function CustomerRenewalRequestModal({
     getRenewalOptions(rentalId),
   )
   const [code, setCode] = useState("")
-  const [note, setNote] = useState("")
+  const note = ""
   const [quote, setQuote] = useState<RenewalApiQuote>()
   const [quoteError, setQuoteError] = useState<unknown>()
   const [quoteBusy, setQuoteBusy] = useState(false)
@@ -145,17 +145,6 @@ export default function CustomerRenewalRequestModal({
             </label>
           </>
         )}
-        <label className="block">
-          Ghi chú
-          <textarea
-            className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
-            rows={2}
-            maxLength={2000}
-            value={note}
-            disabled={locked}
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </label>
         {command.error ? (
           <p role="alert">{rentalError(command.error)}</p>
         ) : null}
