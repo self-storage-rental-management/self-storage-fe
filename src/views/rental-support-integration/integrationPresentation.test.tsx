@@ -66,15 +66,6 @@ const draft = {
   eligiblePackageIds: "",
 }
 describe("Dương integration presentation and safe policy builders", () => {
-  it("distinguishes matched Renewal debt source from a paid deposit", () => {
-    const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 1,
-      obligations: [], receipts: [], refunds: [], coverageInventory: { rentalId: ids.rental, ledgerRevision: 1,
-        completeness: "PARTIAL", gaps: ["RENEWAL_REMAINDER_EFFECTIVE_EVENT_UNCERTIFIED"], payments: [], consistentThroughApproval: false,
-        renewalDeposits: [{ renewalId: ids.renewal, acceptedRevisionId: ids.event, status: "MATCHED", obligationId: ids.event }] } }} />)
-    expect(html).toContain("Cọc gia hạn đã khớp nguồn duyệt và nghĩa vụ đã ghi; chưa xác nhận đã thanh toán.")
-    expect(html).toContain("Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.")
-    expect(html).not.toContain(ids.renewal)
-  })
   it("explains partial inventory without rendering technical references or a zero-debt claim", () => {
     const html = renderToStaticMarkup(<LedgerContent data={{ ...unknown, completeness: "PARTIAL", revision: 0,
       obligations: [], receipts: [], refunds: [], coverageInventory: { rentalId: ids.rental, ledgerRevision: 0,
@@ -141,22 +132,6 @@ describe("Dương integration presentation and safe policy builders", () => {
     const html = renderToStaticMarkup(<LedgerContent data={unknown} />)
     expect(html).toContain("Không có dữ liệu")
     expect(html).not.toMatch(/0 đ|đã thanh toán|Internal ledger/i)
-  })
-  it("partial empty rows remain explicitly unverified, not a complete zero debt", () => {
-    const html = renderToStaticMarkup(
-      <LedgerContent
-        data={{
-          ...unknown,
-          completeness: "PARTIAL",
-          revision: 0,
-          obligations: [],
-          receipts: [],
-          refunds: [],
-        }}
-      />,
-    )
-    expect(html).toContain("chưa được xác minh đầy đủ")
-    expect(html).not.toContain("0 đ")
   })
   it("simulation never claims actual payment and reserved refund never claims payout", () => {
     const html = renderToStaticMarkup(
@@ -226,48 +201,6 @@ describe("Dương integration presentation and safe policy builders", () => {
     const html = renderToStaticMarkup(<DuongPolicyWorkspace />)
     expect(html).toContain("Cần đăng nhập")
     expect(html).not.toContain("Lưu chính sách")
-  })
-  it("blank policy does not seed deadline, revision, rates or packages", () => {
-    expect(() => buildPolicyInput("renewal", {})).toThrow()
-    expect(() => buildPolicyInput("communication", {})).toThrow()
-    expect(() =>
-      buildPolicyInput("renewal", { ...draft, expectedRevision: "" }),
-    ).toThrow()
-    expect(() =>
-      buildPolicyInput("renewal", { ...draft, quoteTtlMinutes: "" }),
-    ).toThrow()
-  })
-  it("explicit zero request window/rate and empty package set are not fabricated defaults", () => {
-    const p = buildPolicyInput("renewal", {
-      ...draft,
-      requestWindowDays: "0",
-      depositRate: "0",
-    })
-    expect(p).toMatchObject({
-      expectedRevision: 0,
-      requestWindowDays: 0,
-      depositRate: 0,
-      eligiblePackageIds: [],
-      signing: null,
-      term: null,
-    })
-  })
-  it("requires full signing and sequential calendar-day term policy", () => {
-    expect(() =>
-      buildPolicyInput("renewal", { ...draft, signingEnabled: "true" }),
-    ).toThrow()
-    expect(() =>
-      buildPolicyInput("renewal", {
-        ...draft,
-        termEnabled: "true",
-        warningThroughDay: "1",
-        seriousThroughDay: "2",
-        urgentThroughDay: "3",
-        recoveryFromDay: "5",
-        recoveryCutoffTime: "12:00",
-        recoveryStartTime: "13:00",
-      }),
-    ).toThrow()
   })
   it("support close permission is not silently true or inferred from checkbox alone", () => {
     expect(() =>

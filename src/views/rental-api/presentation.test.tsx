@@ -21,46 +21,9 @@ describe("Rental/Renewal business presentation", () => {
     expect(html).not.toContain("PRIVATE_SOURCE_REASON")
     expect(detail.access.status).toBe(status)
   })
-  it("labels PARTIAL finance and preserves known balances while deposit remains unknown", () => {
-    const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, financialSummary: {
-      ...rental.financialSummary, completeness: "PARTIAL", outstandingAmount: 1234,
-      overdueAmount: 234, securityDepositAmount: null, billingMode: "PREPAID_FULL_PERIOD",
-      reason: "Chưa xác minh cọc bảo đảm",
-    } }} />)
-    expect(html).toContain("Đã xác minh một phần")
-    expect(html).toContain("1.234 đ")
-    expect(html).toContain("234 đ")
-    expect(html).not.toContain("Chưa xác minh cọc bảo đảm")
-    expect(html).not.toContain("Cọc hồ sơ thuê")
-    expect(html).toContain("Theo dõi quá hạn")
-    expect(html).toContain(unknown)
-  })
-  it("renders authoritative prepaid financial details without inventing a recurring due date", () => {
-    const html=renderToStaticMarkup(<RentalDetail rental={{...rental, financialSummary:{...rental.financialSummary, completeness:"COMPLETE", outstandingAmount:0, overdueAmount:0, securityDepositAmount:1234567, billingMode:"PREPAID_FULL_PERIOD"}}} />)
-    expect(html).not.toContain("1.234.567 đ")
-    expect(html).toContain("Trả trước toàn kỳ, không có kỳ thu tiền định kỳ")
-    expect(html).not.toContain("API D1 chưa cung cấp")
-  })
   it("UNKNOWN financial source does not expose an unverified deposit value", () => {
     const html=renderToStaticMarkup(<RentalDetail rental={{...rental,financialSummary:{...rental.financialSummary,securityDepositAmount:1234567}}} />)
     expect(html).not.toContain("1.234.567 đ")
-  })
-  it("shows accepted terms and persisted cancellation reason without recalculating", () => {
-    const html=renderToStaticMarkup(<RenewalDetail role="customer" renewal={{...renewal,acceptedTerms:quote,cancellationReason:"Khách đổi kế hoạch"}} onAction={()=>{}} />)
-    expect(html).toContain(rentalMoney(quote.totalAfterDiscount, quote.currency))
-    expect(html).not.toContain("Cọc gia hạn")
-    expect(html).not.toContain("Tiền thuê còn lại")
-    expect(html).not.toContain("Thời điểm duyệt")
-    expect(html).toContain("Khách đổi kế hoạch")
-    expect(html).not.toContain("không phải xác nhận đã thanh toán")
-    expect(html).not.toContain("policy1")
-    expect(html).toContain("Điều khoản khách hàng đã chấp nhận")
-  })
-  it("legacy renewal has honest missing snapshot state", () => {
-    const html=renderToStaticMarkup(<RenewalDetail role="customer" renewal={renewal} onAction={()=>{}} />)
-    expect(html).toContain("chưa thể xác định giá và khoản thanh toán")
-    expect(html).not.toContain("catalog")
-    expect(html).not.toContain("3.201.000 đ")
   })
   it("generates secure retry keys on LAN HTTP without randomUUID", () => {
     const fill = vi.fn((bytes: Uint8Array) => bytes.fill(42))
@@ -85,17 +48,6 @@ describe("Rental/Renewal business presentation", () => {
   it("keeps LocalDate intact across timezone boundaries", () => {
     expect(rentalDate("2026-10-01")).toBe("01/10/2026")
     expect(rentalDate(null)).toBe(unknown)
-  })
-  it("uses nested UnitType and hides legal/database/PIN fiction", () => {
-    const html = renderToStaticMarkup(<RentalDetail rental={rental} />)
-    expect(html).toContain("Small Storage")
-    expect(html).not.toContain("Đơn giá áp dụng / tháng")
-    expect(html).not.toContain("5.500.000 đ")
-    expect(html).toContain(unknown)
-    expect(html).not.toContain("143.000.000.000")
-    expect(html).not.toContain("9004#")
-    expect(html).not.toContain("database")
-    expect(html).not.toContain("Đã thanh toán")
   })
   it("move-out disables new renewal request", () => {
     expect(

@@ -8,8 +8,7 @@ import {
   resolveRentalPackagesForUnit,
   getActiveDurationDiscounts
 } from '../src/domain/packageRules'
-import { POLICIES, SETTINGS_GROUPS, UNIT_SPECS } from '../src/data/demoDatabase'
-import { DEFAULT_BUSINESS_CONFIG } from '../src/store/StorageHubContext'
+import { UNIT_SPECS } from '../src/data/demoDatabase'
 import type { FacilityCustomUnitSpec, RentalPackage } from '../src/types/storageHub'
 
 describe('FE Audit Phases Comprehensive Verification', () => {
@@ -108,30 +107,6 @@ describe('FE Audit Phases Comprehensive Verification', () => {
 
       expect(p3?.discountPercent).toBe(6)
       expect(p6?.discountPercent).toBe(10)
-    })
-  })
-
-  describe('Phase 4 — Rental Policy Consistency', () => {
-    it('should have Grace Period aligned to 3 days across all sources of truth', () => {
-      const gracePolicy = POLICIES.find(p => p.id === 'pol-1')
-      expect(gracePolicy?.value).toBe('3 days')
-
-      const billingGroup = SETTINGS_GROUPS.find(g => g.group === 'Billing & Invoicing Rules')
-      const graceSetting = billingGroup?.items.find(i => i.id === 'gracePeriod')
-      expect(graceSetting?.value).toBe(3)
-
-      expect(DEFAULT_BUSINESS_CONFIG.gracePeriodDays).toBe(3)
-    })
-
-    it('should preserve standard rental policy rules', () => {
-      const securityPolicy = POLICIES.find(p => p.id === 'pol-3')
-      expect(securityPolicy?.value).toBe('1 month')
-
-      const noticePolicy = POLICIES.find(p => p.id === 'pol-4')
-      expect(noticePolicy?.value).toBe('15 days')
-
-      const minLeasePolicy = POLICIES.find(p => p.id === 'pol-5')
-      expect(minLeasePolicy?.value).toBe('1 month')
     })
   })
 

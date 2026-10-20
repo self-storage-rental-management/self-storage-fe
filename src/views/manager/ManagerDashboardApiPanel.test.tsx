@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiActor } from '../../services/authApi'
+import { ApiClientError } from '../../services/apiClient'
 import { manager } from '../../../tests/rentalApiFixtures'
 import ManagerDashboardApiPanel from './ManagerDashboardApiPanel'
 
@@ -36,6 +37,21 @@ describe('Manager API dashboard: no business demo data', () => {
     expect(html).toContain('Chưa đủ dữ liệu công nợ.')
     expect(html).not.toContain('Không có khoản quá hạn')
     expect(html).not.toContain('>0<')
+  })
+  it.each(['payment-overdue', 'term-overdue'])('preserves unknown, error and verified zero for %s', metric => {
+    state.reads = { [metric]: { error: new ApiClientError('Offline', { status: 503 }), data: { value: 888 } } }
+    let html = render()
+    expect(html).toContain('Chưa xác minh')
+    expect(html).not.toContain('>888<')
+    expect(html).not.toContain('>0<')
+    state.reads = { [metric]: { data: { value: null, completeness: 'PARTIAL', reason: 'Chưa đủ dữ liệu công nợ.' } } }
+    html = render()
+    expect(html).toContain('Chưa đủ dữ liệu công nợ.')
+    expect(html).not.toContain('>0<')
+    state.reads = { [metric]: { data: { value: 0, completeness: 'COMPLETE' } } }
+    html = render()
+    expect(html).toContain('>0<')
+    expect(html).not.toContain('Chưa đủ dữ liệu công nợ.')
   })
   it('does not request unauthorized metrics or render demo for a missing actor', () => {
     state.actor = { ...manager, permissions: ['support:read'] }

@@ -98,6 +98,15 @@ describe("D5 upload preserves its form until response is handled", () => {
     expect(find(tree, kind === "create" ? SupportCreateForm : SupportTicketDetail).props.command.locked).toBe(true)
     finish({ id: supportIds.message })
     await pending
+    // Message drafts are controlled by the workspace, so receive its new props
+    // after the upload callback rather than rerendering with a stale draft.
+    if (kind === "message") {
+      tree = session()
+      const detail = find(tree, SupportTicketDetail)
+      harness.data = supportTicket
+      form = find(render(() => SupportTicketDetail(detail.props)), SupportActionForm)
+      harness.data = supportPage([supportTicket])
+    }
     const updatedForm = render(() => (form.type as any)(form.props), formSlots)
     expect(find(updatedForm, EvidenceUpload).props.value).toEqual([supportIds.message])
     expect(harness.upload).toHaveBeenCalledTimes(1)
