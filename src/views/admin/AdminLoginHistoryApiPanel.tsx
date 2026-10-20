@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Badge,
@@ -824,7 +825,7 @@ export default function AdminLoginHistoryApiPanel({
                   {/* Custom Date Range if selected */}
                   {timeFilter === 'custom' && (
                     <div className="flex items-center gap-1.5">
-                      <input
+                      <LocalizedDateInput
                         type="date"
                         value={customStartDate}
                         onChange={e => setCustomStartDate(e.target.value)}
@@ -832,7 +833,7 @@ export default function AdminLoginHistoryApiPanel({
                         title="Từ ngày"
                       />
                       <span className="text-xs text-stone-400">→</span>
-                      <input
+                      <LocalizedDateInput
                         type="date"
                         value={customEndDate}
                         onChange={e => setCustomEndDate(e.target.value)}

@@ -12,8 +12,8 @@ export function supportAssigneeLabel(ticket: SupportTicket, role: SupportRole) {
 export const supportStatusLabels = {
   open: "Chờ tiếp nhận",
   in_progress: "Đang xử lý",
-  waiting_customer: "Chờ khách hàng bổ sung",
-  resolved: "Đã xử lý - chờ xác nhận",
+  waiting_customer: "Chờ bổ sung",
+  resolved: "Chờ xác nhận",
   closed: "Đã đóng",
 }
 export const supportModuleLabels = {

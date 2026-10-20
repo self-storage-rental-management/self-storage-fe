@@ -25,7 +25,7 @@ export interface RenewalOperationState {
 }
 export interface RenewalOperationEvent {
   id: string
-  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "REFUND_EXECUTION"
+  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "DEPOSIT_REVIEW_REQUIRED" | "REFUND_EXECUTION"
   occurredAt: string
   actorId: string | null
   data: unknown
@@ -87,7 +87,7 @@ export type RenewalOperationCommand = {
   action: "cash"
   body: Version & {
     payableStatementRef: string
-    receiptReference: string
+    receiptReference?: string
     receiptFileId: string
     paymentMethod?: "CASH" | "BANK_TRANSFER"
     received: true
@@ -95,9 +95,9 @@ export type RenewalOperationCommand = {
 } | {
   action: "completion"
   body: Version & {
-    identityVerified: true
+    identityVerified?: true
     arrivalRef: string
-    signedDocumentFileId: string
+    signedDocumentFileId?: string
     completionNote?: string
   }
 } | {
