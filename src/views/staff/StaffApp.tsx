@@ -879,6 +879,7 @@ export default function StaffApp({
   const [page, setPage] = useState(() => getInitialPage(nav, "dashboard"))
 
   const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+  const [supportOpenTicket, setSupportOpenTicket] = useState<{ id: string; request: number }>()
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -2215,6 +2216,9 @@ export default function StaffApp({
         if (notification.id.startsWith("api-notification-")) {
           const notificationId = notification.id.replace("api-notification-", "")
           setPage(notification.page)
+          if (notification.page === "support" && notification.targetId) {
+            setSupportOpenTicket(previous => ({ id: notification.targetId!, request: (previous?.request ?? 0) + 1 }))
+          }
           setBackendNotifications((current) => current.map((item) =>
             item.id === notificationId ? { ...item, isRead: true } : item
           ))
@@ -3484,7 +3488,7 @@ export default function StaffApp({
       {/* ── SUPPORT ───────────────────────────────────────────── */}
       {page === 'support' && (
         <div className="space-y-4">
-          <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
+          <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff" openTicket={supportOpenTicket} onTicketOpened={() => setSupportOpenTicket(undefined)}>
             <StaffSupportPanel
               user={user}
               tickets={hub.tickets}

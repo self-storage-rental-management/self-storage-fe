@@ -80,7 +80,7 @@ export function uncertainSupportOutcome(error: unknown) {
     error.status >= 500
   )
 }
-export function useSupportCommand(scope: string, onSuccess: () => void) {
+export function useSupportCommand(scope: string, onSuccess: (submission: SupportSubmission, result: unknown) => void) {
   const attempt = supportAttemptFor(scope)
   const lock = useRef(false)
   const [busy, setBusy] = useState(false)
@@ -104,14 +104,15 @@ export function useSupportCommand(scope: string, onSuccess: () => void) {
     setError(undefined)
     let succeeded = false
     let sentKey: string | undefined
+    let result: unknown
     try {
       const saved = attempt.prepare(submission),
         input = saved.submission
       sentKey = saved.key
       if (input.kind === "create")
-        await createSupportTicket(input.body, saved.key, input.parentId)
+        result = await createSupportTicket(input.body, saved.key, input.parentId)
       else
-        await sendSupportCommand(input.role, input.id, input.command, saved.key)
+        result = await sendSupportCommand(input.role, input.id, input.command, saved.key)
       attempt.clear(sentKey)
       succeeded = true
     } catch (e) {
@@ -121,7 +122,7 @@ export function useSupportCommand(scope: string, onSuccess: () => void) {
       lock.current = false
       setBusy(false)
     }
-    if (succeeded) onSuccess()
+    if (succeeded) onSuccess(submission, result)
     return succeeded
   }
   return {

@@ -41,12 +41,7 @@ export default function CustomerRenewalRequestModal({
   const [quoteError, setQuoteError] = useState<unknown>()
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [now, setNow] = useState(Date.now())
   const command = useRenewalCommand()
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
   useEffect(() => {
     let current = true
     if (!code) {
@@ -64,7 +59,6 @@ export default function CustomerRenewalRequestModal({
       .then((nextQuote) => {
         if (current) {
           setQuote(nextQuote)
-          setNow(Date.now())
         }
       })
       .catch((error) => {
@@ -78,7 +72,6 @@ export default function CustomerRenewalRequestModal({
       current = false
     }
   }, [code, rentalId])
-  const expired = quote ? now >= Date.parse(quote.expiresAt) : false
   const locked = command.busy || command.uncertain || quoteBusy
   return (
     <Modal
@@ -140,15 +133,6 @@ export default function CustomerRenewalRequestModal({
               </div>
             </div>
           </section>
-          <p className="flex items-center gap-1.5 text-xs text-stone-500">
-            <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" strokeWidth="1.7"/><path d="M12 7v5l3 2" strokeWidth="1.7" strokeLinecap="round"/></svg>
-            Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}
-          </p>
-            {expired && !command.uncertain && (
-              <p role="alert" className="text-red-700">
-                Báo giá đã hết hạn, vui lòng chọn lại gói gia hạn để cập nhật báo giá.
-              </p>
-            )}
             <label className="flex items-start gap-2 text-sm text-stone-700">
               <input
                 type="checkbox"
@@ -186,7 +170,6 @@ export default function CustomerRenewalRequestModal({
             command.conflict ||
             !quote ||
             !confirmed ||
-            (!command.uncertain && expired) ||
             (revision !== undefined && revision.version === null)
           }
           className="disabled:bg-stone-200 disabled:text-stone-500 disabled:opacity-100 sm:min-w-44"

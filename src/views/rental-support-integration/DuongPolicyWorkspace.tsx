@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -32,19 +33,10 @@ const labels: Record<string, string> = {
   expectedRevision: "Lần cập nhật hiện tại (nhập 0 chỉ khi tạo mới)",
   effectiveFrom: "Có hiệu lực từ ngày",
   effectiveTo: "Đến ngày (không bắt buộc)",
-  quoteTtlHours: "Thời hạn báo giá (giờ)",
-  quoteTtlMinutes: "Thời hạn báo giá (phút)",
   paymentWindowHours: "Thời hạn thanh toán (giờ)",
-  requestWindowDays: "Số ngày được gửi yêu cầu trước khi hết thuê",
   depositRate: "Tỷ lệ cọc (từ 0 đến 1)",
   signingWindowMinutes: "Thời hạn ký (phút)",
   exceptionExtensionLimitMinutes: "Giới hạn kéo dài hạn ký ngoại lệ (phút)",
-  warningThroughDay: "Ngày quá hạn cuối của mức cảnh báo",
-  seriousThroughDay: "Ngày quá hạn cuối của mức nghiêm trọng",
-  urgentThroughDay: "Ngày quá hạn cuối của mức khẩn cấp",
-  recoveryFromDay: "Bắt đầu xem xét thu hồi từ ngày quá hạn",
-  recoveryCutoffTime: "Giờ chốt xem xét thu hồi",
-  recoveryStartTime: "Giờ bắt đầu xử lý thu hồi",
   reminderCooldownMinutes:
     "Khoảng cách tối thiểu giữa hai lần nhắc (phút, không bắt buộc)",
   supportReviewDays: "Thời gian khách hàng xem xét kết quả hỗ trợ (ngày)",
@@ -57,28 +49,14 @@ export function policyDraft(policy: Policy | PolicyInput): Draft {
       (typeof value === "number" || typeof value === "string")
     )
       result[key] = String(value)
-  if ("quoteTtlHours" in policy && typeof policy.quoteTtlHours === "number") {
-    result.quoteTtlHours = String(policy.quoteTtlHours)
-  } else if ("quoteTtlMinutes" in policy && typeof policy.quoteTtlMinutes === "number") {
-    result.quoteTtlHours = String(Math.max(1, Math.round(policy.quoteTtlMinutes / 60)))
-  }
   if ("eligiblePackageIds" in policy) {
     result.eligiblePackageIds = policy.eligiblePackageIds.join(", ")
-    result.unrestrictedRenewalWindow = String(policy.requestWindowDays >= 36_500)
     result.signingEnabled = String(!!policy.signing)
-    result.termEnabled = String(!!policy.term)
     if (policy.signing)
       Object.assign(
         result,
         Object.fromEntries(
           Object.entries(policy.signing).map(([k, v]) => [k, String(v)]),
-        ),
-      )
-    if (policy.term)
-      Object.assign(
-        result,
-        Object.fromEntries(
-          Object.entries(policy.term).map(([k, v]) => [k, String(v)]),
         ),
       )
   } else {
@@ -93,10 +71,6 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
     if (!d[key]?.trim()) throw new Error("Vui lòng nhập đủ thông tin bắt buộc.")
     return Number(d[key])
   }
-  const resolveQuoteMinutes = () => {
-    if (d.quoteTtlHours?.trim()) return Number(d.quoteTtlHours) * 60
-    return n("quoteTtlMinutes")
-  }
   const base = {
     expectedRevision: n("expectedRevision"),
     effectiveFrom: d.effectiveFrom || "",
@@ -106,9 +80,7 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
     kind === "renewal"
       ? {
           ...base,
-          quoteTtlMinutes: resolveQuoteMinutes(),
           paymentWindowHours: n("paymentWindowHours"),
-          requestWindowDays: d.unrestrictedRenewalWindow === "true" ? 36_500 : n("requestWindowDays"),
           // Retained in the legacy policy DTO; new Renewal terms do not collect a deposit.
           depositRate: 0,
           eligiblePackageIds: (d.eligiblePackageIds || "")
@@ -121,19 +93,6 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
                   exceptionExtensionLimitMinutes: n(
                     "exceptionExtensionLimitMinutes",
                   ),
-                }
-              : null,
-          term:
-            d.termEnabled === "true"
-              ? {
-                  calendar: "CALENDAR_DAYS",
-                  timezone: "Asia/Ho_Chi_Minh",
-                  warningThroughDay: n("warningThroughDay"),
-                  seriousThroughDay: n("seriousThroughDay"),
-                  urgentThroughDay: n("urgentThroughDay"),
-                  recoveryFromDay: n("recoveryFromDay"),
-                  recoveryCutoffTime: d.recoveryCutoffTime || "",
-                  recoveryStartTime: d.recoveryStartTime || "",
                 }
               : null,
         }
@@ -163,22 +122,10 @@ export function defaultRenewalPolicyInput(
     expectedRevision: 0,
     effectiveFrom,
     effectiveTo: null,
-    quoteTtlMinutes: 30,
     paymentWindowHours: 24,
-    requestWindowDays: 36_500,
     depositRate: 0,
     eligiblePackageIds,
     signing: { signingWindowMinutes: 120, exceptionExtensionLimitMinutes: 60 },
-    term: {
-      calendar: "CALENDAR_DAYS",
-      timezone: "Asia/Ho_Chi_Minh",
-      warningThroughDay: 1,
-      seriousThroughDay: 3,
-      urgentThroughDay: 7,
-      recoveryFromDay: 8,
-      recoveryCutoffTime: "17:00",
-      recoveryStartTime: "08:00",
-    },
   }
 }
 export function policyMatches(
@@ -231,6 +178,7 @@ function PolicyEditor({
     `${actor.id}:${facility}:${kind}:${JSON.stringify(actor.permissions)}`,
     () => getStoredIntegrationPolicy(kind, facility),
   )
+  const overdueTerm = read.data && "eligiblePackageIds" in read.data ? read.data.term : null
   const packageRead = useRentalApiResource(
     `${actor.id}:${facility}:renewal-packages`,
     () => kind === "renewal" ? listBusinessPackagePolicies(facility) : Promise.resolve([]),
@@ -318,7 +266,7 @@ function PolicyEditor({
   const field = (key: string, optional = false) => (
     <label key={key} className="block">
       {labels[key]}
-      <input
+      <LocalizedDateInput
         className={inputClass}
         required={!optional}
         value={draft[key] || ""}
@@ -490,17 +438,6 @@ function PolicyEditor({
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">{field("effectiveFrom")}{field("effectiveTo", true)}</div>
               </section>
               <section className="rounded-xl border border-stone-200 p-4">
-                <h4 className="font-semibold text-stone-900">Điều kiện gia hạn</h4>
-                <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  {field("quoteTtlHours")}<p className="self-end rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Thời hạn giao dịch thanh toán gia hạn: <strong>15 phút</strong> kể từ khi mở thanh toán.</p>
-                  <label className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-3 font-medium text-stone-700 sm:col-span-2">
-                    <input type="checkbox" checked={draft.unrestrictedRenewalWindow === "true"} onChange={(e) => setDraft((d) => ({ ...d, unrestrictedRenewalWindow: String(e.target.checked), requestWindowDays: e.target.checked ? "36500" : "30" }))} />
-                    Cho phép gửi yêu cầu gia hạn bất kỳ lúc nào (chế độ demo)
-                  </label>
-                  {draft.unrestrictedRenewalWindow !== "true" && field("requestWindowDays")}
-                </div>
-              </section>
-              <section className="rounded-xl border border-stone-200 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div><h4 className="font-semibold text-stone-900">Gói gia hạn được áp dụng</h4><p className="mt-1 text-xs text-stone-500">Chỉ các gói được chọn trong chính sách mới xuất hiện cho khách.</p></div>
                   <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-600">{selectedPackageIds.size} gói đã chọn</span>
@@ -514,10 +451,18 @@ function PolicyEditor({
                 <summary className="cursor-pointer font-semibold text-stone-900">Thời hạn ký</summary>
                 <div className="mt-3 space-y-3">{toggle("signingEnabled", "Bật cấu hình thời hạn ký")}{draft.signingEnabled === "true" && <div className="grid gap-4 sm:grid-cols-2">{["signingWindowMinutes", "exceptionExtensionLimitMinutes"].map((k) => field(k))}</div>}</div>
               </details>
-              <details className="rounded-xl border border-stone-200 p-4" open={draft.termEnabled === "true"}>
-                <summary className="cursor-pointer font-semibold text-stone-900">Quá hạn và thu hồi</summary>
-                <div className="mt-3 space-y-3">{toggle("termEnabled", "Bật cấu hình các mốc quá hạn")}{draft.termEnabled === "true" && <div className="grid gap-4 sm:grid-cols-2">{["warningThroughDay", "seriousThroughDay", "urgentThroughDay", "recoveryFromDay", "recoveryCutoffTime", "recoveryStartTime"].map((k) => field(k))}</div>}</div>
-              </details>
+              {overdueTerm && <section className="rounded-xl border border-stone-200 p-4">
+                <h4 className="font-semibold text-stone-900">Quá hạn và thu hồi</h4>
+                <p className="mt-1 text-xs text-stone-500">Áp dụng sau ngày cuối được phép sử dụng kho, tính theo ngày lịch và giờ Việt Nam.</p>
+                <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
+                  <div><dt className="text-stone-500">Ngày 1–{overdueTerm.warningThroughDay}</dt><dd className="font-medium text-stone-900">Nhắc khách gia hạn hoặc trả kho</dd></div>
+                  <div><dt className="text-stone-500">Ngày {overdueTerm.warningThroughDay + 1}–{overdueTerm.seriousThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo quá hạn nghiêm trọng</dd></div>
+                  <div><dt className="text-stone-500">Ngày {overdueTerm.urgentThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo khẩn cấp</dd></div>
+                  <div><dt className="text-stone-500">Từ {overdueTerm.recoveryStartTime.slice(0, 5)} ngày {overdueTerm.recoveryFromDay}</dt><dd className="font-medium text-stone-900">Chuyển sang xử lý thu hồi</dd></div>
+                </dl>
+                <p className="mt-3 text-xs text-stone-600">Hạn cuối hoàn tất gia hạn là {overdueTerm.recoveryCutoffTime.slice(0, 5)} ngày quá hạn thứ {overdueTerm.urgentThroughDay}. Chuyển thu hồi không đồng nghĩa với kho đã trống hoặc được phép cho thuê lại.</p>
+                <p className="mt-2 text-xs text-stone-600">Nợ tiền thuê theo tháng được theo dõi riêng; không tự áp dụng mốc thu hồi này khi hợp đồng còn hạn.</p>
+              </section>}
             </>
           ) : (
             <>

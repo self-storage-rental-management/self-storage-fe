@@ -3,7 +3,7 @@ import { Input } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { getRenewalSigningSlots } from "../../services/renewalOperationsApi"
-import { rentalDate, rentalError } from "./presentation"
+import { rentalError } from "./presentation"
 import { vietnamLocalInstant } from "./operationsPresentation"
 
 export function signingLocalInput(value: string | number): string {
@@ -71,10 +71,6 @@ export default function RenewalAppointmentPicker({
   return <section className="space-y-3 border-t border-stone-200 pt-4">
     <div>
       <p className="text-sm font-semibold text-stone-900">Chọn ngày giờ ký gia hạn</p>
-      {window && <p className="mt-1 text-xs leading-5 text-stone-600">
-        Lịch hợp lệ từ <b>{rentalDate(window.availableAt)}</b> đến <b>{rentalDate(window.deadlineAt)}</b>.
-        {" "}Giờ ký từ 08:00 đến 16:30, mỗi lượt 30 phút.
-      </p>}
     </div>
     <div className="grid gap-3 sm:grid-cols-2">
       <Input id={`${inputId}-date`} aria-label="Ngày ký gia hạn mong muốn" label="Ngày ký gia hạn mong muốn"
