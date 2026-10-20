@@ -65,7 +65,7 @@ export interface RenewalApiQuote {
   rentalId: string
   customerId: string
   quotedAt: string
-  expiresAt: string
+  expiresAt: string | null
   oldEndDate: string
   endDateConvention?: "INCLUSIVE" | "EXCLUSIVE" | null
   rentalStartDate?: string | null

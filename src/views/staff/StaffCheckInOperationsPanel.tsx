@@ -61,6 +61,10 @@ const emptyChecklist = () =>
     checklistLabels.map(([key]) => [key, false]),
   ) as unknown as CheckInChecklist
 
+function normalizeIdentityDocument(value: string | null | undefined) {
+  return value?.trim().replace(/[\s.-]/g, "").toUpperCase() || ""
+}
+
 function hasMaterialVariance(
   actual: string,
   declared: number,
@@ -238,8 +242,6 @@ export default function StaffCheckInOperationsPanel({
   const [rejectTarget, setRejectTarget] = useState<CheckInCase | null>(null)
 
   const [rejectReason, setRejectReason] = useState("")
-
-  const [refundDepositRequested, setRefundDepositRequested] = useState(false)
 
   const [rejectDisposition, setRejectDisposition] =
     useState<"AVAILABLE" | "MAINTENANCE">("AVAILABLE")
@@ -455,6 +457,13 @@ export default function StaffCheckInOperationsPanel({
       !Number.isFinite(Number(volumeM3))
     ) return
 
+    const declaredIdentity = normalizeIdentityDocument(handoverTarget.identityDocumentNumber)
+    const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
+    if (!declaredIdentity || !providedIdentity || declaredIdentity !== providedIdentity) {
+      setError("CCCD/Hộ chiếu không khớp thông tin đơn đặt kho. Chưa thể tiếp tục bàn giao.")
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -597,9 +606,6 @@ export default function StaffCheckInOperationsPanel({
     setSubmitting(true)
 
     try {
-      const finalRejectReason = refundDepositRequested
-        ? `${rejectReason.trim()} YÊU CẦU HOÀN CỌC TIỀN ĐẶT GIỮ KHO.`
-        : rejectReason.trim()
       const uploadedEvidence = [...rejectEvidenceReferences]
 
       for (const file of rejectEvidenceFiles) {
@@ -617,7 +623,7 @@ export default function StaffCheckInOperationsPanel({
       }
 
       await rejectCheckIn(rejectTarget.checkInId, {
-        reason: finalRejectReason,
+        reason: rejectReason.trim(),
 
         disposition: rejectDisposition,
 
@@ -625,11 +631,9 @@ export default function StaffCheckInOperationsPanel({
       })
 
       showToast(
-        refundDepositRequested
-          ? `Đã hủy bàn giao ${rejectTarget.storageUnitCode} và ghi nhận yêu cầu hoàn cọc.`
-          : rejectDisposition === "MAINTENANCE"
-            ? `Đã từ chối nhận kho và chuyển ${rejectTarget.storageUnitCode} sang bảo trì.`
-            : `Đã từ chối nhận kho và trả ${rejectTarget.storageUnitCode} về trạng thái sẵn sàng.`,
+        rejectDisposition === "MAINTENANCE"
+          ? `Đã từ chối nhận kho và chuyển ${rejectTarget.storageUnitCode} sang bảo trì.`
+          : `Đã từ chối nhận kho và trả ${rejectTarget.storageUnitCode} về trạng thái sẵn sàng.`,
       )
 
       setRejectTarget(null)
@@ -769,16 +773,10 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
-  const openRejection = (item: CheckInCase, requestRefund = false) => {
+  const openRejection = (item: CheckInCase) => {
     setRejectTarget(item)
 
-    setRefundDepositRequested(requestRefund)
-
-    setRejectReason(
-      requestRefund
-        ? "Không chấp nhận chênh lệch hàng hóa thực tế so với khai báo."
-        : "",
-    )
+    setRejectReason("")
 
     setRejectDisposition("AVAILABLE")
 
@@ -1308,25 +1306,6 @@ export default function StaffCheckInOperationsPanel({
                   maxLength={1000}
                   onChange={(event) => setVarianceReason(event.target.value)}
                 />
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 pt-3">
-                  <p className="max-w-2xl text-xs text-amber-900">
-                    Nếu không chấp nhận chênh lệch, có thể hủy bàn giao tại đây để giải phóng gian kho và ghi nhận yêu cầu hoàn cọc.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="sm"
-                    disabled={submitting}
-                    onClick={() => {
-                      if (!handoverTarget) return
-                      const target = handoverTarget
-                      setHandoverTarget(null)
-                      openRejection(target, true)
-                    }}
-                  >
-                    Hủy bàn giao & hoàn cọc
-                  </Button>
-                </div>
               </div>
             )}
             </div>
@@ -1579,7 +1558,7 @@ export default function StaffCheckInOperationsPanel({
         onClose={() => {
           if (!submitting) setRejectTarget(null)
         }}
-        title={refundDepositRequested ? "Hủy bàn giao & hoàn cọc" : "Từ chối nhận kho"}
+        title="Từ chối nhận kho"
       >
         {rejectTarget && (
           <div className="space-y-4">
@@ -1593,11 +1572,6 @@ export default function StaffCheckInOperationsPanel({
               maxLength={1000}
               onChange={(event) => setRejectReason(event.target.value)}
             />
-            {refundDepositRequested && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
-                Đã chọn hủy bàn giao do không chấp nhận chênh lệch hàng hóa. Yêu cầu hoàn cọc sẽ được ghi nhận cùng biên bản từ chối.
-              </div>
-            )}
             <Select
               label="Xử lý gian kho sau khi từ chối"
               value={rejectDisposition}

@@ -84,7 +84,7 @@ export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenan
   const facilityId = singleManagerFacility(actor)
   const identity = `${actor?.id}:${actor?.status}:${JSON.stringify(actor?.roles)}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${facilityId}`
   return (
-    <div className="fade-in space-y-6">
+    <div className="fade-in min-w-0 max-w-full space-y-6">
       {!actor ||
       actor.status !== "ACTIVE" ||
       !actor.roles.includes("MANAGER") ? (
@@ -524,16 +524,16 @@ export function InventoryContent({
             ["price-desc", "Giá từ cao đến thấp"],
           ])}</div>
         </div>
-      <Card>
-        <Table tableClassName="min-w-[1100px] table-fixed">
+      <Card className="min-w-0 max-w-full overflow-hidden">
+        <Table className="max-w-full" tableClassName="min-w-[900px] table-fixed [&_th]:px-3 [&_td]:px-3">
           <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
           <colgroup>
             <col className="w-[22%]" />
-            <col className="w-[22%]" />
-            <col className="w-[15%]" />
+            <col className="w-[21%]" />
+            <col className="w-[14%]" />
             <col className="w-[15%]" />
             <col className="w-[16%]" />
-            <col className="w-[10%]" />
+            <col className="w-[12%]" />
           </colgroup>
           <Thead>
             <tr>
@@ -542,14 +542,14 @@ export function InventoryContent({
               <Th className="text-left align-middle">Vị trí</Th>
               <Th className="whitespace-nowrap text-left align-middle">Trạng thái</Th>
               <Th className="whitespace-nowrap text-right align-middle">Giá niêm yết</Th>
-              <Th className="whitespace-nowrap text-right align-middle">Thao tác</Th>
+              <Th className="whitespace-nowrap text-center align-middle">Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
             {pagination.items.map((u) => (
               <Tr key={u.id} className="odd:bg-white even:bg-stone-50/50">
                 <Td className="align-middle">
-                  <p className="break-all font-mono text-sm font-bold leading-5">{u.code}</p>
+                  <p className="break-words font-mono text-sm font-bold leading-5 [overflow-wrap:anywhere]" title={u.code}>{u.code}</p>
                 </Td>
                 <Td className="align-middle">
                   <p className="font-semibold leading-5">{typeLabel(u)}</p>
@@ -561,8 +561,8 @@ export function InventoryContent({
                 </Td>
                 <Td className="min-w-0 align-middle">
                   <div className="space-y-1">
-                    <p className="break-words [overflow-wrap:anywhere]" title={u.floor ?? undefined}>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
-                    <p className="break-words text-sm text-stone-500 [overflow-wrap:anywhere]" title={u.zone ?? undefined}>{location(u.zone)}</p>
+                    <p className="truncate" title={u.floor?.trim() ? `Tầng ${u.floor}` : missing}>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
+                    <p className="truncate text-xs text-stone-500" title={location(u.zone)}>{location(u.zone)}</p>
                   </div>
                 </Td>
                 <Td className="align-middle">
@@ -570,7 +570,7 @@ export function InventoryContent({
                     {statusLabels[u.status]}
                   </span>
                 </Td>
-                <Td className="text-right align-middle">
+                <Td className="text-right align-middle tabular-nums">
                   {u.definition.monthlyPrice == null || u.definition.monthlyPrice <= 0 ? (
                     <p className="text-sm text-stone-500">Chờ BO định giá</p>
                   ) : (
@@ -582,7 +582,7 @@ export function InventoryContent({
                     </div>
                   )}
                 </Td>
-                <Td className="text-right align-middle">
+                <Td className="text-center align-middle">
                   <Button
                     size="sm"
                     variant="outline"

@@ -1,6 +1,7 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
-import { formatVnd } from '../../i18n/currency'
+import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { isApiAuthenticated } from '../../services/authApi'
 import {
   feeKeys,
@@ -30,7 +31,7 @@ export const statusLabels: Record<string, string> = {
   scheduled: 'Đã hẹn nghiệm thu',
   inspected: 'Đã nghiệm thu hiện trường',
   awaiting_customer_confirmation: 'Chờ khách xác nhận quyết toán',
-  disputed: 'Đang khiếu nại (Cần BO xử lý)',
+  disputed: 'Đang khiếu nại - Cần BO giải quyết',
   payment_due: 'Chờ khách nộp phụ phí',
   refund_pending: 'Chờ giải ngân hoàn cọc',
   completed: 'Đã hoàn tất thanh lý & trả kho',
@@ -1801,7 +1802,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
             <div>
               <label className="block text-xs font-bold text-stone-700 mb-1">Ngày hẹn trả kho dự kiến (*):</label>
-              <input
+              <LocalizedDateInput
                 type="date"
                 value={newScheduledDate}
                 onChange={(e) => setNewScheduledDate(e.target.value)}
