@@ -239,7 +239,6 @@ function PolicyEditor({
             code: "INVALID_RESPONSE",
           })
         setDraft(policyDraft(saved))
-        setMessage("Đã lưu chính sách gia hạn mặc định. BO có thể chỉnh sửa bên dưới.")
         read.refresh()
       } catch (err) {
         if (err instanceof ApiClientError && err.status === 409) {
@@ -337,6 +336,8 @@ function PolicyEditor({
     }
   }
   const selectedPackageIds = new Set((draft.eligiblePackageIds || "").split(/[\s,]+/).filter(Boolean))
+  const availablePackages = (packageRead.data || []).filter(item => item.active).sort((a, b) => a.rentalMonths - b.rentalMonths || a.name.localeCompare(b.name, "vi"))
+  const inactiveSelectedPackages = (packageRead.data || []).filter(item => !item.active && selectedPackageIds.has(item.id))
   const setPackageSelected = (packageId: string, checked: boolean) => {
     setDraft((current) => {
       const ids = new Set((current.eligiblePackageIds || "").split(/[\s,]+/).filter(Boolean))
@@ -353,7 +354,7 @@ function PolicyEditor({
           ? "Chính sách gia hạn và quá hạn"
           : "Chính sách nhắc hạn và hỗ trợ"}
       </h3>
-      <p className="mt-1 text-xs text-stone-500">{kind === "renewal" ? "Thiết lập thời hạn, gói được áp dụng và quy trình ký cho cơ sở." : "Thiết lập cách nhắc hạn và xử lý yêu cầu hỗ trợ."}</p>
+      <p className="mt-1 text-xs text-stone-500">{kind === "renewal" ? "Thiết lập hiệu lực và gói gia hạn được áp dụng cho cơ sở." : "Thiết lập cách nhắc hạn và xử lý yêu cầu hỗ trợ."}</p>
       </div>
       <div className="space-y-4 p-5">
       {read.loading && <p role="status">Đang tải chính sách...</p>}
@@ -444,24 +445,22 @@ function PolicyEditor({
                 </div>
                 {packageRead.loading && <p className="mt-3 text-xs text-stone-500">Đang tải danh sách gói...</p>}
                 {Boolean(packageRead.error) && <p role="alert" className="mt-3 text-xs text-red-700">{integrationError(packageRead.error)}</p>}
-                {!packageRead.loading && !packageRead.error && !(packageRead.data || []).length && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Cơ sở chưa có gói thuê trong danh mục.</p>}
-                {!!packageRead.data?.length && <div className="mt-3 grid gap-2 sm:grid-cols-2">{packageRead.data.map((item) => <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedPackageIds.has(item.id) ? "border-amber-400 bg-amber-50/70" : "border-stone-200 hover:border-stone-300"}`}><input type="checkbox" className="mt-1 accent-amber-600" checked={selectedPackageIds.has(item.id)} onChange={(e) => setPackageSelected(item.id, e.target.checked)} /><span className="min-w-0 flex-1"><span className="block font-semibold text-stone-800">{item.name}</span><span className="mt-0.5 block text-xs text-stone-500">{item.rentalMonths} tháng | Giảm {Math.round(item.discountRate * 100)}%</span></span><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${item.active ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-500"}`}>{item.active ? "Đang hoạt động" : "Đã tạm ngưng"}</span></label>)}</div>}
+                {!packageRead.loading && !packageRead.error && !availablePackages.length && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Cơ sở chưa có gói thuê đang hoạt động.</p>}
+                {!!availablePackages.length && <div className="mt-3 grid gap-2 sm:grid-cols-2">{availablePackages.map((item) => <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedPackageIds.has(item.id) ? "border-amber-400 bg-amber-50/70" : "border-stone-200 hover:border-stone-300"}`}><input type="checkbox" className="mt-1 accent-amber-600" checked={selectedPackageIds.has(item.id)} onChange={(e) => setPackageSelected(item.id, e.target.checked)} /><span className="min-w-0 flex-1"><span className="block font-semibold text-stone-800">{item.name}</span><span className="mt-0.5 block text-xs text-stone-500">{item.rentalMonths} tháng | Giảm {Math.round(item.discountRate * 100)}%</span></span><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Đang hoạt động</span></label>)}</div>}
+                {!!inactiveSelectedPackages.length && <details className="mt-3 rounded-lg border border-stone-200 p-3 text-xs text-stone-600">
+                  <summary className="cursor-pointer">Gói đã chọn đang tạm ngưng ({inactiveSelectedPackages.length})</summary>
+                  <p className="mt-2">Các gói này được giữ từ chính sách đã lưu. Bỏ chọn khi chỉnh sửa để loại khỏi chính sách.</p>
+                  <div className="mt-2 space-y-2">{inactiveSelectedPackages.map(item => <label key={item.id} className="flex items-start gap-2"><input type="checkbox" checked onChange={e => setPackageSelected(item.id, e.target.checked)} /><span>{item.name} · {item.rentalMonths} tháng</span></label>)}</div>
+                </details>}
               </section>
-              <details className="rounded-xl border border-stone-200 p-4" open={draft.signingEnabled === "true"}>
-                <summary className="cursor-pointer font-semibold text-stone-900">Thời hạn ký</summary>
-                <div className="mt-3 space-y-3">{toggle("signingEnabled", "Bật cấu hình thời hạn ký")}{draft.signingEnabled === "true" && <div className="grid gap-4 sm:grid-cols-2">{["signingWindowMinutes", "exceptionExtensionLimitMinutes"].map((k) => field(k))}</div>}</div>
-              </details>
               {overdueTerm && <section className="rounded-xl border border-stone-200 p-4">
                 <h4 className="font-semibold text-stone-900">Quá hạn và thu hồi</h4>
-                <p className="mt-1 text-xs text-stone-500">Áp dụng sau ngày cuối được phép sử dụng kho, tính theo ngày lịch và giờ Việt Nam.</p>
                 <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
                   <div><dt className="text-stone-500">Ngày 1–{overdueTerm.warningThroughDay}</dt><dd className="font-medium text-stone-900">Nhắc khách gia hạn hoặc trả kho</dd></div>
                   <div><dt className="text-stone-500">Ngày {overdueTerm.warningThroughDay + 1}–{overdueTerm.seriousThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo quá hạn nghiêm trọng</dd></div>
                   <div><dt className="text-stone-500">Ngày {overdueTerm.urgentThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo khẩn cấp</dd></div>
                   <div><dt className="text-stone-500">Từ {overdueTerm.recoveryStartTime.slice(0, 5)} ngày {overdueTerm.recoveryFromDay}</dt><dd className="font-medium text-stone-900">Chuyển sang xử lý thu hồi</dd></div>
                 </dl>
-                <p className="mt-3 text-xs text-stone-600">Hạn cuối hoàn tất gia hạn là {overdueTerm.recoveryCutoffTime.slice(0, 5)} ngày quá hạn thứ {overdueTerm.urgentThroughDay}. Chuyển thu hồi không đồng nghĩa với kho đã trống hoặc được phép cho thuê lại.</p>
-                <p className="mt-2 text-xs text-stone-600">Nợ tiền thuê theo tháng được theo dõi riêng; không tự áp dụng mốc thu hồi này khi hợp đồng còn hạn.</p>
               </section>}
             </>
           ) : (

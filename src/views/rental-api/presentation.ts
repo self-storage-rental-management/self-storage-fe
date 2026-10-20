@@ -60,6 +60,7 @@ export function rentalError(error: unknown) {
     if (error.status === 404)
       return "Không có"
     const renewalErrors: Array<[string, string]> = [
+      ["Existing return case blocks renewal", "Hồ sơ đang có yêu cầu trả kho nên chưa thể gia hạn. Vui lòng liên hệ cơ sở để xử lý yêu cầu trả kho trước khi gửi gia hạn."],
       ["Appointment expired during reservation", "Lịch hẹn đã qua trong lúc xử lý. Hãy tải lại hồ sơ và chọn lịch khác; lịch mới chưa được lưu."],
       ["Eligibility UNKNOWN", "Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau; nếu vẫn gặp lỗi, liên hệ quản lý cơ sở."],
       ["Eligibility/cutoff missing", "Chưa có dữ liệu xác định hạn xử lý gia hạn. Vui lòng tải lại sau."],
