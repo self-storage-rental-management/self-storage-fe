@@ -20,6 +20,7 @@ import type {
 } from "../../types/overdueApi"
 import ApiReadState from "../rental-api/ApiReadState"
 import ApiPager from "../rental-api/ApiPager"
+import RecoveryTaskLink from "../rental-api/RecoveryTaskLink"
 import { operationsInputClass } from "../rental-api/RenewalOperationsPanel"
 import { managerDisplayError } from './managerPresentation'
 import {
@@ -32,7 +33,10 @@ const priorityLabels: Record<string, string> = {
   WARNING: "Cảnh báo",
   SERIOUS: "Nghiêm trọng",
   URGENT: "Khẩn cấp",
-  RECOVERY: "Ngưỡng thu hồi",
+  RECOVERY: "Chờ thu hồi",
+  WAITING_RECOVERY: "Chờ thu hồi",
+  RECOVERING: "Đang thu hồi",
+  COMPLETED: "Hoàn tất",
   PAYMENT_DUE: "Thanh toán quá hạn",
 }
 export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
@@ -40,7 +44,7 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
     <span className="text-xs text-stone-500">Cập nhật: {rentalDate(p.asOf)}</span>
   )
 }
-export function OverdueCaseSummary({ record: r }: { record: OverdueCase }) {
+export function OverdueCaseSummary({ record: r, onChanged }: { record: OverdueCase; onChanged?: () => void }) {
   return (
     <div className="space-y-2 text-sm">
       <p className="break-all">Mã theo dõi: {r.caseRef}</p>
@@ -51,7 +55,7 @@ export function OverdueCaseSummary({ record: r }: { record: OverdueCase }) {
       <p>
         {r.kind === "RENTAL_TERM"
           ? "Quá thời hạn thuê"
-          : "Nghĩa vụ thanh toán quá hạn"}, {r.overdueDays} ngày, {priorityLabels[r.priority]}
+          : "Nghĩa vụ thanh toán quá hạn"}, {r.overdueDays} ngày, {priorityLabels[r.workflowStatus ?? r.priority]}
       </p>
       {r.kind === "PAYMENT_DUE" ? (
         <>
@@ -63,9 +67,9 @@ export function OverdueCaseSummary({ record: r }: { record: OverdueCase }) {
         <>
           <p>Mốc thu hồi: {rentalDate(r.recoveryCutoff)}</p>
           <p>
-            Đủ điều kiện gửi thu hồi kho theo hệ thống:{" "}
-            {r.recoveryEligible ? "Có (cần bộ phận tiếp nhận xác nhận)" : "Chưa"}
+            {r.recoveryTaskId ? "Nhiệm vụ thu hồi đã được tạo. Theo dõi tiến độ trong danh sách nhiệm vụ thu hồi." : r.recoveryEligible ? "Đã đến thời điểm chuyển thu hồi." : "Chưa đến thời điểm chuyển thu hồi."}
           </p>
+          {r.recoveryTaskId && <RecoveryTaskLink role="manager" taskId={r.recoveryTaskId} facilityId={r.facilityId} onChanged={onChanged} />}
         </>
       )}
     </div>
@@ -135,7 +139,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
     page: 0,
     size: 10,
     facilityId,
-    kind: "ALL",
+    kind: "RENTAL_TERM",
     sort: "priority,desc",
   })
   const [search, setSearch] = useState("")
@@ -225,7 +229,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
                     <td className="break-words px-4 py-3 align-middle"><p className="font-semibold">{r.customerName}</p><p className="mt-1 text-xs text-stone-500">{r.storageUnitCode}</p></td>
                     <td className="px-4 py-3 align-middle"><p>{r.kind === "PAYMENT_DUE" ? "Thanh toán quá hạn" : "Quá thời hạn thuê"}</p>{r.kind === "PAYMENT_DUE" && <p className="mt-1 text-xs text-stone-500">{rentalMoney(r.outstanding, r.currency!)}</p>}</td>
                     <td className="px-4 py-3 align-middle">{r.overdueDays} ngày</td>
-                    <td className="px-4 py-3 align-middle">{priorityLabels[r.priority]}</td>
+                    <td className="px-4 py-3 align-middle">{priorityLabels[r.workflowStatus ?? r.priority]}</td>
                     <td className="px-4 py-3 text-right align-middle"><Button size="sm" variant="outline" onClick={() => setSelected(r.caseRef)}>Chi tiết</Button></td>
                   </tr>)}
                 </tbody>
@@ -330,7 +334,7 @@ function OverdueDetail({
       ) : null}
       {read.data && (
         <>
-          <OverdueCaseSummary record={read.data} />
+          <OverdueCaseSummary record={read.data} onChanged={() => { read.refresh(); onChanged() }} />
           <Button
             variant="outline"
             disabled={!canWrite || locked}
@@ -419,9 +423,9 @@ function OverdueForm({
             onChange={(e) => setType(e.target.value as typeof type)}
           >
             <option value="NOTE">Ghi chú xử lý (không thay đổi nợ)</option>
-            <option value="REMINDER">
+            {r.workflowStatus !== "COMPLETED" && <option value="REMINDER">
               Yêu cầu gửi nhắc nợ
-            </option>
+            </option>}
             {r.kind === "RENTAL_TERM" && r.recoveryEligible && (
               <option value="RECOVERY_HANDOFF">
                 Đề nghị bàn giao tới thu hồi kho

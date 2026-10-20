@@ -33,6 +33,7 @@ const labels: Record<string, string> = {
   escalate: "Đề nghị chuyển bộ phận",
   decision: "Xử lý yêu cầu chuyển bộ phận",
 }
+export type SupportDraft = { body: string; files: string[] }
 export default function SupportActionForm({
   role,
   ticket: t,
@@ -40,6 +41,8 @@ export default function SupportActionForm({
   onUploadBusy,
   mode = "all",
   internal = false,
+  draft,
+  onDraftChange,
 }: {
   role: SupportRole
   ticket: SupportTicket
@@ -47,6 +50,8 @@ export default function SupportActionForm({
   onUploadBusy?: (busy: boolean) => void
   internal?: boolean
   mode?: "all" | "message" | "operations"
+  draft?: SupportDraft
+  onDraftChange?: (draft: SupportDraft) => void
 }) {
   const { manager, copy } = useManagerPresentation()
 
@@ -55,10 +60,14 @@ export default function SupportActionForm({
     (a) => a !== "follow-up" && (mode === "message" ? a === "message" : mode === "operations" ? a !== "message" && a !== "escalate" && !(role === "staff" && ["information", "resolve"].includes(a)) : true),
   )
   const [action, setAction] = useState(actions[0] ?? "")
-  const [body, setBody] = useState(""),
+  const [localBody, setLocalBody] = useState(""),
     [staffId, setStaffId] = useState("")
   const visibility = internal ? "INTERNAL" as const : "PUBLIC" as const
-  const [files, setFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
+  const [localFiles, setLocalFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
+  const body = draft?.body ?? localBody
+  const files = draft?.files ?? localFiles
+  const setBody = (value: string) => onDraftChange ? onDraftChange({ body: value, files }) : setLocalBody(value)
+  const setFiles = (value: string[]) => onDraftChange ? onDraftChange({ body, files: value }) : setLocalFiles(value)
   const [module, setModule] = useState<SupportModule>("PAYMENT")
   const [escalationId, setEscalationId] = useState(""),
     [decision, setDecision] = useState<"ROUTE" | "REJECT">("ROUTE")

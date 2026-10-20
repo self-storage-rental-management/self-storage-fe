@@ -1096,7 +1096,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
               <span>·</span>
               <span className="hover:text-stone-400 cursor-pointer">Chính sách bảo mật</span>
               <span>·</span>
-              <span className="hover:text-stone-400 cursor-pointer">Quy chế lưu kho</span>
+              <span className="hover:text-stone-400 cursor-pointer">Quy định cho thuê</span>
             </div>
           </div>
         </div>

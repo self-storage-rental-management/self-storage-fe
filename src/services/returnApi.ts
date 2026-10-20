@@ -11,6 +11,7 @@ export interface ApiReturn {
   status: typeof returnStatuses[number]; scheduledDate: string
   inspectionNotes: string | null; managerResolutionNote: string | null
   customerNotes?: string | null
+  customerDecisionNote?: string | null
   depositAmount: number | null; totalDeductions: number; netRefundAmount: number | null; amountDueFromCustomer: number | null
   settlementBlocker?: string | null; customerConfirmed: boolean
   damageFee: number; cleaningFee: number; lostItemFee: number; overdueFee: number; outstandingFee: number
@@ -32,7 +33,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
     (v.evidencePhotos === undefined || (Array.isArray(v.evidencePhotos) && v.evidencePhotos.every(item => typeof item === 'string'))) &&
     ['depositAmount', 'netRefundAmount', 'amountDueFromCustomer'].every(k => v[k] === null || money(v[k])) &&
-    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string') &&
+    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker', 'customerDecisionNote', 'customerNotes'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string') &&
     (v.sourceType === undefined ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
       v.sourceType === 'CUSTOMER_RETURN' ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
         v.sourceType === 'RECOVERY' && isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) &&
@@ -110,6 +111,28 @@ export function completeRefund(id: string, body: { transactionReference?: string
   return mutate('staff', id, 'complete-refund', body)
 }
 
+export interface ReturnSettlementReceipt {
+  amount: number
+  paymentMethod: 'CASH' | 'BANK_TRANSFER'
+  transactionReference: string
+  receiptFileId: string
+  confirmed: boolean
+}
+export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
+  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod) || !body.transactionReference.trim()
+    || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
+    throw new Error('Chọn phương thức, nhập mã giao dịch, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền.')
+}
+export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string) {
+  const a = actor('staff', true)
+  if (!a.permissions.includes('payments:collect')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
+  if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
+  validateReturnSettlementReceipt(body)
+  return bound(await apiRequest(`/api/staff/returns/${id}/settlement-receipts`, {
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
+  }), 'staff', id)
+}
+
 export interface ReturnEvidenceAsset {
   id: string
   originalName: string
@@ -157,7 +180,28 @@ export function paySettlement(id: string, paymentMethod: string, notes = '') {
 }
 export function returnError(error: unknown) {
   if (error instanceof ApiClientError) {
-    if (error.status === 409) return 'Hồ sơ đã thay đổi hoặc chưa đủ chứng cứ thanh toán/hoàn tiền. Tải lại hồ sơ để kiểm tra; chưa xác nhận thành công.'
+    const msg = error.message || ''
+    if (error.status === 409 || msg.includes('409')) {
+      if (msg.includes('is not pending refund')) {
+        return 'Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang có khiếu nại).'
+      }
+      if (msg.includes('not in a state awaiting inspection')) {
+        return 'Hồ sơ hiện không ở trạng thái chờ nghiệm thu hiện trường.'
+      }
+      if (msg.includes('not awaiting customer confirmation')) {
+        return 'Hồ sơ chưa ở trạng thái chờ khách hàng xác nhận.'
+      }
+      if (msg.includes('not in disputed status')) {
+        return 'Hồ sơ không ở trạng thái khiếu nại.'
+      }
+      if (msg.includes('Only active rentals')) {
+        return 'Chỉ hợp đồng đang hoạt động mới được yêu cầu trả kho.'
+      }
+      if (msg.includes('Already in progress') || msg.includes('already in progress')) {
+        return 'Đã có yêu cầu trả kho đang được xử lý cho hợp đồng này.'
+      }
+      return 'Xung đột trạng thái (409): Hồ sơ đang chờ khách duyệt hoặc đang có khiếu nại. Tải lại hồ sơ để kiểm tra; chưa xác nhận thành công.'
+    }
     if (error.status === 403) return 'Bạn chưa có quyền xử lý hồ sơ trả kho tại cơ sở này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 404) return 'Không tìm thấy hồ sơ trong phạm vi được truy cập.'
