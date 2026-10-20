@@ -5,6 +5,22 @@ import { isUuid } from './renewalOperationsApi'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager'
 export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
+export interface OverdueSettlement {
+  accruedAmount: number | null
+  settlementAmount: number | null
+  overdueDays: number | null
+  calculatedAt: string | null
+  requiresReconciliation: boolean
+}
+export function isOverdueSettlement(value: unknown): value is OverdueSettlement {
+  if (!value || typeof value !== 'object') return false
+  const v = value as OverdueSettlement
+  const amount = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0
+  return typeof v.requiresReconciliation === 'boolean' && (v.requiresReconciliation
+    ? v.accruedAmount === null && v.settlementAmount === null && v.overdueDays === null && v.calculatedAt === null
+    : amount(v.accruedAmount) && amount(v.settlementAmount) && v.settlementAmount! <= v.accruedAmount!
+      && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
+}
 export interface ApiReturn {
   id: string; rentalId: string; facilityId: string; customerId: string
   facilityName: string; unitNumber: string; customerName: string
@@ -21,12 +37,14 @@ export interface ApiReturn {
   recoveryTaskId?: string | null
   recoveryTaskStatus?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | null
   recoveryCompletedAt?: string | null
+  overdueSettlement?: OverdueSettlement | null
 }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const money = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 999999999999.99 && Math.abs(v * 100 - Math.round(v * 100)) < 0.01
 const date = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v
 export function isApiReturn(v: unknown): v is ApiReturn {
   return object(v) && ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
+    (v.overdueSettlement == null || isOverdueSettlement(v.overdueSettlement)) &&
     ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && date(v.scheduledDate) &&
     returnStatuses.includes(v.status as ApiReturn['status']) && typeof v.customerConfirmed === 'boolean' && money(v.totalDeductions) &&
     ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'].every(k => money(v[k])) &&
@@ -182,6 +200,9 @@ export function returnError(error: unknown) {
   if (error instanceof ApiClientError) {
     const msg = error.message || ''
     if (error.status === 409 || msg.includes('409')) {
+      if (msg === 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.') {
+        return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
+      }
       if (msg.includes('is not pending refund')) {
         return 'Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang có khiếu nại).'
       }

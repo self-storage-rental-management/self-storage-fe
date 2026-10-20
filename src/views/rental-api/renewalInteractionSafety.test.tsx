@@ -41,6 +41,7 @@ vi.mock("react", async original => ({
 vi.mock("../manager/managerPresentation", () => ({ useManagerPresentation: () => ({ manager: false, copy: (s: string) => s, errorText: () => "Lỗi thử nghiệm" }) }))
 vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => h.actor }))
 vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: (key: string) => {
+  if (key.endsWith(':payment-events')) return { data: apiPage([]), loading: false, refresh: h.refresh }
   if (key.includes(":deposit-settlement:")) return { data: h.settlement, loading: false, refresh: h.refresh }
   if (key.endsWith(":proposal")) return { ...h.proposal, refresh: h.refresh }
   if (key.includes(":renewal:")) return { data: h.detail, loading: false, refresh: h.refresh }
@@ -164,17 +165,17 @@ describe("D3 form identity and original retry request", () => {
     const original = form(panel()), formSlots: any[] = []
     let fields = invoke(original, formSlots)
     const delayedMountEffects = [...h.effects]
-    find(fields, "textarea").props.onChange({ target: { value: "Lý do đổi lịch" } })
+    expect(nodes(fields).some(n => n.type === "textarea")).toBe(false)
     const picker = nodes(fields).find(n => typeof n.type === "function" && n.type.name === "RenewalAppointmentPicker")!
     picker.props.onChange("2026-10-11T09:00")
     picker.props.onReadyChange(true)
     fields = invoke(original, formSlots, true)
-    const cancel = button(fields, "Đóng biểu mẫu")
+    expect(button(fields, "Đóng biểu mẫu")).toBeUndefined()
     h.send.mockRejectedValueOnce(new ApiClientError("Uncertain result", { status: 503 }))
-    button(fields, "Gửi yêu cầu").props.onClick()
+    button(fields, "Lưu lịch ký").props.onClick()
     delayedMountEffects.forEach(effect => effect())
     // Stale closures must already be guarded before effects/React rerender.
-    proposalRetry.props.retry(); cancel.props.onClick(); open.props.onClick()
+    proposalRetry.props.retry(); open.props.onClick()
     expect(h.refresh).not.toHaveBeenCalled()
     expect(parentLock).toHaveBeenLastCalledWith(true)
     await settle()
@@ -192,7 +193,7 @@ describe("D3 form identity and original retry request", () => {
     expect(retained.key).toBe(original.key)
     fields = invoke(retained, formSlots, true)
     // Even a stale input callback cannot replace the original uncertain request.
-    find(fields, "textarea").props.onChange({ target: { value: "Nội dung khác" } })
+    picker.props.onChange("2026-10-11T10:00")
     h.send.mockResolvedValueOnce({ event: operationEvent })
     fields = invoke(retained, formSlots, true)
     button(fields, "Thử lại cùng yêu cầu").props.onClick()

@@ -8,7 +8,7 @@ vi.mock("./authApi", () => ({ getAuthenticatedActor: () => ({ id: "customer" }) 
 vi.mock("./customerReservationApi", () => ({
   listCustomerPaymentHistory: vi.fn(async () => page([])),
 }))
-vi.mock("./renewalApi", () => ({ listRenewals: vi.fn(async () => page([{ id: renewalId }])) }))
+vi.mock("./renewalApi", () => ({ listRenewals: vi.fn(async () => page([{ id: renewalId, storageUnit: { code: "A1" }, facility: { name: "Q1" } }])) }))
 const renewalId = "c91aa45b-0320-4133-bff2-86e7d2d512c6"
 const event = {
   id: "11111111-1111-4111-8111-111111111111", kind: "DEPOSIT", actorId: null,

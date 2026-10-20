@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import type { ReactNode } from "react"
 import { singleManagerFacility, managerFacilityNotice } from "./managerFacilityUi"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
@@ -44,66 +45,80 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
     <span className="text-xs text-stone-500">Cập nhật: {rentalDate(p.asOf)}</span>
   )
 }
-export function OverdueCaseSummary({ record: r, onChanged }: { record: OverdueCase; onChanged?: () => void }) {
+export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: OverdueCase; onChanged?: () => void; actions?: ReactNode }) {
+  const status = r.workflowStatus ?? r.priority
+  const statusClass = status === "COMPLETED" ? "bg-green-50 text-green-700" : status === "URGENT" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"
   return (
-    <div className="space-y-2 text-sm">
-      <p className="break-all">Mã theo dõi: {r.caseRef}</p>
-      <p>
-        {r.customerName}, Gian kho {r.storageUnitCode}
-      </p>
-      <p className="break-all">Hồ sơ thuê: {r.rentalId}</p>
-      <p>
-        {r.kind === "RENTAL_TERM"
-          ? "Quá thời hạn thuê"
-          : "Nghĩa vụ thanh toán quá hạn"}, {r.overdueDays} ngày, {priorityLabels[r.workflowStatus ?? r.priority]}
-      </p>
-      {r.kind === "PAYMENT_DUE" ? (
-        <>
-          <p>Số còn nợ theo hệ thống: {rentalMoney(r.outstanding, r.currency!)}</p>
-          <p>Hạn thanh toán: {rentalDate(r.dueAt)}</p>
-          <p className="break-all">Nghĩa vụ: {r.obligationRef}</p>
-        </>
-      ) : (
-        <>
-          <p>Mốc thu hồi: {rentalDate(r.recoveryCutoff)}</p>
-          <p>
-            {r.recoveryTaskId ? "Nhiệm vụ thu hồi đã được tạo. Theo dõi tiến độ trong danh sách nhiệm vụ thu hồi." : r.recoveryEligible ? "Đã đến thời điểm chuyển thu hồi." : "Chưa đến thời điểm chuyển thu hồi."}
-          </p>
-          {r.recoveryTaskId && <RecoveryTaskLink role="manager" taskId={r.recoveryTaskId} facilityId={r.facilityId} onChanged={onChanged} />}
-        </>
-      )}
-    </div>
+    <section className="min-w-0 space-y-4 text-sm">
+      {r.displayCode && <p className="font-mono text-sm font-semibold">{r.displayCode}</p>}
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-4">
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-xs text-stone-500">Gian kho</p>
+          <h3 className="break-words text-lg font-semibold [overflow-wrap:anywhere]">{r.storageUnitCode}</h3>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{priorityLabels[status]}</span>
+          <span className="rounded-md bg-stone-100 px-2.5 py-1 text-xs text-stone-600">Quá hạn {r.overdueDays} ngày</span>
+        </div>
+      </div>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="min-w-0"><dt className="text-xs text-stone-500">Khách hàng</dt><dd className="mt-1 break-words font-medium">{r.customerName}</dd></div>
+        <div><dt className="text-xs text-stone-500">Loại quá hạn</dt><dd className="mt-1 font-medium">{r.kind === "RENTAL_TERM" ? "Thời hạn thuê" : "Thanh toán"}</dd></div>
+        <div><dt className="text-xs text-stone-500">{r.kind === "RENTAL_TERM" ? "Hạn cuối gia hạn" : "Hạn thanh toán"}</dt><dd className="mt-1 font-medium tabular-nums">{rentalDate(r.kind === "RENTAL_TERM" ? r.recoveryCutoff : r.dueAt)}</dd></div>
+        {r.kind === "PAYMENT_DUE" && <div><dt className="text-xs text-stone-500">Số tiền còn nợ</dt><dd className="mt-1 font-semibold">{rentalMoney(r.outstanding, r.currency!)}</dd></div>}
+      </dl>
+      <details className="text-xs text-stone-500">
+        <summary className="w-fit cursor-pointer py-1">Mã tham chiếu</summary>
+        <dl className="mt-2 grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
+          <div className="min-w-0"><dt>Mã theo dõi</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.caseRef}</dd></div>
+          <div className="min-w-0"><dt>Hồ sơ thuê</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.rentalId}</dd></div>
+          {r.obligationRef && <div className="min-w-0"><dt>Nghĩa vụ thanh toán</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.obligationRef}</dd></div>}
+        </dl>
+      </details>
+      {r.kind === "RENTAL_TERM" && <p className="text-xs leading-relaxed text-stone-500">
+        {status === "COMPLETED" ? "Đã hoàn tất thu hồi. Bạn có thể mở nhiệm vụ để xem chứng từ." : r.recoveryTaskId ? "Đã tạo nhiệm vụ thu hồi, chờ hoàn tất các bước xử lý tại cơ sở." : r.recoveryEligible ? "Đã đến thời điểm chuyển thu hồi." : "Chưa đến thời điểm chuyển thu hồi."}
+      </p>}
+      <div className="flex flex-wrap items-center gap-2">
+        {r.kind === "RENTAL_TERM" && r.recoveryTaskId && <RecoveryTaskLink role="manager" taskId={r.recoveryTaskId} facilityId={r.facilityId} onChanged={onChanged} />}
+        {actions}
+      </div>
+    </section>
   )
 }
 export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
   return (
-    <article className="rounded border p-3 text-sm space-y-1">
-      <p className="font-semibold">
+    <article className="space-y-3 rounded-lg border border-stone-200 p-4 text-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h5 className="font-semibold">
         {
           {
             NOTE: "Ghi chú",
             REMINDER: "Yêu cầu nhắc nợ",
-            RECOVERY_HANDOFF: "Bàn giao tới thu hồi kho",
+            RECOVERY_HANDOFF: "Chuyển thu hồi",
           }[e.type]
-        }, {rentalDate(e.recordedAt)}
-      </p>
-      <p className="whitespace-pre-wrap break-words">{e.content}</p>
-      <p className="break-all">
-        Người ghi: {e.actorId ?? "Hệ thống"}, Sự kiện: {e.id}
-      </p>
-      {e.externalRef && (
-        <p className="break-all">Tham chiếu hệ thống nhận: {e.externalRef}</p>
-      )}
+        }
+      </h5>
+      <time className="text-xs tabular-nums text-stone-500" dateTime={e.recordedAt}>{rentalDate(e.recordedAt)}</time>
+      </div>
+      <p className="whitespace-pre-wrap break-words leading-relaxed [overflow-wrap:anywhere]">{e.content === "AUTO_OVERDUE_DAY_8" ? "Hệ thống tự động chuyển hồ sơ sang thu hồi vào ngày quá hạn thứ 8." : e.content}</p>
       {e.type === "REMINDER" && (
-        <p>
+        <p className="text-xs leading-relaxed text-stone-500">
           Đã được đưa vào hàng đợi thông báo, không xác nhận đã gửi đến khách.
         </p>
       )}
       {e.type === "RECOVERY_HANDOFF" && (
-        <p>
-          Bộ phận thu hồi đã nhận hồ sơ, chưa có nghĩa gian kho đã được thu hồi hoặc giải phóng.
+        <p className="text-xs leading-relaxed text-stone-500">
+          Nhiệm vụ đã được tiếp nhận, gian kho chỉ được giải phóng sau khi hoàn tất thu hồi.
         </p>
       )}
+      <details className="text-xs text-stone-500">
+        <summary className="w-fit cursor-pointer">Thông tin ghi nhận</summary>
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="min-w-0"><dt>Người ghi</dt><dd className="mt-1 break-all">{e.actorId ?? "Hệ thống"}</dd></div>
+          <div className="min-w-0"><dt>Mã sự kiện</dt><dd className="mt-1 break-all font-mono">{e.id}</dd></div>
+          {e.externalRef && <div className="min-w-0 sm:col-span-2"><dt>Mã tham chiếu tiếp nhận</dt><dd className="mt-1 break-all font-mono">{e.externalRef}</dd></div>}
+        </dl>
+      </details>
     </article>
   )
 }
@@ -226,7 +241,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
                 </thead>
                 <tbody className="divide-y divide-stone-200">
                   {read.data.data.map(r => <tr key={r.caseRef} className="hover:bg-stone-50">
-                    <td className="break-words px-4 py-3 align-middle"><p className="font-semibold">{r.customerName}</p><p className="mt-1 text-xs text-stone-500">{r.storageUnitCode}</p></td>
+                    <td className="break-words px-4 py-3 align-middle"><p className="font-semibold">{r.customerName}</p>{r.displayCode && <p className="mt-1 font-mono text-xs text-stone-600">{r.displayCode}</p>}<p className="mt-1 text-xs text-stone-500">{r.storageUnitCode}</p></td>
                     <td className="px-4 py-3 align-middle"><p>{r.kind === "PAYMENT_DUE" ? "Thanh toán quá hạn" : "Quá thời hạn thuê"}</p>{r.kind === "PAYMENT_DUE" && <p className="mt-1 text-xs text-stone-500">{rentalMoney(r.outstanding, r.currency!)}</p>}</td>
                     <td className="px-4 py-3 align-middle">{r.overdueDays} ngày</td>
                     <td className="px-4 py-3 align-middle">{priorityLabels[r.workflowStatus ?? r.priority]}</td>
@@ -260,10 +275,13 @@ function OverdueSession({ identity, facilityId, onLocked }: {
         </label>
         <Button
           variant="outline"
-          onClick={() => {
+          onClick={async () => {
             const ref = historyRef.trim()
-            setRefError(!validOverdueRef(ref))
-            if (validOverdueRef(ref)) setSelected(ref)
+            if (validOverdueRef(ref)) { setRefError(false); setSelected(ref); return }
+            if (/^QH-\d{4}-\d{6}$/i.test(ref)) {
+              try { const record = await getOverdueCase(ref); setRefError(false); setSelected(record.caseRef) }
+              catch { setRefError(true) }
+            } else setRefError(true)
           }}
         >
           Mở lịch sử
@@ -334,14 +352,13 @@ function OverdueDetail({
       ) : null}
       {read.data && (
         <>
-          <OverdueCaseSummary record={read.data} onChanged={() => { read.refresh(); onChanged() }} />
-          <Button
+          <OverdueCaseSummary record={read.data} onChanged={() => { read.refresh(); onChanged() }} actions={<Button
             variant="outline"
             disabled={!canWrite || locked}
             onClick={() => setForm(true)}
           >
             Ghi nhận xử lý
-          </Button>
+          </Button>} />
           {!canWrite && <p>Bạn chưa có quyền xử lý hồ sơ tại cơ sở này.</p>}
           {form && (
             <OverdueForm
@@ -371,7 +388,7 @@ function OverdueDetail({
           <OverdueFollowUpCard event={last} />
         </div>
       )}
-      <h4 className="font-semibold">Lịch sử theo dõi</h4>
+      <h4 className="border-t border-stone-200 pt-5 font-semibold">Lịch sử xử lý</h4>
       <ApiReadState {...history} retry={history.refresh} />
       {history.data && (
         <>

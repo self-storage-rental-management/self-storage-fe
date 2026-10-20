@@ -1,6 +1,7 @@
 import type { RentalApiPage } from "./rentalApi"
 
 export interface OverdueCase {
+  displayCode?: string | null
   caseRef: string
   rentalId: string
   facilityId: string

@@ -289,7 +289,7 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
       </section>}
       <dl className="grid gap-3 sm:grid-cols-3">
         <div><dt className="text-xs text-stone-500">Trạng thái</dt><dd className="font-semibold">{copy(phaseLabels[s.phase])}</dd></div>
-        <div><dt className="text-xs text-stone-500">Lịch ký</dt><dd className="font-medium">{s.appointmentRef ? `${rentalDate(s.appointmentStart)} — ${rentalDate(s.appointmentEnd)}` : "Chưa đặt lịch"}</dd></div>
+        <div><dt className="text-xs text-stone-500">Lịch ký</dt><dd className="font-medium">{s.appointmentRef ? `${rentalDate(s.appointmentStart)}, ${rentalDate(s.appointmentEnd)}` : "Chưa đặt lịch"}</dd></div>
         <div><dt className="text-xs text-stone-500">Khách đến</dt><dd className="font-medium">{s.arrivalRef ? "Đã ghi nhận" : "Chưa ghi nhận"}</dd></div>
       </dl>
       {s.phase === "SIGNING" && !s.arrivalRef && s.appointmentEnd && Date.parse(s.appointmentEnd) < Date.now() && <p className="text-amber-700">Lịch hẹn đã qua. Khách hàng cần đổi lịch trong hạn ký còn hiệu lực để tiếp tục.</p>}

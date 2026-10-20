@@ -83,7 +83,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         ids.facility,
         ids.customer,
       ),
-    ).toContain("khách đến")
+    ).toContain("khách đã đến")
     expect(
       operationBlockedReason(
         signingState,
@@ -180,8 +180,10 @@ describe("D3 operation prerequisites and truthful UI", () => {
       />,
     )
     expect(html).toContain("Chờ thanh toán cọc")
-    expect(html).toContain("Thanh toán và phân bổ tiền gia hạn")
-    expect(html).toContain("Chưa đủ thông tin để xử lý")
+    expect(operationBlockedReason(
+      { ...signingState, missingSources: ["RENEWAL_ACCOUNTING"] },
+      "staff", "cash", operationsActor("staff"),
+    )).toContain("Thanh toán và phân bổ tiền gia hạn")
     expect(html).not.toContain("không dùng dữ liệu demo")
     expect(html).not.toContain("RENEWAL_ACCOUNTING")
     expect(html).not.toContain("0 đ")
@@ -248,7 +250,7 @@ describe("D4 truthful overdue presentation", () => {
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={termCase} />)
-    expect(html).toContain("Quá thời hạn thuê")
+    expect(html).toContain("Thời hạn thuê")
     expect(html).not.toContain("không tự có một khoản nợ tiền")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("term-policy")
@@ -274,7 +276,7 @@ describe("D4 truthful overdue presentation", () => {
         }}
       />,
     )
-    expect(recovery).toContain("chưa có nghĩa gian kho đã được thu hồi hoặc giải phóng")
+    expect(recovery).toContain("gian kho chỉ được giải phóng sau khi hoàn tất thu hồi")
   })
   it("reports deferred code even when backend message lacks the marker", () => {
     expect(
