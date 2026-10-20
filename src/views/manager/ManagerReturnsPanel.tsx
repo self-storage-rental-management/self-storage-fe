@@ -1147,7 +1147,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 value={disputeResolutionNote}
                 onChange={e => setDisputeResolutionNote(e.target.value)}
                 placeholder={
-                  "Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh hiện trạng camera ngày vào và ra, chấp thuận giảm 50% phí vệ sinh...)"
+                  "Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh chụp hiện trạng ngày vào và ra, chấp thuận giảm 50% phí vệ sinh...)"
                 }
                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
