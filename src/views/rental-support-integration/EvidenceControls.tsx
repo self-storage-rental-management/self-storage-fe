@@ -18,6 +18,7 @@ export function EvidenceUpload({
   accept,
   limit = 10,
   compact = false,
+  upload,
 }: {
   entityType: string
   entityId?: string
@@ -29,6 +30,7 @@ export function EvidenceUpload({
   accept?: string
   limit?: number
   compact?: boolean
+  upload?: (file: File) => Promise<{ id: string }>
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>()
@@ -63,7 +65,7 @@ export function EvidenceUpload({
             onBusy?.(true)
             setError(undefined)
             try {
-              const uploaded = await uploadDuongEvidence(
+              const uploaded = upload ? await upload(file) : await uploadDuongEvidence(
                 file,
                 entityType,
                 entityId,
@@ -97,12 +99,14 @@ export function EvidenceDownload({
   label,
   previewLabel,
   asLink = false,
+  previewOnly = false,
 }: {
   id: string
   index?: number
   label?: string
   previewLabel?: string
   asLink?: boolean
+  previewOnly?: boolean
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>()
@@ -178,7 +182,7 @@ export function EvidenceDownload({
       >
         {busy ? "Đang tải…" : previewLabel}
       </Button>}
-      {asLink ? <button
+      {!previewOnly && (asLink ? <button
         type="button"
         className="max-w-full break-words text-left font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-900 disabled:cursor-wait disabled:opacity-60 [overflow-wrap:anywhere]"
         disabled={busy}
@@ -192,7 +196,7 @@ export function EvidenceDownload({
         onClick={download}
       >
         {label || `Tải minh chứng ${index}`}
-      </Button>}
+      </Button>)}
       {!!error && <span role="alert">{integrationError(error)}</span>}
     </span>
   )

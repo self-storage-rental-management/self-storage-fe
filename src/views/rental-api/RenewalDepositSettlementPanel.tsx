@@ -8,7 +8,7 @@ import type { RenewalOperationsRole } from "../../types/renewalOperationsApi"
 import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
 import { rentalError, rentalMoney } from "./presentation"
 
-const labels = { HELD: "Đã ghi nhận cọc", AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý cọc ngày quá hạn thứ 8", APPLIED_TO_RENT: "Đã tính vào tiền thuê", REVIEW_REQUIRED: "Chờ xác minh nguyên nhân", FORFEITED: "Đã ghi nhận mất cọc gia hạn", REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc", REFUND_APPROVED: "Đã duyệt, chờ hoàn cọc", REFUNDED: "Đã ghi nhận hoàn cọc", UNKNOWN: "Chưa xác minh", NOT_APPLICABLE: "Không áp dụng" }
+const labels = { AWAITING_FAULT_REVIEW: "Giữ cọc, chờ xác minh trách nhiệm", FACILITY_FAULT: "Giữ cọc để xử lý sự cố từ cơ sở", HELD: "Đã ghi nhận cọc", AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý cọc ngày quá hạn thứ 8", APPLIED_TO_RENT: "Đã tính vào tiền thuê", REVIEW_REQUIRED: "Chờ xác minh nguyên nhân", FORFEITED: "Đã ghi nhận mất cọc gia hạn", REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc", REFUND_APPROVED: "Đã duyệt, chờ hoàn cọc", REFUNDED: "Đã ghi nhận hoàn cọc", UNKNOWN: "Chưa xác minh", NOT_APPLICABLE: "Không áp dụng" }
 export default function RenewalDepositSettlementPanel({ id, role, revision, onLocked, onChanged }: {
   id: string; role: RenewalOperationsRole; revision?: number | null; onLocked: (value: boolean) => void; onChanged: () => void
 }) {

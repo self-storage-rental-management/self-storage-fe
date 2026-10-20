@@ -46,8 +46,10 @@ export default function RenewalDetail({
   )
   const canViewReceipt = payment?.paymentStatus === "PAID" && !payment.reconciliationRequired &&
     (!payment.settlementStage || ["ALLOCATED_AWAITING_SIGNING", "AWAITING_SIGNING", "COMPLETED"].includes(payment.settlementStage))
+  const paymentDeadline = payment?.paymentDeadline ?? r.approvedPaymentDeadline
+  const paymentExpired = r.status === "accepted" && !!paymentDeadline && Date.parse(paymentDeadline) <= Date.now() && payment?.paymentStatus !== "PAID"
   const verification = r.systemVerification
-  const workflowStatusLabel = r.status === "accepted" && r.approvedPaymentDeadline
+  const workflowStatusLabel = paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
     ? hasDeposit ? "Đã mở thanh toán cọc qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
     : r.status === "accepted" && verification?.status === "VERIFIED"
     ? "Đã xác nhận điều kiện, chờ kiểm tra readiness thanh toán"
@@ -123,9 +125,7 @@ export default function RenewalDetail({
       </dl>
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền cọc đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
-      <details className="rounded-xl border border-stone-200 bg-white p-3">
-        <summary className="cursor-pointer font-semibold">Tài chính</summary>
-        <div className="mt-3 space-y-3">
+      <div className="space-y-3">
           {role === "customer" && payment && <section className={`space-y-1 rounded-lg border p-3 ${payment.reconciliationRequired ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-stone-50"}`} aria-live="polite">
             <p className="font-semibold">{hasDeposit ? "Thanh toán cọc" : "Thanh toán toàn kỳ"}: {({ PENDING: "Đang chờ VNPay", PROCESSING: "Đang xử lý", PAID: payment.reconciliationRequired ? "Đã nhận tiền, cần đối soát" : "Đã ghi nhận thanh toán", NOT_RECEIVED: "Chưa xác nhận đã nhận tiền", FAILED: "Thanh toán thất bại", CANCELLED: "Giao dịch đã hủy" } as Record<string, string>)[payment.paymentStatus]}</p>
             <p>{payment.settlementStage ? ({ AWAITING_PAYMENT: "Chờ VNPay xác nhận thanh toán", VERIFIED_AWAITING_ALLOCATION: "Đã xác minh tiền, đang chờ phân bổ", ALLOCATED_AWAITING_SIGNING: "Đang kiểm tra điều kiện ký", AWAITING_SIGNING: "Đã thanh toán, chờ hoàn tất ký", COMPLETED: "Gia hạn đã hoàn tất", RECONCILIATION_REQUIRED: "Cần hỗ trợ đối soát" }[payment.settlementStage]) : payment.message}</p>
@@ -133,10 +133,9 @@ export default function RenewalDetail({
             {payment.paymentDeadline && <p className="text-xs text-stone-600">Hạn thanh toán: {rentalDate(payment.paymentDeadline)}</p>}
             {canViewReceipt && <Button type="button" variant="outline" onClick={() => setReceiptOpen(true)}>Xem biên lai</Button>}
           </section>}
-          {financeHistory}
           {role === "customer" && paymentError && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{paymentError}</p>}
-        </div>
-      </details>
+      </div>
+      {financeHistory}
       {evidenceDocuments}
       {receiptOpen && canViewReceipt && payment && <Modal open onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán" size="lg">
         <RenewalReceipt id={r.id} paymentId={payment.paymentId} role={role} />
@@ -171,10 +170,10 @@ export default function RenewalDetail({
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
       {appointmentSelection}
-      {canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán cọc" : "thanh toán"}.</p>}
+      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay; khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán cọc" : "thanh toán"}.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
-          disabled={operationsLocked||paymentBusy||!appointmentSelected||payment?.paymentStatus==="PAID"}
+          disabled={operationsLocked||paymentBusy||paymentExpired||!appointmentSelected||payment?.paymentStatus==="PAID"}
           onClick={openRenewalPayment}
         >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":hasDeposit?"Thanh toán cọc":"Thanh toán toàn kỳ"}</Button>}
         {actions

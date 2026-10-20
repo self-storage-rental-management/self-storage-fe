@@ -111,6 +111,28 @@ export function completeRefund(id: string, body: { transactionReference?: string
   return mutate('staff', id, 'complete-refund', body)
 }
 
+export interface ReturnSettlementReceipt {
+  amount: number
+  paymentMethod: 'CASH' | 'BANK_TRANSFER'
+  transactionReference: string
+  receiptFileId: string
+  confirmed: boolean
+}
+export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
+  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod) || !body.transactionReference.trim()
+    || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
+    throw new Error('Chọn phương thức, nhập mã giao dịch, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền.')
+}
+export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string) {
+  const a = actor('staff', true)
+  if (!a.permissions.includes('payments:collect')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
+  if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
+  validateReturnSettlementReceipt(body)
+  return bound(await apiRequest(`/api/staff/returns/${id}/settlement-receipts`, {
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
+  }), 'staff', id)
+}
+
 export interface ReturnEvidenceAsset {
   id: string
   originalName: string
