@@ -45,7 +45,7 @@ const makePermissions = (...enabled: PermissionKey[]): RolePermissions => {
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   customer: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:create', 'reservations:read',
-    'contracts:read', 'rentals:read', 'payments:read', 'support:read'
+    'contracts:read', 'rentals:read', 'payments:read', 'support:read', 'policies:read'
   ),
   staff: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'reservations:approve', 'storage_units:assign', 'contracts:read',

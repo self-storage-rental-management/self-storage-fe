@@ -69,11 +69,11 @@ export default function ReturnSettlementModal({
           <div className="text-right">
             {netRefund > 0 ? (
               <Badge variant={isCompleted ? 'success' : isRefundPending ? 'purple' : 'warning'}>
-                {isCompleted ? '✓ Đã hoàn cọc' : 'Chờ hoàn cọc'}
+                {isCompleted ? (role === 'customer' ? 'Đã hoàn cọc' : '✓ Đã hoàn cọc') : 'Chờ hoàn cọc'}
               </Badge>
             ) : amountDue > 0 ? (
               <Badge variant={isCompleted ? 'success' : isPaymentDue ? 'error' : 'warning'}>
-                {isCompleted ? '✓ Đã thu đủ' : 'Chờ nộp thêm'}
+                {isCompleted ? (role === 'customer' ? 'Đã thu đủ' : '✓ Đã thu đủ') : 'Chờ nộp thêm'}
               </Badge>
             ) : (
               <Badge variant="muted">Quyết toán cân bằng</Badge>
@@ -93,7 +93,7 @@ export default function ReturnSettlementModal({
             }`}
             onClick={() => setActiveTab('invoice')}
           >
-            🧾 Hóa đơn quyết toán
+            {role !== 'customer' && '🧾 '}Hóa đơn quyết toán
           </button>
           <button
             type="button"
@@ -104,7 +104,7 @@ export default function ReturnSettlementModal({
             }`}
             onClick={() => setActiveTab('receipt')}
           >
-            📑 Biên lai & Chứng từ
+            {role !== 'customer' && '📑 '}Biên lai & Chứng từ
           </button>
           <button
             type="button"
@@ -115,7 +115,7 @@ export default function ReturnSettlementModal({
             }`}
             onClick={() => setActiveTab('history')}
           >
-            📜 Lịch sử thanh toán
+            {role !== 'customer' && '📜 '}Lịch sử thanh toán
           </button>
         </div>
 
@@ -226,7 +226,7 @@ export default function ReturnSettlementModal({
                     {totalDeductions === 0 && (
                       <Tr>
                         <Td colSpan={2} className="text-xs italic text-emerald-700">
-                          ✓ Không phát sinh khoản giảm trừ. Khách hàng bàn giao gian kho nguyên vẹn, đúng hạn.
+                          {role !== 'customer' && '✓ '}Không phát sinh khoản giảm trừ. Khách hàng bàn giao gian kho nguyên vẹn, đúng hạn.
                         </Td>
                         <Td className="text-right text-xs font-semibold text-emerald-700">
                           0 ₫
@@ -281,7 +281,7 @@ export default function ReturnSettlementModal({
               <div className="flex items-start justify-between border-b border-stone-200 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">🧾</span>
+                    {role !== 'customer' && <span className="text-xl">🧾</span>}
                     <h4 className="text-lg font-bold text-stone-900">
                       {netRefund > 0
                         ? 'BIÊN LAI HOÀN CỌC TRẢ KHO'
@@ -333,7 +333,7 @@ export default function ReturnSettlementModal({
                   </div>
                   <div className="text-right">
                     <span className="inline-block rounded border border-emerald-600 bg-emerald-50 px-3 py-1 font-mono text-xs font-bold text-emerald-800">
-                      ✓ ĐÃ KIỂM TRA CHỨNG TỪ
+                      {role !== 'customer' && '✓ '}ĐÃ KIỂM TRA CHỨNG TỪ
                     </span>
                   </div>
                 </div>
@@ -355,7 +355,7 @@ export default function ReturnSettlementModal({
 
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="outline" onClick={handlePrint}>
-                🖨️ In biên lai / Lưu PDF
+                {role !== 'customer' && '🖨️ '}In biên lai / Lưu PDF
               </Button>
             </div>
           </div>
