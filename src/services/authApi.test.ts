@@ -69,7 +69,7 @@ describe('backend customer navigation and profile', () => {
   it('shows customer navigation without a demo user or internal permissions', async () => {
     await authenticate()
     const user = actorToUser(actor)
-    for (const permission of ['dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'payments:read', 'support:read'] as const) {
+    for (const permission of ['dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'payments:read', 'support:read', 'policies:read'] as const) {
       expect(canApiCustomerNavigate(user, permission)).toBe(true)
     }
     expect(canApiCustomerNavigate(user, 'roles:manage')).toBe(false)
