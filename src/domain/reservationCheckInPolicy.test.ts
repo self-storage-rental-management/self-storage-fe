@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { isCheckInAppointmentAllowed, plannedCheckInWindow } from './reservationCheckInPolicy'
+import { isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
 
 describe('reservation check in policy', () => {
+  it('formats appointment inputs in Vietnam time across the UTC date boundary', () => {
+    const instant = new Date('2026-10-19T18:30:00Z')
+    expect(policyDateInput(instant)).toBe('2026-10-20')
+    expect(policyTimeInput(instant)).toBe('01:30')
+  })
   it('includes 15 minutes for payment between review and assignment', () => {
     const window = plannedCheckInWindow('2026-10-12T10:30:00+07:00', true)
     expect(window.availableAt.toISOString()).toBe('2026-10-14T04:00:00.000Z')

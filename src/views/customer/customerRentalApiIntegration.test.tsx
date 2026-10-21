@@ -21,9 +21,9 @@ describe("Customer Rental API integration", () => {
   ])("opens the correct customer page for %s", (search, fallback, expected) => {
     expect(resolveCustomerInitialPage(search, fallback)).toBe(expected)
   })
-  it("shows one Hồ sơ Thuê navigation item", () => {
+  it("shows one Hồ sơ thuê navigation item", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("{ id: 'rental-records', label: 'Hồ sơ Thuê'")
+    expect(source.match(/\{\s*id:\s*'rental-records',\s*label:\s*'Hồ sơ thuê'/g)).toHaveLength(1)
     expect(source).not.toContain("...customerRentalApiNav(")
   })
   it("keeps the Customer API workspace implemented and customer-scoped", () => {
