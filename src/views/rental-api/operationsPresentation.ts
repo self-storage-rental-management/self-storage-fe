@@ -15,7 +15,7 @@ export const operationLabels: Record<RenewalOperationAction, string> = {
   confirmation: "Xác nhận đề xuất ngoại lệ",
   arrival: "Ghi nhận khách đến",
   incident: "Báo sự cố tại cơ sở",
-  cash: "Ghi nhận thanh toán còn lại",
+  cash: "Ghi nhận thanh toán",
   completion: "Hoàn tất ký gia hạn",
   exception: "Xem xét ngoại lệ",
   refund: "Xem xét hoàn tiền",

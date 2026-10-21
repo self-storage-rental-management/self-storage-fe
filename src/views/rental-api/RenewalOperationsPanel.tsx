@@ -124,7 +124,7 @@ export function OperationEventCard({
         </div>
         <dl className="grid gap-3 sm:grid-cols-2">
           <div className="min-w-0"><dt className="text-xs text-stone-500">Nội dung thu</dt><dd className="mt-1 font-medium text-stone-800">Thanh toán gia hạn theo bảng kê</dd></div>
-          <div className="min-w-0"><dt className="text-xs text-stone-500">{field("paymentMethod") === "BANK_TRANSFER" ? "Mã giao dịch ngân hàng" : "Mã biên lai"}</dt><dd className="mt-1 break-words font-medium text-stone-800 [overflow-wrap:anywhere]">{field("transactionReference") || field("reference") || "Chưa ghi nhận"}</dd></div>
+          <div className="min-w-0"><dt className="text-xs text-stone-500">Mã biên lai</dt><dd className="mt-1 break-words font-medium text-stone-800 [overflow-wrap:anywhere]">{field("transactionReference") || field("reference") || "Chưa ghi nhận"}</dd></div>
         </dl>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-3">
           <span className="text-xs font-medium text-stone-500">Chứng từ đính kèm</span>
@@ -516,7 +516,7 @@ export default function RenewalOperationsPanel({
                   ? action === "arrival" ? "Đã ghi nhận khách đến." : action === "cash" ? "Đã hoàn tất đối soát thanh toán." : "Gia hạn đã hoàn tất."
                   : action === "cash"
                   ? cashRecorded
-                    ? "Khoản thanh toán còn lại đã được ghi nhận."
+                    ? "Đã ghi nhận thanh toán còn lại."
                     : paymentEventsRead.loading
                       ? "Đang kiểm tra trạng thái thanh toán."
                       : paymentEventsRead.error
@@ -542,7 +542,7 @@ export default function RenewalOperationsPanel({
                     >
                       {copy(role === "staff" && action === "completion" ? "Hoàn tất gia hạn" : operationLabels[action])}
                     </Button>
-                    {reason && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
+                    {reason && !(role === "staff" && reason === "Chưa có lượt khách đến được nhân viên ghi nhận.") && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
                       <p className="mt-1 text-xs text-stone-500">{copy(reason)}</p>
                     )}
                   </div>
@@ -550,6 +550,11 @@ export default function RenewalOperationsPanel({
               })}
             </div>
           </Card>}
+          {!appointmentOnly && role === "staff" && operationBlockedReason(
+            read.data, role, "completion", actor, facilityId, customerId, proposalRead.data, now,
+          ) === "Chưa có lượt khách đến được nhân viên ghi nhận." && (
+            <p role="status" className="text-sm text-stone-500">Chưa có lượt khách đến được nhân viên ghi nhận.</p>
+          )}
         </>
       )}
       {appointmentOnly && read.data && <OperationForm
@@ -672,8 +677,8 @@ function OperationForm({
   const [incidentPage, setIncidentPage] = useState(0)
   const [exception, setException] = useState<RenewalExceptionAction>("REJECT")
   const [decision, setDecision] = useState<"APPROVE" | "REJECT">("REJECT")
-  const [receipt, setReceipt] = useState("")
   const [receiptFile, setReceiptFile] = useState("")
+  const [signedDocumentFile, setSignedDocumentFile] = useState("")
   const [balanceMethod, setBalanceMethod] = useState<"CASH" | "BANK_TRANSFER">("CASH")
   const [attested, setAttested] = useState(false)
   const [validation, setValidation] = useState<string>()
@@ -775,14 +780,12 @@ function OperationForm({
           throw new Error(
             "Cần bảng kê còn hiệu lực, số tiền lớn hơn 0 và xác nhận đã nhận đủ tiền.",
           )
-        if (balanceMethod === "BANK_TRANSFER") validateText(receipt, true, 100)
         if (!isUuid(receiptFile)) throw new Error("Cần chứng từ thanh toán.")
         return {
           action,
           body: {
             ...base,
             payableStatementRef: statement.reference,
-            ...(balanceMethod === "BANK_TRANSFER" ? { receiptReference: receipt.trim() } : {}),
             receiptFileId: receiptFile,
             paymentMethod: balanceMethod,
             received: true,
@@ -800,6 +803,7 @@ function OperationForm({
           body: {
             ...base,
             arrivalRef: s.arrivalRef,
+            ...(signedDocumentFile ? { signedDocumentFileId: signedDocumentFile } : {}),
             completionNote: reason,
           },
         }
@@ -957,17 +961,6 @@ function OperationForm({
             />
           </label>
         )}
-        {needFiles && (
-          <label className="block">
-            Mã tệp minh chứng đã lưu (nếu có)<textarea
-              className={operationsInputClass}
-              value={evidence}
-              onChange={(e) => setEvidence(e.target.value)}
-            />
-            <span className="text-xs text-stone-500">
-              Nhập tối đa 10 mã tệp đã liên kết với hồ sơ, cách nhau bằng dấu phẩy.</span>
-          </label>
-        )}
         {needFiles && <EvidenceUpload
           entityType={`DUONG_RENEWAL_${action.toUpperCase()}`}
           entityId={s.renewalId} value={files}
@@ -977,23 +970,26 @@ function OperationForm({
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
             {cash.data && (
-              <div className="space-y-2">
-                {cash.data.remainingRentalAmount !== undefined && <p>Tiền thuê còn lại: {rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</p>}
-                {cash.data.overdueFee !== undefined && <p>Phí quá hạn: {rentalMoney(cash.data.overdueFee,cash.data.currency)}</p>}
-                <p>
-                  Số tiền theo bảng kê:{" "}
-                  {rentalMoney(cash.data.amount, cash.data.currency)}
-                </p>
-                <p>Hết hiệu lực: {rentalDate(cash.data.expiresAt)}</p>
-                <p className="break-all">
-                  Mã bảng kê: {cash.data.reference}
-                </p>
-                <p className="break-all">
-                  Mã khoản phải thanh toán: {cash.data.requiredObligations.join(", ")}
-                </p>
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                  <p className="text-sm font-medium text-amber-900">Số tiền cần thu</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 sm:text-3xl">{rentalMoney(cash.data.amount, cash.data.currency)}</p>
+                  <dl className="mt-4 space-y-2 border-t border-amber-200/70 pt-3 text-sm">
+                    {cash.data.remainingRentalAmount !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Tiền thuê còn lại</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</dd></div>}
+                    {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
+                  </dl>
+                </div>
+                <p className="text-xs text-stone-500">Bảng kê có hiệu lực đến {rentalDate(cash.data.expiresAt)}</p>
+                <details className="rounded-lg border border-stone-200 px-3 py-2 text-xs text-stone-500">
+                  <summary className="cursor-pointer font-medium text-stone-600">Thông tin đối soát</summary>
+                  <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="min-w-0"><dt>Mã bảng kê</dt><dd className="mt-1 break-all font-mono text-stone-700">{cash.data.reference}</dd></div>
+                    <div className="min-w-0"><dt>Mã khoản phải thanh toán</dt><dd className="mt-1 break-all font-mono text-stone-700">{cash.data.requiredObligations.join(", ")}</dd></div>
+                  </dl>
+                </details>
               </div>
             )}
-            <label className="block">
+            <label className="block text-sm font-medium text-stone-700">
               Phương thức thanh toán
               <select className={operationsInputClass} value={balanceMethod}
                 onChange={e => setBalanceMethod(e.target.value as "CASH" | "BANK_TRANSFER")}>
@@ -1001,27 +997,19 @@ function OperationForm({
                 <option value="BANK_TRANSFER">Chuyển khoản</option>
               </select>
             </label>
-            {balanceMethod === "BANK_TRANSFER" && <label className="block">
-              Mã giao dịch chuyển khoản
-              <input
-                className={operationsInputClass}
-                value={receipt}
-                maxLength={100}
-                onChange={(e) => setReceipt(e.target.value)}
-              />
-            </label>}
-            {balanceMethod === "CASH" && <p className="text-sm text-stone-500">Mã biên lai được hệ thống tự động tạo khi ghi nhận thu tiền.</p>}
+            <p className="text-sm text-stone-500">Mã biên lai được hệ thống tự động tạo khi ghi nhận thu tiền.</p>
             <p className="text-sm text-stone-600">
               {balanceMethod === "BANK_TRANSFER"
-                ? "Tải chứng từ chuyển khoản và chỉ ghi nhận sau khi đã đối chiếu tiền vào tài khoản nhận. Ảnh chuyển khoản do khách gửi chưa đủ để xác nhận đã thanh toán."
+                ? "Tải ảnh chụp màn hình chuyển khoản làm minh chứng."
                 : "Tải biên nhận thu tiền mặt đã lập cho giao dịch này."}
             </p>
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
               onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />
-            <label>
+            <label className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
               <input
                 type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0 accent-amber-600"
                 checked={attested}
                 onChange={(e) => setAttested(e.target.checked)}
               />{" "}
@@ -1033,10 +1021,16 @@ function OperationForm({
         {action === "completion" && (
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
-            <div className="space-y-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
-              <p>Hệ thống kiểm tra khoản thanh toán và biên lai đã lưu trước khi hoàn tất. Không cần tải thêm minh chứng.</p>
-              {cash.data && <p className="font-semibold">Còn phải thu: {rentalMoney(cash.data.amount, cash.data.currency)}</p>}
-            </div>
+            <EvidenceUpload
+                entityType="DUONG_RENEWAL_SIGNED_CONTRACT"
+                entityId={s.renewalId}
+                label="Tải hợp đồng lên"
+                disabled={locked}
+                value={signedDocumentFile ? [signedDocumentFile] : []}
+                limit={1}
+                onChange={ids => setSignedDocumentFile(ids[0] || "")}
+                onBusy={uploadBusy}
+            />
           </>
         )}
       </fieldset>
@@ -1046,7 +1040,7 @@ function OperationForm({
         <p role="alert">
           Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại, không đóng hoặc tải lại trang.</p>
       )}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-4">
         <Button
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||

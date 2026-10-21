@@ -446,7 +446,7 @@ function PolicyEditor({
                 {packageRead.loading && <p className="mt-3 text-xs text-stone-500">Đang tải danh sách gói...</p>}
                 {Boolean(packageRead.error) && <p role="alert" className="mt-3 text-xs text-red-700">{integrationError(packageRead.error)}</p>}
                 {!packageRead.loading && !packageRead.error && !availablePackages.length && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Cơ sở chưa có gói thuê đang hoạt động.</p>}
-                {!!availablePackages.length && <div className="mt-3 grid gap-2 sm:grid-cols-2">{availablePackages.map((item) => <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedPackageIds.has(item.id) ? "border-amber-400 bg-amber-50/70" : "border-stone-200 hover:border-stone-300"}`}><input type="checkbox" className="mt-1 accent-amber-600" checked={selectedPackageIds.has(item.id)} onChange={(e) => setPackageSelected(item.id, e.target.checked)} /><span className="min-w-0 flex-1"><span className="block font-semibold text-stone-800">{item.name}</span><span className="mt-0.5 block text-xs text-stone-500">{item.rentalMonths} tháng | Giảm {Math.round(item.discountRate * 100)}%</span></span><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Đang hoạt động</span></label>)}</div>}
+                {!!availablePackages.length && <div className="mt-3 grid gap-2 sm:grid-cols-2">{availablePackages.map((item) => <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedPackageIds.has(item.id) ? "border-amber-400 bg-amber-50/70" : "border-stone-200 hover:border-stone-300"}`}><input type="checkbox" className="mt-1 accent-amber-600" checked={selectedPackageIds.has(item.id)} onChange={(e) => setPackageSelected(item.id, e.target.checked)} /><span className="min-w-0 flex-1"><span className="block font-semibold text-stone-800">{item.name}</span><span className="mt-0.5 block text-xs text-stone-500">{item.rentalMonths} tháng, giảm {Math.round(item.discountRate * 100)}%</span></span><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Đang hoạt động</span></label>)}</div>}
                 {!!inactiveSelectedPackages.length && <details className="mt-3 rounded-lg border border-stone-200 p-3 text-xs text-stone-600">
                   <summary className="cursor-pointer">Gói đã chọn đang tạm ngưng ({inactiveSelectedPackages.length})</summary>
                   <p className="mt-2">Các gói này được giữ từ chính sách đã lưu. Bỏ chọn khi chỉnh sửa để loại khỏi chính sách.</p>
@@ -586,7 +586,6 @@ export default function DuongPolicyWorkspace({
     actor.permissions.includes("policies:read")
   const [page, setPage] = useState(0),
     [facility, setFacility] = useState(""),
-    [kind, setKind] = useState<PolicyKind>("renewal"),
     [rentalInput, setRentalInput] = useState(""),
     [rental, setRental] = useState("")
   const [locked, setLocked] = useState(false)
@@ -653,10 +652,10 @@ export default function DuongPolicyWorkspace({
     <div className="mx-auto max-w-6xl space-y-5 pb-8">
       <header className="pb-1">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">Thiết lập theo cơ sở</p>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chính sách gia hạn và hỗ trợ</h2>
+        <h2 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chính sách gia hạn</h2>
         <p className="mt-1 text-sm text-stone-500">Quản lý các gói khách được gia hạn và điều kiện xử lý tại từng cơ sở.</p>
       </header>
-      <div className="grid gap-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:grid-cols-2">
+      <div className="grid gap-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
       {read.loading && <p role="status">Đang tải cơ sở...</p>}
       {!!read.error && <p role="alert">{integrationError(read.error)}</p>}
       <label className="block">
@@ -698,24 +697,12 @@ export default function DuongPolicyWorkspace({
           </Button>
         </div>
       )}
-      <label className="block">
-        <span className="text-sm font-semibold text-stone-700">Loại chính sách</span>
-        <select
-          disabled={locked}
-          className="mt-2 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:bg-stone-100"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as PolicyKind)}
-        >
-          <option value="renewal">Gia hạn và quá hạn</option>
-          <option value="communication">Nhắc hạn và hỗ trợ</option>
-        </select>
-      </label>
       </div>
       {facility && (
         <PolicyEditor
-          key={`${actor!.id}:${facility}:${kind}`}
+          key={`${actor!.id}:${facility}:renewal`}
           facility={facility}
-          kind={kind}
+          kind="renewal"
           actor={actor!}
           onLocked={setLocked}
         />
