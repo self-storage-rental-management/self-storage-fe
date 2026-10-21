@@ -124,12 +124,14 @@ export default function CustomerRenewalRequestModal({
                 <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
                 {quote.discountAmount > 0 && (
                   <QuoteLine
-                    label="Giảm giá"
-                    value={`- ${rentalMoney(quote.discountAmount, quote.currency)} (${Math.round(quote.discountRate * 100)}%)`}
+                    label={`Giảm giá (${Math.round(quote.discountRate * 100)}%)`}
+                    value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
                     valueClassName="text-emerald-700"
                   />
                 )}
                 <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
+                <QuoteLine label="Cọc gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} />
+                <QuoteLine label="Tiền thuê còn lại khi ký" value={rentalMoney(quote.remainingRentalAmount, quote.currency)} />
               </div>
             </div>
           </section>
