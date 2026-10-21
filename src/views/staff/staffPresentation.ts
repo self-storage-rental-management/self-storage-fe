@@ -102,13 +102,14 @@ export function formatStaffDate(value: string | null | undefined) {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
+        timeZone: "Asia/Ho_Chi_Minh",
       })
 }
 
 export function formatStaffDateTime(value: string | null | undefined) {
   if (!value) return "Chưa lên lịch"
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN")
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
 }
 
 export function staffErrorMessage(error: unknown, fallback: string) {

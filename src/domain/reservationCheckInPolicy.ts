@@ -8,10 +8,29 @@ export const LAST_CHECK_IN_SLOT_HOUR = 16
 export const LAST_CHECK_IN_SLOT_MINUTE = 30
 
 const SLOT_MS = 30 * 60 * 1000
+const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+const POLICY_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const WORKING_DAYS = new Set([0, 1, 2, 3, 4, 5, 6])
 
+// Facility hours are Vietnam wall-clock hours, independent of the browser/CI timezone.
+function policyClock(value: Date) {
+  return new Date(value.getTime() + VIETNAM_OFFSET_MS)
+}
+
+function minuteOfPolicyDay(value: Date) {
+  const clock = policyClock(value)
+  return clock.getUTCHours() * 60 + clock.getUTCMinutes()
+}
+
+function atPolicyTime(value: Date, hour: number, minute = 0) {
+  const clock = policyClock(value)
+  clock.setUTCHours(hour, minute, 0, 0)
+  return new Date(clock.getTime() - VIETNAM_OFFSET_MS)
+}
+
 function isWorkingDay(value: Date) {
-  return WORKING_DAYS.has(value.getDay())
+  return WORKING_DAYS.has(policyClock(value).getUTCDay())
 }
 
 function ceilToAppointmentSlot(value: Date) {
@@ -19,28 +38,25 @@ function ceilToAppointmentSlot(value: Date) {
 }
 
 function startOfNextWorkingDay(value: Date) {
-  const next = new Date(value)
+  let next = new Date(value)
   do {
-    next.setDate(next.getDate() + 1)
-    next.setHours(CHECK_IN_OPENING_HOUR, 0, 0, 0)
+    next = atPolicyTime(new Date(next.getTime() + DAY_MS), CHECK_IN_OPENING_HOUR)
   } while (!isWorkingDay(next))
   return next
 }
 
 export function addWorkingDays(value: Date, days: number) {
-  const result = new Date(value)
+  let result = new Date(value)
   let remaining = days
   while (remaining > 0) {
-    result.setDate(result.getDate() + 1)
+    result = new Date(result.getTime() + DAY_MS)
     if (isWorkingDay(result)) remaining -= 1
   }
   return result
 }
 
 function endOfWorkingDay(value: Date) {
-  const result = new Date(value)
-  result.setHours(LAST_CHECK_IN_SLOT_HOUR, LAST_CHECK_IN_SLOT_MINUTE, 0, 0)
-  return result
+  return atPolicyTime(value, LAST_CHECK_IN_SLOT_HOUR, LAST_CHECK_IN_SLOT_MINUTE)
 }
 
 export function addWorkingHours(value: Date, hours: number) {
@@ -52,18 +68,18 @@ export function addWorkingHours(value: Date, hours: number) {
       cursor = startOfNextWorkingDay(cursor)
       continue
     }
-    const minuteOfDay = cursor.getHours() * 60 + cursor.getMinutes()
+    const minuteOfDay = minuteOfPolicyDay(cursor)
     const openingMinute = CHECK_IN_OPENING_HOUR * 60
     const closingMinute = CHECK_IN_CLOSING_HOUR * 60
 
     if (minuteOfDay < openingMinute) {
-      cursor.setHours(CHECK_IN_OPENING_HOUR, 0, 0, 0)
+      cursor = atPolicyTime(cursor, CHECK_IN_OPENING_HOUR)
     } else if (minuteOfDay >= closingMinute) {
       cursor = startOfNextWorkingDay(cursor)
     }
 
     const availableMinutes = CHECK_IN_CLOSING_HOUR * 60
-      - (cursor.getHours() * 60 + cursor.getMinutes())
+      - minuteOfPolicyDay(cursor)
     const consumedMinutes = Math.min(remainingMinutes, availableMinutes)
     cursor = new Date(cursor.getTime() + consumedMinutes * 60_000)
     remainingMinutes -= consumedMinutes
@@ -77,15 +93,14 @@ function normalizeCheckInSlot(value: Date) {
   if (!isWorkingDay(candidate)) return startOfNextWorkingDay(candidate)
   const openingMinute = CHECK_IN_OPENING_HOUR * 60
   const lastSlotMinute = LAST_CHECK_IN_SLOT_HOUR * 60 + LAST_CHECK_IN_SLOT_MINUTE
-  const minuteOfDay = candidate.getHours() * 60 + candidate.getMinutes()
+  const minuteOfDay = minuteOfPolicyDay(candidate)
 
   if (minuteOfDay < openingMinute) {
-    candidate.setHours(CHECK_IN_OPENING_HOUR, 0, 0, 0)
-    return candidate
+    return atPolicyTime(candidate, CHECK_IN_OPENING_HOUR)
   }
 
   candidate = ceilToAppointmentSlot(candidate)
-  if (candidate.getHours() * 60 + candidate.getMinutes() > lastSlotMinute) {
+  if (minuteOfPolicyDay(candidate) > lastSlotMinute) {
     return startOfNextWorkingDay(candidate)
   }
   return candidate
@@ -107,21 +122,23 @@ export function plannedCheckInWindow(registeredAt: Date | string | number, revie
 
 export function isCheckInAppointmentAllowed(value: Date, window: ReturnType<typeof plannedCheckInWindow>) {
   if (Number.isNaN(value.getTime()) || !isWorkingDay(value) || value < window.availableAt || value > window.deadlineAt) return false
-  const minutes = value.getHours() * 60 + value.getMinutes()
+  const minutes = minuteOfPolicyDay(value)
   return minutes >= CHECK_IN_OPENING_HOUR * 60
     && minutes <= LAST_CHECK_IN_SLOT_HOUR * 60 + LAST_CHECK_IN_SLOT_MINUTE
-    && value.getMinutes() % 30 === 0
+    && minutes % 30 === 0
 }
 
 export function policyDateInput(value: Date) {
-  const year = value.getFullYear()
-  const month = `${value.getMonth() + 1}`.padStart(2, '0')
-  const day = `${value.getDate()}`.padStart(2, '0')
+  const clock = policyClock(value)
+  const year = clock.getUTCFullYear()
+  const month = `${clock.getUTCMonth() + 1}`.padStart(2, '0')
+  const day = `${clock.getUTCDate()}`.padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
 export function policyTimeInput(value: Date) {
-  return `${`${value.getHours()}`.padStart(2, '0')}:${`${value.getMinutes()}`.padStart(2, '0')}`
+  const clock = policyClock(value)
+  return `${`${clock.getUTCHours()}`.padStart(2, '0')}:${`${clock.getUTCMinutes()}`.padStart(2, '0')}`
 }
 
 export function policyDateTimeInput(value: Date) {
@@ -129,5 +146,5 @@ export function policyDateTimeInput(value: Date) {
 }
 
 export function formatPolicyDateTime(value: Date) {
-  return value.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+  return value.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: POLICY_TIME_ZONE })
 }
