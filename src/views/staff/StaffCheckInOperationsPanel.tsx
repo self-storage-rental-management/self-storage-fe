@@ -394,6 +394,7 @@ export default function StaffCheckInOperationsPanel({
       normalizeIdentityDocument(declaredIdentityDocument) !==
         normalizeIdentityDocument(identityDocumentNumber),
   )
+  const identityVerificationBlocked = !declaredIdentityDocument || identityMismatch
 
   const refresh = () => setRefreshKey((value) => value + 1)
 
@@ -463,7 +464,7 @@ export default function StaffCheckInOperationsPanel({
       !Number.isFinite(Number(heightCm)) ||
       !Number.isFinite(Number(weightKg)) ||
       !Number.isFinite(Number(volumeM3)) ||
-      (identityMismatch && !verificationNotes.trim())
+      identityVerificationBlocked
     ) return
 
     setSubmitting(true)
@@ -1073,7 +1074,7 @@ export default function StaffCheckInOperationsPanel({
             </div>
             {!declaredIdentityDocument && (
               <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
-                Đơn này được tạo trước khi hệ thống lưu CCCD. Sau khi xác minh giấy tờ, số CCCD sẽ được cập nhật vào đơn để các lần tra cứu sau hiển thị đầy đủ.
+                Đơn này chưa có CCCD được lưu trong reservation nên chưa thể hoàn tất bàn giao. Cần cập nhật lại đơn trước khi thực hiện check-in.
               </p>
             )}
             <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
@@ -1107,7 +1108,7 @@ export default function StaffCheckInOperationsPanel({
               />
               <p className="mt-1 text-xs text-amber-800">
                 {identityMismatch
-                  ? "CCCD thực tế đang khác số đã khai báo; bắt buộc ghi chú lý do trước khi tiếp tục."
+                  ? "CCCD thực tế không khớp số đã khai báo; không thể hoàn tất bàn giao. Ghi chú bên dưới dùng để đánh dấu và xử lý đối soát."
                   : "Nếu chưa xác minh được, để nguyên mục tương ứng chưa chọn và ghi chú lý do tại đây."}
               </p>
             </div>
@@ -1498,7 +1499,7 @@ export default function StaffCheckInOperationsPanel({
                   <Button
                     disabled={
                       submitting ||
-                      (handoverStep === 1 && (!identityDocumentNumber.trim() || !checklist.identityVerified || !checklist.reservationMatched || (identityMismatch && !verificationNotes.trim()))) ||
+                      (handoverStep === 1 && (!identityDocumentNumber.trim() || !checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
                       (handoverStep === 2 && (!Object.values(measurementChecks).every(Boolean) || (measurementVariance && (!varianceAccepted || !varianceReason.trim())))) ||
                       (handoverStep === 3 && (!checklist.paymentVerified || !contractFile || !checklist.contractVerified || !initialCondition.trim() || !goodsCondition.trim() || ((handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile)))
                     }
@@ -1512,7 +1513,7 @@ export default function StaffCheckInOperationsPanel({
                       submitting ||
                       !allChecksComplete ||
                       !identityDocumentNumber.trim() ||
-                      (identityMismatch && !verificationNotes.trim()) ||
+                      identityVerificationBlocked ||
                       !contractFile ||
                       (!credentialPassword.trim() && !keyLockReference.trim()) ||
                       ((handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
