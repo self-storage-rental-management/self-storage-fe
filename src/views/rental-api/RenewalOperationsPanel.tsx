@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -106,7 +107,7 @@ export function OperationEventCard({
     const method = field("paymentMethod") === "BANK_TRANSFER" ? "Chuyển khoản" : field("paymentMethod") === "CASH" ? "Tiền mặt" : "Chưa ghi nhận"
     const receivedAt = field("receivedAt") || e.occurredAt
     const recordedDate = Number.isFinite(Date.parse(receivedAt))
-      ? new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(receivedAt))
+      ? new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(parseVietnamDate(receivedAt))
       : rentalDate(receivedAt)
     const receiptFile = field("receiptFileId")
     return <article className="overflow-hidden rounded-xl border border-stone-200 bg-white text-sm">

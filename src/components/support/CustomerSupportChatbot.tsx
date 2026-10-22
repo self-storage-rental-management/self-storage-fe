@@ -1,3 +1,4 @@
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
 import { useState, useRef, useEffect } from 'react'
 import type { User } from '../../types'
 import { useStorageHub } from '../../store/StorageHubContext'
@@ -76,7 +77,7 @@ export default function CustomerSupportChatbot({
     if (!isOpen) return
     setMessages(prev => {
       if (prev.length > 0) return prev
-      const now = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      const now = new Date().toLocaleTimeString('vi-VN', { timeZone: VIETNAM_TIME_ZONE, hour: '2-digit', minute: '2-digit' })
       return [{
         id: 'msg-welcome',
         sender: 'bot',
@@ -91,7 +92,7 @@ export default function CustomerSupportChatbot({
   }
 
   const addMessage = (sender: 'bot' | 'user' | 'system', text: string, extra?: Partial<Message>) => {
-    const now = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+    const now = new Date().toLocaleTimeString('vi-VN', { timeZone: VIETNAM_TIME_ZONE, hour: '2-digit', minute: '2-digit' })
     setMessages(prev => [
       ...prev,
       {

@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { useEffect, useId, useState } from "react"
 import { Input } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -10,7 +11,7 @@ export function signingLocalInput(value: string | number): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-  }).formatToParts(new Date(value))
+  }).formatToParts(parseVietnamDate(value))
   const part = (name: string) => parts.find(p => p.type === name)?.value ?? ""
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`
 }

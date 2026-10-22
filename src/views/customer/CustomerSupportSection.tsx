@@ -1,3 +1,4 @@
+import { VIETNAM_TIME_ZONE, parseVietnamDate } from '../../utils/vietnamTime'
 import { useEffect, useState } from 'react'
 import type { User } from '../../types'
 import type { TicketItem } from '../../types/support'
@@ -104,7 +105,7 @@ export default function CustomerSupportSection({
                     <div>
                       <p className="font-bold text-stone-900">{ticket.subject}</p>
                       <p className="mt-1 text-xs text-stone-500">
-                        {ticket.facilityName || 'Chưa gắn cơ sở'} · Cập nhật {new Date(ticket.updatedAt).toLocaleString('vi-VN')}
+                        {ticket.facilityName || 'Chưa gắn cơ sở'} · Cập nhật {parseVietnamDate(ticket.updatedAt).toLocaleString('vi-VN', { timeZone: VIETNAM_TIME_ZONE })}
                       </p>
                     </div>
                     <Badge variant={ticket.status === 'resolved' || ticket.status === 'closed' ? 'success' : 'warning'}>
@@ -256,11 +257,11 @@ export default function CustomerSupportSection({
     }
 
     return true
-  }).sort((a, b) => new Date(b.updatedAt || b.created).getTime() - new Date(a.updatedAt || a.created).getTime())
+  }).sort((a, b) => parseVietnamDate(b.updatedAt || b.created).getTime() - parseVietnamDate(a.updatedAt || a.created).getTime())
 
   const formatTicketTime = (value: string) => {
-    const parsed = new Date(value)
-    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('vi-VN')
+    const parsed = parseVietnamDate(value)
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('vi-VN', { timeZone: VIETNAM_TIME_ZONE })
   }
 
   return (
