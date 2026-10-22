@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useEffect, useRef, useState } from "react"
@@ -59,7 +60,7 @@ function supportStatusClass(status: SupportTicket["status"]) {
 }
 
 function SupportCreatedAt({ value }: { value: string }) {
-  const date = new Date(value)
+  const date = parseVietnamDate(value)
   if (Number.isNaN(date.getTime())) return <span>{rentalDate(value)}</span>
   const dateText = new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric",

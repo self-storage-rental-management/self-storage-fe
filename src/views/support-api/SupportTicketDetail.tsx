@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState, type ReactNode } from "react"
 import { Button, Card } from "../../components/ui"
@@ -78,7 +79,7 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
 
 function supportDetailDate(value: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Chưa ghi nhận"
-  return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value))
+  return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(parseVietnamDate(value))
 }
 export default function SupportTicketDetail({
   role,
