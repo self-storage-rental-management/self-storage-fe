@@ -136,6 +136,10 @@ function formatInputNumber(value: number | null | undefined) {
   return value == null || !Number.isFinite(Number(value)) ? "" : String(value)
 }
 
+function normalizeIdentityDocument(value: string | null | undefined) {
+  return value?.trim().replace(/\s+/g, "").toUpperCase() || ""
+}
+
 function volumeFromDimensions(length: string, width: string, height: string) {
   const dimensions = [length, width, height].map(Number)
   if (dimensions.some((value) => !Number.isFinite(value) || value <= 0)) return ""
@@ -387,6 +391,14 @@ export default function StaffCheckInOperationsPanel({
 
   const measurementVariance = checkInComparison?.hasVariance ?? false
 
+  const declaredIdentityDocument = handoverTarget?.identityDocumentNumber?.trim() || ""
+  const identityMismatch = Boolean(
+    declaredIdentityDocument &&
+      identityDocumentNumber.trim() &&
+      normalizeIdentityDocument(declaredIdentityDocument) !==
+        normalizeIdentityDocument(identityDocumentNumber),
+  )
+
   const refresh = () => setRefreshKey((value) => value + 1)
 
   const applyFilters = () => {
@@ -454,7 +466,8 @@ export default function StaffCheckInOperationsPanel({
       !Number.isFinite(Number(widthCm)) ||
       !Number.isFinite(Number(heightCm)) ||
       !Number.isFinite(Number(weightKg)) ||
-      !Number.isFinite(Number(volumeM3))
+      !Number.isFinite(Number(volumeM3)) ||
+      (identityMismatch && !verificationNotes.trim())
     ) return
 
     const declaredIdentity = normalizeIdentityDocument(handoverTarget.identityDocumentNumber)
@@ -535,6 +548,8 @@ export default function StaffCheckInOperationsPanel({
         checklist,
 
         identityDocumentNumber: identityDocumentNumber.trim(),
+
+        identityVerificationNote: verificationNotes.trim() || null,
 
         actualMeasurements: {
           lengthCm: Number(lengthCm),
@@ -1038,14 +1053,20 @@ export default function StaffCheckInOperationsPanel({
             </div>
             <p className="text-xs text-stone-500">Các trường có dấu <span className="font-bold text-red-600">*</span> là bắt buộc.</p>
             <div hidden={handoverStep !== 1} className="space-y-4">
-            <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm sm:grid-cols-3">
+            <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm sm:grid-cols-4">
               <div>
                 <span className="text-stone-500">Khách hàng</span>
                 <p className="font-semibold">{handoverTarget.customerName}</p>
               </div>
               <div>
+                <span className="text-stone-500">CCCD / Hộ chiếu khách đã khai báo</span>
+                <p className="mt-1 font-semibold">
+                  {declaredIdentityDocument || "Đơn cũ chưa lưu CCCD"}
+                </p>
+              </div>
+              <div>
                 <label className="block text-stone-500" htmlFor="checkin-identity-document">
-                  CCCD / Hộ chiếu khách đã khai báo <span className="font-bold text-red-600">*</span>
+                  CCCD / Hộ chiếu trên giấy tờ gốc <span className="font-bold text-red-600">*</span>
                 </label>
                 <input
                   id="checkin-identity-document"
@@ -1061,6 +1082,11 @@ export default function StaffCheckInOperationsPanel({
                 <p className="font-semibold">{handoverTarget.customerPhone || "Chưa cập nhật"}</p>
               </div>
             </div>
+            {!declaredIdentityDocument && (
+              <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+                Đơn này được tạo trước khi hệ thống lưu CCCD. Sau khi xác minh giấy tờ, số CCCD sẽ được cập nhật vào đơn để các lần tra cứu sau hiển thị đầy đủ.
+              </p>
+            )}
             <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
               {([
                 ["identityVerified", "Đã đối chiếu giấy tờ tùy thân *"],
@@ -1091,7 +1117,9 @@ export default function StaffCheckInOperationsPanel({
                 className="mt-1 block w-full resize-y rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
               />
               <p className="mt-1 text-xs text-amber-800">
-                Nếu chưa xác minh được, để nguyên mục tương ứng chưa chọn và ghi chú lý do tại đây.
+                {identityMismatch
+                  ? "CCCD thực tế đang khác số đã khai báo; bắt buộc ghi chú lý do trước khi tiếp tục."
+                  : "Nếu chưa xác minh được, để nguyên mục tương ứng chưa chọn và ghi chú lý do tại đây."}
               </p>
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
@@ -1481,7 +1509,7 @@ export default function StaffCheckInOperationsPanel({
                   <Button
                     disabled={
                       submitting ||
-                      (handoverStep === 1 && (!identityDocumentNumber.trim() || !checklist.identityVerified || !checklist.reservationMatched)) ||
+                      (handoverStep === 1 && (!identityDocumentNumber.trim() || !checklist.identityVerified || !checklist.reservationMatched || (identityMismatch && !verificationNotes.trim()))) ||
                       (handoverStep === 2 && (!Object.values(measurementChecks).every(Boolean) || (measurementVariance && (!varianceAccepted || !varianceReason.trim())))) ||
                       (handoverStep === 3 && (!checklist.paymentVerified || !contractFile || !checklist.contractVerified || !initialCondition.trim() || !goodsCondition.trim() || ((handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile)))
                     }
@@ -1495,6 +1523,7 @@ export default function StaffCheckInOperationsPanel({
                       submitting ||
                       !allChecksComplete ||
                       !identityDocumentNumber.trim() ||
+                      (identityMismatch && !verificationNotes.trim()) ||
                       !contractFile ||
                       (!credentialPassword.trim() && !keyLockReference.trim()) ||
                       ((handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
@@ -1793,6 +1822,14 @@ export default function StaffCheckInOperationsPanel({
                 <b>Ghi chú</b>
                 <p className="mt-1 text-stone-600">
                   {detailTarget.handover.notes}
+                </p>
+              </div>
+            )}
+            {detailTarget.handover.identityVerificationNote && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <b>Ghi chú xác minh CCCD</b>
+                <p className="mt-1 text-stone-600">
+                  {detailTarget.handover.identityVerificationNote}
                 </p>
               </div>
             )}
