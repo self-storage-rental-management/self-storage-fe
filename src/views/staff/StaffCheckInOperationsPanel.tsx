@@ -132,7 +132,7 @@ function formatInputNumber(value: number | null | undefined) {
   return value == null || !Number.isFinite(Number(value)) ? "" : String(value)
 }
 
-function normalizeIdentityDocument(value: string | null | undefined) {
+function normalizeCheckInIdentityDocument(value: string | null | undefined) {
   return value?.trim().replace(/\s+/g, "").toUpperCase() || ""
 }
 
@@ -391,8 +391,8 @@ export default function StaffCheckInOperationsPanel({
   const identityMismatch = Boolean(
     declaredIdentityDocument &&
       identityDocumentNumber.trim() &&
-      normalizeIdentityDocument(declaredIdentityDocument) !==
-        normalizeIdentityDocument(identityDocumentNumber),
+      normalizeCheckInIdentityDocument(declaredIdentityDocument) !==
+        normalizeCheckInIdentityDocument(identityDocumentNumber),
   )
   const identityVerificationBlocked = !declaredIdentityDocument || identityMismatch
 
