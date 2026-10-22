@@ -115,7 +115,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
               <p className="text-sm font-bold text-stone-900">Cọc giữ chỗ ({depositPercent}%)</p>
             </div>
             <div className="ml-auto text-right">
-              <span className={`${amountClass} block text-xl font-bold text-amber-700`}>
+              <span className={`${payableAmountClass} block`}>
                 {formatVndAmount(q.reservationDepositAmount)}
               </span>
             </div>

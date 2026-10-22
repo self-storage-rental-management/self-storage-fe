@@ -271,8 +271,8 @@ export function assignStaffWithWorkloadAndUrgency(params: {
       priority: isUrgent ? 'high' : 'medium',
       estimatedWaitMinutes: isUrgent ? 5 : 480,
       estimatedWaitLabel: isUrgent
-        ? '🚨 Kênh khẩn cấp 24/7 — Quản lý trực ca xử lý ngay trong 5-10 phút'
-        : '🌙 Đầu ca sáng mai (08:00)',
+        ? 'Kênh khẩn cấp 24/7 — Quản lý trực ca xử lý ngay trong 5-10 phút'
+        : 'Đầu ca sáng mai (08:00)',
       queuePosition: 1,
       emergencyHotline: '1900 8820',
       emergencyManagerName: dutyManager.name,
