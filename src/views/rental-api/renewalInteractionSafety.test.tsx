@@ -154,6 +154,25 @@ describe("Evidence download request safety", () => {
 })
 
 describe("D3 form identity and original retry request", () => {
+  it('keeps evidence and collection confirmation after removing cash receipt help text', () => {
+    h.actor = operationsActor('staff')
+    h.state = { ...h.state, arrivalRef: ids.event }
+    const slots: any[] = []
+    const panel = () => render(() => RenewalOperationsPanel({ id: ids.renewal, role: 'staff' }), slots)
+    button(panel(), 'Ghi nhận thanh toán').props.onClick()
+    const selected = form(panel())
+    expect(selected).toBeDefined()
+    const formSlots: any[] = []
+    let fields = invoke(selected, formSlots)
+    expect(JSON.stringify(fields)).not.toContain('Mã biên lai được hệ thống tự động tạo khi ghi nhận thu tiền.')
+    expect(JSON.stringify(fields)).not.toContain('Tải biên nhận thu tiền mặt đã lập cho giao dịch này.')
+    expect(find(fields, EvidenceUpload)).toBeDefined()
+    expect(nodes(fields).some(n => n.type === 'input' && n.props.type === 'checkbox')).toBe(true)
+    find(fields, 'select').props.onChange({ target: { value: 'BANK_TRANSFER' } })
+    fields = invoke(selected, formSlots)
+    expect(JSON.stringify(fields)).toContain('Tải ảnh chụp màn hình chuyển khoản làm minh chứng.')
+    expect(find(fields, EvidenceUpload)).toBeDefined()
+  })
   it("retains form, body and idempotency key across late proposal/read responses and blocks stale reload/cancel", async () => {
     const parentLock = vi.fn(), slots: any[] = []
     const panel = () => render(() => RenewalOperationsPanel({ id: ids.renewal, role: "customer", customerId: ids.customer, onLocked: parentLock }), slots)

@@ -290,16 +290,21 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
       </section>}
       <dl className="grid gap-3 sm:grid-cols-3">
         <div><dt className="text-xs text-stone-500">Trạng thái</dt><dd className="font-semibold">{copy(phaseLabels[s.phase])}</dd></div>
-        <div><dt className="text-xs text-stone-500">Lịch ký</dt><dd className="font-medium">{s.appointmentRef ? `${rentalDate(s.appointmentStart)}, ${rentalDate(s.appointmentEnd)}` : "Chưa đặt lịch"}</dd></div>
+        <div><dt className="text-xs text-stone-500">Giờ hẹn đến ký</dt><dd className="font-medium">{s.appointmentRef ? rentalDate(s.appointmentStart) : "Chưa đặt lịch"}</dd></div>
         <div><dt className="text-xs text-stone-500">Khách đến</dt><dd className="font-medium">{s.arrivalRef ? "Đã ghi nhận" : "Chưa ghi nhận"}</dd></div>
       </dl>
-      {s.phase === "SIGNING" && !s.arrivalRef && s.appointmentEnd && Date.parse(s.appointmentEnd) < Date.now() && <p className="text-amber-700">Lịch hẹn đã qua. Khách hàng cần đổi lịch trong hạn ký còn hiệu lực để tiếp tục.</p>}
       <details>
-        <summary className="cursor-pointer text-xs font-semibold text-stone-600">Hạn ký và hạn xử lý</summary>
-        <div className="mt-2 grid gap-2 text-xs text-stone-600 sm:grid-cols-3">
-          <p>Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}</p>
-          <p>Hạn ký hiện tại: {rentalDate(s.effectiveSigningDeadline)}</p>
-          <p>Mốc thu hồi: {rentalDate(s.recoveryCutoff)}</p>
+        <summary className="cursor-pointer text-xs font-semibold text-stone-600">Các mốc cần lưu ý</summary>
+        <div className="mt-2 space-y-3 text-xs text-stone-600">
+          <div>
+            <p className="font-semibold text-stone-800">Bạn cần hoàn tất ký trước: {rentalDate(s.effectiveSigningDeadline)}</p>
+            <p className="mt-1">Vui lòng đến cơ sở, thanh toán phần còn lại và ký hợp đồng trước thời điểm này. Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ. Kỳ thuê mới chỉ được xác nhận khi hoàn tất thủ tục.</p>
+          </div>
+          {s.originalSigningDeadline && s.originalSigningDeadline !== s.effectiveSigningDeadline && <p>Hạn hoàn tất trước khi được điều chỉnh: {rentalDate(s.originalSigningDeadline)}</p>}
+          <div>
+            <p className="font-semibold text-stone-800">Cơ sở tiếp nhận gia hạn đến: {rentalDate(s.recoveryCutoff)}</p>
+            <p className="mt-1">Nếu hợp đồng hiện tại đã hết hạn, bạn cần hoàn tất gia hạn chậm nhất vào thời điểm này để tiếp tục thuê kho. Sau đó, hãy liên hệ cơ sở để sắp xếp trả kho và thanh toán các khoản còn thiếu.</p>
+          </div>
         </div>
       </details>
       {s.completedAt && <p className="text-emerald-700">Gia hạn hoàn tất lúc {rentalDate(s.completedAt)}</p>}
@@ -476,7 +481,7 @@ export default function RenewalOperationsPanel({
             <section className="space-y-2" aria-label="Chọn lịch ký gia hạn">
               <h3 className="font-semibold">Lịch ký gia hạn</h3>
               <p>{read.data.appointmentRef
-                ? `Lịch đã chọn: ${rentalDate(read.data.appointmentStart)} - ${rentalDate(read.data.appointmentEnd)}`
+                ? `Giờ hẹn đến ký: ${rentalDate(read.data.appointmentStart)}`
                 : "Chọn và lưu lịch ký trước khi thanh toán cọc."}</p>
             </section>
           ) : <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
@@ -999,12 +1004,7 @@ function OperationForm({
                 <option value="BANK_TRANSFER">Chuyển khoản</option>
               </select>
             </label>
-            <p className="text-sm text-stone-500">Mã biên lai được hệ thống tự động tạo khi ghi nhận thu tiền.</p>
-            <p className="text-sm text-stone-600">
-              {balanceMethod === "BANK_TRANSFER"
-                ? "Tải ảnh chụp màn hình chuyển khoản làm minh chứng."
-                : "Tải biên nhận thu tiền mặt đã lập cho giao dịch này."}
-            </p>
+            {balanceMethod === "BANK_TRANSFER" && <p className="text-sm text-stone-600">Tải ảnh chụp màn hình chuyển khoản làm minh chứng.</p>}
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
               onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />

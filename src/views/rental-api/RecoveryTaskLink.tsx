@@ -9,7 +9,7 @@ export default function RecoveryTaskLink({ role, taskId, facilityId, onChanged, 
   const [open, setOpen] = useState(false)
   const guard = useRef<() => boolean>(() => false)
   return <>
-    <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => { if (!disabled) setOpen(true) }}>Mở nhiệm vụ thu hồi</Button>
+    <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => { if (!disabled) setOpen(true) }}>Xem và xử lý thu hồi</Button>
     {open && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!guard.current()) setOpen(false) }}>
       <RecoveryTaskDetail role={role} id={taskId} facilityId={facilityId} closeGuard={guard} onChanged={onChanged} />
     </Modal>}
