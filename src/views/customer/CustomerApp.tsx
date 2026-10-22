@@ -4,7 +4,7 @@ import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, Section
 import { formatVnd, vndToLegacyBase } from '../../i18n/currency'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import CustomerUnitDetails from './CustomerUnitDetails'
-import CustomerRentalRegulations from './CustomerRentalRegulations'
+import CustomerRentalRulesPage from './CustomerRentalRulesPage'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import type { User } from '../../types'
@@ -33,7 +33,6 @@ import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import {
-  getStoredPolicies,
   getPoliciesForFacility,
   evaluatePolicyBenefit,
   type PolicyItem,
@@ -648,14 +647,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [units, facilities, backendUnitTypes])
 
   const NAV: NavItem[] = [
-    { id: 'overview', label: 'Tổng quan', icon: Icon.home, group: 'Kho của tôi', permission: 'dashboard:read' },
-    { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm gian kho', permission: 'facilities:read' },
-    { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm gian kho', permission: 'storage_units:read' },
-    { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Đặt giữ kho', permission: 'reservations:read' },
-    { id: 'rental-records', label: 'Hồ sơ Thuê', icon: Icon.key, group: 'Đặt giữ kho', permission: 'rentals:read' },
-    { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Tài khoản', permission: 'payments:read' },
-    { id: 'policies', label: 'Quy định & Chính sách', icon: Icon.policy, group: 'Tài khoản', permission: 'policies:read' },
-    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Hỗ trợ', permission: 'support:read' }
+    { id: 'overview', label: 'Tổng quan', icon: Icon.home, group: 'Thông tin chung', permission: 'dashboard:read' },
+    { id: 'browse-facilities', label: 'Tìm cơ sở kho', icon: Icon.building, group: 'Tìm và đặt kho', permission: 'facilities:read' },
+    { id: 'browse-units', label: 'Cỡ kho khả dụng', icon: Icon.box, group: 'Tìm và đặt kho', permission: 'storage_units:read' },
+    { id: 'reservations', label: 'Đơn đặt giữ kho', icon: Icon.calendar, group: 'Tìm và đặt kho', permission: 'reservations:read' },
+    { id: 'rental-records', label: 'Hồ sơ thuê', icon: Icon.key, group: 'Thuê kho và thanh toán', permission: 'rentals:read' },
+    { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Thuê kho và thanh toán', permission: 'payments:read' },
+    { id: 'policies', label: 'Quy định thuê kho', icon: Icon.policy, group: 'Quy định và hỗ trợ', permission: 'policies:read' },
+    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Quy định và hỗ trợ', permission: 'support:read' }
   ]
 
   const [page, setPage] = useState(() =>
@@ -677,7 +676,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
   const [inputToken, setInputToken] = useState('')
-  const storedPoliciesList = useMemo(() => getStoredPolicies(), [])
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -2037,7 +2035,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <h2 className="font-bold text-stone-900">{displayName}</h2>
                         <p className="mt-1 text-xs text-stone-500">{displayAddress}</p>
                       </div>
-                      {facility.rating > 0 && <span className="text-sm font-semibold text-amber-700">★ {facility.rating}</span>}
+                      {facility.rating > 0 && <span className="text-sm font-semibold text-amber-700">Đánh giá: {facility.rating}</span>}
                     </div>
                     <div className="my-4 flex flex-wrap gap-2">
                       <Badge variant="muted">{'Camera 24/7'}</Badge>
@@ -2143,7 +2141,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                             {display?.code ?? facility.id.toUpperCase()}
                           </span>
                           <h3 className="text-xl font-bold text-black">{display?.name ?? facility.name}</h3>
-                          {facility.rating > 0 && <span className="text-xs font-semibold text-black">★ {facility.rating}</span>}
+                          {facility.rating > 0 && <span className="text-xs font-semibold text-black">Đánh giá: {facility.rating}</span>}
                         </div>
                         <p className="mt-1 text-sm text-stone-600">{display?.address ?? `${facility.address}, ${facility.city}`}</p>
                       </div>
@@ -2448,13 +2446,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                             requestConfirmation({ title: 'Xác nhận hủy giữ kho', message: warning, confirmLabel: 'Hủy giữ kho', tone: 'danger', onConfirm: () => { cancelReservation(hold.id, user, 'Khách hàng chủ động hủy'); showToast('Đã hủy đơn đặt giữ kho thành công.') } })
                           }}
                         >
-                          ✕ {'Hủy giữ kho'}
+                          {'Hủy giữ kho'}
                         </Button>
                       )}
 
                       {hold.status === 'CANCELLED' && (
                         <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-right text-xs text-red-800 shadow-sm">
-                          <p className="font-bold text-red-800">✕ {'Đơn đã hủy'}</p>
+                          <p className="font-bold text-red-800">{'Đơn đã hủy'}</p>
                           <p className="mt-0.5 text-[11px] text-red-700">{'Gian kho đã được giải phóng.'}</p>
                           {hold.payment.status === 'paid' && <p className="mt-1 font-semibold text-red-800">{'Cọc giữ chỗ không hoàn lại do hủy trước khi nhận kho.'}</p>}
                         </div>
@@ -2695,7 +2693,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     if (remainingDays > reminderWindow) return null
                     return <div className="border-t border-amber-200 bg-amber-50 px-5 py-4 text-xs text-amber-950"><p className="font-bold"> {'Hợp đồng sắp hết hạn'}</p><p className="mt-1">{`Còn ${remainingDays} ngày đến ${rental.endDate}. ${unfinishedRenewal ? 'Yêu cầu gia hạn chưa thành công. Hãy đến cơ sở ký tiếp hợp đồng và hoàn tất thanh toán.' : 'Vui lòng gửi yêu cầu gia hạn nếu bạn muốn tiếp tục thuê kho.'}`}</p></div>
                   })()}
-                  {rental.receiptConfirmedAt && <div className="border-t border-emerald-100 bg-emerald-50 px-5 py-3 text-xs font-semibold text-emerald-800">✓ {`Đã xác nhận nhận kho lúc ${new Date(rental.receiptConfirmedAt).toLocaleString('vi-VN')}`}</div>}
+                  {rental.receiptConfirmedAt && <div className="border-t border-emerald-100 bg-emerald-50 px-5 py-3 text-xs font-semibold text-emerald-800">{`Đã xác nhận nhận kho lúc ${new Date(rental.receiptConfirmedAt).toLocaleString('vi-VN')}`}</div>}
                   {(() => {
                     const rentalRenewals = renewals.filter(r => r.rentalId === rental.id)
                     if (isApiAuthenticated()) return null
@@ -2769,7 +2767,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               setSettlementModalOpen(true)
                             }}
                           >
-                            🧾 Xem hóa đơn & biên lai quyết toán
+                              Xem hóa đơn & biên lai quyết toán
                           </Button>
                           {returnCase.refundTransaction && (
                             <span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">
@@ -2793,7 +2791,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                             <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
                               returnCase.moistureOrigin === 'facility_fault' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
                             }`}>
-                              {returnCase.moistureOrigin === 'facility_fault' ? '✓ Xác nhận do lỗi dột thấm cơ sở kho (Được bồi thường)' : 'Do đóng gói ẩm / hàng cấm (Khách chịu phí khử trùng)'}
+                              {returnCase.moistureOrigin === 'facility_fault' ? 'Xác nhận do lỗi dột thấm cơ sở kho (Được bồi thường)' : 'Do đóng gói ẩm / hàng cấm (Khách chịu phí khử trùng)'}
                             </span>
                           )}
                         </div>
@@ -2931,110 +2929,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       {/* ── POLICIES PAGE ─────────────────────────────────────── */}
       {page === 'policies' && (
-        <div className="fade-in space-y-6">
-          <SectionHeader
-            title={'Quy Định & Chính Sách Thuê Kho'}
-            subtitle={'Quy định về thuê kho, nhận kho, gia hạn, trả kho, thanh toán và xử lý trễ hạn'}
-          />
-
-          <div className="overflow-hidden rounded-2xl bg-[#292a27] text-white shadow-lg">
-            <div className="grid gap-5 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
-              <div><p className="text-xs font-bold uppercase tracking-[.16em] text-amber-400">StorageHub</p><h2 className="mt-2 text-xl font-bold">{'Quy trình thuê kho và thanh toán rõ ràng'}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-stone-300">{'Mỗi giai đoạn đều có thời hạn, khoản thanh toán và điều kiện hoàn tất cụ thể để khách hàng chủ động theo dõi.'}</p></div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">30</b>{'phút tạm giữ'}</div><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">12</b>{'giờ trả cọc'}</div><div className="rounded-xl bg-white/10 px-4 py-3"><b className="block text-lg text-amber-400">14</b>{'ngày nhận kho'}</div></div>
-            </div>
-          </div>
-
-          <section className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
-            <div className="border-b border-amber-200 px-5 py-4 sm:px-6">
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-amber-800">{'Hiểu đúng các khoản tiền'}</p>
-              <h2 className="mt-1 text-lg font-bold text-stone-950">{'Cọc giữ chỗ và tiền duy trì CSVC là hai khoản khác nhau'}</h2>
-            </div>
-            <div className="grid gap-px bg-amber-200 md:grid-cols-3">
-              <div className="bg-white p-5"><p className="text-sm font-bold text-blue-800">{'1. Cọc giữ chỗ 20%'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tính trên tổng tiền thuê sau giảm của kỳ đã chọn. Khoản này được trừ vào tiền thuê, không cộng thêm vào giá thuê và không hoàn nếu khách hủy trước khi nhận kho.'}</p></div>
-              <div className="bg-white p-5"><p className="text-sm font-bold text-emerald-800">{'2. Tiền duy trì CSVC'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Bằng một tháng tiền thuê và được thu riêng khi nhận kho. Đây không phải tiền thuê. Khoản còn lại được hoàn sau khi trả kho và hoàn tất nghiệm thu.'}</p></div>
-              <div className="bg-white p-5"><p className="text-sm font-bold text-amber-800">{'3. Số tiền thu khi nhận kho'}</p><p className="mt-2 text-sm leading-6 text-stone-600">{'Tiền thuê còn lại sau khi trừ cọc giữ chỗ và tiền duy trì CSVC. Mọi khoản thu phải có mã giao dịch hoặc biên nhận trong hồ sơ.'}</p></div>
-            </div>
-            <div className="px-5 py-3 text-sm font-semibold text-amber-950 sm:px-6">{'Công thức: Tổng cần chuẩn bị = Tổng tiền thuê kỳ đầu + Tiền duy trì CSVC. Cọc giữ chỗ 20% chỉ là phần trả trước của tiền thuê.'}</div>
-          </section>
-
-
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 font-extrabold text-amber-800">1</span><div><h3 className="font-bold text-stone-950">{'Thuê kho và thanh toán ban đầu'}</h3><p className="text-xs text-stone-500">{'Từ lúc chọn kho đến khi xác nhận đặt giữ'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
-              'Kho chỉ được giữ sau khi yêu cầu đặt kho được hệ thống ghi nhận thành công.',
-              'Mã OTP có hiệu lực 10 phút. Sau khi xác minh email, khách có 15 phút để thanh toán cọc giữ chỗ 20% theo báo giá.',
-              'Cọc giữ chỗ được trừ vào tiền thuê. Nếu khách hủy trước khi nhận kho, khoản này không được hoàn.',
-              'Đơn chuyển sang xử lý quá hạn nếu chưa ghi nhận thanh toán sau 15 phút.'
-            ].map(item => <p key={item} className="flex gap-2"><span className="text-emerald-700">✓</span><span>{item}</span></p>)}</div></Card>
-
-            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-extrabold text-blue-800">2</span><div><h3 className="font-bold text-stone-950">{'Nhận kho và bàn giao'}</h3><p className="text-xs text-stone-500">{'Hoàn tất trong thời hạn nhận kho'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
-              'Quản lý phân kho trong tối đa một ngày làm việc. Khách đặt lịch nhận kho trong vòng 7 ngày làm việc từ lúc kho có thể sẵn sàng.',
-              'Khi nhận kho, khách hoàn tất hợp đồng và xác nhận hiện trạng gian kho. Nếu đến sớm, nhân viên xác minh đủ điều kiện và ghi lý do điều chỉnh lịch trước khi bàn giao.',
-              'Khoản phải trả khi nhận kho gồm tiền thuê còn lại sau khi trừ cọc giữ chỗ và tiền duy trì CSVC bằng một tháng tiền thuê.',
-              'Việc nhận kho chỉ hoàn tất sau khi các khoản đến hạn đã được thanh toán và khách xác nhận nhận đúng gian kho.'
-            ].map(item => <p key={item} className="flex gap-2"><span className="text-blue-700">✓</span><span>{item}</span></p>)}</div></Card>
-
-            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-extrabold text-emerald-800">3</span><div><h3 className="font-bold text-stone-950">{'Gia hạn thuê kho'}</h3><p className="text-xs text-stone-500">{'Hoàn tất trước khi kỳ thuê mới có hiệu lực'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
-              'Khách gửi yêu cầu, chọn số tháng muốn gia hạn và theo dõi trạng thái xác nhận trên hồ sơ thuê.',
-              'Khi yêu cầu được chấp thuận, khách thanh toán trước 20% giá trị kỳ gia hạn trong thời hạn hiển thị.',
-              'Khách thanh toán 80% còn lại và hoàn tất phụ lục trước khi kỳ gia hạn có hiệu lực.',
-              'Nếu quá hạn thanh toán, yêu cầu gia hạn hết hiệu lực và khách cần gửi yêu cầu mới.'
-            ].map(item => <p key={item} className="flex gap-2"><span className="text-emerald-700">✓</span><span>{item}</span></p>)}</div></Card>
-
-            <Card className="p-5"><div className="mb-4 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 font-extrabold text-violet-800">4</span><div><h3 className="font-bold text-stone-950">{'Trả kho và hoàn tiền duy trì CSVC'}</h3><p className="text-xs text-stone-500">{'Quyết toán khi kết thúc thuê'}</p></div></div><div className="space-y-3 text-sm text-stone-700">{[
-              'Khách gửi yêu cầu trả kho và hoàn tất bàn giao theo lịch đã xác nhận.',
-              'Gian kho phải được dọn trống. Hiện trạng và các khoản còn phải thanh toán được ghi nhận khi trả kho.',
-              'Tiền duy trì CSVC được hoàn sau khi trừ các khoản hư hại, vệ sinh, thất lạc, trễ hạn hoặc công nợ đã xác nhận.',
-              'Việc trả kho hoàn tất khi quyết toán được xác nhận, tiền hoàn được xử lý và quyền truy cập kho chấm dứt.'
-            ].map(item => <p key={item} className="flex gap-2"><span className="text-violet-700">✓</span><span>{item}</span></p>)}</div></Card>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-rose-200 p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-rose-700">{'Quy định trễ hạn'}</p><h3 className="mt-2 font-bold text-stone-950">{'Thời hạn và phụ thu được tính theo từng giai đoạn'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Quá 15 phút chưa ghi nhận thanh toán cọc, đơn được chuyển sang bước đối soát để bảo vệ quyền lợi khách hàng.'}</li><li>• {'Quá 7 ngày làm việc mà chưa nhận kho, hệ thống không thể kích hoạt hồ sơ thuê và cọc giữ chỗ không được hoàn.'}</li><li>• {'Hợp đồng quá hạn không có thời gian ân hạn. Từ ngày sau ngày hết hạn, phụ thu mỗi ngày bằng 50% đơn giá thuê ngày.'}</li><li>• {'Gia hạn hợp đồng đã quá hạn phải hoàn tất trong 3 ngày kể từ khi thanh toán cọc gia hạn.'}</li></ul></Card>
-            <Card className="p-5"><p className="text-xs font-bold uppercase tracking-[.14em] text-stone-500">{'Tóm tắt thanh toán giữ kho'}</p><h3 className="mt-2 font-bold text-stone-950">{'Khoản phải trả theo báo giá'}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600"><li>• {'Đặt giữ: 20% tổng tiền thuê sau giảm của kỳ đầu.'}</li><li>• {'Khi nhận kho: tiền thuê còn lại và tiền duy trì CSVC theo báo giá.'}</li><li>• {'Số tiền chính thức luôn lấy từ báo giá đã lưu cùng đơn giữ kho.'}</li></ul></Card>
-          </div>
-
-          {/* ── KHỐI 4: DANH SÁCH TIÊU CHUẨN & QUY ĐỊNH VẬN HÀNH DO BO THIẾT LẬP ── */}
-          <Card className="p-5 border border-stone-200/90 shadow-sm bg-white space-y-3">
-            <div className="border-b border-stone-100 pb-3">
-              <h3 className="font-bold text-slate-900 text-base">
-                Danh Sách Tiêu Chuẩn & Quy Định Vận Hành Đang Áp Dụng
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Các quy định về độ ẩm kho mát, hàng cấm, phí khử trùng và SLA hỗ trợ được đồng bộ từ Ban Điều Hành (BO)
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {storedPoliciesList.map((policy) => (
-                <div
-                  key={policy.id}
-                  className="rounded-xl border border-stone-200 bg-stone-50/50 p-3.5 flex flex-col justify-between hover:border-amber-400 transition"
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-bold text-slate-900 text-xs">
-                        {policy.name}
-                      </span>
-                      <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100/90 text-amber-900 shrink-0">
-                        {policy.value}
-                      </span>
-                    </div>
-                    {policy.description && (
-                      <p className="mt-2 text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
-                        {policy.description}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-2.5 pt-2 border-t border-stone-200/60 text-[10px] text-slate-500">
-                    Phạm vi: {policy.scope || 'Toàn bộ cơ sở'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-        </div>
+        <CustomerRentalRulesPage />
       )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
@@ -3222,41 +3117,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 )
               })()}
 
-              {/* 3. Quy định cho thuê kho */}
-              <div className="order-5">
-                <CustomerRentalRegulations
-                  facilityName={selectedTarget ? (CUSTOMER_FACILITY_DISPLAY[selectedTarget.facility.id]?.name ?? selectedTarget.facility.name) : selectedUnit.facilityName}
-                />
-              </div>
-
-              <div className="order-6 rounded-2xl border border-rose-200 bg-rose-50/60 p-4 text-xs text-stone-700 sm:p-5">
-                <p className="text-sm font-bold text-rose-900">4. Quy định trả kho và gia hạn muộn</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <section className="rounded-xl border border-rose-200 bg-white p-4">
-                    <p className="font-bold text-stone-950">Trả kho sau ngày hết hạn</p>
-                    <ul className="mt-2 list-disc space-y-1.5 pl-5 leading-5">
-                      <li>Thời gian quá hạn được tính từ ngày kế tiếp sau ngày hết hạn hợp đồng đến ngày bàn giao và nghiệm thu kho thực tế.</li>
-                      <li><b>Phí phạt mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</b></li>
-                      <li><b>Tổng phí phạt = số ngày quá hạn × phí phạt mỗi ngày.</b> Khoản này được khấu trừ vào tiền duy trì CSVC. Nếu tiền duy trì CSVC không đủ, khách hàng phải thanh toán phần còn thiếu.</li>
-                    </ul>
-                  </section>
-                  <section className="rounded-xl border border-amber-200 bg-white p-4">
-                    <p className="font-bold text-stone-950">Gia hạn sau ngày hết hạn</p>
-                    <ul className="mt-2 list-disc space-y-1.5 pl-5 leading-5">
-                      <li>Yêu cầu gia hạn hoặc khoản cọc giữ kỳ gia hạn không tự động kéo dài thời hạn thuê và không làm dừng phí phạt quá hạn.</li>
-                      <li>Nếu hoàn tất gia hạn muộn, phí phạt vẫn được cộng theo từng ngày quá hạn đến ngày khách hàng thực tế hoàn tất ký hồ sơ gia hạn tại cơ sở.</li>
-                      <li>Gia hạn chỉ thành công sau khi khách hàng đến kho đúng lịch, ký lại hồ sơ/phụ lục gia hạn và hoàn tất các khoản tiền còn lại cùng phí phát sinh.</li>
-                    </ul>
-                  </section>
-                </div>
-                <p className="mt-3 rounded-lg bg-rose-100 px-3 py-2 font-semibold text-rose-900">Ví dụ: đơn giá 3.000.000 ₫/tháng thì đơn giá ngày là 100.000 ₫. Phí phạt là 50.000 ₫/ngày. Trễ 4 ngày, tổng phí phạt là 200.000 ₫.</p>
-                <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-900">Ưu đãi gia hạn: gói 6 tháng được giảm 3%, gói 12 tháng được giảm 5% tiền thuê của kỳ gia hạn. Gói 1 và 3 tháng không giảm. Phí phạt quá hạn và các khoản phát sinh không được giảm.</p>
-              </div>
-
-              {/* 5. Reservation & Financial Transparency Guarantee */}
-              <div className="order-7 rounded-2xl border border-stone-300 bg-white p-4 text-xs text-black sm:p-5">
+              {/* 3. Reservation & Financial Transparency Guarantee */}
+              <div className="order-5 rounded-2xl border border-stone-300 bg-white p-4 text-xs text-black sm:p-5">
                 <p className="font-bold text-sm text-black mb-1 flex items-center gap-1.5">
-                  <span></span> {'5. Quy trình đặt kho và thanh toán'}
+                  <span></span> {'3. Quy trình đặt kho và thanh toán'}
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-4">
                   {[
@@ -3268,7 +3132,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </div>
               </div>
 
-              <div className="order-8 flex justify-end gap-2 border-t border-stone-100 pt-4">
+              <div className="order-6 flex justify-end gap-2 border-t border-stone-100 pt-4">
                 <Button variant="outline" onClick={() => setDetailOpen(false)}>{'Đóng lại'}</Button>
                 <Button
                   disabled={selectedUnit.status !== 'available' || effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0}

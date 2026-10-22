@@ -424,7 +424,7 @@ export default function CustomerSupportSection({
                 )}
                 {ticket.estimatedWaitTime && ticket.status !== 'resolved' && (
                   <span className="inline-flex items-center gap-1 rounded-md bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
-                    <span>⏱️</span> {ticket.estimatedWaitTime}
+                    {ticket.estimatedWaitTime}
                   </span>
                 )}
               </div>
