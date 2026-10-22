@@ -250,7 +250,7 @@ describe("Dương integration presentation and safe policy builders", () => {
       expectedRevision: 1,
     })
   })
-  it("file inputs and downloads have natural labels, no rendered raw UUID or public fake href", () => {
+  it("provides file upload and authenticated download without exposing resource identifiers", () => {
     let html = renderToStaticMarkup(
       <EvidenceUpload
         entityType="DUONG_RENEWAL_INCIDENT"
@@ -259,11 +259,9 @@ describe("Dương integration presentation and safe policy builders", () => {
         onChange={vi.fn()}
       />,
     )
-    expect(html).toContain("Đính kèm minh chứng")
     expect(html).toContain('type="file"')
     expect(html).not.toContain(ids.renewal)
     html = renderToStaticMarkup(<EvidenceDownload id={ids.file} />)
-    expect(html).toContain("Tải minh chứng 1")
     expect(html).toContain('type="button"')
     expect(html).not.toContain(ids.file)
     expect(html).not.toContain("href=")

@@ -413,7 +413,7 @@ const commandFields: Record<RenewalOperationCommand["action"], readonly string[]
   confirmation: ["decisionRef", "expectedVersion"],
   arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion"],
   incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
-  cash: ["payableStatementRef", "receiptReference", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
+  cash: ["payableStatementRef", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
   completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion"],
   exception: ["incidentId", "action", "appointmentAt", "revisedDeadline", "reason", "evidenceFileIds", "expectedVersion"],
   refund: ["incidentId", "decision", "reason", "evidenceFileIds", "expectedVersion"],
@@ -471,8 +471,6 @@ export async function sendRenewalOperation(
   if (command.action === "cash") {
     if (command.body.paymentMethod && !["CASH", "BANK_TRANSFER"].includes(command.body.paymentMethod)) throw new Error("Phương thức thanh toán không hợp lệ.")
     if (!isUuid(command.body.receiptFileId)) throw new Error("Cần chứng từ thu tiền mặt.")
-    if (command.body.paymentMethod === "BANK_TRANSFER") validateText(command.body.receiptReference ?? "", true, 100)
-    else if (command.body.receiptReference !== undefined) validateText(command.body.receiptReference, false, 100)
     if (command.body.received !== true)
       throw new Error("Cần xác nhận đã nhận tiền thật.")
   }

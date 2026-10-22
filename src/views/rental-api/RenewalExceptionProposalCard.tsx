@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { Card } from "../../components/ui"
 import type { RenewalExceptionProposal } from "../../types/renewalOperationsApi"
 import { unknown } from "./presentation"
@@ -6,7 +7,7 @@ function dateTime(value: string | null) {
   return value ? new Intl.DateTimeFormat("vi-VN", {
     day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
     timeZone: "Asia/Ho_Chi_Minh",
-  }).format(new Date(value)) : unknown
+  }).format(parseVietnamDate(value)) : unknown
 }
 export default function RenewalExceptionProposalCard({ proposal: p }: { proposal: RenewalExceptionProposal }) {
   return <Card className="p-4 space-y-3">
