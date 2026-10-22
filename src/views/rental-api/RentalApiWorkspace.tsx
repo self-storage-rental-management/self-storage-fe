@@ -1,3 +1,4 @@
+import { parseVietnamDate, vietnamDateInput } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
@@ -261,7 +262,7 @@ function WorkspaceData({
         month: "2-digit",
         day: "2-digit",
       }).format(now)
-      const end = new Date(`${date}T00:00:00Z`)
+      const end = parseVietnamDate(`${date}T00:00:00Z`)
       end.setUTCDate(end.getUTCDate() + 30)
       const scope = role === "manager" ? { facilityId: query.facilityId } : {}
       const result = await Promise.all([
@@ -272,7 +273,7 @@ function WorkspaceData({
           size: 1,
           status: "active",
           endFrom: date,
-          endTo: end.toISOString().slice(0, 10),
+          endTo: vietnamDateInput(end),
         }),
         listRenewals(role, { ...scope, size: 1, status: "pending" }),
         listRenewals(role, { ...scope, size: 1, status: "accepted" }),
