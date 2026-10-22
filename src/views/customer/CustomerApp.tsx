@@ -94,6 +94,12 @@ const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) =>
 const isIdentityDocumentFormatValid = (value: string) =>
   /^[0-9A-Za-z][0-9A-Za-z .-]{8,29}$/.test(value.trim())
 
+const isCustomerPhoneFormatValid = (value: string) => {
+  const normalized = value.trim()
+  const digitCount = normalized.replace(/\D/g, '').length
+  return digitCount >= 9 && digitCount <= 15 && /^\+?[0-9][0-9 .()-]*$/.test(normalized)
+}
+
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
   if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
   const t = originalTrolley.toLowerCase()
@@ -817,10 +823,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [schedulePolicyMessage, setSchedulePolicyMessage] = useState<string | null>(null)
   const [rentalMonths, setRentalMonths] = useState(3)
   const [selectedPackageId, setSelectedPackageId] = useState<string>('')
-  const [customerIdCard, setCustomerIdCard] = useState('079203009988')
-  const [customerPhone, setCustomerPhone] = useState('+84 908 123 456')
+  const [customerIdCard, setCustomerIdCard] = useState('')
+  const [customerPhone, setCustomerPhone] = useState(user.phone ?? '')
   const [customerEmail] = useState(user.email)
-  const [customerAddress, setCustomerAddress] = useState('Quận 1, TP. Hồ Chí Minh')
+  const [customerAddress, setCustomerAddress] = useState(user.permanentAddress ?? '')
   const [bookingErrors, setBookingErrors] = useState<Record<string, string>>({})
   const [reservationSubmitError, setReservationSubmitError] = useState<string | null>(null)
   const bookingErrorRef = useRef<HTMLDivElement | null>(null)
@@ -842,9 +848,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingAppointmentTime('09:00')
     setRentalMonths(3)
     setSelectedPackageId('')
-    setCustomerIdCard('079203009988')
-    setCustomerPhone('+84 908 123 456')
-    setCustomerAddress('Quận 1, TP. Hồ Chí Minh')
+    setCustomerIdCard('')
+    setCustomerPhone(user.phone ?? '')
+    setCustomerAddress(user.permanentAddress ?? '')
     setBookingErrors({})
     setSchedulePolicyMessage(null)
     setReservationSubmitError(null)
@@ -1532,10 +1538,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       : null
 
     if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
-    if (!isApiAuthenticated()) {
-      if (customerPhone.replace(/\D/g, '').length < 9) errors.phone = 'Số điện thoại phải có ít nhất 9 chữ số.'
-      if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
-    }
+    if (!isCustomerPhoneFormatValid(customerPhone)) errors.phone = 'Số điện thoại phải có từ 9 đến 15 chữ số và đúng định dạng.'
+    if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     goodsItems.forEach((item, index) => {
       if (!item.category) errors[`goodsCategory-${item.id}`] = `Dòng hàng hóa ${index + 1}: Vui lòng chọn loại hàng hóa.`
       if (item.category && item.category !== 'OTHER' && !item.materialType) errors[`goodsMaterial-${item.id}`] = `Dòng hàng hóa ${index + 1}: Vui lòng chọn chất liệu chính.`
@@ -1593,10 +1597,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const continueFromPersonalDetails = () => {
     const errors: Record<string, string> = {}
     if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
-    if (!isApiAuthenticated()) {
-      if (customerPhone.replace(/\D/g, '').length < 9) errors.phone = 'Số điện thoại phải có ít nhất 9 chữ số.'
-      if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
-    }
+    if (!isCustomerPhoneFormatValid(customerPhone)) errors.phone = 'Số điện thoại phải có từ 9 đến 15 chữ số và đúng định dạng.'
+    if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     setBookingErrors(errors)
     if (Object.keys(errors).length) {
       showToast('Vui lòng kiểm tra lại thông tin cá nhân.')
@@ -3205,10 +3207,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div><p className="font-bold text-stone-900">Thông tin cá nhân</p><p className="mt-1 text-xs text-stone-500">Thông tin dùng để lập hồ sơ và đối chiếu khi nhận kho.</p></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input label={'Họ và tên người thuê'} value={user.name} disabled />
-              <Input label={'Số CCCD / Hộ chiếu (Đối chiếu lúc nhận kho)'} value={customerIdCard} onChange={e => setCustomerIdCard(e.target.value)} />
-              <Input label={'Số điện thoại liên hệ'} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+              <Input label={'Số CCCD / Hộ chiếu * (Đối chiếu lúc nhận kho)'} value={customerIdCard} onChange={e => setCustomerIdCard(e.target.value)} />
+              <Input label={'Số điện thoại liên hệ *'} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               <Input label="Email" value={customerEmail} disabled />
-              <Input label={'Địa chỉ'} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
+              <Input label={'Địa chỉ *'} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
               </div>
             </section>}
 
