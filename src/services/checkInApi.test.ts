@@ -74,6 +74,7 @@ describe('checkInApi', () => {
         accessHandedOver: true,
       },
       identityDocumentNumber: '079203009988',
+      identityVerificationNote: null,
       actualMeasurements: {
         lengthCm: 100, widthCm: 100, heightCm: 100,
         weightKg: 100, actualVolumeM3: 1, varianceAccepted: true,
