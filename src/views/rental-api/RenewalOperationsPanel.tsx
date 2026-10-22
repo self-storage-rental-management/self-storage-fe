@@ -531,6 +531,7 @@ export default function RenewalOperationsPanel({
                     </div>}
                     {role === "staff" && action === "incident" && <p className="text-sm text-stone-500">Có vấn đề phát sinh trong quá trình xử lý?</p>}
                     <Button
+                      type="button"
                       variant="outline"
                       className={role === "staff" ? action === "incident" ? "shrink-0" : "mt-auto w-full" : undefined}
                       disabled={!!reason || locked}
@@ -793,18 +794,18 @@ function OperationForm({
         }
       }
       case "completion":
+        if (!isUuid(signedDocumentFile))
+          throw new Error("Vui lòng tải hợp đồng đã ký lên trước khi hoàn tất gia hạn.")
         if (!s.arrivalRef || cash.loading || cash.error || !cash.data || cash.data.amount !== 0)
           throw new Error(
             "Cần ghi nhận khách đến và thanh toán đủ các khoản theo bảng kê. Hệ thống sẽ đối chiếu biên lai đã lưu.",
           )
-        validateText(reason, false)
         return {
           action,
           body: {
             ...base,
             arrivalRef: s.arrivalRef,
-            ...(signedDocumentFile ? { signedDocumentFileId: signedDocumentFile } : {}),
-            completionNote: reason,
+            signedDocumentFileId: signedDocumentFile,
           },
         }
       case "exception":
@@ -952,7 +953,7 @@ function OperationForm({
         )}
         {needReason && (
           <label className="block">
-            {action === "completion" ? "Ghi chú hoàn tất" : "Lý do (bắt buộc)"}
+            Lý do (bắt buộc)
             <textarea
               className={operationsInputClass}
               value={reason}
@@ -1025,6 +1026,7 @@ function OperationForm({
                 entityType="DUONG_RENEWAL_SIGNED_CONTRACT"
                 entityId={s.renewalId}
                 label="Tải hợp đồng lên"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
                 disabled={locked}
                 value={signedDocumentFile ? [signedDocumentFile] : []}
                 limit={1}
@@ -1045,7 +1047,7 @@ function OperationForm({
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
-            (!command.uncertain && action === "completion" && (cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0)) ||
+            (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0)) ||
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
           }
           onClick={() => {
