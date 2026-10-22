@@ -48,6 +48,10 @@ export default function RenewalDetail({
     (!payment.settlementStage || ["ALLOCATED_AWAITING_SIGNING", "AWAITING_SIGNING", "COMPLETED"].includes(payment.settlementStage))
   const paymentDeadline = payment?.paymentDeadline ?? r.approvedPaymentDeadline
   const paymentExpired = r.status === "accepted" && !!paymentDeadline && Date.parse(paymentDeadline) <= Date.now() && payment?.paymentStatus !== "PAID"
+  const paymentStatusLabel = payment ? ({ PENDING: "Chờ thanh toán", PROCESSING: "Đang xử lý", PAID: payment.reconciliationRequired ? "Đã nhận tiền, cần đối soát" : "Đã thanh toán", NOT_RECEIVED: "Chờ xác nhận", FAILED: "Thất bại", CANCELLED: "Đã hủy" } as Record<string, string>)[payment.paymentStatus] || "Đang cập nhật" : ""
+  const paymentDetail = payment?.settlementStage
+    ? ({ AWAITING_PAYMENT: "Chờ VNPay xác nhận giao dịch.", VERIFIED_AWAITING_ALLOCATION: "Đang cập nhật khoản thanh toán vào hồ sơ.", ALLOCATED_AWAITING_SIGNING: "Đang kiểm tra điều kiện ký hợp đồng.", AWAITING_SIGNING: "Tiếp theo: đến cơ sở hoàn tất ký.", COMPLETED: "Đã hoàn tất gia hạn.", RECONCILIATION_REQUIRED: "Giao dịch cần được cơ sở kiểm tra." }[payment.settlementStage])
+    : payment?.message
   const verification = r.systemVerification
   const workflowStatusLabel = paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
     ? hasDeposit ? "Đã mở thanh toán cọc qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
@@ -127,12 +131,19 @@ export default function RenewalDetail({
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền cọc đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
       <div className="space-y-3">
-          {role === "customer" && payment && <section className={`space-y-1 rounded-lg border p-3 ${payment.reconciliationRequired ? "border-amber-300 bg-amber-50" : "border-stone-200 bg-stone-50"}`} aria-live="polite">
-            <p className="font-semibold">{hasDeposit ? "Thanh toán cọc" : "Thanh toán toàn kỳ"}: {({ PENDING: "Đang chờ VNPay", PROCESSING: "Đang xử lý", PAID: payment.reconciliationRequired ? "Đã nhận tiền, cần đối soát" : "Đã ghi nhận thanh toán", NOT_RECEIVED: "Chưa xác nhận đã nhận tiền", FAILED: "Thanh toán thất bại", CANCELLED: "Giao dịch đã hủy" } as Record<string, string>)[payment.paymentStatus]}</p>
-            <p>{payment.settlementStage ? ({ AWAITING_PAYMENT: "Chờ VNPay xác nhận thanh toán", VERIFIED_AWAITING_ALLOCATION: "Đã xác minh tiền, đang chờ phân bổ", ALLOCATED_AWAITING_SIGNING: "Đang kiểm tra điều kiện ký", AWAITING_SIGNING: "Đã thanh toán, chờ hoàn tất ký", COMPLETED: "Gia hạn đã hoàn tất", RECONCILIATION_REQUIRED: "Cần hỗ trợ đối soát" }[payment.settlementStage]) : payment.message}</p>
-            <p>{rentalMoney(payment.amount, payment.currency)}{payment.paidAt ? `, ${rentalDate(payment.paidAt)}` : ""}</p>
-            {payment.paymentDeadline && <p className="text-xs text-stone-600">Hạn thanh toán: {rentalDate(payment.paymentDeadline)}</p>}
-            {canViewReceipt && <Button type="button" variant="outline" onClick={() => setReceiptOpen(true)}>Xem biên lai</Button>}
+          {role === "customer" && payment && <section className={`rounded-xl border p-4 ${payment.reconciliationRequired ? "border-amber-200 bg-amber-50/50" : "border-stone-200 bg-white"}`} aria-label="Thanh toán gia hạn" aria-live="polite">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-stone-700">{hasDeposit ? "Cọc gia hạn" : "Thanh toán toàn kỳ"}</h4>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${payment.reconciliationRequired ? "bg-amber-100 text-amber-800" : payment.paymentStatus === "PAID" ? "bg-emerald-50 text-emerald-700" : ["FAILED", "CANCELLED"].includes(payment.paymentStatus) ? "bg-red-50 text-red-700" : "bg-stone-100 text-stone-600"}`}>{paymentStatusLabel}</span>
+            </div>
+            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xl font-bold tracking-tight text-stone-900">{rentalMoney(payment.amount, payment.currency)}</p>
+                {payment.paidAt && <p className="mt-1 text-xs text-stone-500">Thanh toán lúc {rentalDate(payment.paidAt)}</p>}
+              </div>
+              {canViewReceipt && <Button type="button" size="sm" variant="outline" className="shrink-0 self-start sm:self-auto" onClick={() => setReceiptOpen(true)}>Xem biên lai</Button>}
+            </div>
+            {paymentDetail && <p className="mt-3 border-t border-stone-100 pt-2 text-xs leading-5 text-stone-600">{paymentDetail}</p>}
           </section>}
           {role === "customer" && paymentError && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{paymentError}</p>}
       </div>

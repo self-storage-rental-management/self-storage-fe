@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
@@ -47,7 +48,7 @@ export function rentalDate(value: string | null | undefined) {
   const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
   if (date) return `${date[3]}/${date[2]}/${date[1]}`
   if (!Number.isFinite(Date.parse(value))) return unknown
-  return new Date(value).toLocaleString("vi-VN", {
+  return parseVietnamDate(value).toLocaleString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
   })
 }

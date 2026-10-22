@@ -16,7 +16,7 @@ const render = () => renderToStaticMarkup(<ManagerDashboardApiPanel setPage={() 
 
 describe('Manager API dashboard: no business demo data', () => {
   it('renders server counts, preserves verified zero and labels missing totals honestly', () => {
-    state.reads = { rentals: { data: { value: 37, completeness: 'COMPLETE' } }, 'active-rentals': { data: { value: 0, completeness: 'COMPLETE' } } }
+    state.reads = { rentals: { data: { value: 37, completeness: 'COMPLETE' } }, 'pending-renewals': { data: { value: 0, completeness: 'COMPLETE' } } }
     const html = render()
     expect(html).toContain('>37<')
     expect(html).toContain('>0<')
@@ -24,7 +24,7 @@ describe('Manager API dashboard: no business demo data', () => {
     expect(html).not.toContain('Tải lại')
   })
   it('never renders stale counts during loading or an API error', () => {
-    state.reads = { rentals: { loading: true, data: { value: 888 } }, 'active-rentals': { error: new Error('Offline'), data: { value: 999 } } }
+    state.reads = { rentals: { loading: true, data: { value: 888 } }, 'pending-renewals': { error: new Error('Offline'), data: { value: 999 } } }
     const html = render()
     expect(html).toContain('Đang tải')
     expect(html).not.toContain('>888<')
@@ -32,13 +32,13 @@ describe('Manager API dashboard: no business demo data', () => {
     expect(html).not.toContain('>0<')
   })
   it('does not describe partial overdue results as no debt', () => {
-    state.reads = { 'payment-overdue': { data: { value: null, completeness: 'PARTIAL', reason: 'Chưa đủ dữ liệu công nợ.' } } }
+    state.reads = { 'term-overdue': { data: { value: null, completeness: 'PARTIAL', reason: 'Chưa đủ dữ liệu công nợ.' } } }
     const html = render()
     expect(html).toContain('Chưa đủ dữ liệu công nợ.')
     expect(html).not.toContain('Không có khoản quá hạn')
     expect(html).not.toContain('>0<')
   })
-  it.each(['payment-overdue', 'term-overdue'])('preserves unknown, error and verified zero for %s', metric => {
+  it.each(['term-overdue'])('preserves unknown, error and verified zero for %s', metric => {
     state.reads = { [metric]: { error: new ApiClientError('Offline', { status: 503 }), data: { value: 888 } } }
     let html = render()
     expect(html).toContain('Chưa xác minh')
@@ -68,7 +68,18 @@ describe('Manager API dashboard: no business demo data', () => {
     state.actor = { ...state.actor!, id: 'other-manager', facilityScopes: { f2: 'READ' } }
     state.identities = []
     render()
-    expect(state.identities).toHaveLength(6)
+    expect(state.identities).toHaveLength(4)
     expect(state.identities.every(id => !previous.includes(id))).toBe(true)
+  })
+  it('omits active-rental and payment-overdue cards and their API reads', () => {
+    const html = render()
+    expect(html).not.toContain('Đang thuê')
+    expect(html).not.toContain('Thanh toán quá hạn')
+    expect(html).toContain('Tổng hồ sơ thuê')
+    expect(html).toContain('Gia hạn cần theo dõi')
+    expect(html).toContain('Yêu cầu hỗ trợ mới')
+    expect(html).toContain('Quá thời hạn thuê')
+    expect(state.identities).toHaveLength(4)
+    expect(state.identities.some(id => id.endsWith(':active-rentals') || id.endsWith(':payment-overdue'))).toBe(false)
   })
 })
