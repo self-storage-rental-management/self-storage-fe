@@ -269,7 +269,7 @@ export default function CustomerSupportChatbot({
           ` Đã chuyển thành công yêu cầu ${ticketId} cho nhân viên hỗ trợ!\n\n` +
           `• Nhân viên tiếp nhận: ${assignment.assignedStaffName} (Đang trực tuyến)\n` +
           `• Cơ sở & Gian kho: ${selectedFacility} · ${selectedUnit}\n` +
-          `• ⏱️ Thời gian phản hồi dự kiến: ${assignment.estimatedWaitLabel}\n` +
+          `• Thời gian phản hồi dự kiến: ${assignment.estimatedWaitLabel}\n` +
           `• Bạn có thể theo dõi tiến độ hoặc nhắn tin bổ sung trong mục "Hỗ trợ khách hàng".`,
           { isEscalationNotice: true }
         )
@@ -488,7 +488,7 @@ export default function CustomerSupportChatbot({
                 onClick={handleMarkDone}
                 className="w-full rounded-lg border border-emerald-300 bg-emerald-50 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition"
               >
-                ✓ Đã xong, cảm ơn
+                Đã xong, cảm ơn
               </button>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
