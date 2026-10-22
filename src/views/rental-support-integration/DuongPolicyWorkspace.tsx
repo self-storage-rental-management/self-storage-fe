@@ -457,10 +457,9 @@ function PolicyEditor({
               {overdueTerm && <section className="rounded-xl border border-stone-200 p-4">
                 <h4 className="font-semibold text-stone-900">Quá hạn và thu hồi</h4>
                 <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
-                  <div><dt className="text-stone-500">Ngày 1 đến {overdueTerm.warningThroughDay}</dt><dd className="font-medium text-stone-900">Nhắc khách gia hạn hoặc trả kho</dd></div>
-                  <div><dt className="text-stone-500">Ngày {overdueTerm.warningThroughDay + 1} đến {overdueTerm.seriousThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo quá hạn nghiêm trọng</dd></div>
-                  <div><dt className="text-stone-500">Ngày {overdueTerm.urgentThroughDay}</dt><dd className="font-medium text-stone-900">Cảnh báo khẩn cấp</dd></div>
-                  <div><dt className="text-stone-500">Từ {overdueTerm.recoveryStartTime.slice(0, 5)} ngày {overdueTerm.recoveryFromDay}</dt><dd className="font-medium text-stone-900">Chuyển sang xử lý thu hồi</dd></div>
+                  <div><dt className="text-stone-500">Ngày 1 đến {overdueTerm.urgentThroughDay} sau khi hết hạn thuê</dt><dd className="font-medium text-stone-900">Nhắc khách hoàn tất gia hạn hoặc trả kho</dd></div>
+                  <div><dt className="text-stone-500">{overdueTerm.recoveryCutoffTime.slice(0, 5)} ngày {overdueTerm.urgentThroughDay}</dt><dd className="font-medium text-stone-900">Hết thời gian hoàn tất gia hạn</dd></div>
+                  <div><dt className="text-stone-500">Từ {overdueTerm.recoveryStartTime.slice(0, 5)} ngày {overdueTerm.recoveryFromDay}</dt><dd className="font-medium text-stone-900">Chuyển hồ sơ sang xử lý thu hồi khi đủ điều kiện</dd></div>
                 </dl>
               </section>}
             </>

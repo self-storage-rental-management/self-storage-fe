@@ -95,6 +95,6 @@ export default function RenewalAppointmentPicker({
     {!!read.error && <p role="alert" className="text-xs text-red-700">{rentalError(read.error)}</p>}
     {window && !currentVersion && <p role="alert" className="text-xs text-red-700">Hồ sơ đã thay đổi, hãy mở lại phần chọn lịch.</p>}
     {currentVersion && !read.loading && !window.slots.length && date >= (earliest?.slice(0, 10) ?? "") && date <= (latest?.slice(0, 10) ?? "") && <p role="status" className="text-xs text-amber-700">Chưa có giờ ký khả dụng trong ngày này. Vui lòng chọn ngày khác hoặc liên hệ cơ sở.</p>}
-    {currentVersion && !!time && !!window.slots.length && !available && <p role="alert" className="text-xs text-red-700">Giờ đã chọn không còn trống hoặc ngoài khung 30 phút, vui lòng chọn lại.</p>}
+    {currentVersion && !!time && !!window.slots.length && !available && <p role="alert" className="text-xs text-red-700">Giờ hẹn đã chọn không còn khả dụng, vui lòng chọn lại.</p>}
   </section>
 }
