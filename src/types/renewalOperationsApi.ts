@@ -88,7 +88,6 @@ export type RenewalOperationCommand = {
   action: "cash"
   body: Version & {
     payableStatementRef: string
-    receiptReference?: string
     receiptFileId: string
     paymentMethod?: "CASH" | "BANK_TRANSFER"
     received: true
