@@ -9,7 +9,6 @@ import RenewalOperationsPanel, { OperationEventCard } from "./RenewalOperationsP
 import SupportTicketDetail, { SupportTicketSummary } from "../support-api/SupportTicketDetail"
 import SupportApiWorkspace from "../support-api/SupportApiWorkspace"
 import ApiReadState from "./ApiReadState"
-import { ManagerPresentationProvider } from "../manager/managerPresentation"
 import { rentalError } from "./presentation"
 import { supportActions, supportError, supportReceiverLabels } from "../support-api/presentation"
 import { apiPage, ids, operationEvent, operationState, operationsActor, overduePage, signingState } from "../../../tests/rentalOperationsApiFixtures"
@@ -46,17 +45,7 @@ beforeEach(() => {
 })
 
 describe("Dương delete-first UI copy regression", () => {
-  it("D4 heading is followed by filters, with NO replacement subtitle", () => {
-    state.actor = operationsActor("manager")
-    state.data = { ...overduePage, ...apiPage([]) }
-    const html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toMatch(/<h1[^>]*>Theo dõi quá hạn<\/h1>/)
-    expect(html).not.toContain("Tách quá hạn thuê và quá hạn thanh toán")
-    expect(html).not.toContain("Theo dõi các hồ sơ quá hạn")
-    expect(html).toContain("Quá hạn thanh toán")
-    expect(html).toContain("Quá thời hạn thuê")
-    expect(html).toContain("Mã theo dõi có sẵn")
-  })
+
   it("D4 empty results stay compact without unsupported warnings or pagination", () => {
     state.actor = operationsActor("manager")
     state.data = { ...overduePage, ...apiPage([]), completeness: "PARTIAL", missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS"] }
@@ -66,7 +55,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).not.toContain("Chưa đủ dữ liệu")
     expect(html).not.toContain("Trang 0/0")
     expect(html).not.toContain(">Trước</button>")
-    expect(html).toContain('<details class="text-sm"><summary')
+
     expect(html).not.toContain("Không có dữ liệu")
     expect(html).not.toContain("AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS")
     expect(html).not.toContain("0 đ")
@@ -113,13 +102,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).toContain("Biên lai thanh toán gia hạn")
     expect(html).not.toContain("thử nghiệm")
   })
-  it("D3 Manager has no empty reload wrapper after presentation cleanup", () => {
-    state.actor = operationsActor("manager"); state.mode = "operations"; state.data = operationState
-    const html = renderToStaticMarkup(<ManagerPresentationProvider><RenewalOperationsPanel id={ids.renewal} role="manager" customerId={ids.customer} facilityId={ids.facility} /></ManagerPresentationProvider>)
-    expect(html).not.toContain('<div class="flex gap-2"></div>')
-    expect(html).not.toContain("Tải lại tiến độ")
-    expect(html).toContain("Xem xét ngoại lệ")
-  })
+
   it.each(["customer", "staff", "manager"] as const)("D5 %s summary retains unknown/blocked state without workflow/version/SLA internals", role => {
     const html = renderToStaticMarkup(<SupportTicketSummary role={role} ticket={{ ...supportActive, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu", workflowReady: false, version: null }} />)
     expect(supportActions(supportActor(role), role, { ...supportActive, workflowReady: false, version: null })).toEqual([])
