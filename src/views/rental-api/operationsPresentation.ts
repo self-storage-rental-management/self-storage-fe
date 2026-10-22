@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import type { ApiActor } from "../../services/authApi"
 import { rentalError } from "./presentation"
 import { ApiClientError } from "../../services/apiClient"
@@ -168,7 +169,7 @@ export function operationValidationError(error: unknown) {
 export function vietnamLocalInstant(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))
     throw new Error("Chọn ngày và giờ.")
-  const instant = new Date(`${value}:00+07:00`)
+  const instant = parseVietnamDate(`${value}:00+07:00`)
   if (!Number.isFinite(instant.getTime()))
     throw new Error("Ngày/giờ không hợp lệ.")
   if (

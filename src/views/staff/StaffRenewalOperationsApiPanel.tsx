@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useCallback, useRef, useState } from "react"
 import { Badge, Button, Card, Modal } from "../../components/ui"
@@ -17,7 +18,7 @@ function signingDate(value: string | null, time = false) {
   return new Intl.DateTimeFormat("vi-VN", time
     ? { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
     : { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" },
-  ).format(new Date(value))
+  ).format(parseVietnamDate(value))
 }
 
 export default function StaffRenewalOperationsApiPanel() {

@@ -1,3 +1,4 @@
+import { VIETNAM_TIME_ZONE, parseVietnamDate } from '../../utils/vietnamTime'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
@@ -366,7 +367,7 @@ function PolicyEditor({
       {read.data && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-600">
           <span className="font-semibold">Phiên bản {read.data.revision}</span>
-          <span>Cập nhật lúc {new Date(read.data.publishedAt).toLocaleString("vi-VN")}</span>
+          <span>Cập nhật lúc {parseVietnamDate(read.data.publishedAt).toLocaleString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })}</span>
         </div>
       )}
       <form
