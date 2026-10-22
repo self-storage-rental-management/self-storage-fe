@@ -61,8 +61,8 @@ it("reads authoritative payment on return and refreshes Renewal when settlement 
   h.read.mockResolvedValueOnce({...payment,paymentStatus:"PAID",settlementStage:"VERIFIED_AWAITING_ALLOCATION",paymentUrl:null,reconciliationRequired:true})
     .mockResolvedValue({...payment,paymentStatus:"PAID",settlementStage:"AWAITING_SIGNING",paymentUrl:null,reconciliationRequired:false});
   render(record,true);await vi.advanceTimersByTimeAsync(0);expect(h.read).toHaveBeenCalledWith("n1");
-  expect(JSON.stringify(render())).toContain("đang chờ phân bổ");expect(pay(render()).props.disabled).toBe(true);
-  await vi.advanceTimersByTimeAsync(5000);expect(h.refresh).toHaveBeenCalledTimes(2);expect(JSON.stringify(render())).toContain("chờ hoàn tất ký");
+  expect(JSON.stringify(render())).toContain("Đang cập nhật khoản thanh toán vào hồ sơ");expect(pay(render()).props.disabled).toBe(true);
+  await vi.advanceTimersByTimeAsync(5000);expect(h.refresh).toHaveBeenCalledTimes(2);expect(JSON.stringify(render())).toContain("Tiếp theo: đến cơ sở hoàn tất ký");
 })
 it("does not redirect from a stale intent response after switching Renewal",async()=>{
   let resolve!:(v:any)=>void;h.create.mockImplementation(()=>new Promise(r=>{resolve=r}));const first=pay(render()).props.onClick();await vi.advanceTimersByTimeAsync(0);
@@ -74,3 +74,16 @@ it("shows received funds without redirecting when retry returns PAID",async()=>{
   h.create.mockResolvedValue({...payment,paymentStatus:"PAID",paymentUrl:null,reconciliationRequired:true});await pay(render()).props.onClick();
   expect(h.assign).not.toHaveBeenCalled();expect(JSON.stringify(render())).toContain("Đã nhận tiền, cần đối soát");
 })
+it("keeps the paid amount and receipt in the compact payment block without a payment deadline",async()=>{
+  h.create.mockResolvedValue({...payment,paymentStatus:"PAID",paidAt:"2026-10-08T01:27:00Z",settlementStage:"AWAITING_SIGNING",paymentUrl:null,reconciliationRequired:false});
+  await pay(render()).props.onClick();
+  const block=nodes(render()).find(n=>n.type==="section"&&n.props["aria-label"]==="Thanh toán gia hạn");
+  expect(block).toBeDefined();
+  const view=JSON.stringify(block);
+  expect(view).toContain("Đã thanh toán");
+  expect(view).toContain("100 đ");
+  expect(view).toContain("Thanh toán lúc");
+  expect(view).toContain("Xem biên lai");
+  expect(view).toContain("Tiếp theo: đến cơ sở hoàn tất ký");
+  expect(view).not.toContain("Hạn thanh toán");
+});
