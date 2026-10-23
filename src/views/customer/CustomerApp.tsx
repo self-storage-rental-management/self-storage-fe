@@ -40,6 +40,16 @@ import {
 } from '../../domain/policyMatching'
 import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
 import { customerFacilityImage, customerUnitAmenities } from './customerPresentation'
+import { isVietnamesePhone, VIETNAMESE_PHONE_ERROR_MESSAGE } from '../../domain/vietnamesePhone'
+import {
+  dimensionalWeightKg,
+  isPackageSampleValid,
+  packageCapacityPerRack,
+  packageVolumeM3,
+  requiredRackCountForSamples,
+  usableRackVolumeM3,
+  type ReservationPackageSample,
+} from '../../domain/reservationCapacity'
 import {
   listCustomerFacilities,
   listCustomerUnitTypes,
@@ -57,6 +67,7 @@ import {
   type CustomerFacility,
   type CustomerReservation,
   type CustomerUnitType,
+  type CompatibilityCheckResult,
   type GoodsCategory,
   type GoodsItemInput,
   type ReservationQuote,
@@ -93,12 +104,6 @@ const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) =>
 
 const isIdentityDocumentFormatValid = (value: string) =>
   /^[0-9A-Za-z][0-9A-Za-z .-]{8,29}$/.test(value.trim())
-
-const isCustomerPhoneFormatValid = (value: string) => {
-  const normalized = value.trim()
-  const digitCount = normalized.replace(/\D/g, '').length
-  return digitCount >= 9 && digitCount <= 15 && /^\+?[0-9][0-9 .()-]*$/.test(normalized)
-}
 
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
   if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
@@ -139,7 +144,7 @@ type GoodsDeclarationItem = {
   customerNote: string
   images: File[]
 }
-type PackageSample = { id: string; quantity: string; lengthCm: string; widthCm: string; heightCm: string; weightKg: string; sourceLabel?: string }
+type PackageSample = ReservationPackageSample & { id: string; sourceLabel?: string }
 type CapacityStatus = 'invalid' | 'fits' | 'not-fit'
 
 const GOODS_CATEGORY_OPTIONS = [
@@ -189,32 +194,6 @@ const parsePositiveNumber = (rawValue: string) => {
   if (rawValue.trim() === '') return null
   const value = Number(rawValue)
   return Number.isFinite(value) && value > 0 ? value : null
-}
-const isPackageSampleValid = (sample: PackageSample) => {
-  const quantity = parsePositiveNumber(sample.quantity)
-  return quantity !== null
-    && Number.isInteger(quantity)
-    && parsePositiveNumber(sample.lengthCm) !== null
-    && parsePositiveNumber(sample.widthCm) !== null
-    && parsePositiveNumber(sample.heightCm) !== null
-    && parsePositiveNumber(sample.weightKg) !== null
-}
-const packageCapacityPerFrame = (sample: PackageSample, rackDimensionsM: [number, number, number] = [2, 4, 4.5]) => {
-  if (!isPackageSampleValid(sample)) return 0
-  const dimensions = [Number(sample.lengthCm) / 100, Number(sample.widthCm) / 100, Number(sample.heightCm) / 100]
-  const [a, b, c] = dimensions
-  const orientations = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]]
-  return Math.max(...orientations.map(([x, y, z]) => Math.floor(rackDimensionsM[0] / x) * Math.floor(rackDimensionsM[1] / y) * Math.floor(rackDimensionsM[2] / z)))
-}
-const RACK_UTILIZATION_RATE = 0.8
-const packageVolumeM3 = (sample: PackageSample) =>
-  (Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm) * Number(sample.quantity)) / 1_000_000
-const usableRackVolumeM3 = ([lengthM, widthM, heightM]: [number, number, number]) =>
-  lengthM * widthM * heightM * RACK_UTILIZATION_RATE
-const requiredRackCountForSamples = (samples: PackageSample[], rackDimensionsM: [number, number, number]) => {
-  const usableVolume = usableRackVolumeM3(rackDimensionsM)
-  if (usableVolume <= 0) return Number.POSITIVE_INFINITY
-  return Math.ceil(samples.reduce((total, sample) => total + packageVolumeM3(sample), 0) / usableVolume)
 }
 const CUSTOMER_UNIT_IMAGE_BY_SIZE: Record<string, string> = {
   S: '/images/customer-units/kho-s.jpg',
@@ -473,6 +452,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return { startDate, endDate: addMonthsForPreview(startDate, 3) }
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
+  const [serverCompatibility, setServerCompatibility] = useState<CompatibilityCheckResult | null>(null)
   const [bookingVoucherCode, setBookingVoucherCode] = useState('')
   const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
   const [rentalPackagesLoading, setRentalPackagesLoading] = useState(false)
@@ -866,14 +846,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }))
   const packageCountNumber = capacitySamples.reduce((sum, sample) => sum + (Number(sample.quantity) || 0), 0)
   const goodsWeightNumber = capacitySamples.reduce((sum, sample) => sum + ((Number(sample.quantity) || 0) * (Number(sample.weightKg) || 0)), 0)
-  const goodsVolumeM3 = capacitySamples.reduce((sum, sample) => sum + (
-    (Number(sample.quantity) || 0)
-    * (Number(sample.lengthCm) || 0)
-    * (Number(sample.widthCm) || 0)
-    * (Number(sample.heightCm) || 0)
-    / 1_000_000
-  ), 0)
+  const goodsVolumeM3 = capacitySamples.reduce((sum, sample) => sum + packageVolumeM3(sample), 0)
   const formatVolumeM3 = (value: number) => value.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  const formatRackDimensions = (dimensions: [number, number, number]) => dimensions.map(value => value.toLocaleString('vi-VN', { maximumFractionDigits: 2 })).join(' × ')
   const largestPackage = capacitySamples.reduce<PackageSample | null>((largest, sample) => {
     const volume = Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm)
     if (!largest) return sample
@@ -1211,6 +1186,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const resetReservationDraft = () => {
     setBookingReview(false)
     setServerQuote(null)
+    setServerCompatibility(null)
     reservationIdempotencyKey.current = null
     setValidationViolation(null)
     setBookingErrors({})
@@ -1255,6 +1231,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingStep(initialStep)
     setBookingReview(false)
     setServerQuote(null)
+    setServerCompatibility(null)
     reservationIdempotencyKey.current = crypto.randomUUID()
     setBookingErrors({})
     setSelectedTarget({ facility, unitType })
@@ -1361,7 +1338,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             widthCm: cargoWidthNumber,
             heightCm: cargoHeightNumber,
             weightKg: goodsWeightNumber,
-            packageCount: packageCountNumber
+            packageCount: packageCountNumber,
+            volumeM3: goodsVolumeM3,
           })
         : {
             quoteId: `QUO-${Date.now().toString().slice(-4)}`,
@@ -1371,9 +1349,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             depositAmount: selectedUnit.deposit || selectedUnit.price,
             dimSurcharge: 0,
             totalFirstPayment: (selectedUnit.price * 2),
-            dimWeightKg: Math.ceil((cargoLengthNumber * cargoWidthNumber * cargoHeightNumber * packageCountNumber) / 5000),
+            dimWeightKg: dimensionalWeightKg(capacitySamples),
             actualWeightKg: goodsWeightNumber,
-            billableWeightKg: Math.max(goodsWeightNumber, Math.ceil((cargoLengthNumber * cargoWidthNumber * cargoHeightNumber * packageCountNumber) / 5000)),
+            billableWeightKg: Math.max(goodsWeightNumber, dimensionalWeightKg(capacitySamples)),
             dimDivisor: 5000,
             quotedAt: new Date().toISOString(),
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
@@ -1387,10 +1365,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const selectedRackCount = selectedBackendUnitType?.rackCount ?? selectedCatalogUnit?.rackCount ?? 0
   const selectedRackDimensions: [number, number, number] = selectedBackendUnitType
     ? [selectedBackendUnitType.rackLengthM, selectedBackendUnitType.rackWidthM, selectedBackendUnitType.rackHeightM]
-    : [2, 4, 4.5]
+    : [4, 2, 4.5]
+  const selectedUsableRackVolumeM3 = usableRackVolumeM3(selectedRackDimensions) * selectedRackCount
   const allPackageSamplesValid = capacitySamples.length > 0 && capacitySamples.every(isPackageSampleValid)
   const packageCapacityResults = allPackageSamplesValid ? capacitySamples.map(sample => {
-    const capacityPerFrame = selectedUnit ? packageCapacityPerFrame(sample, selectedRackDimensions) : 0
+    const capacityPerFrame = selectedUnit ? packageCapacityPerRack(sample, selectedRackDimensions) : 0
     return {
       ...sample,
       capacityPerFrame,
@@ -1408,7 +1387,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       .sort((left, right) => left.volumeM3 - right.volumeM3)
       .find(candidate => {
         const candidateRackDimensions: [number, number, number] = [candidate.rackLengthM, candidate.rackWidthM, candidate.rackHeightM]
-        const everyPackageFits = capacitySamples.every(sample => packageCapacityPerFrame(sample, candidateRackDimensions) > 0)
+        const everyPackageFits = capacitySamples.every(sample => packageCapacityPerRack(sample, candidateRackDimensions) > 0)
         const framesRequired = everyPackageFits
           ? requiredRackCountForSamples(capacitySamples, candidateRackDimensions)
           : Number.POSITIVE_INFINITY
@@ -1538,7 +1517,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       : null
 
     if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
-    if (!isCustomerPhoneFormatValid(customerPhone)) errors.phone = 'Số điện thoại phải có từ 9 đến 15 chữ số và đúng định dạng.'
+    if (!isVietnamesePhone(customerPhone)) errors.phone = VIETNAMESE_PHONE_ERROR_MESSAGE
     if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     goodsItems.forEach((item, index) => {
       if (!item.category) errors[`goodsCategory-${item.id}`] = `Dòng hàng hóa ${index + 1}: Vui lòng chọn loại hàng hóa.`
@@ -1558,7 +1537,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     })
     if (!goodsCondition.trim()) errors.condition = 'Vui lòng mô tả tình trạng đóng gói.'
     capacitySamples.forEach((sample, index) => {
-      if (isPackageSampleValid(sample) && packageCapacityPerFrame(sample, selectedRackDimensions) === 0) errors[`goodsFit-${sample.id}`] = `Hàng hóa ${index + 1} không thể xếp vào khung theo bất kỳ hướng xoay nào.`
+      if (isPackageSampleValid(sample) && packageCapacityPerRack(sample, selectedRackDimensions) === 0) errors[`goodsFit-${sample.id}`] = `Hàng hóa ${index + 1} không thể xếp vào khung theo bất kỳ hướng xoay nào.`
     })
     if (!isApiAuthenticated() && allPackageSamplesValid && !hasUnplaceablePackage && totalFramesRequired > selectedRackCount) errors.capacity = `Kho không chứa vừa: cần ${totalFramesRequired} khung nhưng kho chỉ có ${selectedRackCount} khung.`
     if (!Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Vui lòng nhập cân nặng mỗi kiện cho tất cả mẫu hàng.'
@@ -1597,7 +1576,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const continueFromPersonalDetails = () => {
     const errors: Record<string, string> = {}
     if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
-    if (!isCustomerPhoneFormatValid(customerPhone)) errors.phone = 'Số điện thoại phải có từ 9 đến 15 chữ số và đúng định dạng.'
+    if (!isVietnamesePhone(customerPhone)) errors.phone = VIETNAMESE_PHONE_ERROR_MESSAGE
     if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     setBookingErrors(errors)
     if (Object.keys(errors).length) {
@@ -1670,6 +1649,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     try {
       if (!bookingReview || !serverQuote) {
         const compatibility = await checkCompatibility(selection)
+        setServerCompatibility(compatibility)
         if (compatibility.result === 'INCOMPATIBLE' || compatibility.availableUnitCount <= 0) {
           setValidationViolation({ reason: compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.' })
           showToast(compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.')
@@ -1834,7 +1814,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       onNavigate={handleLayoutNavigate}
       onLogout={onLogout}
       roleLabel="Khách hàng"
-      roleColor="bg-[#F4C542] text-[#5C4300] border-[#D4A900]"
+      roleColor="bg-blue-100 text-blue-700"
       notifications={customerNotifications}
       onNotificationClick={handleNotificationClick}
       canAccess={permission => isApiAuthenticated() ? canApiCustomerNavigate(user, permission) : hub.can(user, permission)}
@@ -2204,6 +2184,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 reservation={reservation}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
                 unitTypeName={unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
+                facilityDetails={backendFacilities.find(item => item.id === reservation.facilityId) || null}
+                unitTypeDetails={backendUnitTypes.find(item => item.id === reservation.unitTypeId) || null}
                 onVerify={() => {
                   setBackendOtpReservation(reservation)
                   setBackendOtpCode('')
@@ -3229,6 +3211,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       setSelectedPackageId(pkg.code)
                       setRentalMonths(pkg.rentalMonths)
                       setServerQuote(null)
+                      setServerCompatibility(null)
                       setReservationSubmitError(null)
                     }
                     return
@@ -3279,7 +3262,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                      {item.category !== 'OTHER' ? <div><Select label="Chất liệu chính" value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const categoryMaterials = MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>]; const materialType: GoodsDeclarationItem['materialType'] = materialName ? 'NORMAL' : ''; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, materialType } : row)) }}><option value="">Chọn chất liệu cụ thể</option>{item.category && [...MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>].normal, ...MATERIALS_BY_CATEGORY[item.category as Exclude<GoodsCategoryCode, 'OTHER'>].fragile].map(material => <option key={material} value={material}>{material}</option>)}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div> : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần nhân viên cơ sở duyệt trước khi thu cọc</div>}
                   </div>
                    <div className="mt-4"><label className="text-sm font-medium text-stone-700">Mô tả hàng hóa *</label><textarea className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={item.description} placeholder="Mô tả tên đồ vật, tình trạng hoặc đặc điểm cần lưu ý" onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, description: e.target.value } : row))} />{bookingErrors[`goodsDescription-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsDescription-${item.id}`]}</p>}</div>
-                   <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-5 sm:items-start">
+                  <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-950">Kích thước tính theo từng kiện/chiếc. Với tủ lạnh hoặc đồ cồng kềnh, hãy nhập kích thước phủ bì thực tế của từng chiếc; hệ thống sẽ cộng theo số lượng.</p>
+                  <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-5 sm:items-start">
                      <div className="flex h-full flex-col"><Input type="number" min="1" step="1" label="Số lượng *" value={item.quantity} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, quantity: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsQuantity-${item.id}`] || ''}</p></div>
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Dài (cm) *" value={item.lengthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, lengthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsLength-${item.id}`] || ''}</p></div>
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Rộng (cm) *" value={item.widthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, widthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWidth-${item.id}`] || ''}</p></div>
@@ -3288,17 +3272,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                   <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row))} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row))} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
                    {item.category === 'OTHER' && <details className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
-                    <summary className="cursor-pointer font-bold text-stone-900">Thông tin nâng cao: vật liệu, ghi chú và hình ảnh</summary>
+                    <summary className="cursor-pointer font-bold text-stone-900">Thông tin nâng cao: vật liệu và ghi chú</summary>
                     <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
                         <div><Input label="Chất liệu chính *" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} />{bookingErrors[`customMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customMaterial-${item.id}`]}</p>}</div>
                       </div>
                       <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
-                      <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
                       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>ℹ Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi xác nhận email, yêu cầu sẽ được xem xét trong tối đa một ngày làm việc. Sau khi hồ sơ được duyệt, khách hàng có 15 phút để thanh toán. Quản lý cơ sở có tối đa một ngày làm việc tiếp theo để phân kho.</p></div>
                     </div>
                   </details>}
+                  <div className="mt-4 rounded-lg border border-stone-200 bg-white p-3"><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP cho mọi loại hàng hóa. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
                 </div>)}
               </div>
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>
@@ -3349,7 +3333,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {(() => {
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
                 <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'Phù hợp' : 'Không phù hợp'}</span>}</div>
-                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(Number(sample.quantity) * Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm) / 1_000_000)} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(goodsVolumeM3)} m³</span></p><p><b>Tổng khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
+                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span></p><p><b>Sức chứa khung hữu dụng:</b> <span>{formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span></p><p><b>Khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
                 {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa một ngày làm việc kể từ khi bạn xác minh email. Sau khi chấp thuận, bạn có 15 phút để hoàn tất tiền cọc giữ chỗ.</p></div>}
               </div>
               const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
@@ -3365,14 +3349,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className="flex items-center justify-between border-b border-stone-200 pb-2">
                     <div>
                       <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
-                      <p className="text-[11px] text-stone-500">Mỗi khung rộng 0,8 m × dài 2,0 m × cao theo kho. Hệ thống thử đủ 6 hướng xoay.</p>
+                      <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Sức chứa hữu dụng tính tối đa 80% thể tích; hệ thống thử đủ 6 hướng xoay.</p>
                     </div>
                     {capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
                   </div>
 
                   {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
-                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel ? `Hàng “Khác”: ${sample.sourceLabel}` : `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · <b>{formatVolumeM3(Number(sample.quantity) * Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm) / 1_000_000)} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {selectedRackDimensions.join(' × ')} m</b>}</div>)}
-                    <div className="grid gap-2 border-t border-stone-100 pt-2 text-sm sm:grid-cols-2"><span><b>Tổng thể tích cần lưu:</b> {formatVolumeM3(goodsVolumeM3)} m³</span><span className="sm:text-right"><b>Tổng khung cần dùng:</b> <b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</b></span></div>
+                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel || `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {formatRackDimensions(selectedRackDimensions)} m</b>}</div>)}
+                    <div className="grid gap-2 border-t border-stone-100 pt-2 text-sm sm:grid-cols-2"><span><b>Tổng thể tích cần lưu:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span><span><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span><span className="sm:text-right"><b>Khung cần dùng:</b> <b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</b></span></div>
                     {warehouseRecommendation && <p className="border-t border-stone-100 pt-2 text-emerald-700">Cỡ kho nhỏ nhất phù hợp: <b>{storageSizeCode(warehouseRecommendation.name || warehouseRecommendation.code)}</b></p>}
                   </div>}
 
@@ -3455,8 +3439,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                   <div className="divide-y divide-stone-200 border-y border-stone-200">
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · 2 × 4 × 4,5 m/khung</p></section>
-                    <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa và sức chứa</p><ul className="list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}><b>{sample.sourceLabel || `Hàng hóa ${index + 1}`}:</b> {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg{!sample.canFitFrame && ' · không thể xếp vừa khung'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện:</b> {packageCountNumber}</p><p><b>Tổng khung cần dùng:</b> {hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} / {selectedRackCount} khung</p><p className="text-xs text-stone-500">Số khung được tính từ tổng thể tích của mọi loại hàng với mức sử dụng tối đa 80% mỗi khung.</p><p><b>Tổng cân nặng:</b> {goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
+                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · {formatRackDimensions(selectedRackDimensions)} m/khung</p></section>
+                    <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa và sức chứa</p><ul className="list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}><b>{sample.sourceLabel || `Hàng hóa ${index + 1}`}:</b> {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg{!sample.canFitFrame && ' · không thể xếp vừa khung'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện:</b> {packageCountNumber}</p><p><b>Tổng thể tích:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</p><p><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</p><p><b>Khung cần dùng:</b> {hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</p><p className="text-xs text-stone-500">Mỗi kiện được tính theo kích thước thực tế; tổng thể tích = số lượng × dài × rộng × cao. Sức chứa khung đã trừ 20% khoảng trống.</p><p><b>Tổng cân nặng:</b> {goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch nhận kho:</b> {displayDateValue(moveInDate)} · {bookingAppointmentTime}</p><p><b>Ngày bắt đầu kỳ thuê:</b> {displayDateValue(earliestCheckInDate)}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, thời điểm mới vẫn phải nằm trong thời hạn nhận kho 7 ngày làm việc.</p></section>
                   </div>
                   {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, nhân viên có tối đa một ngày làm việc để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
@@ -3500,6 +3484,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       if (bookingStep === 3) {
                         setBookingReview(false)
                         setServerQuote(null)
+                        setServerCompatibility(null)
                         setReservationSubmitError(null)
                       }
                       setBookingStep(current => Math.max(1, current - 1) as 1 | 2 | 3 | 4)

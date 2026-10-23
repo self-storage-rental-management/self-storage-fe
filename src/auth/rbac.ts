@@ -48,7 +48,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
     'contracts:read', 'rentals:read', 'payments:read', 'support:read', 'policies:read'
   ),
   staff: makePermissions(
-    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'reservations:approve', 'storage_units:assign', 'contracts:read',
+    'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'reservations:approve', 'contracts:read',
     'checkins:read', 'checkins:process', 'rentals:read', 'returns:read', 'returns:process',
     'support:read', 'support:update'
   ),
@@ -81,7 +81,7 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   normalized.customer['returns:process'] = false
   normalized.customer['rentals:update'] = false
   normalized.staff['reservations:approve'] = true
-  normalized.staff['storage_units:assign'] = true
+  normalized.staff['storage_units:assign'] = false
   normalized.staff['payments:collect'] = false
   normalized.staff['policies:update'] = false
   normalized.staff['staff_tasks:update'] = false
