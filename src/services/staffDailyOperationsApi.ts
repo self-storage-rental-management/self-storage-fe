@@ -10,13 +10,12 @@ import {
 import { listReturns, type ApiReturn } from "./returnApi"
 import { listSupportTickets } from "./supportApi"
 import type { SupportTicket } from "../types/supportApi"
-import { listUnitAssignmentCandidates, type UnitAssignmentCandidate } from "./unitAssignmentApi"
 import { getAuthenticatedActor } from "./authApi"
 import { listAllRecoveryTasks, type RecoveryTask } from "./recoveryTasksApi"
 import { ApiClientError } from "./apiClient"
 
 export type StaffDailyOperationPriority = "high" | "medium" | "low"
-export type StaffDailyOperationPage = "unit-assignments" | "reservations" | "checkin" | "return" | "support" | "tasks"
+export type StaffDailyOperationPage = "reservations" | "checkin" | "return" | "support" | "tasks"
 
 export interface StaffDailyOperation {
   id: string
@@ -144,17 +143,6 @@ const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   page: "tasks",
 })
 
-const assignmentTask = (item: UnitAssignmentCandidate): StaffDailyOperation => ({
-  id: `assignment-${item.reservationId}`,
-  title: `Phân kho ${item.reservationCode}`,
-  customer: item.customerName,
-  time: item.confirmedAt || item.startDate,
-  dueAt: item.confirmedAt || item.startDate,
-  sla: "Đặt chỗ đã xác nhận, cần giữ gian kho",
-  priority: "high",
-  page: "unit-assignments",
-})
-
 /** Load Staff operations from the real API surface and normalize them for one daily list. */
 export async function loadStaffDailyOperations(
   date: string,
@@ -179,7 +167,6 @@ export async function loadStaffDailyOperations(
       page: 0,
       pageSize: 100,
     }),
-    listUnitAssignmentCandidates({ page: 0, pageSize: 100 }),
     Promise.allSettled(recoveryScopes.map(id => listAllRecoveryTasks('staff',id))),
   ])
 
@@ -206,12 +193,8 @@ export async function loadStaffDailyOperations(
   )
   const maintenance =
     read<Awaited<ReturnType<typeof listStaffMaintenanceTasks>>>(3, "bảo trì")
-  const assignments = read<Awaited<ReturnType<typeof listUnitAssignmentCandidates>>>(
-    4,
-    "phân kho",
-  )
 
-  const recoveryResults = read<PromiseSettledResult<RecoveryTask[]>[]>(5, "thu hồi kho") || []
+  const recoveryResults = read<PromiseSettledResult<RecoveryTask[]>[]>(4, "thu hồi kho") || []
   if (recoveryResults.some(result => result.status === 'rejected')) failedSources.push('thu hồi kho')
   const recoveryTasks = recoveryResults.flatMap(result => result.status === 'fulfilled' ? result.value : [])
   const tasks = [
@@ -243,9 +226,6 @@ export async function loadStaffDailyOperations(
       .filter(isOpenMaintenance)
       .filter((item) => !item.dueAt || dayOf(item.dueAt) === date)
       .map(maintenanceTask),
-    ...(assignments?.data || [])
-      .filter((item) => !item.confirmedAt || dayOf(item.confirmedAt) === date)
-      .map(assignmentTask),
   ]
 
   return { tasks, failedSources }

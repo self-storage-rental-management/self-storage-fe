@@ -8,7 +8,6 @@ import { listPublicFacilities, listPublicUnitTypes, type PublicFacilitySummary, 
 interface HomePageProps {
   onOpenLogin: () => void
   onOpenRegister: () => void
-  onOpenAdminLogin?: () => void
 }
 
 interface UnitCategoryCard {
@@ -199,7 +198,7 @@ function MenuIcon({ className = "w-5 h-5" }: { className?: string }) {
   )
 }
 
-export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin }: HomePageProps) {
+export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps) {
   const { facilities: contextFacilities, units, rentals, holds } = useStorageHub()
   const [activeModal, setActiveModal] = useState<'facilities' | 'unit_types' | 'how_it_works' | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -530,18 +529,6 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
                 <span>Đăng Nhập Khách Hàng</span>
                 <ArrowRightIcon className="w-3.5 h-3.5" />
               </button>
-              {onOpenAdminLogin && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOpenAdminLogin()
-                    setMobileMenuOpen(false)
-                  }}
-                  className="w-full py-2 rounded-lg text-xs font-semibold text-center text-amber-400 bg-stone-900 border border-stone-800 hover:bg-stone-800 flex items-center justify-center gap-1.5 mt-1"
-                >
-                  <span>🔒 Cổng Nội Bộ (Staff / Admin)</span>
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -1072,18 +1059,6 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
               <ul className="space-y-2 text-xs text-stone-400">
                 <li>Kiểm tra điều kiện lưu trữ tại cơ sở trước khi thuê.</li>
                 <li>Theo dõi hợp đồng và các khoản thanh toán trong tài khoản.</li>
-                {onOpenAdminLogin && (
-                  <li className="pt-2 border-t border-[#353630]">
-                    <button
-                      type="button"
-                      onClick={onOpenAdminLogin}
-                      className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-semibold transition cursor-pointer"
-                    >
-                      <span>🔒 Cổng Nội bộ (Back-office / Admin)</span>
-                      <span>→</span>
-                    </button>
-                  </li>
-                )}
               </ul>
             </div>
 
