@@ -52,6 +52,7 @@ export interface CustomerFacility {
 }
 
 export interface CustomerUnitType {
+  detailImageUrl?: string | null
   description?: string | null
   id: string
   facilityId: string
@@ -142,6 +143,7 @@ export interface CompatibilityCheckResult {
 
 export interface ReservationQuoteInput extends ReservationSelectionInput {
   pricingPackageCode: string
+  voucherCode?: string | null
 }
 
 export interface ReservationRentalPackage {
@@ -170,6 +172,8 @@ export interface ReservationQuote {
   dueAtCheckIn: number
   totalInitialObligation: number
   policyVersion: string
+  voucherCode?: string | null
+  voucherDiscountAmount?: number | null
   quotedAt: string
   expiresAt: string
 }
@@ -177,6 +181,8 @@ export interface ReservationQuote {
 export interface CreateReservationInput {
   quoteId: string
   identityDocumentNumber: string
+  customerPhone?: string | null
+  customerAddress?: string | null
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
@@ -200,6 +206,14 @@ export interface CustomerReservation {
   remainingRentalAmount: number
   dueAtCheckIn: number
   totalInitialObligation: number
+  pricingPackageCode?: string | null
+  rentalMonths?: number
+  monthlyPrice?: number
+  grossRentalAmount?: number
+  discountRate?: number
+  discountAmount?: number
+  voucherCode?: string | null
+  voucherDiscountAmount?: number
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
   holdExpiresAt: string
@@ -210,6 +224,7 @@ export interface CustomerReservation {
   customerName?: string | null
   customerEmail?: string | null
   customerPhone?: string | null
+  customerAddress?: string | null
   identityDocumentNumber?: string | null
   createdAt: string
 }
@@ -527,6 +542,10 @@ export async function getCustomerCheckInDocuments(reservationId: string) {
 }
 
 export function downloadCustomerCheckInDocument(assetId: string) {
+  return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
+}
+
+export function downloadCustomerReservationGoodsImage(assetId: string) {
   return apiDownload(`/api/files/${encodeURIComponent(assetId)}`)
 }
 

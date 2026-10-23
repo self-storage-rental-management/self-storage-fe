@@ -253,16 +253,16 @@ export interface RenewalPolicyInput {
   expectedRevision: number
   effectiveFrom: string
   effectiveTo: string | null
-  quoteTtlMinutes: number
+  quoteTtlMinutes?: number
   paymentWindowHours: number
-  requestWindowDays: number
+  requestWindowDays?: number
   depositRate: number
   eligiblePackageIds: string[]
   signing: {
     signingWindowMinutes: number
     exceptionExtensionLimitMinutes: number
   } | null
-  term: {
+  term?: {
     calendar: "CALENDAR_DAYS"
     timezone: "Asia/Ho_Chi_Minh"
     warningThroughDay: number
@@ -311,9 +311,7 @@ export function validPolicyInput(kind: PolicyKind, v: unknown): boolean {
       (v.supportReviewDays === null) === (v.customerMayClose === null)
     )
   if (
-    !positive(v.quoteTtlMinutes) ||
     !positive(v.paymentWindowHours) ||
-    !isVersion(v.requestWindowDays) ||
     typeof v.depositRate !== "number" ||
     !Number.isFinite(v.depositRate) ||
     v.depositRate < 0 ||
@@ -333,7 +331,7 @@ export function validPolicyInput(kind: PolicyKind, v: unknown): boolean {
     return false
   const t = v.term
   return (
-    t === null ||
+    t == null ||
     (object(t) &&
       t.calendar === "CALENDAR_DAYS" &&
       t.timezone === "Asia/Ho_Chi_Minh" &&
@@ -355,7 +353,7 @@ function policyValid(kind: PolicyKind, v: unknown, facility: string) {
     text(v.version) &&
     isUuid(v.publishedBy) &&
     isInstant(v.publishedAt) &&
-    (kind !== "renewal" || v.schema === "RENEWAL_POLICY_V1") &&
+    (kind !== "renewal" || v.schema === "RENEWAL_POLICY_V1" && object(v.term)) &&
     validPolicyInput(kind, { ...v, expectedRevision: v.revision })
   )
 }
@@ -466,7 +464,7 @@ export async function uploadDuongEvidence(
   entityId?: string,
 ) {
   if (
-    !/^DUONG_(SUPPORT_(PUBLIC|INTERNAL)|RENEWAL_(ARRIVAL|INCIDENT|SIGNED_CONTRACT|CASH_RECEIPT|EXCEPTION|FAULT_REVIEW|REFUND))$/.test(
+    !/^DUONG_(SUPPORT_(PUBLIC|INTERNAL)|RENEWAL_(ARRIVAL|INCIDENT|SIGNED_CONTRACT|CASH_RECEIPT|EXCEPTION|FAULT_REVIEW|REFUND)|RECOVERY_(INSPECTION|SETTLEMENT|COMPLETION))$/.test(
       entityType,
     )
   )
@@ -501,6 +499,11 @@ export async function uploadDuongEvidence(
 export function downloadDuongEvidence(id: string) {
   requireId(id)
   return apiDownload(`/api/files/${id}`)
+}
+export async function getDuongEvidenceName(id: string) {
+  requireId(id)
+  const file = await apiDownload(`/api/files/${id}`, undefined, "HEAD")
+  return file.fileName
 }
 export function integrationError(error: unknown): string {
   if (error instanceof ApiClientError) {

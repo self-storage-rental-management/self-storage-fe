@@ -33,31 +33,45 @@ const labels: Record<string, string> = {
   escalate: "Đề nghị chuyển bộ phận",
   decision: "Xử lý yêu cầu chuyển bộ phận",
 }
+export type SupportDraft = { body: string; files: string[] }
 export default function SupportActionForm({
   role,
   ticket: t,
   command,
   onUploadBusy,
+  mode = "all",
+  internal = false,
+  draft,
+  onDraftChange,
 }: {
   role: SupportRole
   ticket: SupportTicket
   command: ReturnType<typeof useSupportCommand>
   onUploadBusy?: (busy: boolean) => void
+  internal?: boolean
+  mode?: "all" | "message" | "operations"
+  draft?: SupportDraft
+  onDraftChange?: (draft: SupportDraft) => void
 }) {
   const { manager, copy } = useManagerPresentation()
 
   const actor = getAuthenticatedActor()
   const actions = supportActions(actor, role, t).filter(
-    (a) => a !== "follow-up",
+    (a) => a !== "follow-up" && (mode === "message" ? a === "message" : mode === "operations" ? a !== "message" && a !== "escalate" && !(role === "staff" && ["information", "resolve"].includes(a)) : true),
   )
   const [action, setAction] = useState(actions[0] ?? "")
-  const [body, setBody] = useState(""),
+  const [localBody, setLocalBody] = useState(""),
     [staffId, setStaffId] = useState("")
-  const [visibility, setVisibility] = useState<"PUBLIC" | "INTERNAL">("PUBLIC")
-  const [files, setFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
+  const visibility = internal ? "INTERNAL" as const : "PUBLIC" as const
+  const [localFiles, setLocalFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
+  const body = draft?.body ?? localBody
+  const files = draft?.files ?? localFiles
+  const setBody = (value: string) => onDraftChange ? onDraftChange({ body: value, files }) : setLocalBody(value)
+  const setFiles = (value: string[]) => onDraftChange ? onDraftChange({ body, files: value }) : setLocalFiles(value)
   const [module, setModule] = useState<SupportModule>("PAYMENT")
   const [escalationId, setEscalationId] = useState(""),
     [decision, setDecision] = useState<"ROUTE" | "REJECT">("ROUTE")
+  if (actions.length === 0 && mode !== "all") return null
   if (!actions.includes(action) || t.version === null)
     return (
       <p className="text-sm text-stone-500">
@@ -69,22 +83,24 @@ export default function SupportActionForm({
   )
     ? 2000
     : 4000
-  const needsBody = !["accept", "close"].includes(action)
+  const canResolve = !internal && role === "staff" && body.length <= 4000 && (!!body.trim() || files.length > 0)
+  const needsBody = !["accept", "close", "resolve"].includes(action)
   const valid =
     (!needsBody || !!body.trim()) &&
     body.length <= limit &&
+    (action !== "resolve" || canResolve) &&
     (action !== "assign" || (!!staffId && staffId !== t.assignedStaffId)) &&
     (action !== "decision" || !!escalationId)
-  const submit = () => {
+  const submit = (requestedAction = action) => {
     if (
-      !valid || uploading ||
-      !supportActions(getAuthenticatedActor(), role, t).includes(action)
+      !(requestedAction === "resolve" ? canResolve : valid) || uploading || command.locked || command.conflict ||
+      !supportActions(getAuthenticatedActor(), role, t).includes(requestedAction)
     )
       return
     const version = { expectedVersion: t.version! },
       reason = body.trim()
     let input: SupportCommand
-    switch (action) {
+    switch (requestedAction) {
       case "assign":
         input = { kind: "assign", ...version, assignedStaffId: staffId, reason }
         break
@@ -93,7 +109,7 @@ export default function SupportActionForm({
         break
       case "message":
         input =
-          role === "staff"
+          role !== "customer"
             ? { kind: "message", body: reason, visibility, evidenceFileIds: files }
             : { kind: "message", body: reason, ...version, evidenceFileIds: files }
         break
@@ -128,14 +144,14 @@ export default function SupportActionForm({
   }
   return (
     <form
-      className="space-y-4 rounded-lg border border-stone-200 p-4"
+      className={mode === "message" ? "space-y-4" : "space-y-4 rounded-lg border border-stone-200 p-4"}
       onSubmit={(e) => {
         e.preventDefault()
         submit()
       }}
     >
-      <h3 className="font-semibold">Xử lý yêu cầu</h3>
-      <label className="block text-sm">
+      {mode !== "message" && <h3 className="font-semibold">{actions.length === 1 ? copy(labels[action]) : "Xử lý yêu cầu"}</h3>}
+      {actions.length > 1 && <label className="block text-sm">
         Thao tác
         <select
           className={supportInputClass}
@@ -155,7 +171,7 @@ export default function SupportActionForm({
             </option>
           ))}
         </select>
-      </label>
+      </label>}
       {action === "assign" && t.facilityId && (
         <SupportStaffPicker
           key={t.facilityId}
@@ -164,20 +180,6 @@ export default function SupportActionForm({
           onChange={setStaffId}
           disabled={command.locked}
         />
-      )}
-      {action === "message" && role === "staff" && (
-        <label className="block text-sm">
-          Phạm vi trao đổi
-          <select
-            className={supportInputClass}
-            value={visibility}
-            disabled={command.locked || uploading}
-            onChange={(e) => { setVisibility(e.target.value as "PUBLIC" | "INTERNAL"); setFiles([]) }}
-          >
-            <option value="PUBLIC">Khách hàng có thể xem</option>
-            <option value="INTERNAL">Nội bộ - khách hàng không thể xem</option>
-          </select>
-        </label>
       )}
       {action === "escalate" && (
         <label className="block text-sm">
@@ -228,10 +230,12 @@ export default function SupportActionForm({
                 action === "reopen" ||
                 action === "escalate"
               ? "Lý do"
-              : "Nội dung / kết quả"}
+            : action === "message" ? mode === "message" ? null : "Nội dung trao đổi" : "Nội dung / kết quả"}
           <textarea
+            aria-label={mode === "message" ? "Nội dung tin nhắn" : undefined}
             className={supportInputClass}
-            rows={3}
+            rows={mode === "message" ? 3 : 2}
+            placeholder={mode === "message" ? "Nhập tin nhắn..." : undefined}
             maxLength={limit}
             value={body}
             required={needsBody}
@@ -240,17 +244,29 @@ export default function SupportActionForm({
           />
         </label>
       )}
+      <div className={mode === "message" ? "flex flex-wrap items-start gap-2" : "space-y-4"}>
       {["message", "information", "resolve", "escalate"].includes(action) && <EvidenceUpload
+        compact={mode === "message"}
         key={`${action}:${visibility}`}
-        entityType={action === "escalate" || (action === "message" && role === "staff" && visibility === "INTERNAL") ? "DUONG_SUPPORT_INTERNAL" : "DUONG_SUPPORT_PUBLIC"}
+        entityType={internal || action === "escalate" ? "DUONG_SUPPORT_INTERNAL" : "DUONG_SUPPORT_PUBLIC"}
         entityId={t.id} value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { setUploading(busy); onUploadBusy?.(busy) }}
       />}
       <Button
         type="submit"
+        size={mode === "message" ? "sm" : "md"}
         disabled={command.locked || uploading || command.conflict || !valid}
       >
-        {copy(labels[action])}
+        {mode === "message" ? command.busy ? "Đang gửi..." : "Gửi tin nhắn" : copy(labels[action])}
       </Button>
+      {mode === "message" && !internal && role === "staff" && supportActions(actor, role, t).includes("resolve") && <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={command.locked || uploading || command.conflict || !canResolve}
+        title="Nhập mô tả hoặc đính kèm minh chứng trước khi báo đã xử lý"
+        onClick={() => submit("resolve")}
+      >Báo đã xử lý</Button>}
+      </div>
     </form>
   )
 }

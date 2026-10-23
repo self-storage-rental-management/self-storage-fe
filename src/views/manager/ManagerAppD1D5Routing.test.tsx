@@ -14,7 +14,7 @@ vi.mock('../../components/Layout', async () => ({
 }))
 vi.mock('./ManagerDashboardApiPanel', () => ({ default: (props: object) => <p>API dashboard {Object.keys(props).join(',')}</p> }))
 vi.mock('./ManagerFinancialApiPanel', () => ({ default: (props: object) => <p>API financial {Object.keys(props).join(',')}</p> }))
-vi.mock('./ManagerDashboardPanel', () => ({ default: () => <p>Legacy dashboard</p> }))
+vi.mock('./ManagerReportsPanel', () => ({ default: () => <p>Legacy dashboard</p> }))
 vi.mock('./ManagerPaymentsPanel', () => ({ default: () => <p>Legacy payments</p> }))
 beforeEach(() => { state.api = true; state.page = 'dashboard'; state.nav = [] })
 const render = () => renderToStaticMarkup(<ManagerApp user={{ id: 'manager' } as User} onLogout={() => {}} />)

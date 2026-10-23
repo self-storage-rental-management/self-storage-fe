@@ -1,7 +1,8 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useEffect, useRef, useState } from "react"
-import { Badge, Button, Card, Modal } from "../../components/ui"
+import { Button, Card, Modal } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useSupportCommand } from "../../hooks/useSupportCommand"
 import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
@@ -17,6 +18,8 @@ import { rentalDate } from "../rental-api/presentation"
 import SupportCreateForm from "./SupportCreateForm"
 import SupportReadState from "./SupportReadState"
 import SupportTicketDetail from "./SupportTicketDetail"
+import type { SupportDraft } from "./SupportActionForm"
+import { isUuid } from "../../services/renewalOperationsApi"
 import {
   canReadSupport,
   supportError,
@@ -26,12 +29,58 @@ import {
   supportAssigneeLabel,
 } from "./presentation"
 
+function TicketCode({ id, displayCode }: { id: string; displayCode?: string | null }) {
+  const [copied, setCopied] = useState(false)
+  return <div className="group mt-1 flex items-center gap-1.5 text-xs text-stone-500">
+    <code className="font-mono" title={id}>{displayCode || `#${id.slice(0, 8)}`}</code>
+    <button
+      type="button"
+      className="rounded p-0.5 text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+      aria-label={`Sao chép mã yêu cầu ${id}`}
+      title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(displayCode || id)
+          setCopied(true)
+        } catch {
+          setCopied(false)
+        }
+      }}
+    >
+      {copied ? "✓" : "⧉"}
+    </button>
+  </div>
+}
+
+function supportStatusClass(status: SupportTicket["status"]) {
+  if (status === "open") return "bg-slate-100 text-slate-700 ring-slate-200"
+  if (status === "in_progress") return "bg-blue-50 text-blue-700 ring-blue-200"
+  if (status === "resolved" || status === "closed") return "bg-green-50 text-green-700 ring-green-200"
+  return "bg-amber-50 text-amber-800 ring-amber-200"
+}
+
+function SupportCreatedAt({ value }: { value: string }) {
+  const date = parseVietnamDate(value)
+  if (Number.isNaN(date.getTime())) return <span>{rentalDate(value)}</span>
+  const dateText = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(date)
+  const timeText = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(date)
+  return <time dateTime={value} className="block whitespace-nowrap leading-5"><span className="block text-stone-800">{dateText}</span><span className="block text-xs text-stone-500">{timeText}</span></time>
+}
+
 export default function SupportApiWorkspace({
   role,
   onLocked,
+  openTicket,
+  onTicketOpened,
 }: {
   role: SupportRole
   onLocked?: (locked: boolean) => void
+  openTicket?: { id: string; request: number }
+  onTicketOpened?: () => void
 }) {
   const { manager, copy, errorText } = useManagerPresentation()
 
@@ -54,6 +103,8 @@ export default function SupportApiWorkspace({
       role={role}
       identity={identity}
       onLocked={onLocked}
+      openTicket={openTicket}
+      onTicketOpened={onTicketOpened}
     />
   )
 }
@@ -62,11 +113,15 @@ function SupportSession({
   role,
   identity,
   onLocked,
+  openTicket,
+  onTicketOpened,
 }: {
   actor: ApiActor
   role: SupportRole
   identity: string
   onLocked?: (locked: boolean) => void
+  openTicket?: { id: string; request: number }
+  onTicketOpened?: () => void
 }) {
   const { copy, errorText } = useManagerPresentation()
 
@@ -74,14 +129,17 @@ function SupportSession({
   const [query, setQuery] = useState<SupportQuery>({
     page: 0,
     size: role === "manager" ? 10 : 20,
-    facilityId,
+    ...(facilityId ? { facilityId } : {}),
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState(""),
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
   const [revision, setRevision] = useState(0)
-  const [staffView, setStaffView] = useState<"queue" | "assigned">("queue")
+  const [drafts, setDrafts] = useState<Record<string, Partial<Record<"messages" | "internal", SupportDraft>>>>({})
+  const [messageFocus, setMessageFocus] = useState<{ ticketId: string; channel: "messages" | "internal"; messageId?: string }>()
+  const [conversation, setConversation] = useState<"messages" | "internal">("messages")
+  const [staffView, setStaffView] = useState<"queue" | "assigned">("assigned")
   const [queuePage, setQueuePage] = useState(0)
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
@@ -94,7 +152,14 @@ function SupportSession({
       data: [], pagination: { page: 0, pageSize: 20, totalItems: 0, totalPages: 0, sort: "createdAt,desc" }, correlationId: null,
     }),
   )
-  const command = useSupportCommand(`${actor.id}:support:${role}`, () => {
+  const command = useSupportCommand(`${actor.id}:support:${role}`, (submission, result) => {
+    if (submission.kind === "command" && ["message", "resolve"].includes(submission.command.kind)) {
+      const channel = submission.command.kind === "message" && "visibility" in submission.command && submission.command.visibility === "INTERNAL" ? "internal" : "messages"
+      setDrafts(previous => ({ ...previous, [submission.id]: { ...previous[submission.id], [channel]: { body: "", files: [] } } }))
+      const messageId = submission.command.kind === "message" && result && typeof result === "object" && "id" in result && isUuid(result.id) ? result.id : undefined
+      setMessageFocus({ ticketId: submission.id, channel, messageId })
+      setConversation(channel)
+    }
     read.refresh()
     queueRead.refresh()
     setRevision((n) => n + 1)
@@ -108,6 +173,18 @@ function SupportSession({
     if (busy) onLocked?.(true)
   }
   const locked = command.locked || uploading
+  const consumedOpenRequest = useRef<typeof openTicket>(undefined)
+  useEffect(() => {
+    if (!openTicket || consumedOpenRequest.current === openTicket || locked || !isUuid(openTicket.id)) return
+    consumedOpenRequest.current = openTicket
+    setCreation(undefined)
+    setSelected(openTicket.id)
+    setConversation("messages")
+    setMessageFocus(undefined)
+    setRevision(previous => previous + 1)
+    command.clearError()
+    onTicketOpened?.()
+  }, [openTicket, locked, onTicketOpened])
   const formCommand = { ...command, locked }
   useEffect(() => {
     onLocked?.(locked)
@@ -169,11 +246,40 @@ function SupportSession({
               setCreation({})
             }}
           >
-            Tạo yêu cầu
+            <span aria-hidden="true">+</span> Tạo yêu cầu
           </Button>
         )}
       </div>
       {role !== "manager" && !selected && !creation && commandNotice}
+
+      {role === "staff" && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Danh sách hỗ trợ">
+          {([
+            ["assigned", "Hồ sơ của tôi"],
+            ["queue", "Chờ tiếp nhận"],
+          ] as const).map(([view, label]) => (
+            <Button
+              key={view}
+              type="button"
+              variant={staffView === view ? "primary" : "outline"}
+              aria-pressed={staffView === view}
+              disabled={locked}
+              onClick={() => {
+                if (command.locked || uploadLock.current || staffView === view) return
+                setStaffView(view)
+                setSelected(undefined)
+                setQuery(q => ({ ...q, page: 0 }))
+                setQueuePage(0)
+                command.clearError()
+                if (view === "queue") queueRead.refresh()
+                else read.refresh()
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <Card className="space-y-3 p-4">
         <form
@@ -185,13 +291,19 @@ function SupportSession({
         >
           <label className="block text-sm">
             Tìm tiêu đề / nội dung
-            <input
-              className={supportInputClass}
-              maxLength={200}
-              disabled={locked}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <span className="relative block">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400">
+                <circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />
+              </svg>
+              <input
+                className={`${supportInputClass} pl-9`}
+                placeholder="Nhập tiêu đề hoặc nội dung..."
+                maxLength={200}
+                disabled={locked}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </span>
           </label>
           {(role !== "staff" || staffView === "assigned") && <label className="block text-sm">
             Trạng thái
@@ -235,7 +347,7 @@ function SupportSession({
                 : "lg:col-span-3"
             }`}
           >
-            <Button type="submit" disabled={locked}>
+            <Button type="submit" variant="secondary" className="whitespace-nowrap" disabled={locked}>
               Tìm kiếm
             </Button>
             <Button
@@ -244,7 +356,7 @@ function SupportSession({
               disabled={locked}
               onClick={() => {
                 setSearch("")
-                setQuery({ page: 0, size: role === "manager" ? 10 : 20, facilityId, sort: "createdAt,desc" })
+                setQuery({ page: 0, size: role === "manager" ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: "createdAt,desc" })
                 setQueuePage(0)
               }}
             >
@@ -269,7 +381,7 @@ function SupportSession({
               </thead>
               <tbody className="divide-y divide-stone-200">
                 {queueRead.data.data.map((item) => <tr key={item.id}>
-                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}</td>
+                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}<TicketCode id={item.id} displayCode={item.displayCode} /></td>
                   <td className="px-4 py-3">{actor.facilityNames?.[item.facilityId] ?? item.facilityId}</td>
                   <td className="whitespace-nowrap px-4 py-3">{rentalDate(item.createdAt)}</td>
                   <td className="px-4 py-3">
@@ -300,31 +412,37 @@ function SupportSession({
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <>
             {read.data.data.length > 0 && <Card className="overflow-x-auto p-0">
-              <table className="w-full min-w-[1000px] text-left text-sm">
-                <thead className="border-b bg-stone-50 text-stone-600">
+              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[800px]" : "min-w-[1000px]"}`}>
+                <colgroup>
+                  {role === "customer" ? <>
+                    <col className="w-[28%]" /><col className="w-[18%]" /><col className="w-[26%]" /><col className="w-[16%]" /><col className="w-[12%]" />
+                  </> : <>
+                    <col className="w-[24%]" /><col className="w-[15%]" /><col className="w-[22%]" /><col className="w-[15%]" /><col className="w-[13%]" /><col className="w-[11%]" />
+                  </>}
+                </colgroup>
+                <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Mã yêu cầu</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Nhân viên phụ trách</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Tạo lúc</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Thao tác</th>
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Trạng thái</th>
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Cơ sở</th>
+                    {role !== "customer" && <th scope="col" className="px-4 py-3 text-center font-semibold">Nhân viên phụ trách</th>}
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Tạo lúc</th>
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-stone-200">
-                  {read.data.data.map((t) => <tr key={t.id}>
-                    <td className="max-w-xs break-words px-4 py-3 font-semibold">{t.subject}</td>
-                    <td className="px-4 py-3"><Badge variant={t.status === "closed" || t.status === "resolved" ? "success" : "warning"}>
-                      {t.status === "open"
-                        ? "Chờ tiếp nhận"
-                        : supportStatusLabels[t.status]}
-                    </Badge></td>
-                    <td className="max-w-[150px] break-all px-4 py-3 text-xs text-stone-500">{t.id}</td>
-                    <td className="px-4 py-3">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
-                    <td className="px-4 py-3">{supportAssigneeLabel(t, role)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{rentalDate(t.createdAt)}</td>
-                    <td className="px-4 py-3"><Button variant="outline" disabled={locked} onClick={() => {
+                <tbody className="divide-y divide-stone-100">
+                  {read.data.data.map((t) => <tr key={t.id} className="transition-colors hover:bg-stone-50">
+                    <td className="break-words px-4 py-3 align-middle">
+                      <div className="whitespace-normal break-words font-semibold leading-5 text-stone-900 [overflow-wrap:anywhere]" title={t.subject}>{t.subject}</div>
+                      <TicketCode id={t.id} displayCode={t.displayCode} />
+                    </td>
+                    <td className="px-4 py-3 text-center align-middle"><span className={`inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold leading-4 ring-1 ${supportStatusClass(t.status)}`}>
+                      {supportStatusLabels[t.status]}
+                    </span></td>
+                    <td className="break-words px-4 py-3 text-center align-middle leading-5 text-stone-700 [overflow-wrap:anywhere]">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
+                    {role !== "customer" && <td className="break-words px-4 py-3 text-center align-middle leading-5 text-stone-700">{supportAssigneeLabel(t, role)}</td>}
+                    <td className="whitespace-nowrap px-4 py-3 text-center align-middle"><SupportCreatedAt value={t.createdAt} /></td>
+                    <td className="px-4 py-3 text-center align-middle"><Button size="sm" className="whitespace-nowrap" variant="outline" disabled={locked} onClick={() => {
                       setSelected(t.id)
                       command.clearError()
                     }}>Chi tiết</Button></td>
@@ -348,7 +466,7 @@ function SupportSession({
         <Modal
           open
           size="xl"
-          title="Chi tiết yêu cầu Hỗ trợ"
+          title="Chi tiết yêu cầu hỗ trợ"
           onClose={() => {
             if (!command.locked && !uploadLock.current) setSelected(undefined)
           }}
@@ -360,7 +478,12 @@ function SupportSession({
               role={role}
               id={selected}
               command={formCommand}
+              conversation={conversation}
+              onConversationChange={setConversation}
               onUploadBusy={uploadBusy}
+              drafts={drafts[selected] ?? { messages: { body: "", files: [] }, internal: { body: "", files: [] } }}
+              onDraftChange={(channel, draft) => setDrafts(previous => ({ ...previous, [selected]: { ...previous[selected], [channel]: draft } }))}
+              messageFocus={messageFocus?.ticketId === selected ? messageFocus : undefined}
               onFollowUp={(parent) => {
                 if (command.locked || uploadLock.current) return
                 setSelected(undefined)

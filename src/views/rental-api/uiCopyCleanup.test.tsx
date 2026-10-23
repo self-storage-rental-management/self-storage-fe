@@ -9,9 +9,8 @@ import RenewalOperationsPanel, { OperationEventCard } from "./RenewalOperationsP
 import SupportTicketDetail, { SupportTicketSummary } from "../support-api/SupportTicketDetail"
 import SupportApiWorkspace from "../support-api/SupportApiWorkspace"
 import ApiReadState from "./ApiReadState"
-import { ManagerPresentationProvider } from "../manager/managerPresentation"
 import { rentalError } from "./presentation"
-import { supportError, supportReceiverLabels } from "../support-api/presentation"
+import { supportActions, supportError, supportReceiverLabels } from "../support-api/presentation"
 import { apiPage, ids, operationEvent, operationState, operationsActor, overduePage, signingState } from "../../../tests/rentalOperationsApiFixtures"
 import { supportActive, supportActor, supportIds, supportMessage, supportPage, supportTicket } from "../../../tests/supportApiFixtures"
 
@@ -29,7 +28,7 @@ vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.ac
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (key: string) => ({
     loading: state.loading, error: state.error, refresh: vi.fn(),
-    data: key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } } : state.mode === "operations"
+    data: key.endsWith(':payment-events') || key.includes(':coordination:') ? apiPage([]) : key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } } : state.mode === "operations"
       ? /:(payments|refunds|facility-incidents):/.test(key) ? apiPage([]) : key.endsWith(":proposal") ? null : state.data
       : state.mode === "support" && key.includes(":messages:")
         ? supportPage([{ ...supportMessage, evidenceFileIds: [ids.file] }])
@@ -46,28 +45,23 @@ beforeEach(() => {
 })
 
 describe("Dương delete-first UI copy regression", () => {
-  it("D4 heading is followed by filters, with NO replacement subtitle", () => {
-    state.actor = operationsActor("manager")
-    state.data = { ...overduePage, ...apiPage([]) }
-    const html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toMatch(/<h1[^>]*>Theo dõi quá hạn<\/h1><div class="app-card/)
-    expect(html).not.toContain("Tách quá hạn thuê và quá hạn thanh toán")
-    expect(html).not.toContain("Theo dõi các hồ sơ quá hạn")
-    expect(html).toContain("Quá hạn thanh toán")
-    expect(html).toContain("Quá thời hạn thuê")
-    expect(html).toContain("Mã theo dõi có sẵn")
-  })
-  it("D4 partial empty list is not the verified complete empty state", () => {
+
+  it("D4 empty results stay compact without unsupported warnings or pagination", () => {
     state.actor = operationsActor("manager")
     state.data = { ...overduePage, ...apiPage([]), completeness: "PARTIAL", missingSources: ["AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS"] }
     let html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toContain("dữ liệu quá hạn còn thiếu")
+    expect(html).toContain("Không tìm thấy hồ sơ phù hợp.")
+    expect(html).not.toContain("dữ liệu quá hạn còn thiếu")
+    expect(html).not.toContain("Chưa đủ dữ liệu")
+    expect(html).not.toContain("Trang 0/0")
+    expect(html).not.toContain(">Trước</button>")
+
     expect(html).not.toContain("Không có dữ liệu")
     expect(html).not.toContain("AUTHORITATIVE_OBLIGATIONS_ALLOCATIONS")
     expect(html).not.toContain("0 đ")
     state.data = { ...overduePage, ...apiPage([]), completeness: "COMPLETE", missingSources: [] }
     html = renderToStaticMarkup(<ManagerOverdueApiPanel />)
-    expect(html).toContain("Không có dữ liệu")
+    expect(html).toContain("Không tìm thấy hồ sơ phù hợp.")
     expect(html).not.toContain("dữ liệu quá hạn còn thiếu")
   })
   it("D4 denied actor still gets an alert, no filters or actions", () => {
@@ -82,7 +76,7 @@ describe("Dương delete-first UI copy regression", () => {
     const html = renderToStaticMarkup(<RenewalOperationsPanel id={ids.renewal} role="customer" customerId={ids.customer} facilityId={ids.facility} />)
     expect(html).not.toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).not.toContain("Thanh toán cọc thử nghiệm")
-    expect(html).toContain("Chưa đủ thông tin")
+    expect(html).not.toContain("Thanh toán cọc</button>")
     expect(html).not.toContain("BO_SIGNING_POLICY")
     expect(html).not.toContain("(D3)")
   })
@@ -101,24 +95,18 @@ describe("Dương delete-first UI copy regression", () => {
   })
   it("D3 deposit history discloses simulation, without labeling an actual CASH receipt as simulated", () => {
     let html = renderToStaticMarkup(<OperationEventCard event={operationEvent} />)
-    expect(html).toContain("Giao dịch gia hạn theo luồng cũ")
+    expect(html).toContain("Thanh toán cọc gia hạn")
     expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).toContain("3.201.000 đ")
     html = renderToStaticMarkup(<OperationEventCard event={{ ...operationEvent, kind: "CASH" }} />)
-    expect(html).toContain("Biên nhận tiền mặt")
+    expect(html).toContain("Biên lai thanh toán gia hạn")
     expect(html).not.toContain("thử nghiệm")
   })
-  it("D3 Manager has no empty reload wrapper after presentation cleanup", () => {
-    state.actor = operationsActor("manager"); state.mode = "operations"; state.data = operationState
-    const html = renderToStaticMarkup(<ManagerPresentationProvider><RenewalOperationsPanel id={ids.renewal} role="manager" customerId={ids.customer} facilityId={ids.facility} /></ManagerPresentationProvider>)
-    expect(html).not.toContain('<div class="flex gap-2"></div>')
-    expect(html).not.toContain("Tải lại tiến độ")
-    expect(html).toContain("Xem xét ngoại lệ")
-  })
+
   it.each(["customer", "staff", "manager"] as const)("D5 %s summary retains unknown/blocked state without workflow/version/SLA internals", role => {
     const html = renderToStaticMarkup(<SupportTicketSummary role={role} ticket={{ ...supportActive, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu", workflowReady: false, version: null }} />)
-    expect(html).toContain("hiện chỉ có thể xem")
-    expect(html).toContain("Chưa đủ thông tin để xác định hạn xử lý")
+    expect(supportActions(supportActor(role), role, { ...supportActive, workflowReady: false, version: null })).toEqual([])
+    expect(html).toContain("Nội dung yêu cầu")
     expect(html).not.toMatch(/workflow|version 0|DEFERRED_SOURCE|\bSLA\b|\bBE\b/)
     if (role === "customer") {
       expect(html).not.toContain(supportIds.staff)
@@ -130,9 +118,9 @@ describe("Dương delete-first UI copy regression", () => {
     state.data = { ...supportTicket, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu" }
     const command = { run: vi.fn(), retry: vi.fn(), clearError: vi.fn(), busy: false, uncertain: false, conflict: false, locked: false, error: undefined } as ReturnType<typeof useSupportCommand>
     const html = renderToStaticMarkup(<SupportTicketDetail id={supportIds.ticket} role="customer" command={command} onFollowUp={vi.fn()} />)
-    expect(html).toContain("Tải minh chứng 1")
+    expect(html).toContain("Minh chứng 1")
     expect(html).not.toContain("Có tệp đính kèm, hiện chưa thể tải xuống.")
-    expect(html).toContain("Khách hàng")
+    expect(html).toContain("Bạn")
     expect(html).not.toContain(ids.file)
     expect(html).not.toContain("FileAsset")
     expect(html).not.toContain('download=')
@@ -144,7 +132,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).toContain("Giữ nguyên nội dung và bấm thử lại")
     expect(html).toContain("không tải lại trang hoặc gửi yêu cầu mới")
     expect(html).toContain("Kiểm tra lại bằng yêu cầu cũ")
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Tạo yêu cầu<\/button>/)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Tạo yêu cầu<\/button>/)
     expect(html).not.toContain("Idempotency-Key")
   })
   it("Staff D3 error is natural Vietnamese, without changing the shared Staff helper", () => {

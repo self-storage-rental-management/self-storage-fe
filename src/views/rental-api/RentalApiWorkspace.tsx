@@ -1,9 +1,13 @@
+import { parseVietnamDate, vietnamDateInput } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
+import { RentalDeadlineBanner, rentalDeadlineState, rentalDaysUntilDeadline } from "./RentalDeadlineNotice"
 import { Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { getRental, listRentals } from "../../services/rentalApi"
+import { listRentalHandoverFiles } from "../../services/rentalHandoverFilesApi"
 import { getRenewal, listRenewals } from "../../services/renewalApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type {
@@ -12,15 +16,17 @@ import type {
   RentalApiRole,
 } from "../../types/rentalApi"
 import type { RenewalApiQuery, RenewalApiRecord } from "../../types/renewalApi"
+import type { RenewalOperationEvent } from "../../types/renewalOperationsApi"
 import ApiReadState from "./ApiReadState"
 import RentalDetail from "./RentalDetail"
 import RenewalDetail from "./RenewalDetail"
-import RenewalOperationsPanel from "./RenewalOperationsPanel"
+import RenewalOperationsPanel, { RenewalDocumentHistory, RenewalPaymentHistory } from "./RenewalOperationsPanel"
 import RenewalDecisionModal from "./RenewalDecisionModal"
 import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
   rentalDate,
+  rentalMoney,
   rentalLabels,
   rentalPeriodText,
   renewalLabels,
@@ -28,6 +34,7 @@ import {
 
 const inputClass =
   "rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+const customerRentalColumns = 'grid grid-cols-[minmax(165px,1.3fr)_minmax(145px,1fr)_minmax(135px,0.9fr)_minmax(135px,0.9fr)_minmax(125px,0.8fr)_minmax(315px,1.4fr)]'
 type Detail = {
   kind: "rental" | "renewal"
   id: string
@@ -104,13 +111,13 @@ function Pager({
   )
 }
 
-export default function RentalApiWorkspace({ role }: { role: RentalApiRole }) {
+export default function RentalApiWorkspace({ role, focusStorageUnitId, initialRentalId }: { role: RentalApiRole; focusStorageUnitId?: string; initialRentalId?: string }) {
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  return <WorkspaceSession key={identity} role={role} />
+  return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} role={role} focusStorageUnitId={focusStorageUnitId} initialRentalId={initialRentalId} />
 }
 
-function WorkspaceSession({ role }: { role: RentalApiRole }) {
+function WorkspaceSession({ role, focusStorageUnitId, initialRentalId }: { role: RentalApiRole; focusStorageUnitId?: string; initialRentalId?: string }) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -135,7 +142,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
     sort: "createdAt,desc",
   })
   const [search, setSearch] = useState("")
-  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:undefined)
+  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:initialRentalId?{kind:"rental",id:initialRentalId}:undefined)
   const [action, setAction] = useState<Action>()
   const permitted =
     actor?.status === "ACTIVE" &&
@@ -156,6 +163,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
     return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
   return (
     <WorkspaceData
+      focusStorageUnitId={focusStorageUnitId}
       key={identity}
       role={role}
       identity={identity}
@@ -183,6 +191,7 @@ function WorkspaceSession({ role }: { role: RentalApiRole }) {
 }
 
 function WorkspaceData({
+  focusStorageUnitId,
   role,
   identity,
   tab,
@@ -198,6 +207,7 @@ function WorkspaceData({
   action,
   setAction,
 }: {
+  focusStorageUnitId?: string
   role: RentalApiRole
   identity: string
   tab: "rental" | "renewal"
@@ -216,6 +226,7 @@ function WorkspaceData({
   const { manager, copy } = useManagerPresentation()
 
   const actor = getAuthenticatedActor()!
+  const [returnRental, setReturnRental] = useState<{ id: string; active: boolean }>()
   const [rentalFilterDraft, setRentalFilterDraft] = useState(nq.rentalId || "")
   const dataTab = tab === "renewal" ? "renewal" : "rental"
   const query = dataTab === "rental" ? rq : nq
@@ -226,6 +237,21 @@ function WorkspaceData({
         ? { kind: "rental" as const, page: await listRentals(role, rq) }
         : { kind: "renewal" as const, page: await listRenewals(role, nq) },
   )
+  useEffect(() => {
+    if (!focusStorageUnitId || role !== 'customer' || tab !== 'rental' || read.loading || read.data?.kind !== 'rental') return
+    const row = read.data.page.data.find(item => item.storageUnit.id === focusStorageUnitId && item.status !== 'completed')
+    if (!row) {
+      const pagination = read.data.page.pagination
+      if (pagination.page + 1 < pagination.totalPages) setRq({ ...rq, page: pagination.page + 1 })
+      return
+    }
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(`rental-api-record-${row.id}`)
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.focus({ preventScroll: true })
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [focusStorageUnitId, role, tab, read.loading, read.data])
   const counts = useRentalApiResource(
     `${identity}:${query.facilityId}:counts`,
     async () => {
@@ -236,7 +262,7 @@ function WorkspaceData({
         month: "2-digit",
         day: "2-digit",
       }).format(now)
-      const end = new Date(`${date}T00:00:00Z`)
+      const end = parseVietnamDate(`${date}T00:00:00Z`)
       end.setUTCDate(end.getUTCDate() + 30)
       const scope = role === "manager" ? { facilityId: query.facilityId } : {}
       const result = await Promise.all([
@@ -247,7 +273,7 @@ function WorkspaceData({
           size: 1,
           status: "active",
           endFrom: date,
-          endTo: end.toISOString().slice(0, 10),
+          endTo: vietnamDateInput(end),
         }),
         listRenewals(role, { ...scope, size: 1, status: "pending" }),
         listRenewals(role, { ...scope, size: 1, status: "accepted" }),
@@ -283,9 +309,11 @@ function WorkspaceData({
   }, [read.data, dataTab, rq, nq, setRq, setNq])
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">
-        {role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}
-      </h1>
+      <div className="rounded-2xl border border-stone-200 bg-white px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
+        <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           "Tổng hồ sơ",
@@ -293,10 +321,10 @@ function WorkspaceData({
           "Hết hạn trong 30 ngày",
           "Yêu cầu gia hạn",
         ].map((label, i) => (
-          <Card className="p-4" key={label}>
-            <p className="text-sm text-stone-500">{label}</p>
-            <p className="text-2xl font-bold">
-              {counts.loading ? "…" : (counts.data?.[i] ?? copy("—"))}
+          <Card className={`rounded-xl border-t-4 p-4 ${['border-t-stone-700', 'border-t-emerald-500', 'border-t-amber-500', 'border-t-blue-500'][i]}`} key={label}>
+            <p className="text-xs font-medium text-stone-500">{label}</p>
+            <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
+              {counts.loading ? "…" : (counts.data?.[i] ?? copy("Chưa có"))}
             </p>
           </Card>
         ))}
@@ -304,7 +332,7 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex w-fit flex-wrap gap-2 rounded-xl border border-stone-200 bg-white p-1.5">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
           onClick={() => setTab("rental")}
@@ -319,29 +347,6 @@ function WorkspaceData({
         </Button>
       </div>
       <Card className={`grid items-end gap-3 p-4 sm:grid-cols-2 ${role === "manager" ? (tab === "renewal" ? "xl:grid-cols-4" : "xl:grid-cols-3") : "xl:grid-cols-2"}`}>
-        {(tab === "rental" || role === "manager") && (
-          <form
-            className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              change({ search: search.trim() || undefined })
-            }}
-          >
-            <label className="block min-w-0">
-              Tìm kiếm
-              <input
-                className={`${inputClass} mt-1 block h-[42px] w-full`}
-                value={search}
-                maxLength={200}
-                placeholder="Mã hồ sơ / gian kho"
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            <Button type="submit" className="h-[42px] shrink-0 self-end">
-              Tìm kiếm
-            </Button>
-          </form>
-        )}
         <label className="block min-w-0">
           Trạng thái
           <select
@@ -361,6 +366,29 @@ function WorkspaceData({
               ))}
           </select>
         </label>
+        {(tab === "rental" || role === "manager") && (
+          <form
+            className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              change({ search: search.trim() || undefined })
+            }}
+          >
+        <label className="block min-w-0">
+              Tìm kiếm
+              <input
+                className={`${inputClass} mt-1 block h-[42px] w-full`}
+                value={search}
+                maxLength={200}
+                placeholder="Mã hồ sơ / gian kho"
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <Button type="submit" className="h-[42px] shrink-0 self-end">
+              Tìm kiếm
+            </Button>
+          </form>
+        )}
         {tab === "renewal" && (
           <label className="block min-w-0">
             Mã hồ sơ thuê
@@ -400,27 +428,58 @@ function WorkspaceData({
       </Card>
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+        <Card className="overflow-hidden rounded-2xl">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3"><h2 className="font-bold text-stone-900">{tab === 'rental' ? 'Danh sách hồ sơ thuê' : 'Danh sách yêu cầu gia hạn'}</h2><span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">{read.data.page.pagination.totalItems} hồ sơ</span></div>
+          {role === 'customer' && read.data.kind === 'rental' ? <div className="overflow-x-auto bg-stone-50/60 p-4">
+            <div className="min-w-[1050px] space-y-2">
+            <div className={`${customerRentalColumns} border-l-4 border-transparent px-1 text-xs font-semibold text-stone-500`}>
+              {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className="px-3 py-2">{label}</div>)}
+            </div>
+            {read.data.page.data.map(row => {
+              const days = rentalDaysUntilDeadline(row)
+              const focused = focusStorageUnitId === row.storageUnit.id && row.status !== 'completed'
+              return <article key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1}
+                className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 border-l-4 border-l-amber-500 bg-white shadow-sm transition-colors duration-200 hover:border-amber-300 hover:bg-white hover:shadow-md focus-within:border-l-amber-500 ${focused ? 'outline outline-2 outline-amber-400' : ''}`}>
+                <div className={`${customerRentalColumns} items-center divide-x divide-stone-100 px-1 py-2`}>
+                    <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
+                    <div className="min-w-0 px-3"><span className="break-all font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
+                    <div className="flex flex-wrap gap-1.5 px-3">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-700' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(rentalLabels[row.status])}</span>
+                      {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
+                    </div>
+                  <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
+                  <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
+                  <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>Chi tiết hồ sơ</Button>
+                    <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                    <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' })}>Trả kho</Button>
+                  </div>
+                </div>
+                {rentalDeadlineState(row) && <div className="px-4 pb-4"><RentalDeadlineBanner rental={row} role={role} /></div>}
+              </article>
+            })}
+            {read.data.page.data.length === 0 && <p className="col-span-full p-6 text-center text-sm text-stone-500">Không có hồ sơ thuê phù hợp với bộ lọc.</p>}
+            </div>
+          </div> : <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] table-fixed text-left text-sm">
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>
-                <col className="w-[22%]" />
                 <col className="w-[20%]" />
+                <col className="w-[17%]" />
                 <col className="w-[24%]" />
-                <col className="w-[22%]" />
-                <col className="w-[12%]" />
+                <col className="w-[23%]" />
+                <col className="w-[16%]" />
               </colgroup>
               <thead className="bg-stone-50">
                 <tr>
                   {[
                     "Mã hồ sơ",
-                    "Khách hàng",
-                    "Gian kho / Loại",
+                    role === 'customer' ? 'Trạng thái' : 'Khách hàng',
+                    role === "manager" ? "Gian kho" : "Gian kho / Loại",
                     "Thời hạn",
-                    "",
+                    "Thao tác",
                   ].map((h, i) => (
-                    <th key={i} className="p-3 text-left align-middle font-semibold text-stone-600">
+                    <th key={i} className={`p-3 align-middle font-semibold text-stone-600 ${i === 4 ? 'text-center' : 'text-left'}`}>
                       {h}
                     </th>
                   ))}
@@ -428,55 +487,73 @@ function WorkspaceData({
               </thead>
               <tbody>
                 {read.data.page.data.map((row) => (
-                  <tr key={row.id} className="border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40">
+                  <Fragment key={row.id}>
+                  <tr key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1} className={`border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40 ${focusStorageUnitId && row.storageUnit.id === focusStorageUnitId && row.status !== 'completed' ? 'outline outline-2 outline-amber-400 bg-amber-50' : ''}`}>
                     <td className="p-3 align-middle">
                       <code
                         className="block break-all rounded-md border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs leading-5 tracking-tight text-stone-700"
                         title={row.id}
                       >
-                        {row.id}
+                        {"rentalId" in row ? row.displayCode || row.id : row.id}
                       </code>
                     </td>
                     <td className="p-3 align-middle">
-                      <p className="font-semibold text-stone-900">{row.customer.fullName}</p>
+                      {role === 'customer' ? <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}</span> : <p className="font-semibold text-stone-900">{row.customer.fullName}</p>}
                     </td>
                     <td className="p-3 align-middle">
                       <p className="font-mono text-sm font-semibold text-stone-800">{row.storageUnit.code}</p>
-                      {"unitType" in row && (
+                      {role !== "manager" && 'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
+                      {role !== "manager" && "unitType" in row && (
                         <p className="mt-1 text-xs leading-4 text-stone-500">{copy(row.unitType.name)}</p>
                       )}
                     </td>
-                    <td className="p-3 align-middle whitespace-nowrap">
-                      {"contractEndDate" in row
-                        ? rentalPeriodText(row, role === "manager")
-                        : rentalDate(row.newEndDate)}
+                    <td className="p-3 align-middle">
+                      <p className="text-sm leading-6">{"contractEndDate" in row
+                        ? rentalPeriodText(row, false)
+                        : rentalDate(row.newEndDate)}</p>
+                      {role === 'manager' && <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>
+                        {copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}
+                      </span>}
                     </td>
-                    <td className="p-3 align-middle text-right">
+                    <td className="p-3 align-middle text-center">
+                      <div className="flex justify-center">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="whitespace-nowrap"
+                        className="w-24 justify-center whitespace-nowrap"
                         onClick={() =>
                           setDetail({ kind: read.data!.kind, id: row.id })
                         }
                       >
                         Chi tiết
                       </Button>
+                      {role === 'customer' && 'contractEndDate' in row && <>
+                        <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                        <Button size="sm" variant="primary" disabled={!['active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
+                          onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' })}>Trả kho</Button>
+                      </>}
+                      </div>
                     </td>
                   </tr>
+                  {role === 'customer' && 'contractEndDate' in row && rentalDeadlineState(row) && <tr>
+                    <td colSpan={5} className="border-t border-stone-100 px-3 pb-4">
+                      <RentalDeadlineBanner rental={row} role={role} />
+                    </td>
+                  </tr>}
+                  </Fragment>
                 ))}
                 {read.data.page.data.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center">
+                    <td colSpan={read.data.kind === "rental" ? 6 : 6} className="p-6 text-center">
                       Không có dữ liệu
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-          </div>
+          </div>}
           <Pager
-            fixedSize={role === "manager"}
+            fixedSize
             {...{
               page: read.data.page.pagination.page,
               pages: read.data.page.pagination.totalPages,
@@ -501,6 +578,9 @@ function WorkspaceData({
           onChanged={refresh}
         />
       )}
+      {returnRental && <Modal open onClose={() => setReturnRental(undefined)} title="Trả kho & quyết toán" size="xl">
+        <ReturnApiPanel role="customer" rentalId={returnRental.id} rentalActive={returnRental.active} onChanged={refresh} />
+      </Modal>}
       {action?.kind === "request" && (
         <CustomerRenewalRequestModal
           key={`${identity}:${action.rentalId}:${action.revision?.id}`}
@@ -509,6 +589,11 @@ function WorkspaceData({
           revision={action.revision}
           onClose={() => setAction(undefined)}
           onSuccess={success}
+          onNavigateToRenewals={() => {
+            setAction(undefined)
+            setDetail(undefined)
+            setTab("renewal")
+          }}
         />
       )}
       {action?.kind === "cancel" && (
@@ -547,6 +632,7 @@ function DetailModal({
 
   const operationLock = useRef(false)
   const [operationsLocked, setOperationsLocked] = useState(false)
+  const [documentEvents, setDocumentEvents] = useState<RenewalOperationEvent[]>([])
   const setOperationLocked = useCallback((value: boolean) => {
     operationLock.current = value
     setOperationsLocked(value)
@@ -597,21 +683,7 @@ function DetailModal({
             rental={read.data.record as RentalApiDetail}
             role={role}
             showTechnicalWarnings={role === "manager"}
-            onRequest={
-              role === "customer"
-                ? () => {
-                    onClose()
-                    onAction({ kind: "request", rentalId: detail.id })
-                  }
-                : undefined
-            }
           />
-          {role === "customer" && <ReturnApiPanel
-            role="customer"
-            rentalId={detail.id}
-            rentalActive={(read.data.record as RentalApiDetail).status === "active"}
-            onChanged={onChanged}
-          />}
         </div>
       ) : read.data?.kind === "renewal" ? (
         <div>
@@ -619,6 +691,8 @@ function DetailModal({
             renewal={read.data.record as RenewalApiRecord}
             role={role}
             onPaymentChange={read.refresh}
+            financeHistory={<RenewalPaymentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:finance`} />}
+            evidenceDocuments={<RenewalDocumentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:documents`} extraEvents={documentEvents} />}
             operationsLocked={operationsLocked}
             appointmentSelection={role === "customer" && read.data.record.status === "accepted" ? (
               <RenewalOperationsPanel
@@ -654,6 +728,7 @@ function DetailModal({
           role={role}
           {...operationOwner}
           onLocked={setOperationLocked}
+          onDocumentEvent={event => setDocumentEvents(previous => [event, ...previous.filter(item => item.id !== event.id)])}
           onChanged={() => {
             read.refresh()
             onChanged()

@@ -28,6 +28,8 @@ export interface ManagerPaymentHistoryItem {
   refundedAmount: number
   paymentMethod: string | null
   occurredAt: string
+  renewalId?: string | null
+  receiptFileId?: string | null
 }
 
 export interface ManagerPaymentHistoryPage {

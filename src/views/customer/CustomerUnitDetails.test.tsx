@@ -16,26 +16,24 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
       { code: 'FAC-6M', name: 'Gói 6 tháng cơ sở', rentalMonths: 6, discountRate: 0.10, policyVersion: 'v1' },
     ]} onReserve={() => {}} onClose={() => {}} />)
   for (const text of ['Kho Việt – Cơ sở Quận 1', '125 Nguyễn Bỉnh Khiêm', 'kho-s-chi-tiet.png',
-    'Ưu đãi và báo giá theo kỳ thuê', 'An ninh và tiện ích vận hành', 'Quy định trả kho và gia hạn',
+    'Ưu đãi và báo giá theo kỳ thuê',
     'Gói 6 tháng cơ sở', 'Giảm 10% tiền thuê',
-    'Chính sách và quy định áp dụng', 'Phí quá hạn', 'Tiền đảm bảo kho', 'Thời hạn thuê tối thiểu',
-    'Gia hạn quá hạn', 'Tối đa 7 ngày', 'Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn',
-    'Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi',
-    'Trả kho sau ngày hết hạn', 'Gia hạn kỳ thuê',
-    'Quy trình đặt kho và thanh toán', 'cọc 40%', '5.500.000', 'Tiền cọc đảm bảo',
+    '3. Quy trình đặt kho và thanh toán', 'cọc 20%', '5.500.000', 'Tiền duy trì CSVC',
     'Xác nhận hồ sơ', 'Thanh toán cọc', 'Nhận kho']) expect(html).toContain(text)
   for (const text of ['Số kho trống theo kỳ thuê', 'Theo báo giá kỳ thuê', 'Chiều rộng làn xe đẩy',
     '(hồ sơ bố trí)', '– phù hợp thùng carton và đồ gia dụng nhẹ', 'Kiểm tra hàng hóa',
     'Kích thước từng kiện, tổng thể tích và tổng trọng lượng',
     'Kiểm tra theo khung kệ', 'Đối chiếu kích thước từng kiện với 4 khung kệ',
-    'Kiểm tra cân nặng', 'Tổng trọng lượng hàng không vượt quá 1.000 kg']) expect(html).not.toContain(text)
-  for (const text of ['StorageHub Quan 1', 'Thời gian ân hạn', 'Thời hạn báo trước khi trả kho', 'cọc 20%',
+    'Kiểm tra cân nặng', 'Tổng trọng lượng hàng không vượt quá 1.000 kg',
+    'An ninh và tiện ích vận hành', 'An ninh và kiểm soát ra vào', 'Hệ thống phòng cháy chữa cháy',
+    'Cơ sở chưa công bố chính sách nội dung', 'QUY ĐỊNH CHO THUÊ KHO STORAGEHUB',
+    'Quy định trả kho và gia hạn', 'Chính sách và quy định áp dụng', 'Trả kho sau ngày hết hạn',
+    'Gia hạn kỳ thuê']) expect(html).not.toContain(text)
+  for (const text of ['StorageHub Quan 1', 'Thời gian ân hạn', 'Thời hạn báo trước khi trả kho', 'cọc 40%',
     'Kích thước hàng hóa tối đa', '160 × 80 × 150 cm']) expect(html).not.toContain(text)
   for (const text of ['Quy định trả kho và gia hạn muộn', 'giao diện cũ', 'Lối đi và thiết bị hỗ trợ',
     'Thời hạn thanh toán hiển thị trên đơn; tiền cọc được trừ vào tiền thuê.']) expect(html).not.toContain(text)
-  for (const text of ['Giảm 3% tiền thuê', 'Giảm 5% tiền thuê', 'Giảm 8% tiền thuê',
-    'Chiều rộng lối đi', 'Thiết bị xe đẩy', 'Bố trí và sức chứa kho',
-    'Mẫu thùng nhỏ 50 × 40 × 40 cm', 'Mẫu thùng lớn 70 × 50 × 50 cm']) expect(html).not.toContain(text)
+  for (const text of ['Giảm 3% tiền thuê', 'Giảm 5% tiền thuê', 'Giảm 8% tiền thuê']) expect(html).not.toContain(text)
   for (const text of ['Dữ liệu hiện chưa có', 'Ảnh minh họa giao diện;', '/images/customer-units/kho-s.jpg']) expect(html).not.toContain(text)
   expect(html).not.toContain('sticky')
 })

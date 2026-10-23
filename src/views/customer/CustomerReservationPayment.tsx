@@ -12,6 +12,25 @@ import { paymentCountdown } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
 import { bookingDepositAccepted } from './paymentPresentation'
 
+function displayValue(value?: string | null) {
+  return value?.trim() || 'Chưa cập nhật'
+}
+
+function formatDisplayDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replace(/-/g, '/')
+}
+
+function formatDisplayDateTime(value?: string | null) {
+  if (!value) return 'Chưa chốt'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('vi-VN', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  })
+}
+
 interface Props {
   reservation: CustomerReservation
   facilityName: string
@@ -82,6 +101,10 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
   }, [reservation.id, onMessage])
 
   const countdown = paymentCountdown(paymentExpiresAt || reservation.holdExpiresAt, now)
+  const discountAmount = reservation.discountAmount ?? 0
+  const voucherDiscountAmount = reservation.voucherDiscountAmount ?? 0
+  const grossRentalAmount = reservation.grossRentalAmount
+    ?? reservation.totalRentalAmount + discountAmount + voucherDiscountAmount
   useEffect(() => {
     if (reservation.status !== 'AWAITING_PAYMENT' || !countdown.expired) return
     let disposed = false
@@ -116,12 +139,47 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     <Modal open={payOpen} onClose={() => { if (!busy) setPayOpen(false) }} title="Thanh toán cọc giữ chỗ">
       <div className="space-y-4">
         <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>Kỳ thuê: <b>{reservation.startDate.split('-').reverse().join('/')} đến {reservation.endDate.split('-').reverse().join('/')}</b></p></div>
+        <section className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
+          <p className="font-bold text-stone-900">Thông tin khách hàng đã khai báo</p>
+          <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+            <p><span className="text-stone-500">Họ và tên:</span> <b>{displayValue(reservation.customerName)}</b></p>
+            <p><span className="text-stone-500">CCCD/Hộ chiếu:</span> <b>{displayValue(reservation.identityDocumentNumber)}</b></p>
+            <p><span className="text-stone-500">Số điện thoại:</span> <b>{displayValue(reservation.customerPhone)}</b></p>
+            <p className="break-all"><span className="text-stone-500">Email:</span> <b>{displayValue(reservation.customerEmail)}</b></p>
+            <p className="sm:col-span-2"><span className="text-stone-500">Địa chỉ:</span> <b>{displayValue(reservation.customerAddress)}</b></p>
+          </div>
+        </section>
+        <section className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
+          <p className="font-bold text-stone-900">Thông tin báo giá</p>
+          <div className="mt-2 space-y-1.5">
+            {reservation.monthlyPrice != null && <div className="flex justify-between gap-4"><span>Đơn giá/tháng</span><b>{formatVnd(reservation.monthlyPrice)}</b></div>}
+            <div className="flex justify-between gap-4"><span>Tiền thuê trước giảm</span><b>{formatVnd(grossRentalAmount)}</b></div>
+            <div className="flex justify-between gap-4 text-emerald-700"><span>Giảm giá kỳ hạn ({Math.round((reservation.discountRate ?? 0) * 100)}%)</span><b>− {formatVnd(discountAmount)}</b></div>
+            {reservation.voucherCode && <div className="flex justify-between gap-4 text-emerald-700"><span>Voucher {reservation.voucherCode}</span><b>− {formatVnd(voucherDiscountAmount)}</b></div>}
+            <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5"><b>Tiền thuê sau giảm</b><b>{formatVnd(reservation.totalRentalAmount)}</b></div>
+            <div className="flex justify-between gap-4"><span>Cọc giữ chỗ</span><b className="text-amber-700">{formatVnd(reservation.reservationDepositAmount)}</b></div>
+            <div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(reservation.remainingRentalAmount)}</b></div>
+            <div className="flex justify-between gap-4"><span>Tiền duy trì CSVC</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div>
+            <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5"><b>Khoản thu khi nhận kho</b><b>{formatVnd(reservation.dueAtCheckIn)}</b></div>
+            <div className="flex justify-between gap-4"><b>Tổng nghĩa vụ tài chính</b><b>{formatVnd(reservation.totalInitialObligation)}</b></div>
+          </div>
+        </section>
+        <section className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+          <p className="font-bold">Các mốc thời gian</p>
+          <div className="mt-2 space-y-1.5">
+            <p><span className="text-blue-800">Thời điểm đăng ký:</span> <b>{formatDisplayDateTime(reservation.createdAt)}</b></p>
+            <p><span className="text-blue-800">Lịch nhận kho:</span> <b>{formatDisplayDateTime(reservation.appointmentAt)}</b></p>
+            <p><span className="text-blue-800">Ngày bắt đầu hợp đồng:</span> <b>{formatDisplayDate(reservation.startDate)}</b></p>
+            <p><span className="text-blue-800">Ngày bắt đầu tính tiền:</span> <b>{formatDisplayDate(reservation.startDate)}</b></p>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-blue-800">Theo chính sách hiện tại, ngày bắt đầu kỳ thuê cũng là ngày bắt đầu tính tiền.</p>
+        </section>
         <div className="rounded-xl border-2 border-amber-500 bg-amber-50 p-4 text-center">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Số tiền cần thanh toán ngay</p>
           <p className="mt-1 text-3xl font-extrabold text-stone-950">{formatVnd(reservation.reservationDepositAmount)}</p>
           <p className="mt-1 text-xs text-stone-600">Cọc giữ chỗ được khấu trừ vào tiền thuê của kỳ này.</p>
         </div>
-        <div className="rounded-lg bg-stone-50 p-3 text-sm space-y-1"><div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(reservation.remainingRentalAmount)}</b></div><div className="flex justify-between gap-4"><span>Tiền đảm bảo kho</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng thanh toán khi nhận kho</span><b>{formatVnd(reservation.dueAtCheckIn)}</b></div><p className="pt-1 text-xs text-stone-500">Các khoản trên chưa thu trong bước này.</p></div>
+        <div className="rounded-lg bg-stone-50 p-3 text-sm space-y-1"><div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(reservation.remainingRentalAmount)}</b></div><div className="flex justify-between gap-4"><span>Tiền duy trì CSVC</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng thanh toán khi nhận kho</span><b>{formatVnd(reservation.dueAtCheckIn)}</b></div><p className="pt-1 text-xs text-stone-500">Các khoản trên chưa thu trong bước này.</p></div>
         <div className="rounded-lg bg-red-700 p-3 text-center text-white"><p className="text-xs font-bold uppercase tracking-wide">Thời gian thanh toán còn lại</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
         <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi hoàn tất, VNPay sẽ đưa bạn trở lại StorageHub và cập nhật biên lai tự động.</p>
         <Button className="w-full" disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(reservation.reservationDepositAmount)}`}</Button>

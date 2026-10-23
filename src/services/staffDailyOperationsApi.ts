@@ -10,12 +10,12 @@ import {
 import { listReturns, type ApiReturn } from "./returnApi"
 import { listSupportTickets } from "./supportApi"
 import type { SupportTicket } from "../types/supportApi"
-import { listUnitAssignmentCandidates, type UnitAssignmentCandidate } from "./unitAssignmentApi"
 import { getAuthenticatedActor } from "./authApi"
 import { listAllRecoveryTasks, type RecoveryTask } from "./recoveryTasksApi"
+import { ApiClientError } from "./apiClient"
 
 export type StaffDailyOperationPriority = "high" | "medium" | "low"
-export type StaffDailyOperationPage = "unit-assignments" | "checkin" | "return" | "support" | "tasks"
+export type StaffDailyOperationPage = "reservations" | "checkin" | "return" | "support" | "tasks"
 
 export interface StaffDailyOperation {
   id: string
@@ -123,10 +123,10 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
   return {
     id: `support-${item.id}`,
     title: `Xử lý hỗ trợ ${item.subject}`,
-    customer: item.subject,
+    customer: item.customerName?.trim() || "Chưa có tên khách hàng",
     time: item.assignedAt || item.createdAt,
     dueAt,
-    sla: "Ticket hỗ trợ được phân công",
+    sla: "Yêu cầu hỗ trợ được phân công",
     priority: priorityFromSupport(item.sla?.priority),
     page: "support",
   }
@@ -141,17 +141,6 @@ const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   sla: "Nhiệm vụ bảo trì được phân công",
   priority: item.priority,
   page: "tasks",
-})
-
-const assignmentTask = (item: UnitAssignmentCandidate): StaffDailyOperation => ({
-  id: `assignment-${item.reservationId}`,
-  title: `Phân kho ${item.reservationCode}`,
-  customer: item.customerName,
-  time: item.confirmedAt || item.startDate,
-  dueAt: item.confirmedAt || item.startDate,
-  sla: "Đặt chỗ đã xác nhận, cần giữ gian kho",
-  priority: "high",
-  page: "unit-assignments",
 })
 
 /** Load Staff operations from the real API surface and normalize them for one daily list. */
@@ -178,7 +167,6 @@ export async function loadStaffDailyOperations(
       page: 0,
       pageSize: 100,
     }),
-    listUnitAssignmentCandidates({ page: 0, pageSize: 100 }),
     Promise.allSettled(recoveryScopes.map(id => listAllRecoveryTasks('staff',id))),
   ])
 
@@ -186,7 +174,14 @@ export async function loadStaffDailyOperations(
   const read = <T>(index: number, source: string): T | null => {
     const result = results[index]
     if (result.status === "fulfilled") return result.value as T
-    failedSources.push(source)
+    const error = result.reason
+    const detail = error instanceof ApiClientError
+      ? error.code === "INVALID_RESPONSE" ? "phản hồi không hợp lệ"
+        : error.status === 403 ? "không có quyền truy cập"
+          : error.status === 404 ? "API chưa sẵn sàng"
+            : error.status && error.status >= 500 ? "lỗi máy chủ" : null
+      : null
+    failedSources.push(detail ? `${source} (${detail})` : source)
     return null
   }
 
@@ -198,12 +193,8 @@ export async function loadStaffDailyOperations(
   )
   const maintenance =
     read<Awaited<ReturnType<typeof listStaffMaintenanceTasks>>>(3, "bảo trì")
-  const assignments = read<Awaited<ReturnType<typeof listUnitAssignmentCandidates>>>(
-    4,
-    "phân kho",
-  )
 
-  const recoveryResults = read<PromiseSettledResult<RecoveryTask[]>[]>(5, "thu hồi kho") || []
+  const recoveryResults = read<PromiseSettledResult<RecoveryTask[]>[]>(4, "thu hồi kho") || []
   if (recoveryResults.some(result => result.status === 'rejected')) failedSources.push('thu hồi kho')
   const recoveryTasks = recoveryResults.flatMap(result => result.status === 'fulfilled' ? result.value : [])
   const tasks = [
@@ -235,9 +226,6 @@ export async function loadStaffDailyOperations(
       .filter(isOpenMaintenance)
       .filter((item) => !item.dueAt || dayOf(item.dueAt) === date)
       .map(maintenanceTask),
-    ...(assignments?.data || [])
-      .filter((item) => !item.confirmedAt || dayOf(item.confirmedAt) === date)
-      .map(assignmentTask),
   ]
 
   return { tasks, failedSources }

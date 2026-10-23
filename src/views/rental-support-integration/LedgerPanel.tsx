@@ -28,10 +28,6 @@ export function LedgerContent({ data }: { data: LedgerView }) {
     return <div><p role="status">Không có dữ liệu</p><CoverageDetails data={data} /></div>
   return (
     <div className="space-y-3 text-sm">
-      <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">
-        Dữ liệu tài chính chưa được xác minh đầy đủ. Các khoản dưới đây không
-        xác nhận toàn bộ công nợ.
-      </p>
       <CoverageDetails data={data} />
       <h4 className="font-semibold">Các khoản phải thanh toán đã ghi nhận</h4>
       {!data.obligations?.length ? (
@@ -105,12 +101,11 @@ function CoverageDetails({ data }: { data: LedgerView }) {
   return <section aria-label="Dữ liệu cần đối soát" className="rounded border border-amber-200 p-3">
     <p className="font-semibold">Dữ liệu cần đối soát</p>
     {inventory.renewalDeposits?.map(deposit => <p key={deposit.acceptedRevisionId}>
-      {deposit.status === "NOT_EFFECTIVE" ? "Gia h?n ch?a ph?t sinh ngh?a v? c?c t? quy?t ??nh duy?t." : deposit.status === "MATCHED" ? "Cọc gia hạn đã khớp nguồn duyệt và nghĩa vụ đã ghi; chưa xác nhận đã thanh toán."
+      {deposit.status === "NOT_EFFECTIVE" ? "Gia h?n ch?a ph?t sinh ngh?a v? c?c t? quy?t ??nh duy?t." : deposit.status === "MATCHED" ? "Cọc gia hạn đã khớp nguồn duyệt và nghĩa vụ đã ghi, chưa xác nhận đã thanh toán."
         : deposit.status === "UNPOSTED_OR_INVALID" ? "Cọc gia hạn đã có nguồn duyệt, nhưng nghĩa vụ chưa được đối soát."
         : "Cọc gia hạn chưa có nguồn duyệt được xác minh."}
     </p>)}
     <ul className="list-disc pl-5">{labels.map(label => <li key={label}>{label}</li>)}</ul>
-    <p>Chưa đủ dữ liệu để xác nhận toàn bộ công nợ.</p>
   </section>
 }
 export function canReconcileSandboxPayment(payment: NonNullable<LedgerView["coverageInventory"]>["payments"][number]) {

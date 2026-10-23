@@ -15,6 +15,7 @@ import {
   uploadDuongEvidence,
   renewalSignedContractEntityType,
   downloadDuongEvidence,
+  getDuongEvidenceName,
   integrationError,
   validPolicyInput,
   type RenewalPolicyInput,
@@ -168,6 +169,7 @@ const input: RenewalPolicyInput = {
 }
 const policy = {
   ...input,
+  term: { calendar: 'CALENDAR_DAYS', timezone: 'Asia/Ho_Chi_Minh', warningThroughDay: 3, seriousThroughDay: 6, urgentThroughDay: 7, recoveryFromDay: 8, recoveryCutoffTime: '17:00', recoveryStartTime: '08:00' },
   expectedRevision: undefined,
   schema: "RENEWAL_POLICY_V1",
   facilityId: ids.facility,
@@ -329,29 +331,19 @@ describe("Dương integration real transport contracts", () => {
       },
     },
   }
-  it("sends allowlisted assignment and preserves retry idempotency key", async () => {
+  it("rejects removed staff assignment before any HTTP request", async () => {
     const fetch = respond({ data: assignmentResult }, 201)
-    await coordinateRenewal(
+    await expect(coordinateRenewal(
       ids.renewal,
       assignment,
       "original-coordination-key",
-    )
-    await coordinateRenewal(
+    )).rejects.toThrow('Staff assignment is no longer supported for Renewal.')
+    await expect(coordinateRenewal(
       ids.renewal,
       assignment,
       "original-coordination-key",
-    )
-    for (const [url, init] of fetch.mock.calls) {
-      expect(url).toContain("/staff-assignment")
-      expect(new Headers(init.headers).get("Idempotency-Key")).toBe(
-        "original-coordination-key",
-      )
-      expect(JSON.parse(init.body)).toEqual({
-        expectedVersion: 4,
-        assignedStaffId: ids.staff,
-        reason: assignment.reason,
-      })
-    }
+    )).rejects.toThrow('Staff assignment is no longer supported for Renewal.')
+    expect(fetch).not.toHaveBeenCalled()
   })
   it.each([
     { state: { ...operationState, expectedVersion: 4 } },
@@ -362,11 +354,12 @@ describe("Dương integration real transport contracts", () => {
         data: { ...assignmentResult.event.data, staffId: ids.customer },
       },
     },
-  ])("rejects unverified assignment success %j", async (patch) => {
-    respond({ data: { ...assignmentResult, ...patch } })
+  ])("removed assignment cannot be re-enabled by a mocked success response %j", async (patch) => {
+    const fetch = respond({ data: { ...assignmentResult, ...patch } })
     await expect(
       coordinateRenewal(ids.renewal, assignment, "coordination-key"),
-    ).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+    ).rejects.toThrow('Staff assignment is no longer supported for Renewal.')
+    expect(fetch).not.toHaveBeenCalled()
   })
   it("sends explicit false fault verdict with real incident/file references", async () => {
     const command = {
@@ -591,6 +584,17 @@ describe("Dương integration real transport contracts", () => {
     expect(
       new Headers(fetch.mock.calls[0][1].headers).get("Authorization"),
     ).toBe("Bearer token")
+  })
+  it("reads the real attachment name with an authenticated HEAD request", async () => {
+    const fileName = "minh chứng.pdf"
+    const fetch = vi.fn().mockResolvedValue(new Response(null, {
+      headers: { "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}` },
+    }))
+    vi.stubGlobal("fetch", fetch)
+    setAccessToken("token")
+    expect(await getDuongEvidenceName(ids.file)).toBe(fileName)
+    expect(fetch.mock.calls[0][1].method).toBe("HEAD")
+    expect(new Headers(fetch.mock.calls[0][1].headers).get("Authorization")).toBe("Bearer token")
   })
   it.each([401, 403, 404, 409, 500])(
     "redacts raw server internals while retaining HTTP %s meaning",

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
+import { formatVndAmount as formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
+import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import {
   calculateManagerReturnSettlement,
   canManagerAssignStaff,
@@ -33,7 +34,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     createFacilityTask,
     updateUnitStatus,
     reviewReturnDispute,
-    completeReturnRefund
+    completeReturnRefund,
+    payments
   } = useStorageHub()
 
   const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
@@ -56,6 +58,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [refundTxnRef, setRefundTxnRef] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<ReturnCase | null>(null)
   const returnHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-returns`)
+
+  // Settlement document modal state (invoice, receipt, payment history)
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [settlementTarget, setSettlementTarget] = useState<ReturnCase | null>(null)
 
   // Assign staff for inspection state
   const [assignModalOpen, setAssignModalOpen] = useState(false)
@@ -206,6 +212,32 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     setCompleteModalOpen(true)
   }
 
+  const formatReturnManagerError = (err: any, fallback: string): string => {
+    const msg = String(err?.message || '')
+    if (msg.includes('not pending refund') || msg.includes('409') || msg.includes('Hồ sơ không ở trạng thái chờ hoàn cọc')) {
+      return 'Xung đột trạng thái (409): Hồ sơ đang chờ khách duyệt hoặc đang có khiếu nại. Chưa thể thực hiện hoàn cọc / đóng hồ sơ.'
+    }
+    if (msg.includes('not in a state awaiting inspection')) {
+      return 'Hồ sơ không ở trạng thái chờ nghiệm thu hiện trường.'
+    }
+    if (msg.includes('not awaiting customer confirmation')) {
+      return 'Hồ sơ chưa ở trạng thái chờ khách hàng xác nhận.'
+    }
+    if (msg.includes('not in disputed status')) {
+      return 'Hồ sơ không ở trạng thái khiếu nại.'
+    }
+    if (msg.includes('Only active rentals')) {
+      return 'Chỉ hợp đồng đang hoạt động mới được yêu cầu trả kho.'
+    }
+    if (msg.includes('Error reviewing dispute')) {
+      return 'Có lỗi khi xem xét khiếu nại.'
+    }
+    if (msg.includes('Error completing refund')) {
+      return 'Có lỗi khi xác nhận hoàn cọc.'
+    }
+    return msg || fallback
+  }
+
   const handleConfirmComplete = () => {
     if (!completeTarget) return
     try {
@@ -214,7 +246,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       setCompleteModalOpen(false)
       setCompleteTarget(null)
     } catch (err: any) {
-      showToast(err?.message || 'Có lỗi khi đóng hồ sơ trả kho.')
+      showToast(formatReturnManagerError(err, 'Có lỗi khi đóng hồ sơ trả kho.'))
     }
   }
 
@@ -324,7 +356,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       setDisputeResolutionNote('')
       setSelectedReturn(null)
     } catch (err: any) {
-      showToast(err?.message || 'Error reviewing dispute')
+      showToast(formatReturnManagerError(err, 'Có lỗi khi xử lý khiếu nại.'))
     }
   }
 
@@ -343,7 +375,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       setRefundTxnRef('')
       setSelectedReturn(null)
     } catch (err: any) {
-      showToast(err?.message || 'Error completing refund')
+      showToast(formatReturnManagerError(err, 'Có lỗi khi hoàn cọc.'))
     }
   }
 
@@ -600,6 +632,18 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           {'Biên bản'}
                         </Button>
 
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                          onClick={() => {
+                            setSettlementTarget(ret)
+                            setSettlementModalOpen(true)
+                          }}
+                        >
+                          {'🧾 Quyết toán'}
+                        </Button>
+
                         {(ret.status === 'requested' || ret.status === 'scheduled') && (
                           <Button
                             size="sm"
@@ -622,7 +666,43 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
-                        {['inspected', 'awaiting_customer_confirmation', 'refund_pending', 'payment_due'].includes(ret.status) && (
+                        {ret.status === 'awaiting_customer_confirmation' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title="Hồ sơ đang chờ khách duyệt quyết toán, nút bị vô hiệu hóa để tránh lỗi 409 Conflict."
+                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                          >
+                            {'⏳ Chờ khách duyệt'}
+                          </Button>
+                        )}
+
+                        {ret.status === 'inspected' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title="Biên bản đã lập, chờ gửi và xác nhận từ khách hàng trước khi đóng hồ sơ."
+                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                          >
+                            {'Chờ gửi khách'}
+                          </Button>
+                        )}
+
+                        {ret.status === 'payment_due' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title="Khách hàng chưa thanh toán phần phụ phí còn thiếu, chưa thể hoàn tất."
+                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                          >
+                            {'Chờ thanh toán'}
+                          </Button>
+                        )}
+
+                        {ret.status === 'refund_pending' && (
                           <Button
                             size="sm"
                             variant="primary"
@@ -876,7 +956,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
             {getReturnActionReason(selectedReturn) && <ManagerActionNotice tone={selectedReturn.status === 'completed' ? 'success' : 'info'}>{getReturnActionReason(selectedReturn)}</ManagerActionNotice>}
 
-            <div className="flex justify-end gap-2 pt-2 border-t">
+            <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
+              <Button
+                variant="outline"
+                className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                onClick={() => {
+                  setSettlementTarget(selectedReturn)
+                  setSettlementModalOpen(true)
+                }}
+              >
+                🧾 Xem hóa đơn & biên lai
+              </Button>
               {(selectedReturn.status === 'requested' || selectedReturn.status === 'scheduled') && (
                 <Button
                   variant="primary"
@@ -1255,15 +1345,35 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               placeholder="Nghiệm thu đạt yêu cầu..."
             />
 
+            {(completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'disputed') && (
+              <div className="rounded-lg bg-rose-50 p-3 border border-rose-200 text-xs text-rose-800">
+                ⚠️ Hồ sơ đang {completeTarget.status === 'disputed' ? 'khiếu nại (cần BO giải quyết)' : 'chờ khách hàng duyệt xác nhận'}. Nút xác nhận bị vô hiệu hóa để tránh lỗi xung đột hệ thống (409 Conflict).
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => { setCompleteModalOpen(false); setCompleteTarget(null) }}>Hủy</Button>
-              <Button variant="primary" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleConfirmComplete}>
+              <Button
+                variant="primary"
+                disabled={completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'disputed'}
+                title={completeTarget.status === 'awaiting_customer_confirmation' ? 'Hồ sơ đang chờ khách duyệt - Nút bị vô hiệu hóa' : completeTarget.status === 'disputed' ? 'Hồ sơ đang khiếu nại - Nút bị vô hiệu hóa' : undefined}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleConfirmComplete}
+              >
                 Xác nhận đóng hồ sơ
               </Button>
             </div>
           </div>
         )}
       </Modal>
+
+      <ReturnSettlementModal
+        open={settlementModalOpen}
+        onClose={() => setSettlementModalOpen(false)}
+        returnCase={settlementTarget}
+        payments={payments}
+        role="manager"
+      />
     </div>
   )
 }

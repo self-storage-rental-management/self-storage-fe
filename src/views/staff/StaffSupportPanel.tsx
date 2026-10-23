@@ -1,3 +1,5 @@
+import { VIETNAM_TIME_ZONE, parseVietnamDate, vietnamDate } from '../../utils/vietnamTime'
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useState } from "react"
 import {
   Badge,
@@ -43,15 +45,15 @@ const priorityLabel: Record<TicketItem["priority"], string> = {
   low: "Thông thường",
 }
 const formatTicketTime = (value: string) => {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN")
+  const date = parseVietnamDate(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })
 }
 const ticketDateInput = (value: string) => {
-  const date = new Date(value)
+  const date = parseVietnamDate(value)
   if (Number.isNaN(date.getTime())) return ""
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
+  const year = vietnamDate.getFullYear(date)
+  const month = String(vietnamDate.getMonth(date) + 1).padStart(2, "0")
+  const day = String(vietnamDate.getDate(date)).padStart(2, "0")
   return `${year}-${month}-${day}`
 }
 const supportPriorityRank: Record<TicketItem["priority"], number> = {
@@ -85,8 +87,8 @@ export default function StaffSupportPanel({
       (left, right) =>
         supportPriorityRank[left.priority] -
           supportPriorityRank[right.priority] ||
-        new Date(right.updatedAt || right.created).getTime() -
-          new Date(left.updatedAt || left.created).getTime(),
+        parseVietnamDate(right.updatedAt || right.created).getTime() -
+          parseVietnamDate(left.updatedAt || left.created).getTime(),
     )
   const pagination = paginateStaffItems(sortedTickets, page)
 
@@ -120,7 +122,7 @@ export default function StaffSupportPanel({
         <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-2">
           <label className="text-sm font-medium text-slate-700">
             Ngày cập nhật
-            <input
+            <LocalizedDateInput
               className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
               type="date"
               value={dateFilter}

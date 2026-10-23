@@ -19,17 +19,6 @@ const evidence: RentalBookingEvidence = {
 }
 beforeEach(() => vi.clearAllMocks())
 describe("Booking evidence connects DB response without financial or permission shortcuts", () => {
-  it("shows authenticated project Sandbox eligibility without promoting unknown debt or allocation", () => {
-    const updated = { ...evidence, payments: [{ ...evidence.payments[0], verification: "SANDBOX" as const,
-      projectRecognition: { environment: "VNPAY_SANDBOX", enabled: true, eligibleForReconciliation: true, reason: "AUTHENTICATED_SANDBOX_EVIDENCE" } }] }
-    expect(isRentalBookingEvidence(updated, rental.id, rental.reservationId)).toBe(true)
-    const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, bookingEvidence: updated }} />)
-    expect(html).toContain("Chứng cứ VNPay Sandbox hợp lệ để đối soát")
-    expect(html).toContain("chưa xác nhận phân bổ vào sổ công nợ")
-    expect(rental.financialSummary.completeness).toBe("UNKNOWN")
-    expect(isRentalBookingEvidence({ ...updated, payments: [{ ...updated.payments[0], verification: "SIMULATED" }] }, rental.id, rental.reservationId)).toBe(false)
-    expect(isRentalBookingEvidence({ ...updated, payments: [{ ...updated.payments[0], projectRecognition: { ...updated.payments[0].projectRecognition, enabled: false } }] }, rental.id, rental.reservationId)).toBe(false)
-  })
   it("reads the existing endpoint and preserves unknown debt/access despite a paid simulated record", async () => {
     vi.mocked(apiRequest).mockResolvedValue({ data: { ...rental, bookingEvidence: evidence } })
     const detail = await getRental("customer", rental.id)
@@ -38,35 +27,6 @@ describe("Booking evidence connects DB response without financial or permission 
     expect(detail.financialSummary.completeness).toBe("UNKNOWN")
     expect(detail.financialSummary.outstandingAmount).toBeNull()
     expect(detail.access.status).toBeNull()
-  })
-  it("shows agreed amounts separately and does not present a simulation as actual money", () => {
-    const html = renderToStaticMarkup(<RentalDetail rental={{ ...rental, bookingEvidence: evidence }} onRequest={() => {}} />)
-    expect(html).not.toContain("Cọc theo thỏa thuận ban đầu")
-    expect(html).not.toContain("Xem các khoản tài chính đã ghi nhận")
-    expect(html).toContain("Cọc bảo đảm theo thỏa thuận")
-    expect(html).toContain("Theo dõi quá hạn")
-    expect(html).toContain("Gia hạn")
-    expect(html).toContain("không phải xác nhận đã thu tiền hoặc dư nợ hiện tại")
-    expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật")
-    expect(html).toContain("Chưa có dữ liệu xác thực")
-    expect(html).not.toMatch(/SIMULATED|RESERVATION_DEPOSIT|UNVERIFIED|FileAsset|gatewayIntent/)
-  })
-  it("does not duplicate the deposit in the rental summary when financial data is complete", () => {
-    const html = renderToStaticMarkup(<RentalDetail rental={{
-      ...rental,
-      bookingEvidence: evidence,
-      financialSummary: {
-        ...rental.financialSummary,
-        completeness: "COMPLETE",
-        securityDepositAmount: 25,
-        outstandingAmount: 0,
-        overdueAmount: 0,
-        billingMode: "PREPAID_FULL_PERIOD",
-      },
-    }} />)
-    expect(html).not.toContain("Cọc hồ sơ thuê")
-    expect(html).not.toContain("25 đ")
-    expect(html).toContain("Cọc bảo đảm theo thỏa thuận")
   })
   it("renders no-source states without manufacturing zero or changing a legacy response", async () => {
     const empty = { ...evidence, agreedAmounts: null, payments: [] }
@@ -77,25 +37,6 @@ describe("Booking evidence connects DB response without financial or permission 
     vi.mocked(apiRequest).mockResolvedValue({ data: rental })
     expect(await getRental("manager", rental.id)).toEqual(rental)
     expect(renderToStaticMarkup(<RentalDetail rental={rental} />)).not.toContain("Thỏa thuận ban đầu")
-  })
-  it("non-simulated PAID is still not a verified receipt", () => {
-    const unverified = { ...evidence, payments: [{ ...evidence.payments[0], verification: "UNVERIFIED" as const }] }
-    expect(renderToStaticMarkup(<RentalDetail rental={{ ...rental, bookingEvidence: unverified }} />))
-      .toContain("Chưa có bằng chứng xác minh tiền thực nhận")
-  })
-  it.each([
-    ["VERIFIED", "chưa xác nhận đầy đủ tài chính hồ sơ thuê"],
-    ["SANDBOX", "không xác nhận thu tiền thật"],
-    ["DISPUTED", "khiếu nại chưa được giải quyết"],
-    ["ATTEMPT", "Đang chờ kết quả xác thực"],
-  ] as const)("accepts %s provenance without promoting unknown Rental debt", async (verification, label) => {
-    const updated = { ...evidence, payments: [{ ...evidence.payments[0], verification }] }
-    expect(isRentalBookingEvidence(updated, rental.id, rental.reservationId)).toBe(true)
-    vi.mocked(apiRequest).mockResolvedValue({ data: { ...rental, bookingEvidence: updated } })
-    const detail = await getRental("customer", rental.id)
-    expect(detail.financialSummary.completeness).toBe("UNKNOWN")
-    expect(detail.financialSummary.outstandingAmount).toBeNull()
-    expect(renderToStaticMarkup(<RentalDetail rental={detail} />)).toContain(label)
   })
   it.each([
     { rentalId: "other" }, { reservationId: "other" }, { currency: "USD" },

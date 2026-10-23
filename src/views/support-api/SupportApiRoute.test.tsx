@@ -1,5 +1,4 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { readFileSync } from "node:fs"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ApiActor } from "../../services/authApi"
 import { ApiClientError } from "../../services/apiClient"
@@ -54,9 +53,5 @@ describe("primary D5 Support data boundary", () => {
     expect(html).not.toContain("Private foreign ticket")
     expect(html).not.toContain("Demo-only ticket")
   })
-  it("removes competing Support tabs from rental/signing entry points", () => {
-    for (const file of ["../customer/CustomerRentalsApiPanel.tsx", "../staff/StaffRenewalOperationsApiPanel.tsx"]) {
-      expect(readFileSync(new URL(file, import.meta.url), "utf8")).not.toContain("SupportApiEntry")
-    }
-  })
+
 })

@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useState } from "react"
 import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -63,15 +64,15 @@ export function InventoryRentalSummary({
   if (!rentals.length) {
     const message =
       unit.status === "occupied"
-        ? "Gian đang sử dụng nhưng chưa tìm thấy hồ sơ thuê chưa kết thúc."
-        : "Không có hồ sơ thuê chưa kết thúc."
+        ? "Gian kho đang ở trạng thái sử dụng nhưng không có hồ sơ thuê nào đang hiệu lực."
+        : "Không có hồ sơ thuê đang hiệu lực."
     return (
       <p
-        role="status"
-        className="line-clamp-2 text-sm leading-5 text-stone-600"
+        role={unit.status === "occupied" ? "alert" : "status"}
+        className={unit.status === "occupied" ? "rounded-lg border border-amber-500 bg-amber-100 px-3 py-2 text-sm leading-5 text-amber-800" : "text-sm leading-5 text-stone-600"}
         title={message}
       >
-        {message}
+        {unit.status === "occupied" && <span aria-hidden="true" className="mr-1">⚠️</span>}{message}
       </p>
     )
   }
@@ -96,10 +97,10 @@ export function InventoryRentalSummary({
           <p className="text-xs text-stone-500">{rentalLabels[r.status]}</p>
           {detailed && (
             <p className="text-xs text-stone-500">
-              Kỳ thuê: {rentalPeriodText(r)}
+              Kỳ thuê: {rentalPeriodText(r, false)}
             </p>
           )}
-          {r.dataWarnings.map((warning, index) => (
+          {r.dataWarnings.filter(warning => warning.field !== "contractEndDate").map((warning, index) => (
             <p
               key={`${warning.field}:${index}`}
               className="text-xs text-amber-800"
@@ -141,9 +142,11 @@ export function InventoryMaintenanceDetails({
       ) : read.error ? (
         <ReadFailure error={read.error} retry={read.refresh} />
       ) : !read.data ? (
-        <p role="status">Không có dữ liệu</p>
+        <p role="status">Chưa xác minh được trạng thái bảo trì.</p>
       ) : read.data.length === 0 ? (
-        <p>Không có dữ liệu</p>
+        unit.status === "maintenance"
+          ? <p role="alert" className="text-amber-800">⚠️ Gian kho đang bảo trì nhưng chưa có nhiệm vụ bảo trì được ghi nhận.</p>
+          : <p className="text-green-700">✓ Bình thường — Không có lịch sử hoặc yêu cầu bảo trì đang mở.</p>
       ) : (
         <ul className="space-y-3">
           {read.data.map((t) => (
@@ -201,7 +204,7 @@ export function InventoryAvailabilityDetails({
       >
         <label className="block">
           Từ ngày
-          <input
+          <LocalizedDateInput
             type="date"
             required
             value={range.startDate}
@@ -214,7 +217,7 @@ export function InventoryAvailabilityDetails({
         </label>
         <label className="block">
           Đến ngày
-          <input
+          <LocalizedDateInput
             type="date"
             required
             value={range.endDate}
