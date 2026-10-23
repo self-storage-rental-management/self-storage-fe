@@ -57,9 +57,12 @@ export function isApiReturn(v: unknown): v is ApiReturn {
         v.sourceType === 'RECOVERY' && isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) &&
         (v.recoveryTaskStatus === 'CLOSED' ? v.status === 'completed' && typeof v.recoveryCompletedAt === 'string' && Number.isFinite(Date.parse(v.recoveryCompletedAt)) : v.recoveryCompletedAt === null))
 }
-function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string) {
+type ReturnScope = 'READ' | 'OPERATE' | 'MANAGE'
+const scopeRank: Record<ReturnScope, number> = { READ: 1, OPERATE: 2, MANAGE: 3 }
+function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string, required: ReturnScope = 'READ') {
   if (a.roles.includes('ADMIN')) return true
-  return !!a.facilityScopes[facilityId]
+  const actual = a.facilityScopes[facilityId]
+  return !!actual && scopeRank[actual] >= scopeRank[required]
 }
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
@@ -74,10 +77,10 @@ function actor(role: ReturnRole, write = false) {
     throw new ApiClientError('Bạn chưa có quyền xử lý hồ sơ trả kho.', { status: 403 })
   return a
 }
-function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string) {
+function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string, requiredScope: ReturnScope = 'READ') {
   const a = actor(role)
   return readRentalEnvelope<ApiReturn>(value, v => isApiReturn(v) && (!id || v.id === id) && (!rentalId || v.rentalId === rentalId) &&
-    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || facilityAllowed(a, v.facilityId)))
+    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || facilityAllowed(a, v.facilityId, requiredScope)))
 }
 export async function listReturns(role: ReturnRole, page = 0, pageSize = 20) {
   const a = actor(role)
@@ -136,9 +139,11 @@ export async function completeRefund(id: string, body: { transactionReference?: 
     throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
   }
   if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const requiredScope: ReturnScope = a.roles.includes('BUSINESS') ? 'MANAGE' : 'OPERATE'
+  const resultRole: ReturnRole = a.roles.includes('STAFF') ? 'staff' : 'manager'
   return bound(await apiRequest(`/api/staff/returns/${id}/complete-refund`, {
     method: 'POST', body: JSON.stringify(body),
-  }), 'manager', id)
+  }), resultRole, id, undefined, requiredScope)
 }
 
 export interface ReturnSettlementReceipt {

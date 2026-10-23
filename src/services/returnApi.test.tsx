@@ -110,8 +110,13 @@ describe('real Return transport and unknown settlement presentation', () => {
       returnedKey: true, returnedCard: true, returnedLock: true, proposedUnitStatus: 'available' })
     expect(JSON.parse(fetch.mock.calls[1][1].body).evidencePhotos).toEqual([assetId])
   })
-  it('records the refund transaction reference through the staff endpoint for an authorized Manager', async () => {
-    state.actor = operationsActor('manager'); state.actor.permissions.push('refunds:approve', 'returns:read')
+  it('records the refund transaction reference through the staff endpoint for authorized Business Operations', async () => {
+    state.actor = {
+      ...operationsActor('manager'),
+      roles: ['BUSINESS'],
+      permissions: ['returns:read', 'refunds:execute'],
+      facilityScopes: { [ids.facility]: 'MANAGE' },
+    }
     const fetch = respond({ data: { ...record, status: 'completed' } })
     const result = await completeRefund(ids.event, { transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
     expect(result.status).toBe('completed')
@@ -136,13 +141,17 @@ describe('real Return transport and unknown settlement presentation', () => {
     await expect(listReturns('staff')).rejects.toThrow('quyền')
     expect(fetch).not.toHaveBeenCalled()
   })
-  it('allows business role to view returns across all facilities without facility scope limit', async () => {
+  it('requires a facility scope for Business return reads and accepts a scoped Business actor', async () => {
     state.actor = {
       ...operationsActor('manager'),
       roles: ['BUSINESS'],
-      permissions: ['returns:read', 'rentals:update'],
+      permissions: ['returns:read'],
       facilityScopes: {},
     }
+    respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
+    await expect(listReturns('manager')).rejects.toThrow('contract')
+
+    state.actor = { ...state.actor, facilityScopes: { [ids.facility]: 'MANAGE' } }
     respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
     const page = await listReturns('manager')
     expect(page.data).toHaveLength(1)
