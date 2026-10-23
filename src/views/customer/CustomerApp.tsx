@@ -31,6 +31,7 @@ import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow
 import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
+import CustomerSupportWidget from '../../components/support/CustomerSupportWidget'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import {
   getPoliciesForFacility,
@@ -4224,6 +4225,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           </div>
         </div>
       </Modal>
+
+      {isApiAuthenticated() && <CustomerSupportWidget />}
 
       {!isApiAuthenticated() && <CustomerSupportChatbot
         user={user}

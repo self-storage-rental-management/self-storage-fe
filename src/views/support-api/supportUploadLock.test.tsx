@@ -6,7 +6,7 @@ import SupportActionForm from "./SupportActionForm"
 import SupportTicketDetail from "./SupportTicketDetail"
 import SupportReadState from "./SupportReadState"
 import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
-import { Button, Modal } from "../../components/ui"
+import { Button } from "../../components/ui"
 import { ApiClientError } from "../../services/apiClient"
 import { supportActor, supportActive, supportPage, supportTicket, supportIds } from "../../../tests/supportApiFixtures"
 
@@ -64,14 +64,14 @@ describe("D5 upload preserves its form until response is handled", () => {
       kind: "resolve", summary: "", evidenceFileIds: [supportIds.message], expectedVersion: supportActive.version,
     } })
   })
-  it.each(["create", "message"])("%s upload prevents close and reload, then retains returned file", async kind => {
+  it.each(["create", "message"])("%s upload prevents leaving the inline chat and reload, then retains returned file", async kind => {
     const onLocked = vi.fn(), root = SupportApiWorkspace({ role: "customer", onLocked }) as ReactElement<any>
     const sessionSlots: any[] = [], session = () => render(() => (root.type as any)(root.props), sessionSlots)
     let tree = session()
-    const open = nodes(tree).find(node => node.type === Button && [node.props.children].flat().some(child => typeof child === "string" && child.trim() === (kind === "create" ? "Tạo yêu cầu" : "Chi tiết")))!
+    const open = nodes(tree).find(node => kind === "create" ? node.type === Button && node.props.children === "Cuộc trò chuyện mới" : node.type === "button" && node.props["aria-label"]?.startsWith("Mở hội thoại:"))!
     open.props.onClick()
     tree = session()
-    const modal = find(tree, Modal)
+    const back = nodes(tree).find(node => node.type === Button && node.props.children === "Quay lại danh sách")!
     let form = find(tree, SupportCreateForm)
     if (kind === "message") {
       const detail = find(tree, SupportTicketDetail)
@@ -89,12 +89,12 @@ describe("D5 upload preserves its form until response is handled", () => {
     expect(harness.upload).toHaveBeenCalledTimes(1)
     expect(onLocked).toHaveBeenLastCalledWith(true)
     // Invoke stale callbacks before a React rerender: synchronous upload ref must protect close/reload.
-    modal.props.onClose()
+    back.props.onClick()
     find(tree, SupportReadState).props.retry()
     expect(harness.refresh).not.toHaveBeenCalled()
     harness.data = supportPage([supportTicket])
     tree = session()
-    expect(find(tree, Modal)).toBeDefined()
+    expect(find(tree, kind === "create" ? SupportCreateForm : SupportTicketDetail)).toBeDefined()
     expect(find(tree, kind === "create" ? SupportCreateForm : SupportTicketDetail).props.command.locked).toBe(true)
     finish({ id: supportIds.message })
     await pending
@@ -112,8 +112,8 @@ describe("D5 upload preserves its form until response is handled", () => {
     expect(harness.upload).toHaveBeenCalledTimes(1)
     tree = session()
     expect(find(tree, kind === "create" ? SupportCreateForm : SupportTicketDetail).props.command.locked).toBe(false)
-    find(tree, Modal).props.onClose()
-    expect(find(session(), Modal)).toBeUndefined()
+    nodes(tree).find(node => node.type === Button && node.props.children === "Quay lại danh sách")!.props.onClick()
+    expect(find(session(), kind === "create" ? SupportCreateForm : SupportTicketDetail)).toBeUndefined()
   })
   it("failed upload releases its busy lock without selecting an unconfirmed file", async () => {
     const onBusy = vi.fn(), onChange = vi.fn()
