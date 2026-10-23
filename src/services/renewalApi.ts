@@ -38,7 +38,7 @@ export function isRenewalRecord(value: unknown): boolean {
   const r = value as RenewalApiRecord | null
   return (
     !!r &&
-    (r.displayCode == null || (typeof r.displayCode === "string" && /^GH-\d{4}-\d{6}$/.test(r.displayCode))) &&
+    (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
     typeof r.id === "string" &&
     typeof r.rentalId === "string" &&
     !!r.facility?.id &&
