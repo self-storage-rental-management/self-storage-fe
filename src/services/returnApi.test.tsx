@@ -110,8 +110,8 @@ describe('real Return transport and unknown settlement presentation', () => {
       returnedKey: true, returnedCard: true, returnedLock: true, proposedUnitStatus: 'available' })
     expect(JSON.parse(fetch.mock.calls[1][1].body).evidencePhotos).toEqual([assetId])
   })
-  it('records the refund transaction reference through the staff endpoint', async () => {
-    state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
+  it('records the refund transaction reference through the staff endpoint for an authorized Manager', async () => {
+    state.actor = operationsActor('manager'); state.actor.permissions.push('refunds:approve', 'returns:read')
     const fetch = respond({ data: { ...record, status: 'completed' } })
     const result = await completeRefund(ids.event, { transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
     expect(result.status).toBe('completed')

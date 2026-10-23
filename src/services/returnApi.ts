@@ -119,14 +119,21 @@ export function inspectReturn(id: string, body: InspectionInput) {
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, 'inspection', body)
 }
-export function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
+export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
+  const a = getAuthenticatedActor()
+  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'MANAGER' || role === 'BUSINESS') || !a.permissions.includes('refunds:approve')) {
+    throw new ApiClientError('Bạn chưa có quyền duyệt hoàn tiền.', { status: 403 })
+  }
   if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
     throw new Error('Mã giao dịch hoàn cọc không được vượt quá 120 ký tự.')
   }
   if (body.notes !== undefined && body.notes.length > 1000) {
     throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
   }
-  return mutate('staff', id, 'complete-refund', body)
+  if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
+  return bound(await apiRequest(`/api/staff/returns/${id}/complete-refund`, {
+    method: 'POST', body: JSON.stringify(body),
+  }), 'manager', id)
 }
 
 export interface ReturnSettlementReceipt {
@@ -146,6 +153,9 @@ export async function recordReturnSettlement(id: string, body: ReturnSettlementR
   if (!a.permissions.includes('payments:collect')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
   if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   validateReturnSettlementReceipt(body)
+  if (a.roles.includes('STAFF') && body.paymentMethod !== 'CASH') {
+    throw new ApiClientError('Staff chỉ được ghi nhận thu tiền mặt trong phiên thu.', { status: 403 })
+  }
   return bound(await apiRequest(`/api/staff/returns/${id}/settlement-receipts`, {
     method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
   }), 'staff', id)

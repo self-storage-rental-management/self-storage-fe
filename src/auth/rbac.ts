@@ -28,6 +28,10 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: 'returns:process', label: 'Nghiệm thu và xử lý trả kho', group: 'Nghiệp vụ' },
   { key: 'rentals:update', label: 'Quản lý hợp đồng và gia hạn', group: 'Nghiệp vụ' },
   { key: 'payments:collect', label: 'Quản lý thu cước và công nợ', group: 'Nghiệp vụ' },
+  { key: 'payments:confirm', label: 'Xác nhận thanh toán thủ công', group: 'Nghiệp vụ' },
+  { key: 'refunds:approve', label: 'Duyệt hoàn tiền', group: 'Nghiệp vụ' },
+  { key: 'fees:waive', label: 'Miễn hoặc giảm phí', group: 'Nghiệp vụ' },
+  { key: 'renewals:operate', label: 'Vận hành gia hạn', group: 'Nghiệp vụ' },
   { key: 'support:update', label: 'Phản hồi yêu cầu hỗ trợ', group: 'Nghiệp vụ' },
   { key: 'inventory:update', label: 'Quản lý tồn kho và bảo trì', group: 'Nghiệp vụ' },
   { key: 'policies:update', label: 'Cập nhật chính sách và biểu phí', group: 'Nghiệp vụ' },
@@ -35,6 +39,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: 'users:manage', label: 'Quản lý tài khoản', group: 'Quản trị' },
   { key: 'roles:manage', label: 'Quản lý bảng quyền', group: 'Quản trị' },
   { key: 'settings:manage', label: 'Cập nhật cài đặt hệ thống', group: 'Quản trị' },
+  { key: 'sessions:manage', label: 'Quản lý phiên đăng nhập', group: 'Quản trị' },
 ]
 
 const makePermissions = (...enabled: PermissionKey[]): RolePermissions => {
@@ -49,20 +54,21 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   ),
   staff: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'reservations:approve', 'contracts:read',
-    'checkins:read', 'checkins:process', 'rentals:read', 'returns:read', 'returns:process',
+    'checkins:read', 'checkins:process', 'rentals:read', 'renewals:operate', 'returns:read', 'returns:process',
+    'payments:read', 'payments:collect',
     'support:read', 'support:update'
   ),
   manager: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read',
-    'reservations:approve', 'storage_units:assign', 'contracts:read', 'checkins:read', 'rentals:read',
-    'returns:read', 'returns:process', 'payments:read', 'payments:collect', 'support:read', 'support:update',
-    'inventory:update', 'policies:read', 'staff_tasks:update', 'reports:read'
+    'reservations:approve', 'storage_units:assign', 'contracts:read', 'checkins:read', 'rentals:read', 'rentals:update',
+    'returns:read', 'returns:process', 'payments:read', 'payments:confirm', 'payments:collect', 'refunds:approve', 'fees:waive',
+    'support:read', 'inventory:update', 'policies:read', 'staff_tasks:update', 'reports:read'
   ),
   business: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
-    'rentals:read', 'returns:read', 'returns:process', 'rentals:update', 'payments:read', 'reports:read', 'support:read', 'policies:read', 'policies:update'
+    'rentals:read', 'returns:read', 'payments:read', 'refunds:approve', 'fees:waive', 'reports:read', 'support:read', 'policies:read', 'policies:update'
   ),
-  admin: makePermissions('users:manage', 'roles:manage', 'settings:manage', 'audit_logs:read'),
+  admin: makePermissions('dashboard:read', 'users:manage', 'roles:manage', 'settings:manage', 'audit_logs:read', 'sessions:manage'),
 }
 
 export const normalizeRolePermissions = (value: unknown): RolePermissionsState => {
@@ -82,19 +88,29 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   normalized.customer['rentals:update'] = false
   normalized.staff['reservations:approve'] = true
   normalized.staff['storage_units:assign'] = false
-  normalized.staff['payments:collect'] = false
+  normalized.staff['rentals:update'] = false
+  normalized.staff['payments:collect'] = true
+  normalized.staff['payments:confirm'] = false
+  normalized.staff['refunds:approve'] = false
+  normalized.staff['fees:waive'] = false
+  normalized.staff['renewals:operate'] = true
   normalized.staff['policies:update'] = false
   normalized.staff['staff_tasks:update'] = false
   normalized.manager['policies:update'] = false
   normalized.manager['policies:read'] = true
+  normalized.manager['checkins:process'] = false
+  normalized.manager['support:update'] = false
   normalized.business['policies:read'] = true
   normalized.business['policies:update'] = true
   normalized.business['returns:read'] = true
-  normalized.business['returns:process'] = true
-  normalized.business['rentals:update'] = true
+  normalized.business['returns:process'] = false
+  normalized.business['rentals:update'] = false
   normalized.business['settings:manage'] = false
   normalized.business['payments:collect'] = false
   normalized.business['reservations:approve'] = false
+  normalized.business['checkins:process'] = false
+  normalized.business['storage_units:assign'] = false
+  normalized.business['support:update'] = false
   normalized.admin = { ...DEFAULT_ROLE_PERMISSIONS.admin }
   return normalized
 }
