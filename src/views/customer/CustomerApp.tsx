@@ -276,11 +276,26 @@ interface SizeCategoryCardProps {
   facility: Facility
   unitType: UnitType
   availableCount: number
+  isRecommended?: boolean
+  isUserSelected?: boolean
+  isIncompatible?: boolean
+  incompatibleReason?: string
   onReserve: (facility: Facility, unitType: UnitType) => void
   onViewSpecs: (facility: Facility, unitType: UnitType, availableCount: number) => void
 }
 
-function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReserve, onViewSpecs }: SizeCategoryCardProps) {
+function SizeCategoryCard({
+  facility,
+  unitType,
+  apiSpec,
+  availableCount,
+  isRecommended = false,
+  isUserSelected = false,
+  isIncompatible = false,
+  incompatibleReason,
+  onReserve,
+  onViewSpecs,
+}: SizeCategoryCardProps) {
   const isAvailable = availableCount > 0
   const usableCapacity = Math.round(unitType.volumeM3 * 0.75 * 10) / 10
   const sizeCode = storageSizeCode(unitType.name)
@@ -299,7 +314,13 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
   }, [apiSpec?.imageUrl, facility.image, sizeCode])
 
   return (
-    <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
+    <article className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border transition hover:-translate-y-0.5 hover:shadow-lg ${
+      isRecommended
+        ? 'border-emerald-500 bg-white ring-2 ring-emerald-500/40 shadow-md'
+        : isIncompatible
+        ? 'border-stone-200 bg-stone-50/70'
+        : 'border-stone-200 bg-white hover:border-stone-400'
+    }`}>
       <div className="relative h-44 overflow-hidden bg-stone-200">
         <img
           src={imgSrc}
@@ -311,16 +332,43 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
            {facility.name}
         </span>
+        {isRecommended && (
+          <span className="absolute top-3 right-3 rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow-md flex items-center gap-1">
+            ⭐ Đề xuất tối ưu
+          </span>
+        )}
+        {isUserSelected && !isRecommended && !isIncompatible && (
+          <span className="absolute top-3 right-3 rounded-full bg-stone-900/80 px-2.5 py-0.5 text-xs font-semibold text-white shadow">
+            Kho bạn đã chọn
+          </span>
+        )}
+        {isIncompatible && (
+          <span className="absolute top-3 right-3 rounded-full bg-amber-600 px-2.5 py-0.5 text-xs font-bold text-white shadow">
+            ⚠️ Không còn phù hợp
+          </span>
+        )}
         <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Kho size {sizeCode}</span>
       </div>
       <div className="flex flex-col p-5">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-bold text-amber-700 truncate mb-0.5">{facility.name}</p>
-            <p className="text-xs font-semibold uppercase tracking-[.12em] text-stone-500">{'Cỡ kho'}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-semibold uppercase tracking-[.12em] text-stone-500">{'Cỡ kho'}</p>
+              {isRecommended && (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.2 text-[10px] font-bold text-emerald-800">
+                  ⭐ Hệ thống đề xuất
+                </span>
+              )}
+              {isUserSelected && !isRecommended && (
+                <span className="rounded-full bg-stone-100 px-2 py-0.2 text-[10px] font-medium text-stone-700">
+                  Tự chọn
+                </span>
+              )}
+            </div>
             <h3 className="mt-0.5 text-xl font-bold leading-tight text-black">{storageTypeLabelVi(unitType.name)}</h3>
           </div>
-          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${isAvailable ? 'border-stone-300 bg-white text-black' : 'border-red-700 bg-red-700 text-white'}`}>
+          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${isAvailable ? (isRecommended ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-stone-300 bg-white text-black') : 'border-red-700 bg-red-700 text-white'}`}>
             {isAvailable ? `${availableCount} ${'kho trống'}` : ('Hết kho')}
           </span>
         </div>
@@ -339,6 +387,11 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           </div>
         </div>}
         {unitType.descriptionVi && <p className="mt-4 line-clamp-3 text-sm leading-5 text-stone-600">{unitType.descriptionVi}</p>}
+        {isIncompatible && incompatibleReason && (
+          <p className="mt-2 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800 border border-red-200">
+            ⚠️ {incompatibleReason}
+          </p>
+        )}
         <div className="pt-5">
           <p className="text-xs text-stone-500">{'Giá thuê từ'}</p>
           <p className="text-2xl font-bold tracking-tight text-black">{formatVnd(unitType.monthlyPrice)}<span className="text-sm font-normal text-stone-500">/{'tháng'}</span></p>
@@ -347,7 +400,20 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           {!isAvailable && <p className="mt-2 text-xs font-bold text-red-700">{'Cỡ kho này hiện chưa thể đặt.'}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button variant="outline" size="sm" onClick={() => onViewSpecs(facility, unitType, availableCount)}>{'Xem chi tiết'}</Button>
-            <Button size="sm" disabled={!isAvailable} onClick={() => onReserve(facility, unitType)}>{isAvailable ? ('Bắt đầu đặt') : ('Hết kho')}</Button>
+            {isRecommended ? (
+              <Button
+                size="sm"
+                disabled={!isAvailable}
+                onClick={() => onReserve(facility, unitType)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+              >
+                {isAvailable ? '⭐ Chọn kho đề xuất' : 'Hết kho'}
+              </Button>
+            ) : (
+              <Button size="sm" disabled={!isAvailable} onClick={() => onReserve(facility, unitType)}>
+                {isAvailable ? (isUserSelected ? 'Tiếp tục đặt' : 'Bắt đầu đặt') : 'Hết kho'}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1384,7 +1450,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     ? backendUnitTypes
       .filter(candidate => !selectedTarget || candidate.facilityId === selectedTarget.facility.id)
       .filter(candidate => (availabilityByUnitType[candidate.id] ?? candidate.availableCount ?? 0) > 0)
-      .sort((left, right) => left.volumeM3 - right.volumeM3)
+      .sort((left, right) => (left.monthlyPrice - right.monthlyPrice) || (left.volumeM3 - right.volumeM3))
       .find(candidate => {
         const candidateRackDimensions: [number, number, number] = [candidate.rackLengthM, candidate.rackWidthM, candidate.rackHeightM]
         const everyPackageFits = capacitySamples.every(sample => packageCapacityPerRack(sample, candidateRackDimensions) > 0)
@@ -1399,6 +1465,24 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     : undefined
   const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
   const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
+
+  const currentSelectionIncompatibility = useMemo(() => {
+    if (!selectedUnit || !allPackageSamplesValid) return null
+    if (goodsWeightNumber > selectedUnit.maxLoadKg) {
+      return `Tổng trọng lượng hàng (${goodsWeightNumber.toLocaleString('vi-VN')} kg) vượt quá tải trọng tối đa của kho (${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg).`
+    }
+    if (hasUnplaceablePackage) {
+      return `Kiện hàng có kích thước vượt quá khung kệ kho (${formatRackDimensions(selectedRackDimensions)} m).`
+    }
+    if (totalFramesRequired > selectedRackCount) {
+      return `Số lượng kiện hàng cần ${totalFramesRequired} khung, vượt quá số khung kệ của kho (${selectedRackCount} khung).`
+    }
+    const avail = selectedTarget ? (availabilityByUnitType[selectedTarget.unitType.id] ?? 1) : 1
+    if (avail <= 0) {
+      return `Loại kho này hiện đã hết gian trống tại cơ sở.`
+    }
+    return null
+  }, [selectedUnit, allPackageSamplesValid, goodsWeightNumber, hasUnplaceablePackage, totalFramesRequired, selectedRackCount, selectedRackDimensions, selectedTarget, availabilityByUnitType])
 
   // Active rental packages for the selected unit
   const selectedUnitActivePackages = useMemo(() => {
@@ -1616,6 +1700,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       return
     }
     if (!validateBookingForm()) return
+    if (currentSelectionIncompatibility) {
+      setReservationSubmitError(`Kho đã chọn không phù hợp: ${currentSelectionIncompatibility}. Vui lòng bấm chọn kho đề xuất hoặc điều chỉnh số lượng/kích thước hàng hóa.`)
+      showToast('Kho đã chọn không phù hợp. Vui lòng chuyển sang kho đề xuất.')
+      return
+    }
 
     const endDate = addMonthsForPreview(earliestCheckInDate, rentalMonths)
     if (endDate === '—') return
@@ -2138,17 +2227,26 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                      {visibleUnitTypes.map(unitType => (
-                        <SizeCategoryCard
-                          key={unitType.id}
-                          facility={facility}
-                          unitType={unitType}
-                          apiSpec={backendUnitTypes.find(item => item.id === unitType.id)}
-                          availableCount={effectiveAvailableCount(facility.id, unitType.name)}
-                          onReserve={handleStartReservation}
-                          onViewSpecs={handleOpenSpecs}
-                        />
-                      ))}
+                      {visibleUnitTypes.map(unitType => {
+                        const isRec = warehouseRecommendation ? warehouseRecommendation.id === unitType.id : false
+                        const isSelected = selectedTarget ? selectedTarget.unitType.id === unitType.id : false
+                        const isIncomp = Boolean(allPackageSamplesValid && !isRec && isSelected && currentSelectionIncompatibility)
+                        return (
+                          <SizeCategoryCard
+                            key={unitType.id}
+                            facility={facility}
+                            unitType={unitType}
+                            apiSpec={backendUnitTypes.find(item => item.id === unitType.id)}
+                            availableCount={effectiveAvailableCount(facility.id, unitType.name)}
+                            isRecommended={isRec}
+                            isUserSelected={isSelected}
+                            isIncompatible={isIncomp}
+                            incompatibleReason={isIncomp ? (currentSelectionIncompatibility || undefined) : undefined}
+                            onReserve={handleStartReservation}
+                            onViewSpecs={handleOpenSpecs}
+                          />
+                        )
+                      })}
                     </div>
                     {matchingUnitTypes.length === 0 && <div className="rounded-xl border border-dashed border-stone-300 py-10 text-center text-sm text-stone-500">Không tìm thấy loại kho phù hợp tại cơ sở này.</div>}
                     {matchingUnitTypes.length > CUSTOMER_UNIT_TYPES_PER_PAGE && <div className="flex flex-wrap items-center justify-center gap-2 border-t border-stone-200 pt-5"><Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.max(1, currentPage - 1) }))}>← Trang trước</Button><span className="px-2 text-sm font-semibold text-stone-600">Trang {currentPage}/{pageCount}</span><Button size="sm" variant="outline" disabled={currentPage === pageCount} onClick={() => setUnitPages(pages => ({ ...pages, [facility.id]: Math.min(pageCount, currentPage + 1) }))}>Trang sau →</Button></div>}
@@ -2941,10 +3039,23 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         {selectedUnit && (() => {
           const backendSpec = backendUnitTypes.find(item => item.id === selectedTarget?.unitType.id)
           if (isApiAuthenticated() && backendSpec && selectedTarget) return <CustomerUnitDetails
-            unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
+            unitType={backendSpec}
+            facilityName={selectedTarget.facility.name}
+            facilityCode={selectedTarget.facility.code}
+            address={selectedTarget.facility.address}
             availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
             rentalPackages={backendRentalPackages}
-            onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
+            isRecommended={warehouseRecommendation?.id === backendSpec.id}
+            isUserSelected={true}
+            isIncompatible={Boolean(currentSelectionIncompatibility)}
+            incompatibleReason={currentSelectionIncompatibility || undefined}
+            onSelectRecommended={recommendedUnitType && warehouseRecommendation?.id !== backendSpec.id ? () => {
+              handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2)
+              setDetailOpen(false)
+            } : undefined}
+            onClose={() => setDetailOpen(false)}
+            onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)}
+          />
           const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 
           return (
@@ -3165,8 +3276,27 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             {bookingStep === 2 && <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
               <div className="mb-3 border-b border-stone-200 pb-3">
-                <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">Loại kho bạn đang chọn</p>
-                <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[.1em] text-stone-500">Loại kho bạn đang chọn</p>
+                    <p className="mt-1 font-bold text-black">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)} · {selectedUnit.facilityName}</p>
+                  </div>
+                  <div>
+                    {warehouseRecommendation && warehouseRecommendation.id === selectedTarget?.unitType.id ? (
+                      <span className="rounded-full bg-emerald-100 border border-emerald-300 px-3 py-1 text-xs font-bold text-emerald-800">
+                        ⭐ Kho hệ thống đề xuất
+                      </span>
+                    ) : currentSelectionIncompatibility ? (
+                      <span className="rounded-full bg-amber-100 border border-amber-300 px-3 py-1 text-xs font-bold text-amber-900">
+                        ⚠️ Kho không còn phù hợp
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-stone-100 border border-stone-200 px-3 py-1 text-xs font-semibold text-stone-700">
+                        Kho bạn tự chọn
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="flex flex-col gap-0.5 text-sm sm:flex-row sm:justify-between sm:gap-2">
                 <span className="text-stone-700">Cỡ kho đã chọn:</span>
@@ -3200,7 +3330,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
                 <p className="mb-3 font-bold text-stone-900">Nhu cầu thuê kho</p>
               <Select
-                label={'Gói thuê & Kỳ hạn'}
+                label={'Gói thuê'}
                 value={isApiAuthenticated() ? selectedPackageId : selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
                 disabled={isApiAuthenticated() && rentalPackagesLoading}
                 onChange={e => {
@@ -3294,18 +3424,87 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
 
             {allPackageSamplesValid && warehouseRecommendation && (
-              <div className={`rounded-xl border p-4 text-sm ${warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-bold">Gợi ý kho phù hợp theo số lượng và kích thước đã nhập</p>
-                    <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
-                    {warehouseRecommendation.id === selectedTarget?.unitType.id && <p className="mt-1 text-xs font-semibold">Cỡ kho bạn đang chọn đã phù hợp.</p>}
+              <div className={`rounded-2xl border-2 p-5 text-sm transition ${
+                warehouseRecommendation.id === selectedTarget?.unitType.id
+                  ? 'border-emerald-500 bg-emerald-50/90 text-emerald-950 shadow-sm'
+                  : 'border-amber-400 bg-amber-50/90 text-amber-950 shadow-sm'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-lg text-white">⭐</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-base">Kho hệ thống đề xuất tối ưu</p>
+                        <span className="rounded-full bg-emerald-200 px-2.5 py-0.5 text-xs font-bold text-emerald-900">
+                          Phù hợp nhất
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5">
+                        Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa với tải trọng an toàn: <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung, tải trọng tối đa {warehouseRecommendation.maxLoadKg.toLocaleString('vi-VN')} kg).
+                      </p>
+                      {warehouseRecommendation.id === selectedTarget?.unitType.id ? (
+                        <p className="mt-2 text-xs font-bold text-emerald-800 flex items-center gap-1">
+                          <span>✓</span> Cỡ kho bạn đang chọn chính là kho được đề xuất tối ưu.
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-xs font-medium text-amber-900">
+                          Kho bạn tự chọn khác với kho đề xuất. Bạn có thể giữ nguyên kho tự chọn hoặc bấm nút bên cạnh để chuyển sang kho đề xuất.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && <Button type="button" size="sm" variant="outline" onClick={() => handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2)}>Chọn cỡ kho được gợi ý</Button>}
+                  {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2)
+                        showToast(`Đã chuyển sang kho đề xuất: ${recommendedUnitType.name}`)
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow shrink-0"
+                    >
+                      ⭐ Chọn kho đề xuất này
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
-            {allPackageSamplesValid && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900"><b>Chưa có cỡ kho còn trống phù hợp</b><p className="mt-1 text-xs">Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.</p></div>}
+
+            {currentSelectionIncompatibility && (
+              <div className="rounded-2xl border-2 border-red-500 bg-red-50 p-4 text-xs text-red-950 shadow-sm space-y-2">
+                <div className="flex items-center gap-2 font-bold text-sm text-red-900">
+                  <span className="text-base">⚠️</span>
+                  <span>Kho bạn tự chọn không còn phù hợp</span>
+                </div>
+                <p className="leading-relaxed font-medium text-red-900">
+                  {currentSelectionIncompatibility}
+                </p>
+                {warehouseRecommendation && recommendedUnitType && selectedTarget && (
+                  <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-red-200">
+                    <span className="text-stone-700">Hệ thống đề xuất chuyển sang: <b>{recommendedUnitType.name}</b></span>
+                    <Button
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2)
+                        setValidationViolation(null)
+                        showToast(`Đã chuyển sang ${recommendedUnitType.name}`)
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                    >
+                      ⭐ Chọn kho đề xuất {recommendedUnitType.name}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {allPackageSamplesValid && !warehouseRecommendation && (
+              <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
+                <b>Chưa có cỡ kho còn trống phù hợp</b>
+                <p className="mt-1 text-xs">Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.</p>
+              </div>
+            )}
 
             {/* Check-in schedule is intentionally placed after goods declaration because OTHER goods add a review stage. */}
             </>}
@@ -3338,7 +3537,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
               const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
               const totalTermValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
-              const reservationDeposit = Math.round(totalTermValue * 0.2 * 100) / 100
+              const depositRateToUse = (selectedActivePackage?.depositPercent != null) ? (selectedActivePackage.depositPercent / 100) : 0.2
+              const reservationDeposit = Math.round(totalTermValue * depositRateToUse * 100) / 100
               const remainingPayment = Math.max(0, totalTermValue - reservationDeposit)
               const conditionSecurityDeposit = currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice
               const dueAtCheckIn = remainingPayment + conditionSecurityDeposit
@@ -3366,7 +3566,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
                   </div>
 
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền duy trì CSVC (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + tiền duy trì CSVC)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng tiền thuê và tiền duy trì CSVC</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
+                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>{`Cọc giữ chỗ ${Math.round(depositRateToUse * 100)}% (được trừ vào tiền thuê)`}</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền duy trì CSVC (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + tiền duy trì CSVC)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng tiền thuê và tiền duy trì CSVC</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
 
                     <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Mã OTP có hiệu lực 10 phút. Thời hạn thanh toán bắt đầu sau khi xác minh hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được xét duyệt trong tối đa một ngày làm việc. Sau khi duyệt có 15 phút để thanh toán.' : 'Sau khi xác minh email, bạn có 15 phút để thanh toán cọc 20% theo báo giá.'}</li><li>Quản lý cơ sở có tối đa một ngày làm việc để phân kho. Khách hàng chọn lịch nhận kho trong thời hạn 7 ngày làm việc từ thời điểm kho có thể sẵn sàng.</li></ul></div>
                 </div>
@@ -3619,10 +3819,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span>{'Tổng giá trị kỳ thuê:'}</span>
                     <span className="">{formatVnd(totalDue)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (20%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
+                  <div className="flex justify-between font-bold text-black"><span>{`Cọc cần thanh toán (${totalDue > 0 ? Math.round(reservationDeposit / totalDue * 100) : 20}%):`}</span><span>{formatVnd(reservationDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Tiền duy trì CSVC:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Còn thu tại nhận kho:'}</span><span>{formatVnd(dueAtCheckIn)}</span></div>
-                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Cọc giữ chỗ 20% được khấu trừ vào tiền thuê. Tiền duy trì CSVC được thu riêng khi nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
+                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{`Cọc giữ chỗ ${totalDue > 0 ? Math.round(reservationDeposit / totalDue * 100) : 20}% được khấu trừ vào tiền thuê. Tiền duy trì CSVC được thu riêng khi nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.`}</p>
                 </div>
               </div>
 

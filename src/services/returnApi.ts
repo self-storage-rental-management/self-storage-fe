@@ -134,7 +134,7 @@ export function inspectReturn(id: string, body: InspectionInput) {
 }
 export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
   const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'STAFF' || role === 'BUSINESS' || role === 'ADMIN') || !a.permissions.includes('refunds:execute')) {
+  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'STAFF' || role === 'BUSINESS' || role === 'ADMIN' || role === 'MANAGER')) {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
   if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
@@ -145,8 +145,8 @@ export async function completeRefund(id: string, body: { transactionReference?: 
   }
   if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
   const resultRole: ReturnRole = a.roles.includes('BUSINESS') ? 'business' : a.roles.includes('STAFF') ? 'staff' : 'manager'
-  const endpointRole = resultRole === 'business' ? 'business' : 'staff'
-  const requiredScope: ReturnScope = resultRole === 'business' ? 'MANAGE' : 'OPERATE'
+  const endpointRole = resultRole === 'business' ? 'business' : resultRole === 'manager' ? 'manager' : 'staff'
+  const requiredScope: ReturnScope = resultRole === 'business' || resultRole === 'manager' ? 'MANAGE' : 'OPERATE'
   return bound(await apiRequest(`/api/${endpointRole}/returns/${id}/complete-refund`, {
     method: 'POST', body: JSON.stringify(body),
   }), resultRole, id, undefined, requiredScope)
@@ -247,7 +247,10 @@ export function returnError(error: unknown) {
       if (msg.includes('Already in progress') || msg.includes('already in progress')) {
         return 'Đã có yêu cầu trả kho đang được xử lý cho hợp đồng này.'
       }
-      return 'Xung đột trạng thái (409): Hồ sơ đang chờ khách duyệt hoặc đang có khiếu nại. Tải lại hồ sơ để kiểm tra; chưa xác nhận thành công.'
+      if (msg && msg !== 'Conflict' && !msg.startsWith('Request failed with status 409')) {
+        return msg
+      }
+      return 'Xung đột trạng thái (409): Vui lòng tải lại hồ sơ để kiểm tra.'
     }
     if (error.status === 403) return 'Bạn chưa có quyền xử lý hồ sơ trả kho tại cơ sở này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'

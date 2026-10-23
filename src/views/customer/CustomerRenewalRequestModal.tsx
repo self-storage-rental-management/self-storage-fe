@@ -115,24 +115,17 @@ export default function CustomerRenewalRequestModal({
         {quote && (
           <>
           <section aria-label="Chi tiết báo giá gia hạn" className="rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
-            <div className="space-y-3">
-              <div className="space-y-2 border-b border-dashed border-slate-200 pb-3">
-                <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
-                <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
-              </div>
-              <div className="space-y-2">
-                <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
-                {quote.discountAmount > 0 && (
-                  <QuoteLine
-                    label={`Giảm giá (${Math.round(quote.discountRate * 100)}%)`}
-                    value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
-                    valueClassName="text-emerald-700"
-                  />
-                )}
-                <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
-                <QuoteLine label="Cọc gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} />
-                <QuoteLine label="Tiền thuê còn lại khi ký" value={rentalMoney(quote.remainingRentalAmount, quote.currency)} />
-              </div>
+            <div className="space-y-2">
+              <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
+              <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
+              {quote.discountAmount > 0 && (
+                <QuoteLine
+                  label={`Giảm giá (${Math.round(quote.discountRate * 100)}%)`}
+                  value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
+                  valueClassName="text-emerald-700"
+                />
+              )}
+              <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
             </div>
           </section>
             <label className="flex items-start gap-2 text-sm text-stone-700">

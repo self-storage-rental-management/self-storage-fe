@@ -239,7 +239,7 @@ export default function Layout({
       'overdue': 'Quản Lý Nợ Quá Hạn',
       'facilities': 'Quản Lý Cơ Sở',
       'performance': 'Hiệu Suất Mặt Bằng',
-      'policies': 'Gói Thuê Kỳ Hạn',
+      'policies': 'Gói Thuê',
       'pricing': 'Bảng Giá Loại Kho',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',

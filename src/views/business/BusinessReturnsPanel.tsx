@@ -1374,13 +1374,22 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       >
                         📋 Tiến hành nghiệm thu hiện trường
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={submitting}
+                        className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold cursor-pointer"
+                        onClick={() => handleCompleteRefund()}
+                      >
+                        ⚡ Cho trả kho ngay (Không trừ cọc)
+                      </Button>
                     </div>
                   )}
 
                   {!isBusiness && (selectedItem.status === 'awaiting_customer_confirmation' || selectedItem.status === 'inspected') && (
                     <div className="space-y-2">
                       <p className="text-xs text-stone-600">
-                        Biên bản đã được lập. Để tiếp tục, bạn có thể mô phỏng phản hồi từ khách hàng:
+                        Biên bản đã được lập. Để tiếp tục, bạn có thể mô phỏng phản hồi từ khách hàng hoặc hoàn tất trả kho ngay:
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -1391,6 +1400,15 @@ export default function BusinessReturnsPanel({ user }: Props) {
                           onClick={() => handleCustomerConfirm('accepted')}
                         >
                           ✓ Khách hàng đồng ý quyết toán
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={submitting}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+                          onClick={() => handleCompleteRefund()}
+                        >
+                          ⚡ Hoàn tất trả kho ngay (Giải phóng gian)
                         </Button>
                         <Button
                           variant="outline"
@@ -1412,7 +1430,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   )}
 
                   {!isBusiness && selectedItem.status === 'disputed' && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant="primary"
                         size="sm"
@@ -1420,6 +1438,15 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         onClick={() => setActiveTab('dispute')}
                       >
                         ⚖️ Thẩm định & Tái quyết toán khiếu nại ngay
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={submitting}
+                        className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold cursor-pointer"
+                        onClick={() => handleCompleteRefund()}
+                      >
+                        ⚡ Bỏ qua khiếu nại & Cho trả kho ngay
                       </Button>
                     </div>
                   )}
