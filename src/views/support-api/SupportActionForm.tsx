@@ -1,5 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { useSupportCommand } from "../../hooks/useSupportCommand"
@@ -64,6 +64,7 @@ export default function SupportActionForm({
     [staffId, setStaffId] = useState("")
   const visibility = internal ? "INTERNAL" as const : "PUBLIC" as const
   const [localFiles, setLocalFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
+  const uploadLock = useRef(false)
   const body = draft?.body ?? localBody
   const files = draft?.files ?? localFiles
   const setBody = (value: string) => onDraftChange ? onDraftChange({ body: value, files }) : setLocalBody(value)
@@ -93,7 +94,7 @@ export default function SupportActionForm({
     (action !== "decision" || !!escalationId)
   const submit = (requestedAction = action) => {
     if (
-      !(requestedAction === "resolve" ? canResolve : valid) || uploading || command.locked || command.conflict ||
+      !(requestedAction === "resolve" ? canResolve : valid) || uploadLock.current || uploading || command.locked || command.conflict ||
       !supportActions(getAuthenticatedActor(), role, t).includes(requestedAction)
     )
       return
@@ -241,6 +242,12 @@ export default function SupportActionForm({
             required={needsBody}
             disabled={command.locked}
             onChange={(e) => setBody(e.target.value)}
+            onKeyDown={e => {
+              if (mode === "message" && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                submit()
+              }
+            }}
           />
         </label>
       )}
@@ -249,7 +256,7 @@ export default function SupportActionForm({
         compact={mode === "message"}
         key={`${action}:${visibility}`}
         entityType={internal || action === "escalate" ? "DUONG_SUPPORT_INTERNAL" : "DUONG_SUPPORT_PUBLIC"}
-        entityId={t.id} value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { setUploading(busy); onUploadBusy?.(busy) }}
+        entityId={t.id} value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { uploadLock.current = busy; setUploading(busy); onUploadBusy?.(busy) }}
       />}
       <Button
         type="submit"
@@ -267,6 +274,7 @@ export default function SupportActionForm({
         onClick={() => submit("resolve")}
       >Báo đã xử lý</Button>}
       </div>
+      {mode === "message" && <p className="text-[11px] text-stone-400">Enter để gửi, Shift+Enter để xuống dòng.</p>}
     </form>
   )
 }

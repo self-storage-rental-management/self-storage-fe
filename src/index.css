@@ -284,6 +284,49 @@ button:not(:disabled) { cursor: pointer; }
 
 .fade-in { animation: fadeIn .18s ease-out; }
 
+/* Keep chat content mounted while fading out, without leaving hidden controls interactive. */
+.support-chat-panel {
+  transform-origin: bottom right;
+  opacity: 0;
+  transform: translateY(14px) scale(.97);
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 180ms;
+}
+
+.support-chat-panel[data-open="true"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 220ms ease-out, transform 220ms cubic-bezier(.2, .7, .3, 1), visibility 0s;
+}
+
+@starting-style {
+  .support-chat-panel[data-open="true"] {
+    opacity: 0;
+    transform: translateY(14px) scale(.97);
+  }
+}
+
+.support-chat-launcher {
+  transition: opacity 140ms ease, transform 180ms ease, background-color 150ms ease, visibility 0s;
+}
+
+.support-chat-launcher[data-expanded="true"] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .support-chat-panel,
+  .support-chat-panel[data-open="true"],
+  .support-chat-launcher,
+  .support-chat-launcher[data-expanded="true"] {
+    transform: none;
+    transition: none;
+  }
+}
+
 .stat-card-hover { transition: border-color .18s, box-shadow .18s, transform .18s; }
 
 .stat-card-hover:hover {
