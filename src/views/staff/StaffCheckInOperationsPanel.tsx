@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react"
 import {
   completeCheckIn,
   downloadCheckInEvidence,
-  issueAccessCredential,
   listCheckIns,
   markCheckInNoShow,
   recordCheckInRemainingPayment,
@@ -37,6 +36,7 @@ import {
   staffErrorMessage,
   staffStorageUnitStatusLabel,
 } from "./staffPresentation"
+import { FilePreviewList } from "./StaffFileUpload"
 
 const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
   ["identityVerified", "Đã đối chiếu giấy tờ tùy thân"],
@@ -229,8 +229,6 @@ export default function StaffCheckInOperationsPanel({
 
   const [handoverNotes, setHandoverNotes] = useState("")
 
-  const [credentialPassword, setCredentialPassword] = useState("")
-
   const [keyLockReference, setKeyLockReference] = useState("")
 
   const [paymentMethod, setPaymentMethod] = useState("CASH")
@@ -256,6 +254,12 @@ export default function StaffCheckInOperationsPanel({
   const [downloadingEvidence, setDownloadingEvidence] = useState<string | null>(
     null,
   )
+
+  const [previewEvidence, setPreviewEvidence] = useState<{
+    url: string
+    contentType: string
+    fileName: string
+  } | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
 
@@ -451,13 +455,12 @@ export default function StaffCheckInOperationsPanel({
 
   const submitHandover = async () => {
     const dueAtCheckIn = handoverTarget?.dueAtCheckIn ?? 0
-    const hasPassword = Boolean(credentialPassword.trim())
     const hasKeyLock = Boolean(keyLockReference.trim())
     if (
       !handoverTarget?.checkInId ||
       !allChecksComplete ||
       !contractFile ||
-      (!hasPassword && !hasKeyLock) ||
+      !hasKeyLock ||
       (dueAtCheckIn > 0 && !paymentEvidenceFile) ||
       !Number.isFinite(Number(lengthCm)) ||
       !Number.isFinite(Number(widthCm)) ||
@@ -517,23 +520,6 @@ export default function StaffCheckInOperationsPanel({
         })
       }
 
-      if (hasPassword) {
-        await issueAccessCredential(handoverTarget.checkInId, {
-          type: "PIN",
-          reference: "PASSWORD",
-          secret: credentialPassword.trim(),
-          note: "Mật khẩu bàn giao tại bước nhận kho",
-        })
-      }
-
-      if (hasKeyLock) {
-        await issueAccessCredential(handoverTarget.checkInId, {
-          type: "KEY",
-          reference: keyLockReference.trim(),
-          note: "Bàn giao chìa khóa/ổ khóa",
-        })
-      }
-
       await completeCheckIn(handoverTarget.checkInId, {
         checklist,
 
@@ -569,10 +555,7 @@ export default function StaffCheckInOperationsPanel({
 
         handedOverItems: [
           ...handedOverItems.split(",").map((value) => value.trim()).filter(Boolean),
-          ...(hasPassword ? ["Mật khẩu"] : []),
-          ...(hasKeyLock
-            ? [`Chìa khóa/ổ khóa ${keyLockReference.trim()}`]
-            : []),
+          `Ổ khóa ${keyLockReference.trim()}`,
         ],
 
         notes: [
@@ -585,6 +568,7 @@ export default function StaffCheckInOperationsPanel({
         ]
           .filter(Boolean)
           .join("\n"),
+        lockReference: keyLockReference.trim(),
       })
 
       setContractFile(null)
@@ -592,7 +576,7 @@ export default function StaffCheckInOperationsPanel({
       setPaymentEvidenceFile(null)
 
       showToast(
-        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Đang chờ khách hàng xác nhận nhận kho.`,
+        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Reservation đã chuyển sang COMPLETED.`,
       )
 
       setHandoverTarget(null)
@@ -655,7 +639,7 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
-  const downloadEvidence = async (assetId: string) => {
+  const previewEvidenceFile = async (assetId: string) => {
     setDownloadingEvidence(assetId)
 
     try {
@@ -663,17 +647,16 @@ export default function StaffCheckInOperationsPanel({
 
       const url = URL.createObjectURL(result.blob)
 
-      const anchor = document.createElement("a")
-
-      anchor.href = url
-
-      anchor.download = result.fileName || `bang-chung-nhan-kho-${assetId}`
-
-      anchor.click()
-
-      URL.revokeObjectURL(url)
+      setPreviewEvidence((previous) => {
+        if (previous) URL.revokeObjectURL(previous.url)
+        return {
+          url,
+          contentType: result.contentType,
+          fileName: result.fileName || `bang-chung-nhan-kho-${assetId}`,
+        }
+      })
     } catch (reason) {
-      fail(reason, "Không thể tải bằng chứng bàn giao.")
+      fail(reason, "Không thể xem trước bằng chứng bàn giao.")
     } finally {
       setDownloadingEvidence(null)
     }
@@ -719,8 +702,6 @@ export default function StaffCheckInOperationsPanel({
     setPaymentEvidenceFile(null)
 
     setEvidenceReferences([])
-
-    setCredentialPassword("")
 
     setKeyLockReference("")
 
@@ -913,33 +894,15 @@ export default function StaffCheckInOperationsPanel({
                 <Td className="text-right">
                   <div className="flex justify-end gap-2">
                     {(!item.checkInId || item.checkInStatus === "no_show" || item.checkInStatus === "scheduled") && (
-                      <Button size="sm" onClick={() => void beginHandover(item)}>
-                        Bàn giao
-                      </Button>
+                      <details className="relative text-left">
+                        <summary className="cursor-pointer list-none rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50">Xử lý check-in ▾</summary>
+                        <div className="absolute right-0 z-10 mt-1 grid min-w-44 gap-1 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+                          <Button size="sm" onClick={() => void beginHandover(item)}>Bàn giao</Button>
+                          {item.checkInStatus === "scheduled" && <Button size="sm" variant="danger" onClick={() => openRejection(item)}>Từ chối nhận kho</Button>}
+                          {item.checkInStatus === "scheduled" && item.scheduledAt && new Date(item.scheduledAt).getTime() <= Date.now() && <Button size="sm" variant="danger" onClick={() => { setNoShowTarget(item); setNoShowReason("") }}>Khách không đến</Button>}
+                        </div>
+                      </details>
                     )}
-                    {item.checkInStatus === "scheduled" && (
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => openRejection(item)}
-                      >
-                        Từ chối
-                      </Button>
-                    )}
-                    {item.checkInStatus === "scheduled" &&
-                      item.scheduledAt &&
-                      new Date(item.scheduledAt).getTime() <= Date.now() && (
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => {
-                            setNoShowTarget(item)
-                            setNoShowReason("")
-                          }}
-                        >
-                          Khách không đến
-                        </Button>
-                      )}
                     {item.checkInStatus === "completed" && (
                       <Button
                         size="sm"
@@ -950,7 +913,7 @@ export default function StaffCheckInOperationsPanel({
                       </Button>
                     )}
                     {item.checkInStatus === "completed" && (
-                      <Badge variant="warning">Chờ khách xác nhận</Badge>
+                      <Badge variant="success">COMPLETED</Badge>
                     )}
                   </div>
                 </Td>
@@ -1436,12 +1399,9 @@ export default function StaffCheckInOperationsPanel({
             </div>
             <div hidden={handoverStep !== 4} className="space-y-4">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
-              <p className="font-semibold text-amber-950">Bàn giao quyền truy cập và ổ khóa</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input label="Mã chìa khóa / ổ khóa" value={keyLockReference} onChange={event => setKeyLockReference(event.target.value)} placeholder="Ví dụ: KEY-018 hoặc LOCK-018" />
-                <Input label="Mật khẩu" type="password" value={credentialPassword} onChange={event => setCredentialPassword(event.target.value)} autoComplete="new-password" placeholder="Nhập mật khẩu bàn giao" />
-              </div>
-              <p className="text-xs text-stone-600">Bắt buộc nhập ít nhất một trong hai nhóm trên <span className="font-bold text-red-600">*</span>.</p>
+              <p className="font-semibold text-amber-950">Bàn giao ổ khóa</p>
+              <Input label="Mã ổ khóa / chìa khóa *" value={keyLockReference} onChange={event => setKeyLockReference(event.target.value)} placeholder="Ví dụ: LOCK-018 hoặc KEY-018" />
+              <p className="text-xs text-stone-600">Mã ổ khóa được kích hoạt khi nhân viên xác nhận bàn giao và thu hồi khi nghiệm thu trả kho hoặc đổi mã. Không lưu hoặc bàn giao mật khẩu.</p>
               <label className="flex items-start gap-2 text-sm font-medium text-amber-950">
                 <input
                   type="checkbox"
@@ -1449,7 +1409,7 @@ export default function StaffCheckInOperationsPanel({
                   checked={checklist.accessHandedOver}
                   onChange={(event) => setChecklist((previous) => ({ ...previous, accessHandedOver: event.target.checked }))}
                 />
-                <span>Đã bàn giao và kiểm tra mật khẩu hoặc chìa khóa/ổ khóa với khách hàng <span className="font-bold text-red-600">*</span></span>
+                <span>Đã bàn giao và kiểm tra ổ khóa với khách hàng <span className="font-bold text-red-600">*</span></span>
               </label>
             </div>
             <label className="block text-sm font-medium text-stone-700">
@@ -1473,6 +1433,9 @@ export default function StaffCheckInOperationsPanel({
                     : "Hợp đồng là bắt buộc. Bạn có thể thêm ảnh hiện trạng nếu cần."}
               </span>
             </label>
+            <FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles(current => current.filter((_, fileIndex) => fileIndex !== index))} disabled={submitting} />
+            <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => setContractFile(null)} disabled={submitting} />
+            <FilePreviewList files={paymentEvidenceFile ? [paymentEvidenceFile] : []} onRemove={() => setPaymentEvidenceFile(null)} disabled={submitting} />
             <Input
               label="Vật dụng hoặc quyền truy cập đã bàn giao *"
               value={handedOverItems}
@@ -1515,7 +1478,7 @@ export default function StaffCheckInOperationsPanel({
                       !identityDocumentNumber.trim() ||
                       identityVerificationBlocked ||
                       !contractFile ||
-                      (!credentialPassword.trim() && !keyLockReference.trim()) ||
+                      !keyLockReference.trim() ||
                       ((handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
                       !initialCondition.trim() ||
                       !goodsCondition.trim() ||
@@ -1797,11 +1760,11 @@ export default function StaffCheckInOperationsPanel({
                       size="sm"
                       variant="outline"
                       disabled={downloadingEvidence === assetId}
-                      onClick={() => void downloadEvidence(assetId)}
+                      onClick={() => void previewEvidenceFile(assetId)}
                     >
                       {downloadingEvidence === assetId
                         ? "Đang tải…"
-                        : `Tải tệp ${index + 1}`}
+                        : `Xem trước tệp ${index + 1}`}
                     </Button>
                   ),
                 )}
@@ -1842,6 +1805,19 @@ export default function StaffCheckInOperationsPanel({
             </div>
           </div>
         )}
+      </Modal>
+      <Modal
+        open={Boolean(previewEvidence)}
+        onClose={() => {
+          if (previewEvidence) URL.revokeObjectURL(previewEvidence.url)
+          setPreviewEvidence(null)
+        }}
+        title={previewEvidence?.fileName || "Xem trước bằng chứng"}
+        size="xl"
+      >
+        {previewEvidence?.contentType.startsWith("image/")
+          ? <img src={previewEvidence.url} alt={previewEvidence.fileName} className="max-h-[70vh] w-full object-contain" />
+          : previewEvidence && <iframe title={previewEvidence.fileName} src={previewEvidence.url} className="h-[70vh] w-full" />}
       </Modal>
     </div>
   )

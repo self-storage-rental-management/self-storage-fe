@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Input, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
+import { FilePreviewList } from '../staff/StaffFileUpload'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalMoney } from '../rental-api/presentation'
@@ -295,7 +296,7 @@ function ReturnActions({ role, id, run, busy }: { role: ReturnRole; id: string; 
           <label className="block">Hiện trạng<select value={damage} disabled={busy} onChange={(event) => setDamage(event.target.value as typeof damage)}><option value="no_damage">Không hư hỏng</option><option value="minor_damage">Hư hỏng nhẹ</option><option value="major_damage">Hư hỏng nặng</option><option value="abandoned_goods">Bỏ lại hàng hóa</option></select></label>
           {(['returnedKey', 'returnedCard', 'returnedLock'] as const).map((key, index) => <label key={key} className="block"><input type="checkbox" checked={returned[key]} disabled={busy} onChange={(event) => setReturned((current) => ({ ...current, [key]: event.target.checked }))} /> {['Đã trả chìa khóa', 'Đã trả thẻ', 'Đã trả khóa'][index]}</label>)}
           <label className="block">Ảnh/PDF bằng chứng nghiệm thu<input type="file" multiple accept="image/*,application/pdf" disabled={busy} onChange={(event) => setEvidenceFiles((current) => [...current, ...Array.from(event.target.files ?? [])])} className="mt-1 block w-full rounded border p-2" /></label>
-          {evidenceFiles.length > 0 && <ul className="list-disc pl-5 text-sm">{evidenceFiles.map((file, index) => <li key={`${file.name}:${file.lastModified}:${index}`} className="flex items-center justify-between gap-2"><span className="truncate">{file.name}</span><Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setEvidenceFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>Xóa</Button></li>)}</ul>}
+          <FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} disabled={busy} />
         </>}
         <label className="block">Hiện trạng kho đề xuất<select value={unit} disabled={busy} onChange={(event) => setUnit(event.target.value as typeof unit)}><option value="available">Sẵn sàng</option><option value="maintenance">Cần bảo trì</option></select></label>
         <Button type="submit" disabled={busy || (canReview && !note.trim())}>{canInspect ? 'Ghi nhận nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</Button>

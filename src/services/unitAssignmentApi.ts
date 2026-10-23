@@ -1,6 +1,6 @@
 import { ApiClientError, apiRequest } from './apiClient'
 
-export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED'
+export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'COMPLETED'
 export type AssignmentStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED'
 export type AssignmentUnitStatus = 'available' | 'reserved'
 
@@ -20,6 +20,10 @@ export interface UnitAssignmentCandidate {
   confirmedAt: string | null
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
+  assignedStorageUnitId: string | null
+  assignedStorageUnitCode: string | null
+  assignedStorageUnitStatus: AssignmentUnitStatus | 'maintenance' | 'assigned' | null
+  assignmentStatus: 'ACTIVE' | 'CANCELLED' | 'COMPLETED' | null
 }
 
 export interface AssignableUnit {
@@ -111,6 +115,14 @@ export async function createUnitAssignment(reservationId: string, storageUnitId:
   const payload = await apiRequest<unknown>(
     `/api/staff/unit-assignments/${encodeURIComponent(reservationId)}`,
     { method: 'POST', body: JSON.stringify({ storageUnitId }) },
+  )
+  return assertEnvelope<UnitAssignmentResult>(payload).data
+}
+
+export async function changeUnitAssignment(reservationId: string, storageUnitId: string, reason: string) {
+  const payload = await apiRequest<unknown>(
+    `/api/staff/unit-assignments/${encodeURIComponent(reservationId)}/change`,
+    { method: 'PUT', body: JSON.stringify({ storageUnitId, reason }) },
   )
   return assertEnvelope<UnitAssignmentResult>(payload).data
 }
