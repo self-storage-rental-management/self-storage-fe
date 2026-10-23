@@ -35,6 +35,8 @@ interface Props {
   updateUnitStatus: (unitId: string, status: 'available' | 'maintenance', manager: User, reason?: string) => void
   onCreateMaintenanceWork: (draft: { referenceId: string; title: string; notes: string }) => void
   showToast: (message: string) => void
+  onOpenRental?: (rentalId: string) => void
+  onOpenMaintenance?: (unitId: string, unitCode: string) => void
 }
 
 const statusVariants: Record<string, string> = {
@@ -112,7 +114,7 @@ const normalizeOperationalText = (value?: string) => {
 }
 
 export default function ManagerInventoryPanel(props: Props) {
-  return isApiAuthenticated() ? <ManagerInventoryApiPanel /> : <DemoManagerInventoryPanel {...props} />
+  return isApiAuthenticated() ? <ManagerInventoryApiPanel onOpenRental={props.onOpenRental} onOpenMaintenance={props.onOpenMaintenance} /> : <DemoManagerInventoryPanel {...props} />
 }
 
 function DemoManagerInventoryPanel({
@@ -361,7 +363,7 @@ function DemoManagerInventoryPanel({
   }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy, unitPageSize])
 
   return (
-    <div className="fade-in space-y-6">
+    <div className="fade-in min-w-0 max-w-full space-y-6">
       <SectionHeader
         eyebrow="Vận hành cơ sở"
         title="Quản lý gian kho"
@@ -575,7 +577,7 @@ function DemoManagerInventoryPanel({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Chi phí và khả dụng</h3><div className="space-y-2"><p className="flex justify-between gap-3"><span className="text-stone-500">Giá áp dụng hiện tại</span><b>{formatManagerMoney(selectedUnit.price)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Tiền đảm bảo theo chính sách hiện hành</span><b>{formatManagerMoney(selectedUnit.deposit)}</b></p><div className="flex justify-between gap-3"><span className="text-stone-500">Khả dụng thực tế</span><div className="text-right"><b>{availability.label}</b>{availability.detail && <p className="mt-1 text-xs font-normal text-stone-500">{availability.detail}</p>}</div></div>{selectedUnit.heldUntil && <p className="flex justify-between gap-3"><span className="text-stone-500">Thời hạn giữ tạm</span><b>{formatDateTime(selectedUnit.heldUntil)}</b></p>}</div></Card>
+              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Chi phí và khả dụng</h3><div className="space-y-2"><p className="flex justify-between gap-3"><span className="text-stone-500">Giá áp dụng hiện tại</span><b>{formatManagerMoney(selectedUnit.price)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Tiền duy trì CSVC theo chính sách hiện hành</span><b>{formatManagerMoney(selectedUnit.deposit)}</b></p><div className="flex justify-between gap-3"><span className="text-stone-500">Khả dụng thực tế</span><div className="text-right"><b>{availability.label}</b>{availability.detail && <p className="mt-1 text-xs font-normal text-stone-500">{availability.detail}</p>}</div></div>{selectedUnit.heldUntil && <p className="flex justify-between gap-3"><span className="text-stone-500">Thời hạn giữ tạm</span><b>{formatDateTime(selectedUnit.heldUntil)}</b></p>}</div></Card>
               <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Tình trạng khai thác</h3>{rental ? <div className="space-y-2"><p>Khách hàng: <b>{rental.customerName}</b></p><p>Mã hồ sơ thuê: <b className="font-mono">{rental.id}</b></p><p>Thời hạn: <b>{parseDisplayDate(rental.startDate) && parseDisplayDate(rental.endDate) ? `${formatDate(rental.startDate)} - ${formatDate(rental.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái hồ sơ: <Badge variant="info">{managerStatusLabel(rental.status, 'vi')}</Badge></p><p>Kỳ thanh toán tiếp theo: <b>{formatDate(rental.nextDue)}</b></p><p>Thanh toán: <Badge variant={isManagerRentalOverdue(rental) ? 'error' : rental.paymentStatus === 'paid' ? 'success' : 'warning'}>{managerStatusLabel(isManagerRentalOverdue(rental) ? 'overdue' : rental.paymentStatus, 'vi')}</Badge></p></div> : reservation ? <div className="space-y-2"><p>Khách hàng: <b>{reservation.customerName}</b></p><p>Mã đơn đặt chỗ: <b className="font-mono">{reservation.id}</b></p><p>Thời gian dự kiến: <b>{parseDisplayDate(reservation.startDate) && parseDisplayDate(reservation.endDate) ? `${formatDate(reservation.startDate)} - ${formatDate(reservation.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái: <Badge variant="warning">{managerStatusLabel(reservation.status, 'vi')}</Badge></p></div> : selectedUnit.status === 'occupied' ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800"><b>Dữ liệu trạng thái chưa nhất quán</b><p className="mt-1 text-xs">Gian được đánh dấu đang sử dụng nhưng không tìm thấy hồ sơ thuê vận hành tương ứng.</p></div> : <p className="text-stone-500">Gian kho chưa có hồ sơ thuê hoặc đơn đặt chỗ hiệu lực.</p>}</Card>
             </div>
 

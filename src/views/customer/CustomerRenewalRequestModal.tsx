@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Button, Modal } from "../../components/ui"
 import {
   getRenewalOptions,
@@ -23,28 +23,25 @@ export default function CustomerRenewalRequestModal({
   revision,
   onClose,
   onSuccess,
+  onNavigateToRenewals,
 }: {
   actorId: string
   rentalId: string
   revision?: RenewalApiRecord
   onClose: () => void
   onSuccess: () => void
+  onNavigateToRenewals?: () => void
 }) {
   const options = useRentalApiResource(`${actorId}:${rentalId}:options`, () =>
     getRenewalOptions(rentalId),
   )
   const [code, setCode] = useState("")
-  const [note, setNote] = useState("")
+  const note = ""
   const [quote, setQuote] = useState<RenewalApiQuote>()
   const [quoteError, setQuoteError] = useState<unknown>()
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [now, setNow] = useState(Date.now())
   const command = useRenewalCommand()
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
   useEffect(() => {
     let current = true
     if (!code) {
@@ -62,7 +59,6 @@ export default function CustomerRenewalRequestModal({
       .then((nextQuote) => {
         if (current) {
           setQuote(nextQuote)
-          setNow(Date.now())
         }
       })
       .catch((error) => {
@@ -76,7 +72,6 @@ export default function CustomerRenewalRequestModal({
       current = false
     }
   }, [code, rentalId])
-  const expired = quote ? now >= Date.parse(quote.expiresAt) : false
   const locked = command.busy || command.uncertain || quoteBusy
   return (
     <Modal
@@ -118,55 +113,40 @@ export default function CustomerRenewalRequestModal({
         {quoteBusy ? <p role="status">Đang lấy báo giá…</p> : null}
         {quoteError ? <p role="alert">{rentalError(quoteError)}</p> : null}
         {quote && (
-          <div className="rounded-lg border p-4 space-y-2">
-            <p>
-              Kỳ gia hạn: {rentalDate(quote.extensionStartDate)} →{" "}
-              {rentalDate(quote.newEndDate)}
-            </p>
-            <p>
-              Đơn giá / tháng: {rentalMoney(quote.monthlyPrice, quote.currency)}
-            </p>
-            <p>Tạm tính: {rentalMoney(quote.subtotal, quote.currency)}</p>
-            <p>
-              Giảm giá: {rentalMoney(quote.discountAmount, quote.currency)} (tỷ
-              lệ {quote.discountRate})
-            </p>
-            <p>
-              Tổng sau giảm:{" "}
-              {rentalMoney(quote.totalAfterDiscount, quote.currency)}
-            </p>
-            <p>
-              Cọc gia hạn trả trước:{" "}
-              {rentalMoney(quote.renewalDepositAmount, quote.currency)}
-            </p>
-            <p>Tiền thuê còn lại khi ký: {rentalMoney(quote.remainingRentalAmount, quote.currency)}</p>
-            <p>Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}</p>
-            {expired && !command.uncertain && (
-              <p role="alert" className="text-red-700">
-                Báo giá đã hết hạn, vui lòng chọn lại gói gia hạn để cập nhật báo giá.
-              </p>
-            )}
-            <label className="flex gap-2">
+          <>
+          <section aria-label="Chi tiết báo giá gia hạn" className="rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            <div className="space-y-3">
+              <div className="space-y-2 border-b border-dashed border-slate-200 pb-3">
+                <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
+                <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
+              </div>
+              <div className="space-y-2">
+                <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
+                {quote.discountAmount > 0 && (
+                  <QuoteLine
+                    label={`Giảm giá (${Math.round(quote.discountRate * 100)}%)`}
+                    value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
+                    valueClassName="text-emerald-700"
+                  />
+                )}
+                <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
+                <QuoteLine label="Cọc gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} />
+                <QuoteLine label="Tiền thuê còn lại khi ký" value={rentalMoney(quote.remainingRentalAmount, quote.currency)} />
+              </div>
+            </div>
+          </section>
+            <label className="flex items-start gap-2 text-sm text-stone-700">
               <input
                 type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-amber-600"
                 checked={confirmed}
                 disabled={locked}
                 onChange={(e) => setConfirmed(e.target.checked)}
               />
               Tôi xác nhận kỳ thuê, giá và điều khoản trên.
             </label>
-          </div>
+          </>
         )}
-        <label className="block">
-          Ghi chú
-          <textarea
-            className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
-            maxLength={2000}
-            value={note}
-            disabled={locked}
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </label>
         {command.error ? (
           <p role="alert">{rentalError(command.error)}</p>
         ) : null}
@@ -181,9 +161,9 @@ export default function CustomerRenewalRequestModal({
             command.conflict ||
             !quote ||
             !confirmed ||
-            (!command.uncertain && expired) ||
             (revision !== undefined && revision.version === null)
           }
+          className="disabled:bg-stone-200 disabled:text-stone-500 disabled:opacity-100 sm:min-w-44"
           onClick={() => {
             if (!quote) return
             const snapshot = {
@@ -216,11 +196,42 @@ export default function CustomerRenewalRequestModal({
               : "Xác nhận và gửi"}
         </Button>
         {command.error && !command.uncertain ? (
-          <Button variant="outline" onClick={onSuccess}>
-            Đóng và tải lại hồ sơ
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={onSuccess}>
+              Đóng và tải lại hồ sơ
+            </Button>
+            {onNavigateToRenewals && (
+              <Button
+                variant="primary"
+                onClick={onNavigateToRenewals}
+              >
+                Mở tab Yêu cầu gia hạn
+              </Button>
+            )}
+          </div>
         ) : null}
       </div>
     </Modal>
+  )
+}
+
+function QuoteLine({
+  label,
+  value,
+  emphasis = false,
+  valueClassName = "",
+}: {
+  label: string
+  value: ReactNode
+  emphasis?: boolean
+  valueClassName?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 text-sm sm:text-[15px]">
+      <span className="text-slate-600">{label}</span>
+      <span className={`text-right text-slate-900 ${emphasis ? "text-base font-semibold" : "font-medium"} ${valueClassName}`}>
+        {value}
+      </span>
+    </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
@@ -22,6 +22,8 @@ import {
 
 interface Props {
   showToast: (message: string) => void
+  initialUnit?: { unitId: string; unitCode: string } | null
+  onInitialUnitConsumed?: () => void
 }
 
 const taskStatusLabel: Record<MaintenanceTaskApi['status'], string> = {
@@ -44,7 +46,7 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
   return 'warning'
 }
 
-export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
+export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed }: Props) {
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
@@ -52,6 +54,7 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
   const [recoveryError, setRecoveryError] = useState<unknown>(null)
   const [recoveryDisabled, setRecoveryDisabled] = useState(false)
   const [selectedRecovery, setSelectedRecovery] = useState<RecoveryTask | null>(null)
+  const recoveryCloseGuard = useRef<() => boolean>(() => false)
   const [units, setUnits] = useState<MaintenanceStorageUnit[]>([])
   const [staff, setStaff] = useState<MaintenanceStaffOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,6 +117,18 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(() => {
+    if (!initialUnit || loading || unitReadFailed || staffReadFailed) return
+    if (units.some(unit => unit.id === initialUnit.unitId) && staff.length) {
+      setStorageUnitId(initialUnit.unitId)
+      setTitle(`Bảo trì ${initialUnit.unitCode}`)
+      setModalOpen(true)
+    } else {
+      showToast('Gian kho chưa đủ điều kiện tạo nhiệm vụ bảo trì hoặc chưa có nhân viên phù hợp.')
+    }
+    onInitialUnitConsumed?.()
+  }, [initialUnit, loading, unitReadFailed, staffReadFailed, units, staff])
 
   const openTasks = useMemo(() => tasks.filter(task => !['completed', 'cancelled'].includes(task.status)), [tasks])
 
@@ -215,8 +230,8 @@ export default function ManagerApiStaffTasksPanel({ showToast }: Props) {
         </Table>
       </Card>
 
-      {selectedRecovery && <Modal open title="Chi tiết nhiệm vụ thu hồi" onClose={() => setSelectedRecovery(null)}>
-        <RecoveryTaskDetail key={selectedRecovery.id} role="manager" id={selectedRecovery.id} facilityId={selectedRecovery.facilityId} />
+      {selectedRecovery && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!recoveryCloseGuard.current()) setSelectedRecovery(null) }}>
+        <RecoveryTaskDetail key={selectedRecovery.id} role="manager" id={selectedRecovery.id} facilityId={selectedRecovery.facilityId} closeGuard={recoveryCloseGuard} onChanged={() => { void reload() }} />
       </Modal>}
       <Modal open={modalOpen} onClose={() => !saving && setModalOpen(false)} title="Tạo nhiệm vụ bảo trì">
         <div className="space-y-4">

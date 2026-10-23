@@ -22,8 +22,10 @@ export type SupportModule = typeof supportModules[number]
 export type SupportLinkType = "RENTAL" | "RESERVATION" | "PAYMENT" | "STORAGE_UNIT"
 export type SupportVisibility = "PUBLIC" | "INTERNAL"
 export interface SupportTicket {
+  displayCode?: string | null
   id: string
   customerId: string
+  customerName?: string | null
   facilityId: string | null
   assignedStaffId: string | null
   assignedStaffName?: string | null
@@ -57,7 +59,7 @@ export interface SupportMessage {
   id: string
   ticketId: string
   authorId: string
-  authorRole: "CUSTOMER" | "STAFF"
+  authorRole: "CUSTOMER" | "STAFF" | "MANAGER"
   visibility: SupportVisibility
   body: string
   sentAt: string
@@ -92,6 +94,7 @@ export interface SupportStaffOption {
   fullName: string
 }
 export interface SupportQueueItem {
+  displayCode?: string | null
   id: string
   facilityId: string
   subject: string

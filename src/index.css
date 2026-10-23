@@ -48,6 +48,22 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
   display: block !important;
 }
 
+@keyframes bell-ring {
+  0% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-14deg); }
+  45% { transform: rotate(10deg); }
+  60% { transform: rotate(-10deg); }
+  75% { transform: rotate(4deg); }
+  85% { transform: rotate(-4deg); }
+  100% { transform: rotate(0); }
+}
+
+.bell-ring-active {
+  animation: bell-ring 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  transform-origin: top center;
+}
+
 @keyframes notification-target-reveal {
   0% {
     transform: translateY(0) scale(1);
@@ -219,6 +235,12 @@ button:not(:disabled) { cursor: pointer; }
   font-weight: 600;
   letter-spacing: .1em;
   text-transform: uppercase;
+}
+
+/* Customer portal uses one typeface consistently, including codes and labels. */
+.customer-role-layout,
+.customer-role-layout :where(*) {
+  font-family: var(--font-sans) !important;
 }
 
 .auth-page {

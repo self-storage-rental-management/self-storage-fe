@@ -115,7 +115,7 @@ export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   dimDivisor: 5000,
   gracePeriodDays: 3,
   lateFeeAmount: 25,
-  defaultDepositRatio: 0.4,
+  defaultDepositRatio: 0.2,
   holdExpiryHours: 1 / 6
 }
 
@@ -319,11 +319,56 @@ export function sanitizeFacilityStrings<T extends { code?: string; id?: string; 
   return f
 }
 
-export const isExcludedFacility = (_f: { code?: string; id?: string; city?: string; name?: string }) => false
+export const isExcludedFacility = (f: { code?: string; id?: string; city?: string; name?: string }) => {
+  if (!f) return false
+  const id = (f.id || '').toUpperCase()
+  const code = (f.code || '').toUpperCase()
+  const name = (f.name || '').toLowerCase()
+  return (
+    id === 'FAC-001' ||
+    id === 'FAC-002' ||
+    code === 'HCM-Q1-F01' ||
+    code === 'BD-F01' ||
+    name.includes('quận 1') ||
+    name.includes('bình dương') ||
+    name.includes('downtown storage') ||
+    name.includes('riverside storage')
+  )
+}
 
-export const isExcludedUnit = (_u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => false
+export const isExcludedUnit = (u: { id?: string; code?: string; customerCode?: string; facilityId?: string; facilityName?: string; facility?: string }) => {
+  if (!u) return false
+  const facId = (u.facilityId || '').toUpperCase()
+  const fac = (u.facility || '').toLowerCase()
+  const facName = (u.facilityName || '').toLowerCase()
+  const code = (u.code || u.id || '').toUpperCase()
+  return (
+    facId === 'FAC-001' ||
+    facId === 'FAC-002' ||
+    facId === 'HCM-Q1-F01' ||
+    facId === 'BD-F01' ||
+    fac.includes('quận 1') ||
+    fac.includes('bình dương') ||
+    facName.includes('quận 1') ||
+    facName.includes('bình dương') ||
+    code.startsWith('HCM-Q1-F01') ||
+    code.startsWith('BD-F01')
+  )
+}
 
-export const isExcludedRelated = (_item: any) => false
+export const isExcludedRelated = (item: any) => {
+  if (!item) return false
+  const facId = (item.facilityId || '').toUpperCase()
+  const facName = (item.facilityName || item.facility || '').toLowerCase()
+  return (
+    facId === 'FAC-001' ||
+    facId === 'FAC-002' ||
+    facId === 'HCM-Q1-F01' ||
+    facId === 'BD-F01' ||
+    facName.includes('quận 1') ||
+    facName.includes('bình dương')
+  )
+}
 
 const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
   const normalizedName = facilityName ? LEGACY_FACILITY_NAMES[facilityName] || facilityName : undefined
@@ -331,7 +376,7 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
 }
 
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
-  if (!Array.isArray(facilities) || facilities.length === 0) return INITIAL_FACILITIES.map(sanitizeFacilityStrings)
+  if (!Array.isArray(facilities)) return []
   const cleaned = facilities.filter(f => !isExcludedFacility(f)).map(sanitizeFacilityStrings)
   const mapped = cleaned.map(stored => {
     stored = sanitizeFacilityStrings(stored)
@@ -472,18 +517,18 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
     price,
     deposit: price,
     climate: u.climate,
-    status: isOccupiedDemo ? 'occupied' : 'available',
+    status: (isOccupiedDemo ? 'occupied' : 'available') as 'occupied' | 'available',
     reservedPeriods,
     nextAvailableDate: u.id === 'HCM-Q1-F01-S-001' ? '2027-01-12' : u.id === 'HCM-Q1-F01-M-001' ? '2027-05-01' : u.id === 'HCM-Q1-F01-L-001' ? '2026-09-18' : u.id === 'A-104' ? '2027-03-21' : u.id === 'B-112' ? '2026-12-23' : undefined,
     currentRentalId: demoRentalByUnit[u.id],
     version: 1
   }
-})
+}).filter(u => !isExcludedUnit(u))
 
 // Keep runtime state (status, reservations, next available date) while
 // upgrading older browser snapshots to the current Customer catalog metadata.
 const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
-  if (!Array.isArray(units) || units.length === 0) return INITIAL_UNITS
+  if (!Array.isArray(units)) return []
   const cleaned = units.filter(u => !isExcludedUnit(u))
   const mapped = cleaned.map(stored => {
     const canonical = INITIAL_UNITS.find(unit => unit.id === stored.id || unit.code === stored.code)
@@ -510,7 +555,7 @@ const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
   })
   const existingIds = new Set(mapped.map(u => u.id))
   for (const initUnit of INITIAL_UNITS) {
-    if (!existingIds.has(initUnit.id)) {
+    if (!existingIds.has(initUnit.id) && !isExcludedUnit(initUnit)) {
       mapped.push(initUnit)
     }
   }
@@ -542,7 +587,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     moveInDate: '2026-09-20',
     status: 'READY_FOR_CHECKIN',
     approvalType: 'AUTO',
-    reservationDepositAmount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.4 * 100) / 100,
+    reservationDepositAmount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
     securityDepositAmount: DEMO_SMALL_MONTHLY,
     depositConvertedAt: '2026-09-17T10:00:00Z',
     remainingAmount: 0,
@@ -578,7 +623,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: '2026-09-21T08:30:00Z'
     },
     payment: {
-      amount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.4 * 100) / 100,
+      amount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
       status: 'paid',
       method: 'Chuyển khoản VietQR',
       transactionId: 'VNPAY-204899',
@@ -611,9 +656,9 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     moveInDate: '2026-09-22',
     status: 'DEPOSIT_PAID',
     approvalType: 'AUTO',
-    reservationDepositAmount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.4 * 100) / 100,
+    reservationDepositAmount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
     securityDepositAmount: DEMO_MEDIUM_MONTHLY,
-    remainingAmount: Math.round((DEMO_MEDIUM_MONTHLY * 3 * 0.6 + DEMO_MEDIUM_MONTHLY) * 100) / 100,
+    remainingAmount: Math.round((DEMO_MEDIUM_MONTHLY * 3 * 0.8 + DEMO_MEDIUM_MONTHLY) * 100) / 100,
     firstMonthRent: DEMO_MEDIUM_MONTHLY,
     totalInitialAmount: DEMO_MEDIUM_MONTHLY * 4,
     paymentExpiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString(),
@@ -646,14 +691,14 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString()
     },
     payment: {
-      amount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.4 * 100) / 100,
+      amount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
       status: 'paid',
       method: 'Cọc giữ chỗ qua VietQR',
       transactionId: 'TX-DEP-2049',
       paidAt: new Date().toISOString()
     },
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    evidence: ['RSV-2049 · Đã cọc giữ chỗ 40%, gian kho đã được xác định từ lúc đặt'],
+    evidence: ['RSV-2049 · Đã cọc giữ chỗ 20%, gian kho đã được xác định từ lúc đặt'],
     createdAt: new Date().toISOString()
   }
 ]
@@ -1034,7 +1079,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'policy',
     entityId: 'sec-policy-01',
-    notes: 'Cập nhật chính sách tỷ lệ đặt cọc 40% và chu kỳ đổi mã PIN an ninh.',
+    notes: 'Cập nhật chính sách tỷ lệ đặt cọc 20% và chu kỳ đổi mã PIN an ninh.',
     timestamp: '2026-09-18 11:58:14'
   },
   {
@@ -1046,7 +1091,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'hold',
     entityId: 'RSV-2048',
-    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 40% (${formatVnd(72)}) thành công.`,
+    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 20% (${formatVnd(36)}) thành công.`,
     timestamp: '2026-09-17 08:30:00'
   },
   {
@@ -1160,6 +1205,7 @@ interface StorageHubContextValue extends StorageHubState {
       heightCm: number
       weightKg: number
       packageCount: number
+      volumeM3?: number
     }
   ) => PricingQuote
   // Customer reservation & hold lifecycle actions
@@ -1320,7 +1366,7 @@ interface StorageHubContextValue extends StorageHubState {
   // Facility & Unit CRUD
   createFacility: (data: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => Facility
   updateFacility: (facilityId: string, updates: Partial<Facility> & { unitDistribution?: FacilityUnitDistribution }, actor?: User) => void
-  deleteFacility: (facilityId: string, actor?: User) => { success: boolean; reason?: string }
+  deleteFacility: (facilityId: string, actor?: User, force?: boolean) => { success: boolean; reason?: string }
   createUnit: (data: Partial<StorageUnit>, actor: User) => StorageUnit
   updateUnit: (unitId: string, updates: Partial<StorageUnit>, actor: User) => void
   deleteUnit: (unitId: string, actor: User) => { success: boolean; reason?: string }
@@ -1338,13 +1384,7 @@ if (import.meta.hot) {
 const MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY = 'storagehub:manager-assign-permission-v1'
 
 function normalizeRuntimeRolePermissions(value: unknown) {
-  const empty = Object.fromEntries(
-    (['customer', 'staff', 'manager', 'business', 'admin'] as Role[]).map(role => [
-      role,
-      Object.fromEntries(PERMISSION_KEYS.map(key => [key, false]))
-    ])
-  ) as RolePermissionsState
-  const normalized = !DEMO_DATA_ENABLED && !value ? empty : normalizeRolePermissions(value)
+  const normalized = normalizeRolePermissions(value)
   try {
     if (DEMO_DATA_ENABLED && !localStorage.getItem(MANAGER_ASSIGN_PERMISSION_MIGRATION_KEY)) {
       normalized.manager['storage_units:assign'] = true
@@ -1379,7 +1419,7 @@ const normalizeReservationPricing = (hold: StorageReservation): StorageReservati
   const expectedTotal = rentalTermAmount + securityDepositAmount
   if (!shouldReprice && (normalizedHold.remainingAmount <= 0 || Math.abs((normalizedHold.totalInitialAmount || 0) - expectedTotal) <= 0.01)) return normalizedHold
 
-  const calculatedBookingDeposit = Math.round(rentalTermAmount * 0.4 * 100) / 100
+  const calculatedBookingDeposit = Math.round(rentalTermAmount * 0.2 * 100) / 100
   const bookingDeposit = shouldReprice || normalizedHold.payment.status !== 'paid' ? calculatedBookingDeposit : normalizedHold.reservationDepositAmount
   const isPaidInFull = normalizedHold.payment.status === 'paid' && normalizedHold.remainingAmount <= 0
   return {
@@ -1430,6 +1470,18 @@ const reconcileReservationCheckins = (holds: StorageReservation[], records: Chec
 export function StorageHubProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StorageHubState>(() => {
     try {
+      if (!DEMO_DATA_ENABLED) {
+        localStorage.removeItem('storagehub:facilities')
+        localStorage.removeItem('storagehub:units')
+        localStorage.removeItem('storagehub:rentals')
+        localStorage.removeItem('storagehub:holds')
+        localStorage.removeItem('storagehub:contracts')
+        localStorage.removeItem('storagehub:payments')
+        localStorage.removeItem('storagehub:returns')
+        localStorage.removeItem('storagehub:durationDiscounts')
+        localStorage.removeItem('storagehub:facility-pricing')
+        localStorage.removeItem(STORAGE_KEY)
+      }
       const saved = localStorage.getItem(STORAGE_KEY)
       if (DEMO_DATA_ENABLED && saved) {
         const parsed = JSON.parse(saved)
@@ -1558,7 +1610,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     return {
-      users: DEMO_DATA_ENABLED ? USERS : [],
+      users: USERS,
       rolePermissions: normalizeRuntimeRolePermissions(undefined),
       facilities: fallbackFacilities,
       units: fallbackUnits,
@@ -1956,7 +2008,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
-  // 1. Customer: Validate and create reservation with 40% Reservation Deposit
+  // 1. Customer: Validate and create reservation with 20% Reservation Deposit
   const validateAndCreateReservation = (params: {
     customer: User
     unitTypeId: string
@@ -2127,7 +2179,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Pricing policy: the 40% booking deposit is credited toward rent, while a
+    // Pricing policy: the 20% booking deposit is credited toward rent, while a
     // separate one-month security deposit is collected at check-in and may be
     // refunded only after the move-out inspection and settlement.
     const firstMonthRent = effectiveMonthlyPrice
@@ -2135,7 +2187,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const discountAmount = Math.min(grossRentalTermAmount, Math.max(0, params.discountAmount || 0))
     const rentalTermAmount = grossRentalTermAmount - discountAmount
     const securityDepositAmount = effectiveMonthlyPrice
-    const reservationDepositAmount = Math.round(rentalTermAmount * 0.4 * 100) / 100
+    const reservationDepositAmount = Math.round(rentalTermAmount * 0.2 * 100) / 100
     const remainingAmount = rentalTermAmount - reservationDepositAmount + securityDepositAmount
     const totalInitialAmount = rentalTermAmount + securityDepositAmount
 
@@ -2217,7 +2269,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       expiresAt: paymentExpiresAt || emailExpiresAt,
       evidence: [requiresGoodsReview
         ? `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ khách xác minh email trước khi gửi Staff duyệt hàng hóa “Khác”.`
-        : `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ thanh toán cọc 40% trước ${paymentExpiresAt}.`],
+        : `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
       createdAt: now.toISOString()
     }
 
@@ -2237,7 +2289,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityId: holdId,
           notes: requiresGoodsReview
             ? `Khách hàng chọn loại kho ${unitType.name}. Chờ xác minh email trước khi Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
-            : `Khách hàng chọn loại kho ${unitType.name}. Chờ cọc 40% (${formatVnd(reservationDepositAmount)}) trong 24 giờ.`,
+            : `Khách hàng chọn loại kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 24 giờ.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -2279,8 +2331,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       if (capacity <= earlierCapacityHolds) throw new Error('Loại kho này không còn suất trống để duyệt hồ sơ.')
     }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
-    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
-    const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.4 * 100) / 100 : reservation.reservationDepositAmount
+    const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
+    const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
       units: prev.units,
@@ -2658,7 +2710,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền đảm bảo kho: ${formatVnd(contract.securityDeposit)}.`,
+            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền duy trì CSVC: ${formatVnd(contract.securityDeposit)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -2686,7 +2738,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!reservation) throw new Error('Không tìm thấy đơn đặt chỗ.')
     if (paymentDetails.amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.')
     if (Math.abs(paymentDetails.amount - reservation.remainingAmount) > 0.01) {
-      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền đảm bảo kho.`)
+      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền duy trì CSVC.`)
     }
     if (!paymentDetails.transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
 
@@ -2706,7 +2758,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       status: 'PAID',
       paidAt: now.toISOString(),
       recordedBy: staffUser.id,
-      description: `Tiền thuê còn lại và tiền đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}`
+      description: `Tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}`
     }
 
     setState(prev => {
@@ -2758,7 +2810,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'payment',
             entityId: txId,
-            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}.`,
+            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -3168,12 +3220,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           paidAt: now.toISOString(),
           recordedBy: renewal.customerId,
           invoiceNumber: renewal.invoiceNumber,
-          description: `Cọc giữ chỗ gia hạn 40% cho ${renewal.renewalMonths} tháng (${renewal.oldEndDate} → ${renewal.newEndDate})`,
+          description: `Cọc giữ chỗ gia hạn 20% cho ${renewal.renewalMonths} tháng (${renewal.oldEndDate} → ${renewal.newEndDate})`,
           gatewayVerifiedAt: now.toISOString()
         },
         ...prev.payments
       ],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 40% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 20% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -4832,14 +4884,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const deleteFacility = (facilityId: string, actor?: User): { success: boolean; reason?: string } => {
+  const deleteFacility = (facilityId: string, actor?: User, force: boolean = false): { success: boolean; reason?: string } => {
     if (actor) assertPermission(actor, 'facilities:read')
     const targetFac = state.facilities.find(f => f.id === facilityId || f.code === facilityId)
     const hasActiveHolds = state.holds.some(h => (h.facilityId === facilityId || (targetFac && (h.facilityId === targetFac.id || h.facilityId === targetFac.code)) || h.facilityName?.includes(facilityId)) && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(h.status))
     const hasActiveRentals = state.rentals.some(r => (r.facilityId === facilityId || (targetFac && (r.facilityId === targetFac.id || r.facilityId === targetFac.code)) || r.facilityName?.includes(facilityId)) && ['active', 'return_requested', 'return_inspection', 'closing'].includes(r.status))
     const hasOccupiedUnits = state.units.some(u => (u.facilityId === facilityId || (targetFac && (u.facilityId === targetFac.id || u.facilityId === targetFac.code))) && (u.status === 'occupied' || (u.status as string) === 'rented'))
 
-    if (hasActiveHolds || hasActiveRentals || hasOccupiedUnits) {
+    if (!force && (hasActiveHolds || hasActiveRentals || hasOccupiedUnits)) {
       return {
         success: false,
         reason: 'Không thể xóa cơ sở đang có gian kho cho thuê hoạt động hoặc có đơn giữ chỗ chưa hoàn tất.'
@@ -5131,10 +5183,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       heightCm: number
       weightKg: number
       packageCount: number
+      volumeM3?: number
     }
   ): PricingQuote => {
     const dimDivisor = state.config.dimDivisor || 5000
-    const dimWeightKg = Math.ceil((goods.lengthCm * goods.widthCm * goods.heightCm * goods.packageCount) / dimDivisor)
+    const totalVolumeCm3 = typeof goods.volumeM3 === 'number'
+      ? goods.volumeM3 * 1_000_000
+      : goods.lengthCm * goods.widthCm * goods.heightCm * goods.packageCount
+    const dimWeightKg = Math.ceil(totalVolumeCm3 / dimDivisor)
     const actualWeightKg = goods.weightKg
     const billableWeightKg = Math.max(actualWeightKg, dimWeightKg)
     const baseMonthlyPrice = unit.price
@@ -5167,7 +5223,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     assertPermission(customer, 'reservations:create')
     if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
-    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 6 giờ thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
+    if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 15 phút thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
     const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
@@ -5188,7 +5244,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               paidAt: paidAt.toISOString(),
               transactionId: `TX-DEP-${Date.now().toString().slice(-6)}`
             },
-            evidence: [...h.evidence, `DEPOSIT_PAID · Đã thanh toán cọc 40% qua ${paymentMethod}.`]
+            evidence: [...h.evidence, `DEPOSIT_PAID · Đã thanh toán cọc 20% qua ${paymentMethod}.`]
           }
         }
         return h
@@ -5595,7 +5651,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               : h.goodsReviewDueAt
             const paymentExpiresAt = requiresGoodsReview
               ? h.paymentExpiresAt
-              : new Date(verifiedAt.getTime() + 6 * 60 * 60 * 1000).toISOString()
+              : new Date(verifiedAt.getTime() + 15 * 60 * 1000).toISOString()
             return {
               ...h,
               status: requiresGoodsReview ? transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL') : 'awaiting_payment',

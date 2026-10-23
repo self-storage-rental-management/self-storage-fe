@@ -9,32 +9,12 @@ const VIETNAM_PROVINCES_AND_CITIES = [
   'Thái Nguyên', 'Thanh Hóa', 'Tuyên Quang', 'Vĩnh Long',
 ] as const
 
-export const WAREHOUSE_PHOTO_PRESETS = [
-  {
-    id: 'preset-std',
-    title: 'Kho tiêu chuẩn hiện đại',
-    url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop&q=80',
-    description: 'Hệ thống kệ thép công nghiệp, lối xe rộng',
-  },
-  {
-    id: 'preset-logistics',
-    title: 'Kho Logistics & Pallet',
-    url: 'https://images.unsplash.com/photo-1553413077-190dd305871c?w=800&auto=format&fit=crop&q=80',
-    description: 'Khu vực bốc xếp pallet, sàn chịu tải trọng cao',
-  },
-  {
-    id: 'preset-smart',
-    title: 'Kho tự quản thông minh 24/7',
-    url: 'https://images.unsplash.com/photo-1586864387967-d02ef85d93e8?w=800&auto=format&fit=crop&q=80',
-    description: 'Khóa số điện tử, điều hòa nhiệt ẩm tự động',
-  },
-  {
-    id: 'preset-mini',
-    title: 'Kho mini cá nhân & gia đình',
-    url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80',
-    description: 'Ngăn kho nhỏ gọn, bảo quản đồ dùng gia đình',
-  },
-]
+export const WAREHOUSE_PHOTO_PRESETS: Array<{
+  id: string
+  title: string
+  url: string
+  description: string
+}> = []
 
 export interface FacilityGeneralInfoProps {
   isEditing: boolean
@@ -243,6 +223,7 @@ export interface FacilityOperationsProps {
   status: 'setup' | 'active' | 'maintenance' | 'inactive'
   onChangeStatus: (status: 'setup' | 'active' | 'maintenance' | 'inactive') => void
   statusReadOnly?: boolean
+  initialStatus?: 'setup' | 'active' | 'maintenance' | 'inactive'
   lang?: 'vi' | 'en'
 }
 
@@ -252,6 +233,7 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
   status,
   onChangeStatus,
   statusReadOnly = false,
+  initialStatus,
   lang = 'vi',
 }) => {
   const is24_7 = accessHours.includes('24/7')
@@ -338,6 +320,33 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
                 : status === 'maintenance' ? '▲ Cơ sở đang tạm dừng vận hành / bảo dưỡng'
                   : '● Cơ sở đã ngừng hoạt động'}
           </p>
+          {status === 'active' && initialStatus === 'active' ? (
+            <div className="mt-2.5 rounded-lg border border-emerald-200 bg-emerald-50/90 p-2.5 text-xs text-emerald-950 flex items-center gap-2 shadow-2xs">
+              <svg className="w-4 h-4 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="font-semibold text-emerald-900">
+                {lang === 'vi' ? 'Cơ sở đã kích hoạt thành công và đang hiển thị công khai cho khách hàng.' : 'Facility is active and visible to customers.'}
+              </span>
+            </div>
+          ) : status === 'active' ? (
+            <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/90 p-2.5 text-xs text-amber-950">
+              <div className="font-semibold flex items-center gap-1.5 text-amber-800">
+                <svg className="w-4 h-4 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {lang === 'vi' ? 'Điều kiện để chuyển sang Đang hoạt động:' : 'Conditions to activate:'}
+              </div>
+              <ul className="list-disc list-inside mt-1.5 space-y-1 text-[11px] text-amber-900 leading-snug pl-1">
+                <li>{lang === 'vi' ? 'Quản lý cơ sở đã khai báo ít nhất 1 loại kho & gian kho sẵn sàng' : 'Manager defined unit types & available units'}</li>
+                <li>{lang === 'vi' ? 'BO đã cấu hình đơn giá thuê > 0 (tại mục Bảng Giá Loại Kho)' : 'BO configured monthly rental price > 0'}</li>
+                <li>{lang === 'vi' ? 'Cơ sở đã được gán vào gói thuê kỳ hạn còn hiệu lực' : 'Facility assigned to an active rental package'}</li>
+              </ul>
+              <p className="mt-1.5 text-[10.5px] italic text-amber-700">
+                {lang === 'vi' ? '*Nếu cơ sở mới tạo chưa có đủ các điều kiện trên, vui lòng giữ trạng thái "Đang thiết lập" để tiếp tục cấu hình.' : '*If prerequisites are not met yet, keep status as "Setup".'}
+              </p>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -406,9 +415,11 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
   }
 
   const handleRemoveImage = () => {
-    onChangeImage(WAREHOUSE_PHOTO_PRESETS[0].url)
+    onChangeImage('')
     setLoadError(false)
   }
+
+  const hasValidImage = Boolean(image && image.trim() && !loadError)
 
   return (
     <div className="pt-1">
@@ -422,36 +433,48 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 items-start bg-stone-50 p-3 rounded-xl border border-stone-200">
-        <div className="relative w-full sm:w-44 h-32 rounded-lg overflow-hidden bg-stone-200 border border-stone-300 shrink-0 group shadow-xs">
-          <img
-            src={loadError ? WAREHOUSE_PHOTO_PRESETS[0].url : image || WAREHOUSE_PHOTO_PRESETS[0].url}
-            alt="Facility preview"
-            className="w-full h-full object-cover transition duration-200"
-            onError={() => setLoadError(true)}
-          />
-          <div className="absolute inset-0 bg-stone-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-            <label
-              className="cursor-pointer bg-white text-stone-800 text-[11px] font-bold px-2 py-1.5 rounded-lg shadow-sm hover:bg-stone-100 flex items-center gap-1 transition"
-              aria-label="Đổi hình ảnh"
-            >
-              <svg className="w-3.5 h-3.5 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        <div className="relative w-full sm:w-44 h-32 rounded-lg overflow-hidden bg-stone-100 border border-stone-300 shrink-0 group shadow-xs">
+          {hasValidImage ? (
+            <>
+              <img
+                src={image}
+                alt="Facility preview"
+                className="w-full h-full object-cover transition duration-200"
+                onError={() => setLoadError(true)}
+              />
+              <div className="absolute inset-0 bg-stone-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                <label
+                  className="cursor-pointer bg-white text-stone-800 text-[11px] font-bold px-2 py-1.5 rounded-lg shadow-sm hover:bg-stone-100 flex items-center gap-1 transition"
+                  aria-label="Đổi hình ảnh"
+                >
+                  <svg className="w-3.5 h-3.5 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  <span>Đổi ảnh</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold p-1.5 rounded-lg shadow-sm transition cursor-pointer"
+                  title="Gỡ ảnh này"
+                  aria-label="Gỡ ảnh"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center text-stone-400 bg-stone-100/80">
+              <svg className="w-8 h-8 mb-1 text-stone-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <span>Đổi ảnh</span>
-              <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
-            </label>
-            <button
-              type="button"
-              onClick={handleRemoveImage}
-              className="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold p-1.5 rounded-lg shadow-sm transition cursor-pointer"
-              title="Khôi phục ảnh mẫu mặc định"
-              aria-label="Xóa ảnh và dùng ảnh mặc định"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
+              <span className="text-[11px] font-medium text-stone-500">Chưa có ảnh cơ sở</span>
+              <span className="text-[9px] text-stone-400 mt-0.5">Tải lên hoặc dán URL</span>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 w-full space-y-2 text-xs">
@@ -477,43 +500,25 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
                 <span>{lang === 'vi' ? 'Chọn file' : 'Upload'}</span>
                 <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
               </label>
+              {image ? (
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="px-2.5 py-1.5 bg-stone-100 hover:bg-red-50 text-stone-600 hover:text-red-600 border border-stone-200 hover:border-red-200 rounded-lg text-xs font-medium transition cursor-pointer"
+                  title="Xóa ảnh"
+                >
+                  {lang === 'vi' ? 'Xóa' : 'Clear'}
+                </button>
+              ) : null}
             </div>
             {loadError && (
               <p className="text-[10px] text-red-600 mt-1 font-semibold">
-                Không thể tải link ảnh này, hệ thống đã chuyển về ảnh mẫu mặc định.
+                Không thể tải hình ảnh từ URL này. Vui lòng kiểm tra lại link hoặc tải file từ máy tính.
               </p>
             )}
-          </div>
-
-          <div>
-            <span className="block text-[11px] font-medium text-stone-500 mb-1">
-              {lang === 'vi' ? 'Hoặc chọn nhanh từ thư viện ảnh kho mẫu chuẩn:' : 'Or select from presets:'}
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {WAREHOUSE_PHOTO_PRESETS.map((p: { id: string; title: string; url: string; description: string }) => {
-                const isSelected = image === p.url
-                return (
-                  <button
-                    type="button"
-                    key={p.id}
-                    onClick={() => {
-                      onChangeImage(p.url)
-                      setLoadError(false)
-                    }}
-                    className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-left transition cursor-pointer ${
-                      isSelected
-                        ? 'border-amber-500 bg-amber-50/80 ring-1 ring-amber-400'
-                        : 'border-stone-200 bg-white hover:border-stone-300'
-                    }`}
-                  >
-                    <img src={p.url} alt={p.title} className="w-8 h-8 rounded object-cover shrink-0" />
-                    <span className="text-[10px] font-medium text-stone-700 truncate leading-tight">
-                      {p.title}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+            <p className="text-[11px] text-stone-500 mt-1.5">
+              Hỗ trợ các định dạng JPG, PNG, WebP (tối đa 5MB). Hình ảnh sẽ tự động hiển thị trên thẻ kho dành cho khách thuê.
+            </p>
           </div>
         </div>
       </div>
