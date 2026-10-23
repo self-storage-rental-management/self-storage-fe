@@ -3,7 +3,7 @@ import { getAuthenticatedActor } from './authApi'
 import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
 
-export type ReturnRole = 'customer' | 'staff' | 'manager'
+export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
 export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
 export interface OverdueSettlement {
   accruedAmount: number | null
@@ -67,13 +67,18 @@ function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
   const roleAllowed = role === 'manager'
-    ? a?.roles.some(r => r === 'MANAGER' || r === 'ADMIN' || (r === 'BUSINESS' && !write))
+    ? a?.roles.some(r => r === 'MANAGER' || r === 'ADMIN')
+    : role === 'business'
+      ? a?.roles.some(r => r === 'BUSINESS' || r === 'ADMIN')
     : role === 'staff'
       ? a?.roles.some(r => r === 'STAFF' || r === 'ADMIN')
       : a?.roles.includes('CUSTOMER')
   if (!a || a.status !== 'ACTIVE' || !roleAllowed)
     throw new ApiClientError('Bạn không có quyền truy cập hồ sơ trả kho.', { status: 403 })
-  if (role !== 'customer' && !a.permissions.includes(write ? role === 'manager' ? 'rentals:update' : 'returns:process' : 'returns:read'))
+  const permission = write
+    ? role === 'manager' ? 'rentals:update' : role === 'staff' ? 'returns:process' : 'refunds:execute'
+    : 'returns:read'
+  if (role !== 'customer' && !a.permissions.includes(permission))
     throw new ApiClientError('Bạn chưa có quyền xử lý hồ sơ trả kho.', { status: 403 })
   return a
 }
@@ -139,9 +144,10 @@ export async function completeRefund(id: string, body: { transactionReference?: 
     throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
   }
   if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
-  const requiredScope: ReturnScope = a.roles.includes('BUSINESS') ? 'MANAGE' : 'OPERATE'
-  const resultRole: ReturnRole = a.roles.includes('STAFF') ? 'staff' : 'manager'
-  return bound(await apiRequest(`/api/staff/returns/${id}/complete-refund`, {
+  const resultRole: ReturnRole = a.roles.includes('BUSINESS') ? 'business' : a.roles.includes('STAFF') ? 'staff' : 'manager'
+  const endpointRole = resultRole === 'business' ? 'business' : 'staff'
+  const requiredScope: ReturnScope = resultRole === 'business' ? 'MANAGE' : 'OPERATE'
+  return bound(await apiRequest(`/api/${endpointRole}/returns/${id}/complete-refund`, {
     method: 'POST', body: JSON.stringify(body),
   }), resultRole, id, undefined, requiredScope)
 }

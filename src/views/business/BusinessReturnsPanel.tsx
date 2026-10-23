@@ -320,7 +320,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     setApiLoading(true)
     setApiError(null)
     try {
-      const res = await listReturns('manager', page, 20)
+      const res = await listReturns('business', page, 20)
       if (res && res.data && res.data.length > 0) {
         setApiRows(res.data)
         setTotalPages(res.pagination.totalPages || 1)
