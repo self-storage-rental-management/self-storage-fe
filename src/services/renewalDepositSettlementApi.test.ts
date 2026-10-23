@@ -31,6 +31,7 @@ describe("Renewal deposit settlement API", () => {
     const init = fetch.mock.calls[0][1]
     expect(JSON.parse(init.body)).toEqual(body)
     expect(new Headers(init.headers).get("Idempotency-Key")).toBe("refund-test-key")
+    expect(fetch.mock.calls[0][0]).toContain(`/api/staff/renewals/${ids.renewal}/refund-executions`)
   })
   it("refuses client supplied amounts before sending a money command", async () => {
     const fetch = respond(settlement)
