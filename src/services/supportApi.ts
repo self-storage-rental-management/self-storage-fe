@@ -80,7 +80,7 @@ export function isSupportTicket(value: unknown): value is SupportTicket {
   const r = value as SupportTicket | null
   if (
     !r ||
-    !(r.displayCode == null || (typeof r.displayCode === "string" && /^HT-\d{4}-\d{6}$/.test(r.displayCode))) ||
+    !(r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|HT-\d{4}-\d{6})$/.test(r.displayCode))) ||
     !isUuid(r.id) ||
     !isUuid(r.customerId) ||
     !(r.customerName === undefined || nullable(r.customerName, string)) ||
