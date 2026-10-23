@@ -13,7 +13,7 @@ const labels: Record<string, string> = {
   MAINTENANCE: 'Đang bảo trì', COMPLETE: 'Đã kiểm tra đầy đủ', PARTIAL: 'Chưa đủ thông tin', UNKNOWN: 'Chưa có thông tin',
   RENTAL: 'Hồ sơ thuê', PAYMENT: 'Thanh toán', RESERVATION: 'Đặt chỗ',
   LOW: 'Thấp', NORMAL: 'Trung bình', MEDIUM: 'Trung bình', HIGH: 'Cao', URGENT: 'Khẩn cấp',
-  CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', MANAGER: 'Quản lý cơ sở',
+  CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', MANAGER: 'Quản lý cơ sở', BUSINESS: 'Quản lý vận hành kinh doanh',
   PENDING: 'Đang chờ', COMPLETED: 'Đã hoàn tất', REJECTED: 'Đã từ chối', ROUTED: 'Đã chuyển xử lý',
   'Small Storage': 'Gian kho nhỏ', 'Medium Storage': 'Gian kho vừa', 'Large Storage': 'Gian kho lớn',
   'Extra Large Storage': 'Gian kho rất lớn',
@@ -95,7 +95,7 @@ export function managerDisplayExplanation(value: string): string {
 export function managerDisplayError(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === 'FEATURE_DISABLED') return 'Chức năng này chưa được bật trên hệ thống.'
-    if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu phản hồi chưa đúng định dạng. Vui lòng tải lại; nếu vẫn lỗi, cần kiểm tra Backend.'
+    if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu phản hồi chưa đúng định dạng. Vui lòng tải lại, nếu vẫn lỗi, cần kiểm tra Backend.'
     if (error.code === 'DEFERRED_SOURCE' || error.message.includes('DEFERRED_SOURCE'))
       return 'Chưa đủ dữ liệu hoặc chính sách để thực hiện thao tác này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'

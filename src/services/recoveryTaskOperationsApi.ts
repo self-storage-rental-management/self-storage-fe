@@ -17,12 +17,14 @@ export interface RecoveryOperations {
   assetsCleared: boolean
   completionFileId: string | null
   completedAt: string | null
+  transactionReference?: string | null
 }
 export type RecoveryCommand =
   | { action: 'start'; body: { expectedVersion: number; note: string } }
   | { action: 'inspection'; body: { expectedVersion: number; inspection: Omit<InspectionInput, 'evidencePhotos'>; evidenceFileIds: string[] } }
   | { action: 'settlement-receipts'; body: { expectedVersion: number; paymentMethod: 'CASH' | 'BANK_TRANSFER'; transactionReference: string; receiptFileId: string; confirmed: boolean } }
   | { action: 'completion'; body: { expectedVersion: number; assetsCleared: boolean; unitInspected: boolean; reportFileId: string; note: string } }
+  | { action: 'recalculate-settlement'; body: { expectedVersion: number } }
 
 export function isRecoveryOperations(value: unknown): value is RecoveryOperations {
   const v = value as RecoveryOperations | null
@@ -33,6 +35,7 @@ export function isRecoveryOperations(value: unknown): value is RecoveryOperation
     && (v.settlementStatus === null || returnStatuses.includes(v.settlementStatus))
     && Array.isArray(v.evidenceFileIds) && v.evidenceFileIds.every(isUuid)
     && typeof v.assetsCleared === 'boolean'
+    && (v.transactionReference == null || (typeof v.transactionReference === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/.test(v.transactionReference)))
 }
 function path(role: RecoveryAudience, id: string) {
   if (!['staff', 'manager'].includes(role) || !isUuid(id)) throw new Error('Mã nhiệm vụ hoặc vai trò không hợp lệ.')
@@ -55,13 +58,15 @@ export function validateRecoveryCommand(command: RecoveryCommand) {
         !['available', 'maintenance'].includes(i.proposedUnitStatus) || i.staffNotes.length > 4000 ||
         ![i.returnedKey, i.returnedCard, i.returnedLock].every(v => typeof v === 'boolean')) throw new Error('Kiểm tra thông tin kiểm kê.')
     if (!feeKeys.every(k => Number.isSafeInteger(i[k]) && i[k] >= 0) || feeKeys.reduce((sum, k) => sum + i[k], 0) > 999999999999)
-      throw new Error('Phí phải là số VND nguyên không âm; tổng phí tối đa 999.999.999.999 đ.')
+      throw new Error('Phí phải là số VND nguyên không âm, tổng phí tối đa 999.999.999.999 đ.')
     if (!files.length || files.length > 10 || !files.every(isUuid) || new Set(files).size !== files.length) throw new Error('Đính kèm từ 1 đến 10 chứng từ kiểm kê đã lưu.')
   }
   if (command.action === 'settlement-receipts') {
     const b = command.body
-    if (!['CASH', 'BANK_TRANSFER'].includes(b.paymentMethod) || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/.test(b.transactionReference) || !isUuid(b.receiptFileId) || b.confirmed !== true)
-      throw new Error('Chọn phương thức, nhập mã giao dịch hợp lệ, đính kèm biên lai và xác nhận đã thu hoặc hoàn tiền.')
+    if (!['CASH', 'BANK_TRANSFER'].includes(b.paymentMethod) || !isUuid(b.receiptFileId) || b.confirmed !== true)
+      throw new Error('Chọn phương thức, đính kèm biên lai và xác nhận đã thu hoặc hoàn tiền.')
+    if (b.paymentMethod === 'BANK_TRANSFER' && !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/.test(b.transactionReference))
+      throw new Error('Nhập mã giao dịch chuyển khoản hợp lệ, tối đa 64 ký tự.')
   }
   if (command.action === 'completion' && (!command.body.assetsCleared || !command.body.unitInspected || !isUuid(command.body.reportFileId)))
     throw new Error('Đính kèm biên bản và xác nhận đã xử lý tài sản, kiểm tra kho.')
@@ -86,6 +91,9 @@ export function recoveryOperationError(error: unknown) {
         'Recovery settlement has not been completed': 'Cần hoàn tất quyết toán trước khi hoàn tất thu hồi.',
         'Recovery settlement or transaction evidence was already recorded': 'Quyết toán hoặc chứng từ giao dịch đã được ghi nhận.',
         'Recovery inventory evidence is invalid': 'Chứng từ kiểm kê không hợp lệ. Tải lại và kiểm tra chứng từ.',
+        'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.': 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.',
+        'Đã ghi nhận biên lai, không thể tự sửa quyết toán cũ.': 'Đã ghi nhận biên lai, không thể tự sửa quyết toán cũ.',
+        'Chỉ được đối soát lại hồ sơ thu hồi đã kiểm kê và chưa thu hoàn tiền.': 'Chỉ được đối soát lại hồ sơ thu hồi đã kiểm kê và chưa thu hoàn tiền.',
       }
       return known[error.message] ?? 'Máy chủ từ chối thao tác (409). Tải lại nhiệm vụ trước khi tiếp tục.'
     }

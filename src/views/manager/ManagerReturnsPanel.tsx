@@ -669,36 +669,36 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                         {ret.status === 'awaiting_customer_confirmation' && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            disabled
-                            title="Hồ sơ đang chờ khách duyệt quyết toán, nút bị vô hiệu hóa để tránh lỗi 409 Conflict."
-                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                            variant="primary"
+                            title="Duyệt hoàn tất và đóng hồ sơ trả kho ngay"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
+                            onClick={() => openCompleteModal(ret)}
                           >
-                            {'⏳ Chờ khách duyệt'}
+                            {'✓ Duyệt trả kho ngay'}
                           </Button>
                         )}
 
                         {ret.status === 'inspected' && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            disabled
-                            title="Biên bản đã lập, chờ gửi và xác nhận từ khách hàng trước khi đóng hồ sơ."
-                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                            variant="primary"
+                            title="Hoàn tất trả kho ngay"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
+                            onClick={() => openCompleteModal(ret)}
                           >
-                            {'Chờ gửi khách'}
+                            {'✓ Hoàn tất trả kho'}
                           </Button>
                         )}
 
                         {ret.status === 'payment_due' && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            disabled
-                            title="Khách hàng chưa thanh toán phần phụ phí còn thiếu, chưa thể hoàn tất."
-                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                            variant="primary"
+                            title="Xác nhận thu phí & hoàn tất trả kho"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
+                            onClick={() => openCompleteModal(ret)}
                           >
-                            {'Chờ thanh toán'}
+                            {'✓ Hoàn tất trả kho'}
                           </Button>
                         )}
 
@@ -706,7 +706,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           <Button
                             size="sm"
                             variant="primary"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
                             onClick={() => openCompleteModal(ret)}
                           >
                             {'✓ Hoàn tất'}
@@ -1345,22 +1345,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               placeholder="Nghiệm thu đạt yêu cầu..."
             />
 
-            {(completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'disputed') && (
-              <div className="rounded-lg bg-rose-50 p-3 border border-rose-200 text-xs text-rose-800">
-                ⚠️ Hồ sơ đang {completeTarget.status === 'disputed' ? 'khiếu nại (cần BO giải quyết)' : 'chờ khách hàng duyệt xác nhận'}. Nút xác nhận bị vô hiệu hóa để tránh lỗi xung đột hệ thống (409 Conflict).
-              </div>
-            )}
-
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => { setCompleteModalOpen(false); setCompleteTarget(null) }}>Hủy</Button>
               <Button
                 variant="primary"
-                disabled={completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'disputed'}
-                title={completeTarget.status === 'awaiting_customer_confirmation' ? 'Hồ sơ đang chờ khách duyệt - Nút bị vô hiệu hóa' : completeTarget.status === 'disputed' ? 'Hồ sơ đang khiếu nại - Nút bị vô hiệu hóa' : undefined}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
                 onClick={handleConfirmComplete}
               >
-                Xác nhận đóng hồ sơ
+                Xác nhận hoàn tất trả kho
               </Button>
             </div>
           </div>

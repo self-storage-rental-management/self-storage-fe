@@ -44,7 +44,7 @@ function strictKeys(value: object, keys: string[]) {
 function text(value: unknown, limit: number) {
   check(
     string(value) && !!value.trim() && value.length <= limit,
-    `Nội dung phải có 1–${limit} ký tự.`,
+    `Nội dung phải có từ 1 đến ${limit} ký tự.`,
   )
 }
 function files(value: unknown) {
@@ -80,6 +80,7 @@ export function isSupportTicket(value: unknown): value is SupportTicket {
   const r = value as SupportTicket | null
   if (
     !r ||
+    !(r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|HT-\d{4}-\d{6})$/.test(r.displayCode))) ||
     !isUuid(r.id) ||
     !isUuid(r.customerId) ||
     !(r.customerName === undefined || nullable(r.customerName, string)) ||

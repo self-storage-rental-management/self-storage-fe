@@ -18,6 +18,7 @@ export interface CheckInChecklist {
 export interface CompleteCheckInRequest {
   checklist: CheckInChecklist
   identityDocumentNumber: string
+  identityVerificationNote: string | null
   actualMeasurements: {
     lengthCm: number
     widthCm: number
@@ -34,6 +35,7 @@ export interface CompleteCheckInRequest {
   evidenceReferences: string[]
   handedOverItems: string[]
   notes: string
+  lockReference: string
 }
 
 export interface CheckInCase {
@@ -280,18 +282,6 @@ function assertCredentialEnvelope(payload: unknown): AccessCredential {
     throw new ApiClientError('Backend trả về quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<AccessCredential>).data
-}
-
-export async function issueAccessCredential(checkInId: string, request: {
-  type: AccessCredentialType
-  reference: string
-  secret?: string
-  note?: string
-}) {
-  return assertCredentialEnvelope(await apiRequest<unknown>(
-    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/credentials`,
-    { method: 'POST', body: JSON.stringify(request) },
-  ))
 }
 
 export async function revokeAccessCredential(credentialId: string, reason: string) {

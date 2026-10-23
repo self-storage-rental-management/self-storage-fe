@@ -3,7 +3,6 @@ import type { User } from './types'
 import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
-import AdminPortalLogin from './views/auth/AdminPortalLogin'
 import HomePage from './views/home/HomePage'
 import RequiredPasswordChange from './views/RequiredPasswordChange'
 import { actorToUser, getAuthenticatedActor, logoutFromApi, refreshApiSession, type ApiActor } from './services/authApi'
@@ -35,7 +34,7 @@ const ManagerApp = lazyWithChunkRecovery(() => import('./views/manager/ManagerAp
 const BusinessApp = lazyWithChunkRecovery(() => import('./views/business/BusinessApp'))
 const AdminApp = lazyWithChunkRecovery(() => import('./views/admin/AdminApp'))
 
-type GuestView = 'home' | 'login' | 'register' | 'admin-login'
+type GuestView = 'home' | 'login' | 'register'
 
 function normalizedPathname() {
   return window.location.pathname.replace(/\/+$/, '') || '/'
@@ -46,29 +45,13 @@ function resolveGuestView(): GuestView {
   const pathname = normalizedPathname()
   const hostname = window.location.hostname.toLowerCase()
 
-  // 1. Subdomain matching: staff.storagehub.vn or admin.storagehub.vn
-  if (hostname.startsWith('staff.') || hostname.startsWith('admin.')) {
-    return 'admin-login'
-  }
-  // Subdomain matching: portal.storagehub.vn
+  // Customer portal subdomain
   if (hostname.startsWith('portal.')) {
     if (pathname === '/register') return 'register'
     return 'login'
   }
 
-  // 2. Back-office / Admin routes: /admin/login, /staff/login, /admin, /staff
-  if (
-    pathname === '/admin/login'
-    || pathname === '/staff/login'
-    || pathname === '/admin'
-    || pathname === '/staff'
-    || pathname.startsWith('/admin/')
-    || pathname.startsWith('/staff/')
-  ) {
-    return 'admin-login'
-  }
-
-  // 3. Customer Portal routes
+  // Customer portal routes
   if (pathname === '/register') return 'register'
   if (
     pathname === '/login'
@@ -182,8 +165,22 @@ function MainContent() {
 
   useEffect(() => {
     const syncUpdatedActor = () => setApiActor(getAuthenticatedActor())
+    const handleAuthExpired = () => {
+      const wasApiUser = Boolean(getAuthenticatedActor() || apiActor)
+      clearAuthTokens()
+      setApiActor(null)
+      if (wasApiUser) {
+        setSessionUserId(null)
+        setSessionId(null)
+        setGuestView(resolveGuestView())
+      }
+    }
     window.addEventListener('storagehub:actor-updated', syncUpdatedActor)
-    return () => window.removeEventListener('storagehub:actor-updated', syncUpdatedActor)
+    window.addEventListener('storagehub:auth-expired', handleAuthExpired)
+    return () => {
+      window.removeEventListener('storagehub:actor-updated', syncUpdatedActor)
+      window.removeEventListener('storagehub:auth-expired', handleAuthExpired)
+    }
   }, [])
 
   useEffect(() => {
@@ -194,7 +191,7 @@ function MainContent() {
   }, [user])
 
   const handleLogin = (nextUser: User) => {
-    if (['/login', '/register', '/admin/login', '/staff/login', '/admin', '/staff', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
+    if (['/login', '/register', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
       window.history.replaceState(null, '', '/')
     }
     const authenticatedActor = getAuthenticatedActor()
@@ -228,17 +225,6 @@ function MainContent() {
         <HomePage
           onOpenLogin={() => navigateGuest('/login', 'login', setGuestView)}
           onOpenRegister={() => navigateGuest('/register', 'register', setGuestView)}
-          onOpenAdminLogin={() => navigateGuest('/admin/login', 'admin-login', setGuestView)}
-        />
-      )
-    }
-
-    if (guestView === 'admin-login') {
-      return (
-        <AdminPortalLogin
-          onLogin={handleLogin}
-          onBackToHome={() => navigateGuest('/', 'home', setGuestView)}
-          onSwitchToCustomerPortal={() => navigateGuest('/login', 'login', setGuestView)}
         />
       )
     }
@@ -248,7 +234,6 @@ function MainContent() {
         onLogin={handleLogin}
         initialTab={guestView === 'register' ? 'register' : 'login'}
         onBackToHome={() => navigateGuest('/', 'home', setGuestView)}
-        onSwitchToAdminPortal={() => navigateGuest('/admin/login', 'admin-login', setGuestView)}
       />
     )
   }

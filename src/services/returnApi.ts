@@ -3,8 +3,24 @@ import { getAuthenticatedActor } from './authApi'
 import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
 
-export type ReturnRole = 'customer' | 'staff' | 'manager'
+export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
 export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
+export interface OverdueSettlement {
+  accruedAmount: number | null
+  settlementAmount: number | null
+  overdueDays: number | null
+  calculatedAt: string | null
+  requiresReconciliation: boolean
+}
+export function isOverdueSettlement(value: unknown): value is OverdueSettlement {
+  if (!value || typeof value !== 'object') return false
+  const v = value as OverdueSettlement
+  const amount = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0
+  return typeof v.requiresReconciliation === 'boolean' && (v.requiresReconciliation
+    ? v.accruedAmount === null && v.settlementAmount === null && v.overdueDays === null && v.calculatedAt === null
+    : amount(v.accruedAmount) && amount(v.settlementAmount) && v.settlementAmount! <= v.accruedAmount!
+      && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
+}
 export interface ApiReturn {
   id: string; rentalId: string; facilityId: string; customerId: string
   facilityName: string; unitNumber: string; customerName: string
@@ -21,12 +37,14 @@ export interface ApiReturn {
   recoveryTaskId?: string | null
   recoveryTaskStatus?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | null
   recoveryCompletedAt?: string | null
+  overdueSettlement?: OverdueSettlement | null
 }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const money = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 999999999999.99 && Math.abs(v * 100 - Math.round(v * 100)) < 0.01
 const date = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v
 export function isApiReturn(v: unknown): v is ApiReturn {
   return object(v) && ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
+    (v.overdueSettlement == null || isOverdueSettlement(v.overdueSettlement)) &&
     ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && date(v.scheduledDate) &&
     returnStatuses.includes(v.status as ApiReturn['status']) && typeof v.customerConfirmed === 'boolean' && money(v.totalDeductions) &&
     ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'].every(k => money(v[k])) &&
@@ -39,22 +57,35 @@ export function isApiReturn(v: unknown): v is ApiReturn {
         v.sourceType === 'RECOVERY' && isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) &&
         (v.recoveryTaskStatus === 'CLOSED' ? v.status === 'completed' && typeof v.recoveryCompletedAt === 'string' && Number.isFinite(Date.parse(v.recoveryCompletedAt)) : v.recoveryCompletedAt === null))
 }
-function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string) {
-  if (a.roles.includes('BUSINESS') || a.roles.includes('ADMIN')) return true
-  return !!a.facilityScopes[facilityId]
+type ReturnScope = 'READ' | 'OPERATE' | 'MANAGE'
+const scopeRank: Record<ReturnScope, number> = { READ: 1, OPERATE: 2, MANAGE: 3 }
+function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string, required: ReturnScope = 'READ') {
+  if (a.roles.includes('ADMIN')) return true
+  const actual = a.facilityScopes[facilityId]
+  return !!actual && scopeRank[actual] >= scopeRank[required]
 }
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.some(r => r === role.toUpperCase() || ((role === 'manager' || role === 'staff') && (r === 'BUSINESS' || r === 'ADMIN'))))
+  const roleAllowed = role === 'manager'
+    ? a?.roles.some(r => r === 'MANAGER' || r === 'ADMIN')
+    : role === 'business'
+      ? a?.roles.some(r => r === 'BUSINESS' || r === 'ADMIN')
+    : role === 'staff'
+      ? a?.roles.some(r => r === 'STAFF' || r === 'ADMIN')
+      : a?.roles.includes('CUSTOMER')
+  if (!a || a.status !== 'ACTIVE' || !roleAllowed)
     throw new ApiClientError('Bạn không có quyền truy cập hồ sơ trả kho.', { status: 403 })
-  if (role !== 'customer' && !a.permissions.includes(write ? role === 'manager' ? 'rentals:update' : 'returns:process' : 'returns:read'))
+  const permission = write
+    ? role === 'manager' ? 'rentals:update' : role === 'staff' ? 'returns:process' : 'refunds:execute'
+    : 'returns:read'
+  if (role !== 'customer' && !a.permissions.includes(permission))
     throw new ApiClientError('Bạn chưa có quyền xử lý hồ sơ trả kho.', { status: 403 })
   return a
 }
-function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string) {
+function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string, requiredScope: ReturnScope = 'READ') {
   const a = actor(role)
   return readRentalEnvelope<ApiReturn>(value, v => isApiReturn(v) && (!id || v.id === id) && (!rentalId || v.rentalId === rentalId) &&
-    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || facilityAllowed(a, v.facilityId)))
+    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || facilityAllowed(a, v.facilityId, requiredScope)))
 }
 export async function listReturns(role: ReturnRole, page = 0, pageSize = 20) {
   const a = actor(role)
@@ -101,14 +132,49 @@ export function inspectReturn(id: string, body: InspectionInput) {
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, 'inspection', body)
 }
-export function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
+export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
+  const a = getAuthenticatedActor()
+  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'STAFF' || role === 'BUSINESS' || role === 'ADMIN' || role === 'MANAGER')) {
+    throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
+  }
   if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
     throw new Error('Mã giao dịch hoàn cọc không được vượt quá 120 ký tự.')
   }
   if (body.notes !== undefined && body.notes.length > 1000) {
     throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
   }
-  return mutate('staff', id, 'complete-refund', body)
+  if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const resultRole: ReturnRole = a.roles.includes('BUSINESS') ? 'business' : a.roles.includes('STAFF') ? 'staff' : 'manager'
+  const endpointRole = resultRole === 'business' ? 'business' : resultRole === 'manager' ? 'manager' : 'staff'
+  const requiredScope: ReturnScope = resultRole === 'business' || resultRole === 'manager' ? 'MANAGE' : 'OPERATE'
+  return bound(await apiRequest(`/api/${endpointRole}/returns/${id}/complete-refund`, {
+    method: 'POST', body: JSON.stringify(body),
+  }), resultRole, id, undefined, requiredScope)
+}
+
+export interface ReturnSettlementReceipt {
+  amount: number
+  paymentMethod: 'CASH' | 'BANK_TRANSFER'
+  transactionReference: string
+  receiptFileId: string
+  confirmed: boolean
+}
+export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
+  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod) || !body.transactionReference.trim()
+    || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
+    throw new Error('Chọn phương thức, nhập mã giao dịch, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền.')
+}
+export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string) {
+  const a = actor('staff', true)
+  if (!a.permissions.includes('payments:collect')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
+  if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
+  validateReturnSettlementReceipt(body)
+  if (a.roles.includes('STAFF') && body.paymentMethod !== 'CASH') {
+    throw new ApiClientError('Staff chỉ được ghi nhận thu tiền mặt trong phiên thu.', { status: 403 })
+  }
+  return bound(await apiRequest(`/api/staff/returns/${id}/settlement-receipts`, {
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
+  }), 'staff', id)
 }
 
 export interface ReturnEvidenceAsset {
@@ -160,6 +226,9 @@ export function returnError(error: unknown) {
   if (error instanceof ApiClientError) {
     const msg = error.message || ''
     if (error.status === 409 || msg.includes('409')) {
+      if (msg === 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.') {
+        return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
+      }
       if (msg.includes('is not pending refund')) {
         return 'Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang có khiếu nại).'
       }
@@ -178,7 +247,10 @@ export function returnError(error: unknown) {
       if (msg.includes('Already in progress') || msg.includes('already in progress')) {
         return 'Đã có yêu cầu trả kho đang được xử lý cho hợp đồng này.'
       }
-      return 'Xung đột trạng thái (409): Hồ sơ đang chờ khách duyệt hoặc đang có khiếu nại. Tải lại hồ sơ để kiểm tra; chưa xác nhận thành công.'
+      if (msg && msg !== 'Conflict' && !msg.startsWith('Request failed with status 409')) {
+        return msg
+      }
+      return 'Xung đột trạng thái (409): Vui lòng tải lại hồ sơ để kiểm tra.'
     }
     if (error.status === 403) return 'Bạn chưa có quyền xử lý hồ sơ trả kho tại cơ sở này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
