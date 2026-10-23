@@ -46,7 +46,7 @@ const statusVariants: Record<string, string> = {
   assigned: 'purple'
 }
 
-const activeReservationStatuses = ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN']
+const activeReservationStatuses = ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'COMPLETED']
 const operationalRentalStatuses: RentalRecord['status'][] = ['active', 'return_requested', 'return_inspection', 'closing']
 
 interface AvailabilityPeriod {
