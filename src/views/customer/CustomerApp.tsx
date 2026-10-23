@@ -1819,7 +1819,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       onNotificationClick={handleNotificationClick}
       canAccess={permission => isApiAuthenticated() ? canApiCustomerNavigate(user, permission) : hub.can(user, permission)}
     >
-      <div className="customer-page font-sans">
+      <div className="customer-page min-w-0 w-full max-w-full overflow-x-hidden font-sans">
       {/* ── OVERVIEW ───────────────────────────────────────────── */}
       {page === 'overview' && (
         <div className="fade-in space-y-8 text-black">
