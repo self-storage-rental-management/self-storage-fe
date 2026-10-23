@@ -91,7 +91,7 @@ export async function listUnitAssignmentCandidates(params: {
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
   return assertPage<UnitAssignmentCandidate>(
-    await apiRequest<unknown>(`/api/staff/unit-assignments/candidates?${query}`),
+    await apiRequest<unknown>(`/api/manager/unit-assignments/candidates?${query}`),
     'Backend trả về danh sách reservation chờ phân kho không hợp lệ.',
   )
 }
@@ -101,7 +101,7 @@ export async function listAssignableUnits(reservationId: string, q = '') {
   if (q.trim()) query.set('q', q.trim())
   return assertPage<AssignableUnit>(
     await apiRequest<unknown>(
-      `/api/staff/unit-assignments/candidates/${encodeURIComponent(reservationId)}/available-units?${query}`,
+      `/api/manager/unit-assignments/candidates/${encodeURIComponent(reservationId)}/available-units?${query}`,
     ),
     'Backend trả về danh sách gian kho khả dụng không hợp lệ.',
   )
@@ -109,7 +109,7 @@ export async function listAssignableUnits(reservationId: string, q = '') {
 
 export async function createUnitAssignment(reservationId: string, storageUnitId: string) {
   const payload = await apiRequest<unknown>(
-    `/api/staff/unit-assignments/${encodeURIComponent(reservationId)}`,
+    `/api/manager/unit-assignments/${encodeURIComponent(reservationId)}`,
     { method: 'POST', body: JSON.stringify({ storageUnitId }) },
   )
   return assertEnvelope<UnitAssignmentResult>(payload).data

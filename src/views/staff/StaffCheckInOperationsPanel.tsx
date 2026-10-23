@@ -136,10 +136,6 @@ function formatInputNumber(value: number | null | undefined) {
   return value == null || !Number.isFinite(Number(value)) ? "" : String(value)
 }
 
-function normalizeCheckInIdentityDocument(value: string | null | undefined) {
-  return value?.trim().replace(/\s+/g, "").toUpperCase() || ""
-}
-
 function volumeFromDimensions(length: string, width: string, height: string) {
   const dimensions = [length, width, height].map(Number)
   if (dimensions.some((value) => !Number.isFinite(value) || value <= 0)) return ""
@@ -395,10 +391,10 @@ export default function StaffCheckInOperationsPanel({
   const identityMismatch = Boolean(
     declaredIdentityDocument &&
       identityDocumentNumber.trim() &&
-      normalizeCheckInIdentityDocument(declaredIdentityDocument) !==
-        normalizeCheckInIdentityDocument(identityDocumentNumber),
+      normalizeIdentityDocument(declaredIdentityDocument) !==
+        normalizeIdentityDocument(identityDocumentNumber),
   )
-  const identityVerificationBlocked = !declaredIdentityDocument || identityMismatch
+  const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber) || identityMismatch
 
   const refresh = () => setRefreshKey((value) => value + 1)
 
@@ -473,7 +469,7 @@ export default function StaffCheckInOperationsPanel({
 
     const declaredIdentity = normalizeIdentityDocument(handoverTarget.identityDocumentNumber)
     const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
-    if (!declaredIdentity || !providedIdentity || declaredIdentity !== providedIdentity) {
+    if (!providedIdentity || (declaredIdentity && declaredIdentity !== providedIdentity)) {
       setError("CCCD/Hộ chiếu không khớp thông tin đơn đặt kho. Chưa thể tiếp tục bàn giao.")
       return
     }
@@ -1085,7 +1081,7 @@ export default function StaffCheckInOperationsPanel({
             </div>
             {!declaredIdentityDocument && (
               <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
-                Đơn này chưa có CCCD được lưu trong reservation nên chưa thể hoàn tất bàn giao. Cần cập nhật lại đơn trước khi thực hiện check-in.
+                Đơn này chưa lưu CCCD. Nhập số trên giấy tờ gốc và tích xác nhận đã đối chiếu; hệ thống sẽ lưu số này vào đơn khi hoàn tất check-in.
               </p>
             )}
             <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">

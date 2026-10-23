@@ -20,7 +20,6 @@ Các ô nhập `date` và `datetime-local` gốc dùng định dạng của trì
 | Khách hàng | `customer/CustomerApp.tsx` | Các ô ngày trả kho và ngày hẹn ký còn dùng ô ngày gốc |
 | Chính sách | `rental-support-integration/DuongPolicyWorkspace.tsx` | Ngày bắt đầu và kết thúc hiệu lực theo loại chính sách đang chọn |
 | Kinh doanh | `business/BusinessApp.tsx` | Ô ngày trong biểu mẫu chính sách |
-| Kinh doanh | `business/BusinessDiscountsPanel.tsx` | Ngày bắt đầu, ngày kết thúc ưu đãi |
 | Kinh doanh | `business/BusinessDamageIncidentsPanel.tsx` | Ngày giờ phát sinh sự cố |
 | Kinh doanh | `business/BusinessReturnsPanel.tsx` | Ô ngày của hồ sơ trả kho |
 | Quản lý | `manager/ManagerInventoryDetails.tsx` | Các ô ngày trong chi tiết kho |
