@@ -13,9 +13,10 @@ type PermissionModule = 'Kho bãi & vận hành' | 'Hợp đồng & dịch vụ'
 
 const INTERNAL_ROLE_CODES: InternalRoleCode[] = ['ADMIN', 'MANAGER', 'STAFF', 'BUSINESS']
 const MODULES: PermissionModule[] = ['Kho bãi & vận hành', 'Hợp đồng & dịch vụ', 'Tài chính & báo cáo', 'Hỗ trợ & quản trị']
-const MANAGER_REQUIRED = new Set(['reservations:approve', 'policies:update', 'staff_tasks:update', 'reports:read'])
-const STAFF_RESTRICTED = new Set(['payments:collect', 'policies:update', 'staff_tasks:update'])
-const BUSINESS_RESTRICTED = new Set(['policies:update', 'settings:manage', 'payments:collect', 'reservations:approve'])
+const MANAGER_REQUIRED = new Set(['reservations:approve', 'storage_units:assign', 'rentals:update', 'policies:read', 'payments:read', 'payments:collect', 'payments:confirm', 'refunds:approve', 'fees:waive', 'staff_tasks:update', 'reports:read'])
+const STAFF_REQUIRED = new Set(['reservations:approve', 'checkins:process', 'returns:process', 'payments:read', 'payments:collect', 'renewals:operate', 'support:read', 'support:update'])
+const STAFF_RESTRICTED = new Set(['storage_units:assign', 'rentals:update', 'payments:confirm', 'refunds:approve', 'fees:waive', 'policies:update', 'staff_tasks:update'])
+const BUSINESS_RESTRICTED = new Set(['settings:manage', 'payments:collect', 'payments:confirm', 'reservations:approve', 'returns:process', 'rentals:update', 'checkins:process', 'storage_units:assign', 'support:update'])
 
 const roleKey = (code: InternalRoleCode) => code.toLowerCase() as Role
 const roleDescription: Record<InternalRoleCode, string> = {
@@ -27,8 +28,8 @@ const roleDescription: Record<InternalRoleCode, string> = {
 
 const permissionModule = (key: PermissionKey): PermissionModule => {
   if (['facilities:read', 'storage_units:read', 'reservations:read', 'storage_units:assign', 'checkins:process', 'returns:process', 'inventory:update'].includes(key)) return 'Kho bãi & vận hành'
-  if (['contracts:read', 'checkins:read', 'rentals:read', 'rentals:update'].includes(key)) return 'Hợp đồng & dịch vụ'
-  if (['payments:read', 'payments:collect', 'policies:read', 'policies:update', 'reports:read'].includes(key)) return 'Tài chính & báo cáo'
+  if (['contracts:read', 'checkins:read', 'rentals:read', 'rentals:update', 'renewals:operate'].includes(key)) return 'Hợp đồng & dịch vụ'
+  if (['payments:read', 'payments:collect', 'payments:confirm', 'refunds:approve', 'fees:waive', 'policies:read', 'policies:update', 'reports:read'].includes(key)) return 'Tài chính & báo cáo'
   return 'Hỗ trợ & quản trị'
 }
 
@@ -42,13 +43,12 @@ const defaultPermissions = (code: InternalRoleCode) => Object.entries(DEFAULT_RO
   .map(([permission]) => permission)
 
 const directRoleDefaults: Partial<Record<InternalRoleCode, string[]>> = {
-  MANAGER: ['reservations:approve', 'storage_units:assign', 'payments:read', 'policies:read', 'payments:collect', 'inventory:update', 'policies:update', 'staff_tasks:update', 'reports:read'],
 }
 
 const isProtectedPermission = (role: InternalRoleCode, permission: string) => {
   if (role === 'ADMIN') return true
   if (role === 'MANAGER') return MANAGER_REQUIRED.has(permission)
-  if (role === 'STAFF') return STAFF_RESTRICTED.has(permission)
+  if (role === 'STAFF') return STAFF_REQUIRED.has(permission) || STAFF_RESTRICTED.has(permission)
   return BUSINESS_RESTRICTED.has(permission)
 }
 
