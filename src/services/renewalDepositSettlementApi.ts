@@ -41,7 +41,7 @@ export async function executeDepositRefund(id: string, body: RefundExecutionBody
   if (Object.keys(body).some(field => !["refundId","receiptFileId","transactionReference","transferred","expectedVersion"].includes(field))) throw new Error("Trường hoàn tiền không hợp lệ.")
   validateMutation(body.expectedVersion,key); validateText(body.transactionReference,true,100)
   if (body.transferred !== true) throw new Error("Cần xác nhận khoản hoàn đã được thực hiện.")
-  return readRentalEnvelope<RenewalOperationResult>(await apiRequest(`/api/manager/renewals/${id}/refund-executions`,{
+  return readRentalEnvelope<RenewalOperationResult>(await apiRequest(`/api/staff/renewals/${id}/refund-executions`,{
     method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify(body),
   }), value => {
     const result = value as RenewalOperationResult | null
