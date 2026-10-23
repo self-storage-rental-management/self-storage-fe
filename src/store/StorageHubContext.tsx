@@ -1205,6 +1205,7 @@ interface StorageHubContextValue extends StorageHubState {
       heightCm: number
       weightKg: number
       packageCount: number
+      volumeM3?: number
     }
   ) => PricingQuote
   // Customer reservation & hold lifecycle actions
@@ -5182,10 +5183,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       heightCm: number
       weightKg: number
       packageCount: number
+      volumeM3?: number
     }
   ): PricingQuote => {
     const dimDivisor = state.config.dimDivisor || 5000
-    const dimWeightKg = Math.ceil((goods.lengthCm * goods.widthCm * goods.heightCm * goods.packageCount) / dimDivisor)
+    const totalVolumeCm3 = typeof goods.volumeM3 === 'number'
+      ? goods.volumeM3 * 1_000_000
+      : goods.lengthCm * goods.widthCm * goods.heightCm * goods.packageCount
+    const dimWeightKg = Math.ceil(totalVolumeCm3 / dimDivisor)
     const actualWeightKg = goods.weightKg
     const billableWeightKg = Math.max(actualWeightKg, dimWeightKg)
     const baseMonthlyPrice = unit.price
