@@ -33,6 +33,18 @@ import {
 } from "../../../tests/rentalOperationsApiFixtures"
 
 describe("D3 operation prerequisites and truthful UI", () => {
+  it("shows only the appointment start and does not require rescheduling after the capacity slot ends", () => {
+    const state = { ...signingState, appointmentRef: ids.renewal, appointmentStart: "2026-10-23T01:00:00Z", appointmentEnd: "2026-10-23T01:30:00Z" }
+    const html = renderToStaticMarkup(<RenewalOperationsSummary state={state} />)
+    expect(html).toContain("Giờ hẹn đến ký")
+    expect(html).toContain("08:00:00")
+    expect(html).not.toContain("08:30:00")
+    expect(html).not.toContain("Khách hàng cần đổi lịch")
+    expect(html).toContain("Bạn cần hoàn tất ký trước")
+    expect(html).toContain("Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ")
+    expect(html).toContain("Cơ sở tiếp nhận gia hạn đến")
+    expect(html).not.toContain("Hạn xử lý trước khi chuyển sang thu hồi kho")
+  })
   it.each([null, 500, 502, 503])(
     "unknown/server outcome %s must retain original key",
     (status) => {
@@ -83,7 +95,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         ids.facility,
         ids.customer,
       ),
-    ).toContain("khách đến")
+    ).toContain("khách đã đến")
     expect(
       operationBlockedReason(
         signingState,
@@ -180,8 +192,10 @@ describe("D3 operation prerequisites and truthful UI", () => {
       />,
     )
     expect(html).toContain("Chờ thanh toán cọc")
-    expect(html).toContain("Thanh toán và phân bổ tiền gia hạn")
-    expect(html).toContain("Chưa đủ thông tin để xử lý")
+    expect(operationBlockedReason(
+      { ...signingState, missingSources: ["RENEWAL_ACCOUNTING"] },
+      "staff", "cash", operationsActor("staff"),
+    )).toContain("Thanh toán và phân bổ tiền gia hạn")
     expect(html).not.toContain("không dùng dữ liệu demo")
     expect(html).not.toContain("RENEWAL_ACCOUNTING")
     expect(html).not.toContain("0 đ")
@@ -241,17 +255,26 @@ describe("D4 truthful overdue presentation", () => {
         }}
       />,
     )
-    expect(html).toContain("một phần")
-    expect(html).toContain("Chưa đủ dữ liệu để xác định tất cả khoản nợ")
-    expect(html).toContain("Chỉ hiển thị khoản nợ đã xác minh")
+    expect(html).toContain("Cập nhật:")
+    expect(html).not.toContain("Chưa đủ dữ liệu")
+    expect(html).not.toContain("FINANCIAL_COVERAGE_PARTIAL")
     expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={termCase} />)
-    expect(html).toContain("Quá thời hạn thuê")
+    expect(html).toContain("Thời hạn thuê")
     expect(html).not.toContain("không tự có một khoản nợ tiền")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("term-policy")
+  })
+  it.each([['WAITING_RECOVERY', 'Chờ thu hồi'], ['RECOVERING', 'Đang thu hồi'], ['COMPLETED', 'Hoàn tất']] as const)("shows %s independently from overdue priority and links the existing recovery task", (workflowStatus, label) => {
+    const html = renderToStaticMarkup(<OverdueCaseSummary record={{ ...termCase, priority: 'RECOVERY', workflowStatus, recoveryTaskId: ids.event }} />)
+    expect(html).toContain(label)
+    expect(html).toContain('Xem và xử lý thu hồi')
+    expect(html).not.toContain('Mở nhiệm vụ thu hồi')
+    expect(html).toContain(termCase.customerName)
+    expect(html).toContain(termCase.storageUnitCode)
+    expect(html).toContain(workflowStatus === 'COMPLETED' ? 'Đã hoàn tất thu hồi' : 'Đã tạo nhiệm vụ thu hồi')
   })
   it("debt uses real outstanding only, not USD conversion or rental-month calculation", () => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={debtCase} />)
@@ -274,7 +297,7 @@ describe("D4 truthful overdue presentation", () => {
         }}
       />,
     )
-    expect(recovery).toContain("chưa có nghĩa gian kho đã được thu hồi hoặc giải phóng")
+    expect(recovery).toContain("gian kho chỉ được giải phóng sau khi hoàn tất thu hồi")
   })
   it("reports deferred code even when backend message lacks the marker", () => {
     expect(

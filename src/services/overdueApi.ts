@@ -32,6 +32,7 @@ export function isOverdueCase(value: unknown): value is OverdueCase {
   const r = value as OverdueCase | null
   if (
     !r ||
+    !(r.displayCode == null || (typeof r.displayCode === "string" && /^QH-\d{4}-\d{6}$/.test(r.displayCode))) ||
     !validOverdueRef(r.caseRef) ||
     ![r.rentalId, r.facilityId, r.customerId].every(isUuid) ||
     r.caseRef.split(":")[1] !== r.rentalId ||
@@ -42,6 +43,8 @@ export function isOverdueCase(value: unknown): value is OverdueCase {
     typeof r.recoveryEligible !== "boolean"
   )
     return false
+  if (r.workflowStatus != null && !["WARNING", "SERIOUS", "URGENT", "WAITING_RECOVERY", "RECOVERING", "COMPLETED", "PAYMENT_DUE"].includes(r.workflowStatus)) return false
+  if (r.recoveryTaskId != null && (!isUuid(r.recoveryTaskId) || r.kind !== "RENTAL_TERM" || r.recoveryEligible)) return false
   if (r.kind === "PAYMENT_DUE")
     return (
       r.priority === "PAYMENT_DUE" &&
@@ -117,9 +120,10 @@ export async function listOverdueCases(query: OverdueQuery = {}) {
   return p
 }
 export async function getOverdueCase(ref: string) {
+  const code = /^QH-\d{4}-\d{6}$/.test(ref.toUpperCase()) ? ref.toUpperCase() : null
   return readRentalEnvelope<OverdueCase>(
-    await apiRequest(casePath(ref)),
-    (v) => isOverdueCase(v) && v.caseRef === ref,
+    await apiRequest(code ? `/api/manager/overdue-cases/${encodeURIComponent(code)}` : casePath(ref)),
+    (v) => isOverdueCase(v) && (code ? v.displayCode === code : v.caseRef === ref),
   )
 }
 export async function listOverdueFollowUps(ref: string, page = 0, size = 20) {
