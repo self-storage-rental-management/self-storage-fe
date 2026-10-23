@@ -38,6 +38,7 @@ export function isRenewalRecord(value: unknown): boolean {
   const r = value as RenewalApiRecord | null
   return (
     !!r &&
+    (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
     typeof r.id === "string" &&
     typeof r.rentalId === "string" &&
     !!r.facility?.id &&
@@ -106,7 +107,7 @@ export async function listRenewals(
       "status",
       "rentalId",
       "sort",
-      ...(role === "manager" ? ["facilityId", "search"] : []),
+      ...(role === "manager" || role === "staff" ? ["facilityId", "search"] : []),
     ],
     ["createdAt", "newEndDate", "amount", "id"],
   )
@@ -154,7 +155,7 @@ export async function quoteRenewal(
         typeof q.id === "string" &&
         q.rentalId === rentalId &&
         isAcceptedTerms(q) &&
-        Number.isFinite(Date.parse(q.expiresAt)) &&
+        (q.expiresAt == null || Number.isFinite(Date.parse(q.expiresAt))) &&
         [
           "monthlyPrice",
           "subtotal",
@@ -285,3 +286,22 @@ export async function getRenewalVnpayPayment(renewalId:string) {
     value=>isRenewalPaymentResponse(value,renewalId),
   )
 }
+
+export async function approveRenewalTicket(id: string) {
+  return readRentalEnvelope<RenewalApiRecord>(
+    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+    record => isRenewalRecord(record),
+  )
+}
+
+export async function rejectRenewalTicket(id: string, reason?: string) {
+  return readRentalEnvelope<RenewalApiRecord>(
+    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    }),
+    record => isRenewalRecord(record),
+  )
+}
+

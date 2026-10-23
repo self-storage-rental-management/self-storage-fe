@@ -15,7 +15,6 @@ function formatGatewayPayDate(value: string | null) {
   return `${day}/${month}/${year} ${hour}:${minute}:${second}`
 }
 
-
 export default function ReservationReceipt({ payment, reservationCode }: { payment: ReservationPaymentResult; reservationCode: string }) {
   if (payment.paymentStatus !== 'PAID') return <p className="text-sm text-amber-900">Giao dịch chưa được ghi nhận thành công, chưa có biên lai thanh toán.</p>
   const accepted = bookingDepositAccepted(payment)

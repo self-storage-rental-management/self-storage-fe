@@ -25,4 +25,16 @@ describe('authoritative backend pricing', () => {
     expect(html).toContain('nhân viên cơ sở duyệt')
     expect(html).toContain('Chưa thu cọc')
   })
+  it('renders custom deposit rate configured by BO (e.g. 15%)', () => {
+    const customQuote: ReservationQuote = {
+      ...quote,
+      reservationDepositAmount: 2400750,
+      remainingRentalAmount: 13604250,
+      reservationDepositRate: 0.15,
+    }
+    const html = renderToStaticMarkup(<ReservationQuoteSummary quote={customQuote} needsReview={false} />)
+    expect(html).toContain('Cọc giữ chỗ (15%)')
+    expect(html).toContain('2.400.750 ₫')
+    expect(html).toContain('Tiền thuê còn lại (85%)')
+  })
 })

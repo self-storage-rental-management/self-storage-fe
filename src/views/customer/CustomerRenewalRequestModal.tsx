@@ -36,17 +36,12 @@ export default function CustomerRenewalRequestModal({
     getRenewalOptions(rentalId),
   )
   const [code, setCode] = useState("")
-  const [note, setNote] = useState("")
+  const note = ""
   const [quote, setQuote] = useState<RenewalApiQuote>()
   const [quoteError, setQuoteError] = useState<unknown>()
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [now, setNow] = useState(Date.now())
   const command = useRenewalCommand()
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
   useEffect(() => {
     let current = true
     if (!code) {
@@ -64,7 +59,6 @@ export default function CustomerRenewalRequestModal({
       .then((nextQuote) => {
         if (current) {
           setQuote(nextQuote)
-          setNow(Date.now())
         }
       })
       .catch((error) => {
@@ -78,7 +72,6 @@ export default function CustomerRenewalRequestModal({
       current = false
     }
   }, [code, rentalId])
-  const expired = quote ? now >= Date.parse(quote.expiresAt) : false
   const locked = command.busy || command.uncertain || quoteBusy
   return (
     <Modal
@@ -122,33 +115,19 @@ export default function CustomerRenewalRequestModal({
         {quote && (
           <>
           <section aria-label="Chi tiết báo giá gia hạn" className="rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
-            <div className="space-y-3">
-              <div className="space-y-2 border-b border-dashed border-slate-200 pb-3">
-                <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
-                <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
-              </div>
-              <div className="space-y-2">
-                <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
-                {quote.discountAmount > 0 && (
-                  <QuoteLine
-                    label="Giảm giá"
-                    value={`- ${rentalMoney(quote.discountAmount, quote.currency)} (${Math.round(quote.discountRate * 100)}%)`}
-                    valueClassName="text-emerald-700"
-                  />
-                )}
-                <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
-              </div>
+            <div className="space-y-2">
+              <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
+              <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
+              {quote.discountAmount > 0 && (
+                <QuoteLine
+                  label={`Giảm giá (${Math.round(quote.discountRate * 100)}%)`}
+                  value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
+                  valueClassName="text-emerald-700"
+                />
+              )}
+              <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
             </div>
           </section>
-          <p className="flex items-center gap-1.5 text-xs text-stone-500">
-            <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" strokeWidth="1.7"/><path d="M12 7v5l3 2" strokeWidth="1.7" strokeLinecap="round"/></svg>
-            Báo giá có hiệu lực đến: {rentalDate(quote.expiresAt)}
-          </p>
-            {expired && !command.uncertain && (
-              <p role="alert" className="text-red-700">
-                Báo giá đã hết hạn, vui lòng chọn lại gói gia hạn để cập nhật báo giá.
-              </p>
-            )}
             <label className="flex items-start gap-2 text-sm text-stone-700">
               <input
                 type="checkbox"
@@ -161,17 +140,6 @@ export default function CustomerRenewalRequestModal({
             </label>
           </>
         )}
-        <label className="block">
-          Ghi chú
-          <textarea
-            className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
-            rows={2}
-            maxLength={2000}
-            value={note}
-            disabled={locked}
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </label>
         {command.error ? (
           <p role="alert">{rentalError(command.error)}</p>
         ) : null}
@@ -186,7 +154,6 @@ export default function CustomerRenewalRequestModal({
             command.conflict ||
             !quote ||
             !confirmed ||
-            (!command.uncertain && expired) ||
             (revision !== undefined && revision.version === null)
           }
           className="disabled:bg-stone-200 disabled:text-stone-500 disabled:opacity-100 sm:min-w-44"

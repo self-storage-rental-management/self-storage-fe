@@ -1,6 +1,6 @@
 import { ApiClientError, apiRequest } from './apiClient'
 
-export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED'
+export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED'
 export type AssignmentStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED'
 export type AssignmentUnitStatus = 'available' | 'reserved'
 
@@ -20,6 +20,10 @@ export interface UnitAssignmentCandidate {
   confirmedAt: string | null
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
+  assignedStorageUnitId: string | null
+  assignedStorageUnitCode: string | null
+  assignedStorageUnitStatus: AssignmentUnitStatus | 'maintenance' | 'assigned' | null
+  assignmentStatus: 'ACTIVE' | 'CANCELLED' | 'COMPLETED' | null
 }
 
 export interface AssignableUnit {
@@ -91,7 +95,7 @@ export async function listUnitAssignmentCandidates(params: {
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
   return assertPage<UnitAssignmentCandidate>(
-    await apiRequest<unknown>(`/api/staff/unit-assignments/candidates?${query}`),
+    await apiRequest<unknown>(`/api/manager/unit-assignments/candidates?${query}`),
     'Backend trả về danh sách reservation chờ phân kho không hợp lệ.',
   )
 }
@@ -101,7 +105,7 @@ export async function listAssignableUnits(reservationId: string, q = '') {
   if (q.trim()) query.set('q', q.trim())
   return assertPage<AssignableUnit>(
     await apiRequest<unknown>(
-      `/api/staff/unit-assignments/candidates/${encodeURIComponent(reservationId)}/available-units?${query}`,
+      `/api/manager/unit-assignments/candidates/${encodeURIComponent(reservationId)}/available-units?${query}`,
     ),
     'Backend trả về danh sách gian kho khả dụng không hợp lệ.',
   )
@@ -109,8 +113,16 @@ export async function listAssignableUnits(reservationId: string, q = '') {
 
 export async function createUnitAssignment(reservationId: string, storageUnitId: string) {
   const payload = await apiRequest<unknown>(
-    `/api/staff/unit-assignments/${encodeURIComponent(reservationId)}`,
+    `/api/manager/unit-assignments/${encodeURIComponent(reservationId)}`,
     { method: 'POST', body: JSON.stringify({ storageUnitId }) },
+  )
+  return assertEnvelope<UnitAssignmentResult>(payload).data
+}
+
+export async function changeUnitAssignment(reservationId: string, storageUnitId: string, reason: string) {
+  const payload = await apiRequest<unknown>(
+    `/api/staff/unit-assignments/${encodeURIComponent(reservationId)}/change`,
+    { method: 'PUT', body: JSON.stringify({ storageUnitId, reason }) },
   )
   return assertEnvelope<UnitAssignmentResult>(payload).data
 }

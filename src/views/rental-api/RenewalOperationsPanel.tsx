@@ -1,3 +1,5 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
@@ -42,7 +44,7 @@ import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
 import RenewalCoordinationPanel from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
-import { renewalSignedContractEntityType } from "../../services/duongIntegrationApi"
+import { approveRenewalTicket } from "../../services/renewalApi"
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -56,6 +58,7 @@ const eventLabels: Record<string, string> = {
   EXCEPTION: "Quyết định ngoại lệ",
   REFUND: "Quyết định hoàn tiền",
   DEPOSIT_DISPOSITION: "Kết quả xử lý cọc",
+  DEPOSIT_REVIEW_REQUIRED: "Cọc gia hạn chờ đối soát trách nhiệm",
   REFUND_EXECUTION: "Ghi nhận hoàn cọc",
   COMPLETION: "Hoàn tất ký gia hạn",
   ARRIVAL: "Khách đã đến",
@@ -72,6 +75,8 @@ const statusLabels: Record<string, string> = {
   REJECTED: "Từ chối",
   FORFEITED: "Đã ghi nhận mất cọc gia hạn",
   AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý cọc ngày quá hạn thứ 8",
+  AWAITING_FAULT_REVIEW: "Giữ cọc, chờ xác minh trách nhiệm",
+  FACILITY_FAULT: "Giữ cọc để xử lý sự cố từ cơ sở",
   REVIEW_REQUIRED: "Chờ xác minh nguyên nhân",
   REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc",
   APPROVE_RESCHEDULE_BEFORE_CUTOFF:
@@ -99,6 +104,45 @@ export function OperationEventCard({
     typeof d[key] === "string" ? d[key] as string : null
   const amount =
     typeof d.amount === "number" && Number.isFinite(d.amount) ? d.amount : null
+  if (e.kind === "CASH") {
+    const method = field("paymentMethod") === "BANK_TRANSFER" ? "Chuyển khoản" : field("paymentMethod") === "CASH" ? "Tiền mặt" : "Chưa ghi nhận"
+    const receivedAt = field("receivedAt") || e.occurredAt
+    const recordedDate = Number.isFinite(Date.parse(receivedAt))
+      ? new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(parseVietnamDate(receivedAt))
+      : rentalDate(receivedAt)
+    const receiptFile = field("receiptFileId")
+    return <article className="overflow-hidden rounded-xl border border-stone-200 bg-white text-sm">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-3">
+        <div className="space-y-1">
+          <h4 className="font-semibold text-stone-900">Biên lai thanh toán gia hạn</h4>
+          <p className="text-xs text-stone-500"><time dateTime={receivedAt}>{recordedDate}</time></p>
+        </div>
+        <span className="inline-flex shrink-0 rounded-md bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-700">{method}</span>
+      </header>
+      <div className="space-y-4 p-4">
+        <div className="rounded-lg bg-stone-50 px-3 py-3">
+          <p className="text-xs text-stone-500">Số tiền đã thu</p>
+          <p className="mt-1 break-words text-2xl font-bold tracking-tight text-stone-900">{amount !== null && field("currency") ? rentalMoney(amount, field("currency")!) : "Chưa ghi nhận"}</p>
+        </div>
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <div className="min-w-0"><dt className="text-xs text-stone-500">Nội dung thu</dt><dd className="mt-1 font-medium text-stone-800">Thanh toán gia hạn theo bảng kê</dd></div>
+          <div className="min-w-0"><dt className="text-xs text-stone-500">Mã biên lai</dt><dd className="mt-1 break-words font-medium text-stone-800 [overflow-wrap:anywhere]">{field("transactionReference") || field("reference") || "Chưa ghi nhận"}</dd></div>
+        </dl>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-3">
+          <span className="text-xs font-medium text-stone-500">Chứng từ đính kèm</span>
+          {receiptFile && isUuid(receiptFile)
+            ? <EvidenceDownload id={receiptFile} label="Tải biên lai" previewLabel="Xem trước" />
+            : <span className="text-xs text-stone-500">Chưa có tệp đính kèm</span>}
+        </div>
+        <details className="border-t border-stone-100 pt-3">
+          <summary className="cursor-pointer text-xs font-medium text-stone-500 hover:text-stone-800">Thông tin đối soát</summary>
+          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+            {[["Mã sự kiện", e.id], ["Mã bản ghi biên lai", field("reference")], ["Mã bảng kê", field("statementRef")], ["Mã thanh toán", field("paymentRef")]].filter(([, value]) => value).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-stone-500">{label}</dt><dd className="mt-1 break-words font-mono text-stone-700 [overflow-wrap:anywhere]">{value}</dd></div>)}
+          </dl>
+        </details>
+      </div>
+    </article>
+  }
   return (
     <article className="rounded border border-stone-200 p-3 space-y-1 text-sm break-words">
       <p className="font-semibold">
@@ -121,15 +165,6 @@ export function OperationEventCard({
       )}
       {amount !== null && field("currency") && (
         <p>Số tiền: {rentalMoney(amount, field("currency")!)}</p>
-      )}
-      {e.kind === "CASH" && field("paymentMethod") && (
-        <p>Phương thức: {field("paymentMethod") === "BANK_TRANSFER" ? "Chuyển khoản" : "Tiền mặt"}</p>
-      )}
-      {e.kind === "CASH" && field("transactionReference") && (
-        <p className="break-all">Mã giao dịch: {field("transactionReference")}</p>
-      )}
-      {e.kind === "CASH" && field("receiptFileId") && isUuid(field("receiptFileId")!) && (
-        <EvidenceDownload id={field("receiptFileId")!} label={field("paymentMethod") === "BANK_TRANSFER" ? "Tải chứng từ chuyển khoản" : "Tải biên nhận"} previewLabel="Xem trước" />
       )}
       {e.kind === "COMPLETION" && field("signedDocumentFileId") && isUuid(field("signedDocumentFileId")!) && <EvidenceDownload id={field("signedDocumentFileId")!} label="Tải hợp đồng đã ký" previewLabel="Xem trước PDF" />}
       {["reason", "completionNote"].map((key) =>
@@ -256,16 +291,21 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
       </section>}
       <dl className="grid gap-3 sm:grid-cols-3">
         <div><dt className="text-xs text-stone-500">Trạng thái</dt><dd className="font-semibold">{copy(phaseLabels[s.phase])}</dd></div>
-        <div><dt className="text-xs text-stone-500">Lịch ký</dt><dd className="font-medium">{s.appointmentRef ? `${rentalDate(s.appointmentStart)} — ${rentalDate(s.appointmentEnd)}` : "Chưa đặt lịch"}</dd></div>
+        <div><dt className="text-xs text-stone-500">Giờ hẹn đến ký</dt><dd className="font-medium">{s.appointmentRef ? rentalDate(s.appointmentStart) : "Chưa đặt lịch"}</dd></div>
         <div><dt className="text-xs text-stone-500">Khách đến</dt><dd className="font-medium">{s.arrivalRef ? "Đã ghi nhận" : "Chưa ghi nhận"}</dd></div>
       </dl>
-      {s.phase === "SIGNING" && !s.arrivalRef && s.appointmentEnd && Date.parse(s.appointmentEnd) < Date.now() && <p className="text-amber-700">Lịch hẹn đã qua. Khách hàng cần đổi lịch trong hạn ký còn hiệu lực để tiếp tục.</p>}
       <details>
-        <summary className="cursor-pointer text-xs font-semibold text-stone-600">Hạn ký và hạn xử lý</summary>
-        <div className="mt-2 grid gap-2 text-xs text-stone-600 sm:grid-cols-3">
-          <p>Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}</p>
-          <p>Hạn ký hiện tại: {rentalDate(s.effectiveSigningDeadline)}</p>
-          <p>Mốc thu hồi: {rentalDate(s.recoveryCutoff)}</p>
+        <summary className="cursor-pointer text-xs font-semibold text-stone-600">Các mốc cần lưu ý</summary>
+        <div className="mt-2 space-y-3 text-xs text-stone-600">
+          <div>
+            <p className="font-semibold text-stone-800">Bạn cần hoàn tất ký trước: {rentalDate(s.effectiveSigningDeadline)}</p>
+            <p className="mt-1">Vui lòng đến cơ sở, thanh toán phần còn lại và ký hợp đồng trước thời điểm này. Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ. Kỳ thuê mới chỉ được xác nhận khi hoàn tất thủ tục.</p>
+          </div>
+          {s.originalSigningDeadline && s.originalSigningDeadline !== s.effectiveSigningDeadline && <p>Hạn hoàn tất trước khi được điều chỉnh: {rentalDate(s.originalSigningDeadline)}</p>}
+          <div>
+            <p className="font-semibold text-stone-800">Cơ sở tiếp nhận gia hạn đến: {rentalDate(s.recoveryCutoff)}</p>
+            <p className="mt-1">Nếu hợp đồng hiện tại đã hết hạn, bạn cần hoàn tất gia hạn chậm nhất vào thời điểm này để tiếp tục thuê kho. Sau đó, hãy liên hệ cơ sở để sắp xếp trả kho và thanh toán các khoản còn thiếu.</p>
+          </div>
         </div>
       </details>
       {s.completedAt && <p className="text-emerald-700">Gia hạn hoàn tất lúc {rentalDate(s.completedAt)}</p>}
@@ -338,15 +378,16 @@ function EventTimeline({
       {category !== "payments" && read.data && read.data.pagination.totalPages > 1 && <ApiPager pagination={read.data.pagination} onPage={setPage} />}
     </>}
   </div>
-  if (category === "payments" && collapsible) return <details className="rounded-xl border border-stone-200 bg-white p-4">
-    <summary className="cursor-pointer list-none font-semibold">{title}<span className="ml-2 text-sm font-normal text-stone-500">Mở để xem biên lai và lịch sử thanh toán</span></summary>
+  if (category === "payments" && collapsible) return <details className="group rounded-xl border border-stone-200 bg-white p-4">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-3"><span className="text-sm font-semibold text-stone-900">{title}</span><span className="flex shrink-0 items-center gap-3">{visibleEvents && <span className="rounded-md bg-stone-100 px-2 py-1 text-xs text-stone-600">{visibleEvents.length} biên lai</span>}<span aria-hidden="true" className="text-stone-400 transition-transform group-open:rotate-180">⌄</span></span></summary>
     <div className="mt-3">{content}</div>
   </details>
   if (category === "documents" && collapsible) return <details className="rounded-xl border border-stone-200 bg-white p-4">
     <summary className="cursor-pointer list-none font-semibold">{title}</summary>
     <div className="mt-3">{content}</div>
   </details>
-  return <Card className="space-y-3 p-4">{category !== "payments" && <h4 className="font-semibold">{title}</h4>}{content}</Card>
+  if (category === "payments") return content
+  return <Card className="space-y-3 p-4"><h4 className="font-semibold">{title}</h4>{content}</Card>
 }
 
 export function RenewalPaymentHistory({ id, role, identity }: { id: string; role: RenewalOperationsRole; identity: string }) {
@@ -390,6 +431,7 @@ export default function RenewalOperationsPanel({
   }>()
   const [successMessage, setSuccessMessage] = useState<string>()
   const [lastEvent, setLastEvent] = useState<RenewalOperationEvent>()
+  const [directApproveBusy, setDirectApproveBusy] = useState(false)
   const [locked, setLocked] = useState(false)
   const lockRef = useRef(false)
   const read = useRentalApiResource(`${identity}:${revision}`, () =>
@@ -418,7 +460,7 @@ export default function RenewalOperationsPanel({
           ...(!appointmentOnly && read.data?.pendingExceptionRef ? ["confirmation" as const] : []),
         ]
       : role === "staff"
-        ? ["arrival", "incident", "cash", "completion"]
+        ? ["arrival", "cash", "completion", "incident"]
         : ["exception", "refund"]
   const lock = useCallback((value: boolean) => {
     lockRef.current = value
@@ -441,7 +483,7 @@ export default function RenewalOperationsPanel({
             <section className="space-y-2" aria-label="Chọn lịch ký gia hạn">
               <h3 className="font-semibold">Lịch ký gia hạn</h3>
               <p>{read.data.appointmentRef
-                ? `Lịch đã chọn: ${rentalDate(read.data.appointmentStart)} - ${rentalDate(read.data.appointmentEnd)}`
+                ? `Giờ hẹn đến ký: ${rentalDate(read.data.appointmentStart)}`
                 : "Chọn và lưu lịch ký trước khi thanh toán cọc."}</p>
             </section>
           ) : <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
@@ -464,8 +506,42 @@ export default function RenewalOperationsPanel({
             </div>
           )}
           {successMessage && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{successMessage}</p>}
+          {!appointmentOnly && role === "staff" && (
+            <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50/80 p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block animate-ping" />
+                  Duyệt gia hạn hợp đồng
+                </h3>
+                <p className="text-xs text-emerald-800">
+                  Nhân viên bấm duyệt để tự động kéo dài hợp đồng thuê cho khách hàng ngay lập tức mà không cần qua các bước thủ tục khác.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 text-sm shadow cursor-pointer border-none"
+                disabled={directApproveBusy || read.data?.phase === "COMPLETED"}
+                onClick={async () => {
+                  try {
+                    setDirectApproveBusy(true)
+                    await approveRenewalTicket(id)
+                    setSuccessMessage("✓ Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
+                    onChanged?.()
+                    alert("Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
+                  } catch (err: any) {
+                    alert(err?.message || "Không thể duyệt gia hạn.")
+                  } finally {
+                    setDirectApproveBusy(false)
+                  }
+                }}
+              >
+                {directApproveBusy ? "Đang duyệt…" : read.data?.phase === "COMPLETED" ? "✓ Đã duyệt hoàn tất" : "✓ Duyệt gia hạn ngay"}
+              </Button>
+            </div>
+          )}
           {!appointmentOnly && <Card className="p-4 space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+            {role === "staff" && <h3 className="text-sm font-semibold text-stone-900">Xử lý ký gia hạn</h3>}
+            <div className={role === "staff" ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 sm:grid-cols-2"}>
               {actions.map((action) => {
                 const blockedReason = operationBlockedReason(
                   read.data!,
@@ -477,29 +553,53 @@ export default function RenewalOperationsPanel({
                   proposalRead.data,
                   now,
                 )
-                const reason = action === "cash"
+                const reason = role === "staff" && read.data?.phase === "COMPLETED" && action !== "incident"
+                  ? action === "arrival" ? "Đã ghi nhận khách đến." : action === "cash" ? "Đã hoàn tất đối soát thanh toán." : "Gia hạn đã hoàn tất."
+                  : action === "cash"
                   ? cashRecorded
-                    ? "Khoản thanh toán còn lại đã được ghi nhận."
+                    ? "Đã ghi nhận thanh toán còn lại."
                     : paymentEventsRead.loading
                       ? "Đang kiểm tra trạng thái thanh toán."
                       : paymentEventsRead.error
                         ? "Không thể xác minh trạng thái thanh toán. Hãy tải lại hồ sơ rồi thử lại."
                         : blockedReason
                   : blockedReason
+                const isStaffCompletion = role === "staff" && action === "completion"
                 return (
-                  <div key={action}>
+                  <div key={action} className={role === "staff" ? action === "incident" ? "flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-3 lg:col-span-3" : "flex min-w-0 flex-col gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3" : undefined}>
+                    {role === "staff" && action !== "incident" && <div className="flex items-center gap-2 text-sm font-semibold text-stone-700">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs ring-1 ring-stone-200">{action === "arrival" ? 1 : action === "cash" ? 2 : 3}</span>
+                      {action === "arrival" ? "Khách đến cơ sở" : action === "cash" ? "Thanh toán còn lại" : "Hoàn tất gia hạn"}
+                    </div>}
+                    {role === "staff" && action === "incident" && <p className="text-sm text-stone-500">Có vấn đề phát sinh trong quá trình xử lý?</p>}
                     <Button
-                      variant="outline"
-                      disabled={!!reason || locked}
-                      onClick={() => {
+                      type="button"
+                      variant={isStaffCompletion ? "primary" : "outline"}
+                      className={role === "staff" ? action === "incident" ? "shrink-0" : isStaffCompletion ? "mt-auto w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" : "mt-auto w-full" : undefined}
+                      disabled={isStaffCompletion ? (read.data?.phase === "COMPLETED" || directApproveBusy) : (!!reason || locked)}
+                      onClick={async () => {
+                        if (isStaffCompletion) {
+                          try {
+                            setDirectApproveBusy(true)
+                            await approveRenewalTicket(id)
+                            setSuccessMessage("✓ Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
+                            onChanged?.()
+                            alert("Đã duyệt gia hạn thành công!")
+                          } catch (err: any) {
+                            alert(err?.message || "Lỗi khi duyệt gia hạn.")
+                          } finally {
+                            setDirectApproveBusy(false)
+                          }
+                          return
+                        }
                         if (lockRef.current || reason) return
                         setSuccessMessage(undefined)
                         setSelected({ action, state: read.data!, proposal: proposalRead.data })
                       }}
                     >
-                      {copy(operationLabels[action])}
+                      {copy(isStaffCompletion ? (read.data?.phase === "COMPLETED" ? "Đã duyệt hoàn tất" : "✓ Duyệt gia hạn") : operationLabels[action])}
                     </Button>
-                    {reason && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
+                    {!isStaffCompletion && reason && !(role === "staff" && reason === "Chưa có lượt khách đến được nhân viên ghi nhận.") && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
                       <p className="mt-1 text-xs text-stone-500">{copy(reason)}</p>
                     )}
                   </div>
@@ -507,6 +607,11 @@ export default function RenewalOperationsPanel({
               })}
             </div>
           </Card>}
+          {!appointmentOnly && role === "staff" && operationBlockedReason(
+            read.data, role, "completion", actor, facilityId, customerId, proposalRead.data, now,
+          ) === "Chưa có lượt khách đến được nhân viên ghi nhận." && (
+            <p role="status" className="text-sm text-stone-500">Chưa có lượt khách đến được nhân viên ghi nhận.</p>
+          )}
         </>
       )}
       {appointmentOnly && read.data && <OperationForm
@@ -535,6 +640,11 @@ export default function RenewalOperationsPanel({
           }}
           onSuccess={(e) => {
             setLastEvent(e)
+            if (selected.action === "cash") {
+              const reference = e.data && typeof e.data === "object" && "transactionReference" in e.data ? e.data.transactionReference : undefined
+              setSuccessMessage(typeof reference === "string" ? `Đã ghi nhận thanh toán. Mã biên lai: ${reference}` : "Đã ghi nhận thanh toán.")
+            }
+            if (selected.action === "completion") setSuccessMessage("Gia hạn đã hoàn tất. Hệ thống đã đối chiếu các khoản thu và biên lai đã lưu.")
             if (e.kind === "ARRIVAL" || e.kind === "COMPLETION") onDocumentEvent?.(e)
             if (selected.action === "appointment" || selected.action === "reschedule")
               setSuccessMessage(selected.action === "reschedule" ? "Đổi lịch ký đã lưu thành công." : "Lịch ký đã lưu thành công.")
@@ -624,17 +734,16 @@ function OperationForm({
   const [incidentPage, setIncidentPage] = useState(0)
   const [exception, setException] = useState<RenewalExceptionAction>("REJECT")
   const [decision, setDecision] = useState<"APPROVE" | "REJECT">("REJECT")
-  const [receipt, setReceipt] = useState("")
   const [receiptFile, setReceiptFile] = useState("")
+  const [signedDocumentFile, setSignedDocumentFile] = useState("")
   const [balanceMethod, setBalanceMethod] = useState<"CASH" | "BANK_TRANSFER">("CASH")
-  const [signedFile, setSignedFile] = useState("")
   const [attested, setAttested] = useState(false)
   const [validation, setValidation] = useState<string>()
   const manager = action === "exception" || action === "refund"
   const cash = useRentalApiResource(
     `${s.renewalId}:${s.expectedVersion}:${action}:statement`,
     () =>
-      action === "cash"
+      ["cash", "completion"].includes(action)
         ? getRenewalPayableStatement(s.renewalId)
         : Promise.resolve(null),
   )
@@ -655,7 +764,7 @@ function OperationForm({
     onLocked(interactionLock.current)
   }, [locked, onLocked]) // Parent cannot dismiss/reload an uncertain mutation.
   const files = evidence.split(/[\s,;]+/).filter(Boolean)
-  const needReason = ["reschedule", "incident", "exception", "refund"].includes(
+  const needReason = ["incident", "exception", "refund"].includes(
     action,
   )
   const needFiles = ["arrival", "incident", "exception", "refund"].includes(
@@ -728,14 +837,12 @@ function OperationForm({
           throw new Error(
             "Cần bảng kê còn hiệu lực, số tiền lớn hơn 0 và xác nhận đã nhận đủ tiền.",
           )
-        validateText(receipt, true, 100)
         if (!isUuid(receiptFile)) throw new Error("Cần chứng từ thanh toán.")
         return {
           action,
           body: {
             ...base,
             payableStatementRef: statement.reference,
-            receiptReference: receipt,
             receiptFileId: receiptFile,
             paymentMethod: balanceMethod,
             received: true,
@@ -743,19 +850,18 @@ function OperationForm({
         }
       }
       case "completion":
-        if (!s.arrivalRef || !isUuid(signedFile) || !attested)
+        if (!isUuid(signedDocumentFile))
+          throw new Error("Vui lòng tải hợp đồng đã ký lên trước khi hoàn tất gia hạn.")
+        if (!s.arrivalRef || cash.loading || cash.error || !cash.data || cash.data.amount !== 0)
           throw new Error(
-            "Cần ghi nhận khách đến, mã tài liệu đã ký và xác nhận danh tính khách hàng.",
+            "Cần ghi nhận khách đến và thanh toán đủ các khoản theo bảng kê. Hệ thống sẽ đối chiếu biên lai đã lưu.",
           )
-        validateText(reason, false)
         return {
           action,
           body: {
             ...base,
             arrivalRef: s.arrivalRef,
-            signedDocumentFileId: signedFile,
-            identityVerified: true,
-            completionNote: reason,
+            signedDocumentFileId: signedDocumentFile,
           },
         }
       case "exception":
@@ -882,7 +988,7 @@ function OperationForm({
         {rescheduleProposal && (
           <label className="block">
             Lịch ký đề nghị
-            <input
+            <LocalizedDateInput
               type="datetime-local"
               className={operationsInputClass}
               value={appointment}
@@ -893,7 +999,7 @@ function OperationForm({
         {rescheduleProposal && (
           <label className="block">
             Hạn ký đề nghị
-            <input
+            <LocalizedDateInput
               type="datetime-local"
               className={operationsInputClass}
               value={deadline}
@@ -901,26 +1007,15 @@ function OperationForm({
             />
           </label>
         )}
-        {(needReason || action === "completion") && (
+        {needReason && (
           <label className="block">
-            {action === "completion" ? "Ghi chú hoàn tất" : "Lý do (bắt buộc)"}
+            Lý do (bắt buộc)
             <textarea
               className={operationsInputClass}
               value={reason}
               maxLength={2000}
               onChange={(e) => setReason(e.target.value)}
             />
-          </label>
-        )}
-        {needFiles && (
-          <label className="block">
-            Mã tệp minh chứng đã lưu (nếu có)<textarea
-              className={operationsInputClass}
-              value={evidence}
-              onChange={(e) => setEvidence(e.target.value)}
-            />
-            <span className="text-xs text-stone-500">
-              Nhập tối đa 10 mã tệp đã liên kết với hồ sơ, cách nhau bằng dấu phẩy.</span>
           </label>
         )}
         {needFiles && <EvidenceUpload
@@ -932,23 +1027,26 @@ function OperationForm({
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
             {cash.data && (
-              <div className="space-y-2">
-                {cash.data.remainingRentalAmount !== undefined && <p>Tiền thuê còn lại: {rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</p>}
-                {cash.data.overdueFee !== undefined && <p>Phí quá hạn: {rentalMoney(cash.data.overdueFee,cash.data.currency)}</p>}
-                <p>
-                  Số tiền theo bảng kê:{" "}
-                  {rentalMoney(cash.data.amount, cash.data.currency)}
-                </p>
-                <p>Hết hiệu lực: {rentalDate(cash.data.expiresAt)}</p>
-                <p className="break-all">
-                  Mã bảng kê: {cash.data.reference}
-                </p>
-                <p className="break-all">
-                  Mã khoản phải thanh toán: {cash.data.requiredObligations.join(", ")}
-                </p>
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                  <p className="text-sm font-medium text-amber-900">Số tiền cần thu</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 sm:text-3xl">{rentalMoney(cash.data.amount, cash.data.currency)}</p>
+                  <dl className="mt-4 space-y-2 border-t border-amber-200/70 pt-3 text-sm">
+                    {cash.data.remainingRentalAmount !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Tiền thuê còn lại</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</dd></div>}
+                    {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
+                  </dl>
+                </div>
+                <p className="text-xs text-stone-500">Bảng kê có hiệu lực đến {rentalDate(cash.data.expiresAt)}</p>
+                <details className="rounded-lg border border-stone-200 px-3 py-2 text-xs text-stone-500">
+                  <summary className="cursor-pointer font-medium text-stone-600">Thông tin đối soát</summary>
+                  <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="min-w-0"><dt>Mã bảng kê</dt><dd className="mt-1 break-all font-mono text-stone-700">{cash.data.reference}</dd></div>
+                    <div className="min-w-0"><dt>Mã khoản phải thanh toán</dt><dd className="mt-1 break-all font-mono text-stone-700">{cash.data.requiredObligations.join(", ")}</dd></div>
+                  </dl>
+                </details>
               </div>
             )}
-            <label className="block">
+            <label className="block text-sm font-medium text-stone-700">
               Phương thức thanh toán
               <select className={operationsInputClass} value={balanceMethod}
                 onChange={e => setBalanceMethod(e.target.value as "CASH" | "BANK_TRANSFER")}>
@@ -956,26 +1054,14 @@ function OperationForm({
                 <option value="BANK_TRANSFER">Chuyển khoản</option>
               </select>
             </label>
-            <label className="block">
-              {balanceMethod === "BANK_TRANSFER" ? "Mã giao dịch chuyển khoản" : "Mã biên nhận tiền mặt"}
-              <input
-                className={operationsInputClass}
-                value={receipt}
-                maxLength={100}
-                onChange={(e) => setReceipt(e.target.value)}
-              />
-            </label>
-            <p className="text-sm text-stone-600">
-              {balanceMethod === "BANK_TRANSFER"
-                ? "Tải chứng từ chuyển khoản và chỉ ghi nhận sau khi đã đối chiếu tiền vào tài khoản nhận. Ảnh chuyển khoản do khách gửi chưa đủ để xác nhận đã thanh toán."
-                : "Tải biên nhận thu tiền mặt đã lập cho giao dịch này."}
-            </p>
+            {balanceMethod === "BANK_TRANSFER" && <p className="text-sm text-stone-600">Tải ảnh chụp màn hình chuyển khoản làm minh chứng.</p>}
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
               onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />
-            <label>
+            <label className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
               <input
                 type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0 accent-amber-600"
                 checked={attested}
                 onChange={(e) => setAttested(e.target.checked)}
               />{" "}
@@ -986,19 +1072,18 @@ function OperationForm({
         )}
         {action === "completion" && (
           <>
-            <EvidenceUpload entityType={renewalSignedContractEntityType} entityId={s.renewalId}
-              value={signedFile ? [signedFile] : []} limit={1}
-              label="Tải lên hợp đồng gia hạn đã ký (PDF)" accept=".pdf,application/pdf"
-              onChange={ids => setSignedFile(ids[0] || "")} onBusy={uploadBusy} />
-            {signedFile && isUuid(signedFile) && <EvidenceDownload id={signedFile} label="Tải hợp đồng đã ký" previewLabel="Xem trước PDF" />}
-            <label>
-              <input
-                type="checkbox"
-                checked={attested}
-                onChange={(e) => setAttested(e.target.checked)}
-              />{" "}
-              Đã xác minh danh tính khách
-            </label>
+            <ApiReadState {...cash} retry={cash.refresh} />
+            <EvidenceUpload
+                entityType="DUONG_RENEWAL_SIGNED_CONTRACT"
+                entityId={s.renewalId}
+                label="Tải hợp đồng lên"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                disabled={locked}
+                value={signedDocumentFile ? [signedDocumentFile] : []}
+                limit={1}
+                onChange={ids => setSignedDocumentFile(ids[0] || "")}
+                onBusy={uploadBusy}
+            />
           </>
         )}
       </fieldset>
@@ -1008,11 +1093,12 @@ function OperationForm({
         <p role="alert">
           Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại, không đóng hoặc tải lại trang.</p>
       )}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-4">
         <Button
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
+            (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0)) ||
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
           }
           onClick={() => {
@@ -1058,9 +1144,9 @@ function OperationForm({
             ? ["appointment", "reschedule"].includes(action) ? "Đang lưu lịch ký…" : "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : "Gửi yêu cầu"}
+              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : "Gửi yêu cầu"}
         </Button>
-        <Button
+        {!["appointment", "reschedule"].includes(action) && <Button
           variant="outline"
           disabled={locked}
           onClick={() => {
@@ -1070,7 +1156,7 @@ function OperationForm({
           }}
         >
           Đóng biểu mẫu
-        </Button>
+        </Button>}
       </div>
     </Card>
   )
