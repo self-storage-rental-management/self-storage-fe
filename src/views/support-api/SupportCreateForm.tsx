@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { useSupportCommand } from "../../hooks/useSupportCommand"
@@ -90,8 +90,8 @@ export default function SupportCreateForm({
   parent?: SupportTicket
   onUploadBusy?: (busy: boolean) => void
 }) {
-  const [subject, setSubject] = useState(""),
-    [description, setDescription] = useState("")
+  const [description, setDescription] = useState("")
+  const uploadLock = useRef(false)
   const [source, setSource] = useState<Source>("facility"),
     [page, setPage] = useState(0)
   const [choice, setChoice] = useState<Choice>()
@@ -106,16 +106,14 @@ export default function SupportCreateForm({
     read.data?.data.filter((r) => isUuid(r.id) && isUuid(r.facilityId)) ?? []
   const unique = [...new Map(options.map((r) => [r.id, r])).values()]
   const valid =
-    !!subject.trim() &&
-    subject.length <= 200 &&
     !!description.trim() &&
     description.length <= 4000 &&
     (!!choice || (!!parent && source === "facility")) &&
     (source !== "payment" || !!paymentId)
   const submit = () => {
-    if (!valid || uploading) return
+    if (!valid || uploadLock.current || uploading || command.locked || command.conflict) return
     const body: SupportCreate = {
-      subject: subject.trim(),
+      subject: description.trim().replace(/\s+/g, " ").slice(0, 100),
       description: description.trim(),
       ...(files.length ? { evidenceFileIds: files } : {}),
     }
@@ -136,7 +134,8 @@ export default function SupportCreateForm({
   }
   return (
     <form
-      className="space-y-4"
+      className="mx-auto max-w-2xl space-y-4"
+      aria-label="Bắt đầu chat hỗ trợ"
       onSubmit={(e) => {
         e.preventDefault()
         submit()
@@ -144,34 +143,14 @@ export default function SupportCreateForm({
     >
       {parent && (
         <p className="break-all rounded bg-stone-50 p-3 text-sm">
-          Yêu cầu gốc: {parent.id}
+          Tiếp tục hỗ trợ từ cuộc trò chuyện trước
         </p>
       )}
+      <div className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-stone-700">Chọn cơ sở bạn cần hỗ trợ và gửi tin nhắn. Nhân viên được phân công tại cơ sở sẽ tiếp nhận cuộc trò chuyện.</div>
+      <details className="rounded-lg border border-stone-200 p-3">
+      <summary className="cursor-pointer text-xs font-medium text-stone-500">Liên kết hồ sơ thuê hoặc giao dịch (tùy chọn)</summary>
       <label className="block text-sm">
-        Tiêu đề
-        <input
-          className={supportInputClass}
-          maxLength={200}
-          required
-          disabled={command.locked}
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-        />
-      </label>
-      <label className="block text-sm">
-        Nội dung
-        <textarea
-          className={supportInputClass}
-          rows={4}
-          maxLength={4000}
-          required
-          disabled={command.locked}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </label>
-      <label className="block text-sm">
-        Hồ sơ liên quan
+        Trao đổi về
         <select
           className={supportInputClass}
           disabled={command.locked}
@@ -183,18 +162,19 @@ export default function SupportCreateForm({
             setPaymentId(undefined)
           }}
         >
-          <option value="facility">Không liên kết - chọn cơ sở</option>
+          <option value="facility">Hỗ trợ tại cơ sở</option>
           <option value="rental">Hồ sơ thuê của tôi</option>
           <option value="reservation">Đặt chỗ của tôi</option>
           <option value="unit">Gian kho theo hồ sơ thuê của tôi</option>
           <option value="payment">Giao dịch theo đặt chỗ của tôi</option>
         </select>
       </label>
+      </details>
       <SupportReadState {...read} retry={read.refresh} />
       {read.data && (
         <div className="space-y-2">
           <label className="block text-sm">
-            {source === "facility" ? "Cơ sở đang hoạt động" : "Hồ sơ cụ thể"}
+            {source === "facility" ? "Cơ sở hỗ trợ" : "Hồ sơ cần hỗ trợ"}
             <select
               className={supportInputClass}
               disabled={command.locked}
@@ -238,7 +218,14 @@ export default function SupportCreateForm({
           onChange={setPaymentId}
         />
       )}
-      <EvidenceUpload entityType="DUONG_SUPPORT_PUBLIC" value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { setUploading(busy); onUploadBusy?.(busy) }} />
+      <label className="block text-sm font-medium text-stone-700">Tin nhắn đầu tiên
+        <textarea className={`${supportInputClass} min-h-32 resize-y`} rows={4} maxLength={4000} required disabled={command.locked}
+          placeholder="Bạn cần cơ sở hỗ trợ điều gì?" value={description} onChange={e => setDescription(e.target.value)} onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
+          }} />
+      </label>
+      <div className="flex flex-wrap items-start gap-3">
+      <EvidenceUpload compact entityType="DUONG_SUPPORT_PUBLIC" value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { uploadLock.current = busy; setUploading(busy); onUploadBusy?.(busy) }} />
       <Button
         type="submit"
         disabled={
@@ -250,8 +237,10 @@ export default function SupportCreateForm({
           !!read.error
         }
       >
-        {parent ? "Tạo yêu cầu tiếp nối" : "Gửi yêu cầu"}
+        {command.busy ? "Đang gửi..." : "Gửi tin nhắn"}
       </Button>
+      </div>
+      <p className="text-[11px] text-stone-400">Enter để gửi, Shift+Enter để xuống dòng.</p>
     </form>
   )
 }

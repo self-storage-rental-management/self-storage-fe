@@ -95,7 +95,7 @@ describe("Dương verified empty-data presentation", () => {
   })
   it.each(["customer", "staff", "manager"] as const)("D5 %s empty ticket list", role => {
     state.actor = supportActor(role)
-    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />, "Không có dữ liệu")
+    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />, role === "staff" ? "Chưa có cuộc trò chuyện đang phụ trách" : "Chưa có cuộc trò chuyện phù hợp")
   })
   it("D5 Customer empty available records", () => {
     state.actor = supportActor("customer")

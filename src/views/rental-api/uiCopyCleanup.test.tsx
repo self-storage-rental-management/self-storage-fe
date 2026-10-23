@@ -132,7 +132,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).toContain("Giữ nguyên nội dung và bấm thử lại")
     expect(html).toContain("không tải lại trang hoặc gửi yêu cầu mới")
     expect(html).toContain("Kiểm tra lại bằng yêu cầu cũ")
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Tạo yêu cầu<\/button>/)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Cuộc trò chuyện mới<\/button>/)
     expect(html).not.toContain("Idempotency-Key")
   })
   it("Staff D3 error is natural Vietnamese, without changing the shared Staff helper", () => {
