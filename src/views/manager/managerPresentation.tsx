@@ -13,7 +13,7 @@ const labels: Record<string, string> = {
   MAINTENANCE: 'Đang bảo trì', COMPLETE: 'Đã kiểm tra đầy đủ', PARTIAL: 'Chưa đủ thông tin', UNKNOWN: 'Chưa có thông tin',
   RENTAL: 'Hồ sơ thuê', PAYMENT: 'Thanh toán', RESERVATION: 'Đặt chỗ',
   LOW: 'Thấp', NORMAL: 'Trung bình', MEDIUM: 'Trung bình', HIGH: 'Cao', URGENT: 'Khẩn cấp',
-  CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', MANAGER: 'Quản lý cơ sở',
+  CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', MANAGER: 'Quản lý cơ sở', BUSINESS: 'Quản lý vận hành kinh doanh',
   PENDING: 'Đang chờ', COMPLETED: 'Đã hoàn tất', REJECTED: 'Đã từ chối', ROUTED: 'Đã chuyển xử lý',
   'Small Storage': 'Gian kho nhỏ', 'Medium Storage': 'Gian kho vừa', 'Large Storage': 'Gian kho lớn',
   'Extra Large Storage': 'Gian kho rất lớn',
