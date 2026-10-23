@@ -1,6 +1,7 @@
 import type { RentalApiPage } from "./rentalApi"
 
 export interface OverdueCase {
+  displayCode?: string | null
   caseRef: string
   rentalId: string
   facilityId: string
@@ -19,6 +20,8 @@ export interface OverdueCase {
   recoveryCutoff: string | null
   recoveryEligible: boolean
   followUpVersion: number
+  workflowStatus?: "WARNING" | "SERIOUS" | "URGENT" | "WAITING_RECOVERY" | "RECOVERING" | "COMPLETED" | "PAYMENT_DUE" | null
+  recoveryTaskId?: string | null
 }
 export interface OverduePage extends RentalApiPage<OverdueCase> {
   asOf: string

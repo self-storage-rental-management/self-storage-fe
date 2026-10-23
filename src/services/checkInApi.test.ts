@@ -74,6 +74,7 @@ describe('checkInApi', () => {
         accessHandedOver: true,
       },
       identityDocumentNumber: '079203009988',
+      identityVerificationNote: null,
       actualMeasurements: {
         lengthCm: 100, widthCm: 100, heightCm: 100,
         weightKg: 100, actualVolumeM3: 1, varianceAccepted: true,
@@ -84,8 +85,9 @@ describe('checkInApi', () => {
       packageCount: 2,
       goodsCategory: 'Đồ gia dụng',
       evidenceReferences: ['evidence.jpg'],
-      handedOverItems: ['PIN', 'Biên nhận'],
+      handedOverItems: ['Ổ khóa LOCK-TEST', 'Biên nhận'],
       notes: '',
+      lockReference: 'LOCK-TEST',
     }
 
     await completeCheckIn('checkin-1', request)

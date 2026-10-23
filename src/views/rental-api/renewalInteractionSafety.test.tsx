@@ -41,6 +41,7 @@ vi.mock("react", async original => ({
 vi.mock("../manager/managerPresentation", () => ({ useManagerPresentation: () => ({ manager: false, copy: (s: string) => s, errorText: () => "Lỗi thử nghiệm" }) }))
 vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => h.actor }))
 vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: (key: string) => {
+  if (key.endsWith(':payment-events')) return { data: apiPage([]), loading: false, refresh: h.refresh }
   if (key.includes(":deposit-settlement:")) return { data: h.settlement, loading: false, refresh: h.refresh }
   if (key.endsWith(":proposal")) return { ...h.proposal, refresh: h.refresh }
   if (key.includes(":renewal:")) return { data: h.detail, loading: false, refresh: h.refresh }
@@ -85,7 +86,7 @@ beforeEach(() => {
 
 describe("Deposit refund command safety", () => {
   function approved() {
-    h.actor = { ...operationsActor("manager"), permissions: ["rentals:read", "rentals:update", "payments:collect"] }
+    h.actor = { ...operationsActor("staff"), permissions: ["rentals:read", "payments:read", "payments:collect", "renewals:operate", "refunds:execute"] }
     h.settlement = { renewalId: ids.renewal, expectedVersion: 4, status: "REFUND_APPROVED", amount: 40, refundedAmount: 0, currency: "VND", environment: "SANDBOX", refundId: ids.event, signingDeadline: signingState.effectiveSigningDeadline, checkedAt: operationEvent.occurredAt }
   }
   function ready(panel: () => ReactElement<any> | null) {
@@ -97,7 +98,7 @@ describe("Deposit refund command safety", () => {
   it("unlocks immediately after a known denial and sends no client amount", async () => {
     approved()
     const slots: any[] = [], onLocked = vi.fn()
-    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "manager", revision: 4, onLocked, onChanged: vi.fn() }),slots)
+    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "staff", revision: 4, onLocked, onChanged: vi.fn() }),slots)
     ready(panel)
     h.send.mockRejectedValueOnce(new ApiClientError("denied",{ status: 400 }))
     const click = button(panel(),"Xác nhận đã hoàn cọc").props.onClick
@@ -111,7 +112,7 @@ describe("Deposit refund command safety", () => {
   it("retains the original refund body and key after uncertain results", async () => {
     approved()
     const slots: any[] = [], onLocked = vi.fn()
-    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "manager", revision: 4, onLocked, onChanged: vi.fn() }),slots)
+    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "staff", revision: 4, onLocked, onChanged: vi.fn() }),slots)
     ready(panel)
     h.send.mockRejectedValueOnce(new ApiClientError("unknown",{ status: 503 }))
     button(panel(),"Xác nhận đã hoàn cọc").props.onClick()
@@ -153,6 +154,25 @@ describe("Evidence download request safety", () => {
 })
 
 describe("D3 form identity and original retry request", () => {
+  it('keeps evidence and collection confirmation after removing cash receipt help text', () => {
+    h.actor = operationsActor('staff')
+    h.state = { ...h.state, arrivalRef: ids.event }
+    const slots: any[] = []
+    const panel = () => render(() => RenewalOperationsPanel({ id: ids.renewal, role: 'staff' }), slots)
+    button(panel(), 'Ghi nhận thanh toán').props.onClick()
+    const selected = form(panel())
+    expect(selected).toBeDefined()
+    const formSlots: any[] = []
+    let fields = invoke(selected, formSlots)
+    expect(JSON.stringify(fields)).not.toContain('Mã biên lai được hệ thống tự động tạo khi ghi nhận thu tiền.')
+    expect(JSON.stringify(fields)).not.toContain('Tải biên nhận thu tiền mặt đã lập cho giao dịch này.')
+    expect(find(fields, EvidenceUpload)).toBeDefined()
+    expect(nodes(fields).some(n => n.type === 'input' && n.props.type === 'checkbox')).toBe(true)
+    find(fields, 'select').props.onChange({ target: { value: 'BANK_TRANSFER' } })
+    fields = invoke(selected, formSlots)
+    expect(JSON.stringify(fields)).toContain('Tải ảnh chụp màn hình chuyển khoản làm minh chứng.')
+    expect(find(fields, EvidenceUpload)).toBeDefined()
+  })
   it("retains form, body and idempotency key across late proposal/read responses and blocks stale reload/cancel", async () => {
     const parentLock = vi.fn(), slots: any[] = []
     const panel = () => render(() => RenewalOperationsPanel({ id: ids.renewal, role: "customer", customerId: ids.customer, onLocked: parentLock }), slots)
@@ -164,17 +184,17 @@ describe("D3 form identity and original retry request", () => {
     const original = form(panel()), formSlots: any[] = []
     let fields = invoke(original, formSlots)
     const delayedMountEffects = [...h.effects]
-    find(fields, "textarea").props.onChange({ target: { value: "Lý do đổi lịch" } })
+    expect(nodes(fields).some(n => n.type === "textarea")).toBe(false)
     const picker = nodes(fields).find(n => typeof n.type === "function" && n.type.name === "RenewalAppointmentPicker")!
     picker.props.onChange("2026-10-11T09:00")
     picker.props.onReadyChange(true)
     fields = invoke(original, formSlots, true)
-    const cancel = button(fields, "Đóng biểu mẫu")
+    expect(button(fields, "Đóng biểu mẫu")).toBeUndefined()
     h.send.mockRejectedValueOnce(new ApiClientError("Uncertain result", { status: 503 }))
-    button(fields, "Gửi yêu cầu").props.onClick()
+    button(fields, "Lưu lịch ký").props.onClick()
     delayedMountEffects.forEach(effect => effect())
     // Stale closures must already be guarded before effects/React rerender.
-    proposalRetry.props.retry(); cancel.props.onClick(); open.props.onClick()
+    proposalRetry.props.retry(); open.props.onClick()
     expect(h.refresh).not.toHaveBeenCalled()
     expect(parentLock).toHaveBeenLastCalledWith(true)
     await settle()
@@ -192,7 +212,7 @@ describe("D3 form identity and original retry request", () => {
     expect(retained.key).toBe(original.key)
     fields = invoke(retained, formSlots, true)
     // Even a stale input callback cannot replace the original uncertain request.
-    find(fields, "textarea").props.onChange({ target: { value: "Nội dung khác" } })
+    picker.props.onChange("2026-10-11T10:00")
     h.send.mockResolvedValueOnce({ event: operationEvent })
     fields = invoke(retained, formSlots, true)
     button(fields, "Thử lại cùng yêu cầu").props.onClick()

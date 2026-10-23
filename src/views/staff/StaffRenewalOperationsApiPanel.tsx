@@ -1,5 +1,7 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useCallback, useRef, useState } from "react"
-import { Button, Card, Modal } from "../../components/ui"
+import { Badge, Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { listRenewalAppointments } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -9,7 +11,16 @@ import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
-import { rentalDate, rentalError } from "../rental-api/presentation"
+import { rentalError } from "../rental-api/presentation"
+import { approveRenewalTicket } from "../../services/renewalApi"
+
+function signingDate(value: string | null, time = false) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "Chưa có lịch"
+  return new Intl.DateTimeFormat("vi-VN", time
+    ? { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
+    : { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" },
+  ).format(parseVietnamDate(value))
+}
 
 export default function StaffRenewalOperationsApiPanel() {
   return <StaffRenewalWorkspace />
@@ -60,8 +71,8 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
   }
   return (
     <div className="space-y-4">
-      <Card className="p-4 flex flex-wrap gap-3 items-end">
-        <label>
+      <Card className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="block min-w-0 text-sm font-medium text-stone-700">
           Cơ sở
           <select
             className={operationsInputClass}
@@ -80,16 +91,16 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
               ))}
           </select>
         </label>
-        <label>
+        <label className="block min-w-0 text-sm font-medium text-stone-700">
           Ngày hẹn
-          <input
+          <LocalizedDateInput
             className={operationsInputClass}
             type="date"
             value={query.date || ""}
             onChange={(e) => change({ date: e.target.value || undefined })}
           />
         </label>
-        <label>
+        <label className="block min-w-0 text-sm font-medium text-stone-700">
           Trạng thái
           <select
             className={operationsInputClass}
@@ -124,36 +135,76 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
         </div>
       )}
       {read.data && (
-        <Card className="p-4 space-y-3">
-          {read.data.data.map((s) => (
-            <div
-              key={s.renewalId}
-              className="flex flex-wrap justify-between gap-3 rounded border p-3"
-            >
-              <div className="text-sm space-y-1 min-w-0">
-                <p className="break-all">Gia hạn: {s.renewalId}</p>
-                <p>{phaseLabels[s.phase]}</p>
-                <p>
-                  {rentalDate(s.appointmentStart)} -{" "}
-                  {rentalDate(s.appointmentEnd)}
-                </p>
-                <p>Hạn ký: {rentalDate(s.effectiveSigningDeadline)}</p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}
-              >
-                Xử lý
-              </Button>
-            </div>
-          ))}
-          {read.data.data.length === 0 && (
-            <p>Không có dữ liệu</p>
-          )}
-          <ApiPager
-            pagination={read.data.pagination}
-            onPage={(page) => { if (!lockRef.current) setQuery((q) => ({ ...q, page })) }}
-          />
+        <Card className="overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
+            <h2 className="text-sm font-semibold text-stone-900">Danh sách lịch ký</h2>
+            <span className="text-xs text-stone-500">{read.data.pagination.totalItems} hồ sơ</span>
+          </div>
+          {read.data.data.length > 0 ? <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left text-sm">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-600">
+                <tr>
+                  <th scope="col" className="px-4 py-3 font-semibold">Hồ sơ gia hạn</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Lịch hẹn</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Hạn ký</th>
+                  <th scope="col" className="px-4 py-3 text-right font-semibold">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {read.data.data.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
+                  <td className="px-4 py-4 align-middle">
+                    <span className="font-semibold text-stone-900" title={s.renewalId}>{s.displayCode || `#${s.renewalId.slice(0, 8)}`}</span>
+                  </td>
+                  <td className="px-4 py-4 align-middle">
+                    <Badge variant={s.phase === "COMPLETED" ? "success" : ["SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "error" : ["SIGNING", "AWAITING_DEPOSIT", "AWAITING_PAYMENT_INTENT"].includes(s.phase) ? "warning" : "muted"}>{phaseLabels[s.phase]}</Badge>
+                  </td>
+                  <td className="px-4 py-4 align-middle">
+                    <p className="whitespace-nowrap font-medium text-stone-900">{signingDate(s.appointmentStart)}</p>
+                    {s.appointmentStart && <p className="mt-1 whitespace-nowrap text-xs text-stone-500">
+                      {signingDate(s.appointmentStart, true)}{s.appointmentEnd ? `, ${signingDate(s.appointmentEnd, true)}` : ""}
+                      {s.appointmentEnd && signingDate(s.appointmentEnd) !== signingDate(s.appointmentStart) ? ` (${signingDate(s.appointmentEnd)})` : ""}
+                    </p>}
+                  </td>
+                  <td className="px-4 py-4 align-middle">
+                    <p className="whitespace-nowrap text-stone-700">{s.effectiveSigningDeadline ? signingDate(s.effectiveSigningDeadline) : "Chưa ghi nhận"}</p>
+                    {s.effectiveSigningDeadline && <p className="mt-1 text-xs text-stone-500">{signingDate(s.effectiveSigningDeadline, true)}</p>}
+                  </td>
+                  <td className="px-4 py-4 text-right align-middle">
+                    <div className="flex items-center justify-end gap-2">
+                      {s.phase !== "COMPLETED" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold whitespace-nowrap"
+                          onClick={async () => {
+                            try {
+                              await approveRenewalTicket(s.renewalId)
+                              alert("Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động kéo dài.")
+                              read.refresh()
+                            } catch (err: any) {
+                              alert(err?.message || "Không thể duyệt gia hạn.")
+                            }
+                          }}
+                        >
+                          ✓ Duyệt gia hạn
+                        </Button>
+                      )}
+                      <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}>
+                        {["COMPLETED", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "Xem chi tiết" : "Xử lý"}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div> : <p className="px-4 py-8 text-center text-sm text-stone-500">Không có lịch ký phù hợp với bộ lọc.</p>}
+          <div className="border-t border-stone-200 px-4 py-3">
+            <ApiPager
+              pagination={read.data.pagination}
+              onPage={(page) => { if (!lockRef.current) setQuery((q) => ({ ...q, page })) }}
+            />
+          </div>
         </Card>
       )}
       {selected && (

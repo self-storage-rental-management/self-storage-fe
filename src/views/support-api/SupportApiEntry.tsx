@@ -7,12 +7,16 @@ export function SupportApiRoute({
   apiAuthenticated,
   role,
   children,
+  openTicket,
+  onTicketOpened,
 }: {
   apiAuthenticated: boolean
   role: "customer" | "staff"
   children: ReactNode
+  openTicket?: { id: string; request: number }
+  onTicketOpened?: () => void
 }) {
-  return apiAuthenticated ? <SupportApiWorkspace role={role} /> : children
+  return apiAuthenticated ? <SupportApiWorkspace role={role} openTicket={openTicket} onTicketOpened={onTicketOpened} /> : children
 }
 
 /** Additive composition point owned by Dương; never replaces the team Support/Return screens. */

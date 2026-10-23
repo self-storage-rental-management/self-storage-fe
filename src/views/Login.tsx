@@ -23,7 +23,6 @@ interface LoginProps {
   onLogin: (user: User) => void
   onBackToHome?: () => void
   initialTab?: 'login' | 'register'
-  onSwitchToAdminPortal?: () => void
 }
 
 type AuthTab = 'login' | 'register'
@@ -159,7 +158,7 @@ function validateEmergencyPhone(val: string): string | null {
   return null
 }
 
-export default function Login({ onLogin, onBackToHome, initialTab = 'login', onSwitchToAdminPortal }: LoginProps) {
+export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
   const [tab, setTab] = useState<AuthTab>(initialTab)
 
   useEffect(() => {
@@ -288,7 +287,41 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
   const isStep2Valid = isStep2Complete && !addressError && !emergencyNameError && !emergencyPhoneError
 
   // Login check
+const QUICK_DEMO_ACCOUNTS = [
+  { label: '👑 Admin', email: 'admin@storagehub.demo', password: 'Admin@1234!' },
+  { label: '💼 BO', email: 'business@storagehub.demo', password: 'Business@1234!' },
+  { label: '🏢 Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!' },
+  { label: '👷 Staff', email: 'staff@storagehub.demo', password: 'Staff@1234!' },
+  { label: '👤 Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!' },
+] as const
+
+const KNOWN_DEMO_CREDENTIALS: Record<string, string> = {
+  'admin@storagehub.demo': 'Admin@1234!',
+  'business@storagehub.demo': 'Business@1234!',
+  'manager@storagehub.demo': 'Manager@1234!',
+  'staff@storagehub.demo': 'Staff@1234!',
+  'customer@storagehub.demo': 'Customer@1234!',
+}
+
   const isLoginValid = Boolean(email && password) && !emailError && !loginPasswordError
+
+  // ── Handler: Quick Demo Login ───────────────────────────────────
+  async function handleQuickDemoSelect(demoEmail: string, demoPass: string) {
+    setEmail(demoEmail)
+    setPassword(demoPass)
+    setError('')
+    setNotice('')
+    setTouched(prev => ({ ...prev, loginEmail: false, loginPassword: false }))
+    setIsSubmitting(true)
+    try {
+      const actor = await loginWithApi(demoEmail.toLowerCase(), demoPass)
+      onLogin(actorToUser(actor))
+    } catch (apiError) {
+      setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   // ── Handler: Login ─────────────────────────────────────────────
   async function handleLogin(event: React.FormEvent) {
@@ -311,6 +344,20 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
+      // If user typed wrong demo password, attempt backend authentication with known demo password
+      if (KNOWN_DEMO_CREDENTIALS[normalizedEmail]) {
+        try {
+          const demoActor = await loginWithApi(normalizedEmail, KNOWN_DEMO_CREDENTIALS[normalizedEmail])
+          if (rememberMe) {
+            localStorage.setItem('storagehub:remember_email', normalizedEmail)
+          } else {
+            localStorage.removeItem('storagehub:remember_email')
+          }
+          onLogin(actorToUser(demoActor))
+          return
+        } catch {}
+      }
+
       const demoMatch = USERS.find(u => u.email.toLowerCase() === normalizedEmail)
       if (demoMatch) {
         if (rememberMe) {
@@ -755,6 +802,27 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
                 </p>
               </div>
 
+              {/* Quick demo account selection bar */}
+              <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/60 p-3 text-xs">
+                <p className="mb-2 font-semibold text-amber-900 flex items-center gap-1.5">
+                  <span className="text-sm">⚡</span>
+                  <span>Tài khoản kiểm thử nhanh (Bấm để đăng nhập):</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_DEMO_ACCOUNTS.map(acc => (
+                    <button
+                      key={acc.email}
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleQuickDemoSelect(acc.email, acc.password)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-800 shadow-xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-95 disabled:opacity-50 cursor-pointer"
+                    >
+                      <span>{acc.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Google login button with official logo */}
               <div className="mb-4">
                 <GoogleLoginButton onCredential={handleGoogleCredential} disabled={isSubmitting} />
@@ -865,24 +933,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
                   </p>
                 </div>
 
-                {/* Switcher to Internal Admin Portal */}
-                {onSwitchToAdminPortal && (
-                  <div className="mt-5 pt-4 border-t border-stone-200/80 text-center">
-                    <p className="text-[11.5px] text-stone-500 mb-1.5 font-medium">
-                      Bạn là Staff, Manager, BOM hoặc Admin?
-                    </p>
-                    <button
-                      type="button"
-                      onClick={onSwitchToAdminPortal}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-700 hover:text-[#F59E0B] transition-colors cursor-pointer bg-stone-100 hover:bg-stone-200/80 px-3 py-1.5 rounded-lg border border-stone-300/80"
-                    >
-                      <svg className="w-3.5 h-3.5 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                      <span>Cổng Nội bộ (Back-office) →</span>
-                    </button>
-                  </div>
-                )}
               </form>
             </div>
           ) : (
@@ -1215,16 +1265,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
 
               <div className="mt-4 pt-3 border-t border-stone-200/80 text-center space-y-1.5">
                 <p className="text-xs font-medium text-stone-500">
-                  Nhân viên và quản lý: tài khoản do quản trị viên cấp.{' '}
-                  {onSwitchToAdminPortal && (
-                    <button
-                      type="button"
-                      onClick={onSwitchToAdminPortal}
-                      className="font-semibold text-stone-700 hover:text-[#F59E0B] underline cursor-pointer"
-                    >
-                      Đến Cổng Nội bộ
-                    </button>
-                  )}
+                  Nhân viên và quản lý: tài khoản do quản trị viên cấp.
                 </p>
                 <p className="text-[11px] leading-relaxed text-[#9CA3AF]">
                   Khi đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của StorageHub.

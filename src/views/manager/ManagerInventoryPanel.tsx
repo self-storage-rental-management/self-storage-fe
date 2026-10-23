@@ -48,7 +48,7 @@ const statusVariants: Record<string, string> = {
   assigned: 'purple'
 }
 
-const activeReservationStatuses = ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN']
+const activeReservationStatuses = ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'COMPLETED']
 const operationalRentalStatuses: RentalRecord['status'][] = ['active', 'return_requested', 'return_inspection', 'closing']
 
 interface AvailabilityPeriod {
@@ -363,7 +363,7 @@ function DemoManagerInventoryPanel({
   }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy, unitPageSize])
 
   return (
-    <div className="fade-in space-y-6">
+    <div className="fade-in min-w-0 max-w-full space-y-6">
       <SectionHeader
         eyebrow="Vận hành cơ sở"
         title="Quản lý gian kho"

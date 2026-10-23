@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useEffect, useRef, useState } from "react"
@@ -17,6 +18,8 @@ import { rentalDate } from "../rental-api/presentation"
 import SupportCreateForm from "./SupportCreateForm"
 import SupportReadState from "./SupportReadState"
 import SupportTicketDetail from "./SupportTicketDetail"
+import type { SupportDraft } from "./SupportActionForm"
+import { isUuid } from "../../services/renewalOperationsApi"
 import {
   canReadSupport,
   supportError,
@@ -26,10 +29,10 @@ import {
   supportAssigneeLabel,
 } from "./presentation"
 
-function TicketCode({ id }: { id: string }) {
+function TicketCode({ id, displayCode }: { id: string; displayCode?: string | null }) {
   const [copied, setCopied] = useState(false)
   return <div className="group mt-1 flex items-center gap-1.5 text-xs text-stone-500">
-    <code className="font-mono" title={id}>#{id.slice(0, 8)}</code>
+    <code className="font-mono" title={id}>{displayCode || `#${id.slice(0, 8)}`}</code>
     <button
       type="button"
       className="rounded p-0.5 text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
@@ -37,7 +40,7 @@ function TicketCode({ id }: { id: string }) {
       title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"}
       onClick={async () => {
         try {
-          await navigator.clipboard.writeText(id)
+          await navigator.clipboard.writeText(displayCode || id)
           setCopied(true)
         } catch {
           setCopied(false)
@@ -57,7 +60,7 @@ function supportStatusClass(status: SupportTicket["status"]) {
 }
 
 function SupportCreatedAt({ value }: { value: string }) {
-  const date = new Date(value)
+  const date = parseVietnamDate(value)
   if (Number.isNaN(date.getTime())) return <span>{rentalDate(value)}</span>
   const dateText = new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric",
@@ -65,15 +68,19 @@ function SupportCreatedAt({ value }: { value: string }) {
   const timeText = new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).format(date)
-  return <time dateTime={value} className="whitespace-nowrap">{dateText} <span className="text-stone-500">{timeText}</span></time>
+  return <time dateTime={value} className="block whitespace-nowrap leading-5"><span className="block text-stone-800">{dateText}</span><span className="block text-xs text-stone-500">{timeText}</span></time>
 }
 
 export default function SupportApiWorkspace({
   role,
   onLocked,
+  openTicket,
+  onTicketOpened,
 }: {
   role: SupportRole
   onLocked?: (locked: boolean) => void
+  openTicket?: { id: string; request: number }
+  onTicketOpened?: () => void
 }) {
   const { manager, copy, errorText } = useManagerPresentation()
 
@@ -96,6 +103,8 @@ export default function SupportApiWorkspace({
       role={role}
       identity={identity}
       onLocked={onLocked}
+      openTicket={openTicket}
+      onTicketOpened={onTicketOpened}
     />
   )
 }
@@ -104,11 +113,15 @@ function SupportSession({
   role,
   identity,
   onLocked,
+  openTicket,
+  onTicketOpened,
 }: {
   actor: ApiActor
   role: SupportRole
   identity: string
   onLocked?: (locked: boolean) => void
+  openTicket?: { id: string; request: number }
+  onTicketOpened?: () => void
 }) {
   const { copy, errorText } = useManagerPresentation()
 
@@ -123,6 +136,8 @@ function SupportSession({
     [selected, setSelected] = useState<string>()
   const [creation, setCreation] = useState<{ parent?: SupportTicket }>()
   const [revision, setRevision] = useState(0)
+  const [drafts, setDrafts] = useState<Record<string, Partial<Record<"messages" | "internal", SupportDraft>>>>({})
+  const [messageFocus, setMessageFocus] = useState<{ ticketId: string; channel: "messages" | "internal"; messageId?: string }>()
   const [conversation, setConversation] = useState<"messages" | "internal">("messages")
   const [staffView, setStaffView] = useState<"queue" | "assigned">("assigned")
   const [queuePage, setQueuePage] = useState(0)
@@ -137,7 +152,14 @@ function SupportSession({
       data: [], pagination: { page: 0, pageSize: 20, totalItems: 0, totalPages: 0, sort: "createdAt,desc" }, correlationId: null,
     }),
   )
-  const command = useSupportCommand(`${actor.id}:support:${role}`, () => {
+  const command = useSupportCommand(`${actor.id}:support:${role}`, (submission, result) => {
+    if (submission.kind === "command" && ["message", "resolve"].includes(submission.command.kind)) {
+      const channel = submission.command.kind === "message" && "visibility" in submission.command && submission.command.visibility === "INTERNAL" ? "internal" : "messages"
+      setDrafts(previous => ({ ...previous, [submission.id]: { ...previous[submission.id], [channel]: { body: "", files: [] } } }))
+      const messageId = submission.command.kind === "message" && result && typeof result === "object" && "id" in result && isUuid(result.id) ? result.id : undefined
+      setMessageFocus({ ticketId: submission.id, channel, messageId })
+      setConversation(channel)
+    }
     read.refresh()
     queueRead.refresh()
     setRevision((n) => n + 1)
@@ -151,6 +173,18 @@ function SupportSession({
     if (busy) onLocked?.(true)
   }
   const locked = command.locked || uploading
+  const consumedOpenRequest = useRef<typeof openTicket>(undefined)
+  useEffect(() => {
+    if (!openTicket || consumedOpenRequest.current === openTicket || locked || !isUuid(openTicket.id)) return
+    consumedOpenRequest.current = openTicket
+    setCreation(undefined)
+    setSelected(openTicket.id)
+    setConversation("messages")
+    setMessageFocus(undefined)
+    setRevision(previous => previous + 1)
+    command.clearError()
+    onTicketOpened?.()
+  }, [openTicket, locked, onTicketOpened])
   const formCommand = { ...command, locked }
   useEffect(() => {
     onLocked?.(locked)
@@ -347,7 +381,7 @@ function SupportSession({
               </thead>
               <tbody className="divide-y divide-stone-200">
                 {queueRead.data.data.map((item) => <tr key={item.id}>
-                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}</td>
+                  <td className="max-w-sm break-words px-4 py-3 font-semibold">{item.subject}<TicketCode id={item.id} displayCode={item.displayCode} /></td>
                   <td className="px-4 py-3">{actor.facilityNames?.[item.facilityId] ?? item.facilityId}</td>
                   <td className="whitespace-nowrap px-4 py-3">{rentalDate(item.createdAt)}</td>
                   <td className="px-4 py-3">
@@ -378,37 +412,37 @@ function SupportSession({
         read.data.data.every((t) => supportTicketVisible(actor, role, t)) && (
           <>
             {read.data.data.length > 0 && <Card className="overflow-x-auto p-0">
-              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[1000px]" : "min-w-[1080px]"}`}>
+              <table className={`w-full table-fixed text-left text-sm ${role === "customer" ? "min-w-[800px]" : "min-w-[1000px]"}`}>
                 <colgroup>
                   {role === "customer" ? <>
-                    <col className="w-[28%]" /><col className="w-[22%]" /><col className="w-[23%]" /><col className="w-[15%]" /><col className="w-[12%]" />
+                    <col className="w-[28%]" /><col className="w-[18%]" /><col className="w-[26%]" /><col className="w-[16%]" /><col className="w-[12%]" />
                   </> : <>
-                    <col className="w-[25%]" /><col className="w-[15%]" /><col className="w-[19%]" /><col className="w-[15%]" /><col className="w-[14%]" /><col className="w-[12%]" />
+                    <col className="w-[24%]" /><col className="w-[15%]" /><col className="w-[22%]" /><col className="w-[15%]" /><col className="w-[13%]" /><col className="w-[11%]" />
                   </>}
                 </colgroup>
-                <thead className="border-b bg-stone-50 text-stone-600">
+                <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-semibold">Tiêu đề</th>
-                    <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Trạng thái</th>
-                    <th scope="col" className="px-4 py-3 font-semibold">Cơ sở</th>
-                    {role !== "customer" && <th scope="col" className="px-4 py-3 font-semibold">Nhân viên phụ trách</th>}
-                    <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">Tạo lúc</th>
-                    <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">Thao tác</th>
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Trạng thái</th>
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Cơ sở</th>
+                    {role !== "customer" && <th scope="col" className="px-4 py-3 text-center font-semibold">Nhân viên phụ trách</th>}
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Tạo lúc</th>
+                    <th scope="col" className="px-4 py-3 text-center font-semibold">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-stone-200">
-                  {read.data.data.map((t) => <tr key={t.id}>
+                <tbody className="divide-y divide-stone-100">
+                  {read.data.data.map((t) => <tr key={t.id} className="transition-colors hover:bg-stone-50">
                     <td className="break-words px-4 py-3 align-middle">
-                      <div className="line-clamp-2 min-h-10 font-semibold text-stone-900">{t.subject}</div>
-                      <TicketCode id={t.id} />
+                      <div className="whitespace-normal break-words font-semibold leading-5 text-stone-900 [overflow-wrap:anywhere]" title={t.subject}>{t.subject}</div>
+                      <TicketCode id={t.id} displayCode={t.displayCode} />
                     </td>
-                    <td className="px-4 py-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${supportStatusClass(t.status)}`}>
+                    <td className="px-4 py-3 text-center align-middle"><span className={`inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold leading-4 ring-1 ${supportStatusClass(t.status)}`}>
                       {supportStatusLabels[t.status]}
                     </span></td>
-                    <td className="break-words px-4 py-3 align-middle">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
-                    {role !== "customer" && <td className="break-words px-4 py-3 align-middle">{supportAssigneeLabel(t, role)}</td>}
-                    <td className="whitespace-nowrap px-4 py-3 align-middle"><SupportCreatedAt value={t.createdAt} /></td>
-                    <td className="px-4 py-3 text-right align-middle"><Button size="sm" className="whitespace-nowrap" variant="outline" disabled={locked} onClick={() => {
+                    <td className="break-words px-4 py-3 text-center align-middle leading-5 text-stone-700 [overflow-wrap:anywhere]">{actor.facilityNames?.[t.facilityId ?? ""] ?? t.facilityId ?? "Chưa có thông tin"}</td>
+                    {role !== "customer" && <td className="break-words px-4 py-3 text-center align-middle leading-5 text-stone-700">{supportAssigneeLabel(t, role)}</td>}
+                    <td className="whitespace-nowrap px-4 py-3 text-center align-middle"><SupportCreatedAt value={t.createdAt} /></td>
+                    <td className="px-4 py-3 text-center align-middle"><Button size="sm" className="whitespace-nowrap" variant="outline" disabled={locked} onClick={() => {
                       setSelected(t.id)
                       command.clearError()
                     }}>Chi tiết</Button></td>
@@ -447,6 +481,9 @@ function SupportSession({
               conversation={conversation}
               onConversationChange={setConversation}
               onUploadBusy={uploadBusy}
+              drafts={drafts[selected] ?? { messages: { body: "", files: [] }, internal: { body: "", files: [] } }}
+              onDraftChange={(channel, draft) => setDrafts(previous => ({ ...previous, [selected]: { ...previous[selected], [channel]: draft } }))}
+              messageFocus={messageFocus?.ticketId === selected ? messageFocus : undefined}
               onFollowUp={(parent) => {
                 if (command.locked || uploadLock.current) return
                 setSelected(undefined)

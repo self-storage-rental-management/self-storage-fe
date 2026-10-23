@@ -4,19 +4,113 @@ import type { CustomerUnitType, ReservationRentalPackage } from '../../services/
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import ReferenceBoxCapacity from './ReferenceBoxCapacity'
 import CustomerFacilityPackages from './CustomerFacilityPackages'
-import CustomerRentalRegulations from './CustomerRentalRegulations'
 
-export default function CustomerUnitDetails({ unitType: t, facilityName, facilityCode, address, availableCount, rentalPackages = [], onReserve, onClose }: {
-  unitType: CustomerUnitType; facilityName: string; facilityCode?: string; address?: string; availableCount: number; rentalPackages?: ReservationRentalPackage[]; onReserve: () => void; onClose: () => void
-}) {
+export interface CustomerUnitDetailsProps {
+  unitType: CustomerUnitType
+  facilityName: string
+  facilityCode?: string
+  address?: string
+  availableCount: number
+  rentalPackages?: ReservationRentalPackage[]
+  isRecommended?: boolean
+  isUserSelected?: boolean
+  isIncompatible?: boolean
+  incompatibleReason?: string
+  onReserve: () => void
+  onSelectRecommended?: () => void
+  onClose: () => void
+}
+
+export default function CustomerUnitDetails({
+  unitType: t,
+  facilityName,
+  facilityCode,
+  address,
+  availableCount,
+  rentalPackages = [],
+  isRecommended = false,
+  isUserSelected = false,
+  isIncompatible = false,
+  incompatibleReason,
+  onReserve,
+  onSelectRecommended,
+  onClose,
+}: CustomerUnitDetailsProps) {
   const size = t.code.match(/(?:^|[-_])(XL|S|M|L)(?:$|[-_])/i)?.[1]?.toUpperCase() || t.name.match(/\b(XL|S|M|L)\b/i)?.[1]?.toUpperCase()
     || ({ small: 'S', medium: 'M', large: 'L', 'extra large': 'XL' } as Record<string, string>)[t.name.toLowerCase()]
   facilityName = customerFacilityName(facilityCode || '', facilityName)
   address = customerFacilityAddress(facilityCode || '', facilityName, address || '')
-  const overdueFeePerDay = t.monthlyPrice / 30 * 0.5
-  const overdueExampleDays = 4
   return <div className="space-y-5">
-    <div className="rounded-2xl bg-[#292a27] p-5 text-white"><p className="text-xs text-amber-300">{facilityName}</p><h3 className="mt-1 text-2xl font-bold">{size ? `Kho cỡ ${size}` : 'Loại kho lưu trữ'}</h3><p className="mt-2 text-sm">{address}</p><p className="mt-2 text-xl font-bold">{formatVndAmount(t.monthlyPrice)} / tháng</p></div>
+    <div className="rounded-2xl bg-[#292a27] p-5 text-white">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-amber-300">{facilityName}</p>
+        {isRecommended && (
+          <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300 border border-emerald-400/40">
+            ⭐ Kho hệ thống đề xuất
+          </span>
+        )}
+        {isUserSelected && !isRecommended && !isIncompatible && (
+          <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-stone-300 border border-white/20">
+            Kho bạn tự chọn
+          </span>
+        )}
+        {isIncompatible && (
+          <span className="rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-300 border border-red-400/40">
+            ⚠️ Kho không còn phù hợp
+          </span>
+        )}
+      </div>
+      <h3 className="mt-1 text-2xl font-bold">{size ? `Kho cỡ ${size}` : 'Loại kho lưu trữ'}</h3>
+      <p className="mt-2 text-sm">{address}</p>
+      <p className="mt-2 text-xl font-bold">{formatVndAmount(t.monthlyPrice)} / tháng</p>
+    </div>
+
+    {/* Nổi bật kho hệ thống đề xuất */}
+    {isRecommended && (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-emerald-500 bg-emerald-50/90 p-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-lg text-white">⭐</span>
+          <div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+              Kho hệ thống đề xuất tối ưu
+            </span>
+            <p className="mt-1 text-xs text-stone-700">
+              Cỡ kho này có sức chứa và tải trọng phù hợp nhất với hàng hóa đã khai báo, tối ưu chi phí thuê.
+            </p>
+          </div>
+        </div>
+        {onSelectRecommended && (
+          <Button size="sm" onClick={onSelectRecommended} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+            Chọn kho đề xuất này
+          </Button>
+        )}
+      </div>
+    )}
+
+    {/* Cảnh báo kho không còn phù hợp */}
+    {isIncompatible && (
+      <div className="rounded-2xl border-2 border-amber-500 bg-amber-50 p-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-lg text-white">⚠️</span>
+          <div className="flex-1">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-900">
+              Kho không còn phù hợp với hàng hóa
+            </span>
+            <p className="mt-1 text-xs text-stone-800">
+              {incompatibleReason || 'Kích thước kiện hàng hoặc tổng tải trọng vượt quá khả năng lưu trữ của cỡ kho này.'}
+            </p>
+            {onSelectRecommended && (
+              <div className="mt-2">
+                <Button size="sm" variant="outline" onClick={onSelectRecommended} className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold">
+                  ⭐ Chuyển sang kho đề xuất phù hợp
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
     {(t.detailImageUrl || (size && `/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`)) ? (
       <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
         <img
@@ -61,43 +155,8 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       )}
       <p className="mt-3 text-xs leading-5 text-stone-600">Mức áp dụng và số tiền cuối cùng được xác nhận trên báo giá của đơn. Không cộng ưu đãi hai lần.</p>
     </section>
-    <div>
-      <h4 className="mb-3 text-lg font-bold">3. Quy định cho thuê kho</h4>
-      <CustomerRentalRegulations facilityName={facilityName} />
-    </div>
-    <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5">
-      <h4 className="font-bold text-blue-900">4. Chính sách và quy định áp dụng</h4>
-      <p className="mt-1 text-sm text-stone-700">Áp dụng cho khách thuê tại {facilityName}.</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Phí quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">50% đơn giá thuê ngày cho mỗi ngày trễ</p><p className="text-sm leading-6 text-stone-600">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.</p></article>
-        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Tiền duy trì CSVC</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">{formatVndAmount(t.securityDepositAmount)}</p><p className="text-sm leading-6 text-stone-600">Thu khi nhận kho và được quyết toán sau khi kiểm tra bàn giao, công nợ, vệ sinh và hư hại.</p></article>
-        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Thời hạn thuê tối thiểu</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">01 tháng</p><p className="text-sm leading-6 text-stone-600">Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.</p></article>
-        <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><h5 className="font-bold">Gia hạn quá hạn</h5><p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">Tối đa 7 ngày</p><p className="text-sm leading-6 text-stone-600">Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.</p></article>
-      </div>
-    </section>
-    <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
-      <h4 className="font-bold text-rose-900">Quy định trả kho và gia hạn</h4>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <article className="rounded-xl border border-rose-200 bg-white p-4 text-sm">
-          <b>Trả kho sau ngày hết hạn</b>
-          <ul className="mt-2 list-disc space-y-2 pl-5 text-stone-700">
-            <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
-            <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-            <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.</li>
-          </ul>
-        </article>
-        <article className="rounded-xl border border-amber-200 bg-white p-4 text-sm">
-          <b>Gia hạn kỳ thuê</b>
-          <ul className="mt-2 list-disc space-y-2 pl-5 text-stone-700">
-            <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
-            <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
-          </ul>
-        </article>
-      </div>
-      <p className="mt-3 rounded-lg bg-rose-100 p-3 text-xs leading-5 text-rose-900">Theo giá hiện tại: {formatVndAmount(t.monthlyPrice)} ÷ 30 × 50% = {formatVndAmount(overdueFeePerDay)}/ngày. Trễ {overdueExampleDays} ngày tương ứng {formatVndAmount(overdueFeePerDay * overdueExampleDays)}.</p>
-    </section>
     <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/70 to-white p-5 sm:p-6">
-      <h4 className="font-bold text-stone-900">5. Quy trình đặt kho và thanh toán</h4>
+      <h4 className="font-bold text-stone-900">3. Quy trình đặt kho và thanh toán</h4>
       <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
         ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá và xác minh email.'],
@@ -109,6 +168,35 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
       </li>)}</ol>
     </section>
 
-    <div className="flex justify-end gap-2 border-t border-stone-200 bg-white pt-5"><Button variant="outline" onClick={onClose}>Đóng lại</Button><Button disabled={availableCount <= 0} onClick={onReserve}>{availableCount > 0 ? 'Khai báo hàng & Đặt loại kho này' : 'Hết kho'}</Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-white pt-5">
+      <div className="flex items-center gap-2">
+        {isRecommended && (
+          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+            ⭐ Kho đề xuất tối ưu
+          </span>
+        )}
+        {isUserSelected && !isRecommended && !isIncompatible && (
+          <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
+            Kho bạn tự chọn
+          </span>
+        )}
+        {isIncompatible && (
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+            ⚠️ Không còn phù hợp
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={onClose}>Đóng lại</Button>
+        {isRecommended && onSelectRecommended && (
+          <Button onClick={onSelectRecommended} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+            Chọn kho đề xuất này
+          </Button>
+        )}
+        <Button disabled={availableCount <= 0 || isIncompatible} onClick={onReserve}>
+          {availableCount <= 0 ? 'Hết kho' : isIncompatible ? 'Kho không phù hợp' : 'Khai báo hàng & Đặt loại kho này'}
+        </Button>
+      </div>
+    </div>
   </div>
 }

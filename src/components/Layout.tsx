@@ -238,7 +238,8 @@ export default function Layout({
       'rentals': 'Hợp Đồng & Cước Thuê',
       'overdue': 'Quản Lý Nợ Quá Hạn',
       'facilities': 'Quản Lý Cơ Sở',
-      'policies': 'Gói Thuê Kỳ Hạn',
+      'performance': 'Hiệu Suất Mặt Bằng',
+      'policies': 'Gói Thuê',
       'pricing': 'Bảng Giá Loại Kho',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',
@@ -312,11 +313,11 @@ export default function Layout({
 
   const getTranslatedRole = () => {
     const lower = roleLabel.toLowerCase()
-    if (lower.includes('staff') || lower.includes('nhân viên')) return 'Nhân Viên'
-    if (lower.includes('customer') || lower.includes('khách hàng')) return 'Khách Hàng'
-    if (lower.includes('manager') || lower.includes('quản lý')) return 'Quản Lý Cơ Sở'
-    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh')) return 'Quản Lý Vận Hành Kinh Doanh'
-    if (lower.includes('admin') || lower.includes('quản trị')) return 'Quản Trị Viên'
+    if (lower.includes('staff') || lower.includes('nhân viên')) return 'Nhân viên'
+    if (lower.includes('customer') || lower.includes('khách hàng')) return 'Khách hàng'
+    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh') || lower.includes('thương mại')) return 'Quản lý vận hành kinh doanh'
+    if (lower.includes('manager') || lower.includes('quản lý')) return 'Quản lý cơ sở'
+    if (lower.includes('admin') || lower.includes('quản trị')) return 'Quản trị viên'
     return roleLabel
   }
 
@@ -392,7 +393,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex h-full bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex h-full w-full min-w-0 max-w-full overflow-x-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -404,7 +405,7 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 border-t-4 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 shrink-0 border-t-4 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
@@ -415,7 +416,7 @@ export default function Layout({
         {/* Role & Facility badge */}
         <div className="px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className={`inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold border ${roleColor || 'bg-[#3a3933] text-[#f3c675] border-[#4b4940]'}`}>
+            <span className={`inline-flex items-center px-2.5 py-1 rounded text-[10px] tracking-[.08em] font-semibold border ${roleColor || 'bg-[#3a3933] text-[#f3c675] border-[#4b4940]'}`}>
               {getTranslatedRole()}
             </span>
           </div>
@@ -618,8 +619,8 @@ export default function Layout({
         </header>
 
         {/* Content */}
-        <main ref={contentScrollRef} data-layout-scroll-container className="flex-1 overflow-y-auto p-4 lg:p-7 fade-in">
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+        <main ref={contentScrollRef} data-layout-scroll-container className="min-w-0 flex-1 basis-0 overflow-x-hidden overflow-y-auto p-4 lg:p-7 fade-in">
+          <div className="mx-auto min-w-0 w-full max-w-[1600px]">{children}</div>
 
         </main>
       </div>

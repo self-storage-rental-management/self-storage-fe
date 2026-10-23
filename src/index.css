@@ -127,6 +127,10 @@ html,
 body,
 #root {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 body {
@@ -235,6 +239,12 @@ button:not(:disabled) { cursor: pointer; }
   font-weight: 600;
   letter-spacing: .1em;
   text-transform: uppercase;
+}
+
+/* Customer portal uses one typeface consistently, including codes and labels. */
+.customer-role-layout,
+.customer-role-layout :where(*) {
+  font-family: var(--font-sans) !important;
 }
 
 .auth-page {

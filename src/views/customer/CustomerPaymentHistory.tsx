@@ -8,6 +8,7 @@ import {
 } from "../../services/customerPaymentHistory"
 import ReservationReceipt from "./ReservationReceipt"
 import RenewalReceipt from "./RenewalReceipt"
+import ReturnSettlementReceipt from "./ReturnSettlementReceipt"
 import {
   paymentRecordLabel,
 } from "./paymentPresentation"
@@ -40,7 +41,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
   const [receipt, setReceipt] = useState<HistoryEntry | null>(null)
   const [historyFilter, setHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const visibleEntries = entries.filter(entry => {
-    const settlement = entry.category === 'damage' || ['REFUND', 'DAMAGE_FEE'].includes(entry.reservationPayment?.purpose || '')
+    const settlement = ['damage', 'refund', 'returnOffset'].includes(entry.category) || ['REFUND', 'DAMAGE_FEE'].includes(entry.reservationPayment?.purpose || '')
     return historyFilter === 'all' || (historyFilter === 'settlement' ? settlement : !settlement)
   })
   useEffect(() => {
@@ -76,14 +77,14 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       ? null
       : paid.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
   }
-  const statusLabel = (entry: HistoryEntry) =>
-    entry.reservationPayment && entry.category === "deposit"
-      ? paymentRecordLabel(entry.reservationPayment)
-      : entry.status === "PAID"
-        ? "Thanh toán thành công"
-        : ["FAILED", "CANCELLED"].includes(entry.status)
-          ? "Thanh toán thất bại"
-          : "Chưa ghi nhận tiền"
+  const statusLabel = (entry: HistoryEntry) => {
+    if (entry.reservationPayment && entry.category === "deposit") return paymentRecordLabel(entry.reservationPayment)
+    if (entry.status === "SETTLED") return "Đã đối trừ"
+    if (entry.status === "REFUNDED") return "Đã hoàn"
+    if (entry.status === "PAID") return "Thanh toán thành công"
+    if (["FAILED", "CANCELLED"].includes(entry.status)) return "Thanh toán thất bại"
+    return "Chưa ghi nhận tiền"
+  }
   return (
     <div className="fade-in space-y-4">
       <SectionHeader
@@ -92,15 +93,15 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="p-4">
           <p className="text-xs text-stone-500">Đã ghi nhận thanh toán</p>
-          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? "—" : historyAmount(totalPaid(entries))}</p>
+          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? "Chưa có" : historyAmount(totalPaid(entries))}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Thanh toán gia hạn</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "—" : historyAmount(totalPaid(entries.filter((entry) => entry.category === "renewal" || entry.category === "renewalSigning")))}</p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "Chưa có" : historyAmount(totalPaid(entries.filter((entry) => entry.category === "renewal" || entry.category === "renewalSigning")))}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Số giao dịch</p>
-          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? "—" : entries.length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? "Chưa có" : entries.length}</p>
         </Card>
       </div>
       {loading && (
@@ -156,14 +157,14 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                   <ShortCode value={entry.renewalId} />
                 </> : entry.reference.startsWith("RSV-") ? <span className="whitespace-nowrap font-semibold text-stone-900">{entry.reference}</span> : <span className="font-semibold text-stone-900">{entry.reference}</span>}</Td>
                 <Td>{paymentCategories[entry.category]}</Td>
-                <Td><span className="whitespace-nowrap text-xs text-stone-500">{entry.method || "—"}</span></Td>
+                <Td><span className="whitespace-nowrap text-xs text-stone-500">{entry.method || "Chưa có"}</span></Td>
                 <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b></Td>
                 <Td>
                   <div className="space-y-2">
-                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (entry.status === "PAID" ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (["PAID", "REFUNDED", "SETTLED"].includes(entry.status) ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
                   </div>
                 </Td>
-                <Td>{entry.status === "PAID" && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</Td>
+                <Td>{["PAID", "REFUNDED", "SETTLED"].includes(entry.status) && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</Td>
               </Tr>
             ))}
             {!loading && !error && !visibleEntries.length && (
@@ -175,7 +176,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       <Modal
         open={Boolean(receipt)}
         onClose={() => setReceipt(null)}
-        title="Chi tiết thanh toán"
+        title="Chi tiết giao dịch"
       >
         {receipt &&
           (receipt.renewalId ? <RenewalReceipt key={`${receipt.renewalId}:${receipt.id}`} id={receipt.renewalId} paymentId={receipt.id} /> : receipt.reservationPayment ? (
@@ -183,7 +184,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
               payment={receipt.reservationPayment}
               reservationCode={receipt.reference}
             />
-          ) : (
+          ) : receipt.returnSettlement ? <ReturnSettlementReceipt entry={receipt} /> : (
             <dl className="space-y-3 text-sm">
               {[
                 ["Nội dung", paymentCategories[receipt.category]],
@@ -195,7 +196,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                 ],
                 ["Số tiền", historyAmount(receipt.amount)],
                 [
-                  "Phương thức thanh toán",
+                  "Phương thức",
                   receipt.method || "Chưa có thông tin",
                 ],
                 ["Trạng thái", statusLabel(receipt)],

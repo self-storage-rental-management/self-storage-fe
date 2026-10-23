@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState, type ReactNode } from "react"
 import { Button, Card } from "../../components/ui"
@@ -15,7 +16,7 @@ import type {
   SupportTicket,
 } from "../../types/supportApi"
 import ApiPager from "../rental-api/ApiPager"
-import SupportActionForm from "./SupportActionForm"
+import SupportActionForm, { type SupportDraft } from "./SupportActionForm"
 import SupportNotificationReceipts from "../rental-support-integration/SupportNotificationReceipts"
 import { EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 import SupportReadState from "./SupportReadState"
@@ -53,9 +54,9 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-3">
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="break-words text-lg font-semibold text-stone-900">{t.subject}</h3>
-          <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.id}>Mã yêu cầu: <span className="font-mono">#{t.id.slice(0, 8)}</span>
+          <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.id}>Mã yêu cầu: <span className="font-mono">{t.displayCode || `#${t.id.slice(0, 8)}`}</span>
             <button type="button" className="rounded p-0.5 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
-              try { await navigator.clipboard.writeText(t.id); setCopied(true) }
+              try { await navigator.clipboard.writeText(t.displayCode || t.id); setCopied(true) }
               catch { setCopied(false) }
             }}>{copied ? "✓" : "⧉"}</button>
           </span>
@@ -78,7 +79,7 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
 
 function supportDetailDate(value: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Chưa ghi nhận"
-  return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value))
+  return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(parseVietnamDate(value))
 }
 export default function SupportTicketDetail({
   role,
@@ -88,6 +89,9 @@ export default function SupportTicketDetail({
   onUploadBusy,
   conversation = "messages",
   onConversationChange,
+  drafts,
+  onDraftChange,
+  messageFocus,
 }: {
   role: SupportRole
   id: string
@@ -96,6 +100,9 @@ export default function SupportTicketDetail({
   onUploadBusy?: (busy: boolean) => void
   conversation?: "messages" | "internal"
   onConversationChange?: (tab: "messages" | "internal") => void
+  drafts?: Partial<Record<"messages" | "internal", SupportDraft>>
+  onDraftChange?: (channel: "messages" | "internal", draft: SupportDraft) => void
+  messageFocus?: { channel: "messages" | "internal"; messageId?: string }
 }) {
   const { manager, copy } = useManagerPresentation()
 
@@ -129,8 +136,9 @@ export default function SupportTicketDetail({
             initialCreatedAt={t.createdAt}
             initialTab={role === "customer" ? "messages" : conversation}
             onTabChange={onConversationChange}
-            composer={role !== "manager" ? <SupportActionForm key={`${id}:${t.version}:message`} role={role} ticket={t} command={command} onUploadBusy={onUploadBusy} mode="message" /> : undefined}
-            internalComposer={role !== "customer" ? <SupportActionForm key={`${id}:${t.version}:internal`} role={role} ticket={t} command={command} onUploadBusy={onUploadBusy} mode="message" internal /> : undefined}
+            messageFocus={messageFocus}
+            composer={role !== "manager" ? <SupportActionForm key={`${id}:${t.version}:message`} role={role} ticket={t} command={command} onUploadBusy={onUploadBusy} mode="message" draft={drafts?.messages} onDraftChange={onDraftChange ? draft => onDraftChange("messages", draft) : undefined} /> : undefined}
+            internalComposer={role !== "customer" ? <SupportActionForm key={`${id}:${t.version}:internal`} role={role} ticket={t} command={command} onUploadBusy={onUploadBusy} mode="message" internal draft={drafts?.internal} onDraftChange={onDraftChange ? draft => onDraftChange("internal", draft) : undefined} /> : undefined}
           />
           {role !== "manager" && <SupportActionForm
             key={`${id}:${t.version}`}
@@ -161,6 +169,7 @@ function SupportTimeline({
   internalComposer,
   initialTab,
   onTabChange,
+  messageFocus,
 }: {
   role: SupportRole
   id: string
@@ -172,14 +181,26 @@ function SupportTimeline({
   internalComposer?: ReactNode
   initialTab: "messages" | "internal"
   onTabChange?: (tab: "messages" | "internal") => void
+  messageFocus?: { channel: "messages" | "internal"; messageId?: string }
 }) {
   const [tab, setTab] = useState<"messages" | "internal">(
     initialTab,
   )
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(messageFocus?.channel === initialTab ? -1 : 0)
   const read = useRentalApiResource<SupportPage<SupportMessage>>(
     `${identity}:${tab}:${page}`,
-    () => listSupportMessages(role, id, page, 20, tab === "internal" ? "INTERNAL" : "PUBLIC"),
+    async () => {
+      const visibility = tab === "internal" ? "INTERNAL" : "PUBLIC"
+      if (page >= 0) return listSupportMessages(role, id, page, 20, visibility)
+      const first = await listSupportMessages(role, id, 0, 20, visibility)
+      let result = first
+      // Locate the actual sent message even if other replies arrive concurrently.
+      for (let next = first.pagination.totalPages - 1; next > 0; next--) {
+        result = await listSupportMessages(role, id, next, 20, visibility)
+        if (!messageFocus?.messageId || result.data.some(message => message.id === messageFocus.messageId)) return result
+      }
+      return first
+    },
   )
   const tabs = role === "customer" ? ["messages"] as const : ["messages", "internal"] as const
   const isRepeatedOpeningMessage = (message: SupportMessage, index: number) =>
@@ -199,7 +220,7 @@ function SupportTimeline({
             onClick={() => {
               setTab(t)
               onTabChange?.(t)
-              setPage(0)
+              setPage(messageFocus?.channel === t ? -1 : 0)
             }}
           >
             {t === "messages" ? "Khách hàng" : role === "manager" ? "Nhân viên" : "Quản lý"}

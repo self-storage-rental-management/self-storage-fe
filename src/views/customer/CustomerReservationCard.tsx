@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerReservation, type CustomerReservationDetail, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
@@ -45,17 +45,25 @@ function formatDisplayDate(value: string) {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value.replace(/-/g, '/')
 }
 
+function maskIdentityDocument(value?: string | null) {
+  if (!value) return 'Chưa cập nhật'
+  if (value.length <= 4) return '••••'
+  return `${value.slice(0, 2)}••••${value.slice(-2)}`
+}
+
 interface Props {
   reservation: CustomerReservation
   facilityName: string
   unitTypeName: string
+  facilityDetails?: Pick<CustomerFacility, 'address' | 'city' | 'phone' | 'accessHours'> | null
+  unitTypeDetails?: Pick<CustomerUnitType, 'lengthM' | 'widthM' | 'heightM' | 'volumeM3' | 'rackCount' | 'rackLengthM' | 'rackWidthM' | 'rackHeightM' | 'maxLoadKg'> | null
   onVerify: () => void
   onCancel: () => void
   onRefresh: () => Promise<void>
   onReceiptConfirmed?: (reservationId: string) => void
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
+export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -308,6 +316,16 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <p className="text-xs leading-5 text-stone-600">Lịch thuê: <b className="text-stone-900">{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
           <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? new Date(savedAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa đặt lịch'}</b></p>
         </div>
+        <div className="mt-3 grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs text-stone-700 md:grid-cols-2">
+          <section>
+            <h3 className="font-bold text-stone-900">Thông tin khách hàng</h3>
+            <div className="mt-2 space-y-1"><p><b>Họ tên:</b> {r.customerName || 'Chưa cập nhật'}</p><p><b>Email:</b> {r.customerEmail || 'Chưa cập nhật'}</p><p><b>Số điện thoại:</b> {r.customerPhone || 'Chưa cập nhật'}</p><p><b>CCCD/Hộ chiếu:</b> {maskIdentityDocument(r.identityDocumentNumber)}</p><p><b>Địa chỉ:</b> {r.customerAddress || 'Chưa cập nhật'}</p></div>
+          </section>
+          <section>
+            <h3 className="font-bold text-stone-900">Thông tin kho</h3>
+            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
+          </section>
+        </div>
         {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
           <div className="grid w-full gap-3 sm:grid-cols-2">
             <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
@@ -383,7 +401,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {documentAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
-        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={() => setCancelConfirmOpen(true)}>✕ Hủy giữ kho</Button>}
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
       </div>
     </div>
     {message && <p role="status" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}

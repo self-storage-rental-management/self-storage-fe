@@ -3,6 +3,8 @@ import { getAuthenticatedActor } from "./authApi"
 import { readRentalPage } from "./rentalApi"
 import { listRenewals } from "./renewalApi"
 import { listRenewalOperationEvents } from "./renewalOperationsApi"
+import { isOverdueSettlement, type OverdueSettlement } from "./returnApi"
+import { isUuid } from "./renewalOperationsApi"
 import {
   listCustomerPaymentHistory,
   type ReservationPaymentResult,
@@ -12,6 +14,8 @@ export const paymentCategories = {
   deposit: "Thanh toán cọc giữ chỗ",
   renewal: "Thanh toán cọc gia hạn",
   damage: "Thanh toán bổ sung khi trả kho",
+  refund: "Hoàn tiền trả kho",
+  returnOffset: "Khấu trừ cọc trả kho",
   checkin: "Thanh toán tại chỗ khi nhận kho",
   renewalSigning: "Thanh toán tại chỗ khi ký gia hạn",
   other: "Thanh toán khác",
@@ -32,6 +36,17 @@ export interface HistoryEntry {
   rentalId?: string
   unitCode?: string
   facilityName?: string
+  returnSettlement?: {
+    depositAmount: number | null
+    totalDeductions: number | null
+    damageFee: number | null
+    cleaningFee: number | null
+    lostItemFee: number | null
+    overdueFee: number | null
+    outstandingFee: number | null
+    overdueSettlement: OverdueSettlement | null
+    receiptFileId: string | null
+  }
 }
 export function reservationPaymentCategory(
   payment: ReservationPaymentResult,
@@ -102,6 +117,23 @@ interface ReturnPayment {
   settlementPaymentId: string | null
   settlementPaidAt: string | null
   amountDueFromCustomer: number | null
+  netRefundAmount?: number | null
+  depositAmount?: number | null
+  totalDeductions?: number | null
+  damageFee?: number | null
+  cleaningFee?: number | null
+  lostItemFee?: number | null
+  overdueFee?: number | null
+  outstandingFee?: number | null
+  overdueSettlement?: OverdueSettlement | null
+  settlementReceipt?: {
+    direction: "COLLECTION" | "REFUND" | "OFFSET"
+    amount: number
+    paymentMethod: "CASH" | "BANK_TRANSFER" | "DEPOSIT_OFFSET"
+    transactionReference: string
+    receiptFileId?: string | null
+    recordedAt?: string | null
+  } | null
 }
 function isReturnPayment(value: unknown): value is ReturnPayment {
   if (!value || typeof value !== "object") return false
@@ -110,6 +142,9 @@ function isReturnPayment(value: unknown): value is ReturnPayment {
     typeof r.id === "string" &&
     r.customerId === getAuthenticatedActor()?.id &&
     typeof r.unitNumber === "string" &&
+    [r.depositAmount, r.totalDeductions, r.damageFee, r.cleaningFee, r.lostItemFee, r.overdueFee, r.outstandingFee]
+      .every(value => value == null || typeof value === "number" && Number.isFinite(value) && value >= 0) &&
+    (r.overdueSettlement == null || isOverdueSettlement(r.overdueSettlement)) &&
     (r.settlementPaymentId === null ||
       typeof r.settlementPaymentId === "string") &&
     (r.settlementPaidAt === null ||
@@ -118,7 +153,20 @@ function isReturnPayment(value: unknown): value is ReturnPayment {
     (r.amountDueFromCustomer === null ||
       (typeof r.amountDueFromCustomer === "number" &&
         Number.isFinite(r.amountDueFromCustomer) &&
-        r.amountDueFromCustomer >= 0))
+        r.amountDueFromCustomer >= 0)) &&
+    (r.netRefundAmount == null ||
+      (typeof r.netRefundAmount === "number" &&
+        Number.isFinite(r.netRefundAmount) && r.netRefundAmount >= 0)) &&
+    (r.settlementReceipt == null ||
+      (typeof r.settlementReceipt === "object" &&
+        ["COLLECTION", "REFUND", "OFFSET"].includes(r.settlementReceipt.direction) &&
+        typeof r.settlementReceipt.amount === "number" &&
+        Number.isFinite(r.settlementReceipt.amount) && r.settlementReceipt.amount > 0 &&
+        (r.settlementReceipt.direction === "OFFSET"
+          ? r.settlementReceipt.paymentMethod === "DEPOSIT_OFFSET" && r.settlementReceipt.transactionReference === `OFFSET:${r.id}`
+          : ["CASH", "BANK_TRANSFER"].includes(r.settlementReceipt.paymentMethod) && r.settlementReceipt.transactionReference === r.settlementPaymentId) &&
+        (r.settlementReceipt.recordedAt == null || typeof r.settlementReceipt.recordedAt === "string" && Number.isFinite(Date.parse(r.settlementReceipt.recordedAt))) &&
+        (r.settlementReceipt.receiptFileId == null || isUuid(r.settlementReceipt.receiptFileId))))
   )
 }
 export async function loadCustomerPaymentHistory(): Promise<{
@@ -191,25 +239,42 @@ export async function loadCustomerPaymentHistory(): Promise<{
           (result) =>
             readRentalPage<ReturnPayment>(result, isReturnPayment, page),
         ),
-        () => warnings.push("Chưa tải được đầy đủ lịch sử thanh toán bổ sung khi trả kho."),
+        () => warnings.push("Chưa tải được đầy đủ lịch sử quyết toán trả kho."),
       )
       return returns
         .filter(
           (r) =>
-            r.settlementPaymentId &&
-            r.settlementPaidAt &&
-            r.amountDueFromCustomer !== null,
+            r.settlementReceipt || r.settlementPaymentId && r.settlementPaidAt,
         )
-        .map((r) => ({
-          id: r.settlementPaymentId!,
-          reference: `Trả kho ${r.unitNumber}`,
-          category: "damage",
-          amount: r.amountDueFromCustomer!,
-          currency: "VND",
-          timestamp: r.settlementPaidAt,
-          status: "PAID",
-          method: null,
-        }))
+        .flatMap((r): HistoryEntry[] => {
+          const receipt = r.settlementReceipt
+          const offset = receipt?.direction === "OFFSET"
+          const refund = receipt ? receipt.direction === "REFUND" : (r.netRefundAmount ?? 0) > 0
+          const amount = receipt?.amount ?? (refund ? r.netRefundAmount : r.amountDueFromCustomer)
+          // A zero balance does not represent a collection or a refund.
+          if (amount == null || amount <= 0) return []
+          return [{
+            id: receipt?.transactionReference ?? r.settlementPaymentId!,
+            reference: `Trả kho ${r.unitNumber}`,
+            category: offset ? "returnOffset" : refund ? "refund" : "damage",
+            amount,
+            currency: "VND",
+            timestamp: r.settlementPaidAt ?? receipt?.recordedAt ?? null,
+            status: offset ? "SETTLED" : refund ? "REFUNDED" : "PAID",
+            method: offset ? "Khấu trừ cọc" : receipt ? receipt.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản" : null,
+            returnSettlement: {
+              depositAmount: r.depositAmount ?? null,
+              totalDeductions: r.totalDeductions ?? null,
+              damageFee: r.damageFee ?? null,
+              cleaningFee: r.cleaningFee ?? null,
+              lostItemFee: r.lostItemFee ?? null,
+              overdueFee: r.overdueFee ?? null,
+              outstandingFee: r.outstandingFee ?? null,
+              overdueSettlement: r.overdueSettlement ?? null,
+              receiptFileId: receipt?.receiptFileId ?? null,
+            },
+          }]
+        })
     })(),
   ])
   const entries: HistoryEntry[] = [...reservationEntries]
@@ -219,7 +284,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
       warnings.push(
         index === 0
           ? "Chưa tải được lịch sử thanh toán gia hạn."
-          : "Chưa tải được lịch sử thanh toán bổ sung khi trả kho.",
+          : "Chưa tải được lịch sử quyết toán trả kho.",
       )
   })
   return {

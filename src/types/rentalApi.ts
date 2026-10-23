@@ -1,4 +1,4 @@
-export type RentalApiRole = "customer" | "manager"
+export type RentalApiRole = "customer" | "manager" | "staff"
 export type RentalApiStatus = "active" | "return_requested" | "return_inspection" | "closing" | "completed"
 export interface RentalApiPage<T> {
   data: T[]

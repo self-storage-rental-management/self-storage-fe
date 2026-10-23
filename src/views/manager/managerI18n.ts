@@ -208,8 +208,13 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return includeTime
-    ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')
-    : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US')
+    ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    })
+    : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    })
 }
 
 export const managerTimeLabel = (value: string | undefined, lang: Language) => {

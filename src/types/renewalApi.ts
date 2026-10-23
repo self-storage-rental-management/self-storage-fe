@@ -2,6 +2,7 @@ import type { RentalApiRecord } from "./rentalApi"
 export type RenewalApiStatus = "pending" | "accepted" | "deposit_paid" | "full_rent_paid" | "approved" | "appointment_scheduled" | "payment_processing" | "payment_failed" | "payment_expired" | "rejected" | "cancelled" | "completed"
 export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {
+  displayCode?: string | null
   id: string
   rentalId: string
   customer: RentalApiRecord["customer"]
@@ -65,7 +66,7 @@ export interface RenewalApiQuote {
   rentalId: string
   customerId: string
   quotedAt: string
-  expiresAt: string
+  expiresAt: string | null
   oldEndDate: string
   endDateConvention?: "INCLUSIVE" | "EXCLUSIVE" | null
   rentalStartDate?: string | null

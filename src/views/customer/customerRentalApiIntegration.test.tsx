@@ -21,9 +21,9 @@ describe("Customer Rental API integration", () => {
   ])("opens the correct customer page for %s", (search, fallback, expected) => {
     expect(resolveCustomerInitialPage(search, fallback)).toBe(expected)
   })
-  it("shows one Hồ sơ Thuê navigation item", () => {
+  it("shows one Hồ sơ thuê navigation item", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("{ id: 'rental-records', label: 'Hồ sơ Thuê'")
+    expect(source.match(/\{\s*id:\s*'rental-records',\s*label:\s*'Hồ sơ thuê'/g)).toHaveLength(1)
     expect(source).not.toContain("...customerRentalApiNav(")
   })
   it("keeps the Customer API workspace implemented and customer-scoped", () => {
@@ -65,7 +65,8 @@ describe("Customer Rental API integration", () => {
   it("mounts primary Customer/Staff Support through the API/demo boundary", () => {
     for (const role of ["customer", "staff"] as const) {
       const source = readFileSync(new URL(`../${role}/${role === "customer" ? "Customer" : "Staff"}App.tsx`, import.meta.url), "utf8")
-      expect(source).toContain(`<SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="${role}">`)
+      const routes = source.match(/<SupportApiRoute\b[^>]*>/g) ?? []
+      expect(routes.some(route => route.includes('apiAuthenticated={isApiAuthenticated()}') && route.includes(`role="${role}"`))).toBe(true)
     }
   })
   it("uses API-only D1/D5 metrics and routes rental overview away from demo PIN/status fields", () => {

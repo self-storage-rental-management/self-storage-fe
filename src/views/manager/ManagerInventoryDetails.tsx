@@ -1,3 +1,4 @@
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useState } from "react"
 import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -203,7 +204,7 @@ export function InventoryAvailabilityDetails({
       >
         <label className="block">
           Từ ngày
-          <input
+          <LocalizedDateInput
             type="date"
             required
             value={range.startDate}
@@ -216,7 +217,7 @@ export function InventoryAvailabilityDetails({
         </label>
         <label className="block">
           Đến ngày
-          <input
+          <LocalizedDateInput
             type="date"
             required
             value={range.endDate}

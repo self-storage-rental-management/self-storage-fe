@@ -62,4 +62,30 @@ describe('Manager payment history screen', () => {
     expect(render()).toContain('role="alert"')
     expect(state.identities).toHaveLength(0)
   })
+
+  it('shows the full transaction reference, Vietnam time and receipt action for a paid transaction', () => {
+    const transactionReference = 'TM-94036D0AAE914B739-LONG-REFERENCE'
+    state.list = { data: paymentPage([{ ...item, transactionReference, occurredAt: '2026-10-22T17:27:00Z' }]) }
+    const html = render()
+    expect(html).toContain(`>${transactionReference}</code>`)
+    expect(html).toContain('23/10/2026')
+    expect(html).toContain('00:27')
+    expect(html).toContain(`aria-label="Xem biên lai ${transactionReference}"`)
+    expect(html).toContain('VNPay')
+  })
+
+  it('distinguishes refunds from collections and does not offer receipts for pending payments', () => {
+    state.list = { data: paymentPage([{ ...item, type: 'RETURN_REFUND', status: 'REFUNDED' }]) }
+    let html = render()
+    expect(html).toContain('Hoàn cọc')
+    expect(html).toContain('Đã hoàn tiền')
+    expect(html).toContain('−6.600.000')
+    expect(html).toContain('Xem trước')
+    state.list = { data: paymentPage([{ ...item, status: 'PENDING', paymentMethod: null }]) }
+    html = render()
+    expect(html).toContain('Chờ thanh toán')
+    expect(html).toContain('Chưa ghi nhận')
+    expect(html).toContain('Chưa có')
+    expect(html).not.toContain('Xem trước')
+  })
 })

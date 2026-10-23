@@ -6,7 +6,7 @@ import type { RenewalOperationsRole, RenewalOperationResult } from "../types/ren
 export interface DepositSettlement {
   renewalId: string
   expectedVersion: number | null
-  status: "UNKNOWN" | "NOT_APPLICABLE" | "HELD" | "AWAITING_RECOVERY_DEADLINE" | "APPLIED_TO_RENT" | "REVIEW_REQUIRED" | "FORFEITED" | "REFUND_ELIGIBLE" | "REFUND_APPROVED" | "REFUNDED"
+  status: "UNKNOWN" | "NOT_APPLICABLE" | "HELD" | "AWAITING_RECOVERY_DEADLINE" | "AWAITING_FAULT_REVIEW" | "FACILITY_FAULT" | "APPLIED_TO_RENT" | "REVIEW_REQUIRED" | "FORFEITED" | "REFUND_ELIGIBLE" | "REFUND_APPROVED" | "REFUNDED"
   amount: number | null
   refundedAmount: number | null
   currency: "VND"
@@ -18,7 +18,7 @@ export interface DepositSettlement {
 export function isDepositSettlement(value: unknown): value is DepositSettlement {
   const v = value as DepositSettlement | null
   return !!v && isUuid(v.renewalId) && (v.expectedVersion === null || isVersion(v.expectedVersion))
-    && ["UNKNOWN","NOT_APPLICABLE","HELD","AWAITING_RECOVERY_DEADLINE","APPLIED_TO_RENT","REVIEW_REQUIRED","FORFEITED","REFUND_ELIGIBLE","REFUND_APPROVED","REFUNDED"].includes(v.status)
+    && ["UNKNOWN","NOT_APPLICABLE","HELD","AWAITING_RECOVERY_DEADLINE","AWAITING_FAULT_REVIEW","FACILITY_FAULT","APPLIED_TO_RENT","REVIEW_REQUIRED","FORFEITED","REFUND_ELIGIBLE","REFUND_APPROVED","REFUNDED"].includes(v.status)
     && v.currency === "VND" && isInstant(v.checkedAt) && (v.signingDeadline === null || isInstant(v.signingDeadline))
     && (v.refundId === null || isUuid(v.refundId))
     && (["UNKNOWN","NOT_APPLICABLE"].includes(v.status)
@@ -41,7 +41,7 @@ export async function executeDepositRefund(id: string, body: RefundExecutionBody
   if (Object.keys(body).some(field => !["refundId","receiptFileId","transactionReference","transferred","expectedVersion"].includes(field))) throw new Error("Trường hoàn tiền không hợp lệ.")
   validateMutation(body.expectedVersion,key); validateText(body.transactionReference,true,100)
   if (body.transferred !== true) throw new Error("Cần xác nhận khoản hoàn đã được thực hiện.")
-  return readRentalEnvelope<RenewalOperationResult>(await apiRequest(`/api/manager/renewals/${id}/refund-executions`,{
+  return readRentalEnvelope<RenewalOperationResult>(await apiRequest(`/api/staff/renewals/${id}/refund-executions`,{
     method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify(body),
   }), value => {
     const result = value as RenewalOperationResult | null

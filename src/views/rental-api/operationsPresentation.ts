@@ -1,3 +1,4 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import type { ApiActor } from "../../services/authApi"
 import { rentalError } from "./presentation"
 import { ApiClientError } from "../../services/apiClient"
@@ -15,7 +16,7 @@ export const operationLabels: Record<RenewalOperationAction, string> = {
   confirmation: "Xác nhận đề xuất ngoại lệ",
   arrival: "Ghi nhận khách đến",
   incident: "Báo sự cố tại cơ sở",
-  cash: "Ghi nhận thanh toán còn lại",
+  cash: "Ghi nhận thanh toán",
   completion: "Hoàn tất ký gia hạn",
   exception: "Xem xét ngoại lệ",
   refund: "Xem xét hoàn tiền",
@@ -125,7 +126,7 @@ export function operationBlockedReason(
   )
     return "Chỉ thao tác trong bước ký đang hiệu lực."
   if (action === "appointment" && s.appointmentRef)
-    return "Đã có lịch; dùng đổi lịch."
+    return "Đã có lịch, dùng đổi lịch."
   if (
     ["reschedule", "arrival", "incident"].includes(action) &&
     !s.appointmentRef
@@ -168,7 +169,7 @@ export function operationValidationError(error: unknown) {
 export function vietnamLocalInstant(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))
     throw new Error("Chọn ngày và giờ.")
-  const instant = new Date(`${value}:00+07:00`)
+  const instant = parseVietnamDate(`${value}:00+07:00`)
   if (!Number.isFinite(instant.getTime()))
     throw new Error("Ngày/giờ không hợp lệ.")
   if (

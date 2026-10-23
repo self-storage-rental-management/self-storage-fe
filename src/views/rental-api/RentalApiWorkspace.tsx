@@ -1,3 +1,4 @@
+import { parseVietnamDate, vietnamDateInput } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
@@ -261,7 +262,7 @@ function WorkspaceData({
         month: "2-digit",
         day: "2-digit",
       }).format(now)
-      const end = new Date(`${date}T00:00:00Z`)
+      const end = parseVietnamDate(`${date}T00:00:00Z`)
       end.setUTCDate(end.getUTCDate() + 30)
       const scope = role === "manager" ? { facilityId: query.facilityId } : {}
       const result = await Promise.all([
@@ -272,7 +273,7 @@ function WorkspaceData({
           size: 1,
           status: "active",
           endFrom: date,
-          endTo: end.toISOString().slice(0, 10),
+          endTo: vietnamDateInput(end),
         }),
         listRenewals(role, { ...scope, size: 1, status: "pending" }),
         listRenewals(role, { ...scope, size: 1, status: "accepted" }),
@@ -323,7 +324,7 @@ function WorkspaceData({
           <Card className={`rounded-xl border-t-4 p-4 ${['border-t-stone-700', 'border-t-emerald-500', 'border-t-amber-500', 'border-t-blue-500'][i]}`} key={label}>
             <p className="text-xs font-medium text-stone-500">{label}</p>
             <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
-              {counts.loading ? "…" : (counts.data?.[i] ?? copy("—"))}
+              {counts.loading ? "…" : (counts.data?.[i] ?? copy("Chưa có"))}
             </p>
           </Card>
         ))}
@@ -444,7 +445,7 @@ function WorkspaceData({
                     <div className="min-w-0 px-3"><span className="break-all font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
                     <div className="flex flex-wrap gap-1.5 px-3">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-700' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(rentalLabels[row.status])}</span>
-                      {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days < 0 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
+                      {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
                     </div>
                   <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
                   <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
@@ -474,7 +475,7 @@ function WorkspaceData({
                   {[
                     "Mã hồ sơ",
                     role === 'customer' ? 'Trạng thái' : 'Khách hàng',
-                    "Gian kho / Loại",
+                    role === "manager" ? "Gian kho" : "Gian kho / Loại",
                     "Thời hạn",
                     "Thao tác",
                   ].map((h, i) => (
@@ -493,7 +494,7 @@ function WorkspaceData({
                         className="block break-all rounded-md border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs leading-5 tracking-tight text-stone-700"
                         title={row.id}
                       >
-                        {row.id}
+                        {"rentalId" in row ? row.displayCode || row.id : row.id}
                       </code>
                     </td>
                     <td className="p-3 align-middle">
@@ -501,8 +502,8 @@ function WorkspaceData({
                     </td>
                     <td className="p-3 align-middle">
                       <p className="font-mono text-sm font-semibold text-stone-800">{row.storageUnit.code}</p>
-                      {'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
-                      {"unitType" in row && (
+                      {role !== "manager" && 'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
+                      {role !== "manager" && "unitType" in row && (
                         <p className="mt-1 text-xs leading-4 text-stone-500">{copy(row.unitType.name)}</p>
                       )}
                     </td>
