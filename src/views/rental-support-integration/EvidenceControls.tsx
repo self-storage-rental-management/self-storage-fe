@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import FilePreviewDialog from "../../components/FilePreviewDialog"
 import { Button } from "../../components/ui"
 import {
   downloadDuongEvidence,
@@ -112,6 +113,11 @@ export function EvidenceDownload({
     [error, setError] = useState<unknown>()
   const lock = useRef(false)
   const [fileName, setFileName] = useState<string | null>(null)
+  const [previewFile, setPreviewFile] = useState<{ url: string; name: string; type: string }>()
+  useEffect(() => {
+    if (!previewFile) return
+    return () => URL.revokeObjectURL(previewFile.url)
+  }, [previewFile])
   useEffect(() => {
     if (!asLink) return
     let active = true
@@ -144,50 +150,42 @@ export function EvidenceDownload({
       setBusy(false)
     }
   }
+  const openPreview = async () => {
+    if (lock.current) return
+    lock.current = true
+    setBusy(true)
+    setError(undefined)
+    try {
+      const file = await downloadDuongEvidence(id)
+      const types: Record<string, string> = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp' }
+      const mime = file.blob.type.toLowerCase().split(';')[0]
+      const type = mime && mime !== 'application/octet-stream' ? mime : types[file.fileName?.split('.').pop()?.toLowerCase() ?? ''] ?? ''
+      const safeType = Object.values(types).includes(type) ? type : ''
+      setPreviewFile({ url: URL.createObjectURL(safeType ? new Blob([file.blob], { type: safeType }) : file.blob), name: file.fileName || 'Minh chứng', type: safeType })
+    } catch (e) {
+      setError(e)
+    } finally {
+      lock.current = false
+      setBusy(false)
+    }
+  }
   return (
     <span className={asLink ? "inline-flex min-w-0 max-w-full flex-wrap items-center gap-2" : "inline-flex flex-wrap items-center gap-2"}>
-      {previewLabel && <Button
+      {!asLink && <Button
         type="button"
         variant="outline"
         className="min-h-11 whitespace-nowrap"
         disabled={busy}
-        onClick={async () => {
-          if (lock.current) return
-          lock.current = true
-          setBusy(true)
-          setError(undefined)
-          const preview = window.open("about:blank", "_blank")
-          if (preview) preview.opener = null
-          try {
-            const file = await downloadDuongEvidence(id)
-            const url = URL.createObjectURL(file.blob)
-            if (preview) {
-              preview.location.href = url
-              setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000)
-            } else {
-              const a = document.createElement("a")
-              a.href = url
-              a.download = file.fileName || "minh-chung"
-              a.click()
-              setTimeout(() => URL.revokeObjectURL(url), 1000)
-            }
-          } catch (e) {
-            preview?.close()
-            setError(e)
-          } finally {
-            lock.current = false
-            setBusy(false)
-          }
-        }}
+        onClick={openPreview}
       >
-        {busy ? "Đang tải…" : previewLabel}
+        {busy ? "Đang tải…" : previewLabel || "Xem trước"}
       </Button>}
       {!previewOnly && (asLink ? <button
         type="button"
         className="max-w-full break-words text-left font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-900 disabled:cursor-wait disabled:opacity-60 [overflow-wrap:anywhere]"
         disabled={busy}
-        title="Tải về"
-        onClick={download}
+        title="Xem tệp đính kèm"
+        onClick={openPreview}
       >{busy ? "Đang tải…" : fileName || label || `Minh chứng ${index}`}</button> : <Button
         type="button"
         variant="outline"
@@ -198,6 +196,7 @@ export function EvidenceDownload({
         {label || `Tải minh chứng ${index}`}
       </Button>)}
       {!!error && <span role="alert">{integrationError(error)}</span>}
+      {previewFile && <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(undefined)} />}
     </span>
   )
 }

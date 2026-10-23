@@ -177,6 +177,15 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         open={Boolean(receipt)}
         onClose={() => setReceipt(null)}
         title="Chi tiết giao dịch"
+        size={receipt?.returnSettlement ? 'lg' : 'md'}
+        className={receipt?.returnSettlement ? 'flex min-h-0 flex-col !overflow-hidden' : undefined}
+        contentClassName={receipt?.returnSettlement ? 'min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5' : undefined}
+        customHeader={receipt?.returnSettlement ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 sm:px-5">
+          <h2 id="modal-title" className="text-base font-semibold text-stone-900">Chi tiết giao dịch</h2>
+          <button type="button" aria-label="Đóng chi tiết giao dịch" onClick={() => setReceipt(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600">
+            <svg aria-hidden="true" className="show-icon h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div> : undefined}
       >
         {receipt &&
           (receipt.renewalId ? <RenewalReceipt key={`${receipt.renewalId}:${receipt.id}`} id={receipt.renewalId} paymentId={receipt.id} /> : receipt.reservationPayment ? (

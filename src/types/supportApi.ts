@@ -59,7 +59,7 @@ export interface SupportMessage {
   id: string
   ticketId: string
   authorId: string
-  authorRole: "CUSTOMER" | "STAFF" | "MANAGER"
+  authorRole: "CUSTOMER" | "STAFF" | "MANAGER" | "AI_CONTEXT" | "USER_CONTEXT"
   visibility: SupportVisibility
   body: string
   sentAt: string
@@ -120,6 +120,7 @@ export interface SupportCreate {
     id: string
   }
   evidenceFileIds?: string[]
+  handoffMessages?: { role: 'CUSTOMER' | 'ASSISTANT'; body: string }[]
 }
 type Versioned = { expectedVersion: number }
 type Evidence = { evidenceFileIds?: string[] }

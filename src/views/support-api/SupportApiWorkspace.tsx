@@ -235,7 +235,7 @@ function SupportSession({
                 if (view === "queue") queueRead.refresh(); else read.refresh()
               }}>{label}</Button>)}
             </div> : <h2 className="text-sm font-semibold text-stone-800">Cuộc trò chuyện</h2>}
-            <form className="space-y-3" onSubmit={e => { e.preventDefault(); change({ search: search.trim() }) }}>
+            {role !== "customer" && <form className="space-y-3" onSubmit={e => { e.preventDefault(); change({ search: search.trim() }) }}>
               <label className="block text-xs font-medium text-stone-500">Tìm cuộc trò chuyện
                 <input className={supportInputClass} placeholder="Tìm nội dung hoặc mã hội thoại" value={search} maxLength={200} disabled={locked} onChange={e => setSearch(e.target.value)} />
               </label>
@@ -255,7 +255,7 @@ function SupportSession({
                 <Button size="sm" type="submit" variant="outline" disabled={locked}>Tìm kiếm</Button>
                 <Button size="sm" type="button" variant="ghost" disabled={locked} onClick={() => { setSearch(''); setQuery({ page: 0, size: role === 'manager' ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: 'createdAt,desc' }); setQueuePage(0) }}>Xóa bộ lọc</Button>
               </div>
-            </form>
+            </form>}
           </div>
           {role === "staff" && staffView === "queue" ? <>
             <SupportReadState {...queueRead} loading={queueRead.loading && !queueRead.data} retry={reload} />
