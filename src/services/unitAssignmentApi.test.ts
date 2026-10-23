@@ -24,7 +24,7 @@ describe('unitAssignmentApi', () => {
 
     expect(result.data).toEqual([])
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/staff/unit-assignments/candidates?page=0&pageSize=20&q=RSV-001',
+      'http://localhost:8080/api/manager/unit-assignments/candidates?page=0&pageSize=20&q=RSV-001',
       expect.objectContaining({ headers: expect.any(Headers) }),
     )
   })
@@ -40,7 +40,7 @@ describe('unitAssignmentApi', () => {
     await listAssignableUnits('reservation-1')
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/staff/unit-assignments/candidates/reservation-1/available-units?page=0&pageSize=100',
+      'http://localhost:8080/api/manager/unit-assignments/candidates/reservation-1/available-units?page=0&pageSize=100',
       expect.objectContaining({ headers: expect.any(Headers) }),
     )
   })
@@ -68,7 +68,7 @@ describe('unitAssignmentApi', () => {
 
     expect(response).toEqual(result)
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/staff/unit-assignments/reservation-1',
+      'http://localhost:8080/api/manager/unit-assignments/reservation-1',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ storageUnitId: 'unit-1' }) }),
     )
   })
