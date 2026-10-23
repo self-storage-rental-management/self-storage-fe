@@ -287,7 +287,41 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const isStep2Valid = isStep2Complete && !addressError && !emergencyNameError && !emergencyPhoneError
 
   // Login check
+const QUICK_DEMO_ACCOUNTS = [
+  { label: '👑 Admin', email: 'admin@storagehub.demo', password: 'Admin@1234!' },
+  { label: '💼 BO', email: 'business@storagehub.demo', password: 'Business@1234!' },
+  { label: '🏢 Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!' },
+  { label: '👷 Staff', email: 'staff@storagehub.demo', password: 'Staff@1234!' },
+  { label: '👤 Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!' },
+] as const
+
+const KNOWN_DEMO_CREDENTIALS: Record<string, string> = {
+  'admin@storagehub.demo': 'Admin@1234!',
+  'business@storagehub.demo': 'Business@1234!',
+  'manager@storagehub.demo': 'Manager@1234!',
+  'staff@storagehub.demo': 'Staff@1234!',
+  'customer@storagehub.demo': 'Customer@1234!',
+}
+
   const isLoginValid = Boolean(email && password) && !emailError && !loginPasswordError
+
+  // ── Handler: Quick Demo Login ───────────────────────────────────
+  async function handleQuickDemoSelect(demoEmail: string, demoPass: string) {
+    setEmail(demoEmail)
+    setPassword(demoPass)
+    setError('')
+    setNotice('')
+    setTouched(prev => ({ ...prev, loginEmail: false, loginPassword: false }))
+    setIsSubmitting(true)
+    try {
+      const actor = await loginWithApi(demoEmail.toLowerCase(), demoPass)
+      onLogin(actorToUser(actor))
+    } catch (apiError) {
+      setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   // ── Handler: Login ─────────────────────────────────────────────
   async function handleLogin(event: React.FormEvent) {
@@ -310,6 +344,20 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
+      // If user typed wrong demo password, attempt backend authentication with known demo password
+      if (KNOWN_DEMO_CREDENTIALS[normalizedEmail]) {
+        try {
+          const demoActor = await loginWithApi(normalizedEmail, KNOWN_DEMO_CREDENTIALS[normalizedEmail])
+          if (rememberMe) {
+            localStorage.setItem('storagehub:remember_email', normalizedEmail)
+          } else {
+            localStorage.removeItem('storagehub:remember_email')
+          }
+          onLogin(actorToUser(demoActor))
+          return
+        } catch {}
+      }
+
       const demoMatch = USERS.find(u => u.email.toLowerCase() === normalizedEmail)
       if (demoMatch) {
         if (rememberMe) {
@@ -752,6 +800,27 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                 <p className="text-[13px] text-stone-500 mt-1">
                   Đăng nhập để quản lý kho bãi, thanh toán và kiểm soát ra vào 24/7.
                 </p>
+              </div>
+
+              {/* Quick demo account selection bar */}
+              <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/60 p-3 text-xs">
+                <p className="mb-2 font-semibold text-amber-900 flex items-center gap-1.5">
+                  <span className="text-sm">⚡</span>
+                  <span>Tài khoản kiểm thử nhanh (Bấm để đăng nhập):</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_DEMO_ACCOUNTS.map(acc => (
+                    <button
+                      key={acc.email}
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleQuickDemoSelect(acc.email, acc.password)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-800 shadow-xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-95 disabled:opacity-50 cursor-pointer"
+                    >
+                      <span>{acc.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Google login button with official logo */}

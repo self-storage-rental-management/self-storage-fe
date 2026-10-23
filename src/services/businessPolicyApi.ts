@@ -13,6 +13,7 @@ export interface RentalPackagePolicyApi {
   rentalYears?: number | null
   description?: string | null
   discountRate: number
+  depositRate?: number
   policyVersion: string
   publicationStatus?: PublicationStatus
   runtimeStatus?: RuntimePolicyStatus
@@ -31,6 +32,7 @@ export interface RentalPackagePolicyInput {
   rentalYears?: number | null
   description?: string | null
   discountRate: number
+  depositRate?: number
   policyVersion: string
   publicationStatus?: PublicationStatus
   active?: boolean
