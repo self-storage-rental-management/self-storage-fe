@@ -17,7 +17,6 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '
 import StepIndicator from './auth/StepIndicator'
 import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
-import { USERS } from '../data/demoDatabase'
 
 interface LoginProps {
   onLogin: (user: User) => void
@@ -310,25 +309,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
-      const demoMatch = USERS.find(u => u.email.toLowerCase() === normalizedEmail)
-      if (demoMatch) {
-        if (rememberMe) {
-          localStorage.setItem('storagehub:remember_email', normalizedEmail)
-        } else {
-          localStorage.removeItem('storagehub:remember_email')
-        }
-        onLogin({
-          id: demoMatch.id,
-          name: demoMatch.name,
-          email: demoMatch.email,
-          phone: demoMatch.phone,
-          role: demoMatch.role as User['role'],
-          facility: demoMatch.facility,
-          facilityId: demoMatch.facilityId,
-          status: 'active',
-        } as unknown as User)
-        return
-      }
       setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
     } finally {
       setIsSubmitting(false)
