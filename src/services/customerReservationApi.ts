@@ -3,6 +3,7 @@ import { apiDownload, apiRequest } from './apiClient'
 export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
+export type PaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
 export type ReservationStatus =
   | 'AWAITING_EMAIL' | 'AWAITING_REVIEW' | 'AWAITING_PAYMENT'
   | 'PAYMENT_GRACE' | 'PAYMENT_REVIEW' | 'CONFIRMED' | 'UNIT_RESERVED'
@@ -290,7 +291,7 @@ export interface ReservationPaymentResult {
   amount: number
   currency: string
   refundedAmount: number
-  paymentStatus: string
+  paymentStatus: PaymentStatus
   reservationStatus: ReservationStatus
   responseCode: string | null
   transactionStatus: string | null
@@ -322,7 +323,7 @@ export interface PaymentComplaint {
   reservationId: string
   reservationCode: string
   status: PaymentComplaintStatus
-  paymentStatus: string
+  paymentStatus: PaymentStatus
   reservationStatus: ReservationStatus
   reason: string
   imageIds: string[]
