@@ -18,6 +18,7 @@ export const PERMISSION_KEYS = [
   'payments:read',
   'payments:confirm',
   'refunds:approve',
+  'refunds:execute',
   'fees:waive',
   'policies:read',
   'payments:collect',

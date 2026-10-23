@@ -30,6 +30,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: 'payments:collect', label: 'Quản lý thu cước và công nợ', group: 'Nghiệp vụ' },
   { key: 'payments:confirm', label: 'Xác nhận thanh toán thủ công', group: 'Nghiệp vụ' },
   { key: 'refunds:approve', label: 'Duyệt hoàn tiền', group: 'Nghiệp vụ' },
+  { key: 'refunds:execute', label: 'Thực hiện hoàn tiền', group: 'Nghiệp vụ' },
   { key: 'fees:waive', label: 'Miễn hoặc giảm phí', group: 'Nghiệp vụ' },
   { key: 'renewals:operate', label: 'Vận hành gia hạn', group: 'Nghiệp vụ' },
   { key: 'support:update', label: 'Phản hồi yêu cầu hỗ trợ', group: 'Nghiệp vụ' },
@@ -55,18 +56,18 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   staff: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'reservations:approve', 'contracts:read',
     'checkins:read', 'checkins:process', 'rentals:read', 'renewals:operate', 'returns:read', 'returns:process',
-    'payments:read', 'payments:collect',
+    'payments:read', 'payments:collect', 'refunds:execute',
     'support:read', 'support:update'
   ),
   manager: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read',
     'reservations:approve', 'storage_units:assign', 'contracts:read', 'checkins:read', 'rentals:read', 'rentals:update',
-    'returns:read', 'returns:process', 'payments:read', 'payments:confirm', 'payments:collect', 'refunds:approve', 'fees:waive',
+    'returns:read', 'payments:read', 'payments:confirm', 'payments:collect', 'refunds:approve', 'fees:waive',
     'support:read', 'inventory:update', 'policies:read', 'staff_tasks:update', 'reports:read'
   ),
   business: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
-    'rentals:read', 'returns:read', 'payments:read', 'refunds:approve', 'fees:waive', 'reports:read', 'support:read', 'policies:read', 'policies:update'
+    'rentals:read', 'returns:read', 'payments:read', 'refunds:approve', 'refunds:execute', 'fees:waive', 'reports:read', 'support:read', 'policies:read', 'policies:update'
   ),
   admin: makePermissions('dashboard:read', 'users:manage', 'roles:manage', 'settings:manage', 'audit_logs:read', 'sessions:manage'),
 }
@@ -99,6 +100,8 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   normalized.manager['policies:update'] = false
   normalized.manager['policies:read'] = true
   normalized.manager['checkins:process'] = false
+  normalized.manager['returns:process'] = false
+  normalized.manager['refunds:execute'] = false
   normalized.manager['support:update'] = false
   normalized.business['policies:read'] = true
   normalized.business['policies:update'] = true
