@@ -583,7 +583,7 @@ export default function StaffCheckInOperationsPanel({
       setPaymentEvidenceFile(null)
 
       showToast(
-        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Reservation đã chuyển sang COMPLETED.`,
+        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Reservation đang chờ khách xác nhận nhận kho.`,
       )
 
       setHandoverTarget(null)

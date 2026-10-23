@@ -1,6 +1,6 @@
 import { ApiClientError, apiRequest } from './apiClient'
 
-export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'COMPLETED'
+export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED'
 export type AssignmentStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED'
 export type AssignmentUnitStatus = 'available' | 'reserved'
 
