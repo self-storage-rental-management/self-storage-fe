@@ -85,8 +85,9 @@ describe('checkInApi', () => {
       packageCount: 2,
       goodsCategory: 'Đồ gia dụng',
       evidenceReferences: ['evidence.jpg'],
-      handedOverItems: ['PIN', 'Biên nhận'],
+      handedOverItems: ['Ổ khóa LOCK-TEST', 'Biên nhận'],
       notes: '',
+      lockReference: 'LOCK-TEST',
     }
 
     await completeCheckIn('checkin-1', request)
