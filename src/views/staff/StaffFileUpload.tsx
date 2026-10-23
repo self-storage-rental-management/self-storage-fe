@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Button, Modal } from '../../components/ui'
 
 interface Props {
   label: string
@@ -6,6 +7,50 @@ interface Props {
   onChange: (value: string) => void
   onNameChange?: (name: string) => void
   disabled?: boolean
+}
+
+interface FilePreviewListProps {
+  files: File[]
+  onRemove?: (index: number) => void
+  disabled?: boolean
+}
+
+function fileKey(file: File, index: number) {
+  return `${file.name}:${file.lastModified}:${file.size}:${index}`
+}
+
+/** Preview files locally before they are uploaded to the server. */
+export function FilePreviewList({ files, onRemove, disabled = false }: FilePreviewListProps) {
+  const [preview, setPreview] = useState<{ file: File; url: string } | null>(null)
+  const [urls, setUrls] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    const next: Record<string, string> = {}
+    files.forEach((file, index) => { next[fileKey(file, index)] = URL.createObjectURL(file) })
+    setUrls(next)
+    return () => Object.values(next).forEach(url => URL.revokeObjectURL(url))
+  }, [files])
+
+  if (!files.length) return null
+  return <>
+    <div className="grid gap-2 sm:grid-cols-2">
+      {files.map((file, index) => {
+        const url = urls[fileKey(file, index)]
+        const image = file.type.startsWith('image/')
+        return <div key={fileKey(file, index)} className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white p-2">
+          {image && url ? <img src={url} alt={`Xem trước ${file.name}`} className="h-14 w-14 rounded object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded bg-stone-100 text-xs font-semibold text-stone-500">PDF</div>}
+          <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{file.name}</p><p className="text-xs text-stone-500">{Math.ceil(file.size / 1024)} KB</p></div>
+          <Button type="button" size="sm" variant="outline" disabled={!url || disabled} onClick={() => url && setPreview({ file, url })}>Xem</Button>
+          {onRemove && <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => onRemove(index)}>Xóa</Button>}
+        </div>
+      })}
+    </div>
+    <Modal open={Boolean(preview)} onClose={() => setPreview(null)} title={preview?.file.name} size="xl">
+      {preview && (preview.file.type.startsWith('image/')
+        ? <img src={preview.url} alt={`Xem trước ${preview.file.name}`} className="max-h-[70vh] w-full object-contain" />
+        : <iframe title={`Xem trước ${preview.file.name}`} src={preview.url} className="h-[70vh] w-full" />)}
+    </Modal>
+  </>
 }
 
 /** Staff attachments keep their contents, not a filename-only placeholder. */
@@ -16,6 +61,7 @@ export default function StaffFileUpload({ label, value, onChange, onNameChange, 
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   useEffect(() => () => { ++version.current }, [])
   const remove = () => {
     ++version.current
@@ -72,13 +118,17 @@ export default function StaffFileUpload({ label, value, onChange, onNameChange, 
       }} />
       {!disabled && <p className="mt-2 text-xs leading-5 text-stone-500">Ảnh JPEG, PNG, WEBP hoặc tài liệu PDF · Tối đa 3 MB</p>}
       {loading && <p className="mt-2" role="status">Đang đọc tệp…</p>}
-      {value && <div className="mt-2 min-w-0 space-y-2">
+        {value && <div className="mt-2 min-w-0 space-y-2">
         <p className="break-words text-emerald-800">{name ? `Đã chọn: ${name}` : value.startsWith('data:') ? 'Tệp đã lưu' : value}</p>
-        {value.startsWith('data:image/') && <img src={value} alt={`Xem trước: ${label}`} className="max-h-40 max-w-full rounded border object-contain" />}
-        {value.startsWith('data:application/pdf') && <a href={value} download={name || 'tai-lieu.pdf'} className="inline-block text-emerald-800 underline">Tải tài liệu để xem</a>}
+        <Button type="button" size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>Xem trước</Button>
       </div>}
       {disabled && !value && <p className="text-stone-500">Chưa có tệp đính kèm.</p>}
     </div>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={`Xem trước: ${label}`} size="xl">
+      {value.startsWith('data:image/')
+        ? <img src={value} alt={`Xem trước: ${label}`} className="max-h-[70vh] w-full object-contain" />
+        : <iframe title={`Xem trước: ${label}`} src={value} className="h-[70vh] w-full" />}
+    </Modal>
   </div>
 }
