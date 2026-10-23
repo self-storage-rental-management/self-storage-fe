@@ -24,7 +24,6 @@ import {
 } from "../../services/duongIntegrationApi"
 import { listBusinessPackagePolicies } from "../../services/businessPolicyApi"
 import { isUuid } from "../../services/renewalOperationsApi"
-import LedgerPanel from "./LedgerPanel"
 import { policyPendingKey, readPendingPolicy, retainPendingPolicy, clearPendingPolicy } from "./pendingPolicyPublication"
 
 type Draft = Record<string, string>
@@ -585,9 +584,7 @@ export default function DuongPolicyWorkspace({
     actor.roles.includes("BUSINESS") &&
     actor.permissions.includes("policies:read")
   const [page, setPage] = useState(0),
-    [facility, setFacility] = useState(""),
-    [rentalInput, setRentalInput] = useState(""),
-    [rental, setRental] = useState("")
+    [facility, setFacility] = useState("")
   const [locked, setLocked] = useState(false)
   useEffect(() => {
     onLocked?.(locked)
@@ -707,36 +704,7 @@ export default function DuongPolicyWorkspace({
           onLocked={setLocked}
         />
       )}
-      <Card className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div><h3 className="font-semibold text-stone-900">
-          Tra cứu các khoản tài chính của hồ sơ thuê
-        </h3><p className="mt-1 text-xs text-stone-500">Tra cứu lịch sử tài chính bằng mã hồ sơ thuê.</p></div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (isUuid(rentalInput.trim())) setRental(rentalInput.trim())
-          }}
-        >
-          <label className="block text-sm font-medium text-stone-700">
-            Mã hồ sơ thuê
-            <input
-              className="mt-2 block w-full rounded-xl border border-stone-300 px-3 py-2.5 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-              value={rentalInput}
-              onChange={(e) => setRentalInput(e.target.value)}
-            />
-          </label>
-          <Button className="mt-3" type="submit" disabled={!isUuid(rentalInput.trim())}>
-            Tra cứu
-          </Button>
-        </form>
-        {rental && (
-          <LedgerPanel
-            key={`${actor!.id}:${rental}`}
-            role="business"
-            id={rental}
-          />
-        )}
-      </Card>
+
     </div>
   )
 }

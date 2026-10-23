@@ -85,12 +85,20 @@ export default function SupportCreateForm({
   command,
   parent,
   onUploadBusy,
+  handoff,
 }: {
   command: ReturnType<typeof useSupportCommand>
   parent?: SupportTicket
   onUploadBusy?: (busy: boolean) => void
+  handoff?: { transcript: string; question: string }
 }) {
-  const [description, setDescription] = useState("")
+  const [description, setDescription] = useState(handoff?.question ?? "")
+  const [includeTranscript, setIncludeTranscript] = useState(true)
+  const transcriptSuffix = handoff && includeTranscript && handoff.transcript
+    ? '\n\n--- Nội dung khách chuyển từ phiên trợ lý (tham khảo, chưa xác minh) ---\n' + handoff.transcript : ''
+  const remaining = Math.max(0, 4000 - description.trim().length - 2)
+  const handoffSnapshot = transcriptSuffix.length > remaining
+    ? transcriptSuffix.slice(0, Math.max(0, remaining - 32)) + '\n[Nội dung đã được rút gọn]' : transcriptSuffix
   const uploadLock = useRef(false)
   const [source, setSource] = useState<Source>("facility"),
     [page, setPage] = useState(0)
@@ -114,7 +122,7 @@ export default function SupportCreateForm({
     if (!valid || uploadLock.current || uploading || command.locked || command.conflict) return
     const body: SupportCreate = {
       subject: description.trim().replace(/\s+/g, " ").slice(0, 100),
-      description: description.trim(),
+      description: (description.trim() + handoffSnapshot).slice(0, 4000),
       ...(files.length ? { evidenceFileIds: files } : {}),
     }
     if (choice && source === "facility") body.facilityId = choice.facilityId
@@ -224,6 +232,13 @@ export default function SupportCreateForm({
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
           }} />
       </label>
+      {handoff && <div className="space-y-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs leading-5 text-stone-600">
+        <label className="flex items-start gap-2"><input type="checkbox" checked={includeTranscript} disabled={command.locked} onChange={event => setIncludeTranscript(event.target.checked)} />
+          <span>Gửi kèm trao đổi với trợ lý để nhân viên nắm vấn đề. Nội dung được lưu cùng hồ sơ hỗ trợ.</span>
+        </label>
+        {includeTranscript && handoff.transcript && <details><summary className="cursor-pointer">Xem nội dung sẽ gửi</summary><p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words">{handoffSnapshot.trim()}</p></details>}
+        <p>Chỉ tạo yêu cầu khi bạn xác nhận gửi. Không chia sẻ mật khẩu, mã truy cập hoặc OTP.</p>
+      </div>}
       <div className="flex flex-wrap items-start gap-3">
       <EvidenceUpload compact entityType="DUONG_SUPPORT_PUBLIC" value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { uploadLock.current = busy; setUploading(busy); onUploadBusy?.(busy) }} />
       <Button
@@ -237,7 +252,7 @@ export default function SupportCreateForm({
           !!read.error
         }
       >
-        {command.busy ? "Đang gửi..." : "Gửi tin nhắn"}
+        {command.busy ? "Đang gửi..." : handoff ? "Xác nhận gặp nhân viên" : "Gửi tin nhắn"}
       </Button>
       </div>
       <p className="text-[11px] text-stone-400">Enter để gửi, Shift+Enter để xuống dòng.</p>

@@ -136,7 +136,7 @@ export function isSupportMessage(value: unknown): value is SupportMessage {
   return (
     !!m &&
     [m.id, m.ticketId, m.authorId].every(isUuid) &&
-    inList(m.authorRole, ["CUSTOMER", "STAFF", "MANAGER"]) &&
+    inList(m.authorRole, ["CUSTOMER", "STAFF", "MANAGER", "AI_CONTEXT", "USER_CONTEXT"]) &&
     inList(m.visibility, ["PUBLIC", "INTERNAL"]) &&
     string(m.body) &&
     isInstant(m.sentAt) &&
@@ -372,9 +372,19 @@ export async function createSupportTicket(
     "facilityId",
     "linkedRecord",
     "evidenceFileIds",
+    "handoffMessages",
   ])
   text(body.subject, 200)
   text(body.description, 4000)
+  if (body.handoffMessages !== undefined) {
+    check(Array.isArray(body.handoffMessages) && body.handoffMessages.length <= 200, "Lịch sử chuyển tiếp vượt giới hạn 200 tin nhắn.")
+    for (const message of body.handoffMessages) {
+      strictKeys(message, ['role', 'body'])
+      check(inList(message.role, ['CUSTOMER', 'ASSISTANT']), 'Vai trò trong lịch sử không hợp lệ.')
+      text(message.body, 4000)
+    }
+    check(body.handoffMessages.reduce((total, message) => total + message.body.length, 0) <= 200000, 'Lịch sử chuyển tiếp vượt giới hạn cho phép.')
+  }
   keyValid(key)
   files(body.evidenceFileIds)
   if (body.facilityId !== undefined)

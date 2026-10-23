@@ -19,6 +19,7 @@ import ApiPager from "../rental-api/ApiPager"
 import SupportActionForm, { type SupportDraft } from "./SupportActionForm"
 import SupportNotificationReceipts from "../rental-support-integration/SupportNotificationReceipts"
 import { EvidenceDownload } from "../rental-support-integration/EvidenceControls"
+import SupportReplyText from '../../components/support/SupportReplyText'
 import SupportReadState from "./SupportReadState"
 import {
   supportActions,
@@ -133,7 +134,7 @@ export default function SupportTicketDetail({
       {t && (
         <>
           {chatLayout ? <header className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0"><h2 className="text-base font-semibold text-stone-900">{role === "customer" ? "Nhân viên hỗ trợ" : t.customerName ?? "Khách hàng"}</h2><p className="mt-1 text-xs text-stone-500">{supportAssigneeLabel(t, role)}</p></div>
+            <div className="min-w-0"><h2 className="text-base font-semibold text-stone-900">{role === "customer" ? (t.acceptedAt && t.assignedStaffName?.trim() ? t.assignedStaffName : "Nhân viên hỗ trợ") : t.customerName ?? "Khách hàng"}</h2><p className="mt-1 text-xs text-stone-500">{role === "customer" ? t.acceptedAt ? "Nhân viên đã tiếp nhận cuộc trò chuyện" : "Chờ nhân viên tiếp nhận" : supportAssigneeLabel(t, role)}</p></div>
             <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">{supportStatusLabels[t.status]}</span>
           </header> : <SupportTicketSummary ticket={t} role={role} />}
           {!chatLayout && role === "customer" && <SupportNotificationReceipts key={identity} ticketId={id} locked={command.locked} />}
@@ -145,6 +146,7 @@ export default function SupportTicketDetail({
             locked={command.locked}
             initialDescription={t.description}
             initialCreatedAt={t.createdAt}
+            waitingForStaff={role === "customer" && !t.acceptedAt && t.status === "open"}
             chatLayout={chatLayout}
             initialTab={role === "customer" ? "messages" : conversation}
             onTabChange={onConversationChange}
@@ -180,6 +182,7 @@ function SupportTimeline({
   locked,
   initialDescription,
   initialCreatedAt,
+  waitingForStaff = false,
   composer,
   internalComposer,
   initialTab,
@@ -193,6 +196,7 @@ function SupportTimeline({
   locked: boolean
   initialDescription: string
   initialCreatedAt: string
+  waitingForStaff?: boolean
   composer?: ReactNode
   internalComposer?: ReactNode
   initialTab: "messages" | "internal"
@@ -264,7 +268,7 @@ function SupportTimeline({
       <div ref={scrollArea} role="log" aria-label={tab === "internal" ? "Tin nhắn nội bộ" : "Tin nhắn hỗ trợ"} aria-live="polite" className="min-h-[260px] max-h-[50vh] space-y-3 overflow-y-auto bg-stone-50/60 p-4">
       {read.data && (
         <>
-          {chatLayout && tab === "messages" && read.data.pagination.page === 0 && !read.data.data.some(m => m.authorRole === "CUSTOMER" && m.body.trim() === initialDescription.trim() && Date.parse(m.sentAt) === Date.parse(initialCreatedAt)) && <div className={`w-fit max-w-[90%] rounded-2xl px-3 py-2 text-sm ${role === "customer" ? "ml-auto bg-amber-100" : "mr-auto border border-stone-200 bg-white"}`}><p className="mb-1 text-[11px] text-stone-500">{role === "customer" ? "Bạn" : "Khách hàng"}, {supportDetailDate(initialCreatedAt)}</p><p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{initialDescription}</p></div>}
+          {chatLayout && tab === "messages" && read.data.pagination.page === 0 && !read.data.data.some(m => m.authorRole === "AI_CONTEXT" || m.authorRole === "USER_CONTEXT") && !read.data.data.some(m => m.authorRole === "CUSTOMER" && m.body.trim() === initialDescription.trim() && Date.parse(m.sentAt) === Date.parse(initialCreatedAt)) && <div className={`w-fit max-w-[90%] rounded-2xl px-3 py-2 text-sm ${role === "customer" ? "ml-auto bg-amber-100" : "mr-auto border border-stone-200 bg-white"}`}><p className="mb-1 text-[11px] text-stone-500">{role === "customer" ? "Bạn" : "Khách hàng"}, {supportDetailDate(initialCreatedAt)}</p><p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{initialDescription}</p></div>}
           {read.data.data.map((row, index) => {
             const message = row as SupportMessage
             const repeatedOpeningMessage = !chatLayout && isRepeatedOpeningMessage(message, index)
@@ -272,11 +276,12 @@ function SupportTimeline({
             return (
             <div
               key={row.id}
-              className={`w-fit min-w-0 max-w-[90%] space-y-2 rounded-2xl border px-3 py-2 text-sm ${message.authorId === getAuthenticatedActor()?.id ? "ml-auto border-amber-200 bg-amber-100" : "mr-auto border-stone-200 bg-white"}`}
+              className={`w-fit min-w-0 max-w-[90%] space-y-2 rounded-2xl border px-3 py-2 text-sm ${message.authorRole !== 'AI_CONTEXT' && message.authorId === getAuthenticatedActor()?.id ? "ml-auto border-amber-200 bg-amber-100" : "mr-auto border-stone-200 bg-white"}`}
             >
               <MessageRow message={message} hideBody={repeatedOpeningMessage} />
             </div>
           )})}
+          {chatLayout && waitingForStaff && <p role="status" className="mr-auto max-w-[90%] rounded-2xl rounded-bl-md bg-[#f2f0ee] px-3.5 py-2.5 text-sm leading-6 text-stone-700">Yêu cầu đã được gửi đến cơ sở. Bạn vui lòng chờ nhân viên phản hồi; có thể nhắn thêm thông tin ngay bên dưới.</p>}
           {!chatLayout && (read.data.data.length === 0 || (tab === "messages" && read.data.data.length === 1 &&
             isRepeatedOpeningMessage(read.data.data[0] as SupportMessage, 0) &&
             !(read.data.data[0] as SupportMessage).evidenceFileIds?.length &&
@@ -302,10 +307,10 @@ function MessageRow({ message: m, hideBody }: { message: SupportMessage; hideBod
   return (
     <>
       <p className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
-        <span className="font-semibold text-stone-900">{m.authorId === getAuthenticatedActor()?.id ? "Bạn" : m.authorRole === "MANAGER" ? "Quản lý" : m.authorRole === "STAFF" ? "Nhân viên" : "Khách hàng"}</span>
+        <span className="font-semibold text-stone-900">{m.authorRole === 'AI_CONTEXT' ? 'Trợ lý AI · Lịch sử khách chuyển (chưa xác minh)' : m.authorRole === 'USER_CONTEXT' ? m.authorId === getAuthenticatedActor()?.id ? 'Bạn · Phiên trợ lý' : 'Khách hàng · Phiên trợ lý' : m.authorId === getAuthenticatedActor()?.id ? "Bạn" : m.authorRole === "MANAGER" ? "Quản lý" : m.authorRole === "STAFF" ? "Nhân viên" : "Khách hàng"}</span>
         <time dateTime={m.sentAt}>{supportDetailDate(m.sentAt)}</time>
       </p>
-      {!hideBody && <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.body}</p>}
+      {!hideBody && (m.authorRole === 'AI_CONTEXT' ? <SupportReplyText text={m.body} /> : <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.body}</p>)}
       {(m.evidenceCompleteness === "UNKNOWN" || !!m.evidenceFileIds?.length) && <p className="text-xs text-stone-500">
         {m.evidenceCompleteness === "UNKNOWN" ? "Chưa thể xem tệp đính kèm." : "Tệp đính kèm:"}
       </p>}
