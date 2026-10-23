@@ -107,7 +107,7 @@ export async function listRenewals(
       "status",
       "rentalId",
       "sort",
-      ...(role === "manager" ? ["facilityId", "search"] : []),
+      ...(role === "manager" || role === "staff" ? ["facilityId", "search"] : []),
     ],
     ["createdAt", "newEndDate", "amount", "id"],
   )
@@ -286,3 +286,22 @@ export async function getRenewalVnpayPayment(renewalId:string) {
     value=>isRenewalPaymentResponse(value,renewalId),
   )
 }
+
+export async function approveRenewalTicket(id: string) {
+  return readRentalEnvelope<RenewalApiRecord>(
+    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+    record => isRenewalRecord(record),
+  )
+}
+
+export async function rejectRenewalTicket(id: string, reason?: string) {
+  return readRentalEnvelope<RenewalApiRecord>(
+    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    }),
+    record => isRenewalRecord(record),
+  )
+}
+

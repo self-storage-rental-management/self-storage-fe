@@ -48,7 +48,30 @@ export interface ApiChallengeResponse {
   debugCode: string | null
 }
 
-let currentActor: ApiActor | null = null
+const ACTOR_STORAGE_KEY = 'storagehub:api_actor'
+
+function readStoredActor(): ApiActor | null {
+  try {
+    const raw = sessionStorage.getItem(ACTOR_STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+let currentActor: ApiActor | null = readStoredActor()
+
+export function setStoredActor(actor: ApiActor | null) {
+  currentActor = actor
+  try {
+    if (actor) {
+      sessionStorage.setItem(ACTOR_STORAGE_KEY, JSON.stringify(actor))
+    } else {
+      sessionStorage.removeItem(ACTOR_STORAGE_KEY)
+    }
+  } catch {}
+}
 
 const rolePriority: ApiRoleCode[] = ['ADMIN', 'BUSINESS', 'MANAGER', 'STAFF', 'CUSTOMER']
 
@@ -130,13 +153,14 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = normalizeApiActor(response.data.actor)
-  return currentActor
+  const actor = normalizeApiActor(response.data.actor)
+  setStoredActor(actor)
+  return actor
 }
 
 export async function loginWithApi(email: string, password: string): Promise<ApiActor> {
   clearAuthTokens()
-  currentActor = null
+  setStoredActor(null)
   const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
@@ -257,14 +281,14 @@ export async function resetPasswordWithApi(email: string | undefined, codeOrToke
 
 export async function logoutFromApi() {
   if (!hasAccessToken() && !getRefreshToken()) {
-    currentActor = null
+    setStoredActor(null)
     return
   }
   try {
     await apiRequest('/api/auth/logout', { method: 'POST' })
   } finally {
     clearAuthTokens()
-    currentActor = null
+    setStoredActor(null)
   }
 }
 
@@ -281,8 +305,9 @@ export async function refreshApiSession(): Promise<ApiActor> {
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = normalizeApiActor(response.data.actor)
-  return currentActor
+  const actor = normalizeApiActor(response.data.actor)
+  setStoredActor(actor)
+  return actor
 }
 
 export function getAuthenticatedActor() {

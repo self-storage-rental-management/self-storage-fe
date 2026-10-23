@@ -1059,11 +1059,9 @@ setSavingProfile(true)
             <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <span className="text-sm font-semibold text-emerald-900">Phạm vi dữ liệu</span>
               <Badge variant="success">{apiMode
-                ? user.role === 'admin'
-                  ? 'Toàn hệ thống'
-                  : Object.keys(apiActor?.facilityScopes ?? {}).length
-                    ? 'Theo cơ sở được cấp'
-                    : 'Chưa được cấp phạm vi cơ sở'
+                ? Object.keys(apiActor?.facilityScopes ?? {}).length
+                  ? 'Theo cơ sở được cấp'
+                  : 'Toàn hệ thống'
                 : 'Theo dữ liệu tài khoản'}</Badge>
             </div>
             <InfoRow label="Số cơ sở trong phạm vi" value={apiMode ? (apiFacilities.length ? `${apiFacilities.length} cơ sở` : apiFacilitiesError ? 'Không tải được dữ liệu cơ sở' : 'Chưa có dữ liệu') : facilities.length ? `${facilities.length} cơ sở` : 'Chưa có dữ liệu'} />

@@ -14,6 +14,7 @@ import {
   renewalLabels,
   unknown,
 } from "./presentation"
+import { approveRenewalTicket, rejectRenewalTicket } from "../../services/renewalApi"
 import RenewalReceipt from "../customer/RenewalReceipt"
 export default function RenewalDetail({
   renewal: r,
@@ -35,6 +36,8 @@ export default function RenewalDetail({
   operationsLocked?: boolean
 }) {
   const [receiptOpen, setReceiptOpen] = useState(false)
+  const [approvalBusy, setApprovalBusy] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string>()
   const { manager, copy, explain } = useManagerPresentation()
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
@@ -177,6 +180,78 @@ export default function RenewalDetail({
       {r.status === "approved" && (
         <p className="rounded bg-amber-50 p-3">
           Hồ sơ gia hạn đã được duyệt. Trạng thái này chưa xác nhận đã thanh toán hoặc hoàn tất ký, ngày kết thúc thuê chưa thay đổi.</p>
+      )}
+      {r.status === "completed" && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-1">
+          <h4 className="font-bold text-emerald-900 text-sm">✓ Gia hạn hợp đồng thành công</h4>
+          <p className="text-xs text-emerald-800 leading-relaxed">
+            Hồ sơ gia hạn đã được phê duyệt hoàn tất. Hợp đồng thuê của bạn hiện có hiệu lực đến ngày <b>{rentalDate(r.newEndDate)}</b>.
+          </p>
+        </div>
+      )}
+      {role === "customer" && ["pending", "accepted"].includes(r.status) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+            <h4 className="font-bold text-amber-900 text-sm">Yêu cầu gia hạn đang chờ nhân viên duyệt</h4>
+          </div>
+          <p className="text-xs text-amber-800 leading-relaxed">
+            Hồ sơ gia hạn của bạn đã được tiếp nhận. Nhân viên cơ sở sẽ kiểm tra và phê duyệt. Sau khi duyệt, thời hạn hợp đồng sẽ tự động được kéo dài đến ngày <b>{rentalDate(r.newEndDate)}</b>.
+          </p>
+        </div>
+      )}
+      {(role === "manager" || role === "staff") && ["pending", "accepted"].includes(r.status) && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-3">
+          <div>
+            <h4 className="text-sm font-bold text-slate-900">Duyệt yêu cầu gia hạn</h4>
+            <p className="text-xs text-slate-600">
+              Nhân viên kiểm tra và duyệt để tự động kéo dài hợp đồng thuê của khách hàng đến ngày <b>{rentalDate(r.newEndDate)}</b>.
+            </p>
+          </div>
+          {actionMessage && <p className="text-xs font-semibold text-emerald-700">{actionMessage}</p>}
+          <div className="flex items-center gap-2">
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+              disabled={approvalBusy}
+              onClick={async () => {
+                try {
+                  setApprovalBusy(true)
+                  await approveRenewalTicket(r.id)
+                  setActionMessage("Đã duyệt gia hạn thành công! Hợp đồng thuê đã được kéo dài.")
+                  onPaymentChange?.()
+                } catch (err: any) {
+                  alert(err?.message || "Không thể duyệt yêu cầu gia hạn.")
+                } finally {
+                  setApprovalBusy(false)
+                }
+              }}
+            >
+              {approvalBusy ? "Đang duyệt…" : "✓ Duyệt gia hạn"}
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-300 text-red-700 hover:bg-red-50"
+              disabled={approvalBusy}
+              onClick={async () => {
+                const reason = prompt("Lý do từ chối yêu cầu gia hạn:", "Cơ sở không còn khả dụng hoặc lịch bảo trì.")
+                if (reason && reason.trim()) {
+                  try {
+                    setApprovalBusy(true)
+                    await rejectRenewalTicket(r.id, reason.trim())
+                    setActionMessage("Đã từ chối yêu cầu gia hạn.")
+                    onPaymentChange?.()
+                  } catch (err: any) {
+                    alert(err?.message || "Không thể từ chối gia hạn.")
+                  } finally {
+                    setApprovalBusy(false)
+                  }
+                }
+              }}
+            >
+              ✕ Từ chối
+            </Button>
+          </div>
+        </div>
       )}
       {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
