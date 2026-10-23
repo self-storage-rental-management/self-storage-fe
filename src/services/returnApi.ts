@@ -58,12 +58,17 @@ export function isApiReturn(v: unknown): v is ApiReturn {
         (v.recoveryTaskStatus === 'CLOSED' ? v.status === 'completed' && typeof v.recoveryCompletedAt === 'string' && Number.isFinite(Date.parse(v.recoveryCompletedAt)) : v.recoveryCompletedAt === null))
 }
 function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string) {
-  if (a.roles.includes('BUSINESS') || a.roles.includes('ADMIN')) return true
+  if (a.roles.includes('ADMIN')) return true
   return !!a.facilityScopes[facilityId]
 }
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.some(r => r === role.toUpperCase() || ((role === 'manager' || role === 'staff') && (r === 'BUSINESS' || r === 'ADMIN'))))
+  const roleAllowed = role === 'manager'
+    ? a?.roles.some(r => r === 'MANAGER' || r === 'ADMIN' || (r === 'BUSINESS' && !write))
+    : role === 'staff'
+      ? a?.roles.some(r => r === 'STAFF' || r === 'ADMIN')
+      : a?.roles.includes('CUSTOMER')
+  if (!a || a.status !== 'ACTIVE' || !roleAllowed)
     throw new ApiClientError('Bạn không có quyền truy cập hồ sơ trả kho.', { status: 403 })
   if (role !== 'customer' && !a.permissions.includes(write ? role === 'manager' ? 'rentals:update' : 'returns:process' : 'returns:read'))
     throw new ApiClientError('Bạn chưa có quyền xử lý hồ sơ trả kho.', { status: 403 })
@@ -121,8 +126,8 @@ export function inspectReturn(id: string, body: InspectionInput) {
 }
 export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
   const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'MANAGER' || role === 'BUSINESS') || !a.permissions.includes('refunds:approve')) {
-    throw new ApiClientError('Bạn chưa có quyền duyệt hoàn tiền.', { status: 403 })
+  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'STAFF' || role === 'BUSINESS' || role === 'ADMIN') || !a.permissions.includes('refunds:execute')) {
+    throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
   if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
     throw new Error('Mã giao dịch hoàn cọc không được vượt quá 120 ký tự.')
