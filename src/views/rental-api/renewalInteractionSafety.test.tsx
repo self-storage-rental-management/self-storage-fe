@@ -86,7 +86,7 @@ beforeEach(() => {
 
 describe("Deposit refund command safety", () => {
   function approved() {
-    h.actor = { ...operationsActor("manager"), permissions: ["rentals:read", "rentals:update", "payments:collect"] }
+    h.actor = { ...operationsActor("staff"), permissions: ["rentals:read", "payments:read", "payments:collect", "renewals:operate", "refunds:execute"] }
     h.settlement = { renewalId: ids.renewal, expectedVersion: 4, status: "REFUND_APPROVED", amount: 40, refundedAmount: 0, currency: "VND", environment: "SANDBOX", refundId: ids.event, signingDeadline: signingState.effectiveSigningDeadline, checkedAt: operationEvent.occurredAt }
   }
   function ready(panel: () => ReactElement<any> | null) {
@@ -98,7 +98,7 @@ describe("Deposit refund command safety", () => {
   it("unlocks immediately after a known denial and sends no client amount", async () => {
     approved()
     const slots: any[] = [], onLocked = vi.fn()
-    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "manager", revision: 4, onLocked, onChanged: vi.fn() }),slots)
+    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "staff", revision: 4, onLocked, onChanged: vi.fn() }),slots)
     ready(panel)
     h.send.mockRejectedValueOnce(new ApiClientError("denied",{ status: 400 }))
     const click = button(panel(),"Xác nhận đã hoàn cọc").props.onClick
@@ -112,7 +112,7 @@ describe("Deposit refund command safety", () => {
   it("retains the original refund body and key after uncertain results", async () => {
     approved()
     const slots: any[] = [], onLocked = vi.fn()
-    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "manager", revision: 4, onLocked, onChanged: vi.fn() }),slots)
+    const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "staff", revision: 4, onLocked, onChanged: vi.fn() }),slots)
     ready(panel)
     h.send.mockRejectedValueOnce(new ApiClientError("unknown",{ status: 503 }))
     button(panel(),"Xác nhận đã hoàn cọc").props.onClick()

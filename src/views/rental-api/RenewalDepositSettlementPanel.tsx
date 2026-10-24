@@ -29,7 +29,7 @@ export default function RenewalDepositSettlementPanel({ id, role, revision, onLo
   if (read.loading) return null
   if (read.error) return null
   if (!settlement || ["UNKNOWN","NOT_APPLICABLE","APPLIED_TO_RENT","HELD"].includes(settlement.status)) return null
-  const canRecord = role === "manager" && actor?.permissions.includes("payments:collect") && actor.permissions.includes("rentals:update") && settlement.status === "REFUND_APPROVED"
+  const canRecord = role === "staff" && actor?.permissions.includes("payments:collect") && actor.permissions.includes("renewals:operate") && actor.permissions.includes("refunds:execute") && settlement.status === "REFUND_APPROVED"
   return <Card className="space-y-4 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="font-semibold">Cọc gia hạn</h3><p className="mt-1 text-sm text-stone-600">{labels[settlement.status]}{settlement.environment === "SANDBOX" ? " (Sandbox)" : ""}</p></div>
