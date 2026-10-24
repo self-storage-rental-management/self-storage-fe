@@ -109,9 +109,11 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
         if(!isCurrent())return
         if(!(e instanceof ApiClientError&&e.status===404))throw e
       }
-      const operations=await getRenewalOperations("customer",renewal.id)
-      if(!isCurrent())return
-      // Allow proceeding with payment even if appointment selection is pending
+      try {
+        const operations=await getRenewalOperations("customer",renewal.id)
+        if(!isCurrent())return
+        setAppointmentSelected(!!operations.appointmentRef && !!operations.appointmentStart && Date.parse(operations.appointmentStart)>Date.now())
+      } catch {}
       if(attempt.current?.scope!==scope)attempt.current=null
       let key=attempt.current?.key
       if(!key) { try { key=sessionStorage.getItem(scope)??undefined } catch {} }
