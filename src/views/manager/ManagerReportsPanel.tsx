@@ -151,7 +151,7 @@ export default function ManagerReportsPanel({ user, units, reservations, rentals
       subtitle={'Số liệu được tính trực tiếp từ tồn kho, hồ sơ thuê, trả kho và nhật ký hoạt động.'}
       action={
         <Button variant="outline" onClick={handleExportExcel}>
-          <span className="flex items-center gap-2">📊 Xuất báo cáo Excel</span>
+          <span>Xuất báo cáo Excel</span>
         </Button>
       }
     />
