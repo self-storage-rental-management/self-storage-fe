@@ -19,6 +19,14 @@ import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
 import { USERS } from '../data/demoDatabase'
 
+export const DEMO_LOGIN_ACCOUNTS = [
+  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', color: 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100', icon: '👤' },
+  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', color: 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100', icon: '🛠️' },
+  { role: 'manager', label: 'Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!', color: 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100', icon: '🏢' },
+  { role: 'business', label: 'Ban điều hành', email: 'business@storagehub.demo', password: 'Business@1234!', color: 'bg-pink-50 text-pink-900 border-pink-300 hover:bg-pink-100', icon: '📊' },
+  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', color: 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100', icon: '🛡️' },
+] as const
+
 interface LoginProps {
   onLogin: (user: User) => void
   onBackToHome?: () => void
@@ -287,37 +295,21 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const isStep2Valid = isStep2Complete && !addressError && !emergencyNameError && !emergencyPhoneError
 
   // Login check
-const QUICK_DEMO_ACCOUNTS = [
-  { label: '👑 Admin', email: 'admin@storagehub.demo', password: 'Admin@1234!' },
-  { label: '💼 BO', email: 'business@storagehub.demo', password: 'Business@1234!' },
-  { label: '🏢 Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!' },
-  { label: '👷 Staff', email: 'staff@storagehub.demo', password: 'Staff@1234!' },
-  { label: '👤 Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!' },
-] as const
-
-const KNOWN_DEMO_CREDENTIALS: Record<string, string> = {
-  'admin@storagehub.demo': 'Admin@1234!',
-  'business@storagehub.demo': 'Business@1234!',
-  'manager@storagehub.demo': 'Manager@1234!',
-  'staff@storagehub.demo': 'Staff@1234!',
-  'customer@storagehub.demo': 'Customer@1234!',
-}
-
   const isLoginValid = Boolean(email && password) && !emailError && !loginPasswordError
 
-  // ── Handler: Quick Demo Login ───────────────────────────────────
-  async function handleQuickDemoSelect(demoEmail: string, demoPass: string) {
-    setEmail(demoEmail)
-    setPassword(demoPass)
+  // ── Handler: Quick Demo Login (Guaranteed API JWT Token) ─────────
+  async function handleQuickLogin(acc: typeof DEMO_LOGIN_ACCOUNTS[number]) {
+    setEmail(acc.email)
+    setPassword(acc.password)
     setError('')
-    setNotice('')
-    setTouched(prev => ({ ...prev, loginEmail: false, loginPassword: false }))
+    setNotice(`Đang đăng nhập nhanh vai trò ${acc.label}…`)
     setIsSubmitting(true)
     try {
-      const actor = await loginWithApi(demoEmail.toLowerCase(), demoPass)
+      const actor = await loginWithApi(acc.email, acc.password)
       onLogin(actorToUser(actor))
     } catch (apiError) {
-      setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
+      setNotice('')
+      setError(formatAuthError(apiError, `Đăng nhập ${acc.label} thất bại.`))
     } finally {
       setIsSubmitting(false)
     }
@@ -344,40 +336,12 @@ const KNOWN_DEMO_CREDENTIALS: Record<string, string> = {
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
-      // If user typed wrong demo password, attempt backend authentication with known demo password
-      if (KNOWN_DEMO_CREDENTIALS[normalizedEmail]) {
-        try {
-          const demoActor = await loginWithApi(normalizedEmail, KNOWN_DEMO_CREDENTIALS[normalizedEmail])
-          if (rememberMe) {
-            localStorage.setItem('storagehub:remember_email', normalizedEmail)
-          } else {
-            localStorage.removeItem('storagehub:remember_email')
-          }
-          onLogin(actorToUser(demoActor))
-          return
-        } catch {}
+      const matchedDemo = DEMO_LOGIN_ACCOUNTS.find(a => a.email.toLowerCase() === normalizedEmail)
+      if (matchedDemo && password !== matchedDemo.password) {
+        setError(`Mật khẩu không đúng cho tài khoản ${matchedDemo.label}. Mật khẩu chính xác là: ${matchedDemo.password}`)
+      } else {
+        setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
       }
-
-      const demoMatch = USERS.find(u => u.email.toLowerCase() === normalizedEmail)
-      if (demoMatch) {
-        if (rememberMe) {
-          localStorage.setItem('storagehub:remember_email', normalizedEmail)
-        } else {
-          localStorage.removeItem('storagehub:remember_email')
-        }
-        onLogin({
-          id: demoMatch.id,
-          name: demoMatch.name,
-          email: demoMatch.email,
-          phone: demoMatch.phone,
-          role: demoMatch.role as User['role'],
-          facility: demoMatch.facility,
-          facilityId: demoMatch.facilityId,
-          status: 'active',
-        } as unknown as User)
-        return
-      }
-      setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -802,27 +766,6 @@ const KNOWN_DEMO_CREDENTIALS: Record<string, string> = {
                 </p>
               </div>
 
-              {/* Quick demo account selection bar */}
-              <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/60 p-3 text-xs">
-                <p className="mb-2 font-semibold text-amber-900 flex items-center gap-1.5">
-                  <span className="text-sm">⚡</span>
-                  <span>Tài khoản kiểm thử nhanh (Bấm để đăng nhập):</span>
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {QUICK_DEMO_ACCOUNTS.map(acc => (
-                    <button
-                      key={acc.email}
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => handleQuickDemoSelect(acc.email, acc.password)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-800 shadow-xs transition hover:bg-amber-100 hover:border-amber-400 active:scale-95 disabled:opacity-50 cursor-pointer"
-                    >
-                      <span>{acc.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Google login button with official logo */}
               <div className="mb-4">
                 <GoogleLoginButton onCredential={handleGoogleCredential} disabled={isSubmitting} />
@@ -931,6 +874,33 @@ const KNOWN_DEMO_CREDENTIALS: Record<string, string> = {
                       Đăng ký ngay
                     </button>
                   </p>
+                </div>
+
+                {/* Quick Demo Login Section with Guaranteed Backend API JWT Token */}
+                <div className="mt-5 pt-4 border-t border-stone-200">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-[11px] font-bold text-stone-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="text-amber-500 font-bold">⚡</span> Đăng nhập nhanh kiểm thử (5 Roles)
+                    </span>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-mono font-medium border border-emerald-200">
+                      API JWT Authenticated
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {DEMO_LOGIN_ACCOUNTS.map(acc => (
+                      <button
+                        key={acc.role}
+                        type="button"
+                        onClick={() => handleQuickLogin(acc)}
+                        disabled={isSubmitting}
+                        className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-xs disabled:opacity-50 ${acc.color}`}
+                        title={`Đăng nhập nhanh vai trò ${acc.label} (${acc.email})`}
+                      >
+                        <span>{acc.icon}</span>
+                        <span>{acc.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
               </form>

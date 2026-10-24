@@ -360,7 +360,22 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
-      {role === 'customer' && record.status === 'awaiting_customer_confirmation' && <div className="flex gap-2"><Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button><Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button></div>}
+      {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (
+        <div className="space-y-2">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+            ⏱️ <b>Thời hạn phản hồi (SLA 72 giờ):</b> Quý khách vui lòng kiểm tra biên bản và phản hồi trong vòng 72 giờ. Sau thời gian này, hệ thống sẽ tự động chốt quyết toán theo biên bản nghiệm thu.
+          </div>
+          <div className="flex gap-2">
+            <Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button>
+            <Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button>
+          </div>
+        </div>
+      )}
+      {record.customerDecisionNote && record.customerDecisionNote.includes('Auto-Settlement SLA') && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800">
+          ℹ️ Quyết toán này đã được hệ thống <b>tự động xác nhận (Auto-Settlement SLA 72h)</b> do quá hạn phản hồi của khách hàng.
+        </div>
+      )}
     </section>
   )
 }
