@@ -31,7 +31,7 @@ describe('Booking acceptance uses Payment and Reservation response fields', () =
     },
   )
   it('does not treat a failed transaction with a confirmed Reservation as paid', () => {
-    const payment = { ...paid, paymentStatus: 'FAILED' }
+    const payment: ReservationPaymentResult = { ...paid, paymentStatus: 'FAILED' }
     expect(bookingDepositAccepted(payment)).toBe(false)
     expect(paymentRecordLabel(payment)).toBe('Thanh toán thất bại')
   })

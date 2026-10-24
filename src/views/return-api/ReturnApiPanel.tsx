@@ -328,7 +328,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           </div>
         </div>
       )}
-      {recovery && role !== 'customer' && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
+      {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && <div className="flex gap-2"><Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button><Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button></div>}
     </section>
