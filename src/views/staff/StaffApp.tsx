@@ -40,10 +40,13 @@ import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
+  listCheckIns,
   listCredentialAlerts,
   revokeAccessCredential,
   type CredentialAlert,
 } from "../../services/checkInApi"
+import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { listStaffActiveReservations, type StaffReservationProgress } from "../../services/staffReservationApi"
 import {
   loadStaffDailyOperations,
   type StaffDailyOperation,
@@ -816,21 +819,9 @@ export default function StaffApp({
     {
       id: "dashboard",
 
-      label: "Tổng quan ca làm việc",
+      label: "Tổng quan & nhiệm vụ ca làm việc",
 
       icon: Icon.home,
-
-      group: "Ca làm việc",
-
-      permission: "dashboard:read",
-    },
-
-    {
-      id: "tasks",
-
-      label: "Nhiệm vụ được giao",
-
-      icon: Icon.tasks,
 
       group: "Ca làm việc",
 
@@ -924,6 +915,14 @@ export default function StaffApp({
   const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
 
   const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
+
+  const [apiOverviewCounts, setApiOverviewCounts] = useState({
+    depositWaiting: 0,
+    upcomingCheckins: 0,
+    returnsToProcess: 0,
+  })
+
+  const [apiOverviewLoading, setApiOverviewLoading] = useState(false)
 
   const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
 
@@ -1255,6 +1254,58 @@ export default function StaffApp({
       })
     return () => { active = false }
   }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id, apiDailyOperationsRefresh])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0 })
+      setApiOverviewLoading(false)
+      return
+    }
+
+    let active = true
+    setApiOverviewLoading(true)
+
+    const loadOverview = async () => {
+      const results = await Promise.allSettled([
+        listStaffActiveReservations({ page: 0, size: 100 }),
+        listCheckIns({ page: 0, pageSize: 100 }),
+        listReturns("staff", 0, 100),
+      ])
+
+      if (!active) return
+
+      const reservations = results[0].status === "fulfilled"
+        ? results[0].value.data as StaffReservationProgress[]
+        : []
+      const checkIns = results[1].status === "fulfilled"
+        ? results[1].value.data
+        : []
+      const returns = results[2].status === "fulfilled"
+        ? results[2].value.data as ApiReturn[]
+        : []
+
+      const waitingStatuses = new Set([
+        "CONFIRMED",
+        "UNIT_RESERVED",
+        "READY_FOR_CHECKIN",
+        "AWAITING_CUSTOMER_RECEIPT",
+      ])
+
+      setApiOverviewCounts({
+        depositWaiting: reservations.filter((item) => waitingStatuses.has(item.status)).length,
+        upcomingCheckins: checkIns.filter((item) => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? "")).length,
+        returnsToProcess: returns.filter((item) => item.status !== "completed").length,
+      })
+      setApiOverviewLoading(false)
+    }
+
+    void loadOverview()
+    const timer = window.setInterval(() => void loadOverview(), 30_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [user.facilityId, user.id])
 
   const refreshCredentialAlerts = () => {
     if (!isApiAuthenticated()) return
@@ -2145,7 +2196,7 @@ export default function StaffApp({
       task.status === "open" ? "Chờ nhận việc" : "Đang thực hiện"
     }`,
 
-    page: "tasks",
+    page: "dashboard",
   }))
 
   const notificationPage = (type: ApiNotification["type"]) => {
@@ -2153,7 +2204,7 @@ export default function StaffApp({
     if (type === "SUPPORT") return "support"
     if (type === "RETURN") return "return"
     if (type === "RENEWAL") return "renewal-signing"
-    if (type === "OVERDUE") return "tasks"
+    if (type === "OVERDUE") return "dashboard"
     if (type === "PAYMENT") return "payments"
     if (type === "RESERVATION") return "reservations"
     return "dashboard"
@@ -2215,7 +2266,7 @@ export default function StaffApp({
         }
 
         if (notification.id.startsWith("assigned-task-")) {
-          setPage("tasks")
+          setPage("dashboard")
 
           return
         }
@@ -2375,25 +2426,27 @@ export default function StaffApp({
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
               title={"Đơn đã cọc · Chờ nhận kho"}
-              value={
-                reservations.filter((r) => r.status === "DEPOSIT_PAID").length
-              }
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
+                : reservations.filter((r) => r.status === "DEPOSIT_PAID").length}
               icon={Icon.alert}
               iconBg="bg-amber-50"
             />
             <StatCard
               title={"Nhận kho sắp tới"}
-              value={
-                eligibleCheckins.filter(
-                  (c) => c.status !== "completed" && c.status !== "no-show",
-                ).length
-              }
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
+                : eligibleCheckins.filter(
+                    (c) => c.status !== "completed" && c.status !== "no-show",
+                  ).length}
               icon={Icon.truck}
               iconBg="bg-blue-50"
             />
             <StatCard
               title={"Trả kho cần xử lý"}
-              value={returns.filter((r) => r.status !== "refunded").length}
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
+                : returns.filter((r) => r.status !== "refunded").length}
               icon={Icon.clipboard}
               iconBg="bg-purple-50"
             />
@@ -2413,164 +2466,24 @@ export default function StaffApp({
               iconBg="bg-red-50"
             />
           </div>
-          {openAssignedFacilityTasks.length > 0 && (
-            <Card>
-              <div className="flex items-center justify-between gap-3 border-b border-stone-200 p-4">
-                <div>
-                  <h3 className="font-bold">{"Nhiệm vụ quản lý giao"}</h3>
-                  <p className="text-xs text-stone-500">
-                    {"Nhận việc và cập nhật hoàn thành để quản lý theo dõi."}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage("tasks")}
-                >
-                  {"Xem toàn bộ"}
-                </Button>
-              </div>
-              <Table>
-                <Thead>
-                  <tr>
-                    <Th>{"Nhiệm vụ"}</Th>
-                    <Th>{"Loại"}</Th>
-                    <Th>{"Hạn xử lý"}</Th>
-                    <Th>{"Ưu tiên"}</Th>
-                    <Th>{"Trạng thái"}</Th>
-                    <Th />
-                  </tr>
-                </Thead>
-                <Tbody>
-                  {openAssignedFacilityTasks.slice(0, 5).map((task) => (
-                    <Tr key={task.id}>
-                      <Td>
-                        <p className="font-semibold text-stone-900">
-                          {task.title}
-                        </p>
-                        {task.notes && (
-                          <p className="mt-1 text-xs text-stone-500">
-                            {task.notes}
-                          </p>
-                        )}
-                      </Td>
-                      <Td>{staffTaskTypeLabel[task.type]}</Td>
-                      <Td className="text-xs">{formatDate(task.dueAt)}</Td>
-                      <Td>
-                        <Badge
-                          variant={
-                            task.priority === "high"
-                              ? "error"
-                              : task.priority === "medium"
-                                ? "warning"
-                                : "info"
-                          }
-                        >
-                          {statusLabelMap[task.priority]}
-                        </Badge>
-                      </Td>
-                      <Td>
-                        <Badge
-                          variant={
-                            task.status === "in_progress" ? "info" : "warning"
-                          }
-                        >
-                          {task.status === "in_progress"
-                            ? "Đang thực hiện"
-                            : "Chờ nhận việc"}
-                        </Badge>
-                      </Td>
-                      <Td className="text-right">
-                        {task.status === "open" ? (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              updateAssignedTaskStatus(task, "in_progress")
-                            }
-                          >
-                            {"Nhận việc"}
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              updateAssignedTaskStatus(task, "completed")
-                            }
-                          >
-                            {"Hoàn thành"}
-                          </Button>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </Card>
-          )}
-          <Card>
-            <div className="p-4 border-b border-stone-200 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-bold">
-                  {"Việc ưu tiên theo lịch vận hành"}
-                </h3>
-                <p className="text-xs text-stone-500">
-                  {"Lịch nhận/trả kho, hỗ trợ và hợp đồng sắp hết hạn."}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage("tasks")}
-              >
-                {"Xem toàn bộ"}
-              </Button>
-            </div>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{"Ưu tiên"}</Th>
-                  <Th>{"Nhiệm vụ"}</Th>
-                  <Th>{"Khách hàng"}</Th>
-                  <Th>{"Lịch / Thời hạn xử lý"}</Th>
-                  <Th></Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {operationalTasks.slice(0, 6).map((task) => (
-                  <Tr key={task.id}>
-                    <Td>
-                      {s(task.priority, {
-                        high: "error",
-
-                        medium: "warning",
-
-                        low: "muted",
-                      })}
-                    </Td>
-                    <Td>
-                      <b>{task.title}</b>
-                    </Td>
-                    <Td>{task.customer}</Td>
-                    <Td>
-                      <p className="text-xs">{task.time}</p>
-                      <p className="text-[11px] font-semibold text-amber-700">
-                        {task.sla}
-                      </p>
-                    </Td>
-                    <Td className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openOperationalTask(task)}
-                      >
-                        {"Xử lý"}
-                      </Button>
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Card>
+          <StaffDailyTaskQueue
+            assignedTasks={assignedFacilityTasks}
+            operationalTasks={operationalTasks}
+            dateFilter={operationalTaskDateFilter}
+            priorityFilter={operationalTaskPriorityFilter}
+            sort={operationalTaskSort}
+            onDateFilterChange={setOperationalTaskDateFilter}
+            onPriorityFilterChange={setOperationalTaskPriorityFilter}
+            onSortChange={setOperationalTaskSort}
+            onAssignedStatus={updateAssignedTaskStatus}
+            onOpenAssignedCompletion={(task) => {
+              setTaskCompletionTarget(task)
+              setTaskResultReport(task.resultReport || "")
+              setTaskEvidenceText((task.evidence || []).join("\n"))
+            }}
+            onOpenOperational={openOperationalTask}
+            showToast={showToast}
+          />
         </div>
       )}
 
@@ -2732,61 +2645,62 @@ export default function StaffApp({
             />
           </Card>
 
-          <Modal
-            open={Boolean(taskCompletionTarget)}
-            onClose={() => setTaskCompletionTarget(null)}
-            title="Hoàn thành nhiệm vụ được giao"
-          >
-            {taskCompletionTarget && (
-              <div className="space-y-4">
-                <div className="rounded-lg bg-stone-50 p-3 text-sm">
-                  <b>{taskCompletionTarget.title}</b>
-                  <p className="mt-1 text-stone-600">
-                    {taskCompletionTarget.id}
-                    {taskCompletionTarget.referenceId
-                      ? ` · ${taskCompletionTarget.referenceId}`
-                      : ""}
-                  </p>
-                </div>
-                <label className="block text-sm font-medium text-stone-700">
-                  Báo cáo kết quả
-                  <textarea
-                    className="mt-1 min-h-28 w-full rounded-lg border border-stone-300 p-3"
-                    value={taskResultReport}
-                    maxLength={2000}
-                    onChange={(event) => setTaskResultReport(event.target.value)}
-                    placeholder="Mô tả kết quả đã thực hiện để quản lý theo dõi…"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-stone-700">
-                  Minh chứng hoặc mã tệp (mỗi dòng một mục)
-                  <textarea
-                    className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 p-3"
-                    value={taskEvidenceText}
-                    maxLength={2000}
-                    onChange={(event) => setTaskEvidenceText(event.target.value)}
-                    placeholder="Ví dụ: anh-nghiem-thu-01.jpg"
-                  />
-                </label>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setTaskCompletionTarget(null)}
-                  >
-                    Đóng
-                  </Button>
-                  <Button
-                    disabled={!taskResultReport.trim()}
-                    onClick={completeAssignedTask}
-                  >
-                    Gửi báo cáo và hoàn thành
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Modal>
         </div>
       )}
+
+      <Modal
+        open={Boolean(taskCompletionTarget)}
+        onClose={() => setTaskCompletionTarget(null)}
+        title="Hoàn thành nhiệm vụ được giao"
+      >
+        {taskCompletionTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-stone-50 p-3 text-sm">
+              <b>{taskCompletionTarget.title}</b>
+              <p className="mt-1 text-stone-600">
+                {taskCompletionTarget.id}
+                {taskCompletionTarget.referenceId
+                  ? ` · ${taskCompletionTarget.referenceId}`
+                  : ""}
+              </p>
+            </div>
+            <label className="block text-sm font-medium text-stone-700">
+              Báo cáo kết quả
+              <textarea
+                className="mt-1 min-h-28 w-full rounded-lg border border-stone-300 p-3"
+                value={taskResultReport}
+                maxLength={2000}
+                onChange={(event) => setTaskResultReport(event.target.value)}
+                placeholder="Mô tả kết quả đã thực hiện để quản lý theo dõi…"
+              />
+            </label>
+            <label className="block text-sm font-medium text-stone-700">
+              Minh chứng hoặc mã tệp (mỗi dòng một mục)
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 p-3"
+                value={taskEvidenceText}
+                maxLength={2000}
+                onChange={(event) => setTaskEvidenceText(event.target.value)}
+                placeholder="Ví dụ: anh-nghiem-thu-01.jpg"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setTaskCompletionTarget(null)}
+              >
+                Đóng
+              </Button>
+              <Button
+                disabled={!taskResultReport.trim()}
+                onClick={completeAssignedTask}
+              >
+                Gửi báo cáo và hoàn thành
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* ── RESERVATIONS ──────────────────────────────────────── */}
       {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'reservations:approve')} facilityNames={user.facilityNames} />}
