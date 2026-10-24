@@ -83,7 +83,7 @@ function MainContent() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
-  const [restoringSession, setRestoringSession] = useState(() => Boolean(getRefreshToken()))
+  const [restoringSession, setRestoringSession] = useState(() => Boolean(!getAuthenticatedActor() && getRefreshToken()))
   const [guestView, setGuestView] = useState<GuestView>(resolveGuestView)
 
   useEffect(() => {

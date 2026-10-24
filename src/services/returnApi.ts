@@ -28,6 +28,7 @@ export interface ApiReturn {
   inspectionNotes: string | null; managerResolutionNote: string | null
   customerNotes?: string | null
   customerDecisionNote?: string | null
+  inspectedAt?: string | null
   depositAmount: number | null; totalDeductions: number; netRefundAmount: number | null; amountDueFromCustomer: number | null
   settlementBlocker?: string | null; customerConfirmed: boolean
   damageFee: number; cleaningFee: number; lostItemFee: number; overdueFee: number; outstandingFee: number
@@ -51,7 +52,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
     (v.evidencePhotos === undefined || (Array.isArray(v.evidencePhotos) && v.evidencePhotos.every(item => typeof item === 'string'))) &&
     ['depositAmount', 'netRefundAmount', 'amountDueFromCustomer'].every(k => v[k] === null || money(v[k])) &&
-    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker', 'customerDecisionNote', 'customerNotes'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string') &&
+    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker', 'customerDecisionNote', 'customerNotes', 'inspectedAt'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string') &&
     (v.sourceType === undefined ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
       v.sourceType === 'CUSTOMER_RETURN' ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
         v.sourceType === 'RECOVERY' && isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) &&

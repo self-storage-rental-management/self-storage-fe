@@ -4,7 +4,7 @@ import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
-import type { RentalApiDetail } from "../../types/rentalApi"
+import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, accessStatusLabels } from "./presentation"
 const labelClass = "text-xs font-normal text-slate-500"
@@ -17,7 +17,7 @@ export default function RentalDetail({
 }: {
   rental: RentalApiDetail
   onRequest?: () => void
-  role?: "customer" | "manager"
+  role?: RentalApiRole
   showTechnicalWarnings?: boolean
 }) {
   const { copy } = useManagerPresentation()
@@ -101,7 +101,7 @@ export default function RentalDetail({
           </div>
         </dl>
       </Card>
-      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role} id={rental.id} />
+      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role === "manager" ? "manager" : "customer"} id={rental.id} />
       {onRequest && (
         <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end border-t border-stone-200 bg-white/95 px-1 py-3 backdrop-blur">
           <Button disabled={rental.status !== "active"} onClick={onRequest}>

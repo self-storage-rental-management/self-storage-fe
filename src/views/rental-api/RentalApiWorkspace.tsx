@@ -588,7 +588,16 @@ function WorkspaceData({
           rentalId={action.rentalId}
           revision={action.revision}
           onClose={() => setAction(undefined)}
-          onSuccess={success}
+          onSuccess={(created) => {
+            setAction(undefined)
+            if (created && typeof created === "object" && "id" in created) {
+              setTab("renewal")
+              setDetail({ kind: "renewal", id: (created as RenewalApiRecord).id })
+            } else {
+              setDetail(undefined)
+            }
+            refresh()
+          }}
           onNavigateToRenewals={() => {
             setAction(undefined)
             setDetail(undefined)
@@ -694,18 +703,7 @@ function DetailModal({
             financeHistory={<RenewalPaymentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:finance`} />}
             evidenceDocuments={<RenewalDocumentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:documents`} extraEvents={documentEvents} />}
             operationsLocked={operationsLocked}
-            appointmentSelection={role === "customer" && read.data.record.status === "accepted" ? (
-              <RenewalOperationsPanel
-                appointmentOnly
-                status={read.data.record.status}
-                id={detail.id}
-                role="customer"
-                facilityId={read.data.record.facility.id}
-                customerId={read.data.record.customer.id}
-                onLocked={setOperationLocked}
-                onChanged={() => { read.refresh(); onChanged() }}
-              />
-            ) : undefined}
+            appointmentSelection={undefined}
             onAction={(action) => {
               if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord
