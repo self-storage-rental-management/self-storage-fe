@@ -40,28 +40,28 @@ function nodes(node: any): ReactElement<any>[] {
 function find(tree: unknown, type: unknown) { return nodes(tree).find(node => node.type === type)! }
 beforeEach(() => { harness.refresh.mockReset(); harness.upload.mockReset(); harness.data = supportPage([supportTicket]); harness.role = "customer" })
 describe("D5 upload preserves its form until response is handled", () => {
-  it("blocks empty resolution and waits for a saved proof before enabling evidence-only reporting", () => {
+  it("blocks an empty reply and waits for upload before sending a file-only Staff message", () => {
     harness.role = "staff"
     const run = vi.fn(), formSlots: any[] = []
     const command = { run, locked: false, busy: false, conflict: false } as any
     const form = () => render(() => SupportActionForm({ role: "staff", ticket: supportActive, command, mode: "message" }), formSlots)
-    const report = (tree: unknown) => nodes(tree).find(node => node.type === Button && node.props.children === "Báo đã xử lý")!
+    const report = (tree: unknown) => nodes(tree).find(node => node.type === Button && node.props.type === 'submit')!
     let tree = form()
     expect(report(tree).props.disabled).toBe(true)
-    report(tree).props.onClick()
+    find(tree, 'form').props.onSubmit({ preventDefault: vi.fn() })
     expect(run).not.toHaveBeenCalled()
     find(tree, EvidenceUpload).props.onBusy(true)
     find(tree, EvidenceUpload).props.onChange([supportIds.message])
     tree = form()
     expect(report(tree).props.disabled).toBe(true)
-    report(tree).props.onClick()
+    find(tree, 'form').props.onSubmit({ preventDefault: vi.fn() })
     expect(run).not.toHaveBeenCalled()
     find(tree, EvidenceUpload).props.onBusy(false)
     tree = form()
     expect(report(tree).props.disabled).toBe(false)
-    report(tree).props.onClick()
+    find(tree, 'form').props.onSubmit({ preventDefault: vi.fn() })
     expect(run).toHaveBeenCalledWith({ kind: "command", role: "staff", id: supportActive.id, command: {
-      kind: "resolve", summary: "", evidenceFileIds: [supportIds.message], expectedVersion: supportActive.version,
+      kind: "message", body: "", visibility: 'PUBLIC', evidenceFileIds: [supportIds.message],
     } })
   })
   it.each(["create", "message"])("%s upload prevents leaving the inline chat and reload, then retains returned file", async kind => {

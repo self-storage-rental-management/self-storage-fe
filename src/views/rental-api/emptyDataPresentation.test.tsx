@@ -24,12 +24,14 @@ const state = vi.hoisted(() => ({
   error: undefined as unknown,
 }))
 vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.actor }))
+vi.mock('../../hooks/useSupportMessageReads', () => ({ useSupportUnread: () => new Map(), useSupportMessageReads: () => {} }))
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (key: string) => ({
     loading: state.loading,
     error: state.error,
     refresh: vi.fn(),
     data: state.loading || state.error ? undefined
+      : key.includes(':staff-inbox:') ? { ...page([]), counts: { queue: 0, mine: 0, all: 0, history: 0 } }
       : key.endsWith(':payment-events') || key.includes(':coordination:') ? page([])
       : key.includes(':support-notices:') ? { data: [], pagination: { page: 0, size: 20, totalElements: 0, totalPages: 0 } }
       : key.includes(":summary:") ? { counts: { open: 0, in_progress: 0, resolved: 0, closed: 0 }, unassignedOpen: 0 }
@@ -72,7 +74,7 @@ function verifyEmptyOnlyAfterSuccess(view: ReactElement, emptyText = "Không có
 describe("Dương verified empty-data presentation", () => {
   it.each(["customer", "manager"] as const)("D1 %s empty rental list", role => {
     state.actor = operationsActor(role); state.mode = "rental"
-    verifyEmptyOnlyAfterSuccess(<RentalApiWorkspace role={role} />, role === 'customer' ? 'Không có hồ sơ thuê phù hợp với bộ lọc.' : 'Không có dữ liệu')
+    verifyEmptyOnlyAfterSuccess(<RentalApiWorkspace role={role} />, role === 'customer' ? 'Không có hồ sơ thuê đang diễn ra.' : 'Không có dữ liệu')
   })
   it("D2 Customer empty renewal options", () => {
     state.actor = operationsActor("customer"); state.mode = "options"
@@ -95,7 +97,7 @@ describe("Dương verified empty-data presentation", () => {
   })
   it.each(["customer", "staff", "manager"] as const)("D5 %s empty ticket list", role => {
     state.actor = supportActor(role)
-    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />, role === "staff" ? "Chưa có cuộc trò chuyện đang phụ trách" : "Chưa có cuộc trò chuyện phù hợp")
+    verifyEmptyOnlyAfterSuccess(<SupportApiWorkspace role={role} />, role === "staff" ? "Bạn chưa có cuộc trò chuyện đang hỗ trợ." : "Chưa có cuộc trò chuyện phù hợp")
   })
   it("D5 Customer empty available records", () => {
     state.actor = supportActor("customer")

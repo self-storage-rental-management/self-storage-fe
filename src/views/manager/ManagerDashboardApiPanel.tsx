@@ -9,7 +9,6 @@ import ManagerReportsApiPanel from './ManagerReportsApiPanel'
 const metrics: { metric: ManagerApiMetric; title: string; page: string }[] = [
   { metric: 'rentals', title: 'Tổng hồ sơ thuê', page: 'rentals' },
   { metric: 'pending-renewals', title: 'Gia hạn cần theo dõi', page: 'rentals' },
-  { metric: 'open-support', title: 'Yêu cầu hỗ trợ mới', page: 'support-api' },
   { metric: 'term-overdue', title: 'Quá thời hạn thuê', page: 'overdue-cases' },
 ]
 
@@ -60,7 +59,7 @@ export default function ManagerDashboardApiPanel({ setPage }: { setPage: (page: 
     <ManagerReportsApiPanel overview />
     <section className="space-y-4" aria-label="Công việc cần theo dõi">
     <h2 className="text-xl font-bold text-stone-900">Công việc cần theo dõi</h2>
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {metrics.map(item => <ManagerMetric key={`${managerApiIdentity(actor)}:${item.metric}`} actor={actor} item={item} setPage={setPage} />)}
     </div>
     </section>

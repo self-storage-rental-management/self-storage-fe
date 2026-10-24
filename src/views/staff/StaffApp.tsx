@@ -35,7 +35,6 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
-import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
@@ -3193,7 +3192,6 @@ export default function StaffApp({
               showToast={showToast}
             />
           </SupportApiRoute>
-          {isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
         </div>
       )}
 
