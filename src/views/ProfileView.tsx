@@ -1051,7 +1051,7 @@ setSavingProfile(true)
       )
     }
 
-    if (user.role !== 'business') return null
+    if (user.role !== 'business' && user.role !== 'admin') return null
 
     return (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -1061,7 +1061,7 @@ setSavingProfile(true)
             <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <span className="text-sm font-semibold text-emerald-900">Phạm vi dữ liệu</span>
               <Badge variant="success">{apiMode
-                ? user.role === 'admin'
+                ? (user.role as string) === 'admin'
                   ? 'Toàn hệ thống'
                   : Object.keys(apiActor?.facilityScopes ?? {}).length
                     ? 'Theo cơ sở được cấp'

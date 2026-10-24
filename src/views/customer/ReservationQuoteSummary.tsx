@@ -17,8 +17,17 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
       <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm">
         <div className="flex flex-wrap items-start justify-between gap-2 border-b border-stone-200 pb-3">
           <div>
-            <h3 className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</h3>
-            <p className="mt-0.5 text-xs text-stone-500">{formatDisplayDate(q.startDate)}–{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng</p>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</h3>
+              {q.unitTypeName && (
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700 border border-stone-200">
+                  {q.unitTypeName}
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-stone-500">
+              {q.facilityName ? `${q.facilityName} · ` : ''}{formatDisplayDate(q.startDate)}–{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng
+            </p>
           </div>
           <div className="text-right"><span className="text-xs text-stone-500">Đơn giá/tháng</span><b className="block tabular-nums text-stone-900">{formatVndAmount(q.monthlyPrice)}</b></div>
         </div>
@@ -53,7 +62,14 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
     <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-5 text-sm sm:p-6">
       {/* ── HEADER BÁO GIÁ ── */}
       <div className="border-b border-stone-200 pb-4">
-        <h3 className="text-lg font-bold text-stone-900">{context === 'quote' ? 'Xác nhận báo giá đặt kho' : 'Tiền thuê và cọc giữ chỗ'}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-bold text-stone-900">{context === 'quote' ? 'Xác nhận báo giá đặt kho' : 'Tiền thuê và cọc giữ chỗ'}</h3>
+          {(q.facilityName || q.unitTypeName) && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900 border border-amber-200">
+              🏷️ {q.unitTypeName ? q.unitTypeName : 'Loại kho đã chọn'} {q.facilityName ? `· ${q.facilityName}` : ''}
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-xs text-stone-600">
           Kỳ thuê: <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate)}</b> · {q.rentalMonths} tháng
         </p>

@@ -16,8 +16,7 @@ function validPeriodMetadata(t: AcceptedTerms): boolean {
     || !/^\d{4}-\d{2}-\d{2}$/.test(t.rentalStartDate) || !Number.isFinite(Date.parse(t.rentalStartDate))
     || new Date(t.rentalStartDate).toISOString().slice(0, 10) !== t.rentalStartDate) return false
   const rawEnd = Date.parse(t.oldEndDate), extension = Date.parse(t.extensionStartDate)
-  return Date.parse(t.rentalStartDate) < extension
-    && extension - rawEnd === (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
+  return Date.parse(t.rentalStartDate) <= extension && extension >= rawEnd
 }
 function isAcceptedTerms(value: unknown): value is AcceptedTerms {
   if (!value || typeof value !== "object") return false
@@ -107,7 +106,7 @@ export async function listRenewals(
       "status",
       "rentalId",
       "sort",
-      ...(role === "manager" ? ["facilityId", "search"] : []),
+      ...(role === "manager" || role === "staff" ? ["facilityId", "search"] : []),
     ],
     ["createdAt", "newEndDate", "amount", "id"],
   )
@@ -142,11 +141,17 @@ export async function getRenewalOptions(rentalId: string) {
 export async function quoteRenewal(
   rentalId: string,
   pricingPackageCode: string,
+  fullPayment: boolean = true,
+  startDate?: string,
 ) {
+  const body: Record<string, unknown> = { pricingPackageCode, fullPayment }
+  if (startDate) {
+    body.startDate = startDate
+  }
   return readRentalEnvelope<RenewalApiQuote>(
     await apiRequest(
       `/api/customer/rentals/${encodeURIComponent(rentalId)}/renewal-quote`,
-      { method: "POST", body: JSON.stringify({ pricingPackageCode }) },
+      { method: "POST", body: JSON.stringify(body) },
     ),
     (data) => {
       const q = data as RenewalApiQuote | null
@@ -286,3 +291,22 @@ export async function getRenewalVnpayPayment(renewalId:string) {
     value=>isRenewalPaymentResponse(value,renewalId),
   )
 }
+
+export async function approveRenewalTicket(id: string) {
+  return readRentalEnvelope<RenewalApiRecord>(
+    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+    record => isRenewalRecord(record),
+  )
+}
+
+export async function rejectRenewalTicket(id: string, reason?: string) {
+  return readRentalEnvelope<RenewalApiRecord>(
+    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    }),
+    record => isRenewalRecord(record),
+  )
+}
+

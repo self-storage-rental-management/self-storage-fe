@@ -38,6 +38,7 @@ export default function RenewalDetail({
   const { manager, copy, explain } = useManagerPresentation()
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
+  const isSplit = !!terms && terms.remainingRentalAmount > 0
   const hasDeposit = !!terms && terms.renewalDepositAmount > 0
   const isManager = role === "manager"
   const canOpenPayment = role === "customer" && r.status === "accepted" && r.acceptedRevision !== null
@@ -54,22 +55,20 @@ export default function RenewalDetail({
     : payment?.message
   const verification = r.systemVerification
   const workflowStatusLabel = paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
-    ? hasDeposit ? "Đã mở thanh toán cọc qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
+    ? isSplit ? "Đã mở thanh toán đợt 1 qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
     : r.status === "accepted" && verification?.status === "VERIFIED"
     ? "Đã xác nhận điều kiện, chờ kiểm tra readiness thanh toán"
     : copy(renewalLabels[r.status] || unknown)
   const renewalProgressSteps = [
     { label: "Gửi yêu cầu", detail: "Hồ sơ gia hạn đã được tạo" },
-    { label: "Kiểm tra & báo giá", detail: "Hệ thống xác minh điều kiện và ghi nhận điều khoản" },
-    { label: "Thanh toán", detail: hasDeposit ? "Thanh toán cọc gia hạn" : "Thanh toán tiền gia hạn" },
-    { label: "Hẹn lịch ký", detail: "Chọn thời gian đến cơ sở" },
-    { label: "Đối chiếu & ký", detail: "Staff xác minh, nhận tiền còn lại và lưu hợp đồng đã ký" },
+    { label: "Điều khoản & báo giá", detail: "Hệ thống xác minh điều kiện và ghi nhận gói thuê" },
+    { label: "Thanh toán trực tuyến", detail: isSplit ? "Thanh toán đợt 1 qua VNPay" : "Thanh toán toàn kỳ qua VNPay" },
+    { label: "Hoàn tất gia hạn", detail: "Hợp đồng thuê tự động được kéo dài thời hạn" },
   ]
   const renewalProgressIndex = r.status === "completed" ? renewalProgressSteps.length
-    : ["deposit_paid", "full_rent_paid"].includes(r.status) || payment?.paymentStatus === "PAID" ? 3
-      : r.status === "appointment_scheduled" ? 4
-        : ["accepted", "approved", "payment_processing", "payment_failed"].includes(r.status) ? 2
-          : 1
+    : ["deposit_paid", "full_rent_paid", "appointment_scheduled"].includes(r.status) || payment?.paymentStatus === "PAID" ? 3
+      : ["accepted", "approved", "payment_processing", "payment_failed"].includes(r.status) ? 2
+        : 1
   const renewalTerminalMessage = r.status === "rejected" ? "Yêu cầu bị từ chối. Xem lý do quyết định bên dưới."
     : r.status === "cancelled" ? "Yêu cầu đã hủy. Các khoản đã thu cần được đối soát theo giao dịch."
       : r.status === "payment_expired" ? "Yêu cầu đã hết hạn thanh toán, các bước tiếp theo đang tạm dừng."
@@ -133,7 +132,7 @@ export default function RenewalDetail({
       <div className="space-y-3">
           {role === "customer" && payment && <section className={`rounded-xl border p-4 ${payment.reconciliationRequired ? "border-amber-200 bg-amber-50/50" : "border-stone-200 bg-white"}`} aria-label="Thanh toán gia hạn" aria-live="polite">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold text-stone-700">{hasDeposit ? "Cọc gia hạn" : "Thanh toán toàn kỳ"}</h4>
+              <h4 className="text-sm font-semibold text-stone-700">{isSplit ? "Thanh toán đợt 1 (20%)" : "Thanh toán toàn kỳ (100%)"}</h4>
               <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${payment.reconciliationRequired ? "bg-amber-100 text-amber-800" : payment.paymentStatus === "PAID" ? "bg-emerald-50 text-emerald-700" : ["FAILED", "CANCELLED"].includes(payment.paymentStatus) ? "bg-red-50 text-red-700" : "bg-stone-100 text-stone-600"}`}>{paymentStatusLabel}</span>
             </div>
             <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -178,16 +177,32 @@ export default function RenewalDetail({
         <p className="rounded bg-amber-50 p-3">
           Hồ sơ gia hạn đã được duyệt. Trạng thái này chưa xác nhận đã thanh toán hoặc hoàn tất ký, ngày kết thúc thuê chưa thay đổi.</p>
       )}
+      {r.status === "completed" && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-1">
+          <h4 className="font-bold text-emerald-900 text-sm">✓ Gia hạn hợp đồng thành công</h4>
+          <p className="text-xs text-emerald-800 leading-relaxed">
+            Hợp đồng thuê của bạn đã được gia hạn thành công. Thời hạn mới có hiệu lực đến ngày <b>{rentalDate(r.newEndDate)}</b>.
+          </p>
+        </div>
+      )}
+      {role === "customer" && r.status === "accepted" && payment?.paymentStatus !== "PAID" && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-1">
+          <h4 className="font-bold text-blue-900 text-sm">Thanh toán gia hạn trực tuyến</h4>
+          <p className="text-xs text-blue-800 leading-relaxed">
+            Quý khách chỉ cần bấm <b>{isSplit ? "Thanh toán đợt 1 qua VNPay" : "Thanh toán gia hạn qua VNPay"}</b> bên dưới. Hợp đồng sẽ tự động được gia hạn đến ngày <b>{rentalDate(r.newEndDate)}</b> ngay sau khi giao dịch thành công.
+          </p>
+        </div>
+      )}
       {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
       {appointmentSelection}
-      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán cọc" : "thanh toán"}.</p>}
+      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : null}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
-          disabled={operationsLocked||paymentBusy||paymentExpired||!appointmentSelected||payment?.paymentStatus==="PAID"}
+          disabled={operationsLocked||paymentBusy||paymentExpired||payment?.paymentStatus==="PAID"}
           onClick={openRenewalPayment}
-        >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":hasDeposit?"Thanh toán cọc":"Thanh toán toàn kỳ"}</Button>}
+        >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":isSplit?"Thanh toán đợt 1 (20%)":"Thanh toán gia hạn (100%)"}</Button>}
         {actions
           .filter((a) => r.allowedActions.includes(a.action))
           .map((a) => (

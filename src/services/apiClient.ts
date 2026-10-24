@@ -14,7 +14,16 @@ export class ApiClientError extends Error {
   }
 }
 
+const ACCESS_TOKEN_STORAGE_KEY = 'storagehub:access_token'
 const REFRESH_TOKEN_STORAGE_KEY = 'storagehub:refresh_token'
+
+function readStoredAccessToken(): string | null {
+  try {
+    return sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
 
 function readStoredRefreshToken(): string | null {
   try {
@@ -24,16 +33,22 @@ function readStoredRefreshToken(): string | null {
   }
 }
 
-let accessToken: string | null = null
+let accessToken: string | null = readStoredAccessToken()
 let refreshToken: string | null = readStoredRefreshToken()
 let refreshInFlight: Promise<boolean> | null = null
 
 export function setAccessToken(token: string) {
   accessToken = token
+  try {
+    sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
+  } catch {}
 }
 
 export function clearAccessToken() {
   accessToken = null
+  try {
+    sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+  } catch {}
 }
 
 export function setRefreshToken(token: string) {
@@ -51,6 +66,7 @@ export function clearAuthTokens() {
   accessToken = null
   refreshToken = null
   try {
+    sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
     sessionStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
   } catch {}
 }
@@ -90,7 +106,7 @@ async function refreshAccessToken(): Promise<boolean> {
       if (!response.ok || !data || typeof data.accessToken !== 'string' || typeof data.refreshToken !== 'string') {
         return false
       }
-      accessToken = data.accessToken
+      setAccessToken(data.accessToken)
       setRefreshToken(data.refreshToken)
       return true
     } catch {
@@ -104,6 +120,13 @@ async function refreshAccessToken(): Promise<boolean> {
 
 export async function apiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {}): Promise<T> {
   const { skipAuth, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...requestOptions } = options
+
+  // If a protected request is initiated and we don't have an accessToken in memory
+  // but we do have a refreshToken in storage, refresh before sending to avoid 401s.
+  if (!skipAuth && !accessToken && refreshToken && path !== '/api/auth/refresh' && path !== '/api/auth/login') {
+    await refreshAccessToken()
+  }
+
   const headers = new Headers(requestOptions.headers)
   if (requestOptions.body && !(requestOptions.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (!skipAuth && accessToken) headers.set('Authorization', `Bearer ${accessToken}`)

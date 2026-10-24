@@ -910,6 +910,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         const uniquePackages = uniqueRentalPackagesByDuration(packages)
         setBackendRentalPackages(uniquePackages)
         const selected = uniquePackages.find(item => item.code === selectedPackageId)
+          || uniquePackages.find(item => item.rentalMonths === rentalMonths)
           || uniquePackages.find(item => item.rentalMonths === 3)
           || uniquePackages[0]
         if (selected) {
@@ -928,7 +929,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       })
       .finally(() => { if (!cancelled) setRentalPackagesLoading(false) })
     return () => { cancelled = true }
-  }, [bookOpen, earliestCheckInDate, selectedTarget?.facility.id])
+  }, [bookOpen, earliestCheckInDate, selectedTarget?.facility.id, selectedTarget?.unitType.id])
 
   // Support
   const [supportChatbotOpen, setSupportChatbotOpen] = useState(false)
@@ -1240,14 +1241,28 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const unitRentalPackages = isApiAuthenticated()
       ? []
       : exactUnit?.rentalPackages || customSpec?.rentalPackages || generateDefaultRentalPackages(facility.id, sizeCode, unitType.monthlyPrice)
-    const activePackages = unitRentalPackages.filter(p => p.status === 'active')
-    const initialPkg = activePackages.find(p => p.months === 3) || activePackages[0]
-    if (initialPkg) {
-      setSelectedPackageId(initialPkg.id)
-      setRentalMonths(initialPkg.months)
+    if (isApiAuthenticated()) {
+      const activeBackendPkg = (selectedPackageId ? backendRentalPackages.find(p => p.code === selectedPackageId) : undefined)
+        || backendRentalPackages.find(p => p.rentalMonths === rentalMonths)
+        || backendRentalPackages.find(p => p.rentalMonths === 3)
+        || backendRentalPackages[0]
+      if (activeBackendPkg) {
+        setSelectedPackageId(activeBackendPkg.code)
+        setRentalMonths(activeBackendPkg.rentalMonths)
+      } else {
+        setSelectedPackageId('')
+        setRentalMonths(3)
+      }
     } else {
-      setSelectedPackageId('')
-      setRentalMonths(3)
+      const activePackages = unitRentalPackages.filter(p => p.status === 'active')
+      const initialPkg = activePackages.find(p => p.months === 3) || activePackages[0]
+      if (initialPkg) {
+        setSelectedPackageId(initialPkg.id)
+        setRentalMonths(initialPkg.months)
+      } else {
+        setSelectedPackageId('')
+        setRentalMonths(3)
+      }
     }
     const repUnit: StorageUnit = exactUnit ?? {
       id: '',
@@ -1423,10 +1438,25 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return selectedUnitActivePackages.find(p => p.months === rentalMonths)
   }, [selectedPackageId, selectedUnitActivePackages, rentalMonths])
 
-  const selectedBackendRentalPackage = useMemo(
-    () => backendRentalPackages.find(item => item.code === selectedPackageId),
-    [backendRentalPackages, selectedPackageId],
-  )
+  const selectedBackendRentalPackage = useMemo(() => {
+    if (!backendRentalPackages.length) return undefined
+    if (selectedPackageId) {
+      const match = backendRentalPackages.find(item => item.code === selectedPackageId)
+      if (match) return match
+    }
+    return (
+      backendRentalPackages.find(item => item.rentalMonths === rentalMonths) ||
+      backendRentalPackages.find(item => item.rentalMonths === 3) ||
+      backendRentalPackages[0]
+    )
+  }, [backendRentalPackages, selectedPackageId, rentalMonths])
+
+  useEffect(() => {
+    if (isApiAuthenticated() && selectedBackendRentalPackage && selectedPackageId !== selectedBackendRentalPackage.code) {
+      setSelectedPackageId(selectedBackendRentalPackage.code)
+      setRentalMonths(selectedBackendRentalPackage.rentalMonths)
+    }
+  }, [selectedBackendRentalPackage, selectedPackageId])
 
   const discountRate = selectedActivePackage
     ? (selectedActivePackage.discountPercent ?? 0) / 100
@@ -1611,7 +1641,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const confirmReservation = async () => {
     if (!selectedUnit || !selectedTarget || reservationSubmitting) return
     setReservationSubmitError(null)
-    if (isApiAuthenticated() && !selectedBackendRentalPackage) {
+    if (isApiAuthenticated() && !selectedBackendRentalPackage && backendRentalPackages.length === 0) {
       setReservationSubmitError('Vui lòng chọn một gói thuê đang hiệu lực trước khi lấy báo giá.')
       return
     }
@@ -1656,6 +1686,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           return
         }
         const packageCode = selectedBackendRentalPackage?.code
+          || backendRentalPackages[0]?.code
           || selectedActivePackage?.id
           || `${rentalMonths}_MONTHS`
         const quote = await createReservationQuote({
@@ -2780,7 +2811,27 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           )}
                         </div>
                       )}
-                      {returnCase.status === 'awaiting_customer_confirmation' && <div className="mt-3 flex flex-wrap justify-end gap-2"><Button variant="outline" size="sm" onClick={() => { setReturnDisputeTargetId(returnCase.id); setReturnDisputeReason('') }}>{'Yêu cầu xem xét lại'}</Button><Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền duy trì CSVC. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và mã ra vào đã hết hiệu lực, đang chờ nhân viên chuyển hoàn cọc.')) } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xác nhận quyết toán.') } } }) }}>{'Đồng ý quyết toán'}</Button></div>}
+                      {returnCase.customerDecisionNote?.includes('Auto-Settlement SLA') && (
+                        <div className="mt-2.5 rounded-lg border border-purple-200 bg-purple-50 p-2.5 text-xs text-purple-900 flex items-center gap-2">
+                          <span className="font-bold">⚡ Tự động chốt quyết toán (SLA 72h):</span>
+                          <span>Hồ sơ đã tự động được nghiệm thu và quyết toán sau 72 giờ không có phản hồi khiếu nại.</span>
+                        </div>
+                      )}
+                      {returnCase.status === 'awaiting_customer_confirmation' && (
+                        <div className="mt-3 space-y-2">
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 flex items-start gap-2">
+                            <span className="text-base leading-none">⏱️</span>
+                            <div>
+                              <p className="font-bold">Thời hạn phản hồi (SLA 72 giờ)</p>
+                              <p className="mt-0.5 text-amber-800">Quý khách vui lòng kiểm tra kỹ biên bản và phản hồi trong 72 giờ. Sau thời hạn này, hệ thống sẽ tự động chốt quyết toán theo biên bản nghiệm thu của nhân viên.</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => { setReturnDisputeTargetId(returnCase.id); setReturnDisputeReason('') }}>{'Yêu cầu xem xét lại'}</Button>
+                            <Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền duy trì CSVC. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và mã ra vào đã hết hiệu lực, đang chờ nhân viên chuyển hoàn cọc.')) } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xác nhận quyết toán.') } } }) }}>{'Đồng ý quyết toán'}</Button>
+                          </div>
+                        </div>
+                      )}
                       {returnCase.status === 'payment_due' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-3"><div><p className="font-bold text-red-900">{`Cần thanh toán thêm ${formatVnd(returnCase.amountDueFromCustomer ?? 0)}`}</p><p className="mt-1 text-red-700">{'Sau khi thanh toán, hệ thống sẽ đóng hồ sơ và phát hành biên nhận trong Lịch sử thanh toán.'}</p></div><Button size="sm" onClick={() => requestConfirmation({ title: 'Xác nhận thanh toán', message: `Thanh toán ${formatVnd(returnCase.amountDueFromCustomer ?? 0)} bằng chuyển khoản?`, confirmLabel: 'Thanh toán', onConfirm: () => { const reference = `RET-BAL-${Date.now()}`; try { payReturnBalance(returnCase.id, user, 'BANK_TRANSFER', reference); showToast('Đã thanh toán phần thiếu và phát hành biên nhận.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể thanh toán.') } } })}>{'Thanh toán phần thiếu'}</Button></div>}
                       {returnCase.status === 'disputed' && <p className="mt-3 rounded-lg bg-amber-100 p-3 font-semibold text-amber-900">{'Đang chờ quản lý cơ sở xem xét lại'}: {returnCase.customerDecisionNote}</p>}
                       {returnCase.status === 'refund_pending' && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900">{'Hồ sơ thuê và mã ra vào đã hết hiệu lực. Nhân viên đang chuyển hoàn cọc, biên nhận sẽ xuất hiện sau khi xác nhận giao dịch.'}</p>}
@@ -3301,7 +3352,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
                     {warehouseRecommendation.id === selectedTarget?.unitType.id && <p className="mt-1 text-xs font-semibold">Cỡ kho bạn đang chọn đã phù hợp.</p>}
                   </div>
-                  {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && <Button type="button" size="sm" variant="outline" onClick={() => handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2)}>Chọn cỡ kho được gợi ý</Button>}
+                  {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2)
+                        showToast(`Đã chuyển sang cỡ kho gợi ý: ${unitTypeLabel(recommendedUnitType.name)}`)
+                      }}
+                    >
+                      Chọn cỡ kho được gợi ý
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -3491,7 +3554,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     }}>Quay lại</Button>}
               </div>
               {bookingStep === 1 && <Button onClick={continueFromPersonalDetails}>Tiếp theo: Hàng hóa</Button>}
-              {bookingStep === 2 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && (rentalPackagesLoading || !selectedBackendRentalPackage))} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang lập báo giá...' : 'Kiểm tra và lấy báo giá'}</Button>}
+              {bookingStep === 2 && (
+                <Button
+                  disabled={
+                    reservationSubmitting ||
+                    (isApiAuthenticated() && (rentalPackagesLoading || (!selectedBackendRentalPackage && backendRentalPackages.length === 0)))
+                  }
+                  onClick={() => void confirmReservation()}
+                >
+                  {reservationSubmitting ? 'Đang lập báo giá...' : 'Kiểm tra và lấy báo giá'}
+                </Button>
+              )}
               {bookingStep === 3 && <Button onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
               {bookingStep === 4 && <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
