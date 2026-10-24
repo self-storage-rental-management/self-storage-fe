@@ -38,10 +38,9 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     && actor.permissions.includes('rentals:read') && actor.permissions.includes('returns:process')
     && ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[task.facilityId])
   const refundSettlement = view.settlementStatus === 'refund_pending'
-  const staffCashOnly = role === 'staff'
+  const staffCashOnly = role === 'staff' && !refundSettlement
   const canCollect = !!canProcess
-    && !!actor?.permissions.includes(refundSettlement ? 'refunds:approve' : 'payments:collect')
-    && (!refundSettlement || !staffCashOnly)
+    && !!actor?.permissions.includes(refundSettlement ? 'refunds:execute' : 'payments:collect')
   const canReadReturn = !!actor?.permissions.includes('returns:read')
   const settlement = useRentalApiResource(`${identity}:return:${view.returnCaseId}:${canReadReturn}`, async () => {
     if (!view.returnCaseId || !canReadReturn) return null

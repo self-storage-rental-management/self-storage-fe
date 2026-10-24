@@ -583,7 +583,7 @@ export default function StaffCheckInOperationsPanel({
       setPaymentEvidenceFile(null)
 
       showToast(
-        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Reservation đã chuyển sang COMPLETED.`,
+        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Reservation đang chờ khách xác nhận nhận kho.`,
       )
 
       setHandoverTarget(null)
@@ -782,9 +782,18 @@ export default function StaffCheckInOperationsPanel({
     <div className="fade-in space-y-5">
       <SectionHeader
         title="Nhận kho & bàn giao"
-        subtitle="Đối chiếu hàng hóa và hoàn tất bàn giao theo lịch hẹn do khách hàng đặt. Đơn đã bàn giao được lưu lịch sử và chỉ hiện khi lọc trạng thái ‘Đã bàn giao’."
+        subtitle="Đối chiếu hàng hóa và hoàn tất bàn giao theo lịch hẹn do khách hàng đặt. Hồ sơ đã bàn giao vẫn được lưu để tra cứu và xem lại."
       />
-      <Card className="p-4">
+      <Card className="border-stone-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-stone-900">Bộ lọc hồ sơ nhận kho</p>
+            <p className="mt-1 text-xs text-stone-500">Tìm nhanh theo đơn, khách hàng, gian kho hoặc lịch hẹn.</p>
+          </div>
+          <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-600">
+            {loading ? "Đang tải…" : `${totalItems} hồ sơ`}
+          </span>
+        </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.7fr)_minmax(180px,1fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
           <Input
             label="Tìm kiếm"
@@ -842,8 +851,8 @@ export default function StaffCheckInOperationsPanel({
           {error}
         </div>
       )}
-      <Card>
-        <Table>
+      <Card className="overflow-visible border-stone-200/80 shadow-sm">
+        <Table tableClassName="min-w-[1080px]">
           <Thead>
             <Tr>
               <Th>Đơn đặt giữ kho</Th>
@@ -898,17 +907,45 @@ export default function StaffCheckInOperationsPanel({
                     )}
                   </Badge>
                 </Td>
-                <Td className="text-right">
-                  <div className="flex justify-end gap-2">
-                    {(!item.checkInId || item.checkInStatus === "no_show" || item.checkInStatus === "scheduled") && (
-                      <details className="relative text-left">
-                        <summary className="cursor-pointer list-none rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50">Xử lý check-in ▾</summary>
-                        <div className="absolute right-0 z-10 mt-1 grid min-w-44 gap-1 rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
-                          <Button size="sm" onClick={() => void beginHandover(item)}>Bàn giao</Button>
-                          {item.checkInStatus === "scheduled" && <Button size="sm" variant="danger" onClick={() => openRejection(item)}>Từ chối nhận kho</Button>}
-                          {item.checkInStatus === "scheduled" && item.scheduledAt && new Date(item.scheduledAt).getTime() <= Date.now() && <Button size="sm" variant="danger" onClick={() => { setNoShowTarget(item); setNoShowReason("") }}>Khách không đến</Button>}
-                        </div>
-                      </details>
+                <Td className="min-w-[320px] whitespace-nowrap text-right">
+                  <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+                    {item.checkInStatus !== "completed" && (
+                      <>
+                        <Button
+                          className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                          size="sm"
+                          disabled={item.checkInStatus === "rejected"}
+                          onClick={() => void beginHandover(item)}
+                        >
+                          Bàn giao
+                        </Button>
+                        <Button
+                          className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                          size="sm"
+                          variant="danger"
+                          disabled={item.checkInStatus !== "scheduled"}
+                          onClick={() => openRejection(item)}
+                        >
+                          Từ chối nhận kho
+                        </Button>
+                        <Button
+                          className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                          size="sm"
+                          variant="danger"
+                          disabled={
+                            item.checkInStatus !== "scheduled" ||
+                            !item.checkInId ||
+                            !item.scheduledAt ||
+                            new Date(item.scheduledAt).getTime() > Date.now()
+                          }
+                          onClick={() => {
+                            setNoShowTarget(item)
+                            setNoShowReason("")
+                          }}
+                        >
+                          Khách không đến
+                        </Button>
+                      </>
                     )}
                     {item.checkInStatus === "completed" && (
                       <Button

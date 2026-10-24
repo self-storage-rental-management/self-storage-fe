@@ -298,7 +298,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
           onClick={async () => {
             const ref = historyRef.trim()
             if (validOverdueRef(ref)) { setRefError(false); setSelected(ref); return }
-            if (/^QH-\d{4}-\d{6}$/i.test(ref)) {
+            if (/^(?:SH-\d{6}|QH-\d{4}-\d{6})$/i.test(ref)) {
               try { const record = await getOverdueCase(ref); setRefError(false); setSelected(record.caseRef) }
               catch { setRefError(true) }
             } else setRefError(true)

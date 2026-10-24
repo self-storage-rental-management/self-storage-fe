@@ -110,12 +110,17 @@ describe('real Return transport and unknown settlement presentation', () => {
       returnedKey: true, returnedCard: true, returnedLock: true, proposedUnitStatus: 'available' })
     expect(JSON.parse(fetch.mock.calls[1][1].body).evidencePhotos).toEqual([assetId])
   })
-  it('records the refund transaction reference through the staff endpoint for an authorized Manager', async () => {
-    state.actor = operationsActor('manager'); state.actor.permissions.push('refunds:approve', 'returns:read')
+  it('records the refund transaction reference through the Business endpoint for authorized Business Operations', async () => {
+    state.actor = {
+      ...operationsActor('manager'),
+      roles: ['BUSINESS'],
+      permissions: ['returns:read', 'refunds:execute'],
+      facilityScopes: { [ids.facility]: 'MANAGE' },
+    }
     const fetch = respond({ data: { ...record, status: 'completed' } })
     const result = await completeRefund(ids.event, { transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
     expect(result.status).toBe('completed')
-    expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/complete-refund`)
+    expect(fetch.mock.calls[0][0]).toContain(`/api/business/returns/${ids.event}/complete-refund`)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
   })
   it('manager review records deductions without calling payout or local store', async () => {
@@ -136,20 +141,24 @@ describe('real Return transport and unknown settlement presentation', () => {
     await expect(listReturns('staff')).rejects.toThrow('quyền')
     expect(fetch).not.toHaveBeenCalled()
   })
-  it('allows business role to view returns across all facilities without facility scope limit', async () => {
+  it('requires a facility scope for Business return reads and accepts a scoped Business actor', async () => {
     state.actor = {
       ...operationsActor('manager'),
       roles: ['BUSINESS'],
-      permissions: ['returns:read', 'rentals:update'],
+      permissions: ['returns:read'],
       facilityScopes: {},
     }
     respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
-    const page = await listReturns('manager')
+    await expect(listReturns('business')).rejects.toThrow('contract')
+
+    state.actor = { ...state.actor, facilityScopes: { [ids.facility]: 'MANAGE' } }
+    respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
+    const page = await listReturns('business')
     expect(page.data).toHaveLength(1)
     expect(page.data[0].id).toBe(record.id)
 
     respond({ data: record })
-    const detail = await getReturn('manager', ids.event)
+    const detail = await getReturn('business', ids.event)
     expect(detail.id).toBe(record.id)
   })
 })
