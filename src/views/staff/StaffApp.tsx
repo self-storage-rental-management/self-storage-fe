@@ -40,10 +40,13 @@ import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
+  listCheckIns,
   listCredentialAlerts,
   revokeAccessCredential,
   type CredentialAlert,
 } from "../../services/checkInApi"
+import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { listStaffActiveReservations, type StaffReservationProgress } from "../../services/staffReservationApi"
 import {
   loadStaffDailyOperations,
   type StaffDailyOperation,
@@ -906,6 +909,14 @@ export default function StaffApp({
 
   const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
 
+  const [apiOverviewCounts, setApiOverviewCounts] = useState({
+    depositWaiting: 0,
+    upcomingCheckins: 0,
+    returnsToProcess: 0,
+  })
+
+  const [apiOverviewLoading, setApiOverviewLoading] = useState(false)
+
   const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
 
   const [inspectModal, setInspectModal] = useState(false)
@@ -1236,6 +1247,58 @@ export default function StaffApp({
       })
     return () => { active = false }
   }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id, apiDailyOperationsRefresh])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0 })
+      setApiOverviewLoading(false)
+      return
+    }
+
+    let active = true
+    setApiOverviewLoading(true)
+
+    const loadOverview = async () => {
+      const results = await Promise.allSettled([
+        listStaffActiveReservations({ page: 0, size: 100 }),
+        listCheckIns({ page: 0, pageSize: 100 }),
+        listReturns("staff", 0, 100),
+      ])
+
+      if (!active) return
+
+      const reservations = results[0].status === "fulfilled"
+        ? results[0].value.data as StaffReservationProgress[]
+        : []
+      const checkIns = results[1].status === "fulfilled"
+        ? results[1].value.data
+        : []
+      const returns = results[2].status === "fulfilled"
+        ? results[2].value.data as ApiReturn[]
+        : []
+
+      const waitingStatuses = new Set([
+        "CONFIRMED",
+        "UNIT_RESERVED",
+        "READY_FOR_CHECKIN",
+        "AWAITING_CUSTOMER_RECEIPT",
+      ])
+
+      setApiOverviewCounts({
+        depositWaiting: reservations.filter((item) => waitingStatuses.has(item.status)).length,
+        upcomingCheckins: checkIns.filter((item) => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? "")).length,
+        returnsToProcess: returns.filter((item) => item.status !== "completed").length,
+      })
+      setApiOverviewLoading(false)
+    }
+
+    void loadOverview()
+    const timer = window.setInterval(() => void loadOverview(), 30_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [user.facilityId, user.id])
 
   const refreshCredentialAlerts = () => {
     if (!isApiAuthenticated()) return
@@ -2258,25 +2321,27 @@ export default function StaffApp({
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
               title={"Đơn đã cọc · Chờ nhận kho"}
-              value={
-                reservations.filter((r) => r.status === "DEPOSIT_PAID").length
-              }
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
+                : reservations.filter((r) => r.status === "DEPOSIT_PAID").length}
               icon={Icon.alert}
               iconBg="bg-amber-50"
             />
             <StatCard
               title={"Nhận kho sắp tới"}
-              value={
-                eligibleCheckins.filter(
-                  (c) => c.status !== "completed" && c.status !== "no-show",
-                ).length
-              }
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
+                : eligibleCheckins.filter(
+                    (c) => c.status !== "completed" && c.status !== "no-show",
+                  ).length}
               icon={Icon.truck}
               iconBg="bg-blue-50"
             />
             <StatCard
               title={"Trả kho cần xử lý"}
-              value={returns.filter((r) => r.status !== "refunded").length}
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
+                : returns.filter((r) => r.status !== "refunded").length}
               icon={Icon.clipboard}
               iconBg="bg-purple-50"
             />
