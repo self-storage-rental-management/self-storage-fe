@@ -6,7 +6,7 @@ import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useSupportCommand } from "../../hooks/useSupportCommand"
 import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
-import { listSupportQueue, listSupportTickets } from "../../services/supportApi"
+import { listSupportTickets } from "../../services/supportApi"
 import { supportStatuses } from "../../types/supportApi"
 import type {
   SupportQuery,
@@ -18,6 +18,7 @@ import { rentalDate } from "../rental-api/presentation"
 import SupportCreateForm from "./SupportCreateForm"
 import SupportReadState from "./SupportReadState"
 import SupportTicketDetail from "./SupportTicketDetail"
+import StaffSupportInbox from './StaffSupportInbox'
 import type { SupportDraft } from "./SupportActionForm"
 import { isUuid } from "../../services/renewalOperationsApi"
 import {
@@ -94,7 +95,7 @@ function SupportSession({
     page: 0,
     size: role === "manager" ? 10 : 20,
     ...(facilityId ? { facilityId } : {}),
-    sort: "createdAt,desc",
+    sort: role === "staff" ? "updatedAt,desc" : "createdAt,desc",
   })
   const [search, setSearch] = useState(""),
     [selected, setSelected] = useState<string>()
@@ -103,19 +104,10 @@ function SupportSession({
   const [drafts, setDrafts] = useState<Record<string, Partial<Record<"messages" | "internal", SupportDraft>>>>({})
   const [messageFocus, setMessageFocus] = useState<{ ticketId: string; channel: "messages" | "internal"; messageId?: string }>()
   const [conversation, setConversation] = useState<"messages" | "internal">("messages")
-  const [staffView, setStaffView] = useState<"queue" | "assigned">("assigned")
-  const [queuePage, setQueuePage] = useState(0)
+  // StaffSupportInbox owns its grouped API; the legacy list is only used by other roles.
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
-    () => listSupportTickets(role, query),
-    { retainDataOnRefresh: true },
-  )
-  const queueQuery: SupportQuery = { page: queuePage, size: query.size, search: query.search, sort: query.sort }
-  const queueRead = useRentalApiResource(
-    `${identity}:queue:${JSON.stringify(queueQuery)}`,
-    () => role === "staff" ? listSupportQueue(queueQuery) : Promise.resolve({
-      data: [], pagination: { page: 0, pageSize: 20, totalItems: 0, totalPages: 0, sort: "createdAt,desc" }, correlationId: null,
-    }),
+    () => role === 'staff' ? Promise.resolve({ data: [] as SupportTicket[], pagination: { page: 0, pageSize: 20, totalItems: 0, totalPages: 0, sort: 'updatedAt,desc' }, correlationId: null }) : listSupportTickets(role, query),
     { retainDataOnRefresh: true },
   )
   const command = useSupportCommand(`${actor.id}:support:${role}`, (submission, result) => {
@@ -123,7 +115,7 @@ function SupportSession({
       setSelected(result.id)
       setConversation("messages")
     }
-    if (submission.kind === "command" && ["message", "resolve"].includes(submission.command.kind)) {
+    if (submission.kind === "command" && (submission.command.kind === 'message' || submission.command.kind === 'resolve' && !submission.command.statusOnly)) {
       const channel = submission.command.kind === "message" && "visibility" in submission.command && submission.command.visibility === "INTERNAL" ? "internal" : "messages"
       setDrafts(previous => ({ ...previous, [submission.id]: { ...previous[submission.id], [channel]: { body: "", files: [] } } }))
       const messageId = submission.command.kind === "message" && result && typeof result === "object" && "id" in result && isUuid(result.id) ? result.id : undefined
@@ -131,7 +123,6 @@ function SupportSession({
       setConversation(channel)
     }
     read.refresh()
-    queueRead.refresh()
     setRevision((n) => n + 1)
     setCreation(undefined)
   })
@@ -144,13 +135,13 @@ function SupportSession({
   }
   const locked = command.locked || uploading
   useEffect(() => {
+    if (role === 'staff') return
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible" || command.locked || uploadLock.current) return
       read.refresh()
-      if (role === "staff") queueRead.refresh()
     }, 8000)
     return () => window.clearInterval(timer)
-  }, [role, command.locked, read.refresh, queueRead.refresh])
+  }, [role, command.locked, read.refresh])
   const consumedOpenRequest = useRef<typeof openTicket>(undefined)
   useEffect(() => {
     if (!openTicket || consumedOpenRequest.current === openTicket || locked || !isUuid(openTicket.id)) return
@@ -172,13 +163,11 @@ function SupportSession({
     if (command.locked || uploadLock.current) return
     command.clearError()
     read.refresh()
-    queueRead.refresh()
     setRevision((n) => n + 1)
   }
   const change = (patch: SupportQuery) => {
     if (command.locked || uploadLock.current) return
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
-    setQueuePage(0)
     setSelected(undefined)
   }
   const commandNotice = (
@@ -216,88 +205,84 @@ function SupportSession({
   const visibleTickets = read.data?.data.filter(t => supportTicketVisible(actor, role, t)) ?? []
   const invalidScope = read.data && visibleTickets.length !== read.data.data.length
   return (
-    <div className="min-w-0 space-y-4">
+    <div className={`support-inbox ${role === 'staff' ? 'support-inbox--staff' : ''} min-w-0 space-y-4`}>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900">Hỗ trợ khách hàng</h1>
-          <p className="mt-1 text-sm text-stone-500">{role === "customer" ? "Nhắn tin trực tiếp với nhân viên tại cơ sở của bạn." : "Tiếp nhận và trao đổi với khách hàng trong cùng một cuộc trò chuyện."}</p>
+          {role === "customer" && <p className="mt-1 text-sm text-stone-500">Nhắn tin trực tiếp với nhân viên tại cơ sở của bạn.</p>}
         </div>
         {role === "customer" && <Button disabled={locked} onClick={() => { setSelected(undefined); setCreation({}) }}>Cuộc trò chuyện mới</Button>}
       </header>
       {commandNotice}
-      <div className="grid min-h-[600px] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="support-inbox-shell grid overflow-hidden rounded-2xl border border-stone-200 bg-white lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
         <aside className={`min-w-0 border-stone-200 bg-stone-50/50 lg:border-r ${selected || creation ? "hidden lg:block" : "block"}`} aria-label="Danh sách hội thoại">
+          {role === "staff" ? (
+    <StaffSupportInbox selectedId={selected} refreshRevision={revision}
+      locked={locked || command.conflict} onOpen={id => { setSelected(id); command.clearError() }}
+      onClaim={async item => {
+        const succeeded = await command.run({ kind: 'command', role: 'staff', id: item.id, command: { kind: 'claim', expectedVersion: item.version } })
+        if (succeeded) setSelected(item.id)
+        return succeeded
+      }} />
+          ) : <>
           <div className="space-y-3 border-b border-stone-200 p-4">
-            {role === "staff" ? <div className="flex gap-2" role="group" aria-label="Danh sách hỗ trợ">
-              {([['assigned', 'Đang phụ trách'], ['queue', 'Chờ tiếp nhận']] as const).map(([view, label]) => <Button key={view} size="sm" variant={staffView === view ? "primary" : "outline"} aria-pressed={staffView === view} disabled={locked} onClick={() => {
-                if (command.locked || uploadLock.current || staffView === view) return
-                setStaffView(view); setSelected(undefined); setCreation(undefined); setQuery(q => ({ ...q, page: 0 })); setQueuePage(0); command.clearError()
-                if (view === "queue") queueRead.refresh(); else read.refresh()
-              }}>{label}</Button>)}
-            </div> : <h2 className="text-sm font-semibold text-stone-800">Cuộc trò chuyện</h2>}
-            {role !== "customer" && <form className="space-y-3" onSubmit={e => { e.preventDefault(); change({ search: search.trim() }) }}>
+            <h2 className="text-xl font-bold tracking-tight text-stone-900">Đoạn chat</h2>
+            <h2 className="text-sm font-semibold text-stone-800">Cuộc trò chuyện</h2>
+            {role !== "customer" && <details className="group">
+              <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-xs font-medium text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600 [&::-webkit-details-marker]:hidden">
+                <svg aria-hidden="true" className="show-icon h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+                <span className="flex-1">Tìm kiếm & lọc</span>
+                {(!!query.search || !!query.status || query.sort !== 'createdAt,desc') && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">Đang áp dụng</span>}
+                <svg aria-hidden="true" className="show-icon h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+              </summary>
+              <form className="mt-2 space-y-2 border-t border-stone-200/70 pt-3" onSubmit={e => { e.preventDefault(); change({ search: search.trim() }) }}>
               <label className="block text-xs font-medium text-stone-500">Tìm cuộc trò chuyện
-                <input className={supportInputClass} placeholder="Tìm nội dung hoặc mã hội thoại" value={search} maxLength={200} disabled={locked} onChange={e => setSearch(e.target.value)} />
+                <input className={`${supportInputClass} !mt-1 !min-h-9 !py-1.5 !text-xs`} placeholder="Nội dung hoặc mã hội thoại" value={search} maxLength={200} disabled={locked} onChange={e => setSearch(e.target.value)} />
               </label>
               <div className="grid grid-cols-2 gap-2">
-                {(role !== "staff" || staffView === "assigned") && <label className="block text-xs text-stone-500">Trạng thái
-                  <select className={supportInputClass} value={query.status ?? ""} disabled={locked} onChange={e => change({ status: (e.target.value || undefined) as SupportQuery['status'] })}>
+                {<label className="block text-xs text-stone-500">Trạng thái
+                  <select className={`${supportInputClass} !mt-1 !min-h-9 !py-1.5 !text-xs`} value={query.status ?? ""} disabled={locked} onChange={e => change({ status: (e.target.value || undefined) as SupportQuery['status'] })}>
                     <option value="">Tất cả</option>{supportStatuses.map(s => <option key={s} value={s}>{supportStatusLabels[s]}</option>)}
                   </select>
                 </label>}
                 <label className="block text-xs text-stone-500">Sắp xếp
-                  <select className={supportInputClass} value={query.sort} disabled={locked} onChange={e => change({ sort: e.target.value })}>
+                  <select className={`${supportInputClass} !mt-1 !min-h-9 !py-1.5 !text-xs`} value={query.sort} disabled={locked} onChange={e => change({ sort: e.target.value })}>
                     <option value="createdAt,desc">Mới nhất</option><option value="createdAt,asc">Cũ nhất</option><option value="updatedAt,desc">Vừa cập nhật</option><option value="subject,asc">Nội dung A-Z</option>
                   </select>
                 </label>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" type="submit" variant="outline" disabled={locked}>Tìm kiếm</Button>
-                <Button size="sm" type="button" variant="ghost" disabled={locked} onClick={() => { setSearch(''); setQuery({ page: 0, size: role === 'manager' ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: 'createdAt,desc' }); setQueuePage(0) }}>Xóa bộ lọc</Button>
+                <Button size="sm" type="submit" variant="outline" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked}>Áp dụng</Button>
+                <Button size="sm" type="button" variant="ghost" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked} onClick={() => { setSearch(''); setQuery({ page: 0, size: role === 'manager' ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: 'createdAt,desc' }) }}>Đặt lại</Button>
               </div>
-            </form>}
+              </form>
+            </details>}
           </div>
-          {role === "staff" && staffView === "queue" ? <>
-            <SupportReadState {...queueRead} loading={queueRead.loading && !queueRead.data} retry={reload} />
-            {queueRead.data && <>
-              <div className="max-h-[550px] divide-y divide-stone-100 overflow-y-auto">
-                {queueRead.data.data.map(item => <article key={item.id} className="space-y-2 bg-white p-4">
-                  <p className="line-clamp-2 break-words text-sm font-semibold text-stone-800">{item.subject}</p>
-                  <p className="text-xs text-stone-500">{actor.facilityNames?.[item.facilityId] ?? 'Cơ sở phụ trách'}</p>
-                  <p className="text-[11px] text-stone-400">{rentalDate(item.createdAt)}</p>
-                  <Button size="sm" disabled={locked || command.conflict} onClick={async () => {
-                    const succeeded = await command.run({ kind: 'command', role: 'staff', id: item.id, command: { kind: 'claim', expectedVersion: item.version } })
-                    if (succeeded) { setStaffView('assigned'); setSelected(item.id) }
-                  }}>Nhận trò chuyện</Button>
-                </article>)}
-                {!queueRead.data.data.length && <p className="p-6 text-center text-sm text-stone-500">Chưa có cuộc trò chuyện chờ tiếp nhận tại cơ sở được phân công.</p>}
-              </div>
-              {queueRead.data.pagination.totalPages > 1 && <div className="px-3"><ApiPager pagination={queueRead.data.pagination} disabled={locked} onPage={setQueuePage} /></div>}
-            </>}
-          </> : <>
+          {<>
             <SupportReadState {...read} loading={read.loading && !read.data} retry={reload} />
             {invalidScope ? <p role="alert" className="p-4 text-sm text-red-700">Không thể hiển thị hội thoại ngoài phạm vi truy cập của bạn.</p> : <>
               <div className="max-h-[550px] divide-y divide-stone-100 overflow-y-auto">
                 {visibleTickets.map(t => <button key={t.id} type="button" disabled={locked} aria-pressed={selected === t.id} aria-label={`Mở hội thoại: ${t.subject}`} className={`block w-full border-l-4 p-4 text-left transition-colors disabled:opacity-60 ${selected === t.id ? 'border-amber-500 bg-amber-50' : 'border-transparent hover:bg-white'}`} onClick={() => { if (command.locked || uploadLock.current) return; setCreation(undefined); setSelected(t.id); command.clearError() }}>
-                  <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-stone-900">{role === 'customer' ? actor.facilityNames?.[t.facilityId ?? ''] ?? 'Nhân viên hỗ trợ' : t.customerName ?? 'Khách hàng'}</span><span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${supportStatusClass(t.status)}`}>{supportStatusLabels[t.status]}</span></div>
+                  <div className="flex items-center gap-3"><span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f5e3e1] text-sm font-semibold text-[#95575f]">{(role === 'customer' ? 'HT' : t.customerName?.trim().split(/\s+/).slice(-2).map(word => word[0]).join('') || 'KH')}</span><div className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-stone-900">{role === 'customer' ? actor.facilityNames?.[t.facilityId ?? ''] ?? 'Nhân viên hỗ trợ' : t.customerName ?? 'Khách hàng'}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${supportStatusClass(t.status)}`}>{supportStatusLabels[t.status]}</span></div></div>
                   <p className="mt-1.5 line-clamp-2 break-words text-xs leading-5 text-stone-600">{t.subject}</p>
                   <p className="mt-2 flex justify-between gap-2 text-[10px] text-stone-400"><span>{t.displayCode || `#${t.id.slice(0, 8)}`}</span><span>{new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' }).format(parseVietnamDate(t.createdAt))}</span></p>
                 </button>)}
-                {read.data && !visibleTickets.length && <p className="p-6 text-center text-sm text-stone-500">{role === 'staff' ? 'Chưa có cuộc trò chuyện đang phụ trách. Chọn Chờ tiếp nhận để bắt đầu.' : 'Chưa có cuộc trò chuyện phù hợp.'}</p>}
+                {read.data && !visibleTickets.length && <p className="p-6 text-center text-sm text-stone-500">{'Chưa có cuộc trò chuyện phù hợp.'}</p>}
               </div>
               {read.data && read.data.pagination.totalPages > 1 && <div className="px-3"><ApiPager pagination={read.data.pagination} disabled={locked} onPage={page => setQuery(q => ({ ...q, page }))} /></div>}
             </>}
           </>}
+          </>}
         </aside>
-        <section className={`min-w-0 ${selected || creation ? 'block' : 'hidden lg:flex lg:items-center lg:justify-center'}`} aria-label="Khung chat hỗ trợ">
+        <section className={`support-inbox-conversation min-w-0 ${selected || creation ? 'flex flex-col' : 'hidden lg:flex lg:items-center lg:justify-center'}`} aria-label="Khung chat hỗ trợ">
           {selected || creation ? <>
-            <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-100 px-4 py-2 lg:hidden">
               <p className="text-sm font-semibold text-stone-800">{creation ? 'Bắt đầu cuộc trò chuyện' : 'Trao đổi hỗ trợ'}</p>
               <Button size="sm" variant="ghost" disabled={locked} onClick={closeConversation}>Quay lại danh sách</Button>
             </div>
-            <div className="p-4 sm:p-5">
+            <div className={`support-inbox-content ${creation ? 'overflow-y-auto p-4 sm:p-5' : 'min-h-0 flex-1'}`}>
               {creation ? <SupportCreateForm key={revision} command={formCommand} onUploadBusy={uploadBusy} parent={creation.parent} /> : selected && <SupportTicketDetail
-                key={`${identity}:${selected}:${revision}`} role={role} id={selected} command={formCommand} chatLayout
+                key={`${identity}:${selected}`} role={role} id={selected} command={formCommand} chatLayout refreshRevision={revision}
                 conversation={conversation} onConversationChange={setConversation} onUploadBusy={uploadBusy}
                 drafts={drafts[selected] ?? { messages: { body: '', files: [] }, internal: { body: '', files: [] } }}
                 onDraftChange={(channel, draft) => setDrafts(previous => ({ ...previous, [selected]: { ...previous[selected], [channel]: draft } }))}

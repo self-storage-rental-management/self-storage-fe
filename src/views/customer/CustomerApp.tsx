@@ -15,7 +15,6 @@ import ProfileView from '../ProfileView'
 import CustomerReservationCard from './CustomerReservationCard'
 import CustomerPaymentHistory from './CustomerPaymentHistory'
 import CustomerRentalsApiPanel from './CustomerRentalsApiPanel'
-import { SupportApiRoute } from '../support-api/SupportApiEntry'
 import { CustomerApiMetric, CustomerRentalApiLink } from '../rental-api/CustomerApiOverview'
 import { resolveCustomerInitialPage } from './customerRentalApiIntegration'
 import CustomerReservationOtpModal from './CustomerReservationOtpModal'
@@ -29,7 +28,6 @@ import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../
 import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_WORKING_HOURS, CHECK_IN_WINDOW_DAYS, CHECK_IN_OPENING_HOUR, CHECK_IN_CLOSING_HOUR } from '../../domain/reservationCheckInPolicy'
 import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
-import CustomerSupportSection from './CustomerSupportSection'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import CustomerSupportWidget from '../../components/support/CustomerSupportWidget'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
@@ -641,7 +639,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     { id: 'rental-records', label: 'Hồ sơ thuê', icon: Icon.key, group: 'Thuê kho và thanh toán', permission: 'rentals:read' },
     { id: 'payments', label: 'Lịch sử thanh toán', icon: Icon.credit, group: 'Thuê kho và thanh toán', permission: 'payments:read' },
     { id: 'policies', label: 'Quy định thuê kho', icon: Icon.policy, group: 'Quy định và hỗ trợ', permission: 'policies:read' },
-    { id: 'support', label: 'Hỗ trợ khách hàng', icon: Icon.support, group: 'Quy định và hỗ trợ', permission: 'support:read' }
   ]
 
   const [page, setPage] = useState(() =>
@@ -933,6 +930,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Support
   const [supportChatbotOpen, setSupportChatbotOpen] = useState(false)
+  const [supportWidgetRequest, setSupportWidgetRequest] = useState<{ request: number; ticketId?: string } | undefined>(() =>
+    isApiAuthenticated() && new URLSearchParams(window.location.search).get('page') === 'support' ? { request: 1 } : undefined)
+  const openSupportWidget = (ticketId?: string) => {
+    if (isApiAuthenticated()) setSupportWidgetRequest(previous => ({ request: (previous?.request ?? 0) + 1, ticketId }))
+    else setSupportChatbotOpen(true)
+  }
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('page') !== 'support') return
+    const url = new URL(window.location.href)
+    url.searchParams.set('page', 'overview')
+    window.history.replaceState(null, '', url)
+    setPage('overview')
+    if (!isApiAuthenticated()) setSupportChatbotOpen(true)
+  }, [])
   const [ticketOpen, setTicketOpen] = useState(false)
   const [ticketSubject, setTicketSubject] = useState('')
   const [ticketCategory, setTicketCategory] = useState('Access & Entry')
@@ -1194,6 +1205,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const navigateTo = (nextPage: string, options?: { facilityId?: string | null }) => {
+    if (nextPage === 'support') { openSupportWidget(); return }
     setPreviousPage(page)
     if (nextPage === 'browse-units') {
       setSelectedFacilityId(options?.facilityId ?? null)
@@ -1202,6 +1214,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const handleLayoutNavigate = (nextPage: string) => {
+    if (nextPage === 'support') { openSupportWidget(); return }
     notificationRevealTimers.current.forEach(timer => window.clearTimeout(timer))
     notificationRevealTimers.current = []
     setFocusedNotificationTarget(null)
@@ -1458,6 +1471,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         setBackendNotifications(current => current.map(item => item.id === updated.id ? updated : item))
       }).catch(() => undefined)
     }
+    if (notification.page === 'support') { openSupportWidget(notification.targetId); return }
     navigateTo(notification.page)
     if (notification.page === 'reservations') {
       setReservationFacilityFilter('all')
@@ -2876,42 +2890,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         </div>
       )}
 
-      {/* ── SUPPORT ─────────────────────────────────────────── */}
-      {page === 'support' && (
-        <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="customer">
-        <CustomerSupportSection
-          user={user}
-          tickets={tickets}
-          onOpenChatbot={() => setSupportChatbotOpen(true)}
-          onOpenCreateModal={() => setTicketOpen(true)}
-          onOpenConversation={t => {
-            setSelectedTicket(t)
-            setConversationOpen(true)
-          }}
-          onDeleteResolved={t =>
-            setConfirmation({
-              title: 'Xóa yêu cầu đã giải quyết',
-              message: `Bạn có chắc muốn xóa yêu cầu ${t.id} – “${t.subject}”? Dữ liệu trao đổi của yêu cầu này sẽ bị xóa khỏi danh sách.`,
-              confirmLabel: 'Xóa yêu cầu',
-              tone: 'danger',
-              onConfirm: () => {
-                try {
-                  deleteResolvedSupportTicket(t.id, user)
-                  if (selectedTicket?.id === t.id) {
-                    setSelectedTicket(null)
-                    setConversationOpen(false)
-                  }
-                  showToast('Đã xóa yêu cầu hỗ trợ.')
-                } catch (error) {
-                  showToast(error instanceof Error ? error.message : 'Không thể xóa yêu cầu hỗ trợ.')
-                }
-              }
-            })
-          }
-        />
-        </SupportApiRoute>
-      )}
-
       {/* ── POLICIES PAGE ─────────────────────────────────────── */}
       {page === 'policies' && (
         <CustomerRentalRulesPage />
@@ -4226,13 +4204,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         </div>
       </Modal>
 
-      {isApiAuthenticated() && <CustomerSupportWidget />}
+      {isApiAuthenticated() && <CustomerSupportWidget openRequest={supportWidgetRequest} />}
 
       {!isApiAuthenticated() && <CustomerSupportChatbot
         user={user}
         isOpen={supportChatbotOpen}
         onToggleOpen={setSupportChatbotOpen}
-        onOpenTicketList={() => setPage('support')}
+        onOpenTicketList={() => setSupportChatbotOpen(true)}
         showToast={showToast}
       />}
 
