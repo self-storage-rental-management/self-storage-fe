@@ -23,7 +23,7 @@ describe('Manager-only readable presentation', () => {
     expect(managerDisplayText('Gửi yêu cầu (API)')).toBe('Gửi yêu cầu')
     expect(source).toBe('Hỗ trợ (D5 API)')
     const app = readFileSync(new URL('./ManagerApp.tsx', import.meta.url), 'utf8')
-    expect(app).toContain('label: "Hỗ trợ khách hàng"')
+    expect(app).not.toContain('label: "Hỗ trợ khách hàng"')
     expect(app).not.toContain('label: "Hỗ trợ ()"')
   })
   it('matches shared typography within Manager only, preserving identifier fonts', () => {

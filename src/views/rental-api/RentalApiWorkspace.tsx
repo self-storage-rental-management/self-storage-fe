@@ -18,6 +18,7 @@ import type {
 import type { RenewalApiQuery, RenewalApiRecord } from "../../types/renewalApi"
 import type { RenewalOperationEvent } from "../../types/renewalOperationsApi"
 import ApiReadState from "./ApiReadState"
+import CustomerRenewalGroups from './CustomerRenewalGroups'
 import RentalDetail from "./RentalDetail"
 import RenewalDetail from "./RenewalDetail"
 import RenewalOperationsPanel, { RenewalDocumentHistory, RenewalPaymentHistory } from "./RenewalOperationsPanel"
@@ -234,8 +235,27 @@ function WorkspaceData({
     `${identity}:${dataTab}:${JSON.stringify(query)}`,
     async () =>
       dataTab === "rental"
-        ? { kind: "rental" as const, page: await listRentals(role, rq) }
-        : { kind: "renewal" as const, page: await listRenewals(role, nq) },
+        ? { kind: "rental" as const, page: await (async () => {
+          if (role !== 'customer') return listRentals(role, rq)
+          const first = await listRentals(role, { ...rq, page: 0, size: 100 })
+          const rows = [...first.data]
+          for (let page = 1; page < first.pagination.totalPages; page++) {
+            const next = await listRentals(role, { ...rq, page, size: 100 })
+            rows.push(...next.data)
+          }
+          const data = [...new Map(rows.map(row => [row.id, row])).values()]
+          return { ...first, data, pagination: { ...first.pagination, page: 0, totalPages: 1, totalItems: data.length } }
+        })() }
+        : { kind: "renewal" as const, page: await (async () => {
+          if (role !== 'customer') return listRenewals(role, nq)
+          const first = await listRenewals(role, { ...nq, page: 0, size: 100 })
+          const rows = [...first.data]
+          for (let page = 1; page < first.pagination.totalPages; page++) {
+            const next = await listRenewals(role, { ...nq, page, size: 100 })
+            rows.push(...next.data)
+          }
+          return { ...first, data: [...new Map(rows.map(row => [row.id, row])).values()] }
+        })() },
   )
   useEffect(() => {
     if (!focusStorageUnitId || role !== 'customer' || tab !== 'rental' || read.loading || read.data?.kind !== 'rental') return
@@ -428,14 +448,22 @@ function WorkspaceData({
       </Card>
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
-        <Card className="overflow-hidden rounded-2xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3"><h2 className="font-bold text-stone-900">{tab === 'rental' ? 'Danh sách hồ sơ thuê' : 'Danh sách yêu cầu gia hạn'}</h2><span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">{read.data.page.pagination.totalItems} hồ sơ</span></div>
-          {role === 'customer' && read.data.kind === 'rental' ? <div className="overflow-x-auto bg-stone-50/60 p-4">
+        <Card className={role === 'customer' ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
+          {role !== 'customer' && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3"><h2 className="font-bold text-stone-900">{tab === 'rental' ? 'Danh sách hồ sơ thuê' : 'Danh sách yêu cầu gia hạn'}</h2><span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">{read.data.page.pagination.totalItems} hồ sơ</span></div>}
+          {role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
+            { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, quá hạn hoặc đang xử lý trả kho.', rows: read.data.page.data.filter(row => row.status !== 'completed'), active: true },
+            { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
+          ].map(group => <section key={group.id} aria-labelledby={`rental-group-${group.id}`} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <header className="flex items-center justify-between gap-3 border-b border-stone-100 px-4 py-4">
+              <div className="flex items-center gap-3"><span aria-hidden="true" className={`h-8 w-1 rounded-full ${group.active ? 'bg-amber-400' : 'bg-stone-300'}`} /><div><h2 id={`rental-group-${group.id}`} className="text-base font-semibold text-stone-900">{group.title}</h2><p className="mt-0.5 text-xs text-stone-500">{group.subtitle}</p></div></div>
+              <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${group.active ? 'bg-amber-50 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>{group.rows.length} hồ sơ</span>
+            </header>
+            {group.rows.length ? <div className="overflow-x-auto bg-stone-50/60 p-4">
             <div className="min-w-[1050px] space-y-2">
             <div className={`${customerRentalColumns} border-l-4 border-transparent px-1 text-xs font-semibold text-stone-500`}>
               {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className="px-3 py-2">{label}</div>)}
             </div>
-            {read.data.page.data.map(row => {
+            {group.rows.map(row => {
               const days = rentalDaysUntilDeadline(row)
               const focused = focusStorageUnitId === row.storageUnit.id && row.status !== 'completed'
               return <article key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1}
@@ -458,9 +486,9 @@ function WorkspaceData({
                 {rentalDeadlineState(row) && <div className="px-4 pb-4"><RentalDeadlineBanner rental={row} role={role} /></div>}
               </article>
             })}
-            {read.data.page.data.length === 0 && <p className="col-span-full p-6 text-center text-sm text-stone-500">Không có hồ sơ thuê phù hợp với bộ lọc.</p>}
             </div>
-          </div> : <div className="overflow-x-auto">
+          </div> : <p className="px-4 py-8 text-center text-sm text-stone-500">{group.active ? 'Không có hồ sơ thuê đang diễn ra.' : 'Chưa có hồ sơ thuê đã kết thúc.'}</p>}
+          </section>)}</div> : <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] table-fixed text-left text-sm">
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>
@@ -552,7 +580,7 @@ function WorkspaceData({
               </tbody>
             </table>
           </div>}
-          <Pager
+          {role !== 'customer' && <Pager
             fixedSize
             {...{
               page: read.data.page.pagination.page,
@@ -564,7 +592,7 @@ function WorkspaceData({
             setPage={(page) =>
               tab === "rental" ? setRq({ ...rq, page }) : setNq({ ...nq, page })
             }
-          />
+          />}
         </Card>
       )}
       {detail && (
