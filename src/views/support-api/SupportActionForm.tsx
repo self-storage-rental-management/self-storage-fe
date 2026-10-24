@@ -1,5 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { useSupportCommand } from "../../hooks/useSupportCommand"
@@ -64,6 +64,7 @@ export default function SupportActionForm({
     [staffId, setStaffId] = useState("")
   const visibility = internal ? "INTERNAL" as const : "PUBLIC" as const
   const [localFiles, setLocalFiles] = useState<string[]>([]), [uploading, setUploading] = useState(false)
+  const uploadLock = useRef(false)
   const body = draft?.body ?? localBody
   const files = draft?.files ?? localFiles
   const setBody = (value: string) => onDraftChange ? onDraftChange({ body: value, files }) : setLocalBody(value)
@@ -84,7 +85,7 @@ export default function SupportActionForm({
     ? 2000
     : 4000
   const canResolve = !internal && role === "staff" && body.length <= 4000 && (!!body.trim() || files.length > 0)
-  const needsBody = !["accept", "close", "resolve"].includes(action)
+  const needsBody = !["accept", "close", "resolve"].includes(action) && !(action === 'message' && files.length > 0)
   const valid =
     (!needsBody || !!body.trim()) &&
     body.length <= limit &&
@@ -93,7 +94,7 @@ export default function SupportActionForm({
     (action !== "decision" || !!escalationId)
   const submit = (requestedAction = action) => {
     if (
-      !(requestedAction === "resolve" ? canResolve : valid) || uploading || command.locked || command.conflict ||
+      !(requestedAction === "resolve" ? canResolve : valid) || uploadLock.current || uploading || command.locked || command.conflict ||
       !supportActions(getAuthenticatedActor(), role, t).includes(requestedAction)
     )
       return
@@ -144,7 +145,7 @@ export default function SupportActionForm({
   }
   return (
     <form
-      className={mode === "message" ? "space-y-4" : "space-y-4 rounded-lg border border-stone-200 p-4"}
+      className={mode === "message" ? "support-message-composer" : "space-y-4 rounded-lg border border-stone-200 p-4"}
       onSubmit={(e) => {
         e.preventDefault()
         submit()
@@ -234,38 +235,39 @@ export default function SupportActionForm({
           <textarea
             aria-label={mode === "message" ? "Nội dung tin nhắn" : undefined}
             className={supportInputClass}
-            rows={mode === "message" ? 3 : 2}
+            rows={mode === "message" ? 1 : 2}
             placeholder={mode === "message" ? "Nhập tin nhắn..." : undefined}
             maxLength={limit}
             value={body}
             required={needsBody}
             disabled={command.locked}
             onChange={(e) => setBody(e.target.value)}
+            onKeyDown={e => {
+              if (mode === "message" && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                submit()
+              }
+            }}
           />
         </label>
       )}
       <div className={mode === "message" ? "flex flex-wrap items-start gap-2" : "space-y-4"}>
       {["message", "information", "resolve", "escalate"].includes(action) && <EvidenceUpload
         compact={mode === "message"}
+        iconOnly={mode === "message"}
         key={`${action}:${visibility}`}
         entityType={internal || action === "escalate" ? "DUONG_SUPPORT_INTERNAL" : "DUONG_SUPPORT_PUBLIC"}
-        entityId={t.id} value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { setUploading(busy); onUploadBusy?.(busy) }}
+        entityId={t.id} value={files} onChange={setFiles} disabled={command.locked} onBusy={busy => { uploadLock.current = busy; setUploading(busy); onUploadBusy?.(busy) }}
       />}
       <Button
         type="submit"
+        className={mode === "message" ? "support-composer-send" : undefined}
+        aria-label={mode === "message" ? command.busy ? "Đang gửi" : "Gửi tin nhắn" : undefined}
         size={mode === "message" ? "sm" : "md"}
         disabled={command.locked || uploading || command.conflict || !valid}
       >
-        {mode === "message" ? command.busy ? "Đang gửi..." : "Gửi tin nhắn" : copy(labels[action])}
+        {mode === "message" ? <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 7-7 7 7M12 5v14" /></svg> : copy(labels[action])}
       </Button>
-      {mode === "message" && !internal && role === "staff" && supportActions(actor, role, t).includes("resolve") && <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={command.locked || uploading || command.conflict || !canResolve}
-        title="Nhập mô tả hoặc đính kèm minh chứng trước khi báo đã xử lý"
-        onClick={() => submit("resolve")}
-      >Báo đã xử lý</Button>}
       </div>
     </form>
   )

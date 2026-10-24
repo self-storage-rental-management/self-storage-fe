@@ -295,14 +295,14 @@ export default function CustomerSupportChatbot({
           type="button"
           onClick={handleOpen}
           aria-label="Mở Trợ lý StorageHub"
-          className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-50 flex items-center gap-2 rounded-full bg-[#181b22] px-4 sm:px-5 py-3 sm:py-3.5 text-xs font-bold text-white shadow-2xl transition-all duration-300 hover:bg-[#20242d] hover:scale-105 border border-amber-600/30"
-          style={{ boxShadow: '0 10px 28px rgba(24, 27, 34, 0.45)' }}
+          title="Mở Trợ lý StorageHub"
+          aria-haspopup="dialog"
+          className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-colors hover:bg-[#20242d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2"
         >
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-          </span>
-          <span>Trợ lý StorageHub</span>
-          <span className="rounded-md bg-amber-600/30 px-1.5 py-0.5 text-[10px] text-amber-300 font-mono">AI</span>
+          <svg aria-hidden="true" className="show-icon h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-3 3V11.5A7.5 7.5 0 0 1 9.5 4h3a7.5 7.5 0 0 1 7.5 7.5Z" />
+            <path d="M7 10h8M7 14h5" />
+          </svg>
         </button>
       )}
 
@@ -312,23 +312,23 @@ export default function CustomerSupportChatbot({
           role="dialog"
           aria-label="Trợ lý StorageHub"
           className="fixed right-3 bottom-3 sm:right-4 sm:bottom-4 z-50 flex h-[620px] max-h-[88vh] w-[390px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl transition-all duration-300"
-          style={{ boxShadow: '0 20px 60px rgba(24, 27, 34, 0.35)' }}
+          style={{ boxShadow: '0 12px 40px rgba(41, 37, 36, 0.14)' }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-stone-800 bg-[#181b22] px-4 py-3.5 text-white">
+          <div className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3.5 text-stone-900">
             <div className="flex items-center gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold tracking-tight text-white">Trợ lý StorageHub</h3>
-                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-400">Trực tuyến</span>
+                  <h3 className="text-sm font-bold tracking-tight text-stone-900">Trợ lý StorageHub</h3>
+                  <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[10px] font-semibold text-stone-600">Trực tuyến</span>
                 </div>
-                <p className="text-[11px] text-stone-400">Trả lời tức thì · Chuyển nhân viên khi cần</p>
+                <p className="text-[11px] text-stone-500">Trả lời tức thì · Chuyển nhân viên khi cần</p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:bg-white/10 hover:text-white transition"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition"
               aria-label="Đóng trợ lý"
             >
               ✕
@@ -336,9 +336,9 @@ export default function CustomerSupportChatbot({
           </div>
 
           {/* Context Banner: Customer's mapped facility & unit */}
-          <div className="flex items-center justify-between border-b border-stone-200 bg-[#f4f1ea] px-3.5 py-2 text-xs text-stone-700">
+          <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50 px-3.5 py-2 text-xs text-stone-700">
             <div className="flex items-center gap-1.5 truncate">
-              <span className="text-amber-700 font-bold"> Kho:</span>
+              <span className="text-stone-500 font-bold"> Kho:</span>
               <span className="font-semibold text-stone-900 truncate">
                 {selectedUnit} · {selectedFacility}
               </span>
@@ -366,7 +366,7 @@ export default function CustomerSupportChatbot({
           </div>
 
           {/* Messages Body */}
-          <div role="log" aria-live="polite" aria-label="Trao đổi với Trợ lý StorageHub" className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf8f4]">
+          <div role="log" aria-live="polite" aria-label="Trao đổi với Trợ lý StorageHub" className="flex-1 overflow-y-auto p-4 space-y-3 bg-stone-50">
             {messages.map(msg => {
               const isBot = msg.sender === 'bot'
               const isUser = msg.sender === 'user'
@@ -379,30 +379,30 @@ export default function CustomerSupportChatbot({
                   <div
                     className={`max-w-[88%] rounded-xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm ${
                       isUser
-                        ? 'bg-[#181b22] text-white rounded-br-lg'
+                        ? 'bg-stone-200 text-stone-900 rounded-br-lg'
                         : msg.isEmergencyAlert
                         ? 'bg-red-50 text-red-950 border border-red-200 font-medium'
                         : msg.isEscalationNotice
-                        ? 'bg-amber-50 text-amber-950 border border-amber-200'
+                        ? 'bg-stone-100 text-stone-800 border border-stone-300'
                         : 'bg-white text-stone-800 border border-stone-200 rounded-bl-lg'
                     }`}
                   >
                     <p className="whitespace-pre-line">{msg.text}</p>
                     {msg.faqItem?.actionHint && (
-                      <div className="mt-2 pt-1.5 border-t border-stone-100 flex items-center gap-1 text-[11px] font-semibold text-amber-700">
+                      <div className="mt-2 pt-1.5 border-t border-stone-100 flex items-center gap-1 text-[11px] font-semibold text-stone-600">
                         <span> Gợi ý: {msg.faqItem.actionHint}</span>
                       </div>
                     )}
                   </div>
-                  <span className="mt-1 text-[10px] text-stone-400 px-1">{msg.time}</span>
+                  <span className="mt-1 text-[10px] text-stone-500 px-1">{msg.time}</span>
                 </div>
               )
             })}
 
             {/* Requirement 1: Loop Breaker Banner */}
             {showLoopBreakerPrompt && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 space-y-2 shadow-sm animate-fade-in">
-                <p className="font-semibold text-amber-900 flex items-center gap-1.5">
+              <div className="rounded-xl border border-stone-200 bg-white p-3 text-xs text-stone-700 space-y-2 shadow-sm animate-fade-in">
+                <p className="font-semibold text-stone-900 flex items-center gap-1.5">
                   <span> Gợi ý từ hệ thống:</span>
                 </p>
                 <p className="text-[11.5px] leading-relaxed">
@@ -412,7 +412,7 @@ export default function CustomerSupportChatbot({
                   <button
                     type="button"
                     onClick={handleEscalate}
-                    className="w-full rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700 transition"
+                    className="w-full rounded-lg bg-stone-700 px-3 py-2 text-xs font-bold text-white hover:bg-stone-800 transition"
                   >
                      Chuyển ngay cho nhân viên hỗ trợ
                   </button>
@@ -423,7 +423,7 @@ export default function CustomerSupportChatbot({
                       setUnresolvedCount(0)
                       addMessage('bot', 'Bạn có thể chọn một chủ đề khác bên dưới hoặc gõ câu hỏi cụ thể nhé:')
                     }}
-                    className="w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-amber-100/50 transition"
+                    className="w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-100 transition"
                   >
                     Tiếp tục hỏi trợ lý AI
                   </button>
@@ -441,7 +441,7 @@ export default function CustomerSupportChatbot({
                   <button
                     type="button"
                     onClick={() => handleFeedbackRate('helpful')}
-                    className="flex-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 font-bold text-emerald-800 hover:bg-emerald-100 transition flex items-center justify-center gap-1.5"
+                    className="flex-1 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 font-bold text-stone-700 hover:bg-stone-100 transition flex items-center justify-center gap-1.5"
                   >
                      Hữu ích
                   </button>
@@ -461,7 +461,7 @@ export default function CustomerSupportChatbot({
 
           {/* Quick FAQ suggestions */}
           {!showPostActions && !showLoopBreakerPrompt && (
-            <div className="border-t border-stone-200 bg-[#f4f1ea] p-2.5">
+            <div className="border-t border-stone-200 bg-white p-2.5">
               <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-stone-500 px-1">
                 Chủ đề thường gặp
               </p>
@@ -471,7 +471,7 @@ export default function CustomerSupportChatbot({
                     key={faq.id}
                     type="button"
                     onClick={() => handleAsk(faq.question)}
-                    className="rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-medium text-stone-700 hover:border-amber-600 hover:text-amber-800 transition"
+                    className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-medium text-stone-700 hover:border-stone-400 hover:bg-stone-100 transition"
                   >
                     {faq.question}
                   </button>
@@ -482,11 +482,11 @@ export default function CustomerSupportChatbot({
 
           {/* Post Actions (Resolve / Ask another / Escalate) */}
           {showPostActions && (
-            <div className="border-t border-stone-200 bg-[#f4f1ea] p-3 space-y-1.5">
+            <div className="border-t border-stone-200 bg-white p-3 space-y-1.5">
               <button
                 type="button"
                 onClick={handleMarkDone}
-                className="w-full rounded-lg border border-emerald-300 bg-emerald-50 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition"
+                className="w-full rounded-lg border border-stone-300 bg-stone-50 py-2 text-xs font-bold text-stone-700 hover:bg-stone-100 transition"
               >
                 Đã xong, cảm ơn
               </button>
@@ -501,7 +501,7 @@ export default function CustomerSupportChatbot({
                 <button
                   type="button"
                   onClick={handleEscalate}
-                  className="rounded-lg bg-amber-600 py-2 text-xs font-bold text-white hover:bg-amber-700 transition"
+                  className="rounded-lg bg-stone-700 py-2 text-xs font-bold text-white hover:bg-stone-800 transition"
                 >
                   Chuyển nhân viên
                 </button>
@@ -525,7 +525,7 @@ export default function CustomerSupportChatbot({
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#181b22] text-white disabled:opacity-40 hover:bg-[#20242d] transition"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-700 text-white disabled:opacity-40 hover:bg-stone-800 transition"
               aria-label="Gửi tin nhắn"
             >
               ➤
@@ -541,7 +541,7 @@ export default function CustomerSupportChatbot({
                   setIsOpen(false)
                   onOpenTicketList()
                 }}
-                className="text-[11px] font-semibold text-amber-700 hover:underline"
+                className="text-[11px] font-semibold text-stone-600 hover:text-stone-900 hover:underline"
               >
                 Xem danh sách phiếu hỗ trợ của bạn ({tickets.filter(t => t.email === user.email || t.customer === user.name).length})
               </button>

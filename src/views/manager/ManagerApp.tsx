@@ -15,7 +15,6 @@ import ManagerFinancialApiPanel from './ManagerFinancialApiPanel'
 import ManagerRentalsPanel from './ManagerRentalsPanel'
 import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
 import ManagerOverdueApiPanel from './ManagerOverdueApiPanel'
-import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerApiStaffTasksPanel from './ManagerApiStaffTasksPanel'
@@ -38,11 +37,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'rentals:read' as const }] : []),
     { id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' },
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
-    ...(isApiAuthenticated() ? [{ id: 'support-api', label: "Hỗ trợ khách hàng", icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
-  const [supportOpenTicket, setSupportOpenTicket] = useState<{ id: string; request: number }>()
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -82,7 +79,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       'overdue-cases': 'Theo dõi quá hạn',
       'payment-complaints': 'Khiếu nại thanh toán',
       'staff-tasks': 'Nhân viên & Nhiệm vụ',
-      'support-api': 'Hỗ trợ khách hàng',
       reports: 'Báo cáo cơ sở'
     }
     notifyBell({
@@ -144,10 +140,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     if (type === 'RESERVATION') return 'unit-assignments'
     if (type === 'RENEWAL') return 'rentals'
     if (type === 'PAYMENT' || type === 'OVERDUE') return type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
-    if (type === 'SUPPORT') return 'support-api'
     return 'dashboard'
   }
-  const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
+  const managerApiNotifications: LayoutNotification[] = backendNotifications.filter(notification => notification.type !== 'SUPPORT').map(notification => ({
     id: `api-notification-${notification.id}`,
     title: notification.title,
     message: notification.content,
@@ -161,9 +156,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.replace('api-notification-', '')
       setPage(notification.page)
-      if (notification.page === 'support-api' && notification.targetId) {
-        setSupportOpenTicket(previous => ({ id: notification.targetId!, request: (previous?.request ?? 0) + 1 }))
-      }
       setBackendNotifications(current => current.map(item =>
         item.id === notificationId ? { ...item, isRead: true } : item
       ))
@@ -180,7 +172,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     {page === 'moves' && <ManagerMovesPanel user={user} showToast={showToast} statusBadge={statusBadge} onNavigate={setPage} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
     {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
-    {page === 'support-api' && isApiAuthenticated() && <SupportApiWorkspace role="manager" openTicket={supportOpenTicket} onTicketOpened={() => setSupportOpenTicket(undefined)} />}
     {page === 'payment-complaints' && <ManagerPaymentComplaintsPanel showToast={showToast} />}
     {page === 'staff-tasks' && (isApiAuthenticated()
       ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} />
