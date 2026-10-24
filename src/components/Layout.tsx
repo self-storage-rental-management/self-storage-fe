@@ -423,12 +423,11 @@ export default function Layout({
           {(user.role === 'manager' || user.role === 'staff') && (
             user.facility ? (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#3a3933]/80 border border-[#4b4940] text-[11px] text-amber-300">
-                <span>🏢</span>
                 <span className="truncate font-medium">{user.facility}</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/40 border border-amber-800/60 text-[11px] text-amber-400">
-                <span>⚠️ Chưa phân công cơ sở</span>
+                <span>Chưa phân công cơ sở</span>
               </div>
             )
           )}
@@ -525,11 +524,11 @@ export default function Layout({
               {user.facility ? (
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>🏢 Cơ sở: <strong className="font-bold text-emerald-950">{user.facility}</strong></span>
+                  <span>Cơ sở: <strong className="font-bold text-emerald-950">{user.facility}</strong></span>
                 </div>
               ) : (
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                  <span>⚠️ Chưa phân công cơ sở</span>
+                  <span>Chưa phân công cơ sở</span>
                 </div>
               )}
             </div>
