@@ -1,7 +1,7 @@
 import { apiDownload, apiRequest } from './apiClient'
 
 export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
-export type UnitTypeStatus = 'active' | 'inactive'
+export type UnitTypeStatus = 'active' | 'inactive' | 'archived'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
 export type PaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
 export type ReservationStatus =
@@ -82,6 +82,9 @@ export interface CustomerUnitType {
   availableCount: number | null
   createdAt: string
   updatedAt: string
+  publishedRevision?: number
+  acceptedGoodsCategoryIds?: string[]
+  acceptedGoodsMaterialIds?: string[]
 }
 
 export interface AvailabilityResult {
@@ -100,6 +103,11 @@ export type GoodsCategory =
   | 'MOVING_ITEMS' | 'OTHER'
 
 export interface GoodsItemInput {
+  catalogCategoryId?: string | null
+  catalogMaterialId?: string | null
+  categoryCode?: string | null
+  categoryName?: string | null
+  materialCode?: string | null
   category: GoodsCategory
   customGoodsName?: string | null
   materialName?: string | null
@@ -112,6 +120,32 @@ export interface GoodsItemInput {
   heightCm: number
   weightPerItemKg: number
   fragile: boolean
+}
+
+export interface GoodsCatalogMaterial {
+  id: string
+  code: string
+  label: string
+  fragile: boolean
+  status: GoodsCatalogStatus
+  sortOrder: number
+}
+
+export type GoodsCatalogStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
+
+export interface GoodsCatalogCategory {
+  id: string
+  code: string
+  reservationCategory: GoodsCategory
+  label: string
+  status: GoodsCatalogStatus
+  materials: GoodsCatalogMaterial[]
+  custom: boolean
+  sortOrder: number
+}
+
+export interface GoodsCatalog {
+  categories: GoodsCatalogCategory[]
 }
 
 export interface ReservationSelectionInput {
@@ -244,6 +278,7 @@ export interface CheckInDocument {
 
 export interface ReservationGoodsItem extends GoodsItemInput {
   id: string
+  goodsCode: string
   requiresStaffReview: boolean
   reviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
   reviewNote: string | null
@@ -467,6 +502,11 @@ export async function listAccessibleUnitTypes(facilityId: string, page = 0, size
   return apiRequest<PageResponse<CustomerUnitType>>(
     `/api/facilities/${facilityId}/unit-types${query({ page, size })}`,
   )
+}
+
+export async function getGoodsCatalog() {
+  const response = await apiRequest<ApiEnvelope<GoodsCatalog>>('/api/customer/reservations/goods-catalog')
+  return response.data
 }
 
 export async function getAvailability(input: Omit<ReservationSelectionInput, 'goodsCondition' | 'goodsItems'>) {
