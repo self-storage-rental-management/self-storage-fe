@@ -254,7 +254,7 @@ export default function StaffReservationReviews({
               className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"
             >
               <p className="font-bold">
-                {item.customGoodsName || staffGoodsCategoryLabel(item.category)}
+                {item.customGoodsName || item.categoryName || staffGoodsCategoryLabel(item.category)}
               </p>
               <p>Mô tả: {item.description || "Không có"}</p>
               <p>

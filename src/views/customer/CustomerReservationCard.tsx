@@ -11,15 +11,8 @@ import ReservationReceipt from './ReservationReceipt'
 import { paymentMethodLabel } from './paymentLabels'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput } from '../../domain/reservationCheckInPolicy'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
-
-const GOODS_CATEGORY_LABELS: Record<string, string> = {
-  FURNITURE: 'Nội thất', KITCHENWARE: 'Đồ dùng nhà bếp', DECOR: 'Đồ trang trí',
-  ELECTRONICS: 'Thiết bị điện tử', OFFICE: 'Đồ dùng văn phòng', TOYS: 'Đồ chơi',
-  SPORTS: 'Dụng cụ thể thao', GIFTS: 'Quà tặng', MUSICAL_INSTRUMENTS: 'Nhạc cụ',
-  CAMERA_EQUIPMENT: 'Thiết bị máy ảnh', EVENT_EQUIPMENT: 'Thiết bị sự kiện',
-  STORE_FIXTURES: 'Thiết bị cửa hàng', FINE_ART: 'Mỹ thuật',
-  CERAMIC_GLASS: 'Gốm, sứ và thủy tinh', MOVING_ITEMS: 'Đồ chuyển nhà', OTHER: 'Khác',
-}
+import type { Facility, UnitType } from '../../types/storageHub'
+import { totalGoodsVolumeM3, formatGoodsVolume } from '../../domain/goodsMeasurements'
 
 const APPOINTMENT_EDITABLE_STATUSES = [
   'AWAITING_EMAIL',
@@ -57,13 +50,15 @@ interface Props {
   unitTypeName: string
   facilityDetails?: Pick<CustomerFacility, 'address' | 'city' | 'phone' | 'accessHours'> | null
   unitTypeDetails?: Pick<CustomerUnitType, 'lengthM' | 'widthM' | 'heightM' | 'volumeM3' | 'rackCount' | 'rackLengthM' | 'rackWidthM' | 'rackHeightM' | 'maxLoadKg'> | null
+  facility?: Facility
+  unitType?: UnitType
   onVerify: () => void
   onCancel: () => void
   onRefresh: () => Promise<void>
   onReceiptConfirmed?: (reservationId: string) => void
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
+export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -103,11 +98,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const remainingPayment = detail?.payments?.find(payment => payment.purpose === 'RENTAL_BALANCE' && payment.paymentStatus === 'PAID') || null
   const goodsItems = detail?.goodsItems ?? []
   const totalGoodsQuantity = goodsItems.reduce((total, item) => total + item.quantity, 0)
-  const calculatedGoodsVolumeM3 = goodsItems.reduce((total, item) => total + (
-    item.quantity * item.lengthCm * item.widthCm * item.heightCm / 1_000_000
-  ), 0)
+  const calculatedGoodsVolumeM3 = totalGoodsVolumeM3(goodsItems)
   const calculatedGoodsWeightKg = goodsItems.reduce((total, item) => total + item.quantity * item.weightPerItemKg, 0)
-  const formatMeasurement = (value: number) => value.toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+  const formatMeasurement = formatGoodsVolume
   const rentalMonths = r.rentalMonths && r.rentalMonths > 0 ? r.rentalMonths : Math.max(1, Math.round((new Date(r.endDate).getTime() - new Date(r.startDate).getTime()) / (30.4375 * 86_400_000)))
   const discountAmount = r.discountAmount ?? 0
   const voucherDiscountAmount = r.voucherDiscountAmount ?? 0
@@ -218,11 +211,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(appointmentTime)) {
       errors.time = 'Vui lòng chọn giờ nhận kho hợp lệ.'
     } else {
-      const [hour, minute] = appointmentTime.split(':').map(Number)
-      const minutes = hour * 60 + minute
-      if (minutes < 8 * 60 || minutes > 16 * 60 + 30 || minute % 30 !== 0) {
-        errors.time = 'Giờ nhận kho phải nằm trong khoảng 08:00–16:30 và theo khung 30 phút.'
-      } else if (!errors.date && appointmentDate === earliestDate && appointment < appointmentWindow.availableAt) {
+      if (!errors.date && appointmentDate === earliestDate && appointment < appointmentWindow.availableAt) {
         errors.time = `Trong ngày ${appointmentWindow.availableAt.toLocaleDateString('vi-VN')}, giờ nhận kho sớm nhất là ${policyTimeInput(appointmentWindow.availableAt)}.`
       }
     }
@@ -329,9 +318,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
           <div className="grid w-full gap-3 sm:grid-cols-2">
             <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
-              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '09:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
+              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '00:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
               {appointmentErrors.date && <p className="mt-1 text-xs text-red-700">{appointmentErrors.date}</p>}</div>
-            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input aria-invalid={Boolean(appointmentErrors.time)} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="1800" value={appointmentInput.split('T')[1] || ''}
+            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input aria-invalid={Boolean(appointmentErrors.time)} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="60" value={appointmentInput.split('T')[1] || ''}
               onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
           </div>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
@@ -339,6 +328,23 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
         </div>}
         <div className="mt-3 space-y-4">
+          <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-700">
+            <h3 className="font-bold text-stone-900">Thông tin khách hàng</h3>
+            <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+              <div><dt className="inline font-medium">Họ và tên: </dt><dd className="inline">{r.customerName || 'Chưa có thông tin'}</dd></div>
+              <div><dt className="inline font-medium">CCCD / Hộ chiếu: </dt><dd className="inline">{r.identityDocumentNumber || 'Chưa có thông tin'}</dd></div>
+              <div><dt className="inline font-medium">Số điện thoại: </dt><dd className="inline">{r.customerPhone || 'Chưa có thông tin'}</dd></div>
+              <div><dt className="inline font-medium">Email: </dt><dd className="inline break-all">{r.customerEmail || 'Chưa có thông tin'}</dd></div>
+              <div className="sm:col-span-2"><dt className="inline font-medium">Địa chỉ: </dt><dd className="inline">{r.customerAddress || 'Chưa có thông tin'}</dd></div>
+            </dl>
+            <h3 className="mt-4 border-t border-stone-200 pt-4 font-bold text-stone-900">Thông tin kho đã đặt</h3>
+            <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+              <div><dt className="inline font-medium">Cơ sở: </dt><dd className="inline">{facilityName}</dd></div>
+              <div><dt className="inline font-medium">Loại kho: </dt><dd className="inline">{unitTypeName}</dd></div>
+              {facility && <><div className="sm:col-span-2"><dt className="inline font-medium">Địa chỉ kho: </dt><dd className="inline">{facility.address}</dd></div><div><dt className="inline font-medium">Giờ hoạt động: </dt><dd className="inline">{facility.accessHours || 'Chưa công bố'}</dd></div>{facility.phone && <div><dt className="inline font-medium">Liên hệ cơ sở: </dt><dd className="inline">{facility.phone}</dd></div>}</>}
+              {unitType && <><div><dt className="inline font-medium">Diện tích: </dt><dd className="inline">{unitType.areaM2} m²</dd></div><div><dt className="inline font-medium">Kích thước kho (D × R × C): </dt><dd className="inline">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m</dd></div><div><dt className="inline font-medium">Thể tích kho: </dt><dd className="inline">{unitType.volumeM3} m³</dd></div><div><dt className="inline font-medium">Tải trọng tối đa: </dt><dd className="inline">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</dd></div></>}
+            </dl>
+          </section>
           <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
             <h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3>
             {!detail && <p className="mt-3 text-stone-500">Đang tải chi tiết hàng hóa…</p>}
@@ -354,9 +360,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
                 {goodsItems.map((item, index) => {
                   const itemVolumeM3 = item.lengthCm * item.widthCm * item.heightCm / 1_000_000
                   return <article key={item.id} className="rounded-lg border border-stone-200 bg-white p-4 leading-5">
-                    <p className="font-bold text-stone-900">Hàng hóa {index + 1}: {item.customGoodsName || GOODS_CATEGORY_LABELS[item.category] || item.category}</p>
+                    <p className="font-bold text-stone-900">{item.goodsCode || 'Hàng hóa'}: {item.customGoodsName || item.categoryName || 'Loại hàng đã khai báo'}</p>
                     <div className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-                      <p><b>Loại hàng:</b> {GOODS_CATEGORY_LABELS[item.category] || item.category}</p>
+                      <p><b>Loại hàng:</b> {item.categoryName || 'Loại hàng đã khai báo'}</p>
                       <p><b>Chất liệu:</b> {item.customMaterial || item.materialName || 'Không có'}</p>
                       <p className="sm:col-span-2"><b>Mô tả:</b> {item.description || 'Không có'}</p>
                       <p><b>Số lượng:</b> {item.quantity.toLocaleString('vi-VN')} kiện</p>
