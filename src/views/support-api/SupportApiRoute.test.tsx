@@ -8,8 +8,11 @@ import { SupportApiRoute } from "./SupportApiEntry"
 
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null, read: {} as Record<string, unknown> }))
 vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.actor }))
+vi.mock('../../hooks/useSupportMessageReads', () => ({ useSupportUnread: () => new Map() }))
 vi.mock("../../hooks/useRentalApiResource", () => ({
-  useRentalApiResource: () => ({ loading: false, refresh: vi.fn(), ...state.read }),
+  useRentalApiResource: (key: string) => ({ loading: false, refresh: vi.fn(), ...state.read,
+    ...(key.includes(':staff-inbox:') && state.read.data ? { data: { ...page((state.read.data as any).data.map((ticket: any) => ({ ticket, queued: null, historyCount: 0, lastActivityAt: ticket.createdAt }))), counts: { queue: 0, mine: 1, all: 1, history: 0 } } } : {}),
+  }),
 }))
 beforeEach(() => { state.actor = null; state.read = {}; vi.clearAllMocks() })
 

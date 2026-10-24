@@ -13,6 +13,9 @@ import type {
   SupportRole,
   SupportStaffOption,
   SupportTicket,
+  StaffSupportInboxView,
+  StaffSupportInboxRow,
+  StaffSupportInboxPage,
 } from "../types/supportApi"
 
 const links = ["RENTAL", "RESERVATION", "PAYMENT", "STORAGE_UNIT"]
@@ -71,6 +74,14 @@ function rolePath(role: SupportRole) {
     ? "/api/manager/support-tickets"
     : `/api/${role}/support-workflows`
 }
+export async function hideCustomerSupportHistory(id: string) {
+  check(isUuid(id), 'Mã hội thoại không hợp lệ.')
+  return envelope(await apiRequest(`${rolePath('customer')}/${id}/history`, { method: 'DELETE' }),
+    (value): value is { ticketId: string; hidden: true } => {
+      const result = value as { ticketId?: unknown; hidden?: unknown } | null
+      return !!result && result.ticketId === id && result.hidden === true
+    })
+}
 function path(role: SupportRole, id: string) {
   check(isUuid(id), "Mã yêu cầu Hỗ trợ không hợp lệ.")
   return `${rolePath(role)}/${encodeURIComponent(id)}`
@@ -80,7 +91,7 @@ export function isSupportTicket(value: unknown): value is SupportTicket {
   const r = value as SupportTicket | null
   if (
     !r ||
-    !(r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|HT-\d{4}-\d{6})$/.test(r.displayCode))) ||
+    !(r.displayCode == null || (typeof r.displayCode === "string" && /^SH-\d{6}$/.test(r.displayCode))) ||
     !isUuid(r.id) ||
     !isUuid(r.customerId) ||
     !(r.customerName === undefined || nullable(r.customerName, string)) ||
@@ -276,15 +287,29 @@ export async function listSupportTickets(
     query.page ?? 0,
   )
 }
+function isSupportQueueItem(v: unknown) {
+  return record(v) && isUuid(v.id) && isUuid(v.facilityId) &&
+      string(v.subject) && isInstant(v.createdAt) && isVersion(v.version) &&
+      (v.displayCode == null || (string(v.displayCode) && /^SH-\d{6}$/.test(v.displayCode))) &&
+      Object.keys(v).every((key) => ["id", "facilityId", "subject", "createdAt", "version", "displayCode"].includes(key))
+}
 export async function listSupportQueue(query: SupportQuery = {}) {
   const value = await apiRequest(`${rolePath("staff")}/queue${queryString(query)}`)
-  return page<SupportQueueItem>(
-    value,
-    (v) => record(v) && isUuid(v.id) && isUuid(v.facilityId) &&
-      string(v.subject) && isInstant(v.createdAt) && isVersion(v.version) &&
-      Object.keys(v).every((key) => ["id", "facilityId", "subject", "createdAt", "version"].includes(key)),
+  return page<SupportQueueItem>(value, isSupportQueueItem,
     query.page ?? 0,
   )
+}
+export async function listStaffSupportInbox(view: StaffSupportInboxView, currentPage = 0): Promise<StaffSupportInboxPage> {
+  check(['queue', 'mine', 'all', 'history'].includes(view), 'Nhóm hội thoại không hợp lệ.')
+  const paging = queryString({ page: currentPage, size: 20 }, false, true)
+  const value = await apiRequest<unknown>(`${rolePath('staff')}/inbox${paging}&view=${view}`)
+  const result = page<StaffSupportInboxRow>(value, row => record(row) && isVersion(row.historyCount) && isInstant(row.lastActivityAt) &&
+    ((row.queued === null && isSupportTicket(row.ticket)) || (row.ticket === null && isSupportQueueItem(row.queued))), currentPage)
+  if (!record(value) || !record(value.counts) || !['queue', 'mine', 'all', 'history'].every(key => isVersion((value.counts as Record<string, unknown>)[key]))) return invalid()
+  return { ...result, counts: value.counts as StaffSupportInboxPage['counts'] }
+}
+export async function listRelatedStaffConversations(id: string, currentPage = 0) {
+  return page<SupportTicket>(await apiRequest(`${path('staff', id)}/related${queryString({ page: currentPage, size: 20 }, false, true)}`), isSupportTicket, currentPage)
 }
 export async function getSupportSummary(facilityId: string) {
   check(isUuid(facilityId), "Cơ sở không hợp lệ.")
@@ -450,7 +475,7 @@ export async function sendSupportCommand(
       ...(role !== "customer" ? ["visibility"] : ["expectedVersion"]),
     ],
     information: ["message", "evidenceFileIds", "expectedVersion"],
-    resolve: ["summary", "evidenceFileIds", "expectedVersion"],
+    resolve: ["summary", "evidenceFileIds", "expectedVersion", "statusOnly"],
     close: ["feedback", "expectedVersion"],
     reopen: ["reason", "expectedVersion"],
     escalate: ["targetModule", "reason", "evidenceFileIds", "expectedVersion"],
@@ -467,14 +492,20 @@ export async function sendSupportCommand(
     check(isVersion(payload.expectedVersion), "Phiên bản không hợp lệ.")
   if ("evidenceFileIds" in payload) files(payload.evidenceFileIds)
   if ("reason" in payload) text(payload.reason, 2000)
-  if ("body" in payload) text(payload.body, 4000)
+  if ("body" in payload) {
+    const hasFiles = "evidenceFileIds" in payload && Array.isArray(payload.evidenceFileIds) && payload.evidenceFileIds.length > 0
+    if (!(kind === 'message' && string(payload.body) && payload.body.length <= 4000 && !payload.body.trim() && hasFiles)) text(payload.body, 4000)
+  }
   if ("message" in payload) text(payload.message, 4000)
-  if (kind === "resolve")
+  if (kind === "resolve") {
+    const statusOnly = "statusOnly" in payload ? payload.statusOnly : undefined
     check(
       "summary" in payload && string(payload.summary) && payload.summary.length <= 4000 &&
-        (!!payload.summary.trim() || ("evidenceFileIds" in payload && Array.isArray(payload.evidenceFileIds) && payload.evidenceFileIds.length > 0)),
+        (statusOnly === true ? !payload.summary.trim() && (!payload.evidenceFileIds || Array.isArray(payload.evidenceFileIds) && payload.evidenceFileIds.length === 0) :
+          (statusOnly === undefined || statusOnly === false) && (!!payload.summary.trim() || ("evidenceFileIds" in payload && Array.isArray(payload.evidenceFileIds) && payload.evidenceFileIds.length > 0))),
       "Cần nhập mô tả xử lý hoặc đính kèm minh chứng để gửi cho khách hàng.",
     )
+  }
   if ("feedback" in payload && payload.feedback !== undefined)
     check(
       string(payload.feedback) && payload.feedback.length <= 2000,

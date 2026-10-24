@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { User } from './types'
 import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -85,6 +85,14 @@ function MainContent() {
   const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
   const [restoringSession, setRestoringSession] = useState(() => Boolean(getRefreshToken()))
   const [guestView, setGuestView] = useState<GuestView>(resolveGuestView)
+  const logoutLock = useRef(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string>()
+  const logoutDialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    if (loggingOut) logoutDialog.current?.showModal()
+    else logoutDialog.current?.close()
+  }, [loggingOut])
 
   useEffect(() => {
     if (!getRefreshToken()) {
@@ -191,14 +199,25 @@ function MainContent() {
     setSessionUserId(nextUser.id)
   }
 
-  const handleLogout = () => {
-    if (apiActor) void logoutFromApi()
-    if (user && sessionId) endSession(sessionId, user)
-    setApiActor(null)
-    setSessionUserId(null)
-    setSessionId(null)
-    setGuestView('home')
-    window.history.replaceState(null, '', '/')
+  const handleLogout = async () => {
+    if (logoutLock.current) return
+    logoutLock.current = true
+    setLoggingOut(true)
+    setLogoutError(undefined)
+    try {
+      if (apiActor && !await logoutFromApi()) return
+      if (user && sessionId) endSession(sessionId, user)
+      setApiActor(null)
+      setSessionUserId(null)
+      setSessionId(null)
+      setGuestView('home')
+      window.history.replaceState(null, '', '/')
+    } catch {
+      setLogoutError('Chưa lưu được nội dung chat nên chưa đăng xuất. Nội dung vẫn được giữ tại đây. Vui lòng kiểm tra kết nối hoặc lỗi lưu chat rồi thử lại.')
+    } finally {
+      logoutLock.current = false
+      setLoggingOut(false)
+    }
   }
 
   if (restoringSession) {
@@ -224,11 +243,9 @@ function MainContent() {
     )
   }
 
-  if (apiActor?.mustChangePassword) {
-    return <RequiredPasswordChange actor={apiActor} onChanged={setApiActor} onLogout={handleLogout} />
-  }
-
-  const roleApp = (() => {
+  const roleApp = apiActor?.mustChangePassword
+    ? <RequiredPasswordChange actor={apiActor} onChanged={setApiActor} onLogout={handleLogout} />
+    : (() => {
     switch (user.role) {
       case 'customer': return <CustomerApp user={user} onLogout={handleLogout} onUpdateUser={() => setApiActor(getAuthenticatedActor())} />
       case 'staff': return <StaffApp user={user} onLogout={handleLogout} />
@@ -238,7 +255,13 @@ function MainContent() {
     }
   })()
 
-  return <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm font-medium text-stone-600">Đang tải không gian làm việc…</div>}>{roleApp}</Suspense>
+  return <>
+    {logoutError && <div role="alert" className="fixed left-1/2 top-4 z-[100] flex w-[min(560px,calc(100vw-32px))] -translate-x-1/2 items-start gap-3 rounded-xl bg-amber-50 p-4 text-sm text-stone-800 shadow-lg"><p>{logoutError}</p><button type="button" aria-label="Đóng thông báo đăng xuất" onClick={() => setLogoutError(undefined)} className="shrink-0 px-1">×</button></div>}
+    <div inert={loggingOut} aria-busy={loggingOut}>
+      <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm font-medium text-stone-600">Đang tải không gian làm việc…</div>}>{roleApp}</Suspense>
+    </div>
+    <dialog ref={logoutDialog} aria-label="Đang đăng xuất" onCancel={event => event.preventDefault()} className="fixed inset-0 m-auto rounded-xl border-0 bg-white p-5 text-sm text-stone-700 shadow-lg backdrop:bg-black/20"><p role="status">Đang lưu cuộc trò chuyện và đăng xuất…</p></dialog>
+  </>
 }
 
 export default function App() {

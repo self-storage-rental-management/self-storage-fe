@@ -56,7 +56,7 @@ describe('Manager API dashboard: no business demo data', () => {
   it('does not request unauthorized metrics or render demo for a missing actor', () => {
     state.actor = { ...manager, permissions: ['support:read'] }
     render()
-    expect(state.identities).toHaveLength(1)
+    expect(state.identities).toHaveLength(0)
     state.actor = null
     state.identities = []
     expect(render()).toContain('Cần đăng nhập')
@@ -68,7 +68,7 @@ describe('Manager API dashboard: no business demo data', () => {
     state.actor = { ...state.actor!, id: 'other-manager', facilityScopes: { f2: 'READ' } }
     state.identities = []
     render()
-    expect(state.identities).toHaveLength(4)
+    expect(state.identities).toHaveLength(3)
     expect(state.identities.every(id => !previous.includes(id))).toBe(true)
   })
   it('omits active-rental and payment-overdue cards and their API reads', () => {
@@ -77,9 +77,9 @@ describe('Manager API dashboard: no business demo data', () => {
     expect(html).not.toContain('Thanh toán quá hạn')
     expect(html).toContain('Tổng hồ sơ thuê')
     expect(html).toContain('Gia hạn cần theo dõi')
-    expect(html).toContain('Yêu cầu hỗ trợ mới')
+    expect(html).not.toContain('Yêu cầu hỗ trợ mới')
     expect(html).toContain('Quá thời hạn thuê')
-    expect(state.identities).toHaveLength(4)
+    expect(state.identities).toHaveLength(3)
     expect(state.identities.some(id => id.endsWith(':active-rentals') || id.endsWith(':payment-overdue'))).toBe(false)
   })
 })

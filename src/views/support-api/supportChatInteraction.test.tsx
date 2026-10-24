@@ -6,11 +6,14 @@ import { supportActor, supportActive, supportIds, supportPage, supportTicket } f
 import SupportApiWorkspace from './SupportApiWorkspace'
 import SupportCreateForm from './SupportCreateForm'
 import SupportTicketDetail from './SupportTicketDetail'
+import StaffSupportInbox from './StaffSupportInbox'
+import ApiPager from '../rental-api/ApiPager'
 import { EvidenceUpload } from '../rental-support-integration/EvidenceControls'
 
 // Exercise component handlers with isolated API fixtures; no records are written to the app DB.
 const h = vi.hoisted(() => ({
   slots: [] as any[], cursor: 0, effects: [] as (() => void | (() => void))[],
+  layouts: [] as (() => void)[],
   resources: [] as { key: string; load: () => Promise<any>; options: any }[],
   role: 'customer' as 'customer' | 'staff' | 'manager',
   command: {} as any, onSuccess: undefined as any, messages: undefined as any,
@@ -25,6 +28,7 @@ vi.mock('react', async original => ({
   },
   useRef: (initial: any) => { const index = h.cursor++; return h.slots[index] ??= { current: initial } },
   useEffect: (effect: () => void) => { h.effects.push(effect) },
+  useLayoutEffect: (effect: () => void) => { h.layouts.push(effect) },
 }))
 vi.mock('../../services/authApi', () => ({ getAuthenticatedActor: () => supportActor(h.role) }))
 vi.mock('../manager/managerPresentation', () => ({ useManagerPresentation: () => ({ manager: false, copy: (text: string) => text, errorText: () => 'Lỗi kiểm thử' }) }))
@@ -41,7 +45,7 @@ vi.mock('../../hooks/useRentalApiResource', () => ({ useRentalApiResource: (key:
 } }))
 type Element = ReactElement<any>
 function render(fn: () => any, slots: any[] = []) {
-  h.slots = slots; h.cursor = 0; h.effects = []; h.resources = []
+  h.slots = slots; h.cursor = 0; h.effects = []; h.layouts = []; h.resources = []
   return fn()
 }
 function invoke(element: Element, slots: any[] = []) { return render(() => (element.type as any)(element.props), slots) }
@@ -52,6 +56,14 @@ function nodes(node: any): Element[] {
 }
 const find = (tree: any, type: any) => nodes(tree).find(n => n.type === type)!
 const button = (tree: any, label: string) => nodes(tree).find(n => n.type === Button && n.props.children === label)!
+function createScrollArea() {
+  let top = 0
+  return {
+    scrollHeight: 1200, clientHeight: 300,
+    get scrollTop() { return top },
+    set scrollTop(value: number) { top = Math.max(0, Math.min(value, this.scrollHeight - this.clientHeight)) },
+  }
+}
 function workspace() {
   const root = SupportApiWorkspace({ role: h.role }) as Element
   const slots: any[] = []
@@ -66,6 +78,70 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('Support chat workspace', () => {
+  it('refreshes a sent Staff message without remounting the open conversation', () => {
+    h.role = 'staff'
+    const session = workspace()
+    find(session(), StaffSupportInbox).props.onOpen(supportIds.ticket)
+    const before = find(session(), SupportTicketDetail)
+    h.onSuccess({ kind: 'command', role: 'staff', id: supportIds.ticket, command: { kind: 'message', body: 'Đã nhận được tệp.' } }, { id: supportIds.message })
+    const after = find(session(), SupportTicketDetail)
+    expect(after.key).toBe(before.key)
+    expect(after.props.refreshRevision).toBeGreaterThan(before.props.refreshRevision)
+    expect(after.props.messageFocus.messageId).toBe(supportIds.message)
+    expect(after.props.drafts.messages).toEqual({ body: '', files: [] })
+  })
+  it('keeps Staff chat at the bottom on updates and preserves the position while reading older messages', () => {
+    h.role = 'staff'
+    const detail = render(() => SupportTicketDetail({ role: 'staff', id: supportIds.ticket, command: h.command, onFollowUp: vi.fn(), chatLayout: true }))
+    const timeline = nodes(detail).find(n => typeof n.type === 'function' && n.type.name === 'SupportTimeline')!
+    const slots: any[] = []
+    let tree = invoke(timeline, slots)
+    expect(nodes(tree).some(n => n.type === 'h3' && n.props.children === 'Tin nhắn')).toBe(false)
+    const area = createScrollArea()
+    const log = () => nodes(tree).find(n => n.props.role === 'log')!
+    log().props.ref.current = area
+    h.layouts.forEach(effect => effect())
+    expect(area.scrollTop).toBe(900)
+    log().props.onScroll()
+    area.scrollHeight = 1800
+    h.messages = supportPage([])
+    tree = invoke(timeline, slots)
+    h.layouts.forEach(effect => effect())
+    expect(area.scrollTop).toBe(1500)
+    area.scrollTop = 100
+    log().props.onScroll()
+    area.scrollHeight = 2400
+    h.messages = supportPage([])
+    tree = invoke(timeline, slots)
+    h.layouts.forEach(effect => effect())
+    expect(area.scrollTop).toBe(100)
+  })
+  it('returns to the latest page and scrolls to the sent message after replying from an older page', () => {
+    h.role = 'staff'
+    const detail = render(() => SupportTicketDetail({ role: 'staff', id: supportIds.ticket, command: h.command, onFollowUp: vi.fn(), chatLayout: true }))
+    let timeline = nodes(detail).find(n => typeof n.type === 'function' && n.type.name === 'SupportTimeline')!
+    h.messages = { ...supportPage([]), pagination: { ...supportPage([]).pagination, totalPages: 3 } }
+    const slots: any[] = []
+    let tree = invoke(timeline, slots)
+    const area = createScrollArea()
+    nodes(tree).find(n => n.props.role === 'log')!.props.ref.current = area
+    h.layouts.forEach(effect => effect())
+    find(tree, ApiPager).props.onPage(0)
+    tree = invoke(timeline, slots)
+    area.scrollTop = 50
+    nodes(tree).find(n => n.props.role === 'log')!.props.onScroll()
+    timeline = { ...timeline, props: { ...timeline.props, refreshRevision: 1, messageFocus: { channel: 'messages', messageId: supportIds.message } } }
+    tree = invoke(timeline, slots)
+    h.refresh.mockClear()
+    h.effects.slice(0, 2).forEach(effect => effect())
+    expect(h.refresh).toHaveBeenCalledOnce()
+    h.messages = supportPage([])
+    area.scrollHeight = 2000
+    tree = invoke(timeline, slots)
+    h.layouts.forEach(effect => effect())
+    expect(h.resources[0].key).toMatch(/:messages:-1$/)
+    expect(area.scrollTop).toBe(1700)
+  })
   it('starts a conversation from the first message and selected facility without a title field', () => {
     const slots: any[] = [], form = () => render(() => SupportCreateForm({ command: h.command }), slots)
     let tree = form()

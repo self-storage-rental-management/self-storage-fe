@@ -118,7 +118,7 @@ describe("Dương delete-first UI copy regression", () => {
     state.data = { ...supportTicket, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu" }
     const command = { run: vi.fn(), retry: vi.fn(), clearError: vi.fn(), busy: false, uncertain: false, conflict: false, locked: false, error: undefined } as ReturnType<typeof useSupportCommand>
     const html = renderToStaticMarkup(<SupportTicketDetail id={supportIds.ticket} role="customer" command={command} onFollowUp={vi.fn()} />)
-    expect(html).toContain("Minh chứng 1")
+    expect(html).toContain("Tệp đính kèm 1")
     expect(html).not.toContain("Có tệp đính kèm, hiện chưa thể tải xuống.")
     expect(html).toContain("Bạn")
     expect(html).not.toContain(ids.file)
