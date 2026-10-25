@@ -37,7 +37,10 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
   const canProcess = actor?.status === 'ACTIVE' && actor.roles.includes(role === 'staff' ? 'STAFF' : 'MANAGER')
     && actor.permissions.includes('rentals:read') && actor.permissions.includes('returns:process')
     && ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[task.facilityId])
-  const canCollect = !!canProcess && !!actor?.permissions.includes('payments:collect')
+  const refundSettlement = view.settlementStatus === 'refund_pending'
+  const staffCashOnly = role === 'staff' && !refundSettlement
+  const canCollect = !!canProcess
+    && !!actor?.permissions.includes(refundSettlement ? 'refunds:execute' : 'payments:collect')
   const canReadReturn = !!actor?.permissions.includes('returns:read')
   const settlement = useRentalApiResource(`${identity}:return:${view.returnCaseId}:${canReadReturn}`, async () => {
     if (!view.returnCaseId || !canReadReturn) return null
@@ -139,7 +142,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     {action && !(needsReconciliation && action === 'settlement-receipts') && <form onSubmit={e => { e.preventDefault(); submit(e.currentTarget) }} className="space-y-4 rounded-lg border border-stone-200 p-4">
       <h3 className="font-semibold">{actionLabels[action]}</h3>
       {!canProcess && <p className="text-sm">Cần quyền xử lý trả kho và quyền thao tác tại cơ sở để xử lý nhiệm vụ.</p>}
-      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">Cần quyền quản lý thanh toán để ghi nhận quyết toán.</p>}
+      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền; Staff không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
       <fieldset disabled={frozen || !allowed || command.conflict} className="space-y-4 disabled:opacity-70">
         {action === 'inspection' && <>
           <p className="text-sm text-stone-600">Phí quá hạn và công nợ được hệ thống tính khi lưu kiểm kê. Số tiền sẽ hiển thị trong quyết toán để khách hàng xác nhận.</p>
@@ -154,7 +157,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
         </>}
         {action === 'settlement-receipts' && <>
           {record && <p className="rounded-lg bg-stone-50 p-3 font-semibold">{record.status === 'payment_due' ? 'Thực thu' : 'Thực hoàn'}: {money((record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount) ?? 0)}</p>}
-          <Field label="Phương thức"><select name="paymentMethod" className={inputClass} value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as 'CASH' | 'BANK_TRANSFER')}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></select></Field>
+          <Field label="Phương thức"><select name="paymentMethod" className={inputClass} value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as 'CASH' | 'BANK_TRANSFER')}><option value="CASH">Tiền mặt</option>{!staffCashOnly && <option value="BANK_TRANSFER">Chuyển khoản</option>}</select></Field>
           {paymentMethod === 'BANK_TRANSFER'
             ? <Field label="Mã giao dịch chuyển khoản"><input name="transactionReference" required maxLength={64} className={inputClass} /></Field>
             : <p className="text-sm text-stone-500">Mã biên nhận được tạo tự động khi ghi nhận quyết toán.</p>}

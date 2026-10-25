@@ -23,7 +23,7 @@ describe('Manager-only readable presentation', () => {
     expect(managerDisplayText('Gửi yêu cầu (API)')).toBe('Gửi yêu cầu')
     expect(source).toBe('Hỗ trợ (D5 API)')
     const app = readFileSync(new URL('./ManagerApp.tsx', import.meta.url), 'utf8')
-    expect(app).toContain('label: "Hỗ trợ khách hàng"')
+    expect(app).not.toContain('label: "Hỗ trợ khách hàng"')
     expect(app).not.toContain('label: "Hỗ trợ ()"')
   })
   it('matches shared typography within Manager only, preserving identifier fonts', () => {
@@ -66,6 +66,6 @@ describe('Manager-only readable presentation', () => {
   })
   it('does not expose raw server diagnostics in Manager errors', () => {
     expect(managerDisplayError(new ApiClientError('English debug message FileAsset UUID', { status: 400 }))).not.toContain('UUID')
-    expect(managerDisplayError(new ApiClientError('Conflict', { status: 409 }))).toContain('Hồ sơ đã thay đổi')
+    expect(managerDisplayError(new ApiClientError('Conflict', { status: 409 }))).toBe('Dữ liệu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng tải lại trước khi tiếp tục.')
   })
 })

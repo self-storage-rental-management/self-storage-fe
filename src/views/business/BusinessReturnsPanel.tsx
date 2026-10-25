@@ -224,6 +224,7 @@ const SAMPLE_RETURNS: Array<{
 export default function BusinessReturnsPanel({ user }: Props) {
   const hub = useStorageHub()
   const useApi = isApiAuthenticated()
+  const isBusiness = user.role === 'business'
 
   // API State
   const [apiRows, setApiRows] = useState<ApiReturn[]>([])
@@ -319,7 +320,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     setApiLoading(true)
     setApiError(null)
     try {
-      const res = await listReturns('manager', page, 20)
+      const res = await listReturns('business', page, 20)
       if (res && res.data && res.data.length > 0) {
         setApiRows(res.data)
         setTotalPages(res.pagination.totalPages || 1)
@@ -437,6 +438,10 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 1. Thao tác: Nghiệm thu hiện trường (Inspection)
   const handlePerformInspection = async () => {
     if (!selectedItem) return
+    if (isBusiness) {
+      setFeedback('Business chỉ được theo dõi hồ sơ và thực hiện hoàn cọc đã đủ điều kiện.')
+      return
+    }
     setSubmitting(true)
     setFeedback('')
 
@@ -505,6 +510,10 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 2. Thao tác: Khách hàng duyệt / Khiếu nại (Confirmation & Dispute)
   const handleCustomerConfirm = async (decision: 'accepted' | 'disputed') => {
     if (!selectedItem) return
+    if (isBusiness) {
+      setFeedback('Business không thay khách hàng xác nhận quyết toán.')
+      return
+    }
     setSubmitting(true)
     setFeedback('')
 
@@ -558,6 +567,10 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 3. Thao tác: Thẩm định khiếu nại (BO Review Dispute)
   const handleReviewDispute = async () => {
     if (!selectedItem) return
+    if (isBusiness) {
+      setFeedback('Business không thẩm định khiếu nại; thao tác này thuộc Manager.')
+      return
+    }
     if (!resolutionNote.trim()) {
       setFeedback('Vui lòng nhập ghi chú kết luận thẩm định khiếu nại của Ban Điều Hành.')
       return
@@ -674,6 +687,10 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 5. Thao tác: Khách nộp phụ phí phát sinh (Pay Due)
   const handlePayDue = async () => {
     if (!selectedItem) return
+    if (isBusiness) {
+      setFeedback('Business không ghi nhận phụ phí; thao tác này thuộc Customer/Staff theo contract.')
+      return
+    }
     setSubmitting(true)
     setFeedback('')
 
@@ -928,14 +945,14 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
           {/* Nhóm nút hành động: Tạo mới hồ sơ */}
           <div className="flex flex-wrap gap-2 items-center">
-            <Button
+            {!isBusiness && <Button
               variant="outline"
               size="sm"
               className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold flex items-center gap-1 cursor-pointer"
               onClick={() => setCreateModalOpen(true)}
             >
               + Tạo hồ sơ trả kho
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -972,9 +989,9 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         <Button variant="primary" size="sm" onClick={handleSeedDemoData}>
                           Nạp 5 hồ sơ mẫu chuẩn
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(true)}>
+                        {!isBusiness && <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(true)}>
                           + Tạo yêu cầu trả kho mới
-                        </Button>
+                        </Button>}
                       </div>
                     </div>
                   </Td>
@@ -1022,7 +1039,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       </Badge>
                     </Td>
                     <Td className="text-right whitespace-nowrap space-x-1.5">
-                      {item.status === 'disputed' ? (
+                      {item.status === 'disputed' && !isBusiness ? (
                         <Button
                           variant="primary"
                           size="sm"
@@ -1041,7 +1058,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                           💳 Giải Ngân Cọc
                         </Button>
                       ) : item.status === 'scheduled' || item.status === 'requested' ? (
-                        <Button
+                        isBusiness ? <Button variant="outline" size="sm" className="font-medium cursor-pointer" onClick={() => handleOpenDetail(item, 'overview')}>Xem Chi Tiết</Button> : <Button
                           variant="primary"
                           size="sm"
                           className="bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-2xs"
@@ -1050,7 +1067,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                           📋 Nghiệm Thu
                         </Button>
                       ) : item.status === 'awaiting_customer_confirmation' || item.status === 'inspected' ? (
-                        <Button
+                        isBusiness ? <Button variant="outline" size="sm" className="font-medium cursor-pointer" onClick={() => handleOpenDetail(item, 'overview')}>Xem Chi Tiết</Button> : <Button
                           variant="primary"
                           size="sm"
                           className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-2xs"
@@ -1155,7 +1172,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
               >
                 Tổng quan & Đối soát
               </button>
-              {(selectedItem.status === 'scheduled' || selectedItem.status === 'requested') && (
+              {!isBusiness && (selectedItem.status === 'scheduled' || selectedItem.status === 'requested') && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('inspect')}
@@ -1168,7 +1185,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   📋 Biên bản nghiệm thu
                 </button>
               )}
-              {selectedItem.status === 'disputed' && (
+              {!isBusiness && selectedItem.status === 'disputed' && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('dispute')}
@@ -1194,7 +1211,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   💳 Lệnh giải ngân hoàn cọc
                 </button>
               )}
-              {selectedItem.status === 'payment_due' && (
+              {!isBusiness && selectedItem.status === 'payment_due' && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('pay')}
@@ -1347,7 +1364,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     Thao Tác Chuyển Giai Đoạn Tiếp Theo
                   </p>
 
-                  {(selectedItem.status === 'scheduled' || selectedItem.status === 'requested') && (
+                  {!isBusiness && (selectedItem.status === 'scheduled' || selectedItem.status === 'requested') && (
                     <div className="flex gap-2">
                       <Button
                         variant="primary"
@@ -1360,7 +1377,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     </div>
                   )}
 
-                  {(selectedItem.status === 'awaiting_customer_confirmation' || selectedItem.status === 'inspected') && (
+                  {!isBusiness && (selectedItem.status === 'awaiting_customer_confirmation' || selectedItem.status === 'inspected') && (
                     <div className="space-y-2">
                       <p className="text-xs text-stone-600">
                         Biên bản đã được lập. Để tiếp tục, bạn có thể mô phỏng phản hồi từ khách hàng:
@@ -1394,7 +1411,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     </div>
                   )}
 
-                  {selectedItem.status === 'disputed' && (
+                  {!isBusiness && selectedItem.status === 'disputed' && (
                     <div className="flex gap-2">
                       <Button
                         variant="primary"
@@ -1420,7 +1437,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     </div>
                   )}
 
-                  {selectedItem.status === 'payment_due' && (
+                  {!isBusiness && selectedItem.status === 'payment_due' && (
                     <div className="flex gap-2">
                       <Button
                         variant="primary"
