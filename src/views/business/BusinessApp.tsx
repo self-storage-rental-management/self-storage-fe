@@ -276,6 +276,7 @@ export interface DurationDiscountItem {
   label: string
   discountPercent: number
   renewalDiscountPercent: number
+  depositPercent?: number
   description: string
   appliesTo: string
   status: 'active' | 'inactive'
@@ -589,13 +590,6 @@ export default function BusinessApp({
       group: "Cơ Sở & Mặt Bằng",
       permission: "facilities:read",
     },
-    {
-      id: "performance",
-      label: "Hiệu Suất Mặt Bằng",
-      icon: Icon.eye,
-      group: "Cơ Sở & Mặt Bằng",
-      permission: "reports:read",
-    },
 
     // ── GIÁ & KHUYẾN MÃI ──
     {
@@ -607,7 +601,7 @@ export default function BusinessApp({
     },
     {
       id: "policies",
-      label: "Gói Thuê Kỳ Hạn",
+      label: "Gói Thuê",
       icon: Icon.calendar,
       group: "Giá & Khuyến Mãi",
       permission: "policies:read",
@@ -641,15 +635,6 @@ export default function BusinessApp({
       icon: Icon.alert,
       group: "Vận Hành & Hậu Mãi",
       permission: "facilities:read",
-    },
-
-    // ── BÁO CÁO THỐNG KÊ ──
-    {
-      id: "revenue",
-      label: "Báo Cáo Doanh Thu",
-      icon: Icon.chart,
-      group: "Báo Cáo Thống Kê",
-      permission: "reports:read",
     },
   ]
 
@@ -1053,6 +1038,7 @@ export default function BusinessApp({
           title: policy.name,
           label: policy.rentalYears ? `${policy.rentalYears} năm (${policy.rentalMonths} tháng)` : `${policy.rentalMonths} tháng`,
           discountPercent: Number(policy.discountRate) * 100,
+          depositPercent: policy.depositRate !== undefined ? Math.round(Number(policy.depositRate) * 100) : 20,
           renewalDiscountPercent: 0,
           description: policy.name,
           appliesTo: 'Đặt mới',
@@ -1105,6 +1091,7 @@ export default function BusinessApp({
   const [formCreateDurationMonths, setFormCreateDurationMonths] = useState<number | string>(9)
   const [formCreateDurationPercent, setFormCreateDurationPercent] = useState<number>(6)
   const [formCreateDurationRenewalPercent, setFormCreateDurationRenewalPercent] = useState<number>(4)
+  const [formCreateDurationDepositPercent, setFormCreateDurationDepositPercent] = useState<number>(20)
   const [formCreateDurationAppliesTo, setFormCreateDurationAppliesTo] = useState("Đặt mới & Gia hạn")
   const [formCreateDurationScopeType, setFormCreateDurationScopeType] = useState<'all' | 'specific'>('all')
   const [formCreateDurationFacilityIds, setFormCreateDurationFacilityIds] = useState<string[]>([])
@@ -1125,6 +1112,7 @@ export default function BusinessApp({
   const [formDurationLabel, setFormDurationLabel] = useState("")
   const [formDurationPercent, setFormDurationPercent] = useState<number>(0)
   const [formDurationRenewalPercent, setFormDurationRenewalPercent] = useState<number>(0)
+  const [formDurationDepositPercent, setFormDurationDepositPercent] = useState<number>(20)
   const [formDurationAppliesTo, setFormDurationAppliesTo] = useState("Đặt mới & Gia hạn")
   const [formDurationScopeType, setFormDurationScopeType] = useState<'all' | 'specific'>('all')
   const [formDurationFacilityIds, setFormDurationFacilityIds] = useState<string[]>([])
@@ -1138,6 +1126,7 @@ export default function BusinessApp({
     setFormCreateDurationMonths(9)
     setFormCreateDurationPercent(6)
     setFormCreateDurationRenewalPercent(4)
+    setFormCreateDurationDepositPercent(20)
     setFormCreateDurationAppliesTo("Đặt mới & Gia hạn")
     setFormCreateDurationScopeType("all")
     setFormCreateDurationFacilityIds([])
@@ -1167,6 +1156,7 @@ export default function BusinessApp({
       label,
       discountPercent: Math.max(0, Math.min(100, Number(formCreateDurationPercent) || 0)),
       renewalDiscountPercent: Math.max(0, Math.min(100, Number(formCreateDurationRenewalPercent) || 0)),
+      depositPercent: Math.max(5, Math.min(50, Number(formCreateDurationDepositPercent) || 20)),
       description: formCreateDurationDesc.trim() || `Giảm ${formCreateDurationPercent}% cho hợp đồng mới và giảm ${formCreateDurationRenewalPercent}% khi gia hạn ${label}.`,
       appliesTo: formCreateDurationAppliesTo,
       status: formCreateDurationStatus,
@@ -1189,6 +1179,7 @@ export default function BusinessApp({
           rentalMonths: rentalMonthsNumber,
           rentalYears,
           discountRate: newPkg.discountPercent / 100,
+          depositRate: (newPkg.depositPercent ?? 20) / 100,
           policyVersion: `v${Date.now()}`,
           publicationStatus: pubStatus,
           active: pubStatus === 'PUBLISHED',
@@ -1227,6 +1218,7 @@ export default function BusinessApp({
     setFormDurationLabel(item.label)
     setFormDurationPercent(item.discountPercent)
     setFormDurationRenewalPercent(item.renewalDiscountPercent)
+    setFormDurationDepositPercent(item.depositPercent ?? 20)
     setFormDurationAppliesTo(item.appliesTo || "Đặt mới & Gia hạn")
     setFormDurationScopeType(item.scopeType || "all")
     setFormDurationFacilityIds(item.facilityIds || [])
@@ -1262,6 +1254,7 @@ export default function BusinessApp({
           name: formDurationTitle.trim() || selectedDurationItem.title,
           rentalMonths: typeof selectedDurationItem.months === 'number' ? selectedDurationItem.months : 1,
           discountRate: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)) / 100,
+          depositRate: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)) / 100,
           policyVersion: `v${Date.now()}`,
           active: formDurationStatus === 'active',
           effectiveFrom,
@@ -1288,6 +1281,7 @@ export default function BusinessApp({
           label: formDurationLabel.trim() || d.label,
           discountPercent: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)),
           renewalDiscountPercent: Math.max(0, Math.min(100, Number(formDurationRenewalPercent) || 0)),
+          depositPercent: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)),
           appliesTo: formDurationAppliesTo,
           scopeType: formDurationScopeType,
           facilityIds: isApiAuthenticated() ? savedFacilityIds : formDurationScopeType === 'specific' ? formDurationFacilityIds : [],
@@ -1765,7 +1759,7 @@ export default function BusinessApp({
         return !value || value.monthlyPrice <= 0 || value.securityDepositAmount < 0
       })
       if (invalid) {
-        showToast('Giá thuê phải lớn hơn 0 và tiền duy trì CSVC không được âm.')
+        showToast('Giá thuê phải lớn hơn 0 và tiền cọc đảm bảo kho không được âm.')
         return
       }
       try {
@@ -2207,7 +2201,7 @@ export default function BusinessApp({
   )
 
   const [formFacAccessHours, setFormFacAccessHours] = useState<string>(
-    "06:00 - 22:00 hàng ngày",
+    "08:00 - 17:00",
   )
 
   const [formFacStatus, setFormFacStatus] = useState<Facility['status']>(
@@ -2325,7 +2319,7 @@ export default function BusinessApp({
       facilities: 'Quản Lý Cơ Sở',
       performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Bảng Giá Loại Kho',
-      policies: 'Gói Thuê Kỳ Hạn',
+      policies: 'Gói Thuê',
       'rental-regulations': 'Quy Định Cho Thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
       returns: 'Trả Kho & Quyết Toán',
@@ -2468,7 +2462,7 @@ export default function BusinessApp({
 
     setFormFacSecurity("Khóa riêng tự quản, Bảo vệ cổng")
 
-    setFormFacAccessHours("06:00 - 22:00 hàng ngày")
+    setFormFacAccessHours("08:00 - 17:00")
 
     setFormFacStatus(isApiAuthenticated() ? "setup" : "active")
 
@@ -3004,7 +2998,7 @@ export default function BusinessApp({
     setFormFacSecurity(f.security || "Khóa riêng tự quản, Bảo vệ cổng")
 
     setFormFacAccessHours(
-      f.accessHours || "06:00 - 22:00 hàng ngày",
+      f.accessHours || "08:00 - 17:00",
     )
 
     setFormFacStatus(f.status)
@@ -3605,9 +3599,6 @@ export default function BusinessApp({
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
-          <div className="flex justify-end">
-            <Button variant="secondary" onClick={() => { setReviewRequestId(null); setReviewOpen(true) }}>Duyệt thay đổi loại kho</Button>
-          </div>
           <SectionHeader
             title={lang === "vi" ? "Quản Lý Cơ Sở" : "Facility Management"}
             subtitle={
@@ -3628,7 +3619,7 @@ export default function BusinessApp({
               </Button>
             }
           />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <StatCard
               title={lang === "vi" ? "Tổng số cơ sở" : "Total Locations"}
               value={facilitiesList.length}
@@ -3640,14 +3631,6 @@ export default function BusinessApp({
               value={totalUnits}
               icon={Icon.box}
               iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={
-                lang === "vi" ? "Doanh thu tháng (MTD)" : "Total Revenue MTD"
-              }
-              value={formatCurrency(totalRevenue)}
-              icon={Icon.dollar}
-              iconBg="bg-amber-50"
             />
           </div>
           {/* Thanh Công Cụ: Tìm kiếm & Lọc Đa Tiêu Chí */}
@@ -3810,7 +3793,7 @@ export default function BusinessApp({
                           <div>{cleanF.address} · <b>{cleanF.city}</b></div>
                           <div>Quản lý: <b>{cleanF.manager}</b></div>
                           <div>Hotline: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
-                          <div>Giờ mở cửa: <b>{cleanF.accessHours || "06:00 - 22:00 hàng ngày"}</b></div>
+                          <div>Khung giờ mở cửa: <b>{cleanF.accessHours || "08:00 - 17:00"}</b></div>
                         </div>
                         {/* Cơ cấu gian kho */}
                         <div className="flex flex-wrap gap-2 text-xs">
@@ -3821,19 +3804,6 @@ export default function BusinessApp({
                             ).length
                             return count > 0 ? <span key={size} className="rounded border border-stone-200 bg-stone-50 px-2 py-1">{size}: {count} kho</span> : null
                           })}
-                        </div>
-                        {/* Chỉ số vận hành */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
-                          <div>
-                            <p className="text-xs text-slate-500">Doanh thu tháng (MTD)</p>
-                            <p className="font-bold">{isApiAuthenticated() ? formatVndAmount(getFacilityActualRevenue(f)) : formatCurrency(getFacilityActualRevenue(f))}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-500">Cước cơ sở từ</p>
-                            <p className="font-bold">{backendFacilityStats[facCode.trim().toUpperCase()]?.price != null
-                              ? `${formatVndAmount(backendFacilityStats[facCode.trim().toUpperCase()].price!)}/tháng`
-                              : "Chưa cấu hình"}</p>
-                          </div>
                         </div>
 
                         {/* Hàng 2.8: Gói thuê đang áp dụng */}
@@ -3932,7 +3902,7 @@ export default function BusinessApp({
           <SectionHeader
             title={
               lang === "vi"
-                ? "Gói Thuê & Chiết Khấu Kỳ Hạn"
+                ? "Gói Thuê & Chiết Khấu"
                 : "Rental Packages & Discounts"
             }
             subtitle={
@@ -3954,25 +3924,15 @@ export default function BusinessApp({
 
           {/* ── KHỐI 1: GÓI THUÊ & MỨC GIẢM GIÁ THEO KỲ HẠN ── */}
           <Card className="p-5 border border-stone-200/90 shadow-sm bg-white">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-slate-900 text-base">
-                    {lang === "vi" ? "Danh Sách Gói Thuê Kỳ Hạn & Mức Chiết Khấu" : "Rental Packages & Discount Schedule"}
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
-                </p>
+            <div className="border-b border-stone-100 pb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-base">
+                  {lang === "vi" ? "Danh Sách Gói Thuê & Mức Chiết Khấu" : "Rental Packages & Discount Schedule"}
+                </h3>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50 self-start sm:self-auto flex items-center gap-1.5 shrink-0"
-                onClick={handleOpenCreateDuration}
-              >
-                {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
-              </Button>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
+              </p>
             </div>
 
             {/* Cards Tóm Tắt Nhanh Các Gói */}
@@ -4085,6 +4045,12 @@ export default function BusinessApp({
                             {hasRenewal ? `-${item.renewalDiscountPercent}%` : "0% (Không giảm)"}
                           </span>
                         </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
+                          <span className="text-[11px] text-slate-600 font-medium">Cọc giữ chỗ:</span>
+                          <span className="font-mono font-bold text-amber-800">
+                            {item.depositPercent ?? 20}%
+                          </span>
+                        </div>
                       </div>
 
                       <p className="text-[11px] text-slate-500 mt-2 line-clamp-3 leading-relaxed">
@@ -4141,94 +4107,6 @@ export default function BusinessApp({
                   </div>
                 )
               }))}
-            </div>
-          </Card>
-
-          {/* ── KHỐI 2: QUY CHUẨN VẬN HÀNH & ĐIỀU KHOẢN HỢP ĐỒNG ── */}
-          <Card className="p-6 border border-stone-200/90 shadow-sm bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200/70 pb-4">
-              <div>
-                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200 mb-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  Quy định pháp lý & Vận hành chuẩn hóa
-                </div>
-                <h3 className="font-bold text-slate-900 text-base">
-                  {lang === "vi" ? "Thông Số Vận Hành Cốt Lõi & Quy Định Cho Thuê" : "Core Operational Parameters & Regulations"}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  {lang === "vi"
-                    ? "Các điều khoản pháp quy, tiền duy trì CSVC và quy chế bồi thường được ban hành thống nhất tại Văn Bản Quy Định Toàn Hệ Thống."
-                    : "Legal terms, security deposits, and settlement protocols are governed by official StorageHub regulations."}
-                </p>
-              </div>
-
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                className="bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs px-4 py-2 self-start md:self-auto shrink-0 shadow-sm flex items-center gap-1.5 cursor-pointer"
-                onClick={() => setPage("rental-regulations")}
-              >
-                <span>{lang === "vi" ? "Xem Toàn Văn 12 Điều Khoản (In / PDF)" : "View Full 12 Articles (Print/PDF)"}</span>
-                <span>→</span>
-              </Button>
-            </div>
-
-            {/* 4 Chỉ Số Vận Hành Cốt Lõi */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-4">
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-                <div className="text-base font-extrabold text-amber-700 font-mono mt-1">50% / ngày</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
-              </div>
-
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Duy Trì CSVC</span>
-                <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">Theo loại kho</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Thu khi nhận kho; quyết toán sau kiểm tra nghiệm thu, vệ sinh và công nợ.</p>
-              </div>
-
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Hạn Thuê Tối Thiểu</span>
-                <div className="text-base font-extrabold text-slate-900 font-mono mt-1">01 Tháng</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Kỳ thuê sử dụng trọn tháng. Chi tiết xác nhận trên báo giá hợp đồng.</p>
-              </div>
-
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
-                <div className="text-base font-extrabold text-blue-700 font-mono mt-1">Tối Đa 7 Ngày</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.</p>
-              </div>
-            </div>
-
-            {/* Quy Định Trả Kho & Gia Hạn Mẫu Hiển Thị Khách Hàng */}
-            <div className="mt-4 pt-4 border-t border-stone-200/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-rose-900 text-sm">Quy định trả kho và gia hạn (Công bố khách hàng)</h4>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-                  Hiển thị tại Customer Portal
-                </span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                <article className="rounded-xl border border-rose-200 bg-white p-3.5">
-                  <b className="text-slate-800 text-sm">Trả kho sau ngày hết hạn</b>
-                  <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                    <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
-                    <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                    <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.</li>
-                  </ul>
-                </article>
-                <article className="rounded-xl border border-amber-200 bg-white p-3.5">
-                  <b className="text-slate-800 text-sm">Gia hạn kỳ thuê</b>
-                  <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                    <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
-                    <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
-                  </ul>
-                </article>
-              </div>
-              <p className="rounded-lg bg-rose-50 border border-rose-200/70 p-3 text-xs leading-5 text-rose-900 font-medium">
-                Ví dụ tính phạt mẫu (giá kho 3.000.000 đ/tháng): 3.000.000 đ ÷ 30 × 50% = 50.000 đ/ngày. Trễ 4 ngày tương ứng 200.000 đ (khấu trừ trực tiếp vào tiền duy trì CSVC khi quyết toán).
-              </p>
             </div>
           </Card>
         </div>
@@ -4327,7 +4205,7 @@ export default function BusinessApp({
                   <Button variant="outline" onClick={() => void handleOpenFacilityPriceModal(fac)}>Chỉnh giá cơ sở này</Button>
                 </div>
                 {!pricingCatalogLoading && !pricingCatalogError && types.length === 0 && <p className="p-5 text-sm text-stone-500">Chưa có loại kho thực tế để cấu hình giá.</p>}
-                {types.length > 0 && <Table><Thead><tr><Th>Loại kho</Th><Th>Kích thước (D × R × C)</Th><Th>Số gian</Th><Th>Giá thuê / tháng</Th><Th>Tiền duy trì CSVC</Th></tr></Thead>
+                {types.length > 0 && <Table><Thead><tr><Th>Loại kho</Th><Th>Kích thước (D × R × C)</Th><Th>Số gian</Th><Th>Giá thuê / tháng</Th><Th>Tiền cọc đảm bảo kho</Th></tr></Thead>
                   <Tbody>{types.map(type => <Tr key={type.id}>
                     <Td><b>{type.code}</b> · {type.name}</Td>
                     <Td>{type.lengthM} × {type.widthM} × {type.heightM} m</Td>
@@ -4381,59 +4259,6 @@ export default function BusinessApp({
               </Tbody>
             </Table>
           </Card>
-
-          {/* Chính sách và quy định áp dụng đi kèm biểu giá */}
-          <Card className="p-5 border border-blue-200/90 bg-gradient-to-br from-blue-50/60 via-white to-white space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 pb-3">
-              <div>
-                <h3 className="font-bold text-blue-950 text-base">
-                  Chính Sách & Quy Định Áp Dụng Đi Kèm Biểu Giá
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Các thông số này được công bố trực tiếp cho khách hàng khi xem chi tiết loại kho và đặt kho trên Customer Portal.
-                </p>
-              </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                Hiển thị bên Customer
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">50% đơn giá ngày / trễ</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo ngày quá hạn.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Duy Trì CSVC</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">Theo cột Tiền duy trì CSVC</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Thu khi bàn giao kho; dùng khấu trừ hư hỏng, công nợ hoặc phí trễ hạn khi quyết toán.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Hạn Thuê Tối Thiểu</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">01 Tháng</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Kỳ thuê sử dụng trọn tháng. Chi tiết và ưu đãi kỳ hạn xác nhận trên báo giá.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">Tối Đa 7 Ngày</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn trước khi thu hồi kho.</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 space-y-2">
-              <h4 className="font-bold text-rose-900 text-xs uppercase tracking-wider">
-                Quy Định Trả Kho & Gia Hạn
-              </h4>
-              <p className="text-xs text-rose-950 leading-relaxed">
-                • <b>Trả kho sau ngày hết hạn:</b> Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày). Tổng phí = số ngày quá hạn × phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.<br />
-                • <b>Gia hạn kỳ thuê:</b> Khách hàng hoàn tất thủ tục và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.
-              </p>
-            </div>
-          </Card>
         </div>
       )}
 
@@ -4447,635 +4272,6 @@ export default function BusinessApp({
         />
       )}
 
-
-      {/* ── REVENUE REPORTS ───────────────────────────────────── */}
-      {page === "revenue" && (
-        <div className="fade-in space-y-6">
-          <SectionHeader
-            title="Báo Cáo Doanh Thu"
-            subtitle="Hiệu quả tài chính chu kỳ Tháng 4 – Tháng 9 toàn hệ thống StorageHub"
-            action={
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={downloadingExcel}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 shadow-sm cursor-pointer"
-                onClick={() => {
-                  setDownloadingExcel(true)
-
-                  setTimeout(() => {
-                    try {
-                      const fileName = exportRevenueExcel({
-                        facilityName: selectedRevenueFacilityName,
-
-                        revenueData: activeRevenueData,
-                      })
-
-                      setDownloadedFileName(fileName)
-
-                      showToast(`Đã xuất báo cáo Excel: ${fileName}`)
-                    } catch {
-                      showToast("Lỗi khi xuất file Excel!")
-                    } finally {
-                      setDownloadingExcel(false)
-                    }
-                  }, 350)
-                }}
-              >
-                <span>{downloadingExcel ? "⏳" : ""}</span>
-                <span>
-                  {downloadingExcel
-                    ? "Đang tạo file..."
-                    : "Xuất Báo Cáo Excel (.xlsx)"}
-                </span>
-              </Button>
-            }
-          />
-
-          {/* Download Notification Banner */}
-          {downloadedFileName && !downloadingExcel && (
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold text-emerald-950 text-sm">
-                      {downloadedFileName}
-                    </p>
-                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-200 text-emerald-800">
-                      Đã tải về máy (.xlsx)
-                    </span>
-                  </div>
-                  <p className="text-xs text-emerald-700 mt-0.5">
-                    Tệp Excel 2 trang tính: Báo cáo doanh thu Tháng 4 – Tháng 9
-                    & Cơ cấu doanh thu
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold cursor-pointer"
-                  onClick={() => {
-                    exportRevenueExcel({
-                      facilityName: selectedRevenueFacilityName,
-
-                      revenueData: activeRevenueData,
-                    })
-                  }}
-                >
-                   Tải lại file
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
-                  onClick={() => setDownloadedFileName(null)}
-                >
-                  ✕
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Filter Cơ Sở - Tự động cập nhật mọi cơ sở mới thêm vào hệ thống */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Cơ sở:
-              </span>
-              <div className="w-64">
-                <Select
-                  value={
-                    selectedRevenueFacility
-                      ? selectedRevenueFacility.id
-                      : "Toàn bộ cơ sở"
-                  }
-                  onChange={(e) => setRevenueFacilityFilter(e.target.value)}
-                >
-                  <option value="Toàn bộ cơ sở">Toàn bộ cơ sở</option>
-                  {facilitiesList.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-              Phạm vi chu kỳ:{" "}
-              <strong className="text-slate-800">Tháng 4 – Tháng 9</strong>
-            </span>
-          </div>
-
-          {/* 4 Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Doanh thu lũy kế
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentTotalRevenue.toLocaleString("vi-VN")} ₫
-                  </p>
-                  <p className="text-xs text-stone-400 mt-1 font-medium">
-                    Tháng 4 đến Tháng 9
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-green-50 text-emerald-600">
-                  {Icon.dollar}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Doanh thu trung bình/tháng
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentAvgRevenue.toLocaleString("vi-VN")} ₫
-                  </p>
-                  <p className="text-xs text-stone-400 mt-1 font-medium">
-                    {currentTotalRevenue.toLocaleString("vi-VN")} ₫ / 6 tháng
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-                  {Icon.chart}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Tháng doanh thu cao nhất
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentHighestItem.revenue.toLocaleString("vi-VN")} ₫
-                  </p>
-                  <p className="text-xs text-emerald-600 mt-1 font-semibold">
-                    {currentHighestItem.month}
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-purple-50 text-purple-600">
-                  {Icon.check}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Dự báo tháng tới
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentForecast}
-                  </p>
-                  <p className="text-xs text-amber-600 mt-1 font-medium">
-                    {hasAnyRevenue
-                      ? "Dựa trên xu hướng doanh thu gần đây"
-                      : "Chưa có dữ liệu giao dịch"}
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
-                  {Icon.refresh}
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Biểu Đồ Doanh Thu */}
-          <Card className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-800 text-base">
-                Biểu Đồ Doanh Thu{" "}
-                {selectedRevenueFacility
-                  ? `– ${selectedRevenueFacility.name}`
-                  : "Toàn Hệ Thống"}
-              </h3>
-              <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md font-medium">
-                Đơn vị: Triệu VNĐ
-              </span>
-            </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart
-                data={activeRevenueData}
-                margin={{ top: 10, right: 10, left: 15, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 12, fill: "#64748b" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  domain={[0, chartYMax]}
-                  ticks={[
-                    0,
-                    Math.round(chartYMax * 0.25),
-                    Math.round(chartYMax * 0.5),
-                    Math.round(chartYMax * 0.75),
-                    chartYMax,
-                  ]}
-                  tick={{ fontSize: 12, fill: "#64748b" }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) =>
-                    v === 0 ? "0" : `${Math.round(v / 1000000)} triệu`
-                  }
-                />
-                <Tooltip
-                  formatter={(value: any) => [
-                    `${Number(value).toLocaleString("vi-VN")} ₫`,
-                    "Doanh thu",
-                  ]}
-                  labelFormatter={(label: any) => `${label}`}
-                  contentStyle={{
-                    borderRadius: 8,
-                    border: "1px solid #e2e8f0",
-                    fontSize: 12,
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#2563eb"
-                  strokeWidth={2.5}
-                  fillOpacity={1}
-                  fill="url(#colorRev)"
-                  name="Doanh thu"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Card>
-
-          {/* Bảng Chi Tiết Doanh Thu */}
-          <Card>
-            <div className="p-4 border-b border-stone-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800 text-sm">
-                Bảng Chi Tiết Doanh Thu
-              </h3>
-              <span className="text-xs text-slate-400">
-                Đơn vị tiền tệ: VNĐ (₫)
-              </span>
-            </div>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>Tháng</Th>
-                  <Th>Doanh thu</Th>
-                  <Th>Tăng trưởng</Th>
-                  <Th>Số hợp đồng</Th>
-                  <Th>Tỷ lệ lấp đầy</Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {activeRevenueData.map((r) => (
-                  <Tr key={r.month}>
-                    <Td className="font-semibold text-slate-900">{r.month}</Td>
-                    <Td className="font-bold text-slate-900 font-mono">
-                      {r.revenue.toLocaleString("vi-VN")} ₫
-                    </Td>
-                    <Td>
-                      {r.growth === "—" ? (
-                        <span className="text-slate-400 font-medium">—</span>
-                      ) : (
-                        <span className="text-emerald-600 font-semibold font-mono bg-emerald-50 px-2 py-0.5 rounded text-xs">
-                          {r.growth}
-                        </span>
-                      )}
-                    </Td>
-                    <Td className="font-medium text-slate-700">
-                      {r.contracts}
-                    </Td>
-                    <Td className="font-semibold text-slate-800">
-                      {r.occupancyRate}
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Card>
-
-          {/* 2 Cột: Hiệu Suất Kho & Cơ Cấu Doanh Thu */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Section 6: Hiệu Suất Kho */}
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800 text-base">
-                  Hiệu Suất Kho
-                </h3>
-                <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-md">
-                  Vận hành ổn định
-                </span>
-              </div>
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-stone-500 font-medium">
-                      Tỷ lệ lấp đầy hiện tại
-                    </p>
-                    <p className="text-xl font-bold text-stone-900 mt-0.5">
-                      {selectedRevenueFacility
-                        ? `${Math.round((selectedRevenueFacility.occupied / Math.max(1, selectedRevenueFacility.units)) * 100)}%`
-                        : `${facilitiesList.reduce((s, f) => s + (f.units || 0), 0) > 0 ? Math.round((facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0) / facilitiesList.reduce((s, f) => s + (f.units || 0), 0)) * 100) : 19}%`}
-                    </p>
-                  </div>
-                  <div className="w-32">
-                    <ProgressBar
-                      value={
-                        selectedRevenueFacility
-                          ? Math.round(
-                            (selectedRevenueFacility.occupied /
-                              Math.max(1, selectedRevenueFacility.units)) *
-                            100,
-                          )
-                          : facilitiesList.reduce((s, f) => s + (f.units || 0), 0) > 0
-                            ? Math.round((facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0) / facilitiesList.reduce((s, f) => s + (f.units || 0), 0)) * 100)
-                            : 19
-                      }
-                      max={100}
-                      color="bg-blue-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-stone-500 font-medium">
-                      Hợp đồng đang hoạt động
-                    </p>
-                    <p className="text-xl font-bold text-stone-900 mt-0.5">
-                      {selectedRevenueFacility
-                        ? Math.max(
-                          selectedRevenueFacility.occupied,
-                          selectedFacilityContracts.length,
-                          selectedFacilityRentals.length,
-                        )
-                        : facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)}
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded">
-                    {selectedRevenueFacility
-                      ? `${Math.max(
-                        selectedRevenueFacility.occupied,
-                        selectedFacilityContracts.length,
-                        selectedFacilityRentals.length,
-                      )} / ${selectedRevenueFacility.units} gian`
-                      : `${facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)} / ${facilitiesList.reduce((s, f) => s + (f.units || 0), 0)} gian`}
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-stone-500 font-medium">
-                      Tỷ lệ gia hạn
-                    </p>
-                    <p className="text-xl font-bold text-stone-900 mt-0.5">
-                      0%
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded">
-                    Chưa có dữ liệu
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            {/* Section 7: Cơ Cấu Doanh Thu */}
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800 text-base">
-                  Cơ Cấu Doanh Thu
-                </h3>
-                <span className="text-xs text-slate-500 font-medium">
-                  Tỷ trọng nguồn thu
-                </span>
-              </div>
-              <div className="space-y-3.5">
-                {RUNTIME_REVENUE_BREAKDOWN.length === 0 || !hasAnyRevenue ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">
-                    Chưa có giao dịch phát sinh để phân tích cơ cấu doanh thu (0 ₫).
-                  </p>
-                ) : (
-                  RUNTIME_REVENUE_BREAKDOWN.map((item) => (
-                    <div key={item.category} className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-medium text-slate-700">
-                          {item.category}
-                        </span>
-                        <span className="font-bold text-slate-900">
-                          {item.percentage}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className="h-2.5 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${item.percentage}%`,
-                            backgroundColor: item.color,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* ── PERFORMANCE REPORTS ───────────────────────────────── */}
-      {page === "performance" && (
-        <div className="fade-in space-y-5">
-          <SectionHeader
-            title={
-              lang === "vi"
-                ? "Báo Cáo Hiệu Suất Hoạt Động"
-                : "Performance Reports"
-            }
-            subtitle={
-              lang === "vi"
-                ? "Các chỉ số KPI vận hành trọng yếu trên toàn bộ hệ thống cơ sở"
-                : "Operational KPIs across all facilities"
-            }
-          />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              title={lang === "vi" ? "Lấp đầy trung bình" : "Avg Occupancy"}
-              value={`${totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0}%`}
-              icon={Icon.chart}
-              iconBg="bg-blue-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Tỷ lệ chuyển đổi" : "Conversion Rate"}
-              value="0%"
-              icon={Icon.check}
-              iconBg="bg-green-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Thời gian thuê TB" : "Avg Tenure"}
-              value={lang === "vi" ? "0 tháng" : "0 mo"}
-              icon={Icon.calendar}
-              iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Tỷ lệ rời bỏ (Churn)" : "Churn Rate"}
-              value="0%"
-              icon={Icon.refresh}
-              iconBg="bg-amber-50"
-            />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">
-                {lang === "vi"
-                  ? "Tỷ Lệ Chuyển Đổi Khách Thăm Kho"
-                  : "Inquiry Conversion Rate"}
-              </h3>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart
-                  data={RUNTIME_CONVERSION_DATA}
-                  margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <Tooltip
-                    formatter={
-                      ((v: number) => [
-                        `${v}%`,
-                        lang === "vi" ? "Chuyển đổi" : "Conversion",
-                      ]) as any
-                    }
-                    contentStyle={{
-                      borderRadius: 8,
-                      border: "1px solid #e2e8f0",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="rate"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={{ fill: "#10b981", r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">
-                {lang === "vi"
-                  ? "Điểm Hiệu Suất Từng Cơ Sở"
-                  : "Facility Performance Scores"}
-              </h3>
-              {facilitiesList
-                .filter((f) => f.status === "active")
-                .map((f) => {
-                  const occ = getFacilityOccupiedCount(f)
-                  const tot = getFacilityTotalUnits(f)
-                  const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
-                  return (
-                    <div key={f.id} className="mb-4">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-700 font-medium">
-                          {f.name}
-                        </span>
-                        <span className="text-slate-800 font-semibold">
-                          {pct}%
-                        </span>
-                      </div>
-                      <ProgressBar
-                        value={occ}
-                        max={tot || 1}
-                        color={pct >= 85 ? "bg-green-500" : "bg-blue-500"}
-                      />
-                    </div>
-                  )
-                })}
-            </Card>
-          </div>
-          <Card>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{lang === "vi" ? "Cơ Sở" : "Facility"}</Th>
-                  <Th>{lang === "vi" ? "Tỷ Lệ Lấp Đầy" : "Occupancy"}</Th>
-                  <Th>{lang === "vi" ? "Thời Hạn TB" : "Avg Length"}</Th>
-                  <Th>{lang === "vi" ? "Rời Bỏ" : "Churn"}</Th>
-                  <Th>{lang === "vi" ? "Độ Hài Lòng" : "Satisfaction"}</Th>
-                  <Th>
-                    {lang === "vi" ? "Doanh Thu / Năm" : "Revenue / Year"}
-                  </Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {facilitiesList
-                  .filter((f) => f.status === "active")
-                  .map((f) => {
-                    const occ = getFacilityOccupiedCount(f)
-                    const tot = getFacilityTotalUnits(f)
-                    const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
-                    return (
-                      <Tr key={f.id}>
-                        <Td className="font-medium">{f.name}</Td>
-                        <Td>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">
-                              {pct}%
-                            </span>
-                            <ProgressBar
-                              value={occ}
-                              max={tot || 1}
-                              color="bg-blue-500"
-                            />
-                          </div>
-                        </Td>
-                        <Td>{lang === "vi" ? "0 tháng" : "0 mo"}</Td>
-                        <Td>0%</Td>
-                        <Td>
-                          <div className="flex items-center gap-1 text-slate-400">
-                            ★ 0.0
-                          </div>
-                        </Td>
-                        <Td className="font-semibold text-slate-800 font-mono">
-                          {formatCurrency(getFacilityActualRevenue(f) * 12)} /{" "}
-                          {lang === "vi" ? "năm" : "yr"}
-                        </Td>
-                      </Tr>
-                    )
-                  })}
-              </Tbody>
-            </Table>
-          </Card>
-        </div>
-      )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
       {page === "profile" && (
@@ -5203,7 +4399,7 @@ export default function BusinessApp({
                         </span>
                       </div>
                     </label>
-                    <label className="text-[11px] font-semibold text-slate-700">Tiền duy trì CSVC (VNĐ)
+                    <label className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
                       <div className="relative mt-1">
                         <input
                           type="text"
@@ -5757,7 +4953,7 @@ export default function BusinessApp({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Input
               label={lang === "vi" ? "Số tháng kỳ hạn" : "Months"}
               type="number"
@@ -5781,6 +4977,14 @@ export default function BusinessApp({
               max={100}
               value={formCreateDurationRenewalPercent.toString()}
               onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
+            />
+            <Input
+              label={lang === "vi" ? "Cọc giữ chỗ (%)" : "Deposit (%)"}
+              type="number"
+              min={5}
+              max={50}
+              value={formCreateDurationDepositPercent.toString()}
+              onChange={(e) => setFormCreateDurationDepositPercent(Number(e.target.value))}
             />
           </div>
 
@@ -5992,7 +5196,7 @@ export default function BusinessApp({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input
                 label="Giảm giá khi đặt mới (%)"
                 type="number"
@@ -6009,6 +5213,15 @@ export default function BusinessApp({
                 max={100}
                 value={formDurationRenewalPercent.toString()}
                 onChange={(e) => setFormDurationRenewalPercent(Number(e.target.value))}
+              />
+
+              <Input
+                label="Cọc giữ chỗ (%)"
+                type="number"
+                min={5}
+                max={50}
+                value={formDurationDepositPercent.toString()}
+                onChange={(e) => setFormDurationDepositPercent(Number(e.target.value))}
               />
             </div>
 
@@ -6503,14 +5716,7 @@ export default function BusinessApp({
                       {/* Sticky footer */}
                       <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
                         <div className="text-xs text-stone-500">
-                          {facilityEditError ? (
-                            <span className="text-red-600 font-semibold flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              <span className="truncate max-w-md">Lỗi: {facilityEditError}</span>
-                            </span>
-                          ) : !isApiAuthenticated() && formFacUnits <= 0 ? (
+                          {!isApiAuthenticated() && formFacUnits <= 0 ? (
                             <span className="text-red-600 font-semibold flex items-center gap-1">
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -6956,14 +6162,11 @@ export default function BusinessApp({
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
-                      Doanh thu tháng (MTD):
+                      {lang === "vi" ? "Cước cơ sở từ:" : "Base rate from:"}
                     </span>
                     <b className="text-slate-800 block text-sm">
-                      {formatCurrency(getFacilityActualRevenue(selectedFacility))}
-                    </b>
-                    <span className="text-slate-500">
                       {hasWarehouseInfo ? `${selectedFacility.price}/tháng từ` : "Chưa cấu hình giá"}
-                    </span>
+                    </b>
                   </div>
                   <div className="bg-amber-50/70 p-3 rounded-lg border border-amber-200/80">
                     <span className="text-amber-800/80 block mb-0.5 font-medium">
@@ -6978,10 +6181,10 @@ export default function BusinessApp({
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
-                      Giờ hoạt động:
+                      Khung giờ mở cửa:
                     </span>
                     <b className="text-slate-800 block text-xs">
-                      {selectedFacility.accessHours || "06:00 - 22:00"}
+                      {selectedFacility.accessHours || "08:00 - 17:00"}
                     </b>
                   </div>
                 </div>
@@ -7016,7 +6219,7 @@ export default function BusinessApp({
                           ["Đang sử dụng", measure(type.occupiedCount, "gian")],
                           ["Còn trống", measure(type.availableCount, "gian")],
                           ["Giá thuê mỗi tháng", Number(type.monthlyPrice) > 0 ? formatCurrency(type.monthlyPrice) : "Chờ BO định giá"],
-                          ["Tiền duy trì CSVC", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
+                          ["Tiền cọc đảm bảo kho", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
                           ["Trạng thái loại kho", ({ active: "Đã công bố", awaiting_pricing: "Chờ BO định giá / duyệt", draft: "Đang thiết lập", inactive: "Ngừng hoạt động" } as Record<string, string>)[type.status] || type.status],
                         ]},
                       ]
@@ -7156,14 +6359,14 @@ export default function BusinessApp({
                           </article>
 
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
-                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Tiền duy trì CSVC</h5>
+                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Tiền cọc đảm bảo kho</h5>
                             <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
                               {repType && Number(repType.securityDepositAmount) > 0
                                 ? formatVndAmount(repType.securityDepositAmount)
-                                : "200.000 đ (hoặc theo loại kho)"}
+                                : "Theo biểu giá từng loại kho"}
                             </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Thu khi nhận kho và được quyết toán sau khi kiểm tra bàn giao, công nợ, vệ sinh và hư hại.
+                              Thu khi nhận kho; hoàn trả lại cho khách hàng sau khi nghiệm thu bàn giao trả kho (trừ công nợ, hư hại nếu có).
                             </p>
                           </article>
 
@@ -7193,7 +6396,7 @@ export default function BusinessApp({
                             <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
                               <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
                               <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                              <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.</li>
+                              <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo kho được đưa vào quyết toán.</li>
                             </ul>
                           </article>
 

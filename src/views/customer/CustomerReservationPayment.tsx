@@ -159,7 +159,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5"><b>Tiền thuê sau giảm</b><b>{formatVnd(reservation.totalRentalAmount)}</b></div>
             <div className="flex justify-between gap-4"><span>Cọc giữ chỗ</span><b className="text-amber-700">{formatVnd(reservation.reservationDepositAmount)}</b></div>
             <div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(reservation.remainingRentalAmount)}</b></div>
-            <div className="flex justify-between gap-4"><span>Tiền duy trì CSVC</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div>
+            <div className="flex justify-between gap-4"><span>Tiền cọc đảm bảo kho</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div>
             <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5"><b>Khoản thu khi nhận kho</b><b>{formatVnd(reservation.dueAtCheckIn)}</b></div>
             <div className="flex justify-between gap-4"><b>Tổng nghĩa vụ tài chính</b><b>{formatVnd(reservation.totalInitialObligation)}</b></div>
           </div>
@@ -179,7 +179,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           <p className="mt-1 text-3xl font-extrabold text-stone-950">{formatVnd(reservation.reservationDepositAmount)}</p>
           <p className="mt-1 text-xs text-stone-600">Cọc giữ chỗ được khấu trừ vào tiền thuê của kỳ này.</p>
         </div>
-        <div className="rounded-lg bg-stone-50 p-3 text-sm space-y-1"><div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(reservation.remainingRentalAmount)}</b></div><div className="flex justify-between gap-4"><span>Tiền duy trì CSVC</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng thanh toán khi nhận kho</span><b>{formatVnd(reservation.dueAtCheckIn)}</b></div><p className="pt-1 text-xs text-stone-500">Các khoản trên chưa thu trong bước này.</p></div>
+        <div className="rounded-lg bg-stone-50 p-3 text-sm space-y-1"><div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(reservation.remainingRentalAmount)}</b></div><div className="flex justify-between gap-4"><span>Tiền cọc đảm bảo kho</span><b>{formatVnd(reservation.securityDepositAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2"><span>Tổng thanh toán khi nhận kho</span><b>{formatVnd(reservation.dueAtCheckIn)}</b></div><p className="pt-1 text-xs text-stone-500">Các khoản trên chưa thu trong bước này.</p></div>
         <div className="rounded-lg bg-red-700 p-3 text-center text-white"><p className="text-xs font-bold uppercase tracking-wide">Thời gian thanh toán còn lại</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
         <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi hoàn tất, VNPay sẽ đưa bạn trở lại StorageHub và cập nhật biên lai tự động.</p>
         <Button className="w-full" disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(reservation.reservationDepositAmount)}`}</Button>
