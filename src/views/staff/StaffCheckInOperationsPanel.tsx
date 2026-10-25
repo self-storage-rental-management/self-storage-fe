@@ -159,6 +159,15 @@ function stepForCheckIn(item: CheckInCase) {
   }
 }
 
+const workflowStepLabels = [
+  "Xác minh khách",
+  "Ký hợp đồng",
+  "Thu tiền",
+  "Khách setup",
+  "Setup xong",
+  "Kiểm kê",
+]
+
 export default function StaffCheckInOperationsPanel({
   showToast,
 }: {
@@ -408,6 +417,12 @@ export default function StaffCheckInOperationsPanel({
 
   const measurementVariance = checkInComparison?.hasVariance ?? false
 
+  const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
+  const isReviewingCompletedStep = Boolean(
+    handoverTarget &&
+      (handoverTarget.checkInStatus === "completed" || handoverStep < workflowCurrentStep),
+  )
+
   const declaredIdentityDocument = handoverTarget?.identityDocumentNumber?.trim() || ""
   const identityMismatch = Boolean(
     declaredIdentityDocument &&
@@ -567,7 +582,7 @@ export default function StaffCheckInOperationsPanel({
       setPaymentEvidenceFile(null)
 
       showToast(
-        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Reservation đã chuyển sang COMPLETED.`,
+        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Hồ sơ vẫn được lưu trong Nhận kho & bàn giao để xem lại.`,
       )
 
       setHandoverTarget(null)
@@ -755,7 +770,7 @@ export default function StaffCheckInOperationsPanel({
 
     setPaymentEvidenceFile(null)
 
-    setEvidenceReferences([])
+    setEvidenceReferences(item.handover?.evidenceReferences ?? [])
 
     setKeyLockReference(item.lockReference || "")
 
@@ -1000,13 +1015,22 @@ export default function StaffCheckInOperationsPanel({
                       </>
                     )}
                     {item.checkInStatus === "completed" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setDetailTarget(item)}
-                      >
-                        Xem biên bản
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openHandover(item)}
+                        >
+                          Xem lại các bước
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setDetailTarget(item)}
+                        >
+                          Xem biên bản
+                        </Button>
+                      </>
                     )}
                     {item.checkInStatus === "completed" && (
                       <Badge variant="success">COMPLETED</Badge>
@@ -1074,18 +1098,24 @@ export default function StaffCheckInOperationsPanel({
               <b>{handoverTarget.reservationCode}</b> · {handoverTarget.storageUnitCode} · {handoverTarget.customerName}
             </div>
             <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Tiến độ check-in">
-              {["Xác minh khách", "Ký hợp đồng", "Thu tiền", "Khách setup", "Setup xong", "Kiểm kê"].map((label, index) => {
+              {workflowStepLabels.map((label, index) => {
                 const step = index + 1
                 return (
-                  <div key={label} className={`rounded-lg border px-3 py-2 text-xs ${
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={step > workflowCurrentStep}
+                    onClick={() => setHandoverStep(step)}
+                    aria-current={handoverStep === step ? "step" : undefined}
+                    className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
                     handoverStep === step
                       ? "border-amber-500 bg-amber-50 font-semibold text-amber-950"
-                      : handoverStep > step
+                      : workflowCurrentStep >= step
                         ? "border-emerald-300 bg-emerald-50 text-emerald-900"
                         : "border-stone-200 bg-stone-50 text-stone-500"
-                  }`}>
+                    } ${step <= workflowCurrentStep ? "cursor-pointer hover:brightness-95" : "cursor-not-allowed opacity-70"}`}>
                     <span className="mr-1 font-bold">{step}.</span>{label}
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -1095,36 +1125,45 @@ export default function StaffCheckInOperationsPanel({
                 <div className="grid gap-3 rounded-lg border border-stone-200 p-4 text-sm md:grid-cols-3">
                   <div><span className="text-stone-500">Khách hàng</span><p className="font-semibold">{handoverTarget.customerName}</p></div>
                   <div><span className="text-stone-500">CCCD/Hộ chiếu đã khai báo</span><p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p></div>
-                  <Input label="CCCD/Hộ chiếu trên giấy tờ gốc *" value={identityDocumentNumber} onChange={(event) => setIdentityDocumentNumber(event.target.value)} />
+                  <Input label="CCCD/Hộ chiếu trên giấy tờ gốc *" value={identityDocumentNumber} disabled={isReviewingCompletedStep} onChange={(event) => setIdentityDocumentNumber(event.target.value)} />
                 </div>
                 {identityMismatch && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">Số giấy tờ không khớp với đơn đặt kho. Backend sẽ không cho chuyển sang bước ký hợp đồng.</p>}
                 <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
                   {([['identityVerified', 'Đã kiểm tra giấy tờ gốc'], ['reservationMatched', 'Khách hàng và đơn đặt kho trùng khớp']] as Array<[keyof CheckInChecklist, string]>).map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={checklist[key]} onChange={(event) => setChecklist((value) => ({ ...value, [key]: event.target.checked }))} />{label} *</label>
+                    <label key={key} className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist[key]} onChange={(event) => setChecklist((value) => ({ ...value, [key]: event.target.checked }))} />{label} *</label>
                   ))}
                 </div>
-                <Input label="Ghi chú xác minh" value={verificationNotes} maxLength={1000} onChange={(event) => setVerificationNotes(event.target.value)} />
+                <Input label="Ghi chú xác minh" value={verificationNotes || handoverTarget.identityVerificationNote || ""} disabled={isReviewingCompletedStep} maxLength={1000} onChange={(event) => setVerificationNotes(event.target.value)} />
               </div>
             )}
 
             {handoverStep === 2 && (
               <div className="space-y-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
                 <div><p className="font-semibold text-blue-950">Ký và lưu hợp đồng</p><p className="text-sm text-blue-800">Chỉ thực hiện sau khi khách hàng đã được xác minh. Tệp hợp đồng được lưu vào đúng hồ sơ check-in.</p></div>
-                <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setContractFile(event.target.files?.[0] || null)} /></label>
-                <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => setContractFile(null)} disabled={submitting} />
+                {handoverTarget.contractEvidenceReference && isReviewingCompletedStep ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                    Hợp đồng đã ký được lưu. Mã bằng chứng: <b className="font-mono">{handoverTarget.contractEvidenceReference}</b>
+                  </div>
+                ) : (
+                  <>
+                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh) *<input disabled={isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setContractFile(event.target.files?.[0] || null)} /></label>
+                    <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => setContractFile(null)} disabled={submitting || isReviewingCompletedStep} />
+                  </>
+                )}
+                {handoverTarget.contractSignedAt && <p className="text-xs text-stone-600">Đã ký lúc: <b>{formatStaffDateTime(handoverTarget.contractSignedAt)}</b></p>}
               </div>
             )}
 
             {handoverStep === 3 && (
               <div className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                 <div><p className="font-semibold text-emerald-950">Thu tiền sau khi ký hợp đồng</p><p className="text-sm text-emerald-800">Số tiền cần thu: <b>{Number(handoverTarget.dueAtCheckIn ?? 0).toLocaleString('vi-VN')} đồng</b>.</p></div>
-                {(handoverTarget.dueAtCheckIn ?? 0) > 0 ? (
+                {(handoverTarget.dueAtCheckIn ?? 0) > 0 && !isReviewingCompletedStep ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
                     <label className="block text-sm font-medium">Biên lai / bằng chứng giao dịch *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setPaymentEvidenceFile(event.target.files?.[0] || null)} /></label>
                   </div>
-                ) : <p className="text-sm">Đơn không còn khoản phải thu. Xác nhận để chuyển sang bước setup.</p>}
-                <FilePreviewList files={paymentEvidenceFile ? [paymentEvidenceFile] : []} onRemove={() => setPaymentEvidenceFile(null)} disabled={submitting} />
+                ) : <p className="text-sm">{isReviewingCompletedStep ? `Đã ghi nhận lúc ${formatStaffDateTime(handoverTarget.paymentCollectedAt)}.` : "Đơn không còn khoản phải thu. Xác nhận để chuyển sang bước setup."}</p>}
+                {!isReviewingCompletedStep && <FilePreviewList files={paymentEvidenceFile ? [paymentEvidenceFile] : []} onRemove={() => setPaymentEvidenceFile(null)} disabled={submitting} />}
               </div>
             )}
 
@@ -1132,9 +1171,10 @@ export default function StaffCheckInOperationsPanel({
               <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
                 <div><p className="font-semibold text-amber-950">Bàn giao kho trống và bắt đầu setup</p><p className="text-sm text-amber-800">Ổ khóa chỉ được kích hoạt sau khi backend xác nhận đã ký hợp đồng và thu tiền. Không lưu hoặc bàn giao mật khẩu.</p></div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Input label="Mã ổ khóa / chìa khóa *" value={keyLockReference} onChange={(event) => setKeyLockReference(event.target.value)} placeholder="Ví dụ: LOCK-018" />
+                  <Input label="Mã ổ khóa / chìa khóa *" value={keyLockReference} disabled={isReviewingCompletedStep} onChange={(event) => setKeyLockReference(event.target.value)} placeholder="Ví dụ: LOCK-018" />
                   <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"><span className="text-stone-600">Quyền lợi đã lưu cùng đơn</span><b className="mt-1 block">{handoverTarget.freeSetupDays} ngày setup miễn phí</b><span className="text-xs text-stone-500">Hệ thống tự tính từ ngày bàn giao thực tế; Staff không thể thay đổi.</span></div>
                 </div>
+                {handoverTarget.lockReference && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"><b>Ổ khóa đã được kích hoạt và bàn giao</b><p className="mt-1">Mã ổ khóa/chìa khóa: <b className="font-mono">{handoverTarget.lockReference}</b></p><p className="mt-1 text-xs">Credential được kích hoạt lúc {formatStaffDateTime(handoverTarget.setupStartedAt)}. Không có mật khẩu được lưu hoặc bàn giao.</p></div>}
               </div>
             )}
 
@@ -1145,6 +1185,7 @@ export default function StaffCheckInOperationsPanel({
                 <p className="text-sm">Setup miễn phí: <b>{handoverTarget.freeSetupDays} ngày</b></p>
                 <p className="text-sm">Thời hạn thuê tính từ: <b>{handoverTarget.paidRentalStartsOn || `ngày bàn giao thực tế + ${handoverTarget.freeSetupDays} ngày`}</b></p>
                 <p className="text-sm">Khách báo setup xong sớm chỉ ghi nhận thời điểm hoàn tất chuyển hàng, không rút ngắn kỳ miễn phí.</p>
+                {handoverTarget.lockReference && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"><b>Ổ khóa đã bàn giao</b><p className="mt-1">Mã: <b className="font-mono">{handoverTarget.lockReference}</b></p><p className="mt-1 text-xs">Quyền truy cập được kích hoạt từ thời điểm bàn giao, theo giờ mở cửa cơ sở.</p></div>}
               </div>
             )}
 
@@ -1152,12 +1193,12 @@ export default function StaffCheckInOperationsPanel({
               <div className="space-y-4">
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê sau setup</b><p className="mt-1 text-xs">Đo hàng hóa sau khi khách đã sắp xếp xong, đối chiếu với khai báo và lưu bằng chứng thực tế. Kỳ thuê vẫn tự ACTIVE đúng ngày {handoverTarget.paidRentalStartsOn || `bàn giao thực tế + ${handoverTarget.freeSetupDays} ngày`}, không chờ Staff hoàn tất bước này.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <Input label="Dài thực tế (cm) *" type="number" min="0.01" value={lengthCm} onChange={(event) => { const next = event.target.value; setLengthCm(next); setVolumeM3(volumeFromDimensions(next, widthCm, heightCm)) }} />
-                  <Input label="Rộng thực tế (cm) *" type="number" min="0.01" value={widthCm} onChange={(event) => { const next = event.target.value; setWidthCm(next); setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm)) }} />
-                  <Input label="Cao thực tế (cm) *" type="number" min="0.01" value={heightCm} onChange={(event) => { const next = event.target.value; setHeightCm(next); setVolumeM3(volumeFromDimensions(lengthCm, widthCm, next)) }} />
-                  <Input label="Khối lượng (kg) *" type="number" min="0.01" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} />
+                  <Input label="Dài thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={lengthCm} onChange={(event) => { const next = event.target.value; setLengthCm(next); setVolumeM3(volumeFromDimensions(next, widthCm, heightCm)) }} />
+                  <Input label="Rộng thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={widthCm} onChange={(event) => { const next = event.target.value; setWidthCm(next); setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm)) }} />
+                  <Input label="Cao thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={heightCm} onChange={(event) => { const next = event.target.value; setHeightCm(next); setVolumeM3(volumeFromDimensions(lengthCm, widthCm, next)) }} />
+                  <Input label="Khối lượng (kg) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} />
                   <Input label="Thể tích (m³) *" value={volumeM3} readOnly />
-                  <Input label="Số kiện *" type="number" min="1" value={packageCount} onChange={(event) => setPackageCount(event.target.value)} />
+                  <Input label="Số kiện *" disabled={isReviewingCompletedStep} type="number" min="1" value={packageCount} onChange={(event) => setPackageCount(event.target.value)} />
                 </div>
                 {checkInComparison && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {([
@@ -1165,19 +1206,21 @@ export default function StaffCheckInOperationsPanel({
                     ['weight', 'Khối lượng', checkInComparison.weightMatches],
                     ['volume', 'Thể tích', checkInComparison.volumeMatches],
                     ['dimensions', 'Kích thước', checkInComparison.dimensionMatches],
-                  ] as Array<[MeasurementComparisonKey, string, boolean | null]>).map(([key, label, matches]) => <label key={key} className="rounded-lg border border-stone-200 p-3 text-sm"><div className="mb-2 flex items-center justify-between gap-2"><b>{label}</b><ComparisonBadge matches={matches} /></div><span className="flex items-center gap-2"><input type="checkbox" checked={measurementChecks[key]} onChange={(event) => setMeasurementChecks((value) => ({ ...value, [key]: event.target.checked }))} />Đã đối chiếu *</span></label>)}
+                  ] as Array<[MeasurementComparisonKey, string, boolean | null]>).map(([key, label, matches]) => <label key={key} className="rounded-lg border border-stone-200 p-3 text-sm"><div className="mb-2 flex items-center justify-between gap-2"><b>{label}</b><ComparisonBadge matches={matches} /></div><span className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={measurementChecks[key]} onChange={(event) => setMeasurementChecks((value) => ({ ...value, [key]: event.target.checked }))} />Đã đối chiếu *</span></label>)}
                 </div>}
-                {measurementVariance && <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><label className="flex gap-2"><input type="checkbox" checked={varianceAccepted} onChange={(event) => setVarianceAccepted(event.target.checked)} />Đã trao đổi với khách và chấp nhận chênh lệch *</label><Input label="Lý do chênh lệch *" value={varianceReason} onChange={(event) => setVarianceReason(event.target.value)} /></div>}
-                <div className="grid gap-3 sm:grid-cols-2"><Input label="Loại hàng *" value={goodsCategory} onChange={(event) => setGoodsCategory(event.target.value)} /><Input label="Hiện trạng gian kho *" value={initialCondition} onChange={(event) => setInitialCondition(event.target.value)} /><Input label="Tình trạng hàng hóa *" value={goodsCondition} onChange={(event) => setGoodsCondition(event.target.value)} /><Input label="Ghi chú kiểm kê" value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} /></div>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checklist.conditionRecorded} onChange={(event) => setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))} />Đã ghi nhận hiện trạng gian kho và hàng hóa *</label>
-                <label className="block text-sm font-medium">Ảnh/PDF kiểm kê sau setup *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setEvidenceFiles(Array.from(event.target.files || []))} /></label>
-                <FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} />
+                {measurementVariance && <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><label className="flex gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={varianceAccepted} onChange={(event) => setVarianceAccepted(event.target.checked)} />Đã trao đổi với khách và chấp nhận chênh lệch *</label><Input label="Lý do chênh lệch *" disabled={isReviewingCompletedStep} value={varianceReason} onChange={(event) => setVarianceReason(event.target.value)} /></div>}
+                <div className="grid gap-3 sm:grid-cols-2"><Input label="Loại hàng *" disabled={isReviewingCompletedStep} value={goodsCategory} onChange={(event) => setGoodsCategory(event.target.value)} /><Input label="Hiện trạng gian kho *" disabled={isReviewingCompletedStep} value={initialCondition} onChange={(event) => setInitialCondition(event.target.value)} /><Input label="Tình trạng hàng hóa *" disabled={isReviewingCompletedStep} value={goodsCondition} onChange={(event) => setGoodsCondition(event.target.value)} /><Input label="Ghi chú kiểm kê" disabled={isReviewingCompletedStep} value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} /></div>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.conditionRecorded} onChange={(event) => setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))} />Đã ghi nhận hiện trạng gian kho và hàng hóa *</label>
+                {!isReviewingCompletedStep && <><label className="block text-sm font-medium">Ảnh/PDF kiểm kê sau setup *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setEvidenceFiles(Array.from(event.target.files || []))} /></label><FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} /></>}
+                {isReviewingCompletedStep && handoverTarget.handover?.evidenceReferences.length ? <p className="text-xs text-stone-600">Đã lưu {handoverTarget.handover.evidenceReferences.length} tệp bằng chứng kiểm kê trong biên bản.</p> : null}
               </div>
             )}
 
             <div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
               <Button variant="outline" onClick={() => setHandoverTarget(null)} disabled={submitting}>Đóng</Button>
-              {handoverStep < 6 ? (
+              {isReviewingCompletedStep ? (
+                <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu; không thể thay đổi bước này.</span>
+              ) : handoverStep < 6 ? (
                 <Button disabled={submitting ||
                   (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
                   (handoverStep === 2 && !contractFile) ||
