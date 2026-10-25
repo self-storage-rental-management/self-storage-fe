@@ -15,7 +15,7 @@ describe('authoritative backend pricing', () => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview={false} />)
     for (const amount of ['5.500.000 ₫', '16.500.000 ₫', '495.000 ₫', '16.005.000 ₫', '3.201.000 ₫', '12.804.000 ₫', '18.304.000 ₫', '21.505.000 ₫']) expect(html).toContain(amount)
     expect(html).toContain('Cọc giữ chỗ (20%)')
-    expect(html).toContain('Tiền duy trì CSVC')
+    expect(html).toContain('Tiền cọc đảm bảo kho')
     expect(html).not.toContain('40%')
     expect(html).not.toContain('166.452.000.000')
   })
@@ -24,5 +24,17 @@ describe('authoritative backend pricing', () => {
     expect(html).toContain('xác minh OTP')
     expect(html).toContain('nhân viên cơ sở duyệt')
     expect(html).toContain('Chưa thu cọc')
+  })
+  it('renders custom deposit rate configured by BO (e.g. 15%)', () => {
+    const customQuote: ReservationQuote = {
+      ...quote,
+      reservationDepositAmount: 2400750,
+      remainingRentalAmount: 13604250,
+      reservationDepositRate: 0.15,
+    }
+    const html = renderToStaticMarkup(<ReservationQuoteSummary quote={customQuote} needsReview={false} />)
+    expect(html).toContain('Cọc giữ chỗ (15%)')
+    expect(html).toContain('2.400.750 ₫')
+    expect(html).toContain('Tiền thuê còn lại (85%)')
   })
 })

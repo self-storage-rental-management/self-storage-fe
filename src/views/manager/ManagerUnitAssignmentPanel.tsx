@@ -30,7 +30,17 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('vi-VN')
 }
 
-export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (message: string) => void }) {
+function formatDateTime(value: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+}
+
+export default function ManagerUnitAssignmentPanel({ showToast, embedded = false, onAssigned }: {
+  showToast: (message: string) => void
+  embedded?: boolean
+  onAssigned?: () => void
+}) {
   const [items, setItems] = useState<UnitAssignmentCandidate[]>([])
   const [page, setPage] = useState(0)
   const [totalItems, setTotalItems] = useState(0)
@@ -60,7 +70,7 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
         setTotalPages(response.pagination.totalPages)
       })
       .catch(reason => {
-        if (active) setError(reason instanceof Error ? reason.message : "Không thể tải đặt chỗ chờ phân kho.")
+        if (active) setError(managerDisplayError(reason))
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -96,12 +106,13 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
         ? await changeUnitAssignment(selected.reservationId, storageUnitId, changeReason.trim())
         : await createUnitAssignment(selected.reservationId, storageUnitId)
       showToast(selected.assignedStorageUnitId
-        ? `Đã đổi sang gian ${result.storageUnitCode} cho reservation ${result.reservationCode}.`
-        : `Đã phân gian ${result.storageUnitCode} cho reservation ${result.reservationCode}.`)
+        ? `Đã đổi sang gian ${result.storageUnitCode} cho đơn đặt chỗ ${result.reservationCode}.`
+        : `Đã phân gian ${result.storageUnitCode} cho đơn đặt chỗ ${result.reservationCode}.`)
       setSelected(null)
       setRefreshKey(value => value + 1)
+      onAssigned?.()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể tạo phân gian.")
+      setError(managerDisplayError(reason))
     } finally {
       setSubmitting(false)
     }
@@ -113,17 +124,23 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
   }
 
   return <div className="space-y-6">
-    <SectionHeader
+    {!embedded && <SectionHeader
       eyebrow="Vận hành nhận kho"
-      title="Phân kho cho đặt chỗ"
-    />
+      title="Phân gian"
+      subtitle="Các đơn đã thanh toán và đang chờ gian được xếp trước. Chọn gian phù hợp và xem đầy đủ vị trí, kích thước, tải trọng trước khi xác nhận."
+    />}
+
+    {embedded && <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Cần xử lý trước</p><h3 className="mt-1 text-lg font-bold text-stone-900">Đơn đã thanh toán cọc đang chờ phân gian</h3><p className="mt-1 text-sm text-stone-500">Đơn chờ lâu nhất được xếp lên trước. Chọn một gian còn trống phù hợp ngay tại trang quản lý kho.</p></div>
+      {totalItems > 0 && <Badge variant="warning">{totalItems} đơn chờ phân</Badge>}
+    </div>}
 
     <Card className="p-4">
       <div className="flex flex-col gap-3 sm:flex-row">
         <Input
           className="sm:min-w-80"
           value={queryInput}
-          placeholder="Mã đặt chỗ, khách hàng hoặc email"
+          placeholder="Mã đặt chỗ, khách hàng hoặc thư điện tử"
           onChange={event => setQueryInput(event.target.value)}
           onKeyDown={event => { if (event.key === 'Enter') search() }}
         />
@@ -137,7 +154,7 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
     <Card>
       <Table>
         <Thead><Tr>
-          <Th>đặt chỗ</Th>
+          <Th>Đặt chỗ</Th>
           <Th>Khách hàng</Th>
           <Th>Cơ sở / loại kho</Th>
           <Th>Thời hạn</Th>
@@ -146,10 +163,10 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
         </Tr></Thead>
         <Tbody>
           {items.map(item => <Tr key={item.reservationId}>
-            <Td><b className="font-mono">{item.reservationCode}</b><p className="mt-1 text-xs text-stone-500">Xác nhận {formatDate(item.confirmedAt)}</p></Td>
+            <Td><b className="font-mono">{item.reservationCode}</b><p className="mt-1 text-xs text-stone-500">Xác nhận {formatDateTime(item.confirmedAt)}</p></Td>
             <Td><b>{item.customerName}</b><p className="mt-1 text-xs text-stone-500">{item.customerEmail}</p></Td>
             <Td><b>{item.facilityName}</b><p className="mt-1 text-xs text-stone-500">{managerUnitTypeLabel(item.unitTypeName, 'vi')}</p></Td>
-            <Td>{formatDate(item.startDate)} - {formatDate(item.endDate)}</Td>
+            <Td><p>{formatDate(item.startDate)} - {formatDate(item.endDate)}</p>{!item.assignedStorageUnitId && <p className={`mt-1 text-xs font-semibold ${item.assignmentDueAt && new Date(item.assignmentDueAt).getTime() < Date.now() ? 'text-red-700' : 'text-amber-700'}`}>{item.assignmentDueAt && new Date(item.assignmentDueAt).getTime() < Date.now() ? 'Đã quá hạn phân gian: ' : 'Hạn phân gian: '}{formatDateTime(item.assignmentDueAt)}</p>}</Td>
             <Td><Badge variant={item.assignedStorageUnitId ? 'info' : 'success'}>
               {item.assignedStorageUnitId ? `Đã phân ${item.assignedStorageUnitCode}` : 'Đã thanh toán cọc, chờ phân gian'}
             </Badge></Td>
@@ -171,7 +188,7 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
     <Modal open={Boolean(selected)} onClose={() => { if (!submitting) setSelected(null) }} title={flow === 'change' ? 'Đổi gian kho' : 'Phân gian kho'}>
       {selected && <div className="space-y-4">
         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
-          <p><b>đặt chỗ:</b> {selected.reservationCode}</p>
+          <p><b>Đặt chỗ:</b> {selected.reservationCode}</p>
           <p><b>Khách hàng:</b> {selected.customerName}</p>
           <p><b>Yêu cầu:</b> {managerUnitTypeLabel(selected.unitTypeName, 'vi')} · {selected.facilityName}</p>
         </div>
@@ -204,6 +221,20 @@ export default function ManagerUnitAssignmentPanel({ showToast }: { showToast: (
           Đã chọn <b className="font-mono">{units.find(unit => unit.storageUnitId === storageUnitId)?.storageUnitCode}</b>. Kiểm tra lại rồi xác nhận để giữ gian cho khách hàng.
         </div>}
         {flow === 'change' && <Input label="Lý do đổi gian *" value={changeReason} onChange={event => setChangeReason(event.target.value)} placeholder="Ví dụ: gian đang bảo trì hoặc không còn phù hợp kích thước" />}
+        {units.find(unit => unit.storageUnitId === storageUnitId) && (() => {
+          const unit = units.find(item => item.storageUnitId === storageUnitId)!
+          return <dl className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm sm:grid-cols-2">
+            <div><dt className="text-xs text-stone-500">Loại gian</dt><dd className="font-semibold">{unit.unitTypeName}</dd></div>
+            <div><dt className="text-xs text-stone-500">Vị trí</dt><dd className="font-semibold">Tầng {unit.floor || '-'} · {unit.zone || 'Chưa có khu'}</dd></div>
+            <div><dt className="text-xs text-stone-500">Kích thước</dt><dd className="font-semibold">{unit.lengthM} × {unit.widthM} × {unit.heightM} m</dd></div>
+            <div><dt className="text-xs text-stone-500">Diện tích / thể tích</dt><dd className="font-semibold">{unit.areaM2} m² · {unit.volumeM3} m³</dd></div>
+            <div><dt className="text-xs text-stone-500">Tải trọng tối đa</dt><dd className="font-semibold">{unit.maxLoadKg.toLocaleString('vi-VN')} kg</dd></div>
+            <div><dt className="text-xs text-stone-500">Trạng thái</dt><dd><Badge variant="success">Còn trống</Badge></dd></div>
+          </dl>
+        })()}
+        <div className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">
+          Xác nhận để phân gian kho đã chọn cho đặt chỗ này. Gian kho sẽ được giữ cho khách hàng.
+        </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={submitting} onClick={() => setSelected(null)}>Đóng</Button>
           <Button disabled={submitting || loadingUnits || !storageUnitId || flow === 'suggested' || (flow === 'change' && !changeReason.trim())} onClick={() => void submitAssignment()}>

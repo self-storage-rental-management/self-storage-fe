@@ -7,9 +7,12 @@ import ApiReadState from '../rental-api/ApiReadState'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import PaymentReceiptCard from './PaymentReceiptCard'
 
-export default function RenewalReceipt({ id,paymentId,role='customer' }: { id: string; paymentId: string; role?: 'customer' | 'manager' }) {
+import type { RentalApiRole } from '../../types/rentalApi'
+
+export default function RenewalReceipt({ id,paymentId,role='customer' }: { id: string; paymentId: string; role?: RentalApiRole }) {
   const actor=getAuthenticatedActor()
-  const read=useRentalApiResource(`${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${id}:receipt:${paymentId}`,()=>getRenewalReceipt(role,id,paymentId))
+  const receiptRole = role === "staff" ? "manager" : role
+  const read=useRentalApiResource(`${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${receiptRole}:${id}:receipt:${paymentId}`,()=>getRenewalReceipt(receiptRole,id,paymentId))
   const p=read.data
   if(!p)return <ApiReadState {...read} retry={read.refresh} />
   const remaining=p.kind==='REMAINING_RENT'

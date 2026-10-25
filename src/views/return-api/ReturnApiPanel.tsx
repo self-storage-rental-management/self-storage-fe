@@ -8,6 +8,7 @@ import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
+  completeRefund,
   confirmReturn,
   feeKeys,
   inspectReturn,
@@ -280,18 +281,34 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         <label className="block">Hiện trạng kho đề xuất<select value={unit} disabled={busy} onChange={(event) => setUnit(event.target.value as typeof unit)}><option value="available">Sẵn sàng</option><option value="maintenance">Cần bảo trì</option></select></label>
         <Button type="submit" disabled={busy || (canReview && !note.trim())}>{canInspect ? 'Ghi nhận nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</Button>
       </form>}
+      {role === 'staff' && !recovery && (record.status === 'requested' || record.status === 'scheduled') && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-blue-900">⚡ Cho trả kho nhanh</span>
+            <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 border border-blue-300">Thao tác nhanh</span>
+          </div>
+          <p className="text-xs text-blue-800">
+            Bạn có thể duyệt cho khách trả kho ngay lập tức mà không cần qua nhiều bước nghiệm thu.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `QUICK-RETURN-${Date.now()}`, notes: 'Cho trả kho ngay' }))}>
+              ⚡ Cho trả kho ngay (Đóng hồ sơ & giải phóng gian)
+            </Button>
+          </div>
+        </div>
+      )}
       {role === 'staff' && !recovery && record.status === 'awaiting_customer_confirmation' && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-900">⏳ Đang chờ khách hàng xác nhận quyết toán</span>
-            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 border border-amber-300">Chưa đủ điều kiện hoàn cọc</span>
+            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Có thể duyệt hoàn tất ngay</span>
           </div>
           <p className="text-xs text-amber-800">
-            Biên bản nghiệm thu đã được ghi nhận và đang chờ khách hàng duyệt phương án quyết toán. Nút hoàn cọc tạm thời bị vô hiệu hóa để tránh lỗi xung đột hệ thống (409 Conflict).
+            Biên bản nghiệm thu đã lập. Bạn có thể xác nhận cho phép trả kho và hoàn tất hồ sơ ngay mà không cần đợi thêm.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" disabled variant="outline" className="opacity-50 cursor-not-allowed border-amber-300 text-amber-800 bg-white" title="Hồ sơ đang chờ khách duyệt - Nút bị vô hiệu hóa để tránh lỗi xung đột 409">
-              Hoàn cọc (Đang chờ khách duyệt)
+            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `RETURN-${Date.now()}`, notes: 'Nhân viên xác nhận hoàn tất trả kho' }))}>
+              ✓ Xác nhận hoàn tất trả kho ngay
             </Button>
           </div>
         </div>
@@ -299,15 +316,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'disputed' && (
         <div className="rounded-xl border border-rose-300 bg-rose-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-900">⚠️ Đang khiếu nại - Cần BO giải quyết</span>
-            <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800 border border-rose-300">Khóa thao tác nhân viên</span>
+            <span className="text-xs font-bold text-rose-900">⚠️ Khiếu nại từ khách hàng</span>
+            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">Có thể duyệt trả kho</span>
           </div>
           <p className="text-xs text-rose-800">
-            Khách hàng đã khiếu nại kết quả quyết toán ({record.customerDecisionNote || 'Cần xem xét lại'}). Nút hoàn cọc và nghiệm thu bị khóa để tránh lỗi xung đột (409 Conflict) cho đến khi Ban Điều Hành (BO) hoặc Quản lý cơ sở thẩm định giải quyết.
+            Ý kiến khách: {record.customerDecisionNote || 'Cần xem xét lại'}. Bạn có thể bỏ qua khiếu nại và duyệt cho trả kho ngay.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" disabled variant="outline" className="opacity-50 cursor-not-allowed border-rose-300 text-rose-700 bg-white" title="Hồ sơ đang khiếu nại - Cần BO giải quyết trước khi hoàn cọc (tránh lỗi xung đột 409)">
-              Hoàn cọc (Bị khóa do khiếu nại)
+            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `DISPUTE-RESOLVED-${Date.now()}`, notes: 'Duyệt trả kho theo yêu cầu' }))}>
+              ✓ Duyệt trả kho & Hoàn tất ngay
             </Button>
           </div>
         </div>
@@ -315,22 +332,50 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'payment_due' && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">💵 Chờ khách thanh toán quyết toán</span>
-            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 border border-amber-300">Khách nộp thêm: {rentalMoney(record.amountDueFromCustomer, 'VND')}</span>
+            <span className="text-xs font-bold text-amber-900">💵 Phụ phí cần thu: {rentalMoney(record.amountDueFromCustomer, 'VND')}</span>
+            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Duyệt nhanh</span>
           </div>
           <p className="text-xs text-amber-800">
-            Tổng chi phí nghiệm thu vượt quá tiền cọc. Khách hàng cần thanh toán phần phụ phí còn thiếu trước khi hoàn tất đóng hồ sơ trả kho.
+            Xác nhận đã thu phụ phí và đóng hồ sơ trả kho ngay.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" disabled variant="outline" className="opacity-50 cursor-not-allowed border-amber-300 text-amber-800 bg-white" title="Hồ sơ chờ khách nộp thêm phụ phí - Nút bị vô hiệu hóa">
-              Hoàn tất (Chờ khách thanh toán)
+            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `PAID-${Date.now()}`, notes: 'Xác nhận thu phụ phí và đóng hồ sơ' }))}>
+              ✓ Ghi nhận & Hoàn tất trả kho ngay
+            </Button>
+          </div>
+        </div>
+      )}
+      {role === 'staff' && !recovery && record.status === 'refund_pending' && (
+        <div className="rounded-xl border border-purple-300 bg-purple-50/80 p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-purple-900">💳 Tiền hoàn cọc: {rentalMoney(record.netRefundAmount, 'VND')}</span>
+            <span className="rounded bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800 border border-purple-300">Chờ chuyển hoàn</span>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="primary" disabled={busy} className="bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `REFUND-${Date.now()}`, notes: 'Hoàn tiền cọc trả kho' }))}>
+              ✓ Xác nhận đã hoàn cọc & Đóng hồ sơ
             </Button>
           </div>
         </div>
       )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
-      {role === 'customer' && record.status === 'awaiting_customer_confirmation' && <div className="flex gap-2"><Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button><Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button></div>}
+      {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (
+        <div className="space-y-2">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+            ⏱️ <b>Thời hạn phản hồi (SLA 72 giờ):</b> Quý khách vui lòng kiểm tra biên bản và phản hồi trong vòng 72 giờ. Sau thời gian này, hệ thống sẽ tự động chốt quyết toán theo biên bản nghiệm thu.
+          </div>
+          <div className="flex gap-2">
+            <Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button>
+            <Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button>
+          </div>
+        </div>
+      )}
+      {record.customerDecisionNote && record.customerDecisionNote.includes('Auto-Settlement SLA') && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800">
+          ℹ️ Quyết toán này đã được hệ thống <b>tự động xác nhận (Auto-Settlement SLA 72h)</b> do quá hạn phản hồi của khách hàng.
+        </div>
+      )}
     </section>
   )
 }

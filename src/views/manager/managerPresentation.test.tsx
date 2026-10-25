@@ -66,6 +66,6 @@ describe('Manager-only readable presentation', () => {
   })
   it('does not expose raw server diagnostics in Manager errors', () => {
     expect(managerDisplayError(new ApiClientError('English debug message FileAsset UUID', { status: 400 }))).not.toContain('UUID')
-    expect(managerDisplayError(new ApiClientError('Conflict', { status: 409 }))).toContain('Hồ sơ đã thay đổi')
+    expect(managerDisplayError(new ApiClientError('Conflict', { status: 409 }))).toBe('Dữ liệu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng tải lại trước khi tiếp tục.')
   })
 })

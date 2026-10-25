@@ -288,11 +288,11 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     <div className="flex flex-wrap items-center gap-2">
       {[
         { id: 'all', label: 'Tất cả nhiệm vụ' },
-        { id: 'maintenance', label: '🛠️ Bảo trì hiện trường' },
-        { id: 'return', label: '📦 Nghiệm thu trả kho' },
-        { id: 'checkin', label: '🚚 Nhận kho' },
-        { id: 'support', label: '💬 Hỗ trợ' },
-        { id: 'general', label: '📋 Khác' },
+        { id: 'maintenance', label: 'Bảo trì hiện trường' },
+        { id: 'return', label: 'Nghiệm thu trả kho' },
+        { id: 'checkin', label: 'Nhận kho' },
+        { id: 'support', label: 'Hỗ trợ' },
+        { id: 'general', label: 'Khác' },
       ].map(t => (
         <Button
           key={t.id}
@@ -340,7 +340,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
             <div className="flex justify-end gap-2">
               {isCompletedMaintenance && (
                 <Button size="sm" variant="primary" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAcceptMaintenance(task)}>
-                  ✅ Nghiệm thu kho
+                  Nghiệm thu kho
                 </Button>
               )}
               <Button size="sm" variant="outline" onClick={() => setDetailTaskId(task.id)}>Chi tiết</Button>

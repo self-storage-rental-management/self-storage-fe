@@ -239,10 +239,12 @@ export default function BusinessReturnsPanel({ user }: Props) {
       const saved = localStorage.getItem('storagehub:bo:returns-cache')
       if (saved) {
         const parsed: unknown = JSON.parse(saved)
-        if (Array.isArray(parsed)) return parsed as typeof SAMPLE_RETURNS
+        if (Array.isArray(parsed)) {
+          return (parsed as typeof SAMPLE_RETURNS).filter((r) => r.status === 'completed')
+        }
       }
     } catch {}
-    return SAMPLE_RETURNS
+    return SAMPLE_RETURNS.filter((r) => r.status === 'completed')
   })
 
   // Filter State
@@ -314,6 +316,23 @@ export default function BusinessReturnsPanel({ user }: Props) {
     } catch {}
   }
 
+  // Dọn dẹp cache local ngay khi mở màn hình, loại bỏ toàn bộ hồ sơ đang chạy dở
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('storagehub:bo:returns-cache')
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          const completedOnly = (parsed as typeof SAMPLE_RETURNS).filter((r) => r.status === 'completed')
+          if (completedOnly.length !== parsed.length) {
+            localStorage.setItem('storagehub:bo:returns-cache', JSON.stringify(completedOnly))
+            setLocalReturns(completedOnly)
+          }
+        }
+      }
+    } catch {}
+  }, [])
+
   // Load from API if authenticated
   const loadApiData = async () => {
     if (!useApi) return
@@ -342,13 +361,14 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // Normalized list of return items
   const displayItems = useMemo<typeof SAMPLE_RETURNS>(() => {
-    if (useApi && apiRows.length > 0) {
+    if (useApi && !apiError && (apiRows.length > 0 || !apiLoading)) {
       return apiRows.map((r) => ({
         id: r.id,
         rentalId: r.rentalId,
         unitNumber: r.unitNumber,
         facilityName: r.facilityName,
         customerName: r.customerName,
+        customerPhone: (r as unknown as { customerPhone?: string }).customerPhone || '',
         scheduledDate: r.scheduledDate,
         status: r.status,
         depositAmount: r.depositAmount ?? 0,
@@ -372,7 +392,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     }
 
     return localReturns
-  }, [useApi, apiRows, localReturns])
+  }, [useApi, apiRows, apiError, apiLoading, localReturns])
 
   // Facilities list for filter
   const facilityNames = useMemo(() => {
@@ -863,6 +883,23 @@ export default function BusinessReturnsPanel({ user }: Props) {
     alert('Đã nạp thành công 5 hồ sơ trả kho & quyết toán mẫu vào hệ thống!')
   }
 
+  // 9. Xóa toàn bộ dữ liệu đang xử lý dở dang (chỉ giữ các hồ sơ đã hoàn tất thanh lý)
+  const handleClearInProgressData = () => {
+    try {
+      localStorage.removeItem('storagehub:bo:returns-cache')
+    } catch {}
+    const completedOnly = SAMPLE_RETURNS.filter((r) => r.status === 'completed')
+    setLocalReturns(completedOnly)
+    try {
+      localStorage.setItem('storagehub:bo:returns-cache', JSON.stringify(completedOnly))
+    } catch {}
+    if (useApi) {
+      void loadApiData()
+    }
+    setFeedback('Đã xóa dữ liệu hồ sơ đang chạy dở và làm mới danh sách từ máy chủ!')
+    setTimeout(() => setFeedback(''), 4000)
+  }
+
   return (
     <div className="space-y-6">
       {/* ── THỐNG KÊ TỔNG QUAN KPI TRẢ KHO & QUYẾT TOÁN ── */}
@@ -943,8 +980,17 @@ export default function BusinessReturnsPanel({ user }: Props) {
             </select>
           </div>
 
-          {/* Nhóm nút hành động: Tạo mới hồ sơ */}
+          {/* Nhóm nút hành động */}
           <div className="flex flex-wrap gap-2 items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-300 text-red-700 bg-red-50/50 hover:bg-red-100 font-semibold flex items-center gap-1 cursor-pointer"
+              onClick={handleClearInProgressData}
+              title="Xóa toàn bộ các hồ sơ đang chạy dở và làm mới từ máy chủ"
+            >
+              🗑️ Xóa dữ liệu chạy dở
+            </Button>
             {!isBusiness && <Button
               variant="outline"
               size="sm"
@@ -956,6 +1002,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
           </div>
         </div>
 
+        {feedback && <p className="text-xs text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200 font-medium">{feedback}</p>}
         {apiLoading && <p className="text-xs text-stone-500 italic">Đang đồng bộ dữ liệu từ Backend Spring Boot...</p>}
         {apiError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{apiError}</p>}
       </Card>
@@ -1374,13 +1421,22 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       >
                         📋 Tiến hành nghiệm thu hiện trường
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={submitting}
+                        className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold cursor-pointer"
+                        onClick={() => handleCompleteRefund()}
+                      >
+                        ⚡ Cho trả kho ngay (Không trừ cọc)
+                      </Button>
                     </div>
                   )}
 
                   {!isBusiness && (selectedItem.status === 'awaiting_customer_confirmation' || selectedItem.status === 'inspected') && (
                     <div className="space-y-2">
                       <p className="text-xs text-stone-600">
-                        Biên bản đã được lập. Để tiếp tục, bạn có thể mô phỏng phản hồi từ khách hàng:
+                        Biên bản đã được lập. Để tiếp tục, bạn có thể mô phỏng phản hồi từ khách hàng hoặc hoàn tất trả kho ngay:
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -1391,6 +1447,15 @@ export default function BusinessReturnsPanel({ user }: Props) {
                           onClick={() => handleCustomerConfirm('accepted')}
                         >
                           ✓ Khách hàng đồng ý quyết toán
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={submitting}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+                          onClick={() => handleCompleteRefund()}
+                        >
+                          ⚡ Hoàn tất trả kho ngay (Giải phóng gian)
                         </Button>
                         <Button
                           variant="outline"
@@ -1412,7 +1477,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   )}
 
                   {!isBusiness && selectedItem.status === 'disputed' && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant="primary"
                         size="sm"
@@ -1420,6 +1485,15 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         onClick={() => setActiveTab('dispute')}
                       >
                         ⚖️ Thẩm định & Tái quyết toán khiếu nại ngay
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={submitting}
+                        className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold cursor-pointer"
+                        onClick={() => handleCompleteRefund()}
+                      >
+                        ⚡ Bỏ qua khiếu nại & Cho trả kho ngay
                       </Button>
                     </div>
                   )}
