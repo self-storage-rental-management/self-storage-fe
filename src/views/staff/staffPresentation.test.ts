@@ -48,6 +48,21 @@ describe("trình bày dữ liệu cho giao diện nhân viên", () => {
     ).toBe("Hệ thống đang tạm thời gián đoạn. Vui lòng thử lại sau.")
   })
 
+  it("giải thích đúng xung đột khi tiếp tục check-in", () => {
+    expect(
+      staffErrorMessage(
+        { status: 409, code: "CONFLICT", message: "Reservation is not READY_FOR_CHECKIN" },
+        "Không thể lưu.",
+      ),
+    ).toContain("sẵn sàng nhận kho")
+    expect(
+      staffErrorMessage(
+        { status: 409, code: "CONFLICT", message: "Check-in step is out of order. Expected status: scheduled" },
+        "Không thể lưu.",
+      ),
+    ).toContain("Các bước nhận kho đã thay đổi")
+  })
+
   it("đưa nhiệm vụ đến hạn trước lên đầu và dùng ưu tiên khi trùng hạn", () => {
     const tasks = [
       { id: "muon", dueAt: "2026-10-12", priority: "high" },
