@@ -16,7 +16,8 @@ function validPeriodMetadata(t: AcceptedTerms): boolean {
     || !/^\d{4}-\d{2}-\d{2}$/.test(t.rentalStartDate) || !Number.isFinite(Date.parse(t.rentalStartDate))
     || new Date(t.rentalStartDate).toISOString().slice(0, 10) !== t.rentalStartDate) return false
   const rawEnd = Date.parse(t.oldEndDate), extension = Date.parse(t.extensionStartDate)
-  return Date.parse(t.rentalStartDate) <= extension && extension >= rawEnd
+  return Date.parse(t.rentalStartDate) < extension
+    && extension - rawEnd === (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
 }
 function isAcceptedTerms(value: unknown): value is AcceptedTerms {
   if (!value || typeof value !== "object") return false
@@ -141,10 +142,13 @@ export async function getRenewalOptions(rentalId: string) {
 export async function quoteRenewal(
   rentalId: string,
   pricingPackageCode: string,
-  fullPayment: boolean = true,
+  fullPayment?: boolean,
   startDate?: string,
 ) {
-  const body: Record<string, unknown> = { pricingPackageCode, fullPayment }
+  const body: Record<string, unknown> = { pricingPackageCode }
+  if (fullPayment !== undefined) {
+    body.fullPayment = fullPayment
+  }
   if (startDate) {
     body.startDate = startDate
   }

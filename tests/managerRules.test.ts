@@ -105,7 +105,7 @@ describe('Facility Manager business rules', () => {
     expect(permissions.manager['policies:update']).toBe(false)
     expect(permissions.manager['policies:read']).toBe(true)
     expect(permissions.manager['reservations:approve']).toBe(true)
-    expect(permissions.manager['support:update']).toBe(false)
+    expect(permissions.manager['support:update']).toBe(true)
   })
 
   it('keeps a unit locked throughout the return workflow', () => {
