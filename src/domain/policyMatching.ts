@@ -189,7 +189,7 @@ function normalizeText(str: string): string {
 /**
  * Parser thông minh nhận diện quyền lợi / giá trị giảm trừ từ chính sách:
  * - Quy định vận hành (Late Fee, Security Deposit, Minimum Lease, Grace Period, v.v.): Luôn là quy chuẩn (isDiscount: false)
- * - Chính sách ưu đãi (có từ khóa tặng, giảm, miễn phí, voucher, %, trốn thuế, v.v.): Tự động tính toán chiết khấu (isDiscount: true)
+ * - Chính sách ưu đãi (có từ khóa tặng, giảm, miễn phí, voucher, %, v.v.): Tự động tính toán chiết khấu (isDiscount: true)
  */
 export function evaluatePolicyBenefit(
   policy: PolicyItem,
@@ -252,7 +252,7 @@ export function evaluatePolicyBenefit(
     normCombined.includes('promo') ||
     normCombined.includes('tro gia') ||
     normCombined.includes('ho tro') ||
-    normCombined.includes('tron thue') // Hỗ trợ test case mẫu
+    normCombined.includes('tron thue')
 
   if (!isPromotional) {
     // Không có dấu hiệu ưu đãi -> Quy định điều khoản thông thường
@@ -285,7 +285,7 @@ export function evaluatePolicyBenefit(
     }
   }
 
-  // B. Tặng / Miễn phí tháng tiền thuê (VD: "1 tháng trốn thuế", "Tặng 1 tháng", "Miễn phí 2 tháng")
+  // B. Tặng / Miễn phí tháng tiền thuê (VD: "Tặng 1 tháng", "Miễn phí 2 tháng")
   const monthMatch = val.match(/(\d+)\s*(?:tháng|month)/i) || name.match(/(\d+)\s*(?:tháng|month)/i)
   if (monthMatch) {
     const months = parseInt(monthMatch[1], 10)

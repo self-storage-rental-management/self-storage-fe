@@ -248,7 +248,7 @@ const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
   growth: f.growth,
   manager: f.manager,
   status: 'active',
-  accessHours: '06:00 - 22:00 hàng ngày',
+  accessHours: '08:00 - 17:00',
   timezone: 'Asia/Ho_Chi_Minh',
   unitDistribution: f.unitDistribution
 }))
@@ -288,6 +288,12 @@ export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address
 
 export function sanitizeFacilityStrings<T extends { code?: string; id?: string; name?: string; address?: string; city?: string }>(f: T): T {
   if (!f) return f
+  const isCorrupted = (str?: string) => Boolean(str && (str.includes('ß') || str.includes('Ã') || str.includes('Huß') || str.includes('Nguyß')))
+
+  if (!isCorrupted(f.name) && !isCorrupted(f.address) && f.name && f.address) {
+    return f
+  }
+
   const code = (f.code || f.id || '').toUpperCase()
   let fix = KNOWN_FACILITY_CORRECTIONS[code]
   if (!fix && f.id) {
@@ -311,9 +317,9 @@ export function sanitizeFacilityStrings<T extends { code?: string; id?: string; 
   if (fix) {
     return {
       ...f,
-      name: fix.name || f.name,
-      address: fix.address || f.address,
-      city: fix.city || f.city
+      name: isCorrupted(f.name) || !f.name ? (fix.name || f.name) : f.name,
+      address: isCorrupted(f.address) || !f.address ? (fix.address || f.address) : f.address,
+      city: isCorrupted(f.city) || !f.city ? (fix.city || f.city) : f.city
     }
   }
   return f
@@ -2710,7 +2716,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền duy trì CSVC: ${formatVnd(contract.securityDeposit)}.`,
+            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền cọc đảm bảo kho: ${formatVnd(contract.securityDeposit)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -2738,7 +2744,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!reservation) throw new Error('Không tìm thấy đơn đặt chỗ.')
     if (paymentDetails.amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.')
     if (Math.abs(paymentDetails.amount - reservation.remainingAmount) > 0.01) {
-      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền duy trì CSVC.`)
+      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền cọc đảm bảo kho.`)
     }
     if (!paymentDetails.transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
 
@@ -2758,7 +2764,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       status: 'PAID',
       paidAt: now.toISOString(),
       recordedBy: staffUser.id,
-      description: `Tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}`
+      description: `Tiền thuê còn lại và tiền cọc đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}`
     }
 
     setState(prev => {
@@ -2810,7 +2816,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'payment',
             entityId: txId,
-            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}.`,
+            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền cọc đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -3063,22 +3069,32 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const approveRenewal = (renewalId: string, managerUser: User) => {
-    assertPermission(managerUser, 'rentals:update')
+    if (managerUser.role === 'staff') {
+      assertPermission(managerUser, 'renewals:operate')
+    } else {
+      assertPermission(managerUser, 'rentals:update')
+    }
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') {
-      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
+      if (managerUser.role === 'manager' || managerUser.role === 'staff') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
       return
     }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
+    if (managerUser.role === 'staff') {
+      if (!isFacilityVisible(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)) {
+        throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
+      }
+    } else {
+      assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
+    }
 
-    if (managerUser.role === 'manager') {
+    if (managerUser.role === 'manager' || managerUser.role === 'staff') {
       if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn hiệu lực để gia hạn.')
       if (renewal.oldEndDate !== rental.endDate) throw new Error('Thời hạn hợp đồng đã thay đổi. Vui lòng yêu cầu khách cập nhật lại đề nghị gia hạn.')
       if (renewal.newEndDate <= renewal.oldEndDate) throw new Error('Ngày kết thúc gia hạn phải sau ngày kết thúc hợp đồng hiện tại.')
     }
 
-    const isConflicted = managerUser.role === 'manager'
+    const isConflicted = (managerUser.role === 'manager' || managerUser.role === 'staff')
       ? unitHasAllocationConflict(
           renewal.unitId,
           renewal.oldEndDate,
@@ -3099,9 +3115,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const now = new Date()
     const paymentDueAt = new Date(now.getTime() + 72 * 60 * 60 * 1000)
     const invoiceNumber = `INV-RNW-${Date.now().toString().slice(-8)}`
+    const approverTitle = managerUser.role === 'staff' ? 'Nhân viên' : 'Quản lý'
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'approved', approvedBy: managerUser.name, approvedAt: now.toISOString(), paymentDueAt: paymentDueAt.toISOString(), invoiceNumber, invoiceIssuedAt: now.toISOString() } : r),
+      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'completed', approvedBy: `${approverTitle} ${managerUser.name}`, approvedAt: now.toISOString(), paymentDueAt: paymentDueAt.toISOString(), invoiceNumber, invoiceIssuedAt: now.toISOString() } : r),
+      rentals: prev.rentals.map(rent => rent.id === renewal.rentalId ? { ...rent, endDate: renewal.newEndDate } : rent),
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3114,8 +3132,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityId: renewal.rentalId,
           correlationId: renewal.id,
           beforeState: { status: renewal.status, endDate: renewal.oldEndDate },
-          afterState: { status: 'approved', requestedEndDate: renewal.newEndDate, invoiceNumber, paymentDueAt: paymentDueAt.toISOString() },
-          notes: `Manager duyệt gia hạn kho ${renewal.unitId} đến ${renewal.newEndDate}. Chờ khách thanh toán.`,
+          afterState: { status: 'completed', requestedEndDate: renewal.newEndDate, invoiceNumber },
+          notes: `${approverTitle} ${managerUser.name} duyệt gia hạn kho ${renewal.unitId} đến ${renewal.newEndDate}. Hợp đồng đã gia hạn thành công.`,
           timestamp: now.toISOString()
         },
         ...prev.activities
@@ -3124,21 +3142,32 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const rejectRenewal = (renewalId: string, managerUser: User, reason: string) => {
-    assertPermission(managerUser, 'rentals:update')
+    if (managerUser.role === 'staff') {
+      assertPermission(managerUser, 'renewals:operate')
+    } else {
+      assertPermission(managerUser, 'rentals:update')
+    }
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') {
-      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
+      if (managerUser.role === 'manager' || managerUser.role === 'staff') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
       return
     }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
+    if (managerUser.role === 'staff') {
+      if (!isFacilityVisible(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)) {
+        throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
+      }
+    } else {
+      assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
+    }
     if (!reason.trim()) throw new Error('Vui lòng nhập lý do từ chối yêu cầu gia hạn.')
     const now = new Date()
+    const approverTitle = managerUser.role === 'staff' ? 'Nhân viên' : 'Quản lý'
 
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'rejected', approvedBy: managerUser.name, approvedAt: now.toISOString(), notes: reason.trim() } : r),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REJECTED', actorId: managerUser.id, actorName: managerUser.name, actorRole: managerUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, correlationId: renewal.id, beforeState: { status: renewal.status, endDate: renewal.oldEndDate }, afterState: { status: 'rejected', reason: reason.trim() }, notes: `Từ chối yêu cầu ${renewal.id}. Lý do: ${reason.trim()}`, timestamp: now.toISOString() }, ...prev.activities]
+      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'rejected', approvedBy: `${approverTitle} ${managerUser.name}`, approvedAt: now.toISOString(), notes: reason.trim() } : r),
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REJECTED', actorId: managerUser.id, actorName: managerUser.name, actorRole: managerUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, correlationId: renewal.id, beforeState: { status: renewal.status, endDate: renewal.oldEndDate }, afterState: { status: 'rejected', reason: reason.trim() }, notes: `${approverTitle} ${managerUser.name} từ chối yêu cầu ${renewal.id}. Lý do: ${reason.trim()}`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -4471,7 +4500,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       manager: data.manager?.trim() || 'Quản lý cơ sở',
       phone: data.phone?.trim() || '1900 6868',
       status: data.status || 'active',
-      accessHours: data.accessHours || '06:00 - 22:00 hàng ngày',
+      accessHours: data.accessHours || '08:00 - 17:00',
       timezone: data.timezone || 'Asia/Ho_Chi_Minh',
       unitDistribution,
       unitPrices: data.unitPrices,
@@ -5136,7 +5165,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }
 
     setState(prev => {
-      const nextUnits = prev.units.filter(u => u.id !== unitId && u.code !== unitId)
+      const nextUnits = prev.units.map(u => u.id === unitId || u.code === unitId
+        ? { ...u, status: 'maintenance' as const, version: u.version + 1,
+          conditionNotes: 'Ngừng khai thác. Bản ghi được giữ lại để bảo toàn lịch sử.' }
+        : u)
       const nextFacilities = prev.facilities.map(f => {
         if (f.id === unit.facilityId || f.code === unit.facilityId) {
           const facUnits = nextUnits.filter(u => u.facilityId === f.id || u.facilityId === f.code)
@@ -5159,7 +5191,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         facilities: nextFacilities,
         activities: actor.role === 'manager' ? [{
           id: `act-${Date.now()}`,
-          action: 'UNIT_DELETED',
+          action: 'UNIT_STATUS_UPDATED',
           actorId: actor.id,
           actorName: actor.name,
           actorRole: actor.role,
@@ -5167,7 +5199,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityType: 'unit',
           entityId: unit.id,
           beforeState: unit,
-          notes: `Manager xóa gian kho ${unit.code} chưa phát sinh nghiệp vụ.`,
+          notes: `Ngừng khai thác gian kho ${unit.code}, giữ nguyên bản ghi và lịch sử.`,
           timestamp: new Date().toISOString()
         }, ...prev.activities] : prev.activities
       }
@@ -5393,9 +5425,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const completeReturnRefund = (returnId: string, staffUser: User, transactionReference: string) => {
     assertPermission(staffUser, 'returns:process')
-    if (staffUser.role !== 'staff' && staffUser.role !== 'manager' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được xác nhận chuyển hoàn cọc.')
     const returnCase = state.returns.find(item => item.id === returnId)
-    if (!returnCase || returnCase.status !== 'refund_pending') throw new Error('Hồ sơ không ở trạng thái chờ hoàn cọc.')
+    if (!returnCase) throw new Error('Không tìm thấy hồ sơ trả kho.')
+    if (returnCase.status === 'completed') return
     if (staffUser.role === 'manager' || staffUser.role === 'admin') assertFacilityManager(staffUser, returnCase.facilityId, returnCase.facilityName)
     if (staffUser.role === 'staff' && !isFacilityVisible(staffUser, returnCase.facilityId, returnCase.facilityName)) throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
     if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã giao dịch hoàn cọc.')
@@ -5462,7 +5494,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       assertPermission(manager, 'returns:process')
     }
     const returnCase = state.returns.find(r => r.id === returnId)
-    if (!returnCase || returnCase.status !== 'disputed') throw new Error('Không tìm thấy hồ sơ khiếu nại đang chờ xử lý.')
+    if (!returnCase) throw new Error('Không tìm thấy hồ sơ trả kho.')
     assertFacilityManager(manager, returnCase.facilityId, returnCase.facilityName)
     if (!resolutionNote?.trim()) throw new Error('Vui lòng nhập lý do và kết quả rà soát quyết toán.')
     if (manager.role === 'manager' && !settlement) throw new Error('Vui lòng xác nhận lại toàn bộ khoản khấu trừ trước khi gửi kết luận.')

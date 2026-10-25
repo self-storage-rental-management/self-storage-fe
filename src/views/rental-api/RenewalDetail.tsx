@@ -40,6 +40,7 @@ export default function RenewalDetail({
   const { manager, copy, explain } = useManagerPresentation()
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
+  const isSplit = !!terms && terms.remainingRentalAmount > 0
   const hasDeposit = !!terms && terms.renewalDepositAmount > 0
   const isManager = role === "manager"
   const canOpenPayment = role === "customer" && r.status === "accepted" && r.acceptedRevision !== null
@@ -181,6 +182,22 @@ export default function RenewalDetail({
         <p className="rounded bg-amber-50 p-3">
           Hồ sơ gia hạn đã được duyệt. Trạng thái này chưa xác nhận đã thanh toán hoặc hoàn tất ký, ngày kết thúc thuê chưa thay đổi.</p>
       )}
+      {r.status === "completed" && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-1">
+          <h4 className="font-bold text-emerald-900 text-sm">✓ Gia hạn hợp đồng thành công</h4>
+          <p className="text-xs text-emerald-800 leading-relaxed">
+            Hợp đồng thuê của bạn đã được gia hạn thành công. Thời hạn mới có hiệu lực đến ngày <b>{rentalDate(r.newEndDate)}</b>.
+          </p>
+        </div>
+      )}
+      {role === "customer" && r.status === "accepted" && payment?.paymentStatus !== "PAID" && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-1">
+          <h4 className="font-bold text-blue-900 text-sm">Thanh toán gia hạn trực tuyến</h4>
+          <p className="text-xs text-blue-800 leading-relaxed">
+            Quý khách chỉ cần bấm <b>{isSplit ? "Thanh toán đợt 1 qua VNPay" : "Thanh toán gia hạn qua VNPay"}</b> bên dưới. Hợp đồng sẽ tự động được gia hạn đến ngày <b>{rentalDate(r.newEndDate)}</b> ngay sau khi giao dịch thành công.
+          </p>
+        </div>
+      )}
       {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
@@ -188,7 +205,7 @@ export default function RenewalDetail({
       {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán tiền thuê trả trước" : "thanh toán"}.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
-          disabled={operationsLocked||paymentBusy||paymentExpired||!appointmentSelected||payment?.paymentStatus==="PAID"}
+          disabled={operationsLocked||paymentBusy||paymentExpired||payment?.paymentStatus==="PAID"}
           onClick={openRenewalPayment}
         >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":hasDeposit?"Thanh toán tiền thuê trả trước":"Thanh toán toàn kỳ"}</Button>}
         {actions

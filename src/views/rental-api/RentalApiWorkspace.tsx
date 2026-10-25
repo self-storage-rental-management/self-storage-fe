@@ -486,7 +486,7 @@ function WorkspaceData({
                   <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
                     <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>Chi tiết hồ sơ</Button>
                     <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
-                    <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' })}>Trả kho</Button>
+                    <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                   </div>
                 </div>
                 {rentalDeadlineState(row) && <div className="px-4 pb-4"><RentalDeadlineBanner rental={row} role={role} /></div>}
@@ -563,8 +563,8 @@ function WorkspaceData({
                       </Button>
                       {role === 'customer' && 'contractEndDate' in row && <>
                         <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
-                        <Button size="sm" variant="primary" disabled={!['active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
-                          onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' })}>Trả kho</Button>
+                        <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
+                          onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                       </>}
                       </div>
                     </td>
@@ -622,7 +622,16 @@ function WorkspaceData({
           rentalId={action.rentalId}
           revision={action.revision}
           onClose={() => setAction(undefined)}
-          onSuccess={success}
+          onSuccess={(created) => {
+            setAction(undefined)
+            if (created && typeof created === "object" && "id" in created) {
+              setTab("renewal")
+              setDetail({ kind: "renewal", id: (created as RenewalApiRecord).id })
+            } else {
+              setDetail(undefined)
+            }
+            refresh()
+          }}
           onNavigateToRenewals={() => {
             setAction(undefined)
             setDetail(undefined)
@@ -728,18 +737,7 @@ function DetailModal({
             financeHistory={<RenewalPaymentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:finance`} />}
             evidenceDocuments={<RenewalDocumentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:documents`} extraEvents={documentEvents} />}
             operationsLocked={operationsLocked}
-            appointmentSelection={role === "customer" && read.data.record.status === "accepted" ? (
-              <RenewalOperationsPanel
-                appointmentOnly
-                status={read.data.record.status}
-                id={detail.id}
-                role="customer"
-                facilityId={read.data.record.facility.id}
-                customerId={read.data.record.customer.id}
-                onLocked={setOperationLocked}
-                onChanged={() => { read.refresh(); onChanged() }}
-              />
-            ) : undefined}
+            appointmentSelection={undefined}
             onAction={(action) => {
               if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord

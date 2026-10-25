@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
-import { completeCheckIn, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, uploadCheckInEvidence } from './checkInApi'
+import { completeCheckIn, completeCheckInSetup, confirmCheckInPayment, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, signCheckInContract, startCheckInSetup, uploadCheckInEvidence, verifyCheckInIdentity } from './checkInApi'
 
 const responseCase = {
   checkInId: 'checkin-1',
@@ -95,6 +95,30 @@ describe('checkInApi', () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain('/checkin-1/complete')
     expect(fetchMock.mock.calls[1][0]).toContain('/checkin-1/no-show')
+  })
+
+  it('connects every persisted check-in workflow transition', async () => {
+    const fetchMock = mockEnvelope(responseCase)
+    vi.stubGlobal('fetch', fetchMock)
+
+    await verifyCheckInIdentity('checkin-1', { identityDocumentNumber: '079203009988' })
+    await signCheckInContract('checkin-1', 'contract-asset-1')
+    await confirmCheckInPayment('checkin-1', 'Không còn khoản phải thu')
+    await startCheckInSetup('checkin-1', {
+      lockReference: 'LOCK-001',
+    })
+    await completeCheckInSetup('checkin-1', 'Khách đã setup xong')
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining([
+      expect.stringContaining('/checkin-1/identity-verification'),
+      expect.stringContaining('/checkin-1/contract-signing'),
+      expect.stringContaining('/checkin-1/payment-confirmation'),
+      expect.stringContaining('/checkin-1/setup/start'),
+      expect.stringContaining('/checkin-1/setup/complete'),
+    ]))
+    expect(JSON.parse(String(fetchMock.mock.calls[3][1]?.body))).toMatchObject({
+      lockReference: 'LOCK-001',
+    })
   })
 
   it('rejects check-in with evidence and a safe unit disposition', async () => {

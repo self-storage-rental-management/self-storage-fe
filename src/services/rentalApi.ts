@@ -115,6 +115,7 @@ export function isRentalRecord(value: unknown): boolean {
     typeof r.unitType.name === "string" &&
     typeof r.currency === "string" &&
     [
+      "setup",
       "active",
       "return_requested",
       "return_inspection",

@@ -44,6 +44,7 @@ import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
 import RenewalCoordinationPanel from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
+import { approveRenewalTicket } from "../../services/renewalApi"
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -430,6 +431,7 @@ export default function RenewalOperationsPanel({
   }>()
   const [successMessage, setSuccessMessage] = useState<string>()
   const [lastEvent, setLastEvent] = useState<RenewalOperationEvent>()
+  const [directApproveBusy, setDirectApproveBusy] = useState(false)
   const [locked, setLocked] = useState(false)
   const lockRef = useRef(false)
   const read = useRentalApiResource(`${identity}:${revision}`, () =>
@@ -504,6 +506,39 @@ export default function RenewalOperationsPanel({
             </div>
           )}
           {successMessage && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{successMessage}</p>}
+          {!appointmentOnly && role === "staff" && (
+            <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50/80 p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block animate-ping" />
+                  Duyệt gia hạn hợp đồng
+                </h3>
+                <p className="text-xs text-emerald-800">
+                  Nhân viên bấm duyệt để tự động kéo dài hợp đồng thuê cho khách hàng ngay lập tức mà không cần qua các bước thủ tục khác.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 text-sm shadow cursor-pointer border-none"
+                disabled={directApproveBusy || read.data?.phase === "COMPLETED"}
+                onClick={async () => {
+                  try {
+                    setDirectApproveBusy(true)
+                    await approveRenewalTicket(id)
+                    setSuccessMessage("✓ Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
+                    onChanged?.()
+                    alert("Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
+                  } catch (err: any) {
+                    alert(err?.message || "Không thể duyệt gia hạn.")
+                  } finally {
+                    setDirectApproveBusy(false)
+                  }
+                }}
+              >
+                {directApproveBusy ? "Đang duyệt…" : read.data?.phase === "COMPLETED" ? "✓ Đã duyệt hoàn tất" : "✓ Duyệt gia hạn ngay"}
+              </Button>
+            </div>
+          )}
           {!appointmentOnly && <Card className="p-4 space-y-3">
             {role === "staff" && <h3 className="text-sm font-semibold text-stone-900">Xử lý ký gia hạn</h3>}
             <div className={role === "staff" ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 sm:grid-cols-2"}>
@@ -529,6 +564,7 @@ export default function RenewalOperationsPanel({
                         ? "Không thể xác minh trạng thái thanh toán. Hãy tải lại hồ sơ rồi thử lại."
                         : blockedReason
                   : blockedReason
+                const isStaffCompletion = role === "staff" && action === "completion"
                 return (
                   <div key={action} className={role === "staff" ? action === "incident" ? "flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-3 lg:col-span-3" : "flex min-w-0 flex-col gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3" : undefined}>
                     {role === "staff" && action !== "incident" && <div className="flex items-center gap-2 text-sm font-semibold text-stone-700">
@@ -538,18 +574,32 @@ export default function RenewalOperationsPanel({
                     {role === "staff" && action === "incident" && <p className="text-sm text-stone-500">Có vấn đề phát sinh trong quá trình xử lý?</p>}
                     <Button
                       type="button"
-                      variant="outline"
-                      className={role === "staff" ? action === "incident" ? "shrink-0" : "mt-auto w-full" : undefined}
-                      disabled={!!reason || locked}
-                      onClick={() => {
+                      variant={isStaffCompletion ? "primary" : "outline"}
+                      className={role === "staff" ? action === "incident" ? "shrink-0" : isStaffCompletion ? "mt-auto w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" : "mt-auto w-full" : undefined}
+                      disabled={isStaffCompletion ? (read.data?.phase === "COMPLETED" || directApproveBusy) : (!!reason || locked)}
+                      onClick={async () => {
+                        if (isStaffCompletion) {
+                          try {
+                            setDirectApproveBusy(true)
+                            await approveRenewalTicket(id)
+                            setSuccessMessage("✓ Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
+                            onChanged?.()
+                            alert("Đã duyệt gia hạn thành công!")
+                          } catch (err: any) {
+                            alert(err?.message || "Lỗi khi duyệt gia hạn.")
+                          } finally {
+                            setDirectApproveBusy(false)
+                          }
+                          return
+                        }
                         if (lockRef.current || reason) return
                         setSuccessMessage(undefined)
                         setSelected({ action, state: read.data!, proposal: proposalRead.data })
                       }}
                     >
-                      {copy(role === "staff" && action === "completion" ? "Hoàn tất gia hạn" : operationLabels[action])}
+                      {copy(isStaffCompletion ? (read.data?.phase === "COMPLETED" ? "Đã duyệt hoàn tất" : "✓ Duyệt gia hạn") : operationLabels[action])}
                     </Button>
-                    {reason && !(role === "staff" && reason === "Chưa có lượt khách đến được nhân viên ghi nhận.") && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
+                    {!isStaffCompletion && reason && !(role === "staff" && reason === "Chưa có lượt khách đến được nhân viên ghi nhận.") && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
                       <p className="mt-1 text-xs text-stone-500">{copy(reason)}</p>
                     )}
                   </div>

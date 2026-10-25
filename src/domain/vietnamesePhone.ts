@@ -16,3 +16,7 @@ export function isVietnamesePhone(value: string) {
 export function isOptionalVietnamesePhone(value: string | null | undefined) {
   return !value?.trim() || isVietnamesePhone(value)
 }
+
+// Compatibility aliases for screens created before the shared validator was renamed.
+export const isVietnameseMobilePhone = isVietnamesePhone
+export const VIETNAMESE_PHONE_HINT = VIETNAMESE_PHONE_ERROR_MESSAGE
