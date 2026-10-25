@@ -59,7 +59,7 @@ export interface SupportMessage {
   id: string
   ticketId: string
   authorId: string
-  authorRole: "CUSTOMER" | "STAFF" | "MANAGER"
+  authorRole: "CUSTOMER" | "STAFF" | "MANAGER" | "AI_CONTEXT" | "USER_CONTEXT"
   visibility: SupportVisibility
   body: string
   sentAt: string
@@ -102,6 +102,16 @@ export interface SupportQueueItem {
   version: number
 }
 export type SupportPage<T> = RentalApiPage<T>
+export type StaffSupportInboxView = 'queue' | 'mine' | 'all' | 'history'
+export interface StaffSupportInboxRow {
+  ticket: SupportTicket | null
+  queued: SupportQueueItem | null
+  historyCount: number
+  lastActivityAt: string
+}
+export interface StaffSupportInboxPage extends SupportPage<StaffSupportInboxRow> {
+  counts: Record<StaffSupportInboxView, number>
+}
 export interface SupportQuery {
   page?: number
   size?: number
@@ -120,6 +130,7 @@ export interface SupportCreate {
     id: string
   }
   evidenceFileIds?: string[]
+  handoffMessages?: { role: 'CUSTOMER' | 'ASSISTANT'; body: string }[]
 }
 type Versioned = { expectedVersion: number }
 type Evidence = { evidenceFileIds?: string[] }
@@ -143,6 +154,7 @@ export type SupportCommand = {
 } & Versioned & Evidence | {
   kind: "resolve"
   summary: string
+  statusOnly?: boolean
 } & Versioned & Evidence | {
   kind: "close"
   feedback?: string

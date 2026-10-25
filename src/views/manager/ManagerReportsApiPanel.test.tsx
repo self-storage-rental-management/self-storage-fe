@@ -58,17 +58,19 @@ describe('Manager activity journal', () => {
     expect(html).not.toContain(activity.correlationId)
     expect(html).not.toContain(activity.beforeStateJson)
   })
-  it('opens and closes the selected activity with full identifiers and audit data', () => {
+  it('opens and closes readable activity details without raw identifiers or audit properties', () => {
     const button = nodes(session()).find(n => n.type === Button && n.props['aria-label'] === 'Chi tiết: Bắt đầu xử lý thu hồi')!
     button.props.onClick()
     let tree = session()
     const modal = nodes(tree).find(n => n.type === Modal)!
     const details = renderToStaticMarkup(<>{modal.props.children}</>)
-    expect(details).toContain(activity.entityId)
-    expect(details).toContain(activity.correlationId)
-    expect(details).toContain('RECOVERY_START')
-    expect(details).toContain('OPEN')
-    expect(details).toContain('IN_PROGRESS')
+    expect(details).toContain('Bắt đầu xử lý thu hồi')
+    expect(details).toContain('Nhiệm vụ thu hồi')
+    expect(details).toContain(activity.notes)
+    expect(details).toContain('23/10/2026')
+    for (const raw of [activity.entityId, activity.correlationId!, 'RECOVERY_START', 'RecoveryTask', 'OPEN', 'IN_PROGRESS', 'beforeStateJson', 'afterStateJson']) {
+      expect(details).not.toContain(raw)
+    }
     modal.props.onClose()
     tree = session()
     expect(nodes(tree).some(n => n.type === Modal)).toBe(false)

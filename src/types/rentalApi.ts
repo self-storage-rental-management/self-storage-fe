@@ -1,5 +1,5 @@
 export type RentalApiRole = "customer" | "manager" | "staff"
-export type RentalApiStatus = "active" | "return_requested" | "return_inspection" | "closing" | "completed"
+export type RentalApiStatus = "setup" | "active" | "return_requested" | "return_inspection" | "closing" | "completed"
 export interface RentalApiPage<T> {
   data: T[]
   pagination: {
@@ -46,6 +46,12 @@ export interface RentalApiRecord {
     field: string
     reason: string
   }[]
+  inventoryPending?: boolean
+  inventoryDueAt?: string | null
+  setupStartedAt?: string | null
+  setupEndsAt?: string | null
+  moveInCompletedAt?: string | null
+  setupExitReviewRequired?: boolean
 }
 export interface RentalApiDetail extends RentalApiRecord {
   bookingEvidence?: RentalBookingEvidence | null
