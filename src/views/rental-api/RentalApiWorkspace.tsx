@@ -445,6 +445,7 @@ function WorkspaceData({
                     <div className="min-w-0 px-3"><span className="break-all font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
                     <div className="flex flex-wrap gap-1.5 px-3">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-700' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(rentalLabels[row.status])}</span>
+                      {row.status === 'active' && row.inventoryPending && <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-800">Chưa kiểm kê</span>}
                       {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
                     </div>
                   <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
@@ -452,7 +453,7 @@ function WorkspaceData({
                   <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
                     <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>Chi tiết hồ sơ</Button>
                     <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
-                    <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' })}>Trả kho</Button>
+                    <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                   </div>
                 </div>
                 {rentalDeadlineState(row) && <div className="px-4 pb-4"><RentalDeadlineBanner rental={row} role={role} /></div>}
@@ -498,7 +499,7 @@ function WorkspaceData({
                       </code>
                     </td>
                     <td className="p-3 align-middle">
-                      {role === 'customer' ? <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}</span> : <p className="font-semibold text-stone-900">{row.customer.fullName}</p>}
+                      {role === 'customer' ? <div className="flex flex-wrap gap-1.5"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}</span>{"contractEndDate" in row && row.status === 'active' && row.inventoryPending && <span className="inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-800">Chưa kiểm kê</span>}</div> : <div><p className="font-semibold text-stone-900">{row.customer.fullName}</p>{"contractEndDate" in row && row.status === 'active' && row.inventoryPending && <span className="mt-1 inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-800">Chưa kiểm kê</span>}</div>}
                     </td>
                     <td className="p-3 align-middle">
                       <p className="font-mono text-sm font-semibold text-stone-800">{row.storageUnit.code}</p>
@@ -529,8 +530,8 @@ function WorkspaceData({
                       </Button>
                       {role === 'customer' && 'contractEndDate' in row && <>
                         <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
-                        <Button size="sm" variant="primary" disabled={!['active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
-                          onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' })}>Trả kho</Button>
+                        <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
+                          onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                       </>}
                       </div>
                     </td>

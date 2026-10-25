@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
@@ -78,6 +78,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [appointmentErrors, setAppointmentErrors] = useState<{ date?: string; time?: string }>({})
   const [savedAppointmentAt, setSavedAppointmentAt] = useState(r.appointmentAt)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [setupGoodsEditOpen, setSetupGoodsEditOpen] = useState(false)
+  const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -119,6 +121,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     startDate: r.startDate,
     endDate: r.endDate,
     rentalMonths,
+    freeSetupDays: r.freeSetupDays ?? 0,
     monthlyPrice: r.monthlyPrice ?? grossRentalAmount / rentalMonths,
     subtotal: grossRentalAmount,
     discountRate: r.discountRate ?? (grossRentalAmount > 0 ? discountAmount / grossRentalAmount : 0),
@@ -134,6 +137,35 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     voucherDiscountAmount,
     quotedAt: r.createdAt,
     expiresAt: r.holdExpiresAt,
+  }
+  const beginSetupGoodsEdit = () => {
+    setSetupGoodsDraft(goodsItems.map(item => ({
+      category: item.category,
+      customGoodsName: item.customGoodsName,
+      materialName: item.materialName,
+      customMaterial: item.customMaterial,
+      description: item.description,
+      customerNote: item.customerNote,
+      quantity: item.quantity,
+      lengthCm: item.lengthCm,
+      widthCm: item.widthCm,
+      heightCm: item.heightCm,
+      weightPerItemKg: item.weightPerItemKg,
+      fragile: item.fragile,
+    })))
+    setSetupGoodsEditOpen(true)
+  }
+  const saveSetupGoods = async () => {
+    if (busy || !setupGoodsDraft.length) return
+    setBusy(true); setMessage(null)
+    try {
+      const updated = await updateSetupGoods(r.id, { goodsItems: setupGoodsDraft, goodsCondition: detail?.goodsCondition })
+      setDetail(updated)
+      setSetupGoodsEditOpen(false)
+      await onRefresh()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Không thể cập nhật khai báo hàng trong setup.')
+    } finally { setBusy(false) }
   }
   const steps = [
     { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
@@ -340,9 +372,10 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>}
         <div className="mt-3 space-y-4">
           <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
-            <h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3>
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3><p className="mt-1 text-xs text-stone-500">Chỉ được sửa một lần trong setup và sẽ khóa ngay khi kiểm kê.</p></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
             {!detail && <p className="mt-3 text-stone-500">Đang tải chi tiết hàng hóa…</p>}
             {detail && <>
+              {setupGoodsEditOpen && <div className="mt-3 space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><p className="font-bold">Cập nhật khai báo trong setup</p><p>Đây là lần sửa duy nhất. Sau khi lưu hoặc sau khi Staff kiểm kê, hệ thống sẽ khóa khai báo.</p>{setupGoodsDraft.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border border-amber-200 bg-white p-3 sm:grid-cols-4"><label className="sm:col-span-2">Mô tả<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" value={item.description || ''} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, description: event.target.value } : value))} /></label><label>Số lượng<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="1" value={item.quantity} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, quantity: Number(event.target.value) } : value))} /></label><label>Cân nặng/kiện<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="0.01" step="0.01" value={item.weightPerItemKg} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, weightPerItemKg: Number(event.target.value) } : value))} /></label><label>Dài × Rộng × Cao (cm)<span className="mt-1 flex gap-1"><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.lengthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, lengthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.widthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, widthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.heightCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, heightCm: Number(event.target.value) } : value))} /></span></label></div>)}<div className="flex gap-2"><Button type="button" size="sm" disabled={busy} onClick={() => void saveSetupGoods()}>{busy ? 'Đang lưu…' : 'Lưu thay đổi và khóa khai báo'}</Button><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setSetupGoodsEditOpen(false)}>Hủy</Button></div></div>}
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng loại hàng</span><b className="mt-1 block text-base text-stone-900">{goodsItems.length}</b></div>
                 <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng số lượng</span><b className="mt-1 block text-base text-stone-900">{totalGoodsQuantity.toLocaleString('vi-VN')} kiện</b></div>
@@ -375,6 +408,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           </section>
 
           <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" />
+            {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Business quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian setup không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
               <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
