@@ -2252,7 +2252,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 key={reservation.id}
                 reservation={reservation}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
-                unitTypeName={unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
+                unitTypeName={reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
                 facilityDetails={backendFacilities.find(item => item.id === reservation.facilityId) || null}
                 unitTypeDetails={backendUnitTypes.find(item => item.id === reservation.unitTypeId) || null}
                 facility={facilities.find(item => item.id === reservation.facilityId)}
