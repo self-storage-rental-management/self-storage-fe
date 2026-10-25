@@ -133,6 +133,11 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   }
   const beginSetupGoodsEdit = () => {
     setSetupGoodsDraft(goodsItems.map(item => ({
+      catalogCategoryId: item.catalogCategoryId,
+      catalogMaterialId: item.catalogMaterialId,
+      categoryCode: item.categoryCode,
+      categoryName: item.categoryName,
+      materialCode: item.materialCode,
       category: item.category,
       customGoodsName: item.customGoodsName,
       materialName: item.materialName,

@@ -42,6 +42,8 @@ const statuses: UnitStatus[] = [
   "assigned",
   "held",
   "maintenance",
+  "inactive",
+  "archived",
 ]
 const nullableText = (v: unknown) => v === null || typeof v === "string"
 
