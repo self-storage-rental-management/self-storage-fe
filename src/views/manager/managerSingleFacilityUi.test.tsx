@@ -5,6 +5,7 @@ import { manager, page } from "../../../tests/rentalApiFixtures"
 import { Button } from "../../components/ui"
 import RentalApiWorkspace from "../rental-api/RentalApiWorkspace"
 import SupportApiWorkspace from "../support-api/SupportApiWorkspace"
+import StaffSupportInbox from '../support-api/StaffSupportInbox'
 import ApiPager from "../rental-api/ApiPager"
 import ManagerOverdueApiPanel from "./ManagerOverdueApiPanel"
 import ManagerFinancialApiPanel from "./ManagerFinancialApiPanel"
@@ -170,14 +171,12 @@ describe("Manager rental and renewal filters", () => {
     expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ facilityId: "f1", size: 1,
       status: "active", endFrom: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), endTo: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }))
   })
-  it("keeps the Customer page size fixed at 20 without a size selector", async () => {
+  it("loads all Customer rentals for the grouped view without exposing a page-size selector", async () => {
     h.actor = { ...manager, roles: ["CUSTOMER"], facilityScopes: {} }
     const w = workspace("customer"), tree = w.data()
     await load()
-    expect(h.rental).toHaveBeenCalledWith("customer", expect.objectContaining({ size: 20, facilityId: undefined }))
-    const pager = invoke(named(tree, "Pager"))
-    expect(named(tree, "Pager").props.fixedSize).toBe(true)
-    expect(nodes(pager).some(n => n.type === "select")).toBe(false)
+    expect(h.rental).toHaveBeenCalledWith("customer", expect.objectContaining({ page: 0, size: 100, facilityId: undefined }))
+    expect(named(tree, "Pager")).toBeUndefined()
   })
 })
 
@@ -194,14 +193,14 @@ describe("Support and overdue pagination", () => {
     expect(text(tree)).not.toContain("Số yêu cầu / trang")
     control(label(tree, "Trạng thái"), "select").props.onChange({ target: { value: "open" } })
     tree = renderSupport()
-    byText(tree, "Xóa bộ lọc").props.onClick()
+    byText(tree, "Đặt lại").props.onClick()
     tree = renderSupport(); await load()
     expect(h.support).toHaveBeenLastCalledWith("manager", { page: 0, size: 10, facilityId: "f1", sort: "createdAt,desc" })
     nodes(tree).find(n => n.type === ApiPager)!.props.onPage(1)
     renderSupport(); await load()
     expect(h.support).toHaveBeenLastCalledWith("manager", expect.objectContaining({ page: 1, size: 10, facilityId: "f1" }))
   })
-  it.each(["customer", "staff"] as const)("keeps %s paging at 20 without forcing a Manager scope", async role => {
+  it.each(["customer"] as const)("keeps %s paging at 20 without forcing a Manager scope", async role => {
     h.actor = { ...h.actor!, roles: [role === "customer" ? "CUSTOMER" : "STAFF"], permissions: ["support:read", "support:update"] }
     const rerender = support(role)
     const tree = rerender(); await load()
@@ -212,6 +211,14 @@ describe("Support and overdue pagination", () => {
     rerender(); await load()
     expect(h.support).toHaveBeenLastCalledWith(role, expect.objectContaining({ page: 1, size: 20 }))
     expect(h.support.mock.lastCall?.[1].facilityId).toBeUndefined()
+  })
+  it('delegates Staff paging to the grouped inbox instead of fetching the old ticket list', async () => {
+    h.actor = { ...h.actor!, roles: ['STAFF'], permissions: ['support:read', 'support:update'] }
+    const rerender = support('staff')
+    const tree = rerender(); await load()
+    expect(nodes(tree).some(node => node.type === StaffSupportInbox)).toBe(true)
+    expect(h.support).not.toHaveBeenCalled()
+    expect(h.queue).not.toHaveBeenCalled()
   })
   it("keeps overdue categories separate and preserves fixed scope on filtering and paging", async () => {
     const outer = render(() => ManagerOverdueApiPanel()), slots: unknown[] = []

@@ -75,6 +75,10 @@ export function hasAccessToken() {
   return Boolean(accessToken)
 }
 
+export function getAccessToken() {
+  return accessToken
+}
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {

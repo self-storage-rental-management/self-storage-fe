@@ -1,7 +1,7 @@
 import { apiDownload, apiRequest } from './apiClient'
 
 export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
-export type UnitTypeStatus = 'active' | 'inactive'
+export type UnitTypeStatus = 'active' | 'inactive' | 'archived'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
 export type PaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
 export type ReservationStatus =
@@ -82,6 +82,9 @@ export interface CustomerUnitType {
   availableCount: number | null
   createdAt: string
   updatedAt: string
+  publishedRevision?: number
+  acceptedGoodsCategoryIds?: string[]
+  acceptedGoodsMaterialIds?: string[]
 }
 
 export interface AvailabilityResult {
@@ -100,6 +103,11 @@ export type GoodsCategory =
   | 'MOVING_ITEMS' | 'OTHER'
 
 export interface GoodsItemInput {
+  catalogCategoryId?: string | null
+  catalogMaterialId?: string | null
+  categoryCode?: string | null
+  categoryName?: string | null
+  materialCode?: string | null
   category: GoodsCategory
   customGoodsName?: string | null
   materialName?: string | null
@@ -112,6 +120,32 @@ export interface GoodsItemInput {
   heightCm: number
   weightPerItemKg: number
   fragile: boolean
+}
+
+export interface GoodsCatalogMaterial {
+  id: string
+  code: string
+  label: string
+  fragile: boolean
+  status: GoodsCatalogStatus
+  sortOrder: number
+}
+
+export type GoodsCatalogStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
+
+export interface GoodsCatalogCategory {
+  id: string
+  code: string
+  reservationCategory: GoodsCategory
+  label: string
+  status: GoodsCatalogStatus
+  materials: GoodsCatalogMaterial[]
+  custom: boolean
+  sortOrder: number
+}
+
+export interface GoodsCatalog {
+  categories: GoodsCatalogCategory[]
 }
 
 export interface ReservationSelectionInput {
@@ -151,6 +185,7 @@ export interface ReservationRentalPackage {
   code: string
   name: string
   rentalMonths: number
+  freeSetupDays?: number
   discountRate: number
   policyVersion: string
   depositRate?: number
@@ -165,6 +200,7 @@ export interface ReservationQuote {
   startDate: string
   endDate: string
   rentalMonths: number
+  freeSetupDays?: number
   monthlyPrice: number
   subtotal: number
   discountRate: number
@@ -213,6 +249,9 @@ export interface CustomerReservation {
   totalInitialObligation: number
   pricingPackageCode?: string | null
   rentalMonths?: number
+  freeSetupDays?: number
+  setupExitReviewRequired?: boolean
+  setupGoodsRevisionUsedAt?: string | null
   monthlyPrice?: number
   grossRentalAmount?: number
   discountRate?: number
@@ -248,6 +287,7 @@ export interface CheckInDocument {
 
 export interface ReservationGoodsItem extends GoodsItemInput {
   id: string
+  goodsCode: string
   requiresStaffReview: boolean
   reviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
   reviewNote: string | null
@@ -473,6 +513,11 @@ export async function listAccessibleUnitTypes(facilityId: string, page = 0, size
   )
 }
 
+export async function getGoodsCatalog() {
+  const response = await apiRequest<ApiEnvelope<GoodsCatalog>>('/api/customer/reservations/goods-catalog')
+  return response.data
+}
+
 export async function getAvailability(input: Omit<ReservationSelectionInput, 'goodsCondition' | 'goodsItems'>) {
   const suffix = query(input)
   const response = await apiRequest<ApiEnvelope<AvailabilityResult>>(`/api/availability${suffix}`)
@@ -527,6 +572,17 @@ export async function confirmCustomerReceipt(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
     { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function updateSetupGoods(
+  reservationId: string,
+  input: { goodsItems: GoodsItemInput[]; goodsCondition?: string | null },
+) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
+    { method: 'POST', body: JSON.stringify(input) },
   )
   return response.data
 }

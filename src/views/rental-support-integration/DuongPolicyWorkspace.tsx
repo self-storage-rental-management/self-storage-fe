@@ -24,8 +24,8 @@ import {
 } from "../../services/duongIntegrationApi"
 import { listBusinessPackagePolicies } from "../../services/businessPolicyApi"
 import { isUuid } from "../../services/renewalOperationsApi"
-import LedgerPanel from "./LedgerPanel"
 import { policyPendingKey, readPendingPolicy, retainPendingPolicy, clearPendingPolicy } from "./pendingPolicyPublication"
+import LedgerPanel from "./LedgerPanel"
 
 type Draft = Record<string, string>
 type PolicyInput = RenewalPolicyInput | CommunicationPolicyInput
@@ -848,7 +848,8 @@ export default function DuongPolicyWorkspace({
     actor.status === "ACTIVE" &&
     actor.roles.includes("BUSINESS") &&
     actor.permissions.includes("policies:read")
-  const [facility, setFacility] = useState(""),
+  const [page, setPage] = useState(0),
+    [facility, setFacility] = useState(""),
     [rentalInput, setRentalInput] = useState(""),
     [rental, setRental] = useState("")
   const [locked, setLocked] = useState(false)

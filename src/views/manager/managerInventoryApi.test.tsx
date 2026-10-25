@@ -154,7 +154,7 @@ describe("Manager inventory reads existing DB endpoints without local mutation",
     expect(html).toContain("7.200.000")
     expect(html).toContain("Chưa có dữ liệu")
     expect(html).toContain("Hiển thị 2 trên 2 gian kho")
-    expect(html).toContain("Phân bổ theo khu vực")
+    expect(html).not.toContain("Phân bổ theo khu vực")
     expect(html).toContain("Loại gian kho tại cơ sở")
     expect(html).not.toContain("Trạng thái bảo trì")
     expect(html).not.toContain("Hàng đợi bảo trì")
@@ -378,8 +378,11 @@ describe("Manager inventory filters and truthful read states", () => {
   it("empty successful response shows no data; unavailable secondary sources are not called empty", () => {
     h.read = { loading: false, data: { units: [], catalog: [] } }
     const html = renderToStaticMarkup(<ManagerInventoryApiPanel />)
-    expect(html).toContain("Không có dữ liệu")
-    expect(html).toContain("Hiển thị 0 trên 0 gian kho")
+    expect(html).toContain("chưa có loại gian kho thực tế nào")
+    expect(html).toContain("Khởi tạo loại kho đầu tiên")
+    expect(html).not.toContain("Hiển thị 0 trên 0 gian kho")
+    expect(html).not.toContain("Quản lý gian kho</h1>")
+    expect(html).not.toContain('role="alert"')
     expect(html).not.toContain("Hàng đợi bảo trì")
     expect(html).not.toContain("Không có nhiệm vụ bảo trì đang mở")
   })

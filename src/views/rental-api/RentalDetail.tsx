@@ -85,6 +85,13 @@ export default function RentalDetail({
             <dt>Thời hạn thuê</dt>
             <dd>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
           </div>
+          {rental.inventoryPending && <div>
+            <dt>Kiểm kê đầu vào</dt>
+            <dd><Badge variant="warning">Chưa kiểm kê</Badge>
+              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao; hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
+              {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Hạn kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+            </dd>
+          </div>}
           <div>
             <dt>Giá thuê / tháng</dt>
             <dd>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>

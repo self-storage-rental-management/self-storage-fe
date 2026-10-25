@@ -408,7 +408,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex h-full w-full min-w-0 max-w-full overflow-x-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -420,16 +420,16 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 shrink-0 border-t-4 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-4 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col overflow-hidden transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-[#44453f] flex items-center justify-between">
+        <div className="shrink-0 px-5 py-5 border-b border-[#44453f] flex items-center justify-between">
           <BrandLogo light subtitle={'Lưu trữ an toàn'} />
         </div>
 
         {/* Role & Facility badge */}
-        <div className="px-4 pt-4 pb-2 space-y-1.5">
+        <div className="shrink-0 px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
             <span className={`inline-flex items-center px-2.5 py-1 rounded text-[10px] tracking-[.08em] font-semibold border ${roleColor || 'bg-[#3a3933] text-[#f3c675] border-[#4b4940]'}`}>
               {getTranslatedRole()}
@@ -438,19 +438,18 @@ export default function Layout({
           {(user.role === 'manager' || user.role === 'staff') && (
             user.facility ? (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#3a3933]/80 border border-[#4b4940] text-[11px] text-amber-300">
-                <span>🏢</span>
                 <span className="truncate font-medium">{user.facility}</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/40 border border-amber-800/60 text-[11px] text-amber-400">
-                <span>⚠️ Chưa phân công cơ sở</span>
+                <span>Chưa phân công cơ sở</span>
               </div>
             )
           )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-2 overflow-y-auto" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
           {visibleNavItems.map((item, index) => {
             const groupText = getNavGroup(item.group)
             const prevGroupText = getNavGroup(visibleNavItems[index - 1]?.group)
@@ -473,7 +472,7 @@ export default function Layout({
         </nav>
 
         {/* User section */}
-        <div className="px-4 py-4 border-t border-[#44453f]">
+        <div className="shrink-0 px-4 py-4 border-t border-[#44453f]">
           <button
             type="button"
             onClick={() => { navigate('profile'); setSidebarOpen(false) }}
@@ -518,7 +517,7 @@ export default function Layout({
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Top bar */}
         <header className="bg-white border-b border-[#deddd2] h-16 flex items-center px-4 lg:px-7 gap-3 lg:gap-4 flex-shrink-0">
           <button
@@ -540,11 +539,11 @@ export default function Layout({
               {user.facility ? (
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>🏢 Cơ sở: <strong className="font-bold text-emerald-950">{user.facility}</strong></span>
+                  <span>Cơ sở: <strong className="font-bold text-emerald-950">{user.facility}</strong></span>
                 </div>
               ) : (
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                  <span>⚠️ Chưa phân công cơ sở</span>
+                  <span>Chưa phân công cơ sở</span>
                 </div>
               )}
             </div>
@@ -686,7 +685,7 @@ export default function Layout({
         </header>
 
         {/* Content */}
-        <main ref={contentScrollRef} data-layout-scroll-container className="min-w-0 flex-1 basis-0 overflow-x-hidden overflow-y-auto p-4 lg:p-7 fade-in">
+        <main ref={contentScrollRef} data-layout-scroll-container className="min-h-0 min-w-0 flex-1 basis-0 overflow-x-hidden overflow-y-auto overscroll-contain p-4 lg:p-7 fade-in">
           <div className="mx-auto min-w-0 w-full max-w-[1600px]">{children}</div>
 
         </main>

@@ -9,6 +9,7 @@ import { listAllCustomerRentals, type CustomerRental } from '../services/custome
 import { listManagerMaintenanceTasks, listStaffMaintenanceTasks, type MaintenanceTask } from '../services/maintenanceApi'
 import { getManagerReportSummary, type ManagerReportSummary } from '../services/managerReportingApi'
 import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
+import { isVietnameseMobilePhone, VIETNAMESE_PHONE_HINT } from '../domain/vietnamesePhone'
 import StaffMaintenanceOperationsPanel from './staff/StaffMaintenanceOperationsPanel'
 
 interface ProfileViewProps {
@@ -283,15 +284,6 @@ function profileTabFromLocation(): ProfileTab {
   return 'profile'
 }
 
-function cleanProfilePhone(value: string): string {
-  let phone = value.replace(/[\s().-]/g, '')
-  if (phone.startsWith('+84')) phone = `0${phone.slice(3)}`
-  if (phone.startsWith('84')) phone = `0${phone.slice(2)}`
-  return phone
-}
-
-const PROFILE_PHONE_PATTERN = /^(?:\+?[1-9]\d{7,14}|0\d{9,10})$/
-
 function validateProfileForm(fields: {
   name: string
   phone: string
@@ -302,14 +294,11 @@ function validateProfileForm(fields: {
   const name = fields.name.trim()
   const address = fields.permanentAddress.trim()
   const emergencyName = fields.emergencyContactName.trim()
-  const phone = cleanProfilePhone(fields.phone.trim())
-  const emergencyPhone = cleanProfilePhone(fields.emergencyContactPhone.trim())
-
   if (name.length < 2) return 'Họ và tên phải có ít nhất 2 ký tự.'
-  if (fields.phone.trim() && !PROFILE_PHONE_PATTERN.test(phone)) return 'Số điện thoại không đúng định dạng.'
+  if (fields.phone && !isVietnameseMobilePhone(fields.phone)) return VIETNAMESE_PHONE_HINT
   if (address && address.length < 5) return 'Địa chỉ thường trú phải có ít nhất 5 ký tự.'
   if (emergencyName && emergencyName.length < 2) return 'Tên người liên hệ khẩn cấp phải có ít nhất 2 ký tự.'
-  if (fields.emergencyContactPhone.trim() && !PROFILE_PHONE_PATTERN.test(emergencyPhone)) return 'SĐT liên hệ khẩn cấp không đúng định dạng.'
+  if (fields.emergencyContactPhone && !isVietnameseMobilePhone(fields.emergencyContactPhone)) return `SĐT liên hệ khẩn cấp: ${VIETNAMESE_PHONE_HINT}`
   if (emergencyName && !fields.emergencyContactPhone.trim()) return 'Vui lòng nhập SĐT cho người liên hệ khẩn cấp.'
   if (fields.emergencyContactPhone.trim() && !emergencyName) return 'Vui lòng nhập tên người liên hệ khẩn cấp.'
   return null
@@ -576,14 +565,12 @@ if (validationError) {
 
 setSavingProfile(true)
     try {
-      const normalizedPhone = cleanProfilePhone(phone.trim())
-      const normalizedEmergencyPhone = cleanProfilePhone(emergencyContactPhone.trim())
       const profile = {
         fullName: name.trim(),
-        phone: normalizedPhone,
+        phone,
         permanentAddress: permanentAddress.trim(),
         emergencyContactName: emergencyContactName.trim(),
-        emergencyContactPhone: normalizedEmergencyPhone,
+        emergencyContactPhone,
         avatarUrl,
       }
       if (isApiAuthenticated()) {
@@ -900,7 +887,7 @@ setSavingProfile(true)
     }
 
     if (user.role === 'customer') {
-      const visibleApiRentals = apiRentals.filter(rental => ['active', 'return_requested'].includes(rental.status))
+  const visibleApiRentals = apiRentals.filter(rental => ['setup', 'active', 'return_requested'].includes(rental.status))
       const visibleRentals = apiMode ? visibleApiRentals : activeRentals
       return (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -1220,7 +1207,7 @@ setSavingProfile(true)
                     label="Số điện thoại Việt Nam"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    placeholder="0901 234 567"
+                    placeholder="0901234567"
                     inputMode="tel"
                   />
 
@@ -1253,7 +1240,7 @@ setSavingProfile(true)
                         label="SĐT liên hệ khẩn cấp"
                         value={emergencyContactPhone}
                         onChange={e => setEmergencyContactPhone(e.target.value)}
-                        placeholder="0901 234 567"
+                        placeholder="0901234567"
                         inputMode="tel"
                       />
                       <p className="mt-1 text-[11px] text-stone-600">Nhập 10–11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
