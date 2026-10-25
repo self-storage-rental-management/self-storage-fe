@@ -48,7 +48,7 @@ import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
 const eventLabels: Record<string, string> = {
-  DEPOSIT: "Thanh toán cọc gia hạn",
+  DEPOSIT: "Thanh toán tiền thuê gia hạn trả trước",
   FULL_RENT_PAYMENT: "Thanh toán toàn kỳ bằng VNPay Sandbox",
   CASH: "Ghi nhận tiền thuê còn lại",
   INCIDENT: "Sự cố cơ sở",
@@ -56,9 +56,9 @@ const eventLabels: Record<string, string> = {
   STAFF_ASSIGNMENT: "Phân công nhân viên gia hạn",
   EXCEPTION: "Quyết định ngoại lệ",
   REFUND: "Quyết định hoàn tiền",
-  DEPOSIT_DISPOSITION: "Kết quả xử lý cọc",
-  DEPOSIT_REVIEW_REQUIRED: "Cọc gia hạn chờ đối soát trách nhiệm",
-  REFUND_EXECUTION: "Ghi nhận hoàn cọc",
+  DEPOSIT_DISPOSITION: "Kết quả xử lý tiền thuê trả trước",
+  DEPOSIT_REVIEW_REQUIRED: "Tiền thuê gia hạn trả trước chờ đối soát trách nhiệm",
+  REFUND_EXECUTION: "Ghi nhận hoàn tiền thuê trả trước",
   COMPLETION: "Hoàn tất ký gia hạn",
   ARRIVAL: "Khách đã đến",
   APPOINTMENT: "Lịch ký",
@@ -72,12 +72,12 @@ const statusLabels: Record<string, string> = {
   APPROVED_AWAITING_EXECUTION:
     "Đã duyệt, chờ hoàn tiền (chưa chuyển tiền)",
   REJECTED: "Từ chối",
-  FORFEITED: "Đã ghi nhận mất cọc gia hạn",
-  AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý cọc ngày quá hạn thứ 8",
-  AWAITING_FAULT_REVIEW: "Giữ cọc, chờ xác minh trách nhiệm",
-  FACILITY_FAULT: "Giữ cọc để xử lý sự cố từ cơ sở",
+  FORFEITED: "Đã ghi nhận mất tiền thuê gia hạn trả trước",
+  AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý tiền thuê trả trước ngày quá hạn thứ 8",
+  AWAITING_FAULT_REVIEW: "Giữ tiền thuê trả trước, chờ xác minh trách nhiệm",
+  FACILITY_FAULT: "Giữ tiền thuê trả trước để xử lý sự cố từ cơ sở",
   REVIEW_REQUIRED: "Chờ xác minh nguyên nhân",
-  REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc",
+  REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn tiền thuê trả trước",
   APPROVE_RESCHEDULE_BEFORE_CUTOFF:
     "Đề xuất đổi lịch trước mốc giới hạn, chờ khách hàng xác nhận",
   REQUEST_POST_CUTOFF_REVIEW: "Yêu cầu xem xét sau mốc giới hạn, không kéo dài hạn",
@@ -153,7 +153,7 @@ export function OperationEventCard({
       {e.kind === "FAULT_REVIEW" && typeof d.facilityFault === "boolean" && (
         <p>{d.facilityFault ? "Xác nhận lỗi từ cơ sở" : "Không xác nhận lỗi từ cơ sở"}</p>
       )}
-      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận hoàn cọc Sandbox theo chứng từ." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
+      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận hoàn tiền thuê trả trước Sandbox theo chứng từ." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
       <p className="break-all">
         Mã sự kiện: {e.id}
       </p>
@@ -252,7 +252,7 @@ export function OperationEventCard({
 export function RenewalOperationsSummary({ state: s, role, cashRecorded = false }: { state: RenewalOperationState; role?: RenewalOperationsRole; cashRecorded?: boolean }) {
   const { copy } = useManagerPresentation()
   const progressSteps = [
-    { label: "Thanh toán cọc", detail: "Khoản cọc gia hạn đã được ghi nhận", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
+    { label: "Thanh toán tiền thuê trả trước", detail: "Khoản tiền thuê gia hạn trả trước đã được ghi nhận", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
     { label: "Chọn lịch ký", detail: "Lịch hẹn đã được lưu", done: !!s.appointmentRef },
     { label: "Khách đến", detail: "Nhân viên đã ghi nhận khách tại cơ sở", done: !!s.arrivalRef },
     { label: "Thanh toán còn lại", detail: "Khoản tiền thuê còn lại đã được ghi nhận", done: cashRecorded || !!s.fullRentPaidAt || s.phase === "COMPLETED" },
@@ -346,7 +346,7 @@ function EventTimeline({
   const title = {
     payments: "Lịch sử thanh toán và biên lai",
     documents: "Chứng từ",
-    refunds: "Lịch sử xử lý cọc và hoàn tiền",
+    refunds: "Lịch sử xử lý tiền thuê trả trước và hoàn tiền",
     "facility-incidents": "Sự cố & xem xét ngoại lệ",
   }[category]
   const content = <div className="space-y-3">
@@ -482,7 +482,7 @@ export default function RenewalOperationsPanel({
               <h3 className="font-semibold">Lịch ký gia hạn</h3>
               <p>{read.data.appointmentRef
                 ? `Giờ hẹn đến ký: ${rentalDate(read.data.appointmentStart)}`
-                : "Chọn và lưu lịch ký trước khi thanh toán cọc."}</p>
+                : "Chọn và lưu lịch ký trước khi thanh toán tiền thuê trả trước."}</p>
             </section>
           ) : <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
           {role === "manager" && !selected && <RenewalCoordinationPanel
@@ -979,14 +979,14 @@ function OperationForm({
             {cash.data && (
               <div className="space-y-3">
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-                  <p className="text-sm font-medium text-amber-900">Số tiền cần thu</p>
+                  <p className="text-sm font-medium text-amber-900">Còn phải thanh toán</p>
                   <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 sm:text-3xl">{rentalMoney(cash.data.amount, cash.data.currency)}</p>
                   <dl className="mt-4 space-y-2 border-t border-amber-200/70 pt-3 text-sm">
                     {cash.data.remainingRentalAmount !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Tiền thuê còn lại</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</dd></div>}
                     {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
                   </dl>
                 </div>
-                <p className="text-xs text-stone-500">Bảng kê có hiệu lực đến {rentalDate(cash.data.expiresAt)}</p>
+                <p className="text-xs text-stone-500">Số tiền theo bảng kê đã trừ khoản thanh toán được xác nhận và phân bổ. Không trừ giảm giá hoặc tiền thuê trả trước lần nữa. Bảng kê có hiệu lực đến {rentalDate(cash.data.expiresAt)}</p>
                 <details className="rounded-lg border border-stone-200 px-3 py-2 text-xs text-stone-500">
                   <summary className="cursor-pointer font-medium text-stone-600">Thông tin đối soát</summary>
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2">

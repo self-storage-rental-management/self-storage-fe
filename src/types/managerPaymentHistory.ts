@@ -1,3 +1,4 @@
+import type { RenewalTransactionStatus } from './renewalStatus'
 export type ManagerPaymentHistoryStatus =
   | "PENDING"
   | "PROCESSING"
@@ -30,6 +31,8 @@ export interface ManagerPaymentHistoryItem {
   occurredAt: string
   renewalId?: string | null
   receiptFileId?: string | null
+  transactionStatus?: RenewalTransactionStatus | null
+  receiptAvailable?: boolean | null
 }
 
 export interface ManagerPaymentHistoryPage {
