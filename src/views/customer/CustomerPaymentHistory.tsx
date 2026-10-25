@@ -4,6 +4,9 @@ import { formatVndAmount as formatVnd } from "../../i18n/currency"
 import {
   loadCustomerPaymentHistory,
   paymentCategories,
+  isRenewalHistoryEntry,
+  customerHistoryStatusLabel,
+  canViewCustomerHistoryReceipt,
   type HistoryEntry,
 } from "../../services/customerPaymentHistory"
 import ReservationReceipt from "./ReservationReceipt"
@@ -38,7 +41,10 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
-  const [receipt, setReceipt] = useState<HistoryEntry | null>(null)
+  const [receiptId, setReceiptId] = useState<string | null>(null)
+  const [revision, setRevision] = useState(0)
+  const selectedReceipt = entries.find(entry => entry.id === receiptId)
+  const receipt = !loading && !error && selectedReceipt && canViewCustomerHistoryReceipt(selectedReceipt) ? selectedReceipt : null
   const [historyFilter, setHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const visibleEntries = entries.filter(entry => {
     const settlement = ['damage', 'refund', 'returnOffset'].includes(entry.category) || ['REFUND', 'DAMAGE_FEE'].includes(entry.reservationPayment?.purpose || '')
@@ -47,6 +53,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
   useEffect(() => {
     let disposed = false
     setLoading(true)
+    setEntries([])
     setError(null)
     setWarnings([])
     void loadCustomerPaymentHistory()
@@ -70,14 +77,15 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
     return () => {
       disposed = true
     }
+  }, [revision])
+  useEffect(() => {
+    const refresh = () => setRevision(value => value + 1)
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
   }, [])
-  const totalPaid = (records: HistoryEntry[]) => {
-    const paid = records.filter((entry) => entry.status === "PAID")
-    return paid.some((entry) => entry.amount === null)
-      ? null
-      : paid.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
-  }
+  const confirmedRenewals = entries.filter(entry => isRenewalHistoryEntry(entry) && canViewCustomerHistoryReceipt(entry))
   const statusLabel = (entry: HistoryEntry) => {
+    if (isRenewalHistoryEntry(entry)) return customerHistoryStatusLabel(entry)
     if (entry.reservationPayment && entry.category === "deposit") return paymentRecordLabel(entry.reservationPayment)
     if (entry.status === "SETTLED") return "Đã đối trừ"
     if (entry.status === "REFUNDED") return "Đã hoàn"
@@ -92,12 +100,13 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       />
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="p-4">
-          <p className="text-xs text-stone-500">Đã ghi nhận thanh toán</p>
-          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? "Chưa có" : historyAmount(totalPaid(entries))}</p>
+          <p className="text-xs text-stone-500">Giao dịch có biên lai</p>
+          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? "Chưa có" : entries.filter(canViewCustomerHistoryReceipt).length}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs text-stone-500">Thanh toán gia hạn</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "Chưa có" : historyAmount(totalPaid(entries.filter((entry) => entry.category === "renewal" || entry.category === "renewalSigning")))}</p>
+          <p className="text-xs text-stone-500">Giao dịch gia hạn đã đối soát</p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "Chưa có" : confirmedRenewals.length}</p>
+          <p className="mt-1 text-xs text-stone-500">Xác nhận từng khoản thu; tổng phải trả xem trong hồ sơ gia hạn.</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Số giao dịch</p>
@@ -127,6 +136,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         </p>
       ))}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc giao dịch">
+        <Button variant="outline" disabled={loading} onClick={() => setRevision(value => value + 1)}>Tải lại</Button>
         <Button variant={historyFilter === 'all' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('all')}>Tất cả</Button>
         <Button variant={historyFilter === 'payments' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('payments')}>Lịch sử thanh toán</Button>
         <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>
@@ -148,7 +158,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
             {visibleEntries.map((entry) => (
               <Tr key={entry.id}>
                 <Td>
-                  <ShortCode value={entry.reservationPayment?.transactionReference || entry.id} />
+                  <ShortCode value={entry.paymentReference || entry.reservationPayment?.transactionReference || entry.id} />
                   <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
                 </Td>
                 <Td>{entry.renewalId ? <>
@@ -158,13 +168,15 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                 </> : entry.reference.startsWith("RSV-") ? <span className="whitespace-nowrap font-semibold text-stone-900">{entry.reference}</span> : <span className="font-semibold text-stone-900">{entry.reference}</span>}</Td>
                 <Td>{paymentCategories[entry.category]}</Td>
                 <Td><span className="whitespace-nowrap text-xs text-stone-500">{entry.method || "Chưa có"}</span></Td>
-                <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b></Td>
+                <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b>
+                  {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && <p className="mt-1 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>}
+                </Td>
                 <Td>
                   <div className="space-y-2">
-                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (["PAID", "REFUNDED", "SETTLED"].includes(entry.status) ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + ((isRenewalHistoryEntry(entry) ? canViewCustomerHistoryReceipt(entry) : ["PAID", "REFUNDED", "SETTLED"].includes(entry.status)) ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED", "EXPIRED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
                   </div>
                 </Td>
-                <Td>{["PAID", "REFUNDED", "SETTLED"].includes(entry.status) && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</Td>
+                <Td>{!loading && !error && canViewCustomerHistoryReceipt(entry) && <Button variant="outline" size="sm" onClick={() => setReceiptId(entry.id)}>Xem biên lai</Button>}</Td>
               </Tr>
             ))}
             {!loading && !error && !visibleEntries.length && (
@@ -175,14 +187,14 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       </Card>
       <Modal
         open={Boolean(receipt)}
-        onClose={() => setReceipt(null)}
+        onClose={() => setReceiptId(null)}
         title="Chi tiết giao dịch"
         size={receipt?.returnSettlement ? 'lg' : 'md'}
         className={receipt?.returnSettlement ? 'flex min-h-0 flex-col !overflow-hidden' : undefined}
         contentClassName={receipt?.returnSettlement ? 'min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5' : undefined}
         customHeader={receipt?.returnSettlement ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 sm:px-5">
           <h2 id="modal-title" className="text-base font-semibold text-stone-900">Chi tiết giao dịch</h2>
-          <button type="button" aria-label="Đóng chi tiết giao dịch" onClick={() => setReceipt(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600">
+          <button type="button" aria-label="Đóng chi tiết giao dịch" onClick={() => setReceiptId(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600">
             <svg aria-hidden="true" className="show-icon h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
         </div> : undefined}

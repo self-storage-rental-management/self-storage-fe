@@ -207,6 +207,13 @@ describe("D1/D2 wire contracts", () => {
       pricingPackageCode: "P3",
     })
   })
+  it("requests a renewal quote with its date and no full-payment option", async () => {
+    const fetch = response({ data: quote })
+    await quoteRenewal("r1", "P3", "2026-11-01")
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      pricingPackageCode: "P3", startDate: "2026-11-01",
+    })
+  })
   it("does not accept the Booking quoteId shape", async () => {
     response({ data: { ...quote, id: undefined, quoteId: "q1" } })
     await expect(quoteRenewal("r1", "P3")).rejects.toMatchObject({

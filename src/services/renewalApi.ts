@@ -18,7 +18,7 @@ function validPeriodMetadata(t: AcceptedTerms): boolean {
     || new Date(t.rentalStartDate).toISOString().slice(0, 10) !== t.rentalStartDate) return false
   const rawEnd = Date.parse(t.oldEndDate), extension = Date.parse(t.extensionStartDate)
   return Date.parse(t.rentalStartDate) < extension
-    && extension - rawEnd === (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
+    && extension - rawEnd >= (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
 }
 function isAcceptedTerms(value: unknown): value is AcceptedTerms {
   if (!value || typeof value !== "object") return false
@@ -39,6 +39,13 @@ export function isRenewalRecord(value: unknown): boolean {
   const r = value as RenewalApiRecord | null
   return (
     !!r &&
+    (r.effectivePeriod == null || (
+      typeof r.effectivePeriod.finalized === 'boolean' && r.effectivePeriod.finalized === (r.status === 'completed') &&
+      [r.effectivePeriod.startDate, r.effectivePeriod.endExclusive, r.effectivePeriod.newEndDate].every(d =>
+        typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d) &&
+      r.effectivePeriod.startDate < r.effectivePeriod.endExclusive &&
+      Date.parse(r.effectivePeriod.endExclusive) - Date.parse(r.effectivePeriod.newEndDate) === 86400000
+    )) &&
     (r.statusSummary == null || isRenewalStatusSummary(r.statusSummary)) &&
     (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
     typeof r.id === "string" &&
@@ -93,7 +100,8 @@ export function isRenewalRecord(value: unknown): boolean {
     (r.acceptedTerms == null ||
       (isAcceptedTerms(r.acceptedTerms) && r.acceptedTerms.facilityId === r.facility.id &&
         r.acceptedTerms.storageUnitId === r.storageUnit.id &&
-        r.acceptedTerms.oldEndDate === r.oldEndDate && r.acceptedTerms.newEndDate === r.newEndDate &&
+        r.acceptedTerms.oldEndDate === r.oldEndDate &&
+        (r.effectivePeriod?.finalized ? r.effectivePeriod.newEndDate === r.newEndDate : r.acceptedTerms.newEndDate === r.newEndDate) &&
         r.acceptedTerms.totalAfterDiscount === r.amount && r.acceptedTerms.currency === r.currency))
   )
 }
@@ -144,13 +152,9 @@ export async function getRenewalOptions(rentalId: string) {
 export async function quoteRenewal(
   rentalId: string,
   pricingPackageCode: string,
-  fullPayment?: boolean,
   startDate?: string,
 ) {
   const body: Record<string, unknown> = { pricingPackageCode }
-  if (fullPayment !== undefined) {
-    body.fullPayment = fullPayment
-  }
   if (startDate) {
     body.startDate = startDate
   }
@@ -299,22 +303,3 @@ export async function getRenewalVnpayPayment(renewalId:string) {
     value=>isRenewalPaymentResponse(value,renewalId),
   )
 }
-
-export async function approveRenewalTicket(id: string) {
-  return readRentalEnvelope<RenewalApiRecord>(
-    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/approve`, { method: "POST" }),
-    record => isRenewalRecord(record),
-  )
-}
-
-export async function rejectRenewalTicket(id: string, reason?: string) {
-  return readRentalEnvelope<RenewalApiRecord>(
-    await apiRequest(`/api/staff/renewals/${encodeURIComponent(id)}/reject`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
-    }),
-    record => isRenewalRecord(record),
-  )
-}
-

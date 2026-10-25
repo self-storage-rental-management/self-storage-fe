@@ -36,8 +36,6 @@ export default function CustomerRenewalRequestModal({
     getRenewalOptions(rentalId),
   )
   const [code, setCode] = useState("")
-  const [fullPayment, setFullPayment] = useState(true)
-  const [startDate, setStartDate] = useState("")
   const note = ""
   const [quote, setQuote] = useState<RenewalApiQuote>()
   const [quoteError, setQuoteError] = useState<unknown>()
@@ -57,7 +55,7 @@ export default function CustomerRenewalRequestModal({
     setQuoteError(undefined)
     setConfirmed(false)
     setQuoteBusy(true)
-    void quoteRenewal(rentalId, code, fullPayment, startDate || undefined)
+    void quoteRenewal(rentalId, code)
       .then((nextQuote) => {
         if (current) {
           setQuote(nextQuote)
@@ -73,7 +71,7 @@ export default function CustomerRenewalRequestModal({
     return () => {
       current = false
     }
-  }, [code, rentalId, fullPayment, startDate])
+  }, [code, rentalId])
   const locked = command.busy || command.uncertain || quoteBusy
   return (
     <Modal
@@ -125,18 +123,12 @@ export default function CustomerRenewalRequestModal({
               <input
                 type="date"
                 className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-                value={startDate || quote?.extensionStartDate || ""}
-                disabled={locked}
-                onChange={(e) => {
-                  setStartDate(e.target.value)
-                  setQuote(undefined)
-                  setConfirmed(false)
-                }}
+                value={quote?.extensionStartDate || ""}
+                readOnly
+                aria-describedby="renewal-start-policy"
               />
-              <span className="mt-1 block text-[11px] text-stone-500">
-                {startDate
-                  ? `Bắt đầu từ ${rentalDate(startDate)}.`
-                  : "Mặc định nối tiếp sau ngày kết thúc hiện tại."}
+              <span id="renewal-start-policy" className="mt-1 block text-[11px] text-stone-500">
+                Ngày do hệ thống xác định. Chưa quá hạn: nối tiếp kỳ cũ. Đã quá hạn: bắt đầu từ ngày hoàn tất ký; ngày trong báo giá là dự kiến. Không cộng ngày setup.
               </span>
             </label>
           </div>
@@ -146,66 +138,10 @@ export default function CustomerRenewalRequestModal({
         )}
 
         {options.data && options.data.length > 0 && (
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-stone-900">Hình thức thanh toán tiền thuê</label>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <label
-                className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition ${
-                  fullPayment
-                    ? "border-amber-600 bg-amber-50/60 ring-1 ring-amber-600"
-                    : "border-stone-200 bg-white hover:bg-stone-50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="renewalPaymentOption"
-                  className="mt-0.5 h-4 w-4 accent-amber-600"
-                  checked={fullPayment}
-                  disabled={locked}
-                  onChange={() => {
-                    setFullPayment(true)
-                    setQuote(undefined)
-                    setConfirmed(false)
-                  }}
-                />
-                <div>
-                  <p className="font-bold text-stone-900">Thanh toán 100% (Một lần)</p>
-                  <p className="mt-0.5 leading-snug text-stone-600">
-                    Thanh toán toàn bộ kỳ thuê qua VNPay, hợp đồng tự động gia hạn thành công ngay.
-                  </p>
-                </div>
-              </label>
-
-              <label
-                className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition ${
-                  !fullPayment
-                    ? "border-amber-600 bg-amber-50/60 ring-1 ring-amber-600"
-                    : "border-stone-200 bg-white hover:bg-stone-50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="renewalPaymentOption"
-                  className="mt-0.5 h-4 w-4 accent-amber-600"
-                  checked={!fullPayment}
-                  disabled={locked}
-                  onChange={() => {
-                    setFullPayment(false)
-                    setQuote(undefined)
-                    setConfirmed(false)
-                  }}
-                />
-                <div>
-                  <p className="font-bold text-stone-900">Chia 2 đợt thanh toán</p>
-                  <p className="mt-0.5 leading-snug text-stone-600">
-                    Trả trước 20% để giữ chỗ kỳ mới, 80% còn lại thanh toán khi ký phụ lục.
-                  </p>
-                </div>
-              </label>
-            </div>
-          </div>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            Trả trước 20% tiền thuê gia hạn qua VNPay. Phần tiền thuê còn lại và phí phát sinh hợp lệ, nếu có, thanh toán khi ký gia hạn.
+          </p>
         )}
-
         {quoteBusy ? <p role="status">Đang lấy báo giá…</p> : null}
         {quoteError ? <p role="alert">{rentalError(quoteError)}</p> : null}
         {quote && (
