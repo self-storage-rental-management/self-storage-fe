@@ -1,4 +1,5 @@
 import { apiRequest } from "./apiClient"
+import { isRenewalStatusSummary, isRenewalTransactionStatus } from '../types/renewalStatus'
 import { readRentalEnvelope, readRentalPage, rentalQuery } from "./rentalApi"
 import type { RentalApiRole } from "../types/rentalApi"
 import type {
@@ -38,6 +39,7 @@ export function isRenewalRecord(value: unknown): boolean {
   const r = value as RenewalApiRecord | null
   return (
     !!r &&
+    (r.statusSummary == null || isRenewalStatusSummary(r.statusSummary)) &&
     (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
     typeof r.id === "string" &&
     typeof r.rentalId === "string" &&
@@ -249,6 +251,8 @@ function isRenewalPaymentResponse(value: unknown,renewalId: string): value is Re
     &&(result.acceptedRevisionId===null||typeof result.acceptedRevisionId==="string")
     &&typeof result.transactionReference==="string"&&Number.isFinite(result.amount)&&result.amount>0
     &&result.currency==="VND"
+    &&(result.transactionStatus===undefined||isRenewalTransactionStatus(result.transactionStatus))
+    &&(result.receiptAvailable===undefined||typeof result.receiptAvailable==='boolean')
     &&["PENDING","PROCESSING","PAID","NOT_RECEIVED","FAILED","CANCELLED"].includes(result.paymentStatus)
     &&(result.paymentDeadline===null||Number.isFinite(Date.parse(result.paymentDeadline)))
     &&(result.paidAt===null||Number.isFinite(Date.parse(result.paidAt)))
