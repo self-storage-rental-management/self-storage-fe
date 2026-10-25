@@ -1,3 +1,4 @@
+import { LEGACY_RENEWAL_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
 import { useEffect, useRef, useState } from "react"
 
 import Layout, {
@@ -56,7 +57,6 @@ import StaffReservationReviews from './StaffReservationReviews'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
-import { approveRenewalTicket, rejectRenewalTicket } from '../../services/renewalApi'
 
 import type { User } from "../../types"
 
@@ -851,13 +851,7 @@ export default function StaffApp({
       permission: "returns:read",
     },
 
-    {
-      id: "renewal-signing",
-      label: "Gia hạn hợp đồng",
-      icon: Icon.policy,
-      group: "Vận hành",
-      permission: "renewals:operate",
-    },
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
 
     {
       id: "support",
@@ -1016,17 +1010,11 @@ export default function StaffApp({
   const [selectedRenewal, setSelectedRenewal] =
     useState<typeof hub.renewals[number] | null>(null)
 
-  const [renewalContractFile, setRenewalContractFile] = useState("")
 
-  const [renewalContractFileName, setRenewalContractFileName] = useState("")
 
-  const [renewalContractNumber, setRenewalContractNumber] = useState("")
 
-  const [renewalPaymentReference, setRenewalPaymentReference] = useState("")
 
-  const [renewalIdentityVerified, setRenewalIdentityVerified] = useState(false)
 
-  const [renewalTermsVerified, setRenewalTermsVerified] = useState(false)
 
   const [pendingCheckinCompletionId, setPendingCheckinCompletionId] =
     useState<string | null>(null)
@@ -1702,16 +1690,6 @@ export default function StaffApp({
     )
   })
 
-  const pendingRenewals = hub.renewals.filter(
-    (renewal) =>
-      renewal.status === "pending" &&
-      isFacilityVisible(
-        user,
-        renewal.facilityId,
-        hub.rentals.find((rental) => rental.id === renewal.rentalId)?.facilityName,
-      ),
-  )
-
   const scheduledRenewals = hub.renewals.filter(
     (renewal) =>
       renewal.status === "appointment_scheduled" &&
@@ -2281,138 +2259,44 @@ export default function StaffApp({
       roleColor="bg-green-100 text-green-700"
     >
       {page === "renewal-signing" && isApiAuthenticated() && <StaffRenewalOperationsApiPanel key={user.id} />}
-      {page === "renewal-signing" && (
-        <div className="fade-in mt-4 space-y-6">
-          {/* 1. YÊU CẦU GIA HẠN CHỜ DUYỆT */}
-          <div className="space-y-3">
-            <SectionHeader
-              title={`Yêu cầu gia hạn chờ duyệt (${pendingRenewals.length})`}
-              subtitle="Khách hàng đã tạo đơn xin gia hạn; nhân viên kiểm tra và duyệt để hoàn tất gia hạn hợp đồng cho khách."
-            />
-            {pendingRenewals.length > 0 ? (
-              <div className="grid gap-3">
-                {pendingRenewals.map((renewal) => {
-                  const rental = hub.rentals.find((r) => r.id === renewal.rentalId)
-                  return (
-                    <Card key={renewal.id} className="p-5 border-amber-200 bg-amber-50/20">
-                      <div className="flex flex-wrap items-center justify-between gap-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 text-base">
-                              {renewal.unitId} · {renewal.customerName}
-                            </span>
-                            <Badge variant="warning">Chờ nhân viên duyệt</Badge>
-                          </div>
-                          <p className="text-xs text-slate-600">
-                            Kỳ hạn hiện tại hết hạn: <b>{renewal.oldEndDate}</b> → Đề xuất gia hạn đến: <b className="text-emerald-700">{renewal.newEndDate}</b> ({renewal.renewalMonths} tháng)
-                          </p>
-                          <p className="text-xs text-slate-600">
-                            Đơn giá: {formatMoney(renewal.originalMonthlyRate || rental?.monthlyRate || 0)}/tháng · Tổng tiền: <b className="text-slate-900">{formatMoney(renewal.totalAmount || renewal.renewalFee)}</b>
-                            {renewal.discountAmount ? ` (Ưu đãi giảm: ${formatMoney(renewal.discountAmount)})` : ""}
-                          </p>
-                          <p className="text-[11px] text-slate-400">
-                            Mã yêu cầu: <span className="font-mono">{renewal.id}</span> · Gửi lúc: {formatDate(renewal.requestedAt)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                            onClick={async () => {
-                              try {
-                                if (isApiAuthenticated()) {
-                                  try { await approveRenewalTicket(renewal.id) } catch {}
-                                }
-                                hub.approveRenewal(renewal.id, user)
-                                showToast(`Đã duyệt gia hạn thành công cho hồ sơ ${renewal.id}! Hợp đồng thuê đã được tự động kéo dài đến ${renewal.newEndDate}.`)
-                              } catch (err: any) {
-                                showToast(err?.message || "Có lỗi khi duyệt gia hạn.")
-                              }
-                            }}
-                          >
-                            ✓ Duyệt gia hạn
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-red-300 text-red-700 hover:bg-red-50"
-                            onClick={async () => {
-                              const reason = prompt("Nhập lý do từ chối yêu cầu gia hạn:", "Cơ sở có kế hoạch bảo trì kho hoặc lịch không khả dụng.")
-                              if (reason && reason.trim()) {
-                                try {
-                                  if (isApiAuthenticated()) {
-                                    try { await rejectRenewalTicket(renewal.id, reason.trim()) } catch {}
-                                  }
-                                  hub.rejectRenewal(renewal.id, user, reason.trim())
-                                  showToast(`Đã từ chối yêu cầu gia hạn ${renewal.id}.`)
-                                } catch (err: any) {
-                                  showToast(err?.message || "Có lỗi khi từ chối gia hạn.")
-                                }
-                              }
-                            }}
-                          >
-                            ✕ Từ chối
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  )
-                })}
+      {page === "renewal-signing" && !isApiAuthenticated() && scheduledRenewals.length > 0 && (
+        <div className="fade-in mt-8 space-y-3">
+          <SectionHeader
+            title="Lịch ký phụ lục gia hạn"
+            subtitle="Thu phần tiền còn lại, tải phụ lục đã ký và kích hoạt thời hạn mới"
+          />
+          {renewalsPagination.items.map((renewal) => (
+            <Card key={renewal.id} className="p-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {renewal.unitId} · {renewal.customerName}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Hẹn {formatDate(renewal.appointmentDate)} lúc{" "}
+                    {formatTime(renewal.appointmentTime)} · Gia hạn đến{" "}
+                    {formatDate(renewal.newEndDate)}
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-amber-800">
+                    Phần còn lại đã lưu: {legacyRenewalMoney(renewal.remainingAmount)}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSelectedRenewal(renewal)
+                  }}
+                >
+                  Xem hồ sơ cũ
+                </Button>
               </div>
-            ) : (
-              <Card className="p-6 text-center text-sm text-stone-500 bg-white">
-                Hiện không có yêu cầu gia hạn nào đang chờ duyệt.
-              </Card>
-            )}
-          </div>
-
-          {/* 2. LỊCH KÝ PHỤ LỤC GIA HẠN */}
-          {!isApiAuthenticated() && scheduledRenewals.length > 0 && (
-            <div className="space-y-3 pt-4 border-t border-stone-200">
-              <SectionHeader
-                title={`Lịch ký phụ lục gia hạn (${scheduledRenewals.length})`}
-                subtitle="Thu phần tiền còn lại, tải phụ lục đã ký và kích hoạt thời hạn mới"
-              />
-              {renewalsPagination.items.map((renewal) => (
-                <Card key={renewal.id} className="p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {renewal.unitId} · {renewal.customerName}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Hẹn {formatDate(renewal.appointmentDate)} lúc{" "}
-                        {formatTime(renewal.appointmentTime)} · Gia hạn đến{" "}
-                        {formatDate(renewal.newEndDate)}
-                      </p>
-                      <p className="mt-1 text-xs font-medium text-amber-800">
-                        Còn thu tại cơ sở: {formatMoney(renewal.remainingAmount ?? 0)}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setSelectedRenewal(renewal)
-                        setRenewalContractFile("")
-                        setRenewalContractFileName("")
-                        setRenewalContractNumber(`PL-${renewal.id}`)
-                        setRenewalPaymentReference("")
-                        setRenewalIdentityVerified(false)
-                        setRenewalTermsVerified(false)
-                      }}
-                    >
-                      Hoàn tất gia hạn
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-              <StaffPagination
-                {...renewalsPagination}
-                total={scheduledRenewals.length}
-                onPageChange={setRenewalsPage}
-              />
-            </div>
-          )}
+            </Card>
+          ))}
+          <StaffPagination
+            {...renewalsPagination}
+            total={scheduledRenewals.length}
+            onPageChange={setRenewalsPage}
+          />
         </div>
       )}
       {page === "dashboard" && (
@@ -2827,7 +2711,7 @@ export default function StaffApp({
                         }`}
                       >
                         {r.status === "REVIEW_REQUIRED"
-                          ? "Hạn duyệt hàng hóa trong 6 giờ"
+                          ? "Hạn duyệt hàng hóa trong 12 giờ"
                           : "Hạn cuối"}
                         :{" "}
                         {r.status === "REVIEW_REQUIRED"
@@ -3387,7 +3271,7 @@ export default function StaffApp({
                 <span>
                   <b>
                     {selectedReservation.status === "REVIEW_REQUIRED"
-                      ? "Hạn duyệt 6 giờ"
+                      ? "Hạn duyệt 12 giờ"
                       : "Hạn cuối"}
                     :
                   </b>{" "}
@@ -3405,7 +3289,7 @@ export default function StaffApp({
             {selectedReservation.status === "REVIEW_REQUIRED" && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
                 <p className="font-semibold">
-                  {"Hồ sơ hàng hóa “Khác” cần nhân viên xác nhận trong 6 giờ"}
+                  {"Hồ sơ hàng hóa “Khác” cần nhân viên xác nhận trong 12 giờ"}
                 </p>
                 <p className="mt-1">
                   {
@@ -4588,110 +4472,16 @@ export default function StaffApp({
           </div>
         )}
       </Modal>
-      <Modal
-        closeLabel="Đóng hộp thoại"
-        open={Boolean(selectedRenewal) && !isApiAuthenticated()}
-        onClose={() => setSelectedRenewal(null)}
-        title="Hoàn tất gia hạn tại cơ sở"
-      >
-        {selectedRenewal && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-              <b>{selectedRenewal.unitId}</b> · {selectedRenewal.customerName}
-              <br />
-              Thời hạn mới: {selectedRenewal.newEndDate}
-            </div>
-            <Input
-              label="Số phụ lục / hợp đồng gia hạn"
-              value={renewalContractNumber}
-              onChange={(event) => setRenewalContractNumber(event.target.value)}
-            />
-            <Input
-              label="Mã phiếu thu phần còn lại"
-              value={renewalPaymentReference}
-              onChange={(event) =>
-                setRenewalPaymentReference(event.target.value)
-              }
-            />
-            <StaffFileUpload
-              key={selectedRenewal.id}
-              label="Bản chụp phụ lục đã ký"
-              value={renewalContractFile}
-              onChange={setRenewalContractFile}
-              onNameChange={setRenewalContractFileName}
-            />
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={renewalIdentityVerified}
-                onChange={(event) =>
-                  setRenewalIdentityVerified(event.target.checked)
-                }
-              />
-              Đã đối chiếu giấy tờ khách hàng
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={renewalTermsVerified}
-                onChange={(event) =>
-                  setRenewalTermsVerified(event.target.checked)
-                }
-              />
-              Đã đối chiếu gian kho và điều khoản gia hạn
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setSelectedRenewal(null)}
-              >
-                Hủy
-              </Button>
-              <Button
-                disabled={
-                  !renewalContractFile ||
-                  !renewalContractNumber.trim() ||
-                  !renewalPaymentReference.trim() ||
-                  !renewalIdentityVerified ||
-                  !renewalTermsVerified
-                }
-                onClick={() => {
-                  try {
-                    hub.completeRenewalAtFacility({
-                      renewalId: selectedRenewal.id,
-
-                      staffUser: user,
-
-                      transactionReference: renewalPaymentReference.trim(),
-
-                      identityVerified: renewalIdentityVerified,
-
-                      unitAndTermsVerified: renewalTermsVerified,
-
-                      contractNumber: renewalContractNumber.trim(),
-
-                      signedAt: new Date().toISOString(),
-
-                      scannedFileUrl: renewalContractFile,
-
-                      scannedFileName: renewalContractFileName,
-                    })
-
-                    setSelectedRenewal(null)
-
-                    showToast(
-                      "Đã hoàn tất gia hạn. Khách hàng đã nhận thời hạn hợp đồng và biên nhận mới.",
-                    )
-                  } catch (error) {
-                    showToast(staffErrorMessage(error, "Không thể hoàn tất gia hạn."))
-                  }
-                }}
-              >
-                Xác nhận hoàn tất
-              </Button>
-            </div>
-          </div>
-        )}
+      <Modal closeLabel="Đóng hộp thoại" open={Boolean(selectedRenewal) && !isApiAuthenticated()} onClose={() => setSelectedRenewal(null)} title="Hồ sơ gia hạn cũ">
+        <div className="space-y-4">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_NOTICE}</p>
+          {selectedRenewal && <dl className="space-y-2 text-sm">
+            <div><dt>Hồ sơ</dt><dd>{selectedRenewal.unitId} · {selectedRenewal.customerName}</dd></div>
+            <div><dt>Phần còn lại đã lưu</dt><dd>{legacyRenewalMoney(selectedRenewal.remainingAmount)}</dd></div>
+            <div><dt>Phí quá hạn đã lưu</dt><dd>{legacyRenewalMoney(selectedRenewal.lateFeeAmount)}</dd></div>
+          </dl>}
+          <div className="flex justify-end"><Button variant="outline" onClick={() => setSelectedRenewal(null)}>Đóng</Button></div>
+        </div>
       </Modal>
       <Modal
         closeLabel="Đóng hộp thoại"

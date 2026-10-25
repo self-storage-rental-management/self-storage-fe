@@ -5,7 +5,7 @@ import { Icon } from '../../components/Layout'
 import { formatVnd } from '../../i18n/currency'
 import type { User } from '../../types'
 import type { RenewalRecord, RentalRecord, StorageReservation, StorageUnit, UnitType } from '../../types/storageHub'
-import { isManagerFacilityVisible, isManagerRentalOverdue, rentalAmountDue, unitHasAllocationConflict } from '../../domain/managerRules'
+import { isManagerFacilityVisible, isManagerRentalOverdue, unitHasAllocationConflict } from '../../domain/managerRules'
 import { managerStatusLabel, managerUnitTypeLabel } from './managerI18n'
 import ManagerActionNotice from './ManagerActionNotice'
 import ManagerPagination from './ManagerPagination'
@@ -222,9 +222,6 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
         const unitType = unitTypeFor(selectedRental)
         const referenceRate = normalizeManagerMoney(unitType?.monthlyPrice ?? physicalUnit?.price)
         const rateDiffersFromReference = appliedRate !== undefined && referenceRate !== undefined && Math.abs(appliedRate - referenceRate) > 0.01
-        const overdueAmount = billing.key === 'overdue' && appliedRate !== undefined
-          ? rentalAmountDue({ ...selectedRental, monthlyRate: appliedRate })
-          : undefined
         const hasActiveCredential = selectedRental.accessCredentials?.some(item => item.status === 'ACTIVE')
         const accessStatus = selectedRental.overlocked
           ? 'Đã khóa'
@@ -274,7 +271,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
                 <p><span className="text-stone-400">Giá áp dụng</span><br /><b>{formatKnownMoney(appliedRate)}{appliedRate !== undefined && '/tháng'}</b></p>
                 <p><span className="text-stone-400">Tiền cọc đảm bảo kho đã ghi nhận</span><br /><b>{formatKnownMoney(deposit)}</b></p>
                 <p><span className="text-stone-400">Kỳ hiện tại</span><br /><Badge variant={billing.variant}>{billing.label}</Badge></p>
-                {overdueAmount !== undefined && <p><span className="text-stone-400">Khoản đang quá hạn</span><br /><b className="text-red-700">{formatKnownMoney(overdueAmount)}</b></p>}
+                {billing.key === 'overdue' && <p><span className="text-stone-400">Khoản đang quá hạn</span><br /><b className="text-red-700">Đăng nhập để xem công nợ đã đối soát</b></p>}
               </div>
               {rateDiffersFromReference && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Giá tham chiếu hiện tại của loại gian là {formatKnownMoney(referenceRate)}/tháng, hồ sơ đang hiển thị giá áp dụng đã được ghi nhận tại thời điểm thuê.</p>}
             </section>

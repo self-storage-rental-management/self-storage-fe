@@ -3,6 +3,7 @@ import type { RenewalStatusSummary, RenewalTransactionStatus } from './renewalSt
 export type RenewalApiStatus = "pending" | "accepted" | "deposit_paid" | "full_rent_paid" | "approved" | "appointment_scheduled" | "payment_processing" | "payment_failed" | "payment_expired" | "rejected" | "cancelled" | "completed"
 export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {
+  effectivePeriod?: { startDate: string; endExclusive: string; newEndDate: string; finalized: boolean } | null
   statusSummary?: RenewalStatusSummary | null
   displayCode?: string | null
   id: string

@@ -40,6 +40,9 @@ export default function RenewalDetail({
   const { manager, copy, explain } = useManagerPresentation()
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
+  const extensionStartDate = r.effectivePeriod?.startDate ?? terms?.extensionStartDate
+  const extensionEndDate = r.effectivePeriod?.newEndDate ?? r.newEndDate
+  const extensionPeriodLabel = r.effectivePeriod?.finalized ? 'Kỳ gia hạn có hiệu lực' : 'Kỳ gia hạn dự kiến'
   const isSplit = !!terms && terms.remainingRentalAmount > 0
   const hasDeposit = !!terms && terms.renewalDepositAmount > 0
   const isManager = role === "manager"
@@ -128,7 +131,7 @@ export default function RenewalDetail({
         {renewalTerminalMessage && <p role="status" className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800">{renewalTerminalMessage}</p>}
       </section>
       <dl className="rounded-lg border border-stone-200 p-3 text-sm">
-        <div><dt className="text-xs text-stone-500">Kỳ gia hạn</dt><dd className="font-semibold">{rentalDate(r.oldEndDate)} → {rentalDate(r.newEndDate)}</dd></div>
+        <div><dt className="text-xs text-stone-500">{extensionPeriodLabel}</dt><dd className="font-semibold">{rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</dd></div>
       </dl>
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền thuê trả trước đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
@@ -160,7 +163,8 @@ export default function RenewalDetail({
           <summary className="cursor-pointer font-semibold">Điều khoản</summary>
           <div className="mt-3 space-y-2">
             <p className="text-sm text-stone-600">Gói gia hạn: {terms.rentalMonths} tháng</p>
-            <p className="text-sm text-stone-600">Kỳ gia hạn: {rentalDate(terms.extensionStartDate)} → {rentalDate(terms.newEndDate)}</p>
+            <p className="text-sm text-stone-600">{extensionPeriodLabel}: {rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</p>
+            <p className="text-sm text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký, phí quá hạn tính riêng cho các ngày trước đó. Không cộng ngày setup.</p>
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
               <div><dt className="text-stone-500">Đơn giá/tháng</dt><dd className="font-medium">{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
               <div><dt className="text-stone-500">Tổng trước giảm</dt><dd className="font-medium">{rentalMoney(terms.subtotal, terms.currency)}</dd></div>
@@ -194,7 +198,7 @@ export default function RenewalDetail({
         <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-1">
           <h4 className="font-bold text-blue-900 text-sm">Thanh toán gia hạn trực tuyến</h4>
           <p className="text-xs text-blue-800 leading-relaxed">
-            Quý khách chỉ cần bấm <b>{isSplit ? "Thanh toán đợt 1 qua VNPay" : "Thanh toán gia hạn qua VNPay"}</b> bên dưới. Hợp đồng sẽ tự động được gia hạn đến ngày <b>{rentalDate(r.newEndDate)}</b> ngay sau khi giao dịch thành công.
+            Quý khách bấm <b>{isSplit ? "Thanh toán đợt 1 qua VNPay" : "Thanh toán gia hạn qua VNPay"}</b> bên dưới. Sau khi thanh toán được xác minh, vui lòng hoàn tất đối chiếu và ký tại cơ sở. Kỳ gia hạn có hiệu lực được xác nhận khi hoàn tất ký.
           </p>
         </div>
       )}
