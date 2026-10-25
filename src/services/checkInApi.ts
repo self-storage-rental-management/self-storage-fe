@@ -1,7 +1,7 @@
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
 
-export type CheckInStatus = 'scheduled' | 'completed' | 'rejected' | 'no_show' | 'cancelled' | null
-export type CheckInListStatus = 'UNSCHEDULED' | 'scheduled' | 'completed' | 'no_show'
+export type CheckInStatus = 'scheduled' | 'identity_verified' | 'contract_signed' | 'payment_collected' | 'setup_in_progress' | 'setup_completed' | 'completed' | 'rejected' | 'no_show' | 'cancelled' | null
+export type CheckInListStatus = 'UNSCHEDULED' | Exclude<CheckInStatus, null | 'rejected' | 'cancelled'>
 export type CheckInReservationStatus = 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED' | 'REJECTED'
 
 export interface CheckInChecklist {
@@ -44,6 +44,21 @@ export interface CheckInCase {
   scheduledAt: string | null
   appointmentAt: string | null
   checkedInAt: string | null
+  identityVerifiedAt: string | null
+  verifiedIdentityDocument: string | null
+  identityVerificationNote: string | null
+  contractSignedAt: string | null
+  contractEvidenceReference: string | null
+  paymentCollectedAt: string | null
+  setupStartedAt: string | null
+  setupDueAt: string | null
+  freeSetupDays: number
+  paidRentalStartsOn: string | null
+  setupCompletedAt: string | null
+  inventoryVerifiedAt: string | null
+  inventoryDueAt: string | null
+  inventoryPending: boolean
+  lockReference: string | null
   readinessNote: string | null
   rejectionReason: string | null
   rejectionDisposition: 'AVAILABLE' | 'MAINTENANCE' | null
@@ -210,6 +225,47 @@ export async function completeCheckIn(checkInId: string, request: CompleteCheckI
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/complete`,
     { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function verifyCheckInIdentity(checkInId: string, request: {
+  identityDocumentNumber: string
+  note?: string
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-verification`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function signCheckInContract(checkInId: string, contractEvidenceFileId: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/contract-signing`,
+    { method: 'POST', body: JSON.stringify({ contractEvidenceFileId }) },
+  ))
+}
+
+export async function confirmCheckInPayment(checkInId: string, note?: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/payment-confirmation`,
+    { method: 'POST', body: JSON.stringify({ note }) },
+  ))
+}
+
+export async function startCheckInSetup(checkInId: string, request: {
+  lockReference: string
+  note?: string
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/start`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function completeCheckInSetup(checkInId: string, note?: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/complete`,
+    { method: 'POST', body: JSON.stringify({ note }) },
   ))
 }
 

@@ -1,6 +1,6 @@
 import { apiRequest } from './apiClient'
 
-export type CustomerRentalStatus = 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
+export type CustomerRentalStatus = 'setup' | 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
 
 export interface CustomerRental {
   id: string
