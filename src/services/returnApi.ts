@@ -3,7 +3,7 @@ import { getAuthenticatedActor } from './authApi'
 import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
 
-export type ReturnRole = 'customer' | 'staff' | 'manager'
+export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
 export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
 export interface OverdueSettlement {
   accruedAmount: number | null
@@ -57,22 +57,35 @@ export function isApiReturn(v: unknown): v is ApiReturn {
         v.sourceType === 'RECOVERY' && isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) &&
         (v.recoveryTaskStatus === 'CLOSED' ? v.status === 'completed' && typeof v.recoveryCompletedAt === 'string' && Number.isFinite(Date.parse(v.recoveryCompletedAt)) : v.recoveryCompletedAt === null))
 }
-function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string) {
-  if (a.roles.includes('BUSINESS') || a.roles.includes('ADMIN')) return true
-  return !!a.facilityScopes[facilityId]
+type ReturnScope = 'READ' | 'OPERATE' | 'MANAGE'
+const scopeRank: Record<ReturnScope, number> = { READ: 1, OPERATE: 2, MANAGE: 3 }
+function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string, required: ReturnScope = 'READ') {
+  if (a.roles.includes('ADMIN')) return true
+  const actual = a.facilityScopes[facilityId]
+  return !!actual && scopeRank[actual] >= scopeRank[required]
 }
 function actor(role: ReturnRole, write = false) {
   const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.some(r => r === role.toUpperCase() || ((role === 'manager' || role === 'staff') && (r === 'BUSINESS' || r === 'ADMIN'))))
+  const roleAllowed = role === 'manager'
+    ? a?.roles.some(r => r === 'MANAGER' || r === 'ADMIN')
+    : role === 'business'
+      ? a?.roles.some(r => r === 'BUSINESS' || r === 'ADMIN')
+    : role === 'staff'
+      ? a?.roles.some(r => r === 'STAFF' || r === 'ADMIN')
+      : a?.roles.includes('CUSTOMER')
+  if (!a || a.status !== 'ACTIVE' || !roleAllowed)
     throw new ApiClientError('Bạn không có quyền truy cập hồ sơ trả kho.', { status: 403 })
-  if (role !== 'customer' && !a.permissions.includes(write ? role === 'manager' ? 'rentals:update' : 'returns:process' : 'returns:read'))
+  const permission = write
+    ? role === 'manager' ? 'rentals:update' : role === 'staff' ? 'returns:process' : 'refunds:execute'
+    : 'returns:read'
+  if (role !== 'customer' && !a.permissions.includes(permission))
     throw new ApiClientError('Bạn chưa có quyền xử lý hồ sơ trả kho.', { status: 403 })
   return a
 }
-function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string) {
+function bound(value: unknown, role: ReturnRole, id?: string, rentalId?: string, requiredScope: ReturnScope = 'READ') {
   const a = actor(role)
   return readRentalEnvelope<ApiReturn>(value, v => isApiReturn(v) && (!id || v.id === id) && (!rentalId || v.rentalId === rentalId) &&
-    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || facilityAllowed(a, v.facilityId)))
+    (role !== 'customer' || v.customerId === a.id) && (role === 'customer' || facilityAllowed(a, v.facilityId, requiredScope)))
 }
 export async function listReturns(role: ReturnRole, page = 0, pageSize = 20) {
   const a = actor(role)
@@ -119,14 +132,24 @@ export function inspectReturn(id: string, body: InspectionInput) {
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, 'inspection', body)
 }
-export function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
+export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
+  const a = getAuthenticatedActor()
+  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'STAFF' || role === 'BUSINESS' || role === 'ADMIN') || !a.permissions.includes('refunds:execute')) {
+    throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
+  }
   if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
     throw new Error('Mã giao dịch hoàn cọc không được vượt quá 120 ký tự.')
   }
   if (body.notes !== undefined && body.notes.length > 1000) {
     throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
   }
-  return mutate('staff', id, 'complete-refund', body)
+  if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const resultRole: ReturnRole = a.roles.includes('BUSINESS') ? 'business' : a.roles.includes('STAFF') ? 'staff' : 'manager'
+  const endpointRole = resultRole === 'business' ? 'business' : 'staff'
+  const requiredScope: ReturnScope = resultRole === 'business' ? 'MANAGE' : 'OPERATE'
+  return bound(await apiRequest(`/api/${endpointRole}/returns/${id}/complete-refund`, {
+    method: 'POST', body: JSON.stringify(body),
+  }), resultRole, id, undefined, requiredScope)
 }
 
 export interface ReturnSettlementReceipt {
@@ -146,6 +169,9 @@ export async function recordReturnSettlement(id: string, body: ReturnSettlementR
   if (!a.permissions.includes('payments:collect')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
   if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   validateReturnSettlementReceipt(body)
+  if (a.roles.includes('STAFF') && body.paymentMethod !== 'CASH') {
+    throw new ApiClientError('Staff chỉ được ghi nhận thu tiền mặt trong phiên thu.', { status: 403 })
+  }
   return bound(await apiRequest(`/api/staff/returns/${id}/settlement-receipts`, {
     method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
   }), 'staff', id)

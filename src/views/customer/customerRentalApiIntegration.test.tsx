@@ -62,9 +62,13 @@ describe("Customer Rental API integration", () => {
     expect(source).toContain('!isApiAuthenticated() && scheduledRenewals.length > 0')
     expect(source).toContain('open={Boolean(selectedRenewal) && !isApiAuthenticated()}')
   })
-  it("mounts primary Customer/Staff Support through the API/demo boundary", () => {
-    for (const role of ["customer", "staff"] as const) {
-      const source = readFileSync(new URL(`../${role}/${role === "customer" ? "Customer" : "Staff"}App.tsx`, import.meta.url), "utf8")
+  it("keeps Staff Support as a page while Customer uses only the floating widget", () => {
+    const customer = readFileSync(new URL('./CustomerApp.tsx', import.meta.url), 'utf8')
+    expect(customer).toContain('<CustomerSupportWidget openRequest={supportWidgetRequest}')
+    expect(customer).not.toContain('<SupportApiRoute')
+    expect(customer).not.toContain("{ id: 'support', label:")
+    for (const role of ["staff"] as const) {
+      const source = readFileSync(new URL(`../${role}/StaffApp.tsx`, import.meta.url), "utf8")
       const routes = source.match(/<SupportApiRoute\b[^>]*>/g) ?? []
       expect(routes.some(route => route.includes('apiAuthenticated={isApiAuthenticated()}') && route.includes(`role="${role}"`))).toBe(true)
     }
