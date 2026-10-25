@@ -57,6 +57,10 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
         <p className="mt-1 text-xs text-stone-600">
           Kỳ thuê: <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate)}</b> · {q.rentalMonths} tháng
         </p>
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+          <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế. Các ngày này không nằm trong kỳ thuê đã thanh toán;
+          ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày check-in thực tế. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
+        </div>
       </div>
 
       {/* ── KHỐI 1: TÍNH TOÁN TIỀN THUÊ KHO ── */}

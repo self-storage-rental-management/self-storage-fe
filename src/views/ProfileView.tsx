@@ -887,7 +887,7 @@ setSavingProfile(true)
     }
 
     if (user.role === 'customer') {
-      const visibleApiRentals = apiRentals.filter(rental => ['active', 'return_requested'].includes(rental.status))
+  const visibleApiRentals = apiRentals.filter(rental => ['setup', 'active', 'return_requested'].includes(rental.status))
       const visibleRentals = apiMode ? visibleApiRentals : activeRentals
       return (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
