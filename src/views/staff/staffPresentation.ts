@@ -47,6 +47,11 @@ export function compareStaffTaskSchedule<
 
 const CHECK_IN_STATUS_LABELS: Record<string, string> = {
   scheduled: "Đã lên lịch",
+  identity_verified: "Đã xác minh khách",
+  contract_signed: "Đã ký hợp đồng",
+  payment_collected: "Đã thu tiền",
+  setup_in_progress: "Khách đang setup",
+  setup_completed: "Chờ kiểm kê",
   completed: "Đã hoàn tất bàn giao",
   rejected: "Đã từ chối nhận kho",
   no_show: "Khách không đến",

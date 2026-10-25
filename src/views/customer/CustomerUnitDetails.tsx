@@ -50,6 +50,7 @@ export default function CustomerUnitDetails({ unitType: t, facilityName, facilit
             <article key={item.code} className="rounded-xl border border-emerald-200 bg-white p-4 text-sm">
               <b>{item.name || `Thuê ${item.rentalMonths} tháng`}</b>
               <p className="mt-1 font-semibold text-emerald-700">Giảm {Math.round(item.discountRate * 100)}% tiền thuê</p>
+              <p className="mt-1 text-xs text-stone-600">Tặng {item.freeSetupDays ?? 0} ngày setup khi nhận kho</p>
             </article>
           ))}
         </div>

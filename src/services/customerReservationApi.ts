@@ -150,6 +150,7 @@ export interface ReservationRentalPackage {
   code: string
   name: string
   rentalMonths: number
+  freeSetupDays?: number
   discountRate: number
   policyVersion: string
 }
@@ -161,6 +162,7 @@ export interface ReservationQuote {
   startDate: string
   endDate: string
   rentalMonths: number
+  freeSetupDays?: number
   monthlyPrice: number
   subtotal: number
   discountRate: number
@@ -208,6 +210,9 @@ export interface CustomerReservation {
   totalInitialObligation: number
   pricingPackageCode?: string | null
   rentalMonths?: number
+  freeSetupDays?: number
+  setupExitReviewRequired?: boolean
+  setupGoodsRevisionUsedAt?: string | null
   monthlyPrice?: number
   grossRentalAmount?: number
   discountRate?: number
@@ -522,6 +527,17 @@ export async function confirmCustomerReceipt(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
     { method: 'POST' },
+  )
+  return response.data
+}
+
+export async function updateSetupGoods(
+  reservationId: string,
+  input: { goodsItems: GoodsItemInput[]; goodsCondition?: string | null },
+) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
+    { method: 'POST', body: JSON.stringify(input) },
   )
   return response.data
 }
