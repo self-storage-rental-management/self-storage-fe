@@ -1,4 +1,4 @@
-export type UnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
+export type UnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned' | 'inactive' | 'archived'
 
 export type ReservationStatus =
   | 'CREATED'
