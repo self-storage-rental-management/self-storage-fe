@@ -4,7 +4,7 @@ import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
-import type { RentalApiDetail } from "../../types/rentalApi"
+import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, accessStatusLabels } from "./presentation"
 const labelClass = "text-xs font-normal text-slate-500"
@@ -17,7 +17,7 @@ export default function RentalDetail({
 }: {
   rental: RentalApiDetail
   onRequest?: () => void
-  role?: "customer" | "manager"
+  role?: RentalApiRole
   showTechnicalWarnings?: boolean
 }) {
   const { copy } = useManagerPresentation()
@@ -85,6 +85,13 @@ export default function RentalDetail({
             <dt>Thời hạn thuê</dt>
             <dd>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
           </div>
+          {rental.inventoryPending && <div>
+            <dt>Kiểm kê đầu vào</dt>
+            <dd><Badge variant="warning">Chưa kiểm kê</Badge>
+              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao; hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
+              {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Hạn kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+            </dd>
+          </div>}
           <div>
             <dt>Giá thuê / tháng</dt>
             <dd>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>
@@ -101,7 +108,7 @@ export default function RentalDetail({
           </div>
         </dl>
       </Card>
-      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role} id={rental.id} />
+      <RentalHandoverFiles key={`${role}:${rental.id}`} role={role === "manager" ? "manager" : "customer"} id={rental.id} />
       {onRequest && (
         <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end border-t border-stone-200 bg-white/95 px-1 py-3 backdrop-blur">
           <Button disabled={rental.status !== "active"} onClick={onRequest}>

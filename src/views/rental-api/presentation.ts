@@ -2,7 +2,7 @@ import { parseVietnamDate } from '../../utils/vietnamTime'
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
-import type { RentalApiRecord } from "../../types/rentalApi"
+import type { RentalApiRecord, RentalApiRole } from "../../types/rentalApi"
 
 export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning = true) {
   const verified = rental.dateSemantics?.completeness === "COMPLETE"
@@ -12,6 +12,7 @@ export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning =
 }
 
 export const rentalLabels: Record<string, string> = {
+  setup: "Đang setup miễn phí",
   active: "Đang hiệu lực",
   return_requested: "Đã yêu cầu trả kho",
   return_inspection: "Đang kiểm tra trả kho",
@@ -123,7 +124,7 @@ export function hasRenewalAction(
   record: RenewalApiRecord,
   action: RenewalApiAction,
   actor: ApiActor | null,
-  role: "customer" | "manager",
+  role: RentalApiRole,
 ) {
   if (
     !actor ||
@@ -132,7 +133,7 @@ export function hasRenewalAction(
     !record.allowedActions.includes(action)
   )
     return false
-  if (role === "manager") return false
+  if (role !== "customer") return false
   return (
     actor.roles.includes("CUSTOMER") &&
     actor.id === record.customer.id &&

@@ -169,8 +169,8 @@ export default function ManagerUnitEditor({
     if (!unit || !canDelete) return
     try {
       const result = deleteUnit(unit.id, user)
-      if (!result.success) return showToast(result.reason || 'Không thể xóa gian kho.')
-      showToast(`Đã xóa gian kho ${unit.code} chưa phát sinh nghiệp vụ.`)
+      if (!result.success) return showToast(result.reason || 'Chưa thể ngừng khai thác gian kho.')
+      showToast(`Đã ngừng khai thác gian kho ${unit.code}. Lịch sử được giữ nguyên.`)
       onClose()
     } catch (error) {
       showToast(managerDisplayError(error))
@@ -212,7 +212,7 @@ export default function ManagerUnitEditor({
         <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Giá và chính sách đang áp dụng</p><p className="mt-1 text-xs text-stone-500">Chỉ đọc tại màn hình quản lý gian kho, không phải cấu hình giá hoặc chính sách toàn hệ thống.</p></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Giá chuẩn hiện hành</span><b className="mt-1 block">{selectedDefinition ? `${formatManagerMoney(selectedDefinition.monthlyPrice)}/tháng` : 'Chưa có dữ liệu'}</b></div>
-          <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Tiền duy trì CSVC theo chính sách hiện hành</span><b className="mt-1 block">{selectedTemplate ? formatManagerMoney(selectedTemplate.deposit) : 'Chưa có dữ liệu chính sách'}</b></div>
+          <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Tiền cọc đảm bảo kho theo chính sách hiện hành</span><b className="mt-1 block">{selectedTemplate ? formatManagerMoney(selectedTemplate.deposit) : 'Chưa có dữ liệu chính sách'}</b></div>
         </div>
       </section>
 
@@ -224,10 +224,10 @@ export default function ManagerUnitEditor({
       </section>
 
       {mode === 'edit' && unit && <div className="rounded-lg border border-red-200 p-4">
-        <p className="font-semibold text-red-800">Xóa gian kho</p>
-        <p className="mt-1 text-xs text-stone-600">Chỉ cho phép xóa gian còn trống và chưa từng phát sinh đặt chỗ, hồ sơ thuê, nhận/trả kho hoặc bảo trì.</p>
+        <p className="font-semibold text-red-800">Ngừng khai thác gian kho</p>
+        <p className="mt-1 text-xs text-stone-600">Chuyển gian kho sang trạng thái không phục vụ. Không xóa bản ghi hoặc lịch sử.</p>
         {!canDelete && <p className="mt-2 text-xs font-medium text-red-700">{deleteBlockedReason}</p>}
-        {confirmDelete ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-sm text-red-700">Xác nhận xóa vĩnh viễn {unit.code}?</span><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>Không xóa</Button><Button variant="danger" size="sm" onClick={remove}>Xóa gian kho</Button></div></div> : <Button className="mt-3" variant="danger" size="sm" disabled={!canDelete} onClick={() => setConfirmDelete(true)}>Yêu cầu xóa</Button>}
+        {confirmDelete ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-sm text-red-700">Ngừng khai thác {unit.code}? Dữ liệu vẫn được giữ lại.</span><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>Hủy</Button><Button variant="danger" size="sm" onClick={remove}>Xác nhận ngừng khai thác</Button></div></div> : <Button className="mt-3" variant="danger" size="sm" disabled={!canDelete} onClick={() => setConfirmDelete(true)}>Ngừng khai thác</Button>}
       </div>}
 
       <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Hủy</Button><Button onClick={save}>{mode === 'create' ? 'Thêm gian kho' : 'Lưu thay đổi'}</Button></div>
