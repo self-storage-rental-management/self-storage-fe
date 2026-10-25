@@ -1,6 +1,7 @@
 import { PERMISSION_KEYS, type PermissionKey, type Role, type User } from '../types'
 import { DEFAULT_ROLE_PERMISSIONS } from '../auth/rbac'
-import { ApiClientError, apiRequest, clearAuthTokens, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
+import { ApiClientError, apiRequest, clearAuthTokens, getAccessToken, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
+import { waitForChatSessionSaves } from './chatSessionSaveQueue'
 
 export type ApiRoleCode = 'CUSTOMER' | 'STAFF' | 'MANAGER' | 'BUSINESS' | 'ADMIN'
 export type ApiUserStatus = 'ACTIVE' | 'SUSPENDED' | 'INACTIVE' | 'LOCKED' | 'DISABLED' | 'PENDING_VERIFICATION'
@@ -72,6 +73,7 @@ function persistActor(actor: ApiActor | null): ApiActor | null {
 }
 
 let currentActor: ApiActor | null = readStoredActor()
+let loginGeneration = 0
 
 const rolePriority: ApiRoleCode[] = ['ADMIN', 'BUSINESS', 'MANAGER', 'STAFF', 'CUSTOMER']
 
@@ -157,6 +159,7 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
 }
 
 export async function loginWithApi(email: string, password: string): Promise<ApiActor> {
+  loginGeneration++
   clearAuthTokens()
   persistActor(null)
   const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/login', {
@@ -169,6 +172,7 @@ export async function loginWithApi(email: string, password: string): Promise<Api
 }
 
 export async function loginWithGoogleApi(idToken: string): Promise<ApiActor> {
+  loginGeneration++
   clearAuthTokens()
   persistActor(null)
   const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/google', {
@@ -277,16 +281,27 @@ export async function resetPasswordWithApi(email: string | undefined, codeOrToke
 }
 
 export async function logoutFromApi() {
+  const generation = loginGeneration
   if (!hasAccessToken() && !getRefreshToken()) {
     persistActor(null)
-    return
+    return true
   }
+  // A failed chat flush must leave the account and its in-memory chat mounted.
+  await waitForChatSessionSaves(currentActor?.id)
+  if (generation !== loginGeneration) return false
+  const token = getAccessToken()
   try {
-    await apiRequest('/api/auth/logout', { method: 'POST' })
+    // Do not retry this request using credentials from a subsequent login.
+    await apiRequest('/api/auth/logout', { method: 'POST', skipAuth: true, headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  } catch {
+    // Chat is saved; clear local credentials even if server logout is unavailable.
   } finally {
-    clearAuthTokens()
-    persistActor(null)
+    if (generation === loginGeneration) {
+      clearAuthTokens()
+      persistActor(null)
+    }
   }
+  return generation === loginGeneration
 }
 
 export async function refreshApiSession(): Promise<ApiActor> {

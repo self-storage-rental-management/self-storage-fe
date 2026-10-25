@@ -591,13 +591,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                                 ? 'bg-amber-50 text-amber-700 border border-amber-200'
                                 : 'bg-blue-50 text-blue-700 border border-blue-200'
                             }`}>
-                              {ret.moistureOrigin === 'facility_fault' ? '🌧️ Lỗi cơ sở dột' : ret.moistureOrigin === 'customer_fault' ? '⚠️ Đồ ẩm mốc' : 'ℹ️ Độ ẩm tự nhiên'}
+                              {ret.moistureOrigin === 'facility_fault' ? 'Lỗi cơ sở dột' : ret.moistureOrigin === 'customer_fault' ? 'Đồ ẩm mốc' : 'Độ ẩm tự nhiên'}
                             </span>
                           </div>
                         )}
                         {ret.returnedItems && (
                           <p className="text-[11px] text-stone-500">
-                            Bàn giao: {ret.returnedItems.key ? 'Khóa ✓' : 'Khóa ✗'} · {ret.returnedItems.card ? 'Thẻ ✓' : 'Thẻ ✗'}
+                            Bàn giao: {ret.returnedItems.key ? 'Đã trả khóa' : 'Chưa trả khóa'} · {ret.returnedItems.card ? 'Đã trả thẻ' : 'Chưa trả thẻ'}
                           </p>
                         )}
                       </div>
@@ -641,7 +641,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             setSettlementModalOpen(true)
                           }}
                         >
-                          {'🧾 Quyết toán'}
+                          {'Quyết toán'}
                         </Button>
 
                         {(ret.status === 'requested' || ret.status === 'scheduled') && (
@@ -662,7 +662,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             className="border-amber-500 text-amber-700 hover:bg-amber-50 font-medium whitespace-nowrap"
                             onClick={() => openMaintenanceModal(ret)}
                           >
-                            {'🛠️ Lập bảo trì'}
+                            {'Lập bảo trì'}
                           </Button>
                         )}
 
@@ -709,7 +709,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
                             onClick={() => openCompleteModal(ret)}
                           >
-                            {'✓ Hoàn tất'}
+                            {'Hoàn tất'}
                           </Button>
                         )}
 
@@ -811,7 +811,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 <span className="text-stone-400 block">{'Vật tư bàn giao lại'}</span>
                 <span className="font-medium text-stone-700">
                   {selectedReturn.returnedItems
-                    ? `Chìa: ${selectedReturn.returnedItems.key ? '✓' : '✗'}, Thẻ: ${selectedReturn.returnedItems.card ? '✓' : '✗'}, Khóa: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`
+                    ? `Chìa: ${selectedReturn.returnedItems.key ? 'Đã trả' : 'Chưa trả'}, Thẻ: ${selectedReturn.returnedItems.card ? 'Đã trả' : 'Chưa trả'}, Khóa: ${selectedReturn.returnedItems.lock ? 'Đã trả' : 'Chưa trả'}`
                     : 'N/A'}
                 </span>
               </div>
@@ -822,7 +822,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               <div className="rounded-lg border border-cyan-200 bg-cyan-50/50 p-3.5 text-xs space-y-2">
                 <div className="flex items-center justify-between border-b border-cyan-200 pb-1.5">
                   <span className="font-bold text-cyan-950 text-sm flex items-center gap-1.5">
-                    <span className="text-cyan-600">🛡️</span>
                     Biên Bản Giám Định Kết Cấu & Ẩm Mốc Lúc Trả Kho
                   </span>
                   <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
@@ -848,30 +847,30 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     <span className="text-stone-400 block text-[10px]">Trần kho</span>
                     <span className="font-semibold text-stone-800">
                       {selectedReturn.structuralInspection.ceiling === 'leaking'
-                        ? '⚠️ Thấm dột giọt nước'
+                        ? 'Thấm dột giọt nước'
                         : selectedReturn.structuralInspection.ceiling === 'stained'
-                        ? '⚠️ Loang ố trần'
-                        : '✓ Khô ráo, nguyên vẹn'}
+                        ? 'Loang ố trần'
+                        : 'Khô ráo, nguyên vẹn'}
                     </span>
                   </div>
                   <div className="bg-white p-2 rounded border border-cyan-100">
                     <span className="text-stone-400 block text-[10px]">Vách tường</span>
                     <span className="font-semibold text-stone-800">
                       {selectedReturn.structuralInspection.wall === 'damp_seepage'
-                        ? '⚠️ Ngấm ẩm từ ngoài vào'
+                        ? 'Ngấm ẩm từ ngoài vào'
                         : selectedReturn.structuralInspection.wall === 'cracked'
-                        ? '⚠️ Nứt nẻ vách'
-                        : '✓ Khô ráo, sạch sẽ'}
+                        ? 'Nứt nẻ vách'
+                        : 'Khô ráo, sạch sẽ'}
                     </span>
                   </div>
                   <div className="bg-white p-2 rounded border border-cyan-100">
                     <span className="text-stone-400 block text-[10px]">Sàn kho</span>
                     <span className="font-semibold text-stone-800">
                       {selectedReturn.structuralInspection.floor === 'cracked'
-                        ? '⚠️ Nứt vỡ sàn'
+                        ? 'Nứt vỡ sàn'
                         : selectedReturn.structuralInspection.floor === 'water_pooling'
-                        ? '⚠️ Đọng nước ẩm'
-                        : '✓ Khô ráo, nguyên vẹn'}
+                        ? 'Đọng nước ẩm'
+                        : 'Khô ráo, nguyên vẹn'}
                     </span>
                   </div>
                 </div>
@@ -965,7 +964,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                   setSettlementModalOpen(true)
                 }}
               >
-                🧾 Xem hóa đơn & biên lai
+                Xem hóa đơn và biên lai
               </Button>
               {(selectedReturn.status === 'requested' || selectedReturn.status === 'scheduled') && (
                 <Button
@@ -988,7 +987,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     openMaintenanceModal(selectedReturn)
                   }}
                 >
-                  🛠️ Lập phiếu bảo trì
+                  Lập phiếu bảo trì
                 </Button>
               )}
               {['inspected', 'awaiting_customer_confirmation', 'refund_pending', 'payment_due'].includes(selectedReturn.status) && (
@@ -1000,7 +999,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     openCompleteModal(selectedReturn)
                   }}
                 >
-                  ✓ Hoàn tất trả kho
+                  Hoàn tất trả kho
                 </Button>
               )}
               {selectedReturn.status === 'disputed' && (
@@ -1059,7 +1058,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             {/* 3 Kịch Bản Phân Xử Nhanh Theo Quy Định */}
             <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 text-xs">
               <p className="font-bold text-indigo-950 flex items-center gap-1.5">
-                <span className="text-indigo-600">⚖️</span>
                 Chọn Kịch Bản Phân Xử Theo Căn Cứ Hiện Trường & Quy Định:
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1265,7 +1263,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       </Modal>
 
       {/* 2. Modal Tạo Phiếu Bảo Trì */}
-      <Modal open={maintenanceModalOpen} onClose={() => { setMaintenanceModalOpen(false); setMaintenanceTarget(null) }} title="🛠️ Lập Phiếu Bảo Trì Kho Sau Nghiệm Thu">
+      <Modal open={maintenanceModalOpen} onClose={() => { setMaintenanceModalOpen(false); setMaintenanceTarget(null) }} title="Lập phiếu bảo trì kho sau nghiệm thu">
         {maintenanceTarget && (
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1.5">
@@ -1328,12 +1326,12 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
             {((completeTarget.damageClassification && completeTarget.damageClassification !== 'no_damage') || completeTarget.proposedUnitStatus === 'maintenance') ? (
               <div className="rounded-lg bg-amber-50 p-3 border border-amber-200 text-xs text-amber-900">
-                <p className="font-bold">⚠️ Gian kho có hư hại / bảo trì</p>
+                <p className="font-bold">Gian kho có hư hại hoặc cần bảo trì</p>
                 <p className="mt-1">Khi đóng hồ sơ trả kho này, hợp đồng của khách sẽ kết thúc. Gian kho sẽ tiếp tục được giữ ở trạng thái <b>BẢO TRÌ</b> để nhân viên kỹ thuật khắc phục.</p>
               </div>
             ) : (
               <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-200 text-xs text-emerald-900">
-                <p className="font-bold">✓ Gian kho nguyên vẹn & Đạt nghiệm thu</p>
+                <p className="font-bold">Gian kho nguyên vẹn và đạt nghiệm thu</p>
                 <p className="mt-1">Khi xác nhận hoàn tất, gian kho <b>{completeTarget.unitId}</b> sẽ tự động chuyển sang trạng thái <b>CÒN TRỐNG (Available)</b>, quyền truy cập PIN/thẻ được thu hồi và hồ sơ thuê được đóng hoàn toàn.</p>
               </div>
             )}
@@ -1345,6 +1343,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               placeholder="Nghiệm thu đạt yêu cầu..."
             />
 
+            {completeTarget.status === 'disputed' && (
+              <div className="rounded-lg bg-rose-50 p-3 border border-rose-200 text-xs text-rose-800">
+                Hồ sơ đang khiếu nại, cần BO giải quyết. Chưa thể xác nhận hoàn tất ở trạng thái này.
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => { setCompleteModalOpen(false); setCompleteTarget(null) }}>Hủy</Button>
               <Button

@@ -15,6 +15,9 @@ export interface UnitTypeReview {
   after: ManagerUnitTypeInput
   reviewedAt: string | null
   rejectionReason: string | null
+  requiresRepricing: boolean
+  currentMonthlyPrice: number | null
+  currentSecurityDepositAmount: number | null
 }
 export async function listUnitTypeReviews() {
   return (await apiRequest<{ data: UnitTypeReview[] }>('/api/business/unit-type-changes')).data
@@ -22,8 +25,8 @@ export async function listUnitTypeReviews() {
 export async function getUnitTypeReview(id: string) {
   return (await apiRequest<{ data: UnitTypeReview }>(`/api/business/unit-type-changes/${id}`)).data
 }
-export async function decideUnitTypeReview(id: string, approved: boolean, reason: string) {
+export async function decideUnitTypeReview(id: string, approved: boolean, reason: string, monthlyPrice?: number, securityDepositAmount?: number) {
   return (await apiRequest<{ data: UnitTypeReview }>(`/api/business/unit-type-changes/${id}/review`, {
-    method: 'POST', body: JSON.stringify({ approved, reason }),
+    method: 'POST', body: JSON.stringify({ approved, reason, monthlyPrice, securityDepositAmount }),
   })).data
 }

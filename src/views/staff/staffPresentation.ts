@@ -47,6 +47,11 @@ export function compareStaffTaskSchedule<
 
 const CHECK_IN_STATUS_LABELS: Record<string, string> = {
   scheduled: "Đã lên lịch",
+  identity_verified: "Đã xác minh khách",
+  contract_signed: "Đã ký hợp đồng",
+  payment_collected: "Đã thu tiền",
+  setup_in_progress: "Khách đang setup",
+  setup_completed: "Chờ kiểm kê",
   completed: "Đã hoàn tất bàn giao",
   rejected: "Đã từ chối nhận kho",
   no_show: "Khách không đến",
@@ -140,8 +145,31 @@ export function staffErrorMessage(error: unknown, fallback: string) {
     return "Hồ sơ chưa ở trạng thái chờ khách hàng xác nhận."
   if (message.includes("not in disputed status"))
     return "Hồ sơ không ở trạng thái khiếu nại."
-  if (status === 409)
-    return code === "OPTIMISTIC_LOCK" ? "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại." : "Xung đột trạng thái (409): Hồ sơ đang chờ khách duyệt hoặc đang khiếu nại. Vui lòng tải lại và thử lại."
+  if (status === 409) {
+    if (code === "OPTIMISTIC_LOCK")
+      return "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại."
+    if (message.includes("Reservation is not READY_FOR_CHECKIN"))
+      return "Đơn chưa ở trạng thái sẵn sàng nhận kho. Vui lòng tải lại để đồng bộ trạng thái phân gian."
+    if (message.includes("Check-in step is out of order"))
+      return "Các bước nhận kho đã thay đổi. Vui lòng tải lại hồ sơ để tiếp tục từ bước hiện tại."
+    if (message.includes("Customer identity"))
+      return "CCCD/hộ chiếu không khớp với thông tin đã khai báo trong đơn."
+    if (message.includes("not ready to record the remaining payment"))
+      return "Hồ sơ chưa sẵn sàng ghi nhận khoản thu còn lại. Vui lòng tải lại và kiểm tra bước ký hợp đồng."
+    if (message.includes("Credentials can only be activated"))
+      return "Chỉ được kích hoạt ổ khóa sau khi đã ký hợp đồng và thu tiền."
+    if (message.includes("no active unit assignment"))
+      return "Hồ sơ chưa có phân gian đang hoạt động. Vui lòng kiểm tra lại bước phân gian."
+    if (message.includes("Storage unit is not reserved"))
+      return "Gian kho không còn ở trạng thái giữ chỗ cho hồ sơ này. Vui lòng tải lại để kiểm tra."
+    if (message.includes("Customer setup must be completed"))
+      return "Khách chưa được ghi nhận setup xong nên chưa thể kiểm kê."
+    if (message.includes("Evidence can only be uploaded"))
+      return "Chỉ được tải bằng chứng khi quy trình check-in đang thực hiện. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
+    if (message.includes("lock reference"))
+      return "Mã ổ khóa không khớp với credential đã kích hoạt. Vui lòng kiểm tra lại mã ổ khóa."
+    return "Hồ sơ vừa thay đổi trạng thái. Vui lòng tải lại danh sách rồi tiếp tục check-in."
+  }
   if (status === 413)
     return "Tệp tải lên vượt quá dung lượng cho phép."
   if (status === 422 || status === 400)

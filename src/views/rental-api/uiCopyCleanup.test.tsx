@@ -118,7 +118,7 @@ describe("Dương delete-first UI copy regression", () => {
     state.data = { ...supportTicket, subject: "Cần hỗ trợ", description: "Nội dung yêu cầu" }
     const command = { run: vi.fn(), retry: vi.fn(), clearError: vi.fn(), busy: false, uncertain: false, conflict: false, locked: false, error: undefined } as ReturnType<typeof useSupportCommand>
     const html = renderToStaticMarkup(<SupportTicketDetail id={supportIds.ticket} role="customer" command={command} onFollowUp={vi.fn()} />)
-    expect(html).toContain("Minh chứng 1")
+    expect(html).toContain("Tệp đính kèm 1")
     expect(html).not.toContain("Có tệp đính kèm, hiện chưa thể tải xuống.")
     expect(html).toContain("Bạn")
     expect(html).not.toContain(ids.file)
@@ -132,7 +132,7 @@ describe("Dương delete-first UI copy regression", () => {
     expect(html).toContain("Giữ nguyên nội dung và bấm thử lại")
     expect(html).toContain("không tải lại trang hoặc gửi yêu cầu mới")
     expect(html).toContain("Kiểm tra lại bằng yêu cầu cũ")
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Tạo yêu cầu<\/button>/)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Cuộc trò chuyện mới<\/button>/)
     expect(html).not.toContain("Idempotency-Key")
   })
   it("Staff D3 error is natural Vietnamese, without changing the shared Staff helper", () => {

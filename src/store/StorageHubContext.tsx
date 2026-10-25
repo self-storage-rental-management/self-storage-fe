@@ -5165,7 +5165,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }
 
     setState(prev => {
-      const nextUnits = prev.units.filter(u => u.id !== unitId && u.code !== unitId)
+      const nextUnits = prev.units.map(u => u.id === unitId || u.code === unitId
+        ? { ...u, status: 'maintenance' as const, version: u.version + 1,
+          conditionNotes: 'Ngừng khai thác. Bản ghi được giữ lại để bảo toàn lịch sử.' }
+        : u)
       const nextFacilities = prev.facilities.map(f => {
         if (f.id === unit.facilityId || f.code === unit.facilityId) {
           const facUnits = nextUnits.filter(u => u.facilityId === f.id || u.facilityId === f.code)
@@ -5188,7 +5191,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         facilities: nextFacilities,
         activities: actor.role === 'manager' ? [{
           id: `act-${Date.now()}`,
-          action: 'UNIT_DELETED',
+          action: 'UNIT_STATUS_UPDATED',
           actorId: actor.id,
           actorName: actor.name,
           actorRole: actor.role,
@@ -5196,7 +5199,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityType: 'unit',
           entityId: unit.id,
           beforeState: unit,
-          notes: `Manager xóa gian kho ${unit.code} chưa phát sinh nghiệp vụ.`,
+          notes: `Ngừng khai thác gian kho ${unit.code}, giữ nguyên bản ghi và lịch sử.`,
           timestamp: new Date().toISOString()
         }, ...prev.activities] : prev.activities
       }

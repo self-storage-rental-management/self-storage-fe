@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import ManagerWarehouseImageField from "./ManagerWarehouseImageField"
 import {
   Badge,
@@ -15,6 +15,7 @@ import {
   Tr,
 } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import { ApiClientError } from "../../services/apiClient"
 import { Icon } from "../../components/Layout"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { formatVndAmount } from "../../i18n/currency"
@@ -42,9 +43,12 @@ import {
   type InventoryFilters,
   type InventoryUnit,
 } from "./managerInventoryApi"
-import { createManagerUnitType, updateManagerUnitType, deleteManagerUnitType } from "../../services/managerUnitTypeApi"
+import { archiveManagerUnitType, createManagerUnitType, updateManagerUnitType } from "../../services/managerUnitTypeApi"
 import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
 import { generateUnitTypeCode, formatPhysicalUnitCode, previewPhysicalUnitCodes } from "./managerUnitCodeHelpers"
+import ManagerGoodsCatalogPanel from "./ManagerGoodsCatalogPanel"
+import { getManagerGoodsCatalog } from "../../services/managerGoodsCatalogApi"
+import type { GoodsCatalog } from "../../services/customerReservationApi"
 
 const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
@@ -77,9 +81,10 @@ const dimensions = (u: InventoryUnit) =>
     ? missing
     : `${u.definition.lengthM?.toLocaleString("vi-VN")} × ${u.definition.widthM?.toLocaleString("vi-VN")} × ${u.definition.heightM?.toLocaleString("vi-VN")} m`
 
-export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenance }: {
+export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenance, view = 'info' }: {
   onOpenRental?: (rentalId: string) => void
   onOpenMaintenance?: (unitId: string, unitCode: string) => void
+  view?: 'info' | 'assignment'
 } = {}) {
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
@@ -104,6 +109,7 @@ export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenan
             facilityId={facilityId}
             onOpenRental={onOpenRental}
             onOpenMaintenance={onOpenMaintenance}
+            view={view}
           />
         </>
       )}
@@ -116,24 +122,32 @@ function InventoryRead({
   facilityId,
   onOpenRental,
   onOpenMaintenance,
+  view,
 }: {
   identity: string
   facilityId: string
   onOpenRental?: (rentalId: string) => void
   onOpenMaintenance?: (unitId: string, unitCode: string) => void
+  view: 'info' | 'assignment'
 }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [editingType, setEditingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
   const [reviewNotice, setReviewNotice] = useState('')
-  const [viewingType, setViewingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
   const [deletingType, setDeletingType] = useState<{ id: string; name: string }>()
   const [actionError, setActionError] = useState<string>()
   const [actionBusy, setActionBusy] = useState(false)
-  const read = useRentalApiResource(identity, () =>
-    loadManagerInventory(facilityId),
-  )
+  const read = useRentalApiResource(identity, async () => {
+    try { return await loadManagerInventory(facilityId) }
+    catch (error) {
+      if (view === 'assignment' && error instanceof ApiClientError && error.status === 404) return { catalog: [], units: [] }
+      throw error
+    }
+  })
   const rentals = useRentalApiResource(`${identity}:rentals`, () =>
     loadInventoryRentals(facilityId),
+  )
+  const unitTypes = useRentalApiResource(`${identity}:unit-types`, async () =>
+    (await listAccessibleUnitTypes(facilityId, 0, 100)).data,
   )
   const actor = getAuthenticatedActor()
   const facilityName = (facilityId && actor?.facilityNames?.[facilityId]) || Object.values(actor?.facilityNames || {})[0] || 'Cơ sở được phân công'
@@ -155,12 +169,13 @@ function InventoryRead({
     )
   return read.data ? (
     <>
+      {view === 'assignment' ? <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} showCatalog={false} title="Danh sách gian kho để phân" /> : <>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-stone-200 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-purple-700">Cơ sở phụ trách</span>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-800">
-              🏢 {facilityName}
+              {facilityName}
             </span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-stone-900 mt-1">Quản lý gian kho thực tế</h2>
@@ -171,34 +186,44 @@ function InventoryRead({
         </Button>
       </div>
       {actionError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
-      <Card className="p-4 space-y-3">
-        <h3 className="font-bold">Quản lý loại kho thực tế</h3>
-        {read.data.catalog.map(type => <div key={type.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3">
-          <div><b>{type.code} · {type.name}</b><p className="text-xs text-stone-500">{type.total} gian kho</p></div>
-          <div className="flex gap-2">
+      <Card className="space-y-4 p-5">
+        <div><h3 className="text-lg font-bold">Thông tin các loại kho</h3><p className="mt-1 text-sm text-stone-500">Thông số, sức chứa và tình trạng khai thác của từng loại kho tại cơ sở.</p></div>
+        <div className="grid grid-cols-1 gap-4">
+        {read.data.catalog.map(type => {
+          const detail = unitTypes.data?.find(item => item.id === type.id)
+          const unit = read.data?.units.find(item => item.unitTypeId === type.id)
+          return <article key={type.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 p-4">
+              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4><Badge variant={detail?.status === 'active' ? 'success' : 'muted'}>{detail ? (({ active: 'Đang khai thác', awaiting_pricing: 'Chờ định giá', draft: 'Đang thiết lập', inactive: 'Tạm ngưng', archived: 'Đã lưu trữ' } as Record<string, string>)[detail.status] || 'Chưa xác định') : 'Đang tải'}</Badge></div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · {type.total} gian · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
+              <div className="flex gap-2">
             <Button variant="outline" disabled={actionBusy} onClick={async () => {
               setActionBusy(true); setActionError(undefined)
               try {
-                const response = await listAccessibleUnitTypes(facilityId)
-                const detail = response.data.find(item => item.id === type.id)
-                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
-                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
-                setViewingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
-              } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
-            }}>Thông tin loại kho</Button>
-            <Button variant="outline" disabled={actionBusy} onClick={async () => {
-              setActionBusy(true); setActionError(undefined)
-              try {
-                const response = await listAccessibleUnitTypes(facilityId)
-                const detail = response.data.find(item => item.id === type.id)
-                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
-                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
-                setEditingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
+                const loaded = detail || (await listAccessibleUnitTypes(facilityId, 0, 100)).data.find(item => item.id === type.id)
+                if (!loaded) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
+                setEditingType({ ...loaded, floor: unit?.floor || '', zone: unit?.zone || '' })
               } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
             }}>Chỉnh sửa</Button>
-            <Button variant="outline" disabled={actionBusy} onClick={() => { setActionError(undefined); setDeletingType(type) }}>Xóa loại kho</Button>
-          </div>
-        </div>)}
+            <Button variant="outline" disabled={actionBusy} onClick={() => { setActionError(undefined); setDeletingType(type) }}>Lưu trữ loại kho</Button>
+              </div>
+            </div>
+            {detail ? <div className="space-y-4 p-4">
+              <div className="flex gap-4">{detail.imageUrl ? <img src={detail.imageUrl} alt={detail.name} className="h-24 w-32 shrink-0 rounded-xl object-cover" /> : <div className="grid h-24 w-32 shrink-0 place-items-center rounded-xl bg-stone-100 text-xs text-stone-500">Chưa có ảnh</div>}<p className="line-clamp-4 text-sm leading-6 text-stone-600">{detail.description || 'Chưa có mô tả cho loại kho này.'}</p></div>
+              <dl className="grid grid-cols-2 gap-3 rounded-xl bg-stone-50 p-3 sm:grid-cols-4">
+                {([['Diện tích', `${detail.areaM2} m²`], ['Thể tích', `${detail.volumeM3} m³`], ['Tải trọng', `${detail.maxLoadKg} kg`], ['Giá mỗi tháng', Number(detail.monthlyPrice) > 0 ? formatVndAmount(detail.monthlyPrice) : 'Chờ định giá']] as [string, string][]).map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 text-sm font-bold text-stone-900">{value}</dd></div>)}
+              </dl>
+              <dl className="grid gap-x-5 gap-y-3 text-sm sm:grid-cols-2">
+                <div><dt className="text-xs text-stone-500">Kích thước kho</dt><dd className="mt-1 font-medium">{detail.lengthM} × {detail.widthM} × {detail.heightM} m</dd></div>
+                <div><dt className="text-xs text-stone-500">Tình trạng sử dụng</dt><dd className="mt-1 font-medium">{detail.availableCount ?? 0} còn trống · {detail.occupiedCount ?? 0} đang dùng</dd></div>
+                <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
+                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '—'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
+                <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
+                <div><dt className="text-xs text-stone-500">Tiền duy trì cơ sở vật chất</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
+              </dl>
+            </div> : <p className="p-4 text-sm text-stone-500">Đang tải thông tin chi tiết loại kho...</p>}
+          </article>
+        })}
+        </div>
         {read.data.catalog.length === 0 && (
           <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50/80 p-6 text-center space-y-2">
             <p className="text-sm font-semibold text-stone-700">Cơ sở {facilityName} chưa có loại gian kho thực tế nào</p>
@@ -214,56 +239,7 @@ function InventoryRead({
         )}
       </Card>
       <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} />
-      <Modal open={!!viewingType} onClose={() => setViewingType(undefined)} title="Thông tin loại kho thực tế" size="xl">
-        {viewingType && <div className="space-y-4">
-          <div className="flex flex-col gap-4 rounded-xl bg-stone-50 p-4 sm:flex-row">
-            {viewingType.imageUrl && <img src={viewingType.imageUrl} alt={viewingType.name} className="h-32 w-full rounded-lg object-cover sm:w-44" />}
-            <div className="min-w-0"><h3 className="font-semibold">{viewingType.code} · {viewingType.name}</h3><p className="mt-2 whitespace-pre-wrap break-words text-stone-600">{viewingType.description || 'Chưa có mô tả'}</p></div>
-          </div>
-          {viewingType.detailImageUrl && <figure className="rounded-xl border border-stone-200 p-4">
-            <figcaption className="mb-2 text-sm font-semibold">Ảnh chi tiết / sơ đồ bố trí</figcaption>
-            <img src={viewingType.detailImageUrl} alt={`Sơ đồ ${viewingType.name}`} className="max-h-72 w-full object-contain" />
-          </figure>}
-          {(() => {
-            const fields = [
-              ['Kích thước kho (D × R × C)', `${viewingType.lengthM} × ${viewingType.widthM} × ${viewingType.heightM} m`],
-              ['Diện tích', `${viewingType.areaM2} m²`],
-              ['Thể tích', `${viewingType.volumeM3} m³`],
-              ['Tải trọng tối đa', `${viewingType.maxLoadKg} kg`],
-              ['Số khung kệ', viewingType.rackCount],
-              ['Kích thước khung (D × R × C)', `${viewingType.rackLengthM} × ${viewingType.rackWidthM} × ${viewingType.rackHeightM} m`],
-              ['Chiều rộng lối đi (m)', viewingType.aisleWidthM],
-              ['Xe đẩy hỗ trợ', viewingType.trolleyType],
-              ['Sức chứa thùng nhỏ', viewingType.smallBoxCapacity],
-              ['Sức chứa thùng lớn', viewingType.largeBoxCapacity],
-              ['Tổng số gian', viewingType.totalCount],
-              ['Đang sử dụng', viewingType.occupiedCount],
-              ['Còn trống', viewingType.availableCount],
-              ['Giá thuê / tháng', Number(viewingType.monthlyPrice) > 0 ? formatVndAmount(viewingType.monthlyPrice) : 'Chờ BO định giá'],
-              ['Tiền duy trì CSVC', formatVndAmount(viewingType.securityDepositAmount)],
-              ['Trạng thái', ({ active: 'Đã công bố', awaiting_pricing: 'Chờ BO định giá', draft: 'Đang thiết lập', inactive: 'Ngừng hoạt động' } as Record<string, string>)[viewingType.status] || viewingType.status],
-            ]
-            const groups = [
-              { title: 'Kích thước và tải trọng', items: fields.slice(0, 4) },
-              { title: 'Khung kệ và thiết bị hỗ trợ', items: fields.slice(4, 8) },
-              { title: 'Sức chứa thùng', items: fields.slice(8, 10) },
-              { title: 'Số lượng và giá thuê', items: fields.slice(10) },
-            ]
-            return <div className="grid gap-4 lg:grid-cols-2">
-              {groups.map((group, index) => <section key={group.title} className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 ${index >= 2 ? 'lg:col-span-2' : ''}`}>
-                <h4 className="border-b border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800">{group.title}</h4>
-                <dl className={index >= 2 ? `grid gap-px bg-stone-200 sm:grid-cols-2 ${index === 3 ? 'lg:grid-cols-3' : ''}` : 'divide-y divide-stone-100 px-4'}>
-                  {group.items.map(([label, value]) => <div key={String(label)} className={index >= 2 ? 'min-w-0 bg-white px-4 py-3' : 'grid grid-cols-1 gap-1 py-3 sm:grid-cols-2 sm:gap-3'}>
-                    <dt className={index >= 2 ? 'mb-1 text-xs text-stone-500' : 'text-sm text-stone-500'}>{label}</dt>
-                    <dd className={`min-w-0 whitespace-pre-wrap break-words font-medium text-stone-900 ${index >= 2 ? 'text-base' : 'text-sm'}`}>{value == null || value === '' ? 'Chưa khai báo' : value}</dd>
-                  </div>)}
-                </dl>
-              </section>)}
-            </div>
-          })()}
-          <div className="flex justify-end border-t border-stone-200 pt-4"><Button variant="outline" onClick={() => setViewingType(undefined)}>Đóng</Button></div>
-        </div>}
-      </Modal>
+      <ManagerGoodsCatalogPanel />
       <CreateUnitTypeModal
         open={createOpen}
         facilityId={facilityId}
@@ -283,17 +259,18 @@ function InventoryRead({
           onCreated={() => { setEditingType(undefined); setReviewNotice('Đã lưu thay đổi loại kho và cập nhật số lượng gian kho thành công.'); read.refresh() }}
         />
       )}
-      <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Xóa loại kho">
-        <div className="space-y-4"><p>Xóa loại kho <b>{deletingType?.name}</b> và các gian trống thuộc loại này? Loại kho có đơn đặt hoặc hồ sơ liên quan không được xóa.</p>
+      <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Lưu trữ loại kho">
+        <div className="space-y-4"><p>Chuyển loại kho <b>{deletingType?.name}</b> sang trạng thái lưu trữ? Dữ liệu lịch sử và các đơn đặt chỗ cũ vẫn được giữ nguyên.</p>
           {actionError && <p role="alert" className="text-sm text-red-700">{actionError}</p>}
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={actionBusy} onClick={() => setDeletingType(undefined)}>Hủy</Button><Button disabled={actionBusy} onClick={async () => {
             if (!deletingType) return
             setActionBusy(true); setActionError(undefined)
-            try { await deleteManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh() }
+            try { await archiveManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh() }
             catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
-          }}>{actionBusy ? 'Đang xóa...' : 'Xác nhận xóa'}</Button></div>
+          }}>{actionBusy ? 'Đang lưu trữ...' : 'Xác nhận lưu trữ'}</Button></div>
         </div>
       </Modal>
+      </>}
     </>
   ) : (
     <Card className="p-5" role="alert">
@@ -322,6 +299,16 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
   const [busy, setBusy] = useState(false)
   const [imageReading, setImageReading] = useState(false)
   const [error, setError] = useState<string>()
+  const [goodsCatalog, setGoodsCatalog] = useState<GoodsCatalog>()
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(initial?.acceptedGoodsCategoryIds || [])
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>(initial?.acceptedGoodsMaterialIds || [])
+
+  useEffect(() => {
+    if (!open) return
+    setSelectedCategories(initial?.acceptedGoodsCategoryIds || [])
+    setSelectedMaterials(initial?.acceptedGoodsMaterialIds || [])
+    getManagerGoodsCatalog().then(setGoodsCatalog).catch(cause => setError(managerDisplayError(cause)))
+  }, [open, initial?.id])
 
   const handleNameChange = (newName: string) => {
     setForm(current => {
@@ -376,6 +363,8 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
         physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
         imageUrl: form.imageUrl.trim() || null,
         detailImageUrl: form.detailImageUrl.trim() || null,
+        acceptedGoodsCategoryIds: selectedCategories,
+        acceptedGoodsMaterialIds: selectedMaterials,
       }
       if (initial) await updateManagerUnitType(initial.id, input)
       else await createManagerUnitType(facilityId, input)
@@ -559,8 +548,22 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
           </div>
         )}
       </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-3">
+        <div><h3 className="font-semibold text-stone-900">Loại hàng được nhận</h3><p className="mt-1 text-sm text-stone-500">Chọn loại hàng trước, sau đó chọn các vật liệu được phép lưu trong loại kho này. Thay đổi phạm vi này cần BO xác nhận lại giá.</p></div>
+        {!goodsCatalog ? <p className="text-sm text-stone-500">Đang tải danh mục hàng hóa…</p> : goodsCatalog.categories.filter(category => category.status === 'ACTIVE').map(category => {
+          const checked = selectedCategories.includes(category.id)
+          const materials = category.materials.filter(material => material.status === 'ACTIVE')
+          return <div key={category.id} className="rounded-lg border border-stone-200 p-3">
+            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={checked} onChange={event => {
+              setSelectedCategories(current => event.target.checked ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id))
+              if (!event.target.checked) setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id)))
+            }} />{category.label}</label>
+            {checked && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{materials.map(material => <label key={material.id} className="flex items-center gap-2 rounded bg-stone-50 px-3 py-2 text-sm"><input type="checkbox" checked={selectedMaterials.includes(material.id)} onChange={event => setSelectedMaterials(current => event.target.checked ? [...new Set([...current, material.id])] : current.filter(id => id !== material.id))} />{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</label>)}</div>}
+          </div>
+        })}
+      </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim() || isDuplicateCode} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim() || isDuplicateCode || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
@@ -572,6 +575,8 @@ export function InventoryContent({
   onCreateUnitType,
   onOpenRental,
   onOpenMaintenance,
+  showCatalog = true,
+  title = "Quản lý gian kho",
 }: {
   inventory: Awaited<ReturnType<typeof loadManagerInventory>>
   rentals?: InventorySourceRead<RentalApiRecord[]>
@@ -579,6 +584,8 @@ export function InventoryContent({
   onCreateUnitType?: () => void
   onOpenRental?: (rentalId: string) => void
   onOpenMaintenance?: (unitId: string, unitCode: string) => void
+  showCatalog?: boolean
+  title?: string
 }) {
   const [filters, setFilters] = useState<InventoryFilters>(
     emptyInventoryFilters,
@@ -615,6 +622,9 @@ export function InventoryContent({
   const change = (patch: Partial<InventoryFilters>) => {
     setFilters((f) => ({ ...f, ...patch }))
     setPage(1)
+  }
+  if (units.length === 0) {
+    return <Card className="p-6 text-center"><h3 className="font-bold text-stone-900">Chưa có gian kho</h3><p className="mt-1 text-sm text-stone-500">Cơ sở chưa có gian kho để hiển thị hoặc phân cho khách hàng.</p></Card>
   }
   const filter = (
     label: string,
@@ -657,7 +667,7 @@ export function InventoryContent({
           icon={Icon.tasks}
         />
       </div>
-      <SectionHeader title="Quản lý gian kho" action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
+      <SectionHeader title={title} action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
       <Card className="p-4">
         <div className="grid items-end gap-3 md:grid-cols-2 2xl:grid-cols-6">
           <label className="block min-w-0 text-sm font-medium text-stone-700 md:col-span-2">
@@ -765,7 +775,7 @@ export function InventoryContent({
                 </Td>
                 <Td className="text-right align-middle tabular-nums">
                   {u.definition.monthlyPrice == null || u.definition.monthlyPrice <= 0 ? (
-                    <p className="text-sm text-stone-500">Chờ BO định giá</p>
+                    <p className="text-sm text-stone-500">Chờ quản lý vận hành định giá</p>
                   ) : (
                     <div className="whitespace-nowrap">
                       <p className="font-semibold text-stone-800">
@@ -811,46 +821,13 @@ export function InventoryContent({
           }}
         />
       </Card>
-      <div>
-        <Card>
-          <h2 className="border-b border-stone-200 p-4 font-bold">
-            Phân bổ theo khu vực
-          </h2>
-          <div className="grid gap-3 p-4 sm:grid-cols-2 2xl:grid-cols-1">
-            {[...new Set(units.map((u) => u.zone))].map((zone) => {
-              const inZone = units.filter((u) => u.zone === zone)
-              return (
-                <div
-                  key={zone ?? "no-zone"}
-                  className="rounded-xl border border-stone-200 p-4"
-                >
-                  <div className="flex justify-between gap-3">
-                    <b>{location(zone)}</b>
-                    <Badge variant="muted">{inZone.length} gian</Badge>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {Object.entries(statusLabels).map(([status, text]) => (
-                      <p key={status} className="text-xs text-stone-600">
-                        {text}:{" "}
-                        <b>
-                          {inZone.filter((u) => u.status === status).length}
-                        </b>
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-            {units.length === 0 && <p>Không có dữ liệu</p>}
-          </div>
-        </Card>
-      </div>
-      <Card>
+      {showCatalog && <><Card>
         <h2 className="border-b border-stone-200 p-4 font-bold">
           Loại gian kho tại cơ sở
         </h2>
         <FacilityCatalogTable rows={inventory.catalog} />
       </Card>
+      <ManagerGoodsCatalogPanel /></>}
       <Modal
         open={!!selected}
         onClose={() => setSelectedId(undefined)}
@@ -860,7 +837,7 @@ export function InventoryContent({
             <h2 id="modal-title" className="text-lg font-bold text-slate-900">Chi tiết gian kho · <span className="font-mono">{selected.code}</span></h2>
             <span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${statusClasses[selected.status]}`}>{statusLabels[selected.status]}</span>
           </div>
-          <button type="button" aria-label="Đóng chi tiết gian kho" className="shrink-0 rounded p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900" onClick={() => setSelectedId(undefined)}>✕</button>
+          <button type="button" aria-label="Đóng chi tiết gian kho" className="shrink-0 rounded px-2 py-1 text-sm text-stone-500 hover:bg-stone-100 hover:text-stone-900" onClick={() => setSelectedId(undefined)}>Đóng</button>
         </div>}
         contentClassName="max-h-[calc(90vh-76px)] overflow-y-auto p-4 sm:p-6"
       >
@@ -875,7 +852,7 @@ export function InventoryContent({
                 ["Diện tích", measure(selected.definition.areaM2, "m²")],
                 ["Thể tích", measure(selected.definition.volumeM3, "m³")],
                 ["Tải trọng tối đa", measure(selected.definition.maxLoadKg, "kg")],
-                ["Giá niêm yết", selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0 ? "Chờ BO định giá" : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`],
+                ["Giá niêm yết", selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0 ? "Chờ quản lý vận hành định giá" : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`],
               ] as [string, string][]).map(([label, value]) => <div key={label} className="min-w-0">
                 <dt className="text-xs font-medium text-slate-500">{label}</dt>
                 <dd className="mt-1 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">{value}</dd>
