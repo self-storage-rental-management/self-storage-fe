@@ -12,6 +12,9 @@ import {
   listSupportQueue,
   getSupportSummary,
   sendSupportCommand,
+  hideCustomerSupportHistory,
+  listStaffSupportInbox,
+  listRelatedStaffConversations,
 } from "./supportApi"
 import type {
   SupportCommand,
@@ -45,6 +48,36 @@ afterEach(() => {
   clearAuthTokens()
 })
 describe("D5 transport and response boundaries", () => {
+  it('reads grouped Staff inbox rows and group counts from the API', async () => {
+    const row = { ticket: supportActive, queued: null, historyCount: 8, lastActivityAt: supportActive.createdAt }
+    const counts = { queue: 0, mine: 1, all: 1, history: 1 }
+    const fetch = respond({ ...supportPage([row]), counts })
+    const result = await listStaffSupportInbox('mine')
+    expect(result.data).toEqual([row]); expect(result.counts).toEqual(counts)
+    const url = new URL(fetch.mock.calls[0][0])
+    expect(url.pathname).toBe('/api/staff/support-workflows/inbox')
+    expect(url.searchParams.get('view')).toBe('mine')
+    respond({ ...supportPage([row]), counts: { ...counts, mine: -1 } })
+    await expect(listStaffSupportInbox('mine')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+  it('keeps grouped unclaimed rows limited to safe queue summaries', async () => {
+    const queued = { id: ids.ticket, facilityId: ids.facility, subject: 'Need help', createdAt: supportActive.createdAt, version: 0 }
+    const row = { ticket: null, queued, historyCount: 0, lastActivityAt: queued.createdAt }
+    const counts = { queue: 1, mine: 0, all: 1, history: 0 }
+    respond({ ...supportPage([row]), counts })
+    expect((await listStaffSupportInbox('queue')).data[0].ticket).toBeNull()
+    respond({ ...supportPage([{ ...row, queued: { ...queued, description: 'private' } }]), counts })
+    await expect(listStaffSupportInbox('queue')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    respond({ ...supportPage([{ ...row, ticket: supportActive }]), counts })
+    await expect(listStaffSupportInbox('queue')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+  it('reads related conversations without creating or modifying any ticket', async () => {
+    const fetch = respond(supportPage([supportActive]))
+    expect((await listRelatedStaffConversations(ids.ticket)).data).toEqual([supportActive])
+    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(`/api/staff/support-workflows/${ids.ticket}/related`)
+    expect(fetch.mock.calls[0][1].method).toBeUndefined()
+    await expect(listRelatedStaffConversations('invalid')).rejects.toMatchObject({ code: 'CLIENT_VALIDATION' })
+  })
   it("separates internal conversation and accepts Manager replies", async () => {
     const message = { ...supportMessage, authorRole: "MANAGER", visibility: "INTERNAL" }
     const fetch = respond(supportPage([message]))
@@ -74,6 +107,17 @@ describe("D5 transport and response boundaries", () => {
     expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/api/staff/support-workflows/queue")
     respond(supportPage([{ ...item, description: "private" }]))
     await expect(listSupportQueue()).rejects.toThrow()
+  })
+  it.each([undefined, null, "SH-483291"])("reads Staff queue with displayCode %s", async displayCode => {
+    const item = { id: ids.ticket, facilityId: ids.facility, subject: "Need help", createdAt: "2026-10-08T03:00:00Z", version: 0, displayCode }
+    respond(supportPage([item]))
+    expect((await listSupportQueue()).data[0].displayCode).toBe(displayCode)
+    respond(supportPage([{ ...item, description: "private" }]))
+    await expect(listSupportQueue()).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
+  it.each(["GH-2610-000003", "HT-2610-000003"])("rejects old or malformed queue display code %s", async displayCode => {
+    respond(supportPage([{ id: ids.ticket, facilityId: ids.facility, subject: "Need help", createdAt: "2026-10-08T03:00:00Z", version: 0, displayCode }]))
+    await expect(listSupportQueue()).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
   })
   it("sends Staff claim with version and idempotency key", async () => {
     const fetch = respond({ data: { ...supportActive, id: ids.ticket } })
@@ -303,6 +347,30 @@ describe("D5 transport and response boundaries", () => {
   })
 })
 describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
+  it('hides only the owned Customer history through its dedicated DELETE endpoint', async () => {
+    const fetch = respond({ data: { ticketId: ids.ticket, hidden: true } })
+    await hideCustomerSupportHistory(ids.ticket)
+    expect(fetch.mock.calls[0][0]).toContain(`/api/customer/support-workflows/${ids.ticket}/history`)
+    expect(fetch.mock.calls[0][1].method).toBe('DELETE')
+    await expect(hideCustomerSupportHistory('invalid-id')).rejects.toMatchObject({ code: 'CLIENT_VALIDATION' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it.each(['customer', 'staff'] as const)('allows %s file-only messages and rejects entirely empty messages', async role => {
+    const fetch = respond({ data: { ...supportMessage, body: '', evidenceFileIds: [ids.foreign] } })
+    const payload = role === 'staff' ? { kind: 'message' as const, body: '', evidenceFileIds: [ids.foreign], visibility: 'PUBLIC' as const } : { kind: 'message' as const, body: '', evidenceFileIds: [ids.foreign] }
+    await sendSupportCommand(role, ids.ticket, payload, 'file-only')
+    expect(JSON.parse(fetch.mock.calls[0][1].body).body).toBe('')
+    await expect(sendSupportCommand(role, ids.ticket, { ...payload, evidenceFileIds: [] }, 'empty')).rejects.toMatchObject({ code: 'CLIENT_VALIDATION' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it("allows an explicit status-only resolution without publishing a message or files", async () => {
+    const fetch = respond({ data: { ...supportActive, status: "resolved" } })
+    await sendSupportCommand("staff", ids.ticket, { kind: "resolve", summary: "", evidenceFileIds: [], statusOnly: true, expectedVersion: 2 }, "status-only")
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ summary: "", evidenceFileIds: [], statusOnly: true, expectedVersion: 2 })
+    await expect(sendSupportCommand("staff", ids.ticket, { kind: "resolve", summary: "Must not be posted", statusOnly: true, expectedVersion: 2 }, "invalid-status-only"))
+      .rejects.toMatchObject({ code: "CLIENT_VALIDATION" })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
   it("requires a description or saved evidence before reporting resolution", async () => {
     const fetch = respond({ data: { ...supportActive, status: "resolved" } })
     await expect(sendSupportCommand("staff", ids.ticket, {

@@ -1,85 +1,103 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiActor } from '../../services/authApi'
+import type { ManagerReportSummary } from '../../services/managerReportingApi'
 import { ApiClientError } from '../../services/apiClient'
 import { manager } from '../../../tests/rentalApiFixtures'
 import ManagerDashboardApiPanel from './ManagerDashboardApiPanel'
 
-const state = vi.hoisted(() => ({ actor: null as ApiActor | null, reads: {} as Record<string, Record<string, unknown>>, identities: [] as string[] }))
+const state = vi.hoisted(() => ({
+  actor: null as ApiActor | null, summary: {} as Record<string, unknown>, identities: [] as string[],
+}))
 vi.mock('../../services/authApi', () => ({ getAuthenticatedActor: () => state.actor }))
-vi.mock('../../hooks/useRentalApiResource', () => ({ useRentalApiResource: (identity: string) => {
-  state.identities.push(identity)
-  return { loading: false, ...(state.reads[identity.slice(identity.lastIndexOf(':') + 1)] ?? {}) }
-} }))
-beforeEach(() => { state.actor = { ...manager, permissions: [...manager.permissions, 'support:read'] }; state.reads = {}; state.identities = [] })
+vi.mock('../../hooks/useRentalApiResource', () => ({
+  useRentalApiResource: (identity: string) => {
+    state.identities.push(identity)
+    return { loading: false, refresh: vi.fn(), ...(identity.includes(':report-summary:') ? state.summary : {}) }
+  },
+}))
+const summary: ManagerReportSummary = {
+  facilityId: 'f1', facilityName: 'Cơ sở 1',
+  totalUnits: 20, availableUnits: 18, occupiedUnits: 1, maintenanceUnits: 0, reservedUnits: 1,
+  occupancyRate: 5, monthlyRecurringRevenue: 9500000, collectedRevenue: null,
+  overdueRentalsCount: 0, monthCheckinsCount: 1, openReturnsCount: 0, openMaintenanceTasksCount: 0,
+  unitStatusBreakdown: [], unitTypeBreakdown: [],
+}
+beforeEach(() => {
+  state.actor = { ...manager, permissions: [...manager.permissions, 'reports:read'], facilityNames: { f1: 'Cơ sở 1' } }
+  state.summary = { data: { ...summary } }
+  state.identities = []
+})
 const render = () => renderToStaticMarkup(<ManagerDashboardApiPanel setPage={() => {}} />)
 
-describe('Manager API dashboard: no business demo data', () => {
-  it('renders server counts, preserves verified zero and labels missing totals honestly', () => {
-    state.reads = { rentals: { data: { value: 37, completeness: 'COMPLETE' } }, 'pending-renewals': { data: { value: 0, completeness: 'COMPLETE' } } }
+describe('Manager dashboard uses the current facility report', () => {
+  it('shows compact metrics and distinguishes unverified receipts from verified zero', () => {
     const html = render()
-    expect(html).toContain('>37<')
-    expect(html).toContain('>0<')
+    for (const title of ['Tỷ lệ lấp đầy', 'Tiền thuê dự kiến/tháng', 'Tiền đã thu', 'Hợp đồng quá hạn', 'Nhận kho trong tháng', 'Yêu cầu trả kho']) expect(html).toContain(title)
+    expect(html).toContain('5%')
+    expect(html).toContain('9.500.000')
     expect(html).toContain('Chưa xác minh')
-    expect(html).not.toContain('Tải lại')
+    expect(html).toContain('min-h-[112px]')
+    expect(html).toContain('2xl:grid-cols-6')
+    state.summary = { data: { ...summary, collectedRevenue: 0 } }
+    const verified = render()
+    expect(verified).not.toContain('Chưa xác minh')
+    expect(verified).toContain('>0<')
   })
-  it('never renders stale counts during loading or an API error', () => {
-    state.reads = { rentals: { loading: true, data: { value: 888 } }, 'pending-renewals': { error: new Error('Offline'), data: { value: 999 } } }
+  it.each(['loading', 'error'])('hides stale metrics while %s without inventing zero amounts', status => {
+    state.summary = {
+      data: { ...summary, monthlyRecurringRevenue: 888888888 },
+      ...(status === 'loading' ? { loading: true } : { error: new ApiClientError('SQL debug UnitType', { status: 500 }) }),
+    }
     const html = render()
-    expect(html).toContain('Đang tải')
-    expect(html).not.toContain('>888<')
-    expect(html).not.toContain('>999<')
-    expect(html).not.toContain('>0<')
+    expect(html).not.toContain('888.888.888')
+    expect(html).not.toContain('Tỷ lệ lấp đầy')
+    expect(html).not.toContain('SQL debug')
+    expect(html).not.toContain('UnitType')
+    expect(html).toContain(status === 'loading' ? 'Đang tải báo cáo cơ sở' : 'Hệ thống gặp lỗi')
+    expect(html).toContain('Nhật ký hoạt động cơ sở')
   })
-  it('does not describe partial overdue results as no debt', () => {
-    state.reads = { 'term-overdue': { data: { value: null, completeness: 'PARTIAL', reason: 'Chưa đủ dữ liệu công nợ.' } } }
-    const html = render()
-    expect(html).toContain('Chưa đủ dữ liệu công nợ.')
-    expect(html).not.toContain('Không có khoản quá hạn')
-    expect(html).not.toContain('>0<')
-  })
-  it.each(['term-overdue'])('preserves unknown, error and verified zero for %s', metric => {
-    state.reads = { [metric]: { error: new ApiClientError('Offline', { status: 503 }), data: { value: 888 } } }
-    let html = render()
-    expect(html).toContain('Chưa xác minh')
-    expect(html).not.toContain('>888<')
-    expect(html).not.toContain('>0<')
-    state.reads = { [metric]: { data: { value: null, completeness: 'PARTIAL', reason: 'Chưa đủ dữ liệu công nợ.' } } }
-    html = render()
-    expect(html).toContain('Chưa đủ dữ liệu công nợ.')
-    expect(html).not.toContain('>0<')
-    state.reads = { [metric]: { data: { value: 0, completeness: 'COMPLETE' } } }
-    html = render()
-    expect(html).toContain('>0<')
-    expect(html).not.toContain('Chưa đủ dữ liệu công nợ.')
-  })
-  it('does not request unauthorized metrics or render demo for a missing actor', () => {
+  it('does not request reports without permission or an active Manager account', () => {
     state.actor = { ...manager, permissions: ['support:read'] }
-    render()
-    expect(state.identities).toHaveLength(1)
+    expect(render()).toContain('role="alert"')
+    expect(state.identities).toHaveLength(0)
     state.actor = null
-    state.identities = []
+    expect(render()).toContain('Cần đăng nhập')
+    expect(state.identities).toHaveLength(0)
+    state.actor = { ...manager, status: 'INACTIVE' }
     expect(render()).toContain('Cần đăng nhập')
     expect(state.identities).toHaveLength(0)
   })
-  it('re-keys every metric for account, permission and scope changes', () => {
+  it('re-keys report reads when account, permission or facility scope changes', () => {
     render()
-    const previous = state.identities.slice()
-    state.actor = { ...state.actor!, id: 'other-manager', facilityScopes: { f2: 'READ' } }
-    state.identities = []
-    render()
-    expect(state.identities).toHaveLength(4)
-    expect(state.identities.every(id => !previous.includes(id))).toBe(true)
+    let previous = state.identities.slice()
+    expect(previous).toHaveLength(2)
+    const actors: ApiActor[] = [
+      { ...state.actor!, id: 'other-manager' },
+      { ...state.actor!, permissions: [...state.actor!.permissions, 'support:read'] },
+      { ...state.actor!, facilityScopes: { f2: 'MANAGE' } },
+    ]
+    for (const actor of actors) {
+      state.actor = actor
+      state.identities = []
+      render()
+      expect(state.identities).toHaveLength(2)
+      expect(state.identities.every(id => !previous.includes(id))).toBe(true)
+      previous = state.identities.slice()
+    }
+    expect(state.identities.some(id => id.endsWith(':report-summary:f2'))).toBe(true)
   })
-  it('omits active-rental and payment-overdue cards and their API reads', () => {
+  it('omits removed work-tracking and setup sections and reads only reports', () => {
     const html = render()
-    expect(html).not.toContain('Đang thuê')
-    expect(html).not.toContain('Thanh toán quá hạn')
-    expect(html).toContain('Tổng hồ sơ thuê')
-    expect(html).toContain('Gia hạn cần theo dõi')
-    expect(html).toContain('Yêu cầu hỗ trợ mới')
-    expect(html).toContain('Quá thời hạn thuê')
-    expect(state.identities).toHaveLength(4)
-    expect(state.identities.some(id => id.endsWith(':active-rentals') || id.endsWith(':payment-overdue'))).toBe(false)
+    for (const removed of ['Công việc cần theo dõi', 'Tổng hồ sơ thuê', 'Gia hạn cần theo dõi', 'Yêu cầu hỗ trợ mới', 'Quá thời hạn thuê', 'Thiết lập ban đầu', '(Setup)']) expect(html).not.toContain(removed)
+    expect(html).toContain('Thông tin kho')
+    expect(html).toContain('Nhật ký hoạt động cơ sở')
+    expect(state.identities).toHaveLength(2)
+    expect(state.identities.every(id => id.includes(':report-summary:') || id.includes(':report-activities:'))).toBe(true)
+  })
+  it('requires an unambiguous assigned facility before reading reports', () => {
+    state.actor = { ...state.actor!, facilityScopes: {} }
+    expect(render()).toContain('role="alert"')
+    expect(state.identities).toHaveLength(0)
   })
 })

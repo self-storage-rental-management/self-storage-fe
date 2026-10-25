@@ -1,6 +1,6 @@
 import { ApiClientError, apiRequest } from './apiClient'
 
-export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'COMPLETED'
+export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED'
 export type AssignmentStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED'
 export type AssignmentUnitStatus = 'available' | 'reserved'
 
@@ -18,6 +18,7 @@ export interface UnitAssignmentCandidate {
   startDate: string
   endDate: string
   confirmedAt: string | null
+  assignmentDueAt: string | null
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
   assignedStorageUnitId: string | null
@@ -32,6 +33,13 @@ export interface AssignableUnit {
   floor: string | null
   zone: string | null
   status: 'available'
+  unitTypeName: string
+  lengthM: number
+  widthM: number
+  heightM: number
+  areaM2: number
+  volumeM3: number
+  maxLoadKg: number
 }
 
 export interface UnitAssignmentResult {
@@ -64,6 +72,10 @@ interface ApiEnvelope<T> {
   correlationId: string
 }
 
+function emptyPage<T>(page: number, pageSize: number): ApiPage<T> {
+  return { data: [], pagination: { page, pageSize, totalItems: 0, totalPages: 0, sort: '' }, correlationId: '' }
+}
+
 function assertPage<T>(payload: unknown, message: string): ApiPage<T> {
   const value = payload as Partial<ApiPage<T>> | null
   if (!value || !Array.isArray(value.data)
@@ -79,7 +91,7 @@ function assertPage<T>(payload: unknown, message: string): ApiPage<T> {
 
 function assertEnvelope<T>(payload: unknown): ApiEnvelope<T> {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về assignment không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Kết quả phân gian chưa đúng định dạng.', { code: 'INVALID_API_RESPONSE' })
   }
   return payload as ApiEnvelope<T>
 }
@@ -94,21 +106,31 @@ export async function listUnitAssignmentCandidates(params: {
     pageSize: String(params.pageSize ?? 20),
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
-  return assertPage<UnitAssignmentCandidate>(
-    await apiRequest<unknown>(`/api/manager/unit-assignments/candidates?${query}`),
-    'Backend trả về danh sách reservation chờ phân kho không hợp lệ.',
-  )
+  try {
+    return assertPage<UnitAssignmentCandidate>(
+      await apiRequest<unknown>(`/api/manager/unit-assignments/candidates?${query}`),
+      'Dữ liệu đơn chờ phân gian chưa đúng định dạng.',
+    )
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) return emptyPage<UnitAssignmentCandidate>(params.page ?? 0, params.pageSize ?? 20)
+    throw error
+  }
 }
 
 export async function listAssignableUnits(reservationId: string, q = '') {
   const query = new URLSearchParams({ page: '0', pageSize: '100' })
   if (q.trim()) query.set('q', q.trim())
-  return assertPage<AssignableUnit>(
-    await apiRequest<unknown>(
-      `/api/manager/unit-assignments/candidates/${encodeURIComponent(reservationId)}/available-units?${query}`,
-    ),
-    'Backend trả về danh sách gian kho khả dụng không hợp lệ.',
-  )
+  try {
+    return assertPage<AssignableUnit>(
+      await apiRequest<unknown>(
+        `/api/manager/unit-assignments/candidates/${encodeURIComponent(reservationId)}/available-units?${query}`,
+      ),
+      'Dữ liệu gian kho khả dụng chưa đúng định dạng.',
+    )
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) return emptyPage<AssignableUnit>(0, 100)
+    throw error
+  }
 }
 
 export async function createUnitAssignment(reservationId: string, storageUnitId: string) {

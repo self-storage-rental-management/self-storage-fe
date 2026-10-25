@@ -35,7 +35,6 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
-import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
@@ -2723,7 +2722,7 @@ export default function StaffApp({
                         }`}
                       >
                         {r.status === "REVIEW_REQUIRED"
-                          ? "Hạn duyệt hàng hóa trong 12 giờ"
+                          ? "Hạn duyệt hàng hóa trong 6 giờ"
                           : "Hạn cuối"}
                         :{" "}
                         {r.status === "REVIEW_REQUIRED"
@@ -3193,7 +3192,6 @@ export default function StaffApp({
               showToast={showToast}
             />
           </SupportApiRoute>
-          {isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
         </div>
       )}
 
@@ -3284,7 +3282,7 @@ export default function StaffApp({
                 <span>
                   <b>
                     {selectedReservation.status === "REVIEW_REQUIRED"
-                      ? "Hạn duyệt 12 giờ"
+                      ? "Hạn duyệt 6 giờ"
                       : "Hạn cuối"}
                     :
                   </b>{" "}
@@ -3302,7 +3300,7 @@ export default function StaffApp({
             {selectedReservation.status === "REVIEW_REQUIRED" && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
                 <p className="font-semibold">
-                  {"Hồ sơ hàng hóa “Khác” cần nhân viên xác nhận trong 12 giờ"}
+                  {"Hồ sơ hàng hóa “Khác” cần nhân viên xác nhận trong 6 giờ"}
                 </p>
                 <p className="mt-1">
                   {
