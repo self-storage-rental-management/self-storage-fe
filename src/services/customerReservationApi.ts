@@ -188,12 +188,15 @@ export interface ReservationRentalPackage {
   freeSetupDays?: number
   discountRate: number
   policyVersion: string
+  depositRate?: number
 }
 
 export interface ReservationQuote {
   quoteId: string
   facilityId: string
+  facilityName?: string | null
   unitTypeId: string
+  unitTypeName?: string | null
   startDate: string
   endDate: string
   rentalMonths: number
@@ -203,6 +206,7 @@ export interface ReservationQuote {
   discountRate: number
   discountAmount: number
   totalAfterDiscount: number
+  reservationDepositRate?: number
   reservationDepositAmount: number
   securityDepositAmount: number
   remainingRentalAmount: number

@@ -1038,7 +1038,7 @@ setSavingProfile(true)
       )
     }
 
-    if (user.role !== 'business') return null
+    if (user.role !== 'business' && user.role !== 'admin') return null
 
     return (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -1048,9 +1048,11 @@ setSavingProfile(true)
             <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <span className="text-sm font-semibold text-emerald-900">Phạm vi dữ liệu</span>
               <Badge variant="success">{apiMode
-                ? Object.keys(apiActor?.facilityScopes ?? {}).length
-                  ? 'Theo cơ sở được cấp'
-                  : 'Chưa được cấp phạm vi cơ sở'
+                ? (user.role as string) === 'admin'
+                  ? 'Toàn hệ thống'
+                  : Object.keys(apiActor?.facilityScopes ?? {}).length
+                    ? 'Theo cơ sở được cấp'
+                    : 'Chưa được cấp phạm vi cơ sở'
                 : 'Theo dữ liệu tài khoản'}</Badge>
             </div>
             <InfoRow label="Số cơ sở trong phạm vi" value={apiMode ? (apiFacilities.length ? `${apiFacilities.length} cơ sở` : apiFacilitiesError ? 'Không tải được dữ liệu cơ sở' : 'Chưa có dữ liệu') : facilities.length ? `${facilities.length} cơ sở` : 'Chưa có dữ liệu'} />
