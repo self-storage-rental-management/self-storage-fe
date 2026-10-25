@@ -729,6 +729,7 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const openHandover = (item: CheckInCase) => {
+    setError(null)
     setHandoverTarget(item)
 
     setHandoverStep(stepForCheckIn(item))
