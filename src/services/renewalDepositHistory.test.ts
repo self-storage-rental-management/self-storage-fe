@@ -23,10 +23,10 @@ function page(data: unknown[]) { return { data, pagination: { page: 0, pageSize:
 beforeEach(() => {
   vi.mocked(apiRequest).mockReset().mockImplementation(async path => path.includes("/payments") ? page([event]) : page([]))
 })
-it("loads the existing VNPay deposit into history after a fresh page load", async () => {
+it("keeps an old VNPay event visible without certifying it before current reconciliation", async () => {
   const result = await loadCustomerPaymentHistory()
   expect(result.warnings).toEqual([])
-  expect(result.entries).toEqual([expect.objectContaining({ id: event.data.paymentRef, category: "renewal", amount: 6600000, status: "PAID", method: "VNPay" })])
+  expect(result.entries).toEqual([expect.objectContaining({ id: event.data.paymentRef, category: "renewal", amount: 6600000, status: "UNKNOWN", receiptAvailable: false, method: "VNPay" })])
 })
 it("also accepts deposits emitted with the corrected Renewal binding", async () => {
   vi.mocked(apiRequest).mockResolvedValue(page([{ ...event, data: { ...event.data, renewalId } }]))

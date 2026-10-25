@@ -2,6 +2,7 @@ import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
 import { useState, useRef, useEffect } from 'react'
 import type { User } from '../../types'
 import { useStorageHub } from '../../store/StorageHubContext'
+import { getPublicSupportKnowledge, PUBLIC_SUPPORT_UNKNOWN } from '../../services/supportPublicKnowledgeApi'
 import {
   SUPPORT_FAQS,
   matchQueryAgainstFAQ,
@@ -48,6 +49,7 @@ export default function CustomerSupportChatbot({
 
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState('')
+  const asking = useRef(false)
   const [lastQuestion, setLastQuestion] = useState<string | null>(null)
   const [lastFaqItem, setLastFaqItem] = useState<FAQItem | null>(null)
   const [showPostActions, setShowPostActions] = useState(false)
@@ -82,7 +84,7 @@ export default function CustomerSupportChatbot({
         id: 'msg-welcome',
         sender: 'bot',
         time: now,
-        text: `Xin chào ${user.name}! Mình là Trợ lý ảo StorageHub  Mình có thể giải đáp tức thì các thắc mắc về mã PIN, hợp đồng, thanh toán, hoặc tự động kết nối bạn với nhân viên phụ trách cơ sở.`
+        text: `Xin chào ${user.name}! Mình hướng dẫn theo thông tin công khai của StorageHub. Nếu chưa có nguồn xác nhận hoặc cần kiểm tra hồ sơ, bạn có thể chọn gặp nhân viên.`
       }]
     })
   }, [isOpen, user.name])
@@ -106,7 +108,9 @@ export default function CustomerSupportChatbot({
   }
 
   // Handle asking a predefined FAQ or text
-  const handleAsk = (questionText: string) => {
+  const handleAsk = async (questionText: string) => {
+    if (asking.current) return
+    asking.current = true
     setShowPostActions(false)
     setShowFeedbackStep(false)
     setShowLoopBreakerPrompt(false)
@@ -116,30 +120,26 @@ export default function CustomerSupportChatbot({
 
     // Check FAQ
     const match = matchQueryAgainstFAQ(questionText)
-    setLastFaqItem(match)
-
-    setTimeout(() => {
-      if (match) {
-        addMessage('bot', match.answer, { isFaqAnswer: true, faqItem: match })
-
-        if (match.solved) {
-          setTimeout(() => {
-            addMessage('bot', 'Vấn đề này đã được giải quyết chưa bạn? Hãy cho trợ lý biết để hỗ trợ thêm nhé:')
-            setShowPostActions(true)
-          }, 350)
-        } else {
-          // If match is not solvable by bot (e.g. gate stuck, leak), automatically suggest escalation
-          setTimeout(() => {
-            addMessage('bot', ' Sự cố này cần nhân viên kỹ thuật tại cơ sở can thiệp. Bạn có muốn chuyển ngay cho nhân viên trực ca không?')
-            setShowPostActions(true)
-          }, 350)
-        }
-      } else {
-        // Fallback natural language answer
-        addMessage('bot', `Cảm ơn bạn đã hỏi về "${questionText}". Trợ lý đã kiểm tra hệ thống cơ sở ${selectedFacility}. Nếu nội dung này chưa có trong hướng dẫn tự động, bạn có thể chuyển yêu cầu trực tiếp cho nhân viên phụ trách để được hỗ trợ chuyên sâu nhé!`)
-        setShowPostActions(true)
-      }
-    }, 450)
+    setLastFaqItem(null)
+    if (!match) {
+      addMessage('bot', PUBLIC_SUPPORT_UNKNOWN)
+      setShowPostActions(true)
+      asking.current = false
+      return
+    }
+    try {
+      const entry = (await getPublicSupportKnowledge()).find(item => item.id === match.id)
+      if (entry) {
+        const grounded = { ...match, answer: entry.answer }
+        setLastFaqItem(grounded)
+        addMessage('bot', entry.answer, { isFaqAnswer: true, faqItem: grounded })
+      } else addMessage('bot', PUBLIC_SUPPORT_UNKNOWN)
+    } catch {
+      addMessage('bot', PUBLIC_SUPPORT_UNKNOWN)
+    } finally {
+      asking.current = false
+    }
+    setShowPostActions(true)
   }
 
   // Requirement 1: Handle "Hỏi vấn đề khác" with loop-breaker trigger

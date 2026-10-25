@@ -29,7 +29,7 @@ import type {
   FacilityIssueCategory
 } from '../types/storageHub'
 import { generateDefaultRentalPackages } from '../domain/packageRules'
-import { calculateRenewalPaymentSplit } from '../domain/renewalPricing'
+import { legacyRenewalUnavailable } from '../domain/legacyRenewal'
 import { PERMISSION_KEYS, type PermissionKey, type Role, type RolePermissionsState, type User, type LoginHistoryRecord, type SessionRecord, type SecurityAlert, type ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
 import { transitionReservation } from '../domain/reservationFlow'
@@ -48,8 +48,6 @@ import {
   isManagerOperationAllowed,
   isManagerRentalOverdue,
   managerUnitHasOperationalLock,
-  nextDueAfterPayment,
-  rentalAmountDue,
   unitHasAllocationConflict,
   type ManagerReturnSettlementFees
 } from '../domain/managerRules'
@@ -202,12 +200,6 @@ function toDateInputValue(value: Date): string {
 function addCalendarMonths(value: string, months: number): string {
   const date = toValidDate(value)
   date.setMonth(date.getMonth() + months)
-  return toDateInputValue(date)
-}
-
-function nextCalendarDay(value: string): string {
-  const date = toValidDate(value)
-  date.setDate(date.getDate() + 1)
   return toDateInputValue(date)
 }
 
@@ -1559,17 +1551,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
                 const unit = INITIAL_UNITS.find(
                   item => item.id === (rental?.unitId || renewal.unitId)
                 )
-                const renewalTotal = renewal.totalAmount ?? renewal.renewalFee
-                const paymentSplit = calculateRenewalPaymentSplit(renewalTotal)
-                const shouldApplyCurrentPolicy = ['pending', 'approved', 'payment_expired'].includes(renewal.status)
 
                 return {
                   ...renewal,
                   renewalMonths: renewal.renewalMonths || 1,
-                  ...(shouldApplyCurrentPolicy ? {
-                    bookingDepositAmount: paymentSplit.depositAmount,
-                    remainingAmount: paymentSplit.remainingAmount,
-                  } : {}),
                   facilityId:
                     unit?.facilityId || rental?.facilityId || renewal.facilityId
                 }
@@ -2972,86 +2957,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  // 7. Renewals: Customer requests, Manager approves, Customer pays
-  const requestRenewal = (rentalId: string, renewalMonths: number, customer: User): RenewalRecord => {
-    assertPermission(customer, 'rentals:update')
-    const rental = state.rentals.find(r => r.id === rentalId)
-    if (!rental || rental.status !== 'active') throw new Error('Chỉ hợp đồng đang hoạt động mới được yêu cầu gia hạn.')
-    if (rental.customerId !== customer.id && rental.customerEmail !== customer.email) throw new Error('Hợp đồng không thuộc tài khoản Customer này.')
-    if (![1, 3, 6, 12].includes(renewalMonths)) throw new Error('Gói gia hạn không hợp lệ.')
-    if (state.renewals.some(item => item.rentalId === rentalId && ['pending', 'approved', 'deposit_paid', 'appointment_scheduled', 'payment_processing'].includes(item.status))) throw new Error('Hợp đồng đã có một yêu cầu gia hạn đang chờ xử lý.')
-    const requestedEndDate = addCalendarMonths(rental.endDate, renewalMonths)
-    const grossRenewalAmount = rental.monthlyRate * renewalMonths
-    const discountRate = renewalMonths === 6 ? 0.03 : renewalMonths === 12 ? 0.05 : 0
-    const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
-    const renewalTotal = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
-    const paymentSplit = calculateRenewalPaymentSplit(renewalTotal)
-
-    const renewalRecord: RenewalRecord = {
-      id: `RNW-${Date.now().toString().slice(-6)}`,
-      rentalId: rental.id,
-      unitId: rental.unitId,
-      facilityId: rental.facilityId,
-      customerId: customer.id,
-      customerName: customer.name,
-      oldEndDate: rental.endDate,
-      newEndDate: requestedEndDate,
-      renewalMonths,
-      renewalFee: renewalTotal,
-      originalMonthlyRate: rental.monthlyRate,
-      discountRate,
-      discountAmount,
-      totalAmount: renewalTotal,
-      bookingDepositAmount: paymentSplit.depositAmount,
-      remainingAmount: paymentSplit.remainingAmount,
-      status: 'pending',
-      requestedAt: new Date().toISOString()
-    }
-
-    setState(prev => ({
-      ...prev,
-      renewals: [renewalRecord, ...prev.renewals],
-      activities: [
-        {
-          id: `act-${Date.now()}`,
-          action: 'RENEWAL_REQUESTED',
-          actorId: customer.id,
-          actorName: customer.name,
-          actorRole: customer.role,
-          facilityId: rental.facilityId,
-          entityType: 'rental',
-          entityId: rental.id,
-          notes: `Khách gửi yêu cầu gia hạn kho ${rental.unitId} thêm ${renewalMonths} tháng, đến ngày ${requestedEndDate}.`,
-          timestamp: new Date().toLocaleString('vi-VN')
-        },
-        ...prev.activities
-      ]
-    }))
-
-    return renewalRecord
-  }
-
-  const updateRenewalRequest = (renewalId: string, renewalMonths: number, customer: User) => {
-    assertPermission(customer, 'rentals:update')
-    const renewal = state.renewals.find(item => item.id === renewalId)
-    if (!renewal || renewal.status !== 'pending') throw new Error('Chỉ có thể sửa yêu cầu đang chờ Manager xét duyệt.')
-    if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
-    if (![1, 3, 6, 12].includes(renewalMonths)) throw new Error('Gói gia hạn không hợp lệ.')
-    const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn ở trạng thái hoạt động.')
-    const updatedAt = new Date().toISOString()
-    const newEndDate = addCalendarMonths(rental.endDate, renewalMonths)
-    const grossRenewalAmount = rental.monthlyRate * renewalMonths
-    const discountRate = renewalMonths === 6 ? 0.03 : renewalMonths === 12 ? 0.05 : 0
-    const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
-    const totalAmount = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
-    const paymentSplit = calculateRenewalPaymentSplit(totalAmount)
-    setState(prev => ({
-      ...prev,
-      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, oldEndDate: rental.endDate, newEndDate, renewalMonths, renewalFee: totalAmount, discountRate, discountAmount, totalAmount, bookingDepositAmount: paymentSplit.depositAmount, remainingAmount: paymentSplit.remainingAmount, originalMonthlyRate: rental.monthlyRate, updatedAt } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_UPDATED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: `Khách đã sửa yêu cầu ${renewal.id}: gia hạn ${renewalMonths} tháng, đến ${newEndDate}. Manager cần xét duyệt theo thông tin mới.`, timestamp: updatedAt }, ...prev.activities]
-    }))
-  }
+  // Legacy financial amounts are read-only; quotes and collection commands belong to the backend flow.
+  const requestRenewal: StorageHubContextValue['requestRenewal'] = () => legacyRenewalUnavailable()
+  const updateRenewalRequest: StorageHubContextValue['updateRenewalRequest'] = () => legacyRenewalUnavailable()
 
   const cancelRenewalRequest = (renewalId: string, customer: User) => {
     assertPermission(customer, 'rentals:update')
@@ -3069,32 +2977,22 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const approveRenewal = (renewalId: string, managerUser: User) => {
-    if (managerUser.role === 'staff') {
-      assertPermission(managerUser, 'renewals:operate')
-    } else {
-      assertPermission(managerUser, 'rentals:update')
-    }
+    assertPermission(managerUser, 'rentals:update')
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') {
-      if (managerUser.role === 'manager' || managerUser.role === 'staff') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
+      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
       return
     }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    if (managerUser.role === 'staff') {
-      if (!isFacilityVisible(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)) {
-        throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
-      }
-    } else {
-      assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
-    }
+    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
 
-    if (managerUser.role === 'manager' || managerUser.role === 'staff') {
+    if (managerUser.role === 'manager') {
       if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn hiệu lực để gia hạn.')
       if (renewal.oldEndDate !== rental.endDate) throw new Error('Thời hạn hợp đồng đã thay đổi. Vui lòng yêu cầu khách cập nhật lại đề nghị gia hạn.')
       if (renewal.newEndDate <= renewal.oldEndDate) throw new Error('Ngày kết thúc gia hạn phải sau ngày kết thúc hợp đồng hiện tại.')
     }
 
-    const isConflicted = (managerUser.role === 'manager' || managerUser.role === 'staff')
+    const isConflicted = managerUser.role === 'manager'
       ? unitHasAllocationConflict(
           renewal.unitId,
           renewal.oldEndDate,
@@ -3115,11 +3013,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const now = new Date()
     const paymentDueAt = new Date(now.getTime() + 72 * 60 * 60 * 1000)
     const invoiceNumber = `INV-RNW-${Date.now().toString().slice(-8)}`
-    const approverTitle = managerUser.role === 'staff' ? 'Nhân viên' : 'Quản lý'
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'completed', approvedBy: `${approverTitle} ${managerUser.name}`, approvedAt: now.toISOString(), paymentDueAt: paymentDueAt.toISOString(), invoiceNumber, invoiceIssuedAt: now.toISOString() } : r),
-      rentals: prev.rentals.map(rent => rent.id === renewal.rentalId ? { ...rent, endDate: renewal.newEndDate } : rent),
+      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'approved', approvedBy: managerUser.name, approvedAt: now.toISOString(), paymentDueAt: paymentDueAt.toISOString(), invoiceNumber, invoiceIssuedAt: now.toISOString() } : r),
       activities: [
         {
           id: `act-${Date.now()}`,
@@ -3132,8 +3028,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityId: renewal.rentalId,
           correlationId: renewal.id,
           beforeState: { status: renewal.status, endDate: renewal.oldEndDate },
-          afterState: { status: 'completed', requestedEndDate: renewal.newEndDate, invoiceNumber },
-          notes: `${approverTitle} ${managerUser.name} duyệt gia hạn kho ${renewal.unitId} đến ${renewal.newEndDate}. Hợp đồng đã gia hạn thành công.`,
+          afterState: { status: 'approved', requestedEndDate: renewal.newEndDate, invoiceNumber, paymentDueAt: paymentDueAt.toISOString() },
+          notes: `Manager duyệt gia hạn kho ${renewal.unitId} đến ${renewal.newEndDate}. Chờ khách thanh toán.`,
           timestamp: now.toISOString()
         },
         ...prev.activities
@@ -3142,32 +3038,21 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const rejectRenewal = (renewalId: string, managerUser: User, reason: string) => {
-    if (managerUser.role === 'staff') {
-      assertPermission(managerUser, 'renewals:operate')
-    } else {
-      assertPermission(managerUser, 'rentals:update')
-    }
+    assertPermission(managerUser, 'rentals:update')
     const renewal = state.renewals.find(r => r.id === renewalId)
     if (!renewal || renewal.status !== 'pending') {
-      if (managerUser.role === 'manager' || managerUser.role === 'staff') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
+      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
       return
     }
     const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    if (managerUser.role === 'staff') {
-      if (!isFacilityVisible(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)) {
-        throw new Error('Bạn không có quyền xử lý hồ sơ của cơ sở khác.')
-      }
-    } else {
-      assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
-    }
+    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
     if (!reason.trim()) throw new Error('Vui lòng nhập lý do từ chối yêu cầu gia hạn.')
     const now = new Date()
-    const approverTitle = managerUser.role === 'staff' ? 'Nhân viên' : 'Quản lý'
 
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'rejected', approvedBy: `${approverTitle} ${managerUser.name}`, approvedAt: now.toISOString(), notes: reason.trim() } : r),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REJECTED', actorId: managerUser.id, actorName: managerUser.name, actorRole: managerUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, correlationId: renewal.id, beforeState: { status: renewal.status, endDate: renewal.oldEndDate }, afterState: { status: 'rejected', reason: reason.trim() }, notes: `${approverTitle} ${managerUser.name} từ chối yêu cầu ${renewal.id}. Lý do: ${reason.trim()}`, timestamp: now.toISOString() }, ...prev.activities]
+      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'rejected', approvedBy: managerUser.name, approvedAt: now.toISOString(), notes: reason.trim() } : r),
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REJECTED', actorId: managerUser.id, actorName: managerUser.name, actorRole: managerUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, correlationId: renewal.id, beforeState: { status: renewal.status, endDate: renewal.oldEndDate }, afterState: { status: 'rejected', reason: reason.trim() }, notes: `Từ chối yêu cầu ${renewal.id}. Lý do: ${reason.trim()}`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 
@@ -3177,134 +3062,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá hạn thanh toán toàn kỳ gia hạn.' } : item) }))
   }
 
-  const payRenewal = (renewalId: string, customer: User, paymentMethod: 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionId: string, termsAccepted: boolean, appointmentDate: string, appointmentTime: string) => {
-    assertPermission(customer, 'rentals:update')
-    const renewal = state.renewals.find(r => r.id === renewalId)
-    if (!renewal || renewal.status !== 'approved') throw new Error('Đơn gia hạn chưa được Manager duyệt.')
-    if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
-    if ((renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.renewalFee).depositAmount) === 0)
-      throw new Error('Gia hạn không thu cọc. Cổng VNPay Sandbox thanh toán toàn kỳ chưa được tích hợp; chưa thể ghi nhận thanh toán.')
-    if (!termsAccepted) throw new Error('Vui lòng xác nhận thông tin và điều khoản gia hạn.')
-    if (!transactionId.trim()) throw new Error('Vui lòng nhập mã giao dịch thanh toán.')
-    if (!appointmentDate || !appointmentTime) throw new Error('Vui lòng chọn ngày và giờ đến cơ sở ký phụ lục.')
-    if (appointmentTime < '08:00' || appointmentTime > '17:00') throw new Error('Giờ hẹn phải nằm trong giờ làm việc 08:00–17:00.')
-    if (!renewal.paymentDueAt || new Date(renewal.paymentDueAt).getTime() < Date.now()) {
-      setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá hạn thanh toán toàn kỳ gia hạn.' } : item) }))
-      throw new Error('Đã quá thời hạn thanh toán 72 giờ. Vui lòng gửi yêu cầu gia hạn mới.')
-    }
-    const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn ở trạng thái hoạt động.')
-    if (state.payments.some(payment => payment.renewalId === renewalId && payment.status === 'PAID')) throw new Error('Yêu cầu gia hạn này đã được thanh toán.')
-
-    const now = new Date()
-    const oldEndAt = new Date(`${renewal.oldEndDate}T23:59:59`)
-    const latestSigningDate = new Date(now)
-    latestSigningDate.setDate(latestSigningDate.getDate() + 7)
-    latestSigningDate.setHours(23, 59, 59, 999)
-    const appointmentAt = new Date(`${appointmentDate}T${appointmentTime}:00`)
-    if (Number.isNaN(appointmentAt.getTime()) || appointmentAt.getTime() < now.getTime()) throw new Error('Lịch hẹn phải ở thời điểm tương lai.')
-    if (appointmentAt.getTime() > latestSigningDate.getTime()) throw new Error(`Lịch ký phải nằm trong 7 ngày, chậm nhất ${latestSigningDate.toLocaleString('vi-VN')}.`)
-    const overdueStart = new Date(`${renewal.oldEndDate}T00:00:00`)
-    overdueStart.setDate(overdueStart.getDate() + 1)
-    const appointmentDay = new Date(`${appointmentDate}T00:00:00`)
-    const paymentDay = new Date(now); paymentDay.setHours(0, 0, 0, 0)
-    const lateThroughDay = appointmentDay.getTime() > paymentDay.getTime() ? appointmentDay : paymentDay
-    const overdueDays = lateThroughDay.getTime() >= overdueStart.getTime() ? Math.floor((lateThroughDay.getTime() - overdueStart.getTime()) / 86_400_000) + 1 : 0
-    const lateFeePerDay = Math.round((((renewal.originalMonthlyRate || rental.monthlyRate) / 30) * 0.5) * 100) / 100
-    const lateFeeAmount = Math.round(overdueDays * lateFeePerDay * 100) / 100
-    const txId = transactionId.trim()
-    const paymentId = `PAY-RNW-${Date.now().toString().slice(-8)}`
-    const paymentSplit = calculateRenewalPaymentSplit(renewal.renewalFee)
-    const bookingDepositAmount = renewal.bookingDepositAmount ?? paymentSplit.depositAmount
-
-    setState(prev => ({
-      ...prev,
-      renewals: prev.renewals.map(r => r.id === renewalId ? {
-        ...r,
-        status: 'appointment_scheduled',
-        paidAt: now.toISOString(),
-        paymentMethod,
-        transactionReference: txId,
-        paymentId,
-        bookingDepositAmount,
-        remainingAmount: Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100,
-        appointmentDate,
-        appointmentTime,
-        signingDeadline: latestSigningDate.toISOString(),
-        overdueDays,
-        lateFeePerDay,
-        lateFeeAmount
-      } : r),
-      payments: [
-        {
-          id: paymentId,
-          reservationId: rental.holdId,
-          rentalId: renewal.rentalId,
-          renewalId,
-          type: 'RENEWAL',
-          amount: bookingDepositAmount,
-          paymentMethod,
-          transactionReference: txId,
-          status: 'PAID',
-          paidAt: now.toISOString(),
-          recordedBy: renewal.customerId,
-          invoiceNumber: renewal.invoiceNumber,
-          description: `Cọc giữ chỗ gia hạn 20% cho ${renewal.renewalMonths} tháng (${renewal.oldEndDate} → ${renewal.newEndDate})`,
-          gatewayVerifiedAt: now.toISOString()
-        },
-        ...prev.payments
-      ],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu tiền thuê gia hạn trả trước 20% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
-    }))
-  }
-
-  const completeRenewalAtFacility = (params: {
-    renewalId: string
-    staffUser: User
-    transactionReference: string
-    identityVerified: boolean
-    unitAndTermsVerified: boolean
-    contractNumber: string
-    signedAt: string
-    scannedFileUrl: string
-    scannedFileName: string
-  }) => {
-    const { renewalId, staffUser, transactionReference, identityVerified, unitAndTermsVerified, contractNumber, signedAt, scannedFileUrl, scannedFileName } = params
-    assertPermission(staffUser, 'checkins:process')
-    if (staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Hoàn tất ký gia hạn tại cơ sở thuộc nghiệp vụ của Facility Staff.')
-    if (staffUser.role !== 'staff') throw new Error('Chỉ nhân viên cơ sở được hoàn tất gia hạn.')
-    const renewal = state.renewals.find(item => item.id === renewalId)
-    if (!renewal || renewal.status !== 'appointment_scheduled') throw new Error('Yêu cầu chưa có lịch ký hợp lệ.')
-    if ((renewal.bookingDepositAmount ?? 0) <= 0) throw new Error('Renewal mới không thu cọc và không thể ghi nhận tiền mặt tại quầy. Cần xác minh thanh toán toàn kỳ qua VNPay Sandbox trước khi hoàn tất.')
-    if (!transactionReference.trim()) throw new Error('Vui lòng nhập mã phiếu thu hoặc mã giao dịch.')
-    if (!identityVerified) throw new Error('Cần đối chiếu giấy tờ khách hàng trước khi hoàn tất gia hạn.')
-    if (!unitAndTermsVerified) throw new Error('Cần kiểm tra gian kho và xác nhận lại điều khoản gia hạn.')
-    if (!contractNumber.trim() || !signedAt || !scannedFileUrl || !scannedFileName) throw new Error('Cần nhập đầy đủ và tải lên hợp đồng gia hạn đã ký.')
-    if (state.contracts.some(contract => contract.contractNumber === contractNumber.trim())) throw new Error('Số hợp đồng đã tồn tại.')
-    const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn hoạt động.')
-    const now = new Date()
-    const remainingAmount = renewal.remainingAmount ?? calculateRenewalPaymentSplit(renewal.renewalFee).remainingAmount
-    const overdueStart = new Date(`${renewal.oldEndDate}T00:00:00`)
-    overdueStart.setDate(overdueStart.getDate() + 1)
-    const today = new Date(now); today.setHours(0, 0, 0, 0)
-    const actualOverdueDays = today.getTime() >= overdueStart.getTime() ? Math.floor((today.getTime() - overdueStart.getTime()) / 86_400_000) + 1 : 0
-    const lateFeePerDay = renewal.lateFeePerDay ?? Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
-    const lateFeeAmount = Math.round(Math.max(actualOverdueDays, renewal.overdueDays || 0) * lateFeePerDay * 100) / 100
-    const finalPayment = Math.round((remainingAmount + lateFeeAmount) * 100) / 100
-    const paymentId = `PAY-RNW-BAL-${Date.now().toString().slice(-8)}`
-    const renewalContractId = `CTR-RNW-${Date.now().toString().slice(-8)}`
-    const renewalContractNumber = contractNumber.trim()
-    setState(prev => ({
-      ...prev,
-      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'completed', overdueDays: Math.max(actualOverdueDays, renewal.overdueDays || 0), lateFeePerDay, lateFeeAmount, signedAt, completedBy: staffUser.id, renewalContractId, renewalContractNumber, effectiveAt: nextCalendarDay(renewal.oldEndDate) } : item),
-      rentals: prev.rentals.map(item => item.id === renewal.rentalId ? { ...item, endDate: renewal.newEndDate } : item),
-      contracts: [{ id: renewalContractId, contractNumber: renewalContractNumber, reservationId: rental.holdId, customerId: rental.customerId, unitId: rental.unitId, signedAt, startDate: nextCalendarDay(renewal.oldEndDate), endDate: renewal.newEndDate, monthlyRent: renewal.originalMonthlyRate ?? rental.monthlyRate, securityDeposit: 0, scannedFileUrl, scannedFileName, uploadedAt: now.toISOString(), uploadedBy: staffUser.name, status: 'SIGNED', contractType: 'RENEWAL', renewalId }, ...prev.contracts],
-      units: prev.units.map(unit => unit.id === renewal.unitId ? { ...unit, nextAvailableDate: renewal.newEndDate } : unit),
-      payments: [{ id: paymentId, reservationId: rental.holdId, rentalId: renewal.rentalId, renewalId, type: 'RENEWAL', amount: finalPayment, paymentMethod: 'CASH', transactionReference: transactionReference.trim(), status: 'PAID', paidAt: now.toISOString(), recordedBy: staffUser.id, invoiceNumber: renewal.invoiceNumber, description: `Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(remainingAmount)}${lateFeeAmount ? ` + phụ thu trễ ${formatVnd(lateFeeAmount)}` : ''}` }, ...prev.payments],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_COMPLETED_AT_FACILITY', actorId: staffUser.id, actorName: staffUser.name, actorRole: staffUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: `Đã đối chiếu hồ sơ, ký hợp đồng gia hạn ${renewalContractNumber}, thu ${formatVnd(finalPayment)} và gia hạn đến ${renewal.newEndDate}.`, timestamp: now.toISOString() }, ...prev.activities]
-    }))
-  }
+  const payRenewal: StorageHubContextValue['payRenewal'] = () => legacyRenewalUnavailable()
+  const completeRenewalAtFacility: StorageHubContextValue['completeRenewalAtFacility'] = () => legacyRenewalUnavailable()
 
   // 8. Return & Checkout: Separate Refund Calculation vs Unit Condition
   const requestReturn = (rentalId: string, scheduledDate: string, customer: User, reason?: string): ReturnCase => {
@@ -3730,70 +3489,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const recordRentalPayment = (rentalId: string, amount: number, paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'ONLINE_GATEWAY', transactionReference: string, manager: User) => {
-    assertPermission(manager, 'payments:collect')
-    const rental = state.rentals.find(item => item.id === rentalId)
-    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
-    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
-    if (rental.status !== 'active') throw new Error('Chỉ ghi nhận thanh toán cho hợp đồng đang hoạt động.')
-    if (manager.role === 'manager' && !isManagerRentalOverdue(rental)) throw new Error('Hợp đồng chưa đến hạn thanh toán.')
-    const expectedAmount = manager.role === 'manager'
-      ? rentalAmountDue(rental)
-      : Math.round((rental.monthlyRate + (rental.lateFeeAmount || 0)) * 100) / 100
-    if (amount <= 0 || Math.abs(amount - expectedAmount) > 0.01) throw new Error(`Số tiền cần thu chính xác là ${formatVnd(expectedAmount)}.`)
-    if (!transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
-    if (manager.role === 'manager' && state.payments.some(item => item.transactionReference?.trim().toLocaleLowerCase() === transactionReference.trim().toLocaleLowerCase())) {
-      throw new Error('Mã giao dịch hoặc số phiếu thu đã được sử dụng.')
-    }
-    const now = new Date()
-    const nextDue = manager.role === 'manager'
-      ? nextDueAfterPayment(rental.nextDue, now.toISOString().slice(0, 10))
-      : (() => {
-          const baseDue = toValidDate(rental.nextDue)
-          const nextDueBase = baseDue.getTime() < now.getTime() ? now.toISOString().split('T')[0] : rental.nextDue
-          return addCalendarMonths(nextDueBase, 1)
-        })()
-    const paymentId = `PAY-RENT-${Date.now().toString().slice(-8)}`
-    const payment: StoragePayment = { id: paymentId, reservationId: rental.holdId, rentalId, type: 'RENT', amount, paymentMethod, transactionReference: transactionReference.trim(), receivedAt: now.toISOString(), receivedBy: manager.id, status: 'PAID', paidAt: now.toISOString(), recordedBy: manager.id, description: `Thu cước kho ${rental.unitId}${rental.lateFeeAmount ? ` gồm phí trễ ${formatVnd(rental.lateFeeAmount)}` : ''}` }
-    setState(prev => ({
-      ...prev,
-      payments: [payment, ...prev.payments],
-      rentals: prev.rentals.map(item => item.id === rentalId ? { ...item, paymentStatus: 'paid', lateFeeAmount: 0, overlocked: false, nextDue } : item),
-      accessCredentials: prev.accessCredentials.map(item => item.rentalId === rentalId && item.status === 'SUSPENDED' ? { ...item, status: 'ACTIVE' } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENT_PAYMENT_RECORDED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'payment', entityId: paymentId, correlationId: rental.id, beforeState: { paymentStatus: rental.paymentStatus, nextDue: rental.nextDue, lateFeeAmount: rental.lateFeeAmount || 0, overlocked: rental.overlocked || false }, afterState: { paymentStatus: 'paid', nextDue, lateFeeAmount: 0, overlocked: false, amount, paymentMethod, transactionReference: transactionReference.trim() }, notes: `Đã thu ${formatVnd(amount)} cho hợp đồng ${rental.id}; kỳ tiếp theo ${nextDue}.`, timestamp: now.toISOString() }, ...prev.activities]
-    }))
-  }
-
-  const applyRentalLateFee = (rentalId: string, amount: number, manager: User) => {
-    assertPermission(manager, 'payments:collect')
-    const rental = state.rentals.find(item => item.id === rentalId)
-    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
-    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
-    if (!isManagerRentalOverdue(rental)) throw new Error('Chỉ áp dụng phí trễ cho hợp đồng đang quá hạn.')
-    if (amount <= 0) throw new Error('Phí trễ phải lớn hơn 0.')
-    if (manager.role === 'manager' && !canApplyManagerLateFee(rental)) throw new Error('Phí trễ đã được xử lý cho kỳ thanh toán này.')
-    const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? {
-      ...item,
-      lateFeeAmount: manager.role === 'manager' ? Math.round(amount * 100) / 100 : Math.round(((item.lateFeeAmount || 0) + amount) * 100) / 100,
-      lateFeeProcessedForDueDate: manager.role === 'manager' ? item.nextDue : item.lateFeeProcessedForDueDate
-    } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_APPLIED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, correlationId: rental.nextDue, beforeState: { lateFeeAmount: rental.lateFeeAmount || 0, processedForDueDate: rental.lateFeeProcessedForDueDate }, afterState: { lateFeeAmount: manager.role === 'manager' ? amount : (rental.lateFeeAmount || 0) + amount, processedForDueDate: manager.role === 'manager' ? rental.nextDue : rental.lateFeeProcessedForDueDate }, notes: `Áp dụng phí trễ ${formatVnd(amount)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
-  }
-
-  const waiveRentalLateFee = (rentalId: string, manager: User) => {
-    assertPermission(manager, 'payments:collect')
-    const rental = state.rentals.find(item => item.id === rentalId)
-    if (!rental) throw new Error('Không tìm thấy hợp đồng thuê.')
-    assertFacilityManager(manager, rental.facilityId, rental.facilityName)
-    const previousFee = rental.lateFeeAmount || 0
-    if (manager.role === 'manager' && (!isManagerRentalOverdue(rental) || previousFee <= 0)) throw new Error('Hợp đồng không có phí trễ để miễn.')
-    const now = new Date()
-    setState(prev => ({ ...prev, rentals: prev.rentals.map(item => item.id === rentalId ? {
-      ...item,
-      lateFeeAmount: 0,
-      lateFeeProcessedForDueDate: manager.role === 'manager' ? item.nextDue : item.lateFeeProcessedForDueDate
-    } : item), activities: [{ id: `act-${Date.now()}`, action: 'LATE_FEE_WAIVED', actorId: manager.id, actorName: manager.name, actorRole: manager.role, facilityId: rental.facilityId, entityType: 'rental', entityId: rentalId, correlationId: rental.nextDue, beforeState: { lateFeeAmount: previousFee }, afterState: { lateFeeAmount: 0, processedForDueDate: manager.role === 'manager' ? rental.nextDue : rental.lateFeeProcessedForDueDate }, notes: `Miễn phí trễ ${formatVnd(previousFee)}.`, timestamp: now.toISOString() }, ...prev.activities] }))
-  }
+  const recordRentalPayment: StorageHubContextValue['recordRentalPayment'] = () => legacyRenewalUnavailable()
+  const applyRentalLateFee: StorageHubContextValue['applyRentalLateFee'] = () => legacyRenewalUnavailable()
+  const waiveRentalLateFee: StorageHubContextValue['waiveRentalLateFee'] = () => legacyRenewalUnavailable()
 
   const setRentalOverlock = (rentalId: string, overlocked: boolean, manager: User) => {
     assertPermission(manager, 'payments:collect')

@@ -4,6 +4,8 @@ import {
   reservationPaymentCategory,
   sortPaymentHistory,
   latestPaymentRecords,
+  canViewCustomerHistoryReceipt,
+  customerHistoryStatusLabel,
   type HistoryEntry,
 } from "./customerPaymentHistory"
 import {
@@ -206,6 +208,45 @@ describe("Customer payment history", () => {
     const old = { ...newest, updatedAt: '2026-10-12T08:00:00Z', status: 'NOT_RECEIVED' }
     expect(latestPaymentRecords([newest, old])).toEqual([newest])
     expect(latestPaymentRecords([old, newest])).toEqual([newest])
+  })
+  it.each([
+    ['EXPIRED', 0, false, 'Phiên thanh toán hết hạn'],
+    ['RECONCILIATION_REQUIRED', 0, false, 'Chờ đối soát'],
+    ['PARTIALLY_REFUNDED', 50, true, 'Đã hoàn tiền một phần'],
+    ['REFUNDED', 200, true, 'Đã hoàn tiền toàn bộ'],
+  ] as const)('uses current %s projection over a newer raw PAID record and old success event', async (status, refundedAmount, receiptAvailable, label) => {
+    vi.mocked(listCustomerPaymentHistory).mockResolvedValue(page([payment('renewal-payment', 'RENEWAL', '2027-01-01T00:00:00Z')]) as never)
+    vi.mocked(listRenewals).mockResolvedValue(page([{
+      id: 'renewal', rentalId: 'rental', storageUnit: { code: 'A1' }, facility: { name: 'Q1' },
+      statusSummary: { checkedAt: '2026-10-26T00:00:00Z', transactions: [{
+        paymentId: 'renewal-payment', reference: 'intent', purpose: 'RENEWAL', status, amount: 200,
+        refundedAmount, currency: 'VND', paidAt: null, receiptAvailable,
+      }] },
+    }]) as never)
+    vi.mocked(listRenewalOperationEvents).mockResolvedValue(page([{
+      kind: 'DEPOSIT', occurredAt: '2027-01-01T00:00:00Z',
+      data: { paymentRef: 'renewal-payment', amount: 200, paidAt: '2026-10-13T00:00:00Z', outcome: 'SUCCESS' },
+    }]) as never)
+    const { entries } = await loadCustomerPaymentHistory()
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ status, statusSource: 'RENEWAL_PROJECTION', refundedAmount, receiptAvailable })
+    expect(canViewCustomerHistoryReceipt(entries[0])).toBe(receiptAvailable)
+    expect(customerHistoryStatusLabel(entries[0])).toBe(label)
+  })
+  it('keeps a pending transaction from the projection when payment event metadata is unavailable', async () => {
+    vi.mocked(listRenewals).mockResolvedValue(page([{
+      id: 'renewal', rentalId: 'rental', storageUnit: { code: 'A1' }, facility: { name: 'Q1' },
+      statusSummary: { checkedAt: '2026-10-26T00:00:00Z', transactions: [{
+        paymentId: 'pending-payment', reference: 'intent', purpose: 'RENEWAL', status: 'PROCESSING',
+        amount: 200, refundedAmount: 0, currency: 'VND', paidAt: null, receiptAvailable: false,
+      }] },
+    }]) as never)
+    vi.mocked(listRenewalOperationEvents).mockRejectedValue(new Error('unavailable'))
+    const result = await loadCustomerPaymentHistory()
+    const entry = result.entries.find(item => item.id === 'pending-payment')!
+    expect(entry).toMatchObject({ status: 'PROCESSING', method: null, timestamp: null })
+    expect(canViewCustomerHistoryReceipt(entry)).toBe(false)
+    expect(result.warnings).toContain('Chưa tải được đầy đủ thanh toán của đơn gia hạn renewal.')
   })
   it("keeps loaded pages when a later payment history page fails", async () => {
     vi.mocked(listCustomerPaymentHistory).mockResolvedValueOnce(page([
