@@ -3057,7 +3057,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const depositWasPaid = renewal.status === 'appointment_scheduled'
     setState(prev => ({
       ...prev,
-      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'cancelled', cancelledAt, notes: depositWasPaid ? 'Customer hủy sau khi đã cọc; cọc gia hạn không hoàn lại.' : wasApproved ? 'Customer hủy sau khi được duyệt; hóa đơn gia hạn đã mất hiệu lực.' : 'Customer chủ động hủy trước khi Manager xét duyệt.' } : item),
+      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'cancelled', cancelledAt, notes: depositWasPaid ? 'Customer hủy sau khi đã cọc; tiền thuê gia hạn trả trước không hoàn lại.' : wasApproved ? 'Customer hủy sau khi được duyệt; hóa đơn gia hạn đã mất hiệu lực.' : 'Customer chủ động hủy trước khi Manager xét duyệt.' } : item),
       activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_CANCELLED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: depositWasPaid ? `Khách đã hủy yêu cầu ${renewal.id} sau khi cọc; cọc ${formatVnd(renewal.bookingDepositAmount ?? 0)} không hoàn lại. Manager đã được thông báo.` : wasApproved ? `Khách đã hủy yêu cầu gia hạn ${renewal.id} sau khi duyệt. Hóa đơn ${renewal.invoiceNumber || 'gia hạn'} đã mất hiệu lực.` : `Khách đã hủy yêu cầu gia hạn ${renewal.id}. Manager không cần tiếp tục xét duyệt.`, timestamp: cancelledAt }, ...prev.activities]
     }))
   }
@@ -3225,7 +3225,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         },
         ...prev.payments
       ],
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu cọc gia hạn 20% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_DEPOSIT_PAID', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'payment', entityId: paymentId, notes: `Đã thu tiền thuê gia hạn trả trước 20% ${formatVnd(bookingDepositAmount)}. Khách hẹn ký ngày ${appointmentDate} ${appointmentTime}; còn ${formatVnd(Math.round((renewal.renewalFee - bookingDepositAmount) * 100) / 100)}${lateFeeAmount ? ` và phụ thu trễ dự kiến ${formatVnd(lateFeeAmount)}` : ''}.`, timestamp: now.toISOString() }, ...prev.activities]
     }))
   }
 

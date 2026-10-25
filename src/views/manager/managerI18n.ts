@@ -130,7 +130,7 @@ const activities: Record<string, BilingualLabel> = {
   RENEWAL_REQUEST_CANCELLED: labels('Renewal request cancelled', 'Đã hủy yêu cầu gia hạn'),
   RENEWAL_APPROVED: labels('Renewal approved', 'Đã duyệt gia hạn'),
   RENEWAL_REJECTED: labels('Renewal rejected', 'Đã từ chối gia hạn'),
-  RENEWAL_DEPOSIT_PAID: labels('Renewal deposit paid', 'Đã thanh toán cọc gia hạn'),
+  RENEWAL_DEPOSIT_PAID: labels('Renewal deposit paid', 'Đã thanh toán tiền thuê gia hạn trả trước'),
   RENEWAL_COMPLETED_AT_FACILITY: labels('Renewal completed at facility', 'Đã hoàn tất gia hạn tại cơ sở'),
   RETURN_INSPECTION_COMPLETED: labels('Move-out inspection completed', 'Đã nghiệm thu trả kho'),
   RETURN_SETTLEMENT_CONFIRMED: labels('Settlement confirmed', 'Đã xác nhận quyết toán'),

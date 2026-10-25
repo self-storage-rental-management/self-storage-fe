@@ -30,6 +30,14 @@ const paymentPage = (data: unknown[]) => ({ data, pagination: {
 }, correlationId: 'test' })
 
 describe('Manager payment history screen', () => {
+  it('does not present a raw PAID renewal needing reconciliation as collected or offer a receipt', () => {
+    state.list = { data: paymentPage([{ ...item, type: 'RENEWAL', renewalId: 'renewal-id', transactionStatus: 'RECONCILIATION_REQUIRED', receiptAvailable: false }]) }
+    const html = render()
+    expect(html).toContain('Chờ đối soát')
+    expect(html).not.toContain('>Đã thu<')
+    expect(html).not.toContain('aria-label="Xem biên lai')
+    expect(html).not.toContain('aria-label="Tải biên lai')
+  })
   it('shows payment transactions without rental record cards or financial detail links', () => {
     state.list = { data: paymentPage([item]) }
     const html = render()
@@ -71,6 +79,7 @@ describe('Manager payment history screen', () => {
     expect(html).toContain('23/10/2026')
     expect(html).toContain('00:27')
     expect(html).toContain(`aria-label="Xem biên lai ${transactionReference}"`)
+    expect(html).toContain(`aria-label="Tải biên lai ${transactionReference}"`)
     expect(html).toContain('VNPay')
   })
 
@@ -87,5 +96,13 @@ describe('Manager payment history screen', () => {
     expect(html).toContain('Chưa ghi nhận')
     expect(html).toContain('Chưa có')
     expect(html).not.toContain('Xem trước')
+    expect(html).not.toContain('Tải xuống')
+  })
+
+  it('offers preview and original download when a receipt file is available', () => {
+    state.list = { data: paymentPage([{ ...item, receiptFileId: 'receipt-file' }]) }
+    const html = render()
+    expect(html).toContain('Xem trước')
+    expect(html).toContain('Tải xuống')
   })
 })

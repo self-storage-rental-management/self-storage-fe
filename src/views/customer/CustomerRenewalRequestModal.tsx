@@ -121,7 +121,7 @@ export default function CustomerRenewalRequestModal({
                 <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
               </div>
               <div className="space-y-2">
-                <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
+                <QuoteLine label="Tổng trước giảm" value={rentalMoney(quote.subtotal, quote.currency)} />
                 {quote.discountAmount > 0 && (
                   <QuoteLine
                     label={`Giảm giá (${Math.round(quote.discountRate * 100)}%)`}
@@ -129,11 +129,12 @@ export default function CustomerRenewalRequestModal({
                     valueClassName="text-emerald-700"
                   />
                 )}
-                <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
-                <QuoteLine label="Cọc gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} />
+                <QuoteLine label="Tổng sau điều chỉnh" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><QuoteLine label="Tiền thuê gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} emphasis valueClassName="text-amber-950" /></div>
                 <QuoteLine label="Tiền thuê còn lại khi ký" value={rentalMoney(quote.remainingRentalAmount, quote.currency)} />
               </div>
             </div>
+            <p className="mt-3 text-xs text-slate-600">Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. Không thu lại cọc bảo đảm kho đang giữ. Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
           </section>
             <label className="flex items-start gap-2 text-sm text-stone-700">
               <input

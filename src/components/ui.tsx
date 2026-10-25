@@ -4,17 +4,17 @@ import LocalizedDateInput from './LocalizedDateInput'
 // ─── Badge ───────────────────────────────────────────────────────────────────
 
 const badgeVariants: Record<string, string> = {
-  success: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200',
-  warning: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  error:   'bg-red-50 text-red-700 ring-1 ring-red-200',
-  info:    'bg-stone-100 text-stone-700 ring-1 ring-stone-300',
-  muted:   'bg-stone-100 text-stone-600 ring-1 ring-stone-200',
-  purple:  'bg-amber-50 text-amber-800 ring-1 ring-amber-200',
+  success: 'ui-badge-success',
+  warning: 'ui-badge-warning',
+  error:   'ui-badge-error',
+  info:    '',
+  muted:   '',
+  purple:  '',
 }
 
 export function Badge({ variant = 'muted', children }: { variant?: string; children: ReactNode }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${badgeVariants[variant] ?? badgeVariants.muted}`}>
+    <span className={`ui-badge inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${badgeVariants[variant] ?? badgeVariants.muted}`}>
       {children}
     </span>
   )
@@ -27,11 +27,11 @@ type BtnSize = 'sm' | 'md' | 'lg'
 
 const btnBase = 'inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-colors duration-150 select-none disabled:pointer-events-none'
 const btnVariants: Record<BtnVariant, string> = {
-  primary:   'bg-[#e9a12c] text-[#3f2607] hover:bg-[#dc9220] active:bg-[#ca8215]',
-  secondary: 'bg-[#292a27] text-white hover:bg-[#3a3933] active:bg-[#1e1f1d]',
-  outline:   'border border-[#cfcdc1] bg-white text-stone-700 hover:bg-[#f8f7f1] active:bg-stone-100',
-  ghost:     'text-stone-600 hover:bg-stone-100 active:bg-stone-200',
-  danger:    'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
+  primary:   'ui-button-primary',
+  secondary: 'ui-button-secondary',
+  outline:   'ui-button-outline',
+  ghost:     'ui-button-ghost',
+  danger:    'ui-button-danger',
 }
 const btnSizes: Record<BtnSize, string> = {
   sm: 'text-xs px-3 py-1.5',

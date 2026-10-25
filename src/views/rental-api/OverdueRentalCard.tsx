@@ -25,7 +25,7 @@ export default function OverdueRentalCard({ days, endDate, recoveryDate, started
       </div>
     </div>
     <div className="border-t border-white/15 px-3 py-2">
-      <p className="text-xs font-semibold leading-normal">Gia hạn chỉ thành công khi bạn đến cơ sở ký hợp đồng gia hạn. Chỉ thanh toán cọc gia hạn chưa được tính là gia hạn thành công.</p>
+      <p className="text-xs font-semibold leading-normal">Gia hạn chỉ thành công khi bạn đến cơ sở ký hợp đồng gia hạn. Chỉ thanh toán tiền thuê gia hạn trả trước chưa được tính là gia hạn thành công.</p>
       {error && <p className={`mt-2 text-xs ${muted}`}>Chưa tải được hạn thu hồi và phí quá hạn. Vui lòng tải lại trang.</p>}
     </div>
   </section>

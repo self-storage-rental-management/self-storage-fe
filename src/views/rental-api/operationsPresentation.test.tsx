@@ -191,7 +191,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
         state={{ ...operationState, missingSources: ["RENEWAL_ACCOUNTING"] }}
       />,
     )
-    expect(html).toContain("Chờ thanh toán cọc")
+    expect(html).toContain("Chờ thanh toán tiền thuê trả trước")
     expect(operationBlockedReason(
       { ...signingState, missingSources: ["RENEWAL_ACCOUNTING"] },
       "staff", "cash", operationsActor("staff"),

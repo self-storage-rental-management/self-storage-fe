@@ -1,4 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
+import { downloadPaymentReceipt } from '../../utils/downloadPaymentReceipt'
+import { getRenewalReceipt } from '../../services/renewalReceiptApi'
 import { Badge, Button, Card, Modal, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { EvidenceDownload } from '../rental-support-integration/EvidenceControls'
 import RenewalReceipt from '../customer/RenewalReceipt'
@@ -11,6 +13,14 @@ import ApiPager from '../rental-api/ApiPager'
 import { loadManagerPaymentHistory, managerApiIdentity, requireManagerRead } from './managerD1D5Api'
 import { managerDisplayError } from './managerPresentation'
 import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
+import { renewalTransactionLabels } from '../../types/renewalStatus'
+
+function transactionLabel(item: ManagerPaymentHistoryItem) {
+  return item.renewalId ? item.transactionStatus ? renewalTransactionLabels[item.transactionStatus] : 'Chưa đối soát giao dịch gia hạn' : statusLabels[item.status]
+}
+function canReadReceipt(item: ManagerPaymentHistoryItem) {
+  return item.renewalId ? item.receiptAvailable === true : ['PAID', 'REFUNDED'].includes(item.status)
+}
 
 const typeLabels: Record<ManagerPaymentHistoryType, string> = {
   RESERVATION_DEPOSIT: 'Cọc giữ chỗ',
@@ -35,12 +45,12 @@ const statusLabels: Record<ManagerPaymentHistoryStatus, string> = {
 
 const statusVariants: Record<ManagerPaymentHistoryStatus, string> = {
   PENDING: 'warning',
-  PROCESSING: 'info',
+  PROCESSING: 'warning',
   PAID: 'success',
   NOT_RECEIVED: 'warning',
   FAILED: 'error',
   CANCELLED: 'muted',
-  REFUNDED: 'purple',
+  REFUNDED: 'muted',
 }
 
 function paymentMethodLabel(method: string | null) {
@@ -65,8 +75,19 @@ function PaymentTime({ value }: { value: string }) {
   if (Number.isNaN(date.getTime())) return <span className="text-xs text-stone-500">Chưa ghi nhận</span>
   const day = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
   const time = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date)
-  return <time dateTime={value} className="block whitespace-nowrap text-xs tabular-nums leading-5"><span className="block font-medium text-stone-700">{day}</span><span className="block text-stone-400">{time}</span></time>
+  return <time dateTime={value} className="block whitespace-nowrap text-xs tabular-nums leading-5"><span className="block text-stone-700">{day}</span><span className="block text-[11px] text-stone-500">{time}</span></time>
 }
+
+function receiptFields(item: ManagerPaymentHistoryItem): [string, string][] {
+  return [
+    ['Mã giao dịch', item.transactionReference], ['Khách hàng', item.customerName],
+    ['Nội dung', typeLabels[item.type]], ['Phương thức thanh toán', paymentMethodLabel(item.paymentMethod)],
+    ['Số tiền', money(item.amount, item.currency)], ['Tiền tệ', item.currency],
+    ['Thời điểm ghi nhận', new Date(item.occurredAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })],
+  ]
+}
+
+const receiptActionClass = 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300'
 
 export default function ManagerFinancialApiPanel() {
   let actor: ApiActor
@@ -82,6 +103,9 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [receipt, setReceipt] = useState<ManagerPaymentHistoryItem>()
+  const [downloading, setDownloading] = useState<string>()
+  const [downloadError, setDownloadError] = useState<unknown>()
+  const downloadLock = useRef(false)
   const identity = managerApiIdentity(actor)
   const read = useRentalApiResource(`${identity}:payment-history:${facilityId}:${page}:${search}`, () =>
     loadManagerPaymentHistory(actor, { facilityId, page, size: 10, search }))
@@ -99,18 +123,37 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
     setPage(0)
   }
 
+  async function downloadReceipt(item: ManagerPaymentHistoryItem) {
+    if (downloadLock.current || !canReadReceipt(item)) return
+    downloadLock.current = true
+    setDownloading(item.id)
+    setDownloadError(undefined)
+    try {
+      const fields = receiptFields(item)
+      let footer = 'Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở.'
+      if (item.renewalId) {
+        const payment = await getRenewalReceipt('manager', item.renewalId, item.id)
+        fields.push(['Mã thanh toán StorageHub', payment.paymentId], ['Yêu cầu gia hạn', payment.renewalId])
+        footer = payment.environment === 'SANDBOX' ? 'Biên lai VNPay Sandbox được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.' : 'Biên lai được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.'
+        footer += ' Biên lai xác nhận riêng khoản thu này, không xác nhận đã thanh toán đủ hoặc hoàn tất ký gia hạn.'
+      }
+      downloadPaymentReceipt({ title: item.type === 'RETURN_REFUND' ? 'Biên lai hoàn tiền' : 'Biên lai thanh toán', reference: item.id, status: transactionLabel(item), fields, footer })
+    } catch (error) { setDownloadError(error) }
+    finally { downloadLock.current = false; setDownloading(undefined) }
+  }
+
   return <div className="mx-auto w-full max-w-[1600px] space-y-4">
     <header className="space-y-1">
-      <h1 className="text-2xl font-bold tracking-tight text-stone-900">Lịch sử thanh toán</h1>
+      <h1 className="text-xl font-semibold tracking-tight text-stone-900">Lịch sử thanh toán</h1>
       <p className="text-sm text-stone-500">Các khoản thu, thanh toán gia hạn và hoàn tiền đã được ghi nhận tại cơ sở.</p>
     </header>
 
-    <Card className="p-4 sm:p-5">
-      <form onSubmit={submit} className="flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-end" aria-label="Tìm giao dịch thanh toán">
+    <Card className="p-3 sm:px-4">
+      <form onSubmit={submit} className="flex max-w-2xl flex-col gap-2 sm:flex-row sm:items-end" aria-label="Tìm giao dịch thanh toán">
         <label className="min-w-0 flex-1 space-y-1.5">
-          <span className="block text-xs font-semibold text-stone-600">Tìm giao dịch</span>
+          <span className="block text-xs font-medium text-stone-600">Tìm giao dịch</span>
           <input
-            className="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-stone-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+            className="h-9 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-900 transition focus:border-amber-600"
             value={draft}
             onChange={event => setDraft(event.target.value)}
             maxLength={200}
@@ -118,13 +161,14 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
           />
         </label>
         <div className="flex gap-2">
-          <Button type="submit" disabled={read.loading}>Tìm kiếm</Button>
-          {(draft || search) && <Button type="button" variant="outline" onClick={clearSearch}>Xóa tìm kiếm</Button>}
+          <Button type="submit" size="sm" className="h-9 whitespace-nowrap" disabled={read.loading}>Tìm kiếm</Button>
+          {(draft || search) && <Button type="button" size="sm" className="h-9 whitespace-nowrap" variant="ghost" onClick={clearSearch}>Xóa tìm kiếm</Button>}
         </div>
       </form>
     </Card>
 
     <ApiReadState loading={read.loading} error={read.error} retry={read.refresh} />
+    {!!downloadError && <p role="alert" className="text-sm text-red-800">{managerDisplayError(downloadError)}</p>}
 
     {result && <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
@@ -135,39 +179,42 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
         {search && <p className="text-xs text-stone-500">Kết quả tìm kiếm: <span className="font-medium text-stone-700">{search}</span></p>}
       </div>
 
-      <Table tableClassName="min-w-[960px] table-fixed [&_th]:bg-stone-50 [&_th]:px-4 [&_th]:py-3 [&_th]:normal-case [&_th]:tracking-normal [&_th]:whitespace-nowrap [&_td]:px-4 [&_td]:py-4 [&_td]:align-middle">
+      <Table tableClassName="min-w-[1008px] table-fixed [&_th]:bg-stone-50 [&_th]:px-4 [&_th]:py-2.5 [&_th]:normal-case [&_th]:tracking-normal [&_th]:whitespace-nowrap [&_td]:px-4 [&_td]:py-2.5 [&_td]:align-middle [&_.ui-badge]:border-0">
         <colgroup>
-          <col className="w-[27%]" /><col className="w-[17%]" /><col className="w-[18%]" />
-          <col className="w-[14%]" /><col className="w-[12%]" /><col className="w-[12%]" />
+          <col className="w-64" /><col className="w-28" /><col className="w-32" />
+          <col className="w-44" /><col className="w-24" /><col className="w-60" />
         </colgroup>
         <Thead><tr>
           <Th>Khách hàng / Mã giao dịch</Th>
-          <Th>Nội dung</Th>
-          <Th className="text-right">Số tiền</Th>
+          <Th className="!pr-1">Nội dung</Th>
+          <Th className="!pl-1 !pr-2 text-right">Số tiền</Th>
           <Th className="text-center">Trạng thái</Th>
-          <Th>Thời gian</Th>
-          <Th className="text-center">Biên lai</Th>
+          <Th className="!pl-2 !pr-1">Thời gian</Th>
+          <Th className="relative -left-[0.5cm] !px-1 text-center">Biên lai</Th>
         </tr></Thead>
         <Tbody>
-          {result.data.map((item: ManagerPaymentHistoryItem) => <Tr key={item.id} className="transition-colors hover:bg-amber-50/40 focus-within:bg-amber-50/40">
+          {result.data.map((item: ManagerPaymentHistoryItem) => <Tr key={item.id} className="transition-colors hover:bg-stone-50 focus-within:bg-stone-50">
             <Td>
-              <p className="break-words text-sm font-semibold leading-5 text-stone-900">{item.customerName}</p>
-              <code className="mt-1 block break-all text-[11px] leading-4 text-stone-500">{item.transactionReference}</code>
+              <p className="truncate text-sm font-medium leading-5 text-stone-900" title={item.customerName}>{item.customerName}</p>
+              <code className="mt-0.5 block max-w-[30ch] truncate text-[11px] leading-4 text-stone-500" title={item.transactionReference}>{item.transactionReference}</code>
             </Td>
-            <Td>
-              <span className={`inline-flex rounded-md px-2 py-1 text-xs font-medium ${item.type === 'RENEWAL' ? 'bg-amber-50 text-amber-800' : item.type === 'RETURN_REFUND' ? 'bg-rose-50 text-rose-700' : 'bg-stone-100 text-stone-700'}`}>{typeLabels[item.type]}</span>
-              <p className={`mt-1.5 text-xs ${item.paymentMethod ? 'text-stone-500' : 'text-stone-400'}`}>{paymentMethodLabel(item.paymentMethod)}</p>
+            <Td className="!pr-1">
+              <span className="block truncate text-sm leading-5 text-stone-700" title={typeLabels[item.type]}>{typeLabels[item.type]}</span>
+              <p className="mt-0.5 truncate text-xs text-stone-500" title={paymentMethodLabel(item.paymentMethod)}>{paymentMethodLabel(item.paymentMethod)}</p>
             </Td>
-            <Td className={`whitespace-nowrap text-right text-base font-bold tabular-nums ${item.type === 'RETURN_REFUND' ? 'text-rose-700' : 'text-stone-900'}`}>
+            <Td className="!pl-1 !pr-2 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-stone-900">
               {item.type === 'RETURN_REFUND' ? `−${money(item.amount, item.currency)}` : money(item.amount, item.currency)}
             </Td>
-            <Td className="text-center"><span className="inline-flex whitespace-nowrap"><Badge variant={statusVariants[item.status]}>{statusLabels[item.status]}</Badge></span></Td>
-            <Td><PaymentTime value={item.occurredAt} /></Td>
-            <Td className="text-center">
+            <Td className="text-center"><span className="payment-history-status inline-flex whitespace-nowrap"><Badge variant={item.renewalId ? item.transactionStatus === 'SUCCEEDED' ? 'success' : item.transactionStatus === 'FAILED' ? 'error' : 'warning' : statusVariants[item.status]}>{transactionLabel(item)}</Badge></span></Td>
+            <Td className="!pl-2 !pr-1"><PaymentTime value={item.occurredAt} /></Td>
+            <Td className="relative -left-[0.5cm] !px-1 text-right">
               {item.receiptFileId
-                ? <EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" previewOnly />
-                : ['PAID', 'REFUNDED'].includes(item.status)
-                  ? <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" aria-label={`Xem biên lai ${item.transactionReference}`} onClick={() => setReceipt(item)}>Xem trước</Button>
+                ? <EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact />
+                : canReadReceipt(item)
+                  ? <span className="inline-flex flex-nowrap items-center gap-1">
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} aria-label={`Xem biên lai ${item.transactionReference}`} onClick={() => setReceipt(item)}>Xem trước</Button>
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} aria-label={`Tải biên lai ${item.transactionReference}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}>{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</Button>
+                  </span>
                   : <span className="text-xs text-stone-400">Chưa có</span>}
             </Td>
           </Tr>)}
@@ -188,12 +235,7 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
         ? <RenewalReceipt id={receipt.renewalId} paymentId={receipt.id} role="manager" />
         : <PaymentReceiptCard title={receipt.type === 'RETURN_REFUND' ? 'Biên lai hoàn tiền' : 'Biên lai thanh toán'} reference={receipt.id}
             status={statusLabels[receipt.status]} confirmed={receipt.status === 'PAID' || receipt.status === 'REFUNDED'}
-            fields={[
-              ['Mã giao dịch', receipt.transactionReference], ['Khách hàng', receipt.customerName],
-              ['Nội dung', typeLabels[receipt.type]], ['Phương thức thanh toán', paymentMethodLabel(receipt.paymentMethod)],
-              ['Số tiền', money(receipt.amount, receipt.currency)], ['Tiền tệ', receipt.currency],
-              ['Thời điểm ghi nhận', new Date(receipt.occurredAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })],
-            ]} footer="Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở." />}
+            fields={receiptFields(receipt)} footer="Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở." />}
     </Modal>}
   </div>
 }

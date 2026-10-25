@@ -9,7 +9,7 @@ export default function UpcomingRentalCard({ days, endDate }: { days: number; en
     </div>
     <div className="space-y-1 border-t border-amber-400/40 px-3 py-2 text-xs leading-normal">
       <p>Bạn có thể gia hạn hoặc gửi yêu cầu trả kho trước khi hết hạn.</p>
-      <p className="font-semibold">Gia hạn chỉ thành công khi bạn đến cơ sở ký hợp đồng gia hạn. Chỉ thanh toán cọc gia hạn chưa được tính là gia hạn thành công.</p>
+      <p className="font-semibold">Gia hạn chỉ thành công khi bạn đến cơ sở ký hợp đồng gia hạn. Chỉ thanh toán tiền thuê gia hạn trả trước chưa được tính là gia hạn thành công.</p>
     </div>
   </section>
 }

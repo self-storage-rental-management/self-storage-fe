@@ -101,7 +101,7 @@ describe("Deposit refund command safety", () => {
     const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "staff", revision: 4, onLocked, onChanged: vi.fn() }),slots)
     ready(panel)
     h.send.mockRejectedValueOnce(new ApiClientError("denied",{ status: 400 }))
-    const click = button(panel(),"Xác nhận đã hoàn cọc").props.onClick
+    const click = button(panel(),"Xác nhận đã hoàn tiền thuê trả trước").props.onClick
     click(); click()
     expect(onLocked).toHaveBeenLastCalledWith(true)
     await settle()
@@ -115,7 +115,7 @@ describe("Deposit refund command safety", () => {
     const panel = () => render(() => RenewalDepositSettlementPanel({ id: ids.renewal, role: "staff", revision: 4, onLocked, onChanged: vi.fn() }),slots)
     ready(panel)
     h.send.mockRejectedValueOnce(new ApiClientError("unknown",{ status: 503 }))
-    button(panel(),"Xác nhận đã hoàn cọc").props.onClick()
+    button(panel(),"Xác nhận đã hoàn tiền thuê trả trước").props.onClick()
     await settle()
     const original = h.send.mock.calls[0]
     expect(onLocked).toHaveBeenLastCalledWith(true)

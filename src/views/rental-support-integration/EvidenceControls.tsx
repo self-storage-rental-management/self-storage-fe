@@ -118,6 +118,7 @@ export function EvidenceDownload({
   asLink = false,
   previewOnly = false,
   chatFile = false,
+  compact = false,
 }: {
   id: string
   index?: number
@@ -126,6 +127,7 @@ export function EvidenceDownload({
   asLink?: boolean
   previewOnly?: boolean
   chatFile?: boolean
+  compact?: boolean
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>()
@@ -188,11 +190,12 @@ export function EvidenceDownload({
     }
   }
   return (
-    <span className={asLink ? "inline-flex min-w-0 max-w-full flex-wrap items-center gap-2" : "inline-flex flex-wrap items-center gap-2"}>
+    <span className={asLink ? "inline-flex min-w-0 max-w-full flex-wrap items-center gap-2" : compact ? "inline-flex flex-nowrap items-center gap-1" : "inline-flex flex-wrap items-center gap-2"}>
       {!asLink && <Button
         type="button"
-        variant="outline"
-        className="min-h-11 whitespace-nowrap"
+        variant={compact ? 'ghost' : 'outline'}
+        size={compact ? 'sm' : 'md'}
+        className={compact ? 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300' : 'min-h-11 whitespace-nowrap'}
         disabled={busy}
         onClick={openPreview}
       >
@@ -206,8 +209,9 @@ export function EvidenceDownload({
         onClick={openPreview}
       >{chatFile && <span className="support-chat-file-icon" aria-hidden="true"><svg className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></span>}<span>{busy ? "Đang tải…" : fileName || label || `Tệp đính kèm ${index}`}</span></button> : <Button
         type="button"
-        variant="outline"
-        className="min-h-11 whitespace-nowrap"
+        variant={compact ? 'ghost' : 'outline'}
+        size={compact ? 'sm' : 'md'}
+        className={compact ? 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300' : 'min-h-11 whitespace-nowrap'}
         disabled={busy}
         onClick={download}
       >

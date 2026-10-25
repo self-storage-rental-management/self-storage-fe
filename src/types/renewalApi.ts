@@ -1,7 +1,9 @@
 import type { RentalApiRecord } from "./rentalApi"
+import type { RenewalStatusSummary, RenewalTransactionStatus } from './renewalStatus'
 export type RenewalApiStatus = "pending" | "accepted" | "deposit_paid" | "full_rent_paid" | "approved" | "appointment_scheduled" | "payment_processing" | "payment_failed" | "payment_expired" | "rejected" | "cancelled" | "completed"
 export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {
+  statusSummary?: RenewalStatusSummary | null
   displayCode?: string | null
   id: string
   rentalId: string
@@ -60,6 +62,8 @@ export interface RenewalVnpayPaymentResponse {
   message: string
   paymentUrl: string | null
   settlementStage?: "AWAITING_PAYMENT" | "VERIFIED_AWAITING_ALLOCATION" | "ALLOCATED_AWAITING_SIGNING" | "AWAITING_SIGNING" | "COMPLETED" | "RECONCILIATION_REQUIRED"
+  transactionStatus?: RenewalTransactionStatus
+  receiptAvailable?: boolean
 }
 export interface RenewalApiQuote {
   id: string

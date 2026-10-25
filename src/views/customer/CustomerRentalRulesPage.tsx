@@ -25,7 +25,7 @@ const returnRules = [
       "Gửi yêu cầu gia hạn tại hồ sơ thuê và theo dõi kết quả xác nhận của cơ sở.",
       "Thời hạn mới, giá thuê, ưu đãi và các khoản phải thu được xác nhận trong báo giá và hồ sơ gia hạn.",
       "Hoàn tất hồ sơ và thanh toán theo thời hạn hiển thị trên yêu cầu gia hạn.",
-      "Yêu cầu gia hạn hoặc khoản cọc gia hạn không tự động kéo dài kỳ thuê. Trường hợp đã quá hạn, các khoản phí phát sinh được đối chiếu khi hoàn tất gia hạn."
+      "Yêu cầu gia hạn hoặc khoản tiền thuê gia hạn trả trước không tự động kéo dài kỳ thuê. Trường hợp đã quá hạn, các khoản phí phát sinh được đối chiếu khi hoàn tất gia hạn."
 ],
   },
 ]

@@ -3,7 +3,7 @@ import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { RentalDeadlineBanner, rentalDeadlineState, rentalDaysUntilDeadline } from "./RentalDeadlineNotice"
-import { Button, Card, Modal } from "../../components/ui"
+import { Badge, Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { getRental, listRentals } from "../../services/rentalApi"
@@ -36,6 +36,12 @@ import {
 const inputClass =
   "rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
 const customerRentalColumns = 'grid grid-cols-[minmax(165px,1.3fr)_minmax(145px,1fr)_minmax(135px,0.9fr)_minmax(135px,0.9fr)_minmax(125px,0.8fr)_minmax(315px,1.4fr)]'
+function recordStatusTone(status: string) {
+  if (status === 'payment_failed') return 'error'
+  if (['active', 'deposit_paid', 'full_rent_paid'].includes(status)) return 'success'
+  if (['return_requested', 'return_inspection', 'closing', 'pending', 'accepted', 'approved', 'appointment_scheduled', 'payment_processing', 'payment_expired'].includes(status)) return 'warning'
+  return 'muted'
+}
 type Detail = {
   kind: "rental" | "renewal"
   id: string
@@ -470,9 +476,9 @@ function WorkspaceData({
                 className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 border-l-4 border-l-amber-500 bg-white shadow-sm transition-colors duration-200 hover:border-amber-300 hover:bg-white hover:shadow-md focus-within:border-l-amber-500 ${focused ? 'outline outline-2 outline-amber-400' : ''}`}>
                 <div className={`${customerRentalColumns} items-center divide-x divide-stone-100 px-1 py-2`}>
                     <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
-                    <div className="min-w-0 px-3"><span className="break-all font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
+                    <div className="min-w-0 px-3"><span className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
                     <div className="flex flex-wrap gap-1.5 px-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-700' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(rentalLabels[row.status])}</span>
+                      <Badge variant={recordStatusTone(row.status)}>{copy(rentalLabels[row.status])}</Badge>
                       {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
                     </div>
                   <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
@@ -489,14 +495,14 @@ function WorkspaceData({
             </div>
           </div> : <p className="px-4 py-8 text-center text-sm text-stone-500">{group.active ? 'Không có hồ sơ thuê đang diễn ra.' : 'Chưa có hồ sơ thuê đã kết thúc.'}</p>}
           </section>)}</div> : <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] table-fixed text-left text-sm">
+            <table className="w-full min-w-[960px] table-fixed text-left text-sm">
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>
-                <col className="w-[20%]" />
                 <col className="w-[17%]" />
-                <col className="w-[24%]" />
-                <col className="w-[23%]" />
-                <col className="w-[16%]" />
+                <col className="w-[18%]" />
+                <col className="w-[29%]" />
+                <col />
+                <col className="w-28" />
               </colgroup>
               <thead className="bg-stone-50">
                 <tr>
@@ -507,7 +513,7 @@ function WorkspaceData({
                     "Thời hạn",
                     "Thao tác",
                   ].map((h, i) => (
-                    <th key={i} className={`p-3 align-middle font-semibold text-stone-600 ${i === 4 ? 'text-center' : 'text-left'}`}>
+                    <th key={i} className={`px-4 py-2.5 align-middle text-xs font-semibold text-stone-600 ${i === 4 ? 'text-center' : 'text-left'}`}>
                       {h}
                     </th>
                   ))}
@@ -517,38 +523,38 @@ function WorkspaceData({
                 {read.data.page.data.map((row) => (
                   <Fragment key={row.id}>
                   <tr key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1} className={`border-t border-stone-200 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40 ${focusStorageUnitId && row.storageUnit.id === focusStorageUnitId && row.status !== 'completed' ? 'outline outline-2 outline-amber-400 bg-amber-50' : ''}`}>
-                    <td className="p-3 align-middle">
+                    <td className="px-4 py-2.5 align-middle">
                       <code
-                        className="block break-all rounded-md border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs leading-5 tracking-tight text-stone-700"
-                        title={row.id}
+                        className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-600"
+                        title={"rentalId" in row ? row.displayCode || row.id : row.id}
                       >
                         {"rentalId" in row ? row.displayCode || row.id : row.id}
                       </code>
                     </td>
-                    <td className="p-3 align-middle">
-                      {role === 'customer' ? <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : row.status === 'completed' ? 'bg-stone-100 text-stone-600' : 'bg-amber-100 text-amber-800'}`}>{copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}</span> : <p className="font-semibold text-stone-900">{row.customer.fullName}</p>}
+                    <td className="px-4 py-2.5 align-middle">
+                      {role === 'customer' ? <Badge variant={recordStatusTone(row.status)}>{copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}</Badge> : <p className="truncate font-medium text-stone-900" title={row.customer.fullName}>{row.customer.fullName}</p>}
                     </td>
-                    <td className="p-3 align-middle">
-                      <p className="font-mono text-sm font-semibold text-stone-800">{row.storageUnit.code}</p>
+                    <td className="px-4 py-2.5 align-middle">
+                      <p className="truncate font-mono text-xs font-medium leading-5 text-stone-800" title={row.storageUnit.code}>{row.storageUnit.code}</p>
                       {role !== "manager" && 'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
                       {role !== "manager" && "unitType" in row && (
                         <p className="mt-1 text-xs leading-4 text-stone-500">{copy(row.unitType.name)}</p>
                       )}
                     </td>
-                    <td className="p-3 align-middle">
-                      <p className="text-sm leading-6">{"contractEndDate" in row
+                    <td className="px-4 py-2.5 align-middle">
+                      <p className="whitespace-nowrap text-xs leading-5 tabular-nums">{"contractEndDate" in row
                         ? rentalPeriodText(row, false)
                         : rentalDate(row.newEndDate)}</p>
-                      {role === 'manager' && <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>
+                      {role === 'manager' && <div className="mt-1"><Badge variant={recordStatusTone(row.status)}>
                         {copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}
-                      </span>}
+                      </Badge></div>}
                     </td>
-                    <td className="p-3 align-middle text-center">
+                    <td className="px-4 py-2.5 align-middle text-center">
                       <div className="flex justify-center">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="w-24 justify-center whitespace-nowrap"
+                        className="min-h-8 w-20 justify-center whitespace-nowrap"
                         onClick={() =>
                           setDetail({ kind: read.data!.kind, id: row.id })
                         }
