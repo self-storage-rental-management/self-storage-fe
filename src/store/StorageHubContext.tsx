@@ -2716,7 +2716,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền duy trì CSVC: ${formatVnd(contract.securityDeposit)}.`,
+            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền cọc đảm bảo kho: ${formatVnd(contract.securityDeposit)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -2744,7 +2744,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!reservation) throw new Error('Không tìm thấy đơn đặt chỗ.')
     if (paymentDetails.amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.')
     if (Math.abs(paymentDetails.amount - reservation.remainingAmount) > 0.01) {
-      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền duy trì CSVC.`)
+      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền cọc đảm bảo kho.`)
     }
     if (!paymentDetails.transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
 
@@ -2764,7 +2764,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       status: 'PAID',
       paidAt: now.toISOString(),
       recordedBy: staffUser.id,
-      description: `Tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}`
+      description: `Tiền thuê còn lại và tiền cọc đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}`
     }
 
     setState(prev => {
@@ -2816,7 +2816,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'payment',
             entityId: txId,
-            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền duy trì CSVC ${formatVnd(reservation.securityDepositAmount)}.`,
+            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền cọc đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities

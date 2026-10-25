@@ -364,7 +364,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">3. {'Xác nhận thu đủ cước thuê & tiền duy trì CSVC'}</span>
+                  <span className="font-medium text-stone-700">3. {'Xác nhận thu đủ cước thuê & tiền cọc đảm bảo kho'}</span>
                   <Badge variant={selectedCheckin.checklist.paymentConfirmed ? 'success' : 'muted'}>
                     {selectedCheckin.checklist.paymentConfirmed ? ('Đã thanh toán đủ') : ('Còn thiếu')}
                   </Badge>

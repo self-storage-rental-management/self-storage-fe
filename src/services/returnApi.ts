@@ -62,6 +62,11 @@ type ReturnScope = 'READ' | 'OPERATE' | 'MANAGE'
 const scopeRank: Record<ReturnScope, number> = { READ: 1, OPERATE: 2, MANAGE: 3 }
 function facilityAllowed(a: NonNullable<ReturnType<typeof getAuthenticatedActor>>, facilityId: string, required: ReturnScope = 'READ') {
   if (a.roles.includes('ADMIN')) return true
+  if (a.roles.includes('BUSINESS')) {
+    if (!a.facilityScopes || Object.keys(a.facilityScopes).length === 0) return true
+    const actual = a.facilityScopes[facilityId]
+    return !!actual && scopeRank[actual] >= scopeRank[required]
+  }
   const actual = a.facilityScopes[facilityId]
   return !!actual && scopeRank[actual] >= scopeRank[required]
 }
@@ -229,6 +234,9 @@ export function returnError(error: unknown) {
     if (error.status === 409 || msg.includes('409')) {
       if (msg === 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.') {
         return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
+      }
+      if (msg.includes('verified paid security deposit')) {
+        return 'Tiền cọc đảm bảo chưa xác nhận thành công.'
       }
       if (msg.includes('is not pending refund')) {
         return 'Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang có khiếu nại).'

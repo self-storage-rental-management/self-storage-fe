@@ -146,7 +146,7 @@ describe('real Return transport and unknown settlement presentation', () => {
       ...operationsActor('manager'),
       roles: ['BUSINESS'],
       permissions: ['returns:read'],
-      facilityScopes: {},
+      facilityScopes: { '00000000-0000-0000-0000-000000000000': 'MANAGE' },
     }
     respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
     await expect(listReturns('business')).rejects.toThrow('contract')
