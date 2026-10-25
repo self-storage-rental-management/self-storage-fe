@@ -202,7 +202,7 @@ export default function RenewalDetail({
         {canOpenPayment&&<Button
           disabled={operationsLocked||paymentBusy||paymentExpired||payment?.paymentStatus==="PAID"}
           onClick={openRenewalPayment}
-        >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":isSplit?"Thanh toán đợt 1 (20%)":"Thanh toán gia hạn (100%)"}</Button>}
+        >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":isSplit?"Thanh toán đợt 1 (20%)":"Thanh toán toàn kỳ"}</Button>}
         {actions
           .filter((a) => r.allowedActions.includes(a.action))
           .map((a) => (
