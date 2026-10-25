@@ -272,7 +272,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
               <p className="mb-3 text-xs font-bold uppercase tracking-wider text-stone-500">Thanh toán</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <p><span className="text-stone-400">Giá áp dụng</span><br /><b>{formatKnownMoney(appliedRate)}{appliedRate !== undefined && '/tháng'}</b></p>
-                <p><span className="text-stone-400">Tiền duy trì CSVC đã ghi nhận</span><br /><b>{formatKnownMoney(deposit)}</b></p>
+                <p><span className="text-stone-400">Tiền cọc đảm bảo kho đã ghi nhận</span><br /><b>{formatKnownMoney(deposit)}</b></p>
                 <p><span className="text-stone-400">Kỳ hiện tại</span><br /><Badge variant={billing.variant}>{billing.label}</Badge></p>
                 {overdueAmount !== undefined && <p><span className="text-stone-400">Khoản đang quá hạn</span><br /><b className="text-red-700">{formatKnownMoney(overdueAmount)}</b></p>}
               </div>

@@ -15,7 +15,7 @@ describe('authoritative backend pricing', () => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview={false} />)
     for (const amount of ['5.500.000 ₫', '16.500.000 ₫', '495.000 ₫', '16.005.000 ₫', '3.201.000 ₫', '12.804.000 ₫', '18.304.000 ₫', '21.505.000 ₫']) expect(html).toContain(amount)
     expect(html).toContain('Cọc giữ chỗ (20%)')
-    expect(html).toContain('Tiền duy trì CSVC')
+    expect(html).toContain('Tiền cọc đảm bảo kho')
     expect(html).not.toContain('40%')
     expect(html).not.toContain('166.452.000.000')
   })

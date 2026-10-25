@@ -45,13 +45,13 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
             <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Lộ trình thanh toán</p>
             <div className="flex justify-between gap-3"><span>Cọc giữ chỗ ({depositPercent}%)</span><b className="tabular-nums text-amber-700">{formatVndAmount(q.reservationDepositAmount)}</b></div>
             <div className="flex justify-between gap-3"><span>Tiền thuê còn lại</span><b className="tabular-nums">{formatVndAmount(q.remainingRentalAmount)}</b></div>
-            <div className="flex justify-between gap-3"><span>Tiền duy trì CSVC <small className="text-stone-500">(hoàn trả)</small></span><b className="tabular-nums">{formatVndAmount(q.securityDepositAmount)}</b></div>
+            <div className="flex justify-between gap-3"><span>Tiền cọc đảm bảo kho <small className="text-stone-500">(hoàn trả)</small></span><b className="tabular-nums">{formatVndAmount(q.securityDepositAmount)}</b></div>
             <div className="flex justify-between gap-3 border-t border-stone-200 pt-2"><b>Khoản thu khi nhận kho</b><b className="tabular-nums text-amber-700">{formatVndAmount(q.dueAtCheckIn)}</b></div>
           </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 rounded-lg bg-stone-900 px-3 py-2.5 text-white">
-          <div><b>Tổng nghĩa vụ tài chính</b><p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền duy trì CSVC</p></div>
+          <div><b>Tổng nghĩa vụ tài chính</b><p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền cọc đảm bảo kho</p></div>
           <b className="text-base tabular-nums">{formatVndAmount(q.totalInitialObligation)}</b>
         </div>
       </section>
@@ -155,7 +155,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-stone-600">
-                • Tiền duy trì CSVC <span className="text-stone-400 italic font-normal">(Hoàn trả khi trả kho)</span>
+                • Tiền cọc đảm bảo kho <span className="text-stone-400 italic font-normal">(Hoàn trả khi trả kho)</span>
               </span>
               <span className={`${amountClass} text-sm text-stone-800`}>{formatVndAmount(q.securityDepositAmount)}</span>
             </div>
@@ -172,7 +172,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-stone-900 p-4 text-white">
         <div>
           <p className="text-sm font-bold">Tổng nghĩa vụ tài chính</p>
-          <p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền duy trì CSVC hoàn trả</p>
+          <p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền cọc đảm bảo kho hoàn trả</p>
         </div>
         <div className="ml-auto text-right">
           <span className={`${amountClass} block text-xl font-bold text-white`}>{formatVndAmount(q.totalInitialObligation)}</span>
