@@ -2,8 +2,16 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
 import type { PermissionKey, User, Role } from '../types'
-import { isApiAuthenticated } from '../services/authApi'
+import { isApiAuthenticated, loginWithApi } from '../services/authApi'
 import { markAllNotificationsRead } from '../services/notificationApi'
+
+const DEMO_SWITCHER_ROLES = [
+  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', icon: '👤' },
+  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', icon: '🛠️' },
+  { role: 'manager', label: 'Quản lý cơ sở', email: 'manager@storagehub.demo', password: 'Manager@1234!', icon: '🏢' },
+  { role: 'business', label: 'Ban điều hành (BO)', email: 'business@storagehub.demo', password: 'Business@1234!', icon: '📊' },
+  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', icon: '🛡️' },
+] as const
 
 export interface NavItem {
   id: string
@@ -109,17 +117,24 @@ export default function Layout({
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false)
+  const [switchingRole, setSwitchingRole] = useState(false)
   const notificationAreaRef = useRef<HTMLDivElement>(null)
+  const roleSwitcherAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
   useEffect(() => {
-    if (!notificationsOpen) return
+    if (!notificationsOpen && !roleSwitcherOpen) return
     const closeOutside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !notificationAreaRef.current?.contains(event.target)) {
-        setNotificationsOpen(false)
+      if (event.target instanceof Node) {
+        if (!notificationAreaRef.current?.contains(event.target)) setNotificationsOpen(false)
+        if (!roleSwitcherAreaRef.current?.contains(event.target)) setRoleSwitcherOpen(false)
       }
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setNotificationsOpen(false)
+      if (event.key === 'Escape') {
+        setNotificationsOpen(false)
+        setRoleSwitcherOpen(false)
+      }
     }
     document.addEventListener('pointerdown', closeOutside, true)
     document.addEventListener('keydown', closeOnEscape)
@@ -239,7 +254,7 @@ export default function Layout({
       'overdue': 'Quản Lý Nợ Quá Hạn',
       'facilities': 'Quản Lý Cơ Sở',
       'performance': 'Hiệu Suất Mặt Bằng',
-      'policies': 'Gói Thuê Kỳ Hạn',
+      'policies': 'Gói Thuê',
       'pricing': 'Bảng Giá Loại Kho',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',
@@ -313,11 +328,11 @@ export default function Layout({
 
   const getTranslatedRole = () => {
     const lower = roleLabel.toLowerCase()
-    if (lower.includes('staff') || lower.includes('nhân viên')) return 'Nhân viên'
-    if (lower.includes('customer') || lower.includes('khách hàng')) return 'Khách hàng'
-    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh') || lower.includes('thương mại')) return 'Quản lý vận hành kinh doanh'
-    if (lower.includes('manager') || lower.includes('quản lý')) return 'Quản lý cơ sở'
-    if (lower.includes('admin') || lower.includes('quản trị')) return 'Quản trị viên'
+    if (lower.includes('staff') || lower.includes('nhân viên')) return 'Nhân Viên'
+    if (lower.includes('customer') || lower.includes('khách hàng')) return 'Khách Hàng'
+    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh') || lower.includes('thương mại')) return 'Quản Lý Vận Hành Kinh Doanh'
+    if (lower.includes('manager') || lower.includes('quản lý')) return 'Quản Lý Cơ Sở'
+    if (lower.includes('admin') || lower.includes('quản trị')) return 'Quản Trị Viên'
     return roleLabel
   }
 
@@ -604,6 +619,58 @@ export default function Layout({
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* In-app Role Switcher */}
+          <div className="relative" ref={roleSwitcherAreaRef}>
+            <button
+              type="button"
+              onClick={() => setRoleSwitcherOpen(o => !o)}
+              disabled={switchingRole}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100 text-xs font-semibold text-stone-700 transition cursor-pointer shadow-2xs"
+              title="Chuyển đổi vai trò kiểm thử nhanh (API Token)"
+            >
+              <span className="text-amber-500 font-bold">⚡</span>
+              <span className="hidden sm:inline">Đổi vai trò</span>
+              <span className="text-[10px] text-stone-400">▼</span>
+            </button>
+            {roleSwitcherOpen && (
+              <div className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-stone-200 bg-white py-1.5 shadow-xl">
+                <div className="px-3 py-1.5 border-b border-stone-100 mb-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Chuyển sang vai trò (API Auth)</p>
+                </div>
+                {DEMO_SWITCHER_ROLES.map(acc => {
+                  const isCurrent = acc.role === user.role
+                  return (
+                    <button
+                      key={acc.role}
+                      type="button"
+                      disabled={switchingRole || isCurrent}
+                      onClick={async () => {
+                        setSwitchingRole(true)
+                        try {
+                          await loginWithApi(acc.email, acc.password)
+                          window.location.href = '/'
+                        } catch {
+                          setSwitchingRole(false)
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-left text-xs transition cursor-pointer ${
+                        isCurrent
+                          ? 'bg-amber-50 font-bold text-amber-900 cursor-default'
+                          : 'text-stone-700 hover:bg-stone-50 hover:text-stone-900'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{acc.icon}</span>
+                        <span>{acc.label}</span>
+                      </span>
+                      {isCurrent && <span className="text-[10px] text-amber-600 font-mono">Hiện tại</span>}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>

@@ -212,7 +212,7 @@ export default function ManagerUnitEditor({
         <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Giá và chính sách đang áp dụng</p><p className="mt-1 text-xs text-stone-500">Chỉ đọc tại màn hình quản lý gian kho, không phải cấu hình giá hoặc chính sách toàn hệ thống.</p></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Giá chuẩn hiện hành</span><b className="mt-1 block">{selectedDefinition ? `${formatManagerMoney(selectedDefinition.monthlyPrice)}/tháng` : 'Chưa có dữ liệu'}</b></div>
-          <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Tiền duy trì CSVC theo chính sách hiện hành</span><b className="mt-1 block">{selectedTemplate ? formatManagerMoney(selectedTemplate.deposit) : 'Chưa có dữ liệu chính sách'}</b></div>
+          <div className="rounded-lg border border-stone-200 p-3"><span className="text-xs text-stone-500">Tiền cọc đảm bảo kho theo chính sách hiện hành</span><b className="mt-1 block">{selectedTemplate ? formatManagerMoney(selectedTemplate.deposit) : 'Chưa có dữ liệu chính sách'}</b></div>
         </div>
       </section>
 
