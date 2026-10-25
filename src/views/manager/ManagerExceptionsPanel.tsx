@@ -69,7 +69,7 @@ export default function ManagerExceptionsPanel({ user, onOpen }: { user: User; o
       .forEach(item => {
         const reasons = [
           item.status === 'disputed' ? `Khách hàng không đồng ý quyết toán${item.customerDecisionNote ? `: ${item.customerDecisionNote}` : ''}` : '',
-          item.status === 'payment_due' ? 'Tiền duy trì CSVC không đủ, còn khoản khách hàng phải thanh toán' : '',
+          item.status === 'payment_due' ? 'Tiền cọc đảm bảo kho không đủ, còn khoản khách hàng phải thanh toán' : '',
           item.damageClassification && item.damageClassification !== 'no_damage' ? damageLabels[item.damageClassification] || item.damageClassification : '',
           item.inventoryMatch && item.inventoryMatch !== 'match' ? inventoryLabels[item.inventoryMatch] || item.inventoryMatch : ''
         ].filter(Boolean)

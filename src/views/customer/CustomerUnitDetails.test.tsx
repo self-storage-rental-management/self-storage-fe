@@ -18,7 +18,7 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
   for (const text of ['Kho Việt – Cơ sở Quận 1', '125 Nguyễn Bỉnh Khiêm', 'kho-s-chi-tiet.png',
     'Ưu đãi và báo giá theo kỳ thuê',
     'Gói 6 tháng cơ sở', 'Giảm 10% tiền thuê',
-    '3. Quy trình đặt kho và thanh toán', 'cọc 20%', '5.500.000', 'Tiền duy trì CSVC',
+    '3. Quy trình đặt kho và thanh toán', '5.500.000', 'Tiền cọc đảm bảo kho',
     'Xác nhận hồ sơ', 'Thanh toán cọc', 'Nhận kho']) expect(html).toContain(text)
   for (const text of ['Số kho trống theo kỳ thuê', 'Theo báo giá kỳ thuê', 'Chiều rộng làn xe đẩy',
     '(hồ sơ bố trí)', '– phù hợp thùng carton và đồ gia dụng nhẹ', 'Kiểm tra hàng hóa',
