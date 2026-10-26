@@ -54,7 +54,7 @@ export default function CustomerRentalRegulations({ facilityName }: Props) {
             </div>
           </div>
           <p className="text-sm text-slate-600 mt-2 leading-7">
-            Minh bạch biểu giá, tiền duy trì CSVC, các khoản phí và điều kiện gia hạn trước hạn.
+            Minh bạch biểu giá, tiền cọc đảm bảo kho, các khoản phí và điều kiện gia hạn trước hạn.
           </p>
         </Card>
 

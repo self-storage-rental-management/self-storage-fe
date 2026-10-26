@@ -16,7 +16,7 @@ export interface FacilityCatalogType {
   status: 'draft' | 'awaiting_pricing' | 'active' | 'inactive'
 }
 
-const unitStatuses = ['available', 'reserved', 'occupied', 'maintenance', 'held', 'assigned'] as const
+const unitStatuses = ['available', 'reserved', 'occupied', 'maintenance', 'held', 'assigned', 'inactive', 'archived'] as const
 type UnitStatus = typeof unitStatuses[number]
 interface CatalogUnit { id: string; facilityId: string; unitTypeId: string; status: UnitStatus }
 export interface FacilityCatalogRow extends FacilityCatalogType {
@@ -87,7 +87,7 @@ export function summarizeFacilityCatalog(types: FacilityCatalogType[], units: Ca
   for (const unit of units) {
     const row = byId.get(unit.unitTypeId)
     if (!row) invalidCatalog()
-    row.total++
+    if (unit.status !== 'inactive' && unit.status !== 'archived') row.total++
     row.counts[unit.status]++
   }
   return rows

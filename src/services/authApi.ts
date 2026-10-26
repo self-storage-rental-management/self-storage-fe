@@ -49,7 +49,30 @@ export interface ApiChallengeResponse {
   debugCode: string | null
 }
 
-let currentActor: ApiActor | null = null
+const CURRENT_ACTOR_STORAGE_KEY = 'storagehub:current_actor'
+
+function readStoredActor(): ApiActor | null {
+  try {
+    const raw = sessionStorage.getItem(CURRENT_ACTOR_STORAGE_KEY)
+    return raw ? JSON.parse(raw) as ApiActor : null
+  } catch {
+    return null
+  }
+}
+
+function persistActor(actor: ApiActor | null): ApiActor | null {
+  currentActor = actor
+  try {
+    if (actor) {
+      sessionStorage.setItem(CURRENT_ACTOR_STORAGE_KEY, JSON.stringify(actor))
+    } else {
+      sessionStorage.removeItem(CURRENT_ACTOR_STORAGE_KEY)
+    }
+  } catch {}
+  return actor
+}
+
+let currentActor: ApiActor | null = readStoredActor()
 let loginGeneration = 0
 
 const rolePriority: ApiRoleCode[] = ['ADMIN', 'BUSINESS', 'MANAGER', 'STAFF', 'CUSTOMER']
@@ -132,14 +155,13 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = normalizeApiActor(response.data.actor)
-  return currentActor
+  return persistActor(normalizeApiActor(response.data.actor))!
 }
 
 export async function loginWithApi(email: string, password: string): Promise<ApiActor> {
   loginGeneration++
   clearAuthTokens()
-  currentActor = null
+  persistActor(null)
   const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
@@ -152,7 +174,7 @@ export async function loginWithApi(email: string, password: string): Promise<Api
 export async function loginWithGoogleApi(idToken: string): Promise<ApiActor> {
   loginGeneration++
   clearAuthTokens()
-  currentActor = null
+  persistActor(null)
   const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/google', {
     method: 'POST',
     body: JSON.stringify({ idToken }),
@@ -172,8 +194,7 @@ export async function changePasswordWithApi(currentPassword: string, newPassword
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = normalizeApiActor(response.data.actor)
-  return currentActor
+  return persistActor(normalizeApiActor(response.data.actor))!
 }
 
 export async function registerWithApi(input: {
@@ -218,9 +239,9 @@ export async function updateCurrentProfileWithApi(input: {
     body: JSON.stringify(input),
   })
   if (!response?.data) throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
-  currentActor = normalizeApiActor(response.data)
+  persistActor(normalizeApiActor(response.data))
   window.dispatchEvent(new Event('storagehub:actor-updated'))
-  return currentActor
+  return currentActor!
 }
 
 export async function listMySessions(): Promise<ApiSession[]> {
@@ -262,7 +283,7 @@ export async function resetPasswordWithApi(email: string | undefined, codeOrToke
 export async function logoutFromApi() {
   const generation = loginGeneration
   if (!hasAccessToken() && !getRefreshToken()) {
-    currentActor = null
+    persistActor(null)
     return true
   }
   // A failed chat flush must leave the account and its in-memory chat mounted.
@@ -277,7 +298,7 @@ export async function logoutFromApi() {
   } finally {
     if (generation === loginGeneration) {
       clearAuthTokens()
-      currentActor = null
+      persistActor(null)
     }
   }
   return generation === loginGeneration
@@ -296,8 +317,7 @@ export async function refreshApiSession(): Promise<ApiActor> {
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  currentActor = normalizeApiActor(response.data.actor)
-  return currentActor
+  return persistActor(normalizeApiActor(response.data.actor))!
 }
 
 export function getAuthenticatedActor() {
@@ -329,7 +349,7 @@ export async function updateProfileWithApi(input: { fullName: string; phone: str
   if (!response?.data?.id || response.data.id !== currentActor?.id) {
     throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
   }
-  currentActor = response.data
-  return currentActor
+  persistActor(response.data)
+  return currentActor!
 }
 
