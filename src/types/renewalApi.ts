@@ -3,6 +3,8 @@ import type { ApiRenewalStatus } from './statusContracts'
 export type RenewalApiStatus = ApiRenewalStatus
 export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {
+  effectivePeriod?: { startDate: string; endExclusive: string; newEndDate: string; finalized: boolean } | null
+  statusSummary?: RenewalStatusSummary | null
   displayCode?: string | null
   id: string
   rentalId: string
@@ -45,6 +47,7 @@ export interface RenewalApiRecord {
 export interface RenewalApiOption {
   pricingPackageCode: string
   pricingPackageName?: string | null
+  signingWindowDays?: number | null
   rentalMonths: number
 }
 export interface RenewalVnpayPaymentResponse {
@@ -54,7 +57,7 @@ export interface RenewalVnpayPaymentResponse {
   transactionReference: string
   amount: number
   currency: "VND"
-  paymentStatus: "PENDING" | "PROCESSING" | "PAID" | "NOT_RECEIVED" | "FAILED" | "CANCELLED"
+  paymentStatus: PaymentStatus
   paymentDeadline: string | null
   paidAt: string | null
   reconciliationRequired: boolean
@@ -64,6 +67,8 @@ export interface RenewalVnpayPaymentResponse {
   invoiceStatus: "DRAFT" | "PAID" | "VOID" | "REFUNDED"
   invoiceIssuedAt: string | null
   settlementStage?: "AWAITING_PAYMENT" | "VERIFIED_AWAITING_ALLOCATION" | "ALLOCATED_AWAITING_SIGNING" | "AWAITING_SIGNING" | "COMPLETED" | "RECONCILIATION_REQUIRED"
+  transactionStatus?: RenewalTransactionStatus
+  receiptAvailable?: boolean
 }
 export interface RenewalApiQuote {
   id: string
@@ -83,6 +88,7 @@ export interface RenewalApiQuote {
   pricingPackageCode: string
   packagePolicyRef: string
   packagePolicyVersion: string
+  signingWindowDays?: number | null
   rentalMonths: number
   monthlyPrice: number
   discountRate: number

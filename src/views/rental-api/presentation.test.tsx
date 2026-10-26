@@ -107,7 +107,7 @@ describe("Rental/Renewal business presentation", () => {
     ).toBe("Hồ sơ chưa đến thời hạn được yêu cầu gia hạn. Vui lòng thử lại gần ngày hết hạn.")
   })
   it.each([
-    ["DEFERRED_SOURCE: BO renewal policy missing", "Cơ sở chưa công bố chính sách gia hạn đang có hiệu lực."],
+    ["DEFERRED_SOURCE: BO renewal policy missing", "Chưa tải được các gói gia hạn của cơ sở."],
     ["DEFERRED_SOURCE: Rental date provenance unknown", "Chưa xác minh được ngày thuê của hồ sơ"],
     ["DEFERRED_SOURCE: Renewal pricing UNKNOWN", "Chưa có giá gói gia hạn đã được xác minh"],
     ["Recovery/cutoff conflict", "đã đến mốc xử lý quá hạn"],

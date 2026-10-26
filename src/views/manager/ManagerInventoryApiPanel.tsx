@@ -45,7 +45,7 @@ import {
 } from "./managerInventoryApi"
 import { archiveManagerUnitType, createManagerUnitType, updateManagerUnitType } from "../../services/managerUnitTypeApi"
 import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
-import { generateUnitTypeCode, formatPhysicalUnitCode, previewPhysicalUnitCodes } from "./managerUnitCodeHelpers"
+import { generateUnitTypeCode, previewPhysicalUnitCodes } from "./managerUnitCodeHelpers"
 import ManagerGoodsCatalogPanel from "./ManagerGoodsCatalogPanel"
 import { getManagerGoodsCatalog } from "../../services/managerGoodsCatalogApi"
 import type { GoodsCatalog } from "../../services/customerReservationApi"
@@ -57,6 +57,8 @@ const statusLabels: Record<InventoryUnit["status"], string> = {
   assigned: "Đã phân gian",
   held: "Đang giữ tạm thời",
   maintenance: "Đang bảo trì",
+  inactive: "Tạm ngưng",
+  archived: "Đã lưu trữ",
 }
 const statusClasses: Record<InventoryUnit["status"], string> = {
   available: "bg-green-100 text-green-700",
@@ -65,6 +67,8 @@ const statusClasses: Record<InventoryUnit["status"], string> = {
   assigned: "bg-violet-50 text-violet-700",
   held: "bg-amber-50 text-amber-800",
   maintenance: "bg-red-50 text-red-700",
+  inactive: "bg-stone-100 text-stone-700",
+  archived: "bg-stone-200 text-stone-600",
 }
 const inputClass =
   "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -528,14 +532,14 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
               if (diff > 0) {
                 return (
                   <p className="text-emerald-700 font-medium">
-                    🟢 Tăng thêm <b>+{diff}</b> gian kho vật lý mới (tổng thành <b>{target}</b> gian). Các gian mới sẽ tự động sinh mã theo chuẩn Cách B: <b>{formatPhysicalUnitCode(form.zone, form.floor, current + 1)} → {formatPhysicalUnitCode(form.zone, form.floor, target)}</b>.
+                    Tăng thêm <b>+{diff}</b> gian kho vật lý mới (tổng thành <b>{target}</b> gian). Hệ thống tự sinh mã mới và bỏ qua mọi mã đã từng tồn tại, kể cả mã của gian đã lưu trữ.
                   </p>
                 )
               }
               if (diff < 0) {
                 return (
                   <p className="text-amber-700 font-medium">
-                    🟡 Giảm <b>{Math.abs(diff)}</b> gian kho trống (từ <b>{current}</b> xuống <b>{target}</b> gian). Lưu ý: Chỉ các gian đang trống và chưa có hồ sơ liên quan mới được thu hồi.
+                    Giảm <b>{Math.abs(diff)}</b> gian kho trống (từ <b>{current}</b> xuống <b>{target}</b> gian). Các gian được chuyển sang trạng thái Đã lưu trữ, không bị xóa và mã cũ không được tái sử dụng.
                   </p>
                 )
               }
@@ -618,6 +622,7 @@ export function InventoryContent({
   ].sort((a, b) => a.localeCompare(b, "vi", { numeric: true }))
   const count = (status: InventoryUnit["status"]) =>
     units.filter((u) => u.status === status).length
+  const operationalCount = units.filter((u) => u.status !== "inactive" && u.status !== "archived").length
   const occupied = count("occupied")
   const change = (patch: Partial<InventoryFilters>) => {
     setFilters((f) => ({ ...f, ...patch }))
@@ -649,7 +654,7 @@ export function InventoryContent({
   return (
     <>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <StatCard title="Tổng số gian" value={units.length} icon={Icon.box} />
+        <StatCard title="Tổng số gian" value={operationalCount} icon={Icon.box} />
         <StatCard
           title="Còn trống"
           value={count("available")}
@@ -686,6 +691,8 @@ export function InventoryContent({
             ["allocated", "Đã phân gian / giữ chỗ"],
             ["held", statusLabels.held],
             ["maintenance", statusLabels.maintenance],
+            ["inactive", statusLabels.inactive],
+            ["archived", statusLabels.archived],
           ])}
           {filter("Loại gian kho", "type", [
             ["all", "Tất cả loại gian kho"],

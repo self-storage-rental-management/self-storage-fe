@@ -1,7 +1,8 @@
+import { useReturnRecords } from '../../hooks/useReturnRecords'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
-import { formatVndAmount as formatVnd } from '../../i18n/currency'
+import { formatVndAmount as formatRawVnd } from '../../i18n/currency'
 import { isApiAuthenticated } from '../../services/authApi'
 import {
   feeKeys,
@@ -13,6 +14,8 @@ import {
   decideSetupExit,
   decideLegacyPricing,
   completeRefund,
+  uploadReturnEvidence,
+  validateReturnSettlementReceipt,
   paySettlement,
   requestReturn,
   returnError,
@@ -240,13 +243,12 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const hub = useStorageHub()
   const useApi = isApiAuthenticated()
   const isBusiness = user.role === 'business'
+  const formatVnd = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? 'Chưa xác định' : formatRawVnd(value)
+  const apiRead = useReturnRecords('business', useApi)
 
-  // API State
-  const [apiRows, setApiRows] = useState<ApiReturn[]>([])
-  const [apiLoading, setApiLoading] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
-  const [totalPages, setTotalPages] = useState(1)
+  const apiRows = apiRead.rows
+  const apiLoading = apiRead.loading
+  const apiError = apiRead.error
 
   // Local fallback state (cho phép người dùng luôn tương tác mượt mà)
   const [localReturns, setLocalReturns] = useState<typeof SAMPLE_RETURNS>(() => {
@@ -361,31 +363,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     } catch {}
   }, [])
 
-  // Load from API if authenticated
-  const loadApiData = async () => {
-    if (!useApi) return
-    setApiLoading(true)
-    setApiError(null)
-    try {
-      const res = await listReturns('business', page, 20)
-      if (res && res.data && res.data.length > 0) {
-        setApiRows(res.data)
-        setTotalPages(res.pagination.totalPages || 1)
-      } else {
-        setApiRows([])
-      }
-    } catch (err) {
-      setApiError(returnError(err))
-    } finally {
-      setApiLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (useApi) {
-      void loadApiData()
-    }
-  }, [useApi, page])
+  const loadApiData = apiRead.refresh
 
   // Normalized list of return items
   const displayItems = useMemo<typeof SAMPLE_RETURNS>(() => {
@@ -403,8 +381,8 @@ export default function BusinessReturnsPanel({ user }: Props) {
         settlementMode: r.settlementMode,
         depositAmount: r.depositAmount ?? 0,
         totalDeductions: r.totalDeductions,
-        netRefundAmount: r.netRefundAmount ?? 0,
-        amountDueFromCustomer: r.amountDueFromCustomer ?? 0,
+        netRefundAmount: r.netRefundAmount ?? Number.NaN,
+        amountDueFromCustomer: r.amountDueFromCustomer ?? Number.NaN,
         damageFee: r.damageFee,
         cleaningFee: r.cleaningFee,
         lostItemFee: r.lostItemFee,
@@ -588,6 +566,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 1. Thao tác: Nghiệm thu hiện trường (Inspection)
   const handlePerformInspection = async () => {
     if (!selectedItem) return
+    if (useApi) { setFeedback('Nghiệm thu thuộc Staff tại cơ sở.'); return }
     if (isBusiness) {
       setFeedback('Business chỉ được theo dõi hồ sơ và thực hiện hoàn cọc đã đủ điều kiện.')
       return
@@ -667,6 +646,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 2. Thao tác: Khách hàng duyệt / Khiếu nại (Confirmation & Dispute)
   const handleCustomerConfirm = async (decision: 'accepted' | 'disputed') => {
     if (!selectedItem) return
+    if (useApi) { setFeedback('Xác nhận quyết toán thuộc khách hàng sở hữu hồ sơ.'); return }
     if (isBusiness) {
       setFeedback('Business không thay khách hàng xác nhận quyết toán.')
       return
@@ -731,6 +711,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 3. Thao tác: Thẩm định khiếu nại (BO Review Dispute)
   const handleReviewDispute = async () => {
     if (!selectedItem) return
+    if (useApi) { setFeedback('Xem xét khiếu nại thuộc Manager theo quyền hiện tại.'); return }
     if (isBusiness) {
       setFeedback('Business không thẩm định khiếu nại; thao tác này thuộc Manager.')
       return
@@ -830,6 +811,9 @@ export default function BusinessReturnsPanel({ user }: Props) {
           notes: refundNotes.trim() || 'Hoàn tiền cọc quyết toán',
         })
         await loadApiData()
+        setFeedback('Đã ghi nhận chứng từ hoàn tiền và hoàn tất hồ sơ theo kết quả backend.')
+        setActiveTab('overview')
+        return
       }
 
       if (useApi) {
@@ -866,6 +850,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     } catch (err) {
       setFeedback(returnError(err))
     } finally {
+      refundLock.current = false
       setSubmitting(false)
     }
   }
@@ -873,6 +858,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 5. Thao tác: Khách nộp phụ phí phát sinh (Pay Due)
   const handlePayDue = async () => {
     if (!selectedItem) return
+    if (useApi) { setFeedback('Thu khoản còn thiếu thuộc Staff tại cơ sở.'); return }
     if (isBusiness) {
       setFeedback('Business không ghi nhận phụ phí; thao tác này thuộc Customer/Staff theo contract.')
       return
@@ -926,6 +912,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // 6. Thao tác: Tạo yêu cầu trả kho mới (+ Tạo hồ sơ)
   const handleCreateNewReturn = async () => {
+    if (useApi) { setFeedback('Khách hàng tạo yêu cầu từ hồ sơ thuê; BO không tạo hồ sơ giả thay cho API.'); return }
     if (!newScheduledDate) {
       alert('Vui lòng chọn ngày hẹn trả kho.')
       return
@@ -1319,7 +1306,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
       {modalOpen && selectedItem && (
         <Modal
           open={modalOpen}
-          onClose={() => setModalOpen(false)}
+          onClose={() => { if (!submitting && !refundLock.current) setModalOpen(false) }}
           title={`Hồ sơ trả kho: ${selectedItem.unitNumber} (${selectedItem.facilityName})`}
         >
           <div className="space-y-5 text-sm max-h-[80vh] overflow-y-auto pr-1">
@@ -2064,12 +2051,14 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    Mã giao dịch chuyển khoản ngân hàng / VNPay (*)
+                    Mã giao dịch chuyển khoản / biên nhận tiền mặt (*)
                   </label>
                   <input
                     type="text"
                     value={refundReference}
-                    onChange={(e) => setRefundReference(e.target.value)}
+                    disabled={submitting}
+                    maxLength={120}
+                    onChange={(e) => { setRefundReference(e.target.value); setRefundConfirmed(false) }}
                     placeholder="VD: VNPAY-REFUND-992288 hoặc FT261017001"
                     className="w-full px-2.5 py-1.5 border border-stone-300 rounded-lg bg-white text-xs font-mono"
                   />
@@ -2082,11 +2071,17 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   <textarea
                     rows={2}
                     value={refundNotes}
+                    disabled={submitting}
                     onChange={(e) => setRefundNotes(e.target.value)}
                     className="w-full p-2 border border-stone-300 rounded-lg bg-white text-xs"
                   />
                 </div>
 
+                {useApi && <>
+                  <label className="block text-xs font-bold text-stone-700">Phương thức hoàn tiền<select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" value={refundMethod} disabled={submitting} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
+                  <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
+                  <label className="flex items-start gap-2 text-xs text-stone-700"><input type="checkbox" className="mt-0.5" checked={refundConfirmed} disabled={submitting || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Tôi xác nhận đã thực hoàn đúng số tiền hiển thị và đã đối chiếu biên lai. Hệ thống chỉ ghi nhận chứng từ, không tự chuyển tiền.</span></label>
+                </>}
                 <div className="flex justify-end gap-2 pt-1">
                   <Button variant="outline" size="sm" onClick={() => setActiveTab('overview')}>
                     Quay lại
@@ -2094,7 +2089,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   <Button
                     variant="primary"
                     size="sm"
-                    disabled={submitting}
+                    disabled={submitting || (useApi && (!refundFile || !refundConfirmed || !refundReference.trim() || selectedItem.status !== 'refund_pending'))}
                     className="bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer"
                     onClick={handleCompleteRefund}
                   >

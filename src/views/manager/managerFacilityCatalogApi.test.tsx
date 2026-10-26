@@ -26,7 +26,7 @@ describe('Manager facility catalog DB read adapter', () => {
     vi.stubGlobal('fetch', fetch)
     const rows = await loadManagerFacilityCatalog('facility-a')
     expect(rows.map(row => [row.total, row.lengthM, row.monthlyPrice])).toEqual([[2, 8, 5500000], [1, 12, 7200000]])
-    expect(rows[0].counts).toEqual({ available: 1, occupied: 1, maintenance: 0, held: 0, assigned: 0, reserved: 0 })
+    expect(rows[0].counts).toEqual({ available: 1, occupied: 1, maintenance: 0, held: 0, assigned: 0, reserved: 0, inactive: 0, archived: 0 })
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
       'http://localhost:8080/api/facilities/facility-a/unit-types?page=0&size=100&sort=id,asc',
       'http://localhost:8080/api/storage-units?facilityId=facility-a&page=0&size=100&sort=id,asc',
@@ -39,7 +39,7 @@ describe('Manager facility catalog DB read adapter', () => {
     vi.stubGlobal('fetch', fetch)
     const [row] = await loadManagerFacilityCatalog('facility-a')
     expect(row.total).toBe(101)
-    expect(row.counts).toEqual({ available: 98, reserved: 1, held: 1, assigned: 1, occupied: 0, maintenance: 0 })
+    expect(row.counts).toEqual({ available: 98, reserved: 1, held: 1, assigned: 1, occupied: 0, maintenance: 0, inactive: 0, archived: 0 })
     expect(fetch).toHaveBeenCalledTimes(3)
   })
 
