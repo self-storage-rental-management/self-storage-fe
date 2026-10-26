@@ -245,7 +245,10 @@ export default function StaffCheckInOperationsPanel({
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
 
   const [contractFile, setContractFile] = useState<File | null>(null)
-  const [setupTermsConfirmedFor, setSetupTermsConfirmedFor] = useState<string | null>(null)
+  const [confirmedSetupTerms, setConfirmedSetupTerms] = useState<string | null>(null)
+  const setupTermsKey = handoverTarget?.setupEarlyExitPolicyVersion
+    ? JSON.stringify([handoverTarget.checkInId, handoverTarget.setupEarlyExitPolicyVersion, handoverTarget.setupEarlyExitFee])
+    : null
 
   const [paymentEvidenceFile, setPaymentEvidenceFile] = useState<File | null>(null)
 
@@ -580,7 +583,7 @@ export default function StaffCheckInOperationsPanel({
       })
 
       setContractFile(null)
-      setSetupTermsConfirmedFor(null)
+      setConfirmedSetupTerms(null)
 
       setPaymentEvidenceFile(null)
 
@@ -612,14 +615,14 @@ export default function StaffCheckInOperationsPanel({
         setChecklist((current) => ({ ...current, identityVerified: true, reservationMatched: true }))
       } else if (handoverStep === 2) {
         if (!contractFile) return
-        if (handoverTarget.setupEarlyExitPolicyVersion && setupTermsConfirmedFor !== handoverTarget.checkInId)
-          throw new Error('Cần đối chiếu điều khoản phí trả kho trong setup trong hợp đồng đã ký.')
+        if (setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null)) {
+          throw new Error('Cần đối chiếu điều khoản phí trả kho trong setup trong hợp đồng đã ký trước khi tiếp tục.')
+        }
         const asset = await uploadCheckInEvidence(handoverTarget.checkInId, contractFile)
         updated = await signCheckInContract(handoverTarget.checkInId, asset.id, handoverTarget.setupEarlyExitPolicyVersion)
         setChecklist((current) => ({ ...current, contractVerified: true }))
       } else if (handoverStep === 3) {
-        const due = handoverTarget.dueAtCheckIn
-        if (due == null) throw new Error('Thiếu dữ liệu lịch sử về số tiền cần thu, cần đối soát trước khi tiếp tục.')
+        const due = handoverTarget.dueAtCheckIn ?? 0
         if (due > 0) {
           if (!paymentEvidenceFile) return
           const asset = await uploadCheckInEvidence(handoverTarget.checkInId, paymentEvidenceFile)
@@ -773,7 +776,7 @@ export default function StaffCheckInOperationsPanel({
     setEvidenceFiles([])
 
     setContractFile(null)
-    setSetupTermsConfirmedFor(null)
+    setConfirmedSetupTerms(null)
 
     setPaymentEvidenceFile(null)
 
@@ -1153,9 +1156,12 @@ export default function StaffCheckInOperationsPanel({
                   </div>
                 ) : (
                   <>
-                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh) *<input disabled={isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setContractFile(event.target.files?.[0] || null)} /></label>
-                    <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => setContractFile(null)} disabled={submitting || isReviewingCompletedStep} />
-                    {handoverTarget.setupEarlyExitPolicyVersion && <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" checked={setupTermsConfirmedFor === handoverTarget.checkInId} disabled={submitting || isReviewingCompletedStep} onChange={event => setSetupTermsConfirmedFor(event.target.checked ? handoverTarget.checkInId : null)} /><span>Đã đối chiếu hợp đồng đã ký có phí chấm dứt sớm một lần trong setup: {handoverTarget.setupEarlyExitFee == null ? 'chưa xác định' : handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN') + ' đồng'}, đúng điều khoản khách đã chấp nhận khi đặt kho.</span></label>}
+                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => { setContractFile(event.target.files?.[0] || null); setConfirmedSetupTerms(null) }} /></label>
+                    <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => { setContractFile(null); setConfirmedSetupTerms(null) }} disabled={submitting || isReviewingCompletedStep} />
+                    {setupTermsKey && <label className="flex items-start gap-2 text-sm text-blue-950">
+                      <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
+                      <span>Đã đối chiếu hợp đồng đã ký có điều khoản phí trả kho trong setup một lần {handoverTarget.setupEarlyExitFee == null ? '(chưa xác định, cần đối soát)' : `${handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng`}, đúng điều khoản khách đã chấp nhận khi đặt kho.</span>
+                    </label>}
                   </>
                 )}
                 {handoverTarget.contractSignedAt && <p className="text-xs text-stone-600">Đã ký lúc: <b>{formatStaffDateTime(handoverTarget.contractSignedAt)}</b></p>}
@@ -1164,7 +1170,7 @@ export default function StaffCheckInOperationsPanel({
 
             {handoverStep === 3 && (
               <div className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                <div><p className="font-semibold text-emerald-950">Thu tiền sau khi ký hợp đồng</p><p className="text-sm text-emerald-800">Số tiền cần thu: <b>{handoverTarget.dueAtCheckIn == null ? 'Chưa xác định, cần đối soát' : `${handoverTarget.dueAtCheckIn.toLocaleString('vi-VN')} đồng`}</b>.</p></div>
+                <div><p className="font-semibold text-emerald-950">Thu tiền sau khi ký hợp đồng</p><p className="text-sm text-emerald-800">Số tiền cần thu: <b>{Number(handoverTarget.dueAtCheckIn ?? 0).toLocaleString('vi-VN')} đồng</b>.</p></div>
                 {(handoverTarget.dueAtCheckIn ?? 0) > 0 && !isReviewingCompletedStep ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
@@ -1180,7 +1186,7 @@ export default function StaffCheckInOperationsPanel({
                 <div><p className="font-semibold text-amber-950">Bàn giao kho trống và bắt đầu setup</p><p className="text-sm text-amber-800">Ổ khóa chỉ được kích hoạt sau khi backend xác nhận đã ký hợp đồng và thu tiền. Không lưu hoặc bàn giao mật khẩu.</p></div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input label="Mã ổ khóa / chìa khóa *" value={keyLockReference} disabled={isReviewingCompletedStep} onChange={(event) => setKeyLockReference(event.target.value)} placeholder="Ví dụ: LOCK-018" />
-                  <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"><span className="text-stone-600">Quyền lợi đã lưu cùng đơn</span><b className="mt-1 block">{handoverTarget.freeSetupDays == null ? 'Thiếu dữ liệu lịch sử, cần đối soát' : `${handoverTarget.freeSetupDays} ngày setup miễn phí`}</b><span className="text-xs text-stone-500">Hệ thống tự tính từ ngày bàn giao thực tế; Staff không thể thay đổi.</span></div>
+                  <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"><span className="text-stone-600">Quyền lợi đã lưu cùng đơn</span><b className="mt-1 block">{handoverTarget.freeSetupDays} ngày setup miễn phí</b><span className="text-xs text-stone-500">Hệ thống tự tính từ ngày bàn giao thực tế; Staff không thể thay đổi.</span></div>
                 </div>
                 {handoverTarget.lockReference && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"><b>Ổ khóa đã được kích hoạt và bàn giao</b><p className="mt-1">Mã ổ khóa/chìa khóa: <b className="font-mono">{handoverTarget.lockReference}</b></p><p className="mt-1 text-xs">Credential được kích hoạt lúc {formatStaffDateTime(handoverTarget.setupStartedAt)}. Không có mật khẩu được lưu hoặc bàn giao.</p></div>}
               </div>
@@ -1190,8 +1196,8 @@ export default function StaffCheckInOperationsPanel({
               <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50 p-4 text-violet-950">
                 <p className="font-semibold">Khách hàng đang setup gian kho</p>
                 <p className="text-sm">Bắt đầu: <b>{formatStaffDateTime(handoverTarget.setupStartedAt)}</b></p>
-                <p className="text-sm">Setup miễn phí: <b>{handoverTarget.freeSetupDays == null ? 'Chưa xác định, cần đối soát' : `${handoverTarget.freeSetupDays} ngày`}</b></p>
-                <p className="text-sm">Thời hạn thuê tính từ: <b>{handoverTarget.paidRentalStartsOn || 'Chưa xác định ngày bắt đầu, cần đối soát'}</b></p>
+                <p className="text-sm">Setup miễn phí: <b>{handoverTarget.freeSetupDays} ngày</b></p>
+                <p className="text-sm">Thời hạn thuê tính từ: <b>{handoverTarget.paidRentalStartsOn || `ngày bàn giao thực tế + ${handoverTarget.freeSetupDays} ngày`}</b></p>
                 <p className="text-sm">Khách báo setup xong sớm chỉ ghi nhận thời điểm hoàn tất chuyển hàng, không rút ngắn kỳ miễn phí.</p>
                 {handoverTarget.lockReference && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"><b>Ổ khóa đã bàn giao</b><p className="mt-1">Mã: <b className="font-mono">{handoverTarget.lockReference}</b></p><p className="mt-1 text-xs">Quyền truy cập được kích hoạt từ thời điểm bàn giao, theo giờ mở cửa cơ sở.</p></div>}
               </div>
@@ -1199,7 +1205,7 @@ export default function StaffCheckInOperationsPanel({
 
             {handoverStep === 6 && (
               <div className="space-y-4">
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê sau setup</b><p className="mt-1 text-xs">Đo hàng hóa sau khi khách đã sắp xếp xong, đối chiếu với khai báo và lưu bằng chứng thực tế. Kỳ thuê vẫn tự ACTIVE đúng ngày {handoverTarget.paidRentalStartsOn || 'chưa xác định, cần đối soát'}, không chờ Staff hoàn tất bước này.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê sau setup</b><p className="mt-1 text-xs">Đo hàng hóa sau khi khách đã sắp xếp xong, đối chiếu với khai báo và lưu bằng chứng thực tế. Kỳ thuê vẫn tự ACTIVE đúng ngày {handoverTarget.paidRentalStartsOn || `bàn giao thực tế + ${handoverTarget.freeSetupDays} ngày`}, không chờ Staff hoàn tất bước này.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <Input label="Dài thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={lengthCm} onChange={(event) => { const next = event.target.value; setLengthCm(next); setVolumeM3(volumeFromDimensions(next, widthCm, heightCm)) }} />
                   <Input label="Rộng thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={widthCm} onChange={(event) => { const next = event.target.value; setWidthCm(next); setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm)) }} />
@@ -1231,9 +1237,8 @@ export default function StaffCheckInOperationsPanel({
               ) : handoverStep < 6 ? (
                 <Button disabled={submitting ||
                   (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
-                  (handoverStep === 2 && (!contractFile || !!handoverTarget.setupEarlyExitPolicyVersion && setupTermsConfirmedFor !== handoverTarget.checkInId)) ||
-                  (handoverStep === 3 && (handoverTarget.dueAtCheckIn == null || (handoverTarget.dueAtCheckIn > 0 && !paymentEvidenceFile))) ||
-                  (handoverStep === 4 && handoverTarget.freeSetupDays == null) ||
+                  (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
+                  (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
                   (handoverStep === 4 && !keyLockReference.trim())
                 } onClick={() => void submitWorkflowStep()}>{submitting ? "Đang lưu…" : handoverStep === 5 ? "Khách đã setup xong" : "Xác nhận và tiếp tục"}</Button>
               ) : (

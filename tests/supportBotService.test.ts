@@ -225,9 +225,11 @@ describe('supportBotService', () => {
   })
 
   // FAQ matching
-  it('matches FAQs accurately based on keywords', () => {
-    const match = matchQueryAgainstFAQ('mã pin không mở được cửa')
-    expect(match).not.toBeNull()
-    expect(match?.category).toBe('Access & Entry')
+  it('matches only published FAQ questions and rejects unsupported keyword guesses', () => {
+    expect(SUPPORT_FAQS.length).toBeGreaterThan(0)
+    const faq = SUPPORT_FAQS[0]
+    expect(matchQueryAgainstFAQ('  ' + faq.question.toUpperCase() + '  ')).toEqual(faq)
+    expect(matchQueryAgainstFAQ('mã pin không mở được cửa')).toBeNull()
+    expect(matchQueryAgainstFAQ('')).toBeNull()
   })
 })

@@ -12,7 +12,7 @@ export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning =
 }
 
 export const rentalLabels: Record<string, string> = {
-  setup: "Đang setup miễn phí",
+  setup: "Đang chuẩn bị",
   active: "Đang hiệu lực",
   return_requested: "Đã yêu cầu trả kho",
   return_inspection: "Đang kiểm tra trả kho",

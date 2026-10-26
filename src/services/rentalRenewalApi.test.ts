@@ -152,7 +152,7 @@ describe("D1/D2 wire contracts", () => {
     expect(fetch.mock.calls[0][0]).toMatch(/\/api\/customer\/rental-records\/r1$/)
   })
   it("keeps the shared Customer rental client and flat DTO unchanged", async () => {
-    const shared = { data: [{ id: "r1", storageUnitCode: "A-01", facilityName: "Facility" }], pagination: page([]).pagination }
+    const shared = { data: [{ id: "r1", status: "active", storageUnitCode: "A-01", facilityName: "Facility" }], pagination: page([]).pagination }
     const fetch = response(shared)
     expect(await listCustomerRentals("active", 0, 20)).toEqual(shared)
     expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/api/customer/rentals")

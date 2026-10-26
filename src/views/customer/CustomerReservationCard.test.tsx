@@ -7,6 +7,9 @@ import type { CustomerReservation, ReservationPaymentResult, ReservationStatus }
 
 const base: CustomerReservation = {
   id: 'reservation-1', reservationCode: 'RSV-TEST', quoteId: 'quote-1', facilityId: 'facility-1', unitTypeId: 'type-1',
+  pricingSnapshotStatus: 'COMPLETE', pricingPolicyVersion: 'v1', rentalMonths: 3, freeSetupDays: 3,
+  monthlyPrice: 1000000, grossRentalAmount: 3000000, discountRate: 0, discountAmount: 0, voucherDiscountAmount: 0,
+  pricingQuotedAt: '2026-11-01T09:50:00Z', pricingExpiresAt: '2026-11-01T10:00:00Z',
   status: 'AWAITING_EMAIL', goodsReviewStatus: 'NOT_REQUIRED', compatibilityResult: 'COMPATIBLE',
   startDate: '2026-11-01', endDate: '2027-02-01', totalRentalAmount: 3000000,
   reservationDepositAmount: 600000, securityDepositAmount: 1000000, remainingRentalAmount: 2400000,

@@ -143,9 +143,10 @@ export default function CustomerRenewalRequestModal({
               </div>
               <input
                 id="renewal-start-date"
-                type="date"
+                type="text"
                 className="mt-1 h-11 w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
-                value={quote?.extensionStartDate || ""}
+                value={quote ? rentalDate(quote.extensionStartDate) : ""}
+                placeholder="dd/mm/yyyy"
                 readOnly
                 aria-describedby="renewal-start-policy"
               />

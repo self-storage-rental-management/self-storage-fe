@@ -33,7 +33,7 @@ export default function ReturnSettlementReceipt({ entry }: { entry: HistoryEntry
       Hồ sơ cũ chưa đối soát phí quá hạn. Biên lai này chỉ xác nhận số tiền đã thu hoặc hoàn, vui lòng liên hệ cơ sở để kiểm tra khoản còn thiếu.
     </p>}
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border border-amber-200/70 bg-amber-50/70 px-4 py-4">
-      <div><p className="text-xs font-medium text-stone-600">{offset ? 'Đã đối trừ quyết toán' : refund ? 'Đã hoàn khách hàng' : 'Đã thu bổ sung'}</p>
+      <div><p className="text-xs font-medium text-stone-600">{offset ? settlement.setupEarlyExit ? 'Đã đối trừ quyết toán' : 'Đã khấu trừ cọc' : refund ? 'Đã hoàn khách hàng' : 'Đã thu bổ sung'}</p>
         <p className="mt-1 break-words text-2xl font-bold leading-8 tracking-tight text-stone-900 tabular-nums">{amount(entry.amount)}</p></div>
       <div><p className="text-[11px] text-stone-500">Phương thức</p><p className="mt-1 text-xs font-medium text-stone-700">{entry.method || 'Chưa có thông tin phương thức'}</p></div>
     </div>
@@ -42,7 +42,7 @@ export default function ReturnSettlementReceipt({ entry }: { entry: HistoryEntry
         <h4 className="mb-3 text-xs font-semibold text-stone-900">Chi tiết quyết toán</h4>
         <dl className="overflow-hidden rounded-xl border border-stone-200">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 bg-stone-50 px-3 py-3 text-xs"><dt className="text-stone-600">Cọc bảo đảm</dt><dd className="text-right font-semibold tabular-nums">{amount(settlement.depositAmount)}</dd></div>
-          {settlement.setupEarlyExit && <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-stone-100 px-3 py-3 text-xs"><dt>Tiền thuê thực thu được quyết toán</dt><dd className="font-semibold tabular-nums">{amount(settlement.rentalRefundCredit ?? null)}</dd></div>}
+          {settlement.setupEarlyExit && <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-stone-100 px-3 py-2.5 text-xs"><dt className="leading-5 text-stone-600">Tiền thuê thực thu được quyết toán</dt><dd className="text-right font-medium leading-5 tabular-nums">{amount(settlement.rentalRefundCredit ?? null)}</dd></div>}
           {rows.map(([label, value]) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-stone-100 px-3 py-2.5 text-xs">
             <dt className="leading-5 text-stone-600">{label}</dt><dd className={`text-right leading-5 tabular-nums ${value === 0 ? 'text-stone-400' : 'font-medium text-stone-900'}`}>{amount(value)}</dd>
           </div>)}

@@ -136,7 +136,6 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         </p>
       ))}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc giao dịch">
-        <Button variant="outline" disabled={loading} onClick={() => setRevision(value => value + 1)}>Tải lại</Button>
         <Button variant={historyFilter === 'all' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('all')}>Tất cả</Button>
         <Button variant={historyFilter === 'payments' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('payments')}>Lịch sử thanh toán</Button>
         <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>

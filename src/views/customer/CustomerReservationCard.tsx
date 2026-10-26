@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import ReturnApiPanel from '../return-api/ReturnApiPanel'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
@@ -60,10 +59,7 @@ interface Props {
   onReceiptConfirmed?: (reservationId: string) => void
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, facilityDetails, facility, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
-  const unitTypeName = r.unitTypeName?.trim() || 'Thiếu dữ liệu lịch sử, cần đối soát'
-  const unitTypeDetails = r.unitTypeSnapshot ?? null
-  const unitType = unitTypeDetails
+export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -78,7 +74,6 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [appointmentErrors, setAppointmentErrors] = useState<{ date?: string; time?: string }>({})
   const [savedAppointmentAt, setSavedAppointmentAt] = useState(r.appointmentAt)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
-  const [returnOpen, setReturnOpen] = useState(false)
   const [setupGoodsEditOpen, setSetupGoodsEditOpen] = useState(false)
   const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
   const [now, setNow] = useState(Date.now())
@@ -317,7 +312,6 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
-        {!!r.snapshotWarnings?.length && <p role="status" className="mt-2 text-xs text-amber-800">{r.snapshotWarnings.join(' · ')}</p>}
         <div className="mt-3 space-y-2">
           <p className="text-xs leading-5 text-stone-600">Lịch thuê: <b className="text-stone-900">{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
           <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? new Date(savedAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa đặt lịch'}</b></p>
@@ -329,11 +323,10 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           </section>
           <section>
             <h3 className="font-bold text-stone-900">Thông tin kho</h3>
-            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails ? <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></> : <p className="text-amber-800">Thiếu thông số kho đã lưu, cần đối soát.</p>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
+            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
           </section>
         </div>
-        {r.setupReturnRentalId && <Button variant="outline" size="sm" onClick={() => setReturnOpen(true)}>{r.setupReturnCaseId ? 'Xem trả kho & quyết toán' : 'Yêu cầu trả kho sau bàn giao'}</Button>}
-        {!r.setupReturnRentalId && APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
           <div className="grid w-full gap-3 sm:grid-cols-2">
             <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
               onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '00:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
@@ -364,7 +357,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             </dl>
           </section>
           <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
-            <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3><p className="mt-1 text-xs text-stone-500">Chỉ được sửa một lần trong setup và sẽ khóa ngay khi kiểm kê.</p></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy || !unitTypeDetails} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3><p className="mt-1 text-xs text-stone-500">Chỉ được sửa một lần trong setup và sẽ khóa ngay khi kiểm kê.</p></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
             {!detail && <p className="mt-3 text-stone-500">Đang tải chi tiết hàng hóa…</p>}
             {detail && <>
               {setupGoodsEditOpen && <div className="mt-3 space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><p className="font-bold">Cập nhật khai báo trong setup</p><p>Đây là lần sửa duy nhất. Sau khi lưu hoặc sau khi Staff kiểm kê, hệ thống sẽ khóa khai báo.</p>{setupGoodsDraft.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border border-amber-200 bg-white p-3 sm:grid-cols-4"><label className="sm:col-span-2">Mô tả<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" value={item.description || ''} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, description: event.target.value } : value))} /></label><label>Số lượng<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="1" value={item.quantity} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, quantity: Number(event.target.value) } : value))} /></label><label>Cân nặng/kiện<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="0.01" step="0.01" value={item.weightPerItemKg} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, weightPerItemKg: Number(event.target.value) } : value))} /></label><label>Dài × Rộng × Cao (cm)<span className="mt-1 flex gap-1"><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.lengthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, lengthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.widthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, widthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.heightCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, heightCm: Number(event.target.value) } : value))} /></span></label></div>)}<div className="flex gap-2"><Button type="button" size="sm" disabled={busy} onClick={() => void saveSetupGoods()}>{busy ? 'Đang lưu…' : 'Lưu thay đổi và khóa khai báo'}</Button><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setSetupGoodsEditOpen(false)}>Hủy</Button></div></div>}
@@ -399,8 +392,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             </>}
           </section>
 
-          {savedQuote ? <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" /> : <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{MISSING_RESERVATION_SNAPSHOT}</p>}
-            {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đã yêu cầu trả kho trong setup</b><p className="mt-1 text-xs">Staff sẽ nghiệm thu kho trống và lập bảng kê theo điều khoản đã chấp nhận. Khoản hoàn chỉ được xác nhận sau khi cơ sở thực hoàn và lưu chứng từ.</p></div>}
+          {savedQuote ? <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
+            {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Business quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian setup không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
               <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
@@ -419,7 +412,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>}
       </div>
       <div className="flex min-w-0 flex-col items-stretch gap-3 lg:items-end">
-        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{r.totalInitialObligation == null ? 'Chưa xác định' : formatVnd(r.totalInitialObligation)}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {r.reservationDepositAmount == null ? 'Chưa xác định' : formatVnd(r.reservationDepositAmount)}</p></div>
+        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
         {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
@@ -459,9 +452,6 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     <Modal open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai thanh toán nhận kho">
       {paymentReceipt && <ReservationReceipt payment={paymentReceipt} reservationCode={r.reservationCode} />}
     </Modal>
-    {returnOpen && r.setupReturnRentalId && <Modal open onClose={() => setReturnOpen(false)} title="Trả kho & quyết toán" size="xl">
-      <ReturnApiPanel role="customer" rentalId={r.setupReturnRentalId} rentalActive onChanged={() => void onRefresh()} />
-    </Modal>}
     <Modal open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} title="Xác nhận hủy giữ kho" closeLabel="Đóng xác nhận hủy">
       <div className="space-y-5">
         <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
