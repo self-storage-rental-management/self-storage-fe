@@ -28,6 +28,12 @@ export interface CustomerRental {
   status: CustomerRentalStatus
   startDate?: string
   contractEndDate?: string | null
+  setupStartedAt?: string | null
+  setupEndsAt?: string | null
+  inventoryDueAt?: string | null
+  inventoryPending?: boolean
+  moveInCompletedAt?: string | null
+  setupExitReviewRequired?: boolean
   monthlyPrice?: number
   currency?: string
   actualReturnedAt?: string | null
@@ -51,7 +57,7 @@ interface CustomerRentalPage {
 export async function listCustomerRentals(status?: CustomerRentalStatus, page = 0, size = 100) {
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   if (status) params.set('status', status)
-  return apiRequest<CustomerRentalPage>(`/api/customer/rentals?${params.toString()}`)
+  return checkedStatusPage(await apiRequest<CustomerRentalPage>(`/api/customer/rentals?${params.toString()}`), checkedRental)
 }
 
 export async function listAllCustomerRentals() {

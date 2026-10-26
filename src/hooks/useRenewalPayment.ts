@@ -58,7 +58,7 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
         if(!active||currentScope.current!==scope||request!==epoch.current)return
         setPayment(result);setError(null)
         if(result.paymentStatus==="FAILED"||result.paymentStatus==="CANCELLED")forget()
-        const signature=`${result.paymentStatus}:${result.settlementStage}:${result.reconciliationRequired}`
+        const signature=`${result.paymentStatus}:${result.settlementStage}:${result.reconciliationRequired}:${result.transactionStatus}:${result.receiptAvailable}`
         const previous=lastStatus.current?.signature
         lastStatus.current={scope,signature}
         if(signature!==previous&&(previous!==undefined||result.paymentStatus==="PAID"))refresh.current?.()

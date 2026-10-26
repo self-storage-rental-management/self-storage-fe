@@ -1,4 +1,5 @@
 import type { RentalBookingEvidence } from "../types/rentalApi"
+import { isPaymentStatus } from '../types/statusContracts'
 
 export const bookingPaymentPurposes: Record<RentalBookingEvidence["payments"][number]["purpose"], string> = {
   RESERVATION_DEPOSIT: "Tiền đặt chỗ", RENTAL_BALANCE: "Tiền thuê còn lại",
@@ -39,7 +40,7 @@ export function isRentalBookingEvidence(value: unknown, rentalId: string, reserv
     if (!p || typeof p.id !== "string" || !p.id.trim() || ids.has(p.id) || !money(p.amount) ||
       typeof p.purpose !== "string" || typeof p.status !== "string" ||
       !Object.prototype.hasOwnProperty.call(bookingPaymentPurposes, p.purpose) ||
-      !Object.prototype.hasOwnProperty.call(bookingPaymentStatuses, p.status) ||
+      !isPaymentStatus(p.status) ||
       !Object.prototype.hasOwnProperty.call(bookingPaymentVerification, p.verification) ||
       !(p.processedAt === null || (typeof p.processedAt === "string" &&
         /^\d{4}-\d{2}-\d{2}T/.test(p.processedAt) && Number.isFinite(Date.parse(p.processedAt)))) ||

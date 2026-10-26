@@ -163,7 +163,7 @@ export default function StaffDailyTaskQueue({
       kind: "maintenance",
       title: `${task.title} · ${task.unitCode}`,
       customer: task.facilityName,
-      sourceLabel: "Bảo trì",
+      sourceLabel: task.taskType === "inventory_check" ? "Kiểm kê đầu vào" : "Bảo trì",
       notes: task.reason,
       dueAt: task.dueAt || task.createdAt,
       priority: task.priority,
@@ -297,8 +297,9 @@ export default function StaffDailyTaskQueue({
                 <Td className="text-right">
                   {assigned?.status === "open" && <Button size="sm" onClick={() => onAssignedStatus(assigned, "in_progress")}>Nhận việc</Button>}
                   {assigned?.status === "in_progress" && <Button size="sm" onClick={() => onOpenAssignedCompletion(assigned)}>Hoàn thành</Button>}
-                  {maintenance?.status === "open" && <Button size="sm" disabled={busy} onClick={() => void runMaintenance(() => startMaintenanceTask(maintenance.id), `Đã bắt đầu bảo trì gian ${maintenance.unitCode}.`)}>Bắt đầu</Button>}
-                  {maintenance?.status === "in_progress" && <Button size="sm" disabled={busy} onClick={() => { setMaintenanceCompletionTarget(maintenance); setMaintenanceResult(maintenance.resultReport || ""); setMaintenanceEvidence([]); setMakeUnitAvailable(true) }}>Hoàn thành</Button>}
+                  {maintenance?.taskType === "inventory_check" && !isFinished(maintenance.status) && <span className="text-xs font-semibold text-amber-700">Hoàn tất trong luồng check-in</span>}
+                  {maintenance?.taskType !== "inventory_check" && maintenance?.status === "open" && <Button size="sm" disabled={busy} onClick={() => void runMaintenance(() => startMaintenanceTask(maintenance.id), `Đã bắt đầu bảo trì gian ${maintenance.unitCode}.`)}>Bắt đầu</Button>}
+                  {maintenance?.taskType !== "inventory_check" && maintenance?.status === "in_progress" && <Button size="sm" disabled={busy} onClick={() => { setMaintenanceCompletionTarget(maintenance); setMaintenanceResult(maintenance.resultReport || ""); setMaintenanceEvidence([]); setMakeUnitAvailable(true) }}>Hoàn thành</Button>}
                   {maintenance?.status === "completed" && <span className="text-xs font-semibold text-emerald-700">Đã gửi kết quả</span>}
                   {maintenance?.status === "cancelled" && <span className="text-xs font-semibold text-red-700">Đã hủy</span>}
                   {operational && <Button size="sm" variant="outline" onClick={() => onOpenOperational(operational)}>Mở hồ sơ</Button>}

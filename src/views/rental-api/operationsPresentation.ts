@@ -22,9 +22,10 @@ export const operationLabels: Record<RenewalOperationAction, string> = {
   refund: "Xem xét hoàn tiền",
 }
 export const phaseLabels: Record<RenewalOperationState["phase"], string> = {
-  AWAITING_PAYMENT_INTENT: "Chọn lịch ký rồi thanh toán cọc",
+  PREPARATION_BLOCKED: "Chưa chuẩn bị được ký gia hạn",
+  AWAITING_PAYMENT_INTENT: "Chọn lịch ký rồi thanh toán tiền thuê trả trước",
   UNKNOWN: "Chưa có thông tin xử lý gia hạn",
-  AWAITING_DEPOSIT: "Chờ thanh toán cọc",
+  AWAITING_DEPOSIT: "Chờ thanh toán tiền thuê trả trước",
   SIGNING: "Đang xử lý ký gia hạn",
   SIGNING_EXPIRY_PENDING: "Đã quá hạn ký, chờ đối soát",
   SIGNING_EXPIRED: "Hết hạn ký, cần xem xét",

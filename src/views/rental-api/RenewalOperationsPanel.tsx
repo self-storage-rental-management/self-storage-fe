@@ -44,12 +44,11 @@ import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
 import RenewalCoordinationPanel from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
-import { approveRenewalTicket } from "../../services/renewalApi"
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
 const eventLabels: Record<string, string> = {
-  DEPOSIT: "Thanh toán cọc gia hạn",
+  DEPOSIT: "Thanh toán tiền thuê gia hạn trả trước",
   FULL_RENT_PAYMENT: "Thanh toán toàn kỳ bằng VNPay Sandbox",
   CASH: "Ghi nhận tiền thuê còn lại",
   INCIDENT: "Sự cố cơ sở",
@@ -57,9 +56,11 @@ const eventLabels: Record<string, string> = {
   STAFF_ASSIGNMENT: "Phân công nhân viên gia hạn",
   EXCEPTION: "Quyết định ngoại lệ",
   REFUND: "Quyết định hoàn tiền",
-  DEPOSIT_DISPOSITION: "Kết quả xử lý cọc",
-  DEPOSIT_REVIEW_REQUIRED: "Cọc gia hạn chờ đối soát trách nhiệm",
-  REFUND_EXECUTION: "Ghi nhận hoàn cọc",
+  DEPOSIT_DISPOSITION: "Kết quả xử lý tiền thuê trả trước",
+  DEPOSIT_REVIEW_REQUIRED: "Tiền thuê gia hạn trả trước chờ đối soát trách nhiệm",
+  REFUND_EXECUTION: "Ghi nhận hoàn tiền thuê trả trước",
+  PREPARATION_BLOCKED: "Chưa chuẩn bị được ký gia hạn",
+  PREPARATION_RESOLUTION: "Yêu cầu thử lại bước chuẩn bị ký",
   COMPLETION: "Hoàn tất ký gia hạn",
   ARRIVAL: "Khách đã đến",
   APPOINTMENT: "Lịch ký",
@@ -73,12 +74,12 @@ const statusLabels: Record<string, string> = {
   APPROVED_AWAITING_EXECUTION:
     "Đã duyệt, chờ hoàn tiền (chưa chuyển tiền)",
   REJECTED: "Từ chối",
-  FORFEITED: "Đã ghi nhận mất cọc gia hạn",
-  AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý cọc ngày quá hạn thứ 8",
-  AWAITING_FAULT_REVIEW: "Giữ cọc, chờ xác minh trách nhiệm",
-  FACILITY_FAULT: "Giữ cọc để xử lý sự cố từ cơ sở",
+  FORFEITED: "Đã ghi nhận mất tiền thuê gia hạn trả trước",
+  AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý tiền thuê trả trước ngày quá hạn thứ 8",
+  AWAITING_FAULT_REVIEW: "Giữ tiền thuê trả trước, chờ xác minh trách nhiệm",
+  FACILITY_FAULT: "Giữ tiền thuê trả trước để xử lý sự cố từ cơ sở",
   REVIEW_REQUIRED: "Chờ xác minh nguyên nhân",
-  REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn cọc",
+  REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn tiền thuê trả trước",
   APPROVE_RESCHEDULE_BEFORE_CUTOFF:
     "Đề xuất đổi lịch trước mốc giới hạn, chờ khách hàng xác nhận",
   REQUEST_POST_CUTOFF_REVIEW: "Yêu cầu xem xét sau mốc giới hạn, không kéo dài hạn",
@@ -154,7 +155,7 @@ export function OperationEventCard({
       {e.kind === "FAULT_REVIEW" && typeof d.facilityFault === "boolean" && (
         <p>{d.facilityFault ? "Xác nhận lỗi từ cơ sở" : "Không xác nhận lỗi từ cơ sở"}</p>
       )}
-      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận hoàn cọc Sandbox theo chứng từ." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
+      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận hoàn tiền thuê trả trước Sandbox theo chứng từ." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
       <p className="break-all">
         Mã sự kiện: {e.id}
       </p>
@@ -253,7 +254,7 @@ export function OperationEventCard({
 export function RenewalOperationsSummary({ state: s, role, cashRecorded = false }: { state: RenewalOperationState; role?: RenewalOperationsRole; cashRecorded?: boolean }) {
   const { copy } = useManagerPresentation()
   const progressSteps = [
-    { label: "Thanh toán cọc", detail: "Khoản cọc gia hạn đã được ghi nhận", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
+    { label: "Thanh toán tiền thuê trả trước", detail: "Khoản tiền thuê gia hạn trả trước đã được ghi nhận", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
     { label: "Chọn lịch ký", detail: "Lịch hẹn đã được lưu", done: !!s.appointmentRef },
     { label: "Khách đến", detail: "Nhân viên đã ghi nhận khách tại cơ sở", done: !!s.arrivalRef },
     { label: "Thanh toán còn lại", detail: "Khoản tiền thuê còn lại đã được ghi nhận", done: cashRecorded || !!s.fullRentPaidAt || s.phase === "COMPLETED" },
@@ -299,6 +300,7 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
         <div className="mt-2 space-y-3 text-xs text-stone-600">
           <div>
             <p className="font-semibold text-stone-800">Bạn cần hoàn tất ký trước: {rentalDate(s.effectiveSigningDeadline)}</p>
+            <p>Đổi lịch ký không tự kéo dài hạn hoàn tất này.</p>
             <p className="mt-1">Vui lòng đến cơ sở, thanh toán phần còn lại và ký hợp đồng trước thời điểm này. Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ. Kỳ thuê mới chỉ được xác nhận khi hoàn tất thủ tục.</p>
           </div>
           {s.originalSigningDeadline && s.originalSigningDeadline !== s.effectiveSigningDeadline && <p>Hạn hoàn tất trước khi được điều chỉnh: {rentalDate(s.originalSigningDeadline)}</p>}
@@ -347,7 +349,7 @@ function EventTimeline({
   const title = {
     payments: "Lịch sử thanh toán và biên lai",
     documents: "Chứng từ",
-    refunds: "Lịch sử xử lý cọc và hoàn tiền",
+    refunds: "Lịch sử xử lý tiền thuê trả trước và hoàn tiền",
     "facility-incidents": "Sự cố & xem xét ngoại lệ",
   }[category]
   const content = <div className="space-y-3">
@@ -431,7 +433,6 @@ export default function RenewalOperationsPanel({
   }>()
   const [successMessage, setSuccessMessage] = useState<string>()
   const [lastEvent, setLastEvent] = useState<RenewalOperationEvent>()
-  const [directApproveBusy, setDirectApproveBusy] = useState(false)
   const [locked, setLocked] = useState(false)
   const lockRef = useRef(false)
   const read = useRentalApiResource(`${identity}:${revision}`, () =>
@@ -479,14 +480,7 @@ export default function RenewalOperationsPanel({
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <>
-          {appointmentOnly ? (
-            <section className="space-y-2" aria-label="Chọn lịch ký gia hạn">
-              <h3 className="font-semibold">Lịch ký gia hạn</h3>
-              <p>{read.data.appointmentRef
-                ? `Giờ hẹn đến ký: ${rentalDate(read.data.appointmentStart)}`
-                : "Chọn và lưu lịch ký trước khi thanh toán cọc."}</p>
-            </section>
-          ) : <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
+          {!appointmentOnly && <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
           {role === "manager" && !selected && <RenewalCoordinationPanel
             key={`${identity}:${revision}`}
             state={read.data} facilityId={facilityId} status={status}
@@ -506,39 +500,6 @@ export default function RenewalOperationsPanel({
             </div>
           )}
           {successMessage && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{successMessage}</p>}
-          {!appointmentOnly && role === "staff" && (
-            <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50/80 p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-emerald-950 flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block animate-ping" />
-                  Duyệt gia hạn hợp đồng
-                </h3>
-                <p className="text-xs text-emerald-800">
-                  Nhân viên bấm duyệt để tự động kéo dài hợp đồng thuê cho khách hàng ngay lập tức mà không cần qua các bước thủ tục khác.
-                </p>
-              </div>
-              <Button
-                type="button"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 text-sm shadow cursor-pointer border-none"
-                disabled={directApproveBusy || read.data?.phase === "COMPLETED"}
-                onClick={async () => {
-                  try {
-                    setDirectApproveBusy(true)
-                    await approveRenewalTicket(id)
-                    setSuccessMessage("✓ Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
-                    onChanged?.()
-                    alert("Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
-                  } catch (err: any) {
-                    alert(err?.message || "Không thể duyệt gia hạn.")
-                  } finally {
-                    setDirectApproveBusy(false)
-                  }
-                }}
-              >
-                {directApproveBusy ? "Đang duyệt…" : read.data?.phase === "COMPLETED" ? "✓ Đã duyệt hoàn tất" : "✓ Duyệt gia hạn ngay"}
-              </Button>
-            </div>
-          )}
           {!appointmentOnly && <Card className="p-4 space-y-3">
             {role === "staff" && <h3 className="text-sm font-semibold text-stone-900">Xử lý ký gia hạn</h3>}
             <div className={role === "staff" ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 sm:grid-cols-2"}>
@@ -564,7 +525,6 @@ export default function RenewalOperationsPanel({
                         ? "Không thể xác minh trạng thái thanh toán. Hãy tải lại hồ sơ rồi thử lại."
                         : blockedReason
                   : blockedReason
-                const isStaffCompletion = role === "staff" && action === "completion"
                 return (
                   <div key={action} className={role === "staff" ? action === "incident" ? "flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-3 lg:col-span-3" : "flex min-w-0 flex-col gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3" : undefined}>
                     {role === "staff" && action !== "incident" && <div className="flex items-center gap-2 text-sm font-semibold text-stone-700">
@@ -574,32 +534,18 @@ export default function RenewalOperationsPanel({
                     {role === "staff" && action === "incident" && <p className="text-sm text-stone-500">Có vấn đề phát sinh trong quá trình xử lý?</p>}
                     <Button
                       type="button"
-                      variant={isStaffCompletion ? "primary" : "outline"}
-                      className={role === "staff" ? action === "incident" ? "shrink-0" : isStaffCompletion ? "mt-auto w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" : "mt-auto w-full" : undefined}
-                      disabled={isStaffCompletion ? (read.data?.phase === "COMPLETED" || directApproveBusy) : (!!reason || locked)}
-                      onClick={async () => {
-                        if (isStaffCompletion) {
-                          try {
-                            setDirectApproveBusy(true)
-                            await approveRenewalTicket(id)
-                            setSuccessMessage("✓ Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động cập nhật thời hạn mới.")
-                            onChanged?.()
-                            alert("Đã duyệt gia hạn thành công!")
-                          } catch (err: any) {
-                            alert(err?.message || "Lỗi khi duyệt gia hạn.")
-                          } finally {
-                            setDirectApproveBusy(false)
-                          }
-                          return
-                        }
+                      variant="outline"
+                      className={role === "staff" ? action === "incident" ? "shrink-0" : "mt-auto w-full" : undefined}
+                      disabled={!!reason || locked}
+                      onClick={() => {
                         if (lockRef.current || reason) return
                         setSuccessMessage(undefined)
                         setSelected({ action, state: read.data!, proposal: proposalRead.data })
                       }}
                     >
-                      {copy(isStaffCompletion ? (read.data?.phase === "COMPLETED" ? "Đã duyệt hoàn tất" : "✓ Duyệt gia hạn") : operationLabels[action])}
+                      {copy(role === "staff" && action === "completion" ? "Hoàn tất gia hạn" : operationLabels[action])}
                     </Button>
-                    {!isStaffCompletion && reason && !(role === "staff" && reason === "Chưa có lượt khách đến được nhân viên ghi nhận.") && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
+                    {reason && !(role === "staff" && reason === "Chưa có lượt khách đến được nhân viên ghi nhận.") && !reason.startsWith("\u0043h\u01b0a \u0111\u1ee7 th\u00f4ng tin:") && !reason.startsWith("H\u1ed3 s\u01a1 ch\u01b0a \u0111\u1ee7 th\u00f4ng tin") && (
                       <p className="mt-1 text-xs text-stone-500">{copy(reason)}</p>
                     )}
                   </div>
@@ -618,6 +564,7 @@ export default function RenewalOperationsPanel({
         key={`${identity}:${revision}:inline-appointment`}
         action={read.data.appointmentRef ? "reschedule" : "appointment"}
         state={read.data}
+        appointmentOnly
         onLocked={lock}
         onCancel={() => { setRevision(v => v + 1); onChanged?.() }}
         onSuccess={event => {
@@ -700,6 +647,7 @@ function OperationForm({
   action,
   state: s,
   proposal,
+  appointmentOnly = false,
   onLocked,
   onCancel,
   onSuccess,
@@ -707,6 +655,7 @@ function OperationForm({
   action: RenewalOperationAction
   state: RenewalOperationState
   proposal?: RenewalExceptionProposal | null
+  appointmentOnly?: boolean
   onLocked: (locked: boolean) => void
   onCancel: () => void
   onSuccess: (event: RenewalOperationEvent) => void
@@ -852,7 +801,7 @@ function OperationForm({
       case "completion":
         if (!isUuid(signedDocumentFile))
           throw new Error("Vui lòng tải hợp đồng đã ký lên trước khi hoàn tất gia hạn.")
-        if (!s.arrivalRef || cash.loading || cash.error || !cash.data || cash.data.amount !== 0)
+        if (!s.arrivalRef || cash.loading || cash.error || !cash.data || cash.data.amount !== 0 || !cash.data.effectiveStartDate)
           throw new Error(
             "Cần ghi nhận khách đến và thanh toán đủ các khoản theo bảng kê. Hệ thống sẽ đối chiếu biên lai đã lưu.",
           )
@@ -862,6 +811,7 @@ function OperationForm({
             ...base,
             arrivalRef: s.arrivalRef,
             signedDocumentFileId: signedDocumentFile,
+            expectedEffectiveStartDate: cash.data.effectiveStartDate,
           },
         }
       case "exception":
@@ -898,8 +848,11 @@ function OperationForm({
     }
   }
   return (
-    <Card className="p-4 space-y-3">
-      <h4 className="font-semibold">{copy(operationLabels[action])}</h4>
+    <Card className={appointmentOnly ? "space-y-5 rounded-2xl p-5 shadow-none sm:p-6" : "space-y-3 p-4"}>
+      {appointmentOnly ? <header className="flex items-start justify-between gap-4">
+        <div><h4 className="text-xl font-semibold text-stone-900">Lịch ký gia hạn</h4><p className="mt-1 text-sm text-stone-500">Chọn thời gian đến cơ sở để ký hợp đồng gia hạn.</p></div>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon mt-1 h-5 w-5 shrink-0 text-stone-500"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </header> : <h4 className="font-semibold">{copy(operationLabels[action])}</h4>}
       <fieldset disabled={locked} className="space-y-3">
         {action === "confirmation" && <>
           {proposal && <RenewalExceptionProposalCard proposal={proposal} />}
@@ -1029,14 +982,14 @@ function OperationForm({
             {cash.data && (
               <div className="space-y-3">
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-                  <p className="text-sm font-medium text-amber-900">Số tiền cần thu</p>
+                  <p className="text-sm font-medium text-amber-900">Còn phải thanh toán</p>
                   <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 sm:text-3xl">{rentalMoney(cash.data.amount, cash.data.currency)}</p>
                   <dl className="mt-4 space-y-2 border-t border-amber-200/70 pt-3 text-sm">
                     {cash.data.remainingRentalAmount !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Tiền thuê còn lại</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</dd></div>}
                     {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
                   </dl>
                 </div>
-                <p className="text-xs text-stone-500">Bảng kê có hiệu lực đến {rentalDate(cash.data.expiresAt)}</p>
+                <p className="text-xs text-stone-500">Số tiền theo bảng kê đã trừ khoản thanh toán được xác nhận và phân bổ. Không trừ giảm giá hoặc tiền thuê trả trước lần nữa. Bảng kê có hiệu lực đến {rentalDate(cash.data.expiresAt)}</p>
                 <details className="rounded-lg border border-stone-200 px-3 py-2 text-xs text-stone-500">
                   <summary className="cursor-pointer font-medium text-stone-600">Thông tin đối soát</summary>
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1073,6 +1026,7 @@ function OperationForm({
         {action === "completion" && (
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
+            {cash.data?.effectiveStartDate && <p className="text-sm text-stone-700">Kỳ có hiệu lực khi hoàn tất hôm nay: <b>{rentalDate(cash.data.effectiveStartDate)} → {rentalDate(cash.data.effectiveEndDate)}</b>. Kiểm tra hợp đồng đã ký khớp kỳ này. Không cộng ngày setup.</p>}
             <EvidenceUpload
                 entityType="DUONG_RENEWAL_SIGNED_CONTRACT"
                 entityId={s.renewalId}
@@ -1093,12 +1047,15 @@ function OperationForm({
         <p role="alert">
           Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại, không đóng hoặc tải lại trang.</p>
       )}
-      <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-4">
+      <div className={`flex flex-wrap items-center gap-3 border-t border-stone-200 pt-4 ${appointmentOnly ? "justify-end" : ""}`}>
+        {appointmentOnly && <p className="mr-auto text-sm text-stone-500">{scheduleReady ? "Đã chọn đủ ngày và giờ" : "Chưa chọn đủ ngày và giờ"}</p>}
         <Button
+          size={appointmentOnly ? "md" : undefined}
+          className={appointmentOnly ? "rounded-full px-5 disabled:!bg-stone-100 disabled:!text-stone-400" : undefined}
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
-            (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0)) ||
+            (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0 || !cash.data.effectiveStartDate)) ||
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
           }
           onClick={() => {
