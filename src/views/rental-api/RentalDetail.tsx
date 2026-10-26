@@ -85,12 +85,28 @@ export default function RentalDetail({
             <dt>Thời hạn thuê</dt>
             <dd>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
           </div>
+          {(rental.setupStartedAt || rental.setupEndsAt) && <div>
+            <dt>Giai đoạn setup miễn phí</dt>
+            <dd>
+              <Badge variant={rental.status === 'setup' ? 'warning' : 'success'}>{rental.status === 'setup' ? 'Đang setup' : 'Đã qua setup'}</Badge>
+              <div className="mt-2 grid gap-1 text-xs text-stone-600">
+                {rental.setupStartedAt && <p>Bắt đầu setup: <b>{new Date(rental.setupStartedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
+                {rental.setupEndsAt && <p>Setup kết thúc: <b>{new Date(rental.setupEndsAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
+                {rental.startDate && <p>Ngày bắt đầu tính tiền thuê: <b>{new Date(`${rental.startDate}T00:00:00+07:00`).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
+                {rental.inventoryDueAt && <p>Hạn kiểm kê: <b>{new Date(rental.inventoryDueAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
+              </div>
+            </dd>
+          </div>}
           {rental.inventoryPending && <div>
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="warning">Chưa kiểm kê</Badge>
               <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao; hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
               {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Hạn kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
             </dd>
+          </div>}
+          {rental.setupExitReviewRequired && <div>
+            <dt>Xử lý hủy/trả trong setup</dt>
+            <dd><Badge variant="warning">Chờ Business quyết định</Badge><p className="mt-2 text-xs leading-5 text-stone-500">{rental.moveInCompletedAt ? 'Hàng đã chuyển vào: phải dọn hàng và kiểm tra trả kho trước khi quyết toán.' : 'Hàng chưa chuyển vào: xử lý như hủy sau check-in; không cần kiểm kê hàng.'} Không tự động hoàn tiền.</p></dd>
           </div>}
           <div>
             <dt>Giá thuê / tháng</dt>

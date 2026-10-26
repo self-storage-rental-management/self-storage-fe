@@ -3,7 +3,8 @@ import { readRentalEnvelope, readRentalPage } from './rentalApi'
 
 export type MaintenanceTaskPriority = 'low' | 'medium' | 'high'
 export type MaintenanceTaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled'
-export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned' | 'inactive' | 'archived'
+export type MaintenanceTaskType = 'maintenance' | 'inventory_check'
+export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
 
 export interface MaintenanceTaskApi {
   id: string
@@ -11,8 +12,10 @@ export interface MaintenanceTaskApi {
   facilityName: string
   storageUnitId: string
   unitCode: string
+  rentalId?: string | null
   returnCaseId: string | null
   title: string
+  taskType?: MaintenanceTaskType
   reason: string
   priority: MaintenanceTaskPriority
   damageClassification: string | null
@@ -55,6 +58,8 @@ function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
   if (!isRecord(value)) return false
   return isUuidLike(value.id) && isUuidLike(value.facilityId) && isText(value.facilityName) &&
     isUuidLike(value.storageUnitId) && isText(value.unitCode) && isText(value.title) && isText(value.reason) &&
+    (value.rentalId === undefined || value.rentalId === null || isUuidLike(value.rentalId)) &&
+    (value.taskType === undefined || value.taskType === 'maintenance' || value.taskType === 'inventory_check') &&
     ['low', 'medium', 'high'].includes(String(value.priority)) &&
     ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&
     isNullableText(value.returnCaseId) && isNullableText(value.damageClassification) &&
