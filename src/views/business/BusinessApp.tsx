@@ -648,6 +648,7 @@ export default function BusinessApp({
       label: "Trả Kho & Quyết Toán",
       icon: Icon.clipboard,
       group: "Vận Hành & Hậu Mãi",
+      permission: "returns:read",
     },
     {
       id: "damage-incidents",
