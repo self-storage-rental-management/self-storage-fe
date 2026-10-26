@@ -4,13 +4,45 @@ import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
-export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
+export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
 export interface OverdueSettlement {
   accruedAmount: number | null
   settlementAmount: number | null
   overdueDays: number | null
   calculatedAt: string | null
   requiresReconciliation: boolean
+}
+export interface ReturnSettlementReceiptView {
+  direction: 'COLLECTION' | 'REFUND' | 'OFFSET'
+  amount: number
+  paymentMethod: string
+  transactionReference: string
+  receiptFileId: string | null
+  recordedAt: string
+}
+export interface EarlyTerminationPolicyView {
+  type: 'NO_GOODS_MOVED_IN' | 'GOODS_MOVED_IN' | string
+  earlyTerminationFee: number
+  billableSetupDays: number
+  usedGoodsCharge: number
+  totalRentalCharge: number
+  rentalRefundAmount: number
+  noticeDays: number
+}
+export interface ActiveReturnPolicyView {
+  recalculationRequired: boolean
+  completedRentalMonths: number
+  pricingTierMonths: number | null
+  setupDaysUsed: number
+  chargeableSetupDays: number
+  rentalDaysUsed: number
+  noticeShortfallDays: number
+  dailyPrice: number
+  earlyTerminationFee: number
+  noticeCharge: number
+  totalRentalCharge: number
+  rentalRefundAmount: number
+  noticeDays: number
 }
 export function isOverdueSettlement(value: unknown): value is OverdueSettlement {
   if (!value || typeof value !== 'object') return false
@@ -25,6 +57,8 @@ export interface ApiReturn {
   id: string; rentalId: string; facilityId: string; customerId: string
   facilityName: string; unitNumber: string; customerName: string
   status: typeof returnStatuses[number]; scheduledDate: string
+  returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'EARLY_RETURN' | 'NORMAL'
+  settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
   inspectionNotes: string | null; managerResolutionNote: string | null
   customerNotes?: string | null
   customerDecisionNote?: string | null
@@ -38,14 +72,63 @@ export interface ApiReturn {
   recoveryTaskId?: string | null
   recoveryTaskStatus?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | null
   recoveryCompletedAt?: string | null
+  settlementPaymentId?: string | null
+  settlementPaidAt?: string | null
+  completedAt?: string | null
+  setupExitReviewRequired?: boolean
+  moveInCompletedAt?: string | null
+  settlementReceipt?: ReturnSettlementReceiptView | null
   overdueSettlement?: OverdueSettlement | null
+  earlyTerminationPolicy?: EarlyTerminationPolicyView | null
+  activeReturnPolicy?: ActiveReturnPolicyView | null
+  legacyPricingReviewRequired?: boolean
+  legacyPricingSnapshotAvailable?: boolean
+  legacyPricingEvidenceFileId?: string | null
 }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const money = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 999999999999.99 && Math.abs(v * 100 - Math.round(v * 100)) < 0.01
 const date = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v
 export function isApiReturn(v: unknown): v is ApiReturn {
+  const rawTerminationPolicy = object(v) ? v.earlyTerminationPolicy : undefined
+  const terminationPolicy = object(rawTerminationPolicy) ? rawTerminationPolicy : null
+  const rawActivePolicy = object(v) ? v.activeReturnPolicy : undefined
+  const activePolicy = object(rawActivePolicy) ? rawActivePolicy : null
   return object(v) && ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
+    (v.returnType === undefined || ['CANCELLED_IN_SETUP', 'RETURN_IN_SETUP', 'EARLY_RETURN', 'NORMAL'].includes(String(v.returnType))) &&
+    (v.settlementMode === undefined || ['AUTO', 'MANUAL_REVIEW'].includes(String(v.settlementMode))) &&
     (v.overdueSettlement == null || isOverdueSettlement(v.overdueSettlement)) &&
+    (terminationPolicy == null || (
+      typeof terminationPolicy.type === 'string' &&
+      (['earlyTerminationFee', 'usedGoodsCharge', 'totalRentalCharge', 'rentalRefundAmount'] as const).every(k => money(terminationPolicy[k])) &&
+      Number.isInteger(terminationPolicy.billableSetupDays) && Number(terminationPolicy.billableSetupDays) >= 0 &&
+      Number.isInteger(terminationPolicy.noticeDays) && Number(terminationPolicy.noticeDays) >= 0
+    )) &&
+    (activePolicy == null || (
+      typeof activePolicy.recalculationRequired === 'boolean' &&
+      Number.isInteger(activePolicy.completedRentalMonths) && Number(activePolicy.completedRentalMonths) >= 0 &&
+      (activePolicy.pricingTierMonths === null || Number.isInteger(activePolicy.pricingTierMonths)) &&
+      ['setupDaysUsed', 'chargeableSetupDays', 'rentalDaysUsed', 'noticeShortfallDays'].every(k => Number.isInteger(activePolicy[k]) && Number(activePolicy[k]) >= 0) &&
+      ['dailyPrice', 'earlyTerminationFee', 'noticeCharge', 'totalRentalCharge', 'rentalRefundAmount'].every(k => money(activePolicy[k])) &&
+      Number.isInteger(activePolicy.noticeDays) && Number(activePolicy.noticeDays) >= 0
+    )) &&
+    (v.settlementReceipt == null || (
+      object(v.settlementReceipt) &&
+      ['COLLECTION', 'REFUND', 'OFFSET'].includes(String(v.settlementReceipt.direction)) &&
+      money(v.settlementReceipt.amount) &&
+      typeof v.settlementReceipt.paymentMethod === 'string' &&
+      typeof v.settlementReceipt.transactionReference === 'string' &&
+      (v.settlementReceipt.receiptFileId === null || isUuid(v.settlementReceipt.receiptFileId)) &&
+      typeof v.settlementReceipt.recordedAt === 'string' &&
+      Number.isFinite(Date.parse(v.settlementReceipt.recordedAt))
+    )) &&
+    (v.settlementPaymentId === undefined || v.settlementPaymentId === null || typeof v.settlementPaymentId === 'string') &&
+    (v.settlementPaidAt === undefined || v.settlementPaidAt === null || (typeof v.settlementPaidAt === 'string' && Number.isFinite(Date.parse(v.settlementPaidAt)))) &&
+    (v.completedAt === undefined || v.completedAt === null || (typeof v.completedAt === 'string' && Number.isFinite(Date.parse(v.completedAt)))) &&
+    (v.setupExitReviewRequired === undefined || typeof v.setupExitReviewRequired === 'boolean') &&
+    (v.legacyPricingReviewRequired === undefined || typeof v.legacyPricingReviewRequired === 'boolean') &&
+    (v.legacyPricingSnapshotAvailable === undefined || typeof v.legacyPricingSnapshotAvailable === 'boolean') &&
+    (v.legacyPricingEvidenceFileId === undefined || v.legacyPricingEvidenceFileId === null || isUuid(v.legacyPricingEvidenceFileId)) &&
+    (v.moveInCompletedAt === undefined || v.moveInCompletedAt === null || (typeof v.moveInCompletedAt === 'string' && Number.isFinite(Date.parse(v.moveInCompletedAt)))) &&
     ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && date(v.scheduledDate) &&
     returnStatuses.includes(v.status as ApiReturn['status']) && typeof v.customerConfirmed === 'boolean' && money(v.totalDeductions) &&
     ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'].every(k => money(v[k])) &&
@@ -138,9 +221,17 @@ export function inspectReturn(id: string, body: InspectionInput) {
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, 'inspection', body)
 }
-export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
-  const a = getAuthenticatedActor()
-  if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'STAFF' || role === 'BUSINESS' || role === 'ADMIN' || role === 'MANAGER')) {
+export async function completeRefund(id: string, body: {
+  transactionReference?: string
+  notes?: string
+  receiptFileId?: string
+  paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'VNPAY'
+  originalPaymentId?: string
+} = {}) {
+  const business = getAuthenticatedActor()?.roles.includes('BUSINESS') === true
+  const role: ReturnRole = business ? 'business' : 'staff'
+  const a = actor(role, true)
+  if (!a.permissions.includes('refunds:execute')) {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
   if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
@@ -149,13 +240,14 @@ export async function completeRefund(id: string, body: { transactionReference?: 
   if (body.notes !== undefined && body.notes.length > 1000) {
     throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
   }
-  if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
-  const resultRole: ReturnRole = a.roles.includes('BUSINESS') ? 'business' : a.roles.includes('STAFF') ? 'staff' : 'manager'
-  const endpointRole = resultRole === 'business' ? 'business' : resultRole === 'manager' ? 'manager' : 'staff'
-  const requiredScope: ReturnScope = resultRole === 'business' || resultRole === 'manager' ? 'MANAGE' : 'OPERATE'
-  return bound(await apiRequest(`/api/${endpointRole}/returns/${id}/complete-refund`, {
+  const gateway = body.paymentMethod === 'VNPAY'
+  if (!isUuid(id) || (!business && !gateway && !isUuid(body.receiptFileId)) || (gateway && !isUuid(body.originalPaymentId))) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
+  if ((!gateway && !body.transactionReference?.trim()) || (!business && !gateway && !body.paymentMethod) || (gateway && !body.originalPaymentId)) {
+    throw new Error('Cần mã giao dịch, phương thức thanh toán và biên lai thực tế.')
+  }
+  return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {
     method: 'POST', body: JSON.stringify(body),
-  }), resultRole, id, undefined, requiredScope)
+  }), role, id, undefined, business ? 'MANAGE' : 'OPERATE')
 }
 
 export interface ReturnSettlementReceipt {
@@ -217,6 +309,43 @@ export async function uploadReturnEvidence(returnId: string, file: File) {
 export function reviewDispute(id: string, body: ReturnFees & { resolutionNote: string; proposedUnitStatus: 'available' | 'maintenance' }) {
   fees(body); if (!body.resolutionNote.trim() || body.resolutionNote.length > 2000) throw new Error('Nhập lý do giải quyết khiếu nại.')
   return mutate('manager', id, 'review-dispute', body)
+}
+export async function decideSetupExit(id: string, approvedRefundAmount: number, resolutionNote: string, approvedRentalRefundAmount?: number) {
+  const a = actor('business')
+  if (!a.permissions.includes('refunds:approve')) throw new ApiClientError('Bạn chưa có quyền duyệt hoàn tiền.', { status: 403 })
+  if (!isUuid(id) || !money(approvedRefundAmount) || (approvedRentalRefundAmount !== undefined && !money(approvedRentalRefundAmount)) || !resolutionNote.trim() || resolutionNote.length > 2000) {
+    throw new Error('Nhập số tiền hoàn hợp lệ và lý do quyết định.')
+  }
+  return bound(await apiRequest(`/api/business/returns/${id}/setup-exit-decision`, {
+    method: 'POST',
+    body: JSON.stringify({ approvedRefundAmount, approvedRentalRefundAmount, resolutionNote: resolutionNote.trim() }),
+  }), 'business', id, undefined, 'MANAGE')
+}
+export async function decideLegacyPricing(id: string, body: {
+  approvedRentalCharge: number
+  approvedRentalRefund: number
+  resolutionNote: string
+  pricingSnapshotJson: string
+  sourceDocumentFileId: string
+}) {
+  const a = actor('business')
+  if (!a.permissions.includes('refunds:approve')) throw new ApiClientError('Bạn chưa có quyền duyệt hoàn tiền.', { status: 403 })
+  if (!isUuid(id) || !money(body.approvedRentalCharge) || !money(body.approvedRentalRefund) ||
+    !body.resolutionNote.trim() || body.resolutionNote.length > 2000 ||
+    !body.pricingSnapshotJson.trim() || body.pricingSnapshotJson.length > 12000 ||
+    !isUuid(body.sourceDocumentFileId)) {
+    throw new Error('Thiếu snapshot giá cũ hoặc bằng chứng hợp đồng/báo giá.')
+  }
+  try {
+    const parsed = JSON.parse(body.pricingSnapshotJson)
+    if (parsed === null || (typeof parsed !== 'object')) throw new Error('invalid')
+  } catch {
+    throw new Error('Snapshot giá cũ phải là JSON hợp lệ.')
+  }
+  return bound(await apiRequest(`/api/business/returns/${id}/legacy-pricing-decision`, {
+    method: 'POST',
+    body: JSON.stringify({ ...body, resolutionNote: body.resolutionNote.trim() }),
+  }), 'business', id, undefined, 'MANAGE')
 }
 export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string) {
   if (decision === 'disputed' && !note.trim()) throw new Error('Nhập lý do yêu cầu xem xét lại.')

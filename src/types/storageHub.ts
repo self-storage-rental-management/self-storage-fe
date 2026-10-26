@@ -37,11 +37,12 @@ export type HoldStatus =
   | 'approved'
   | 'checked_in'
 
-export type RentalStatus = 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
+export type RentalStatus = 'setup' | 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
 
 export type PaymentStatus = 'pending' | 'paid' | 'overdue' | 'refunded' | 'cancelled'
 
-export type ReturnStatus = 'requested' | 'scheduled' | 'inspected' | 'awaiting_customer_confirmation' | 'disputed' | 'payment_due' | 'refund_pending' | 'completed'
+import type { ApiReturnStatus } from './statusContracts'
+export type ReturnStatus = ApiReturnStatus
 
 export type DamageClassification =
   | 'no_damage'
@@ -318,6 +319,10 @@ export interface StorageReservation {
   moveInDate: string
   status: ReservationStatus | HoldStatus
   expireReason?: 'NO_SHOW' | 'CUSTOMER_CANCELLED' | 'PAYMENT_EXPIRED'
+  freeSetupDays?: number
+  cancellationType?: 'BEFORE_CHECKIN_FULL_REFUND' | 'BEFORE_CHECKIN_EARLY_FEE' | 'SETUP_EXIT_REVIEW'
+  cancellationRefundAmount?: number
+  cancellationChargeAmount?: number
   reservationDepositAmount: number // 20% paid online to hold booking
   securityDepositAmount: number    // 1-month rent deposit recorded in contract
   depositConvertedAt?: string     // Timestamp when reservation deposit was converted to contract security deposit
@@ -603,6 +608,14 @@ export interface RentalRecord {
   autoRenew: boolean
   gateCode: string
   accessCredentials?: AccessCredential[]
+  freeSetupDays?: number
+  setupStartedAt?: string
+  setupEndsAt?: string
+  moveInCompletedAt?: string
+  inventoryVerifiedAt?: string
+  inventoryDueAt?: string
+  inventoryTaskId?: string
+  goodsSnapshotLocked?: boolean
   initialCondition: string
   evidencePhotos: string[]
   originalMonthlyRate?: number

@@ -8,7 +8,6 @@ import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
-  completeRefund,
   confirmReturn,
   feeKeys,
   inspectReturn,
@@ -28,6 +27,7 @@ const labels: Record<ApiReturn['status'], string> = {
   requested: 'Đã yêu cầu trả kho',
   scheduled: 'Đã hẹn nghiệm thu',
   inspected: 'Đã nghiệm thu',
+  awaiting_business_review: 'Chờ Business duyệt bảng giá cũ',
   awaiting_customer_confirmation: 'Chờ khách xác nhận',
   disputed: 'Đang khiếu nại - Cần BO giải quyết',
   payment_due: 'Chờ thanh toán quyết toán',
@@ -40,6 +40,7 @@ const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
   ['requested', 'Đã yêu cầu trả kho'],
   ['scheduled', 'Đã hẹn nghiệm thu'],
   ['inspected', 'Đã nghiệm thu'],
+  ['awaiting_business_review', 'Chờ Business duyệt bảng giá cũ'],
   ['awaiting_customer_confirmation', 'Chờ khách xác nhận'],
   ['disputed', 'Đang khiếu nại - Cần BO giải quyết'],
   ['payment_due', 'Chờ thanh toán quyết toán'],
@@ -243,7 +244,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       <ReturnSummary record={record} />
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <p className="font-semibold">Bước tiếp theo</p>
-        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban Điều Hành (BO) hoặc Quản lý giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
+        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_business_review: 'Hồ sơ cũ chưa có bảng giá trả sớm snapshot. Chờ Business duyệt thủ công.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban Điều Hành (BO) hoặc Quản lý giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-stone-200 p-4">
@@ -281,83 +282,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         <label className="block">Hiện trạng kho đề xuất<select value={unit} disabled={busy} onChange={(event) => setUnit(event.target.value as typeof unit)}><option value="available">Sẵn sàng</option><option value="maintenance">Cần bảo trì</option></select></label>
         <Button type="submit" disabled={busy || (canReview && !note.trim())}>{canInspect ? 'Ghi nhận nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</Button>
       </form>}
-      {role === 'staff' && !recovery && (record.status === 'requested' || record.status === 'scheduled') && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-900">⚡ Cho trả kho nhanh</span>
-            <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 border border-blue-300">Thao tác nhanh</span>
-          </div>
-          <p className="text-xs text-blue-800">
-            Bạn có thể duyệt cho khách trả kho ngay lập tức mà không cần qua nhiều bước nghiệm thu.
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `QUICK-RETURN-${Date.now()}`, notes: 'Cho trả kho ngay' }))}>
-              ⚡ Cho trả kho ngay (Đóng hồ sơ & giải phóng gian)
-            </Button>
-          </div>
-        </div>
-      )}
-      {role === 'staff' && !recovery && record.status === 'awaiting_customer_confirmation' && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">⏳ Đang chờ khách hàng xác nhận quyết toán</span>
-            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Có thể duyệt hoàn tất ngay</span>
-          </div>
-          <p className="text-xs text-amber-800">
-            Biên bản nghiệm thu đã lập. Bạn có thể xác nhận cho phép trả kho và hoàn tất hồ sơ ngay mà không cần đợi thêm.
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `RETURN-${Date.now()}`, notes: 'Nhân viên xác nhận hoàn tất trả kho' }))}>
-              ✓ Xác nhận hoàn tất trả kho ngay
-            </Button>
-          </div>
-        </div>
-      )}
-      {role === 'staff' && !recovery && record.status === 'disputed' && (
-        <div className="rounded-xl border border-rose-300 bg-rose-50/80 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-900">⚠️ Khiếu nại từ khách hàng</span>
-            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">Có thể duyệt trả kho</span>
-          </div>
-          <p className="text-xs text-rose-800">
-            Ý kiến khách: {record.customerDecisionNote || 'Cần xem xét lại'}. Bạn có thể bỏ qua khiếu nại và duyệt cho trả kho ngay.
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `DISPUTE-RESOLVED-${Date.now()}`, notes: 'Duyệt trả kho theo yêu cầu' }))}>
-              ✓ Duyệt trả kho & Hoàn tất ngay
-            </Button>
-          </div>
-        </div>
-      )}
-      {role === 'staff' && !recovery && record.status === 'payment_due' && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">💵 Phụ phí cần thu: {rentalMoney(record.amountDueFromCustomer, 'VND')}</span>
-            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Duyệt nhanh</span>
-          </div>
-          <p className="text-xs text-amber-800">
-            Xác nhận đã thu phụ phí và đóng hồ sơ trả kho ngay.
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `PAID-${Date.now()}`, notes: 'Xác nhận thu phụ phí và đóng hồ sơ' }))}>
-              ✓ Ghi nhận & Hoàn tất trả kho ngay
-            </Button>
-          </div>
-        </div>
-      )}
-      {role === 'staff' && !recovery && record.status === 'refund_pending' && (
-        <div className="rounded-xl border border-purple-300 bg-purple-50/80 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-purple-900">💳 Tiền hoàn cọc: {rentalMoney(record.netRefundAmount, 'VND')}</span>
-            <span className="rounded bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800 border border-purple-300">Chờ chuyển hoàn</span>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer" onClick={() => void run(() => completeRefund(id, { transactionReference: `REFUND-${Date.now()}`, notes: 'Hoàn tiền cọc trả kho' }))}>
-              ✓ Xác nhận đã hoàn cọc & Đóng hồ sơ
-            </Button>
-          </div>
-        </div>
-      )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (

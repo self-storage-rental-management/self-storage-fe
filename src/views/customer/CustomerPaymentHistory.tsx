@@ -162,6 +162,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                 <Td>
                   <div className="space-y-2">
                     <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (["PAID", "REFUNDED", "SETTLED"].includes(entry.status) ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                    {entry.reservationPayment?.invoiceNumber && <p className="font-mono text-[10px] text-stone-500">Hóa đơn: {entry.reservationPayment.invoiceNumber} · {entry.reservationPayment.invoiceStatus || "DRAFT"}</p>}
                   </div>
                 </Td>
                 <Td>{["PAID", "REFUNDED", "SETTLED"].includes(entry.status) && <Button variant="outline" size="sm" onClick={() => setReceipt(entry)}>Xem biên lai</Button>}</Td>

@@ -6,7 +6,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
-import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, accessStatusLabels } from "./presentation"
+import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 const labelClass = "text-xs font-normal text-slate-500"
 const valueClass = "mt-1 text-sm font-medium text-slate-900"
 export default function RentalDetail({
@@ -85,6 +85,15 @@ export default function RentalDetail({
             <dt>Thời hạn thuê</dt>
             <dd>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
           </div>
+          {rental.setupStartedAt && rental.setupEndsAt && <div>
+            <dt>Setup miễn phí</dt>
+            <dd>
+              <p>Bắt đầu bàn giao: {rentalDate(rental.setupStartedAt)}</p>
+              <p>Setup đến hết: {rentalDate(new Date(new Date(rental.setupEndsAt).getTime() - 86_400_000).toISOString())}</p>
+              <p>Thời hạn thuê tính từ: {rentalDate(rental.startDate)}</p>
+              {rental.moveInCompletedAt && <p className="text-xs text-stone-500">Khách báo setup xong lúc: {rentalDate(rental.moveInCompletedAt)}</p>}
+            </dd>
+          </div>}
           {rental.inventoryPending && <div>
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="warning">Chưa kiểm kê</Badge>
@@ -149,6 +158,7 @@ export default function RentalDetail({
                   <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
                   <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
                   <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
+                  {payment.invoiceNumber && <p className="mt-1 text-sm"><strong>Hóa đơn:</strong> {payment.invoiceNumber} · {payment.invoiceStatus}</p>}
                   {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
                 </li>
               ))}

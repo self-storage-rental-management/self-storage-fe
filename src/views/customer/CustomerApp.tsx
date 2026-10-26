@@ -31,12 +31,6 @@ import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import CustomerSupportWidget from '../../components/support/CustomerSupportWidget'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
-import {
-  getPoliciesForFacility,
-  evaluatePolicyBenefit,
-  type PolicyItem,
-  type ParsedPolicyBenefit
-} from '../../domain/policyMatching'
 import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
 import { customerFacilityImage, customerUnitAmenities } from './customerPresentation'
 import { isVietnamesePhone, VIETNAMESE_PHONE_ERROR_MESSAGE } from '../../domain/vietnamesePhone'
@@ -56,6 +50,7 @@ import {
   getAvailability,
   getGoodsCatalog,
   checkCompatibility,
+  recommendReservationUnitType,
   cancelCustomerReservation,
   createCustomerReservation,
   createReservationQuote,
@@ -68,6 +63,7 @@ import {
   type CustomerReservation,
   type CustomerUnitType,
   type CompatibilityCheckResult,
+  type ReservationRecommendation,
   type GoodsCategory,
   type GoodsItemInput,
   type GoodsCatalog,
@@ -265,24 +261,29 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
     trolley: apiSpec.trolleyType || 'Chưa cập nhật',
     smallBoxCapacity: apiSpec.smallBoxCapacity ?? 0,
     largeBoxCapacity: apiSpec.largeBoxCapacity ?? 0,
+  } : isApiAuthenticated() ? {
+    aisleWidthM: 0,
+    trolley: 'Chưa cập nhật',
+    smallBoxCapacity: 0,
+    largeBoxCapacity: 0,
   } : customerUnitAmenities(sizeCode)
 
-  const resolvedImage = apiSpec?.imageUrl || facility.image || getCustomerUnitImage(sizeCode)
+  const resolvedImage = apiSpec?.imageUrl || facility.image || (isApiAuthenticated() ? '' : getCustomerUnitImage(sizeCode))
   const [imgSrc, setImgSrc] = useState(resolvedImage)
 
   useEffect(() => {
-    setImgSrc(apiSpec?.imageUrl || facility.image || getCustomerUnitImage(sizeCode))
+    setImgSrc(apiSpec?.imageUrl || facility.image || (isApiAuthenticated() ? '' : getCustomerUnitImage(sizeCode)))
   }, [apiSpec?.imageUrl, facility.image, sizeCode])
 
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:-translate-y-0.5 hover:border-stone-400 hover:shadow-lg">
       <div className="relative h-44 overflow-hidden bg-stone-200">
-        <img
+        {imgSrc ? <img
           src={imgSrc}
           alt={`Không gian kho loại ${sizeCode}`}
           className="h-full w-full object-cover transition duration-300 hover:scale-105"
-          onError={() => setImgSrc(getCustomerUnitImage(sizeCode))}
-        />
+          onError={() => setImgSrc(isApiAuthenticated() ? '' : getCustomerUnitImage(sizeCode))}
+        /> : <div className="flex h-full items-center justify-center px-4 text-center text-sm text-stone-500">Chưa có hình ảnh loại kho</div>}
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/65 via-transparent to-transparent" />
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
            {facility.name}
@@ -319,7 +320,7 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           <p className="text-xs text-stone-500">{'Giá thuê từ'}</p>
           <p className="text-2xl font-bold tracking-tight text-black">{formatVnd(unitType.monthlyPrice)}<span className="text-sm font-normal text-stone-500">/{'tháng'}</span></p>
           <p className="mt-1 text-xs text-stone-600">Cọc giữ chỗ theo báo giá hệ thống</p>
-          <p className="mt-1 text-xs text-stone-600">{`Tiền cọc đảm bảo kho: ${formatVnd(unitType.monthlyPrice)} (hoàn sau nghiệm thu nếu không phát sinh khấu trừ)`}</p>
+          <p className="mt-1 text-xs text-stone-600">{`Tiền cọc đảm bảo kho: ${apiSpec?.securityDepositAmount != null ? formatVnd(apiSpec.securityDepositAmount) : isApiAuthenticated() ? 'Chưa có dữ liệu' : formatVnd(unitType.monthlyPrice)} (hoàn sau nghiệm thu nếu không phát sinh khấu trừ)`}</p>
           {!isAvailable && <p className="mt-2 text-xs font-bold text-red-700">{'Cỡ kho này hiện chưa thể đặt.'}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button variant="outline" size="sm" onClick={() => onViewSpecs(facility, unitType, availableCount)}>{'Xem chi tiết'}</Button>
@@ -436,6 +437,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
   const [serverCompatibility, setServerCompatibility] = useState<CompatibilityCheckResult | null>(null)
+  const [serverRecommendation, setServerRecommendation] = useState<ReservationRecommendation | null>(null)
+  const [recommendationLoading, setRecommendationLoading] = useState(false)
+  const [recommendationError, setRecommendationError] = useState<string | null>(null)
+  const [recommendationRetry, setRecommendationRetry] = useState(0)
   const [bookingVoucherCode, setBookingVoucherCode] = useState('')
   const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
   const [rentalPackagesLoading, setRentalPackagesLoading] = useState(false)
@@ -456,8 +461,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     ? backendFacilities.map(facility => ({
         id: facility.id,
         code: facility.code,
-        name: customerFacilityName(facility.code, facility.name),
-        address: customerFacilityAddress(facility.code, facility.name, facility.address),
+        name: isApiAuthenticated() ? facility.name : customerFacilityName(facility.code, facility.name),
+        address: isApiAuthenticated() ? facility.address : customerFacilityAddress(facility.code, facility.name, facility.address),
         city: facility.city,
         rating: 0,
         available: backendUnitTypes
@@ -466,7 +471,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         price: '',
         climate: Boolean(facility.climateControlled),
         security: facility.securityDescription || '',
-        image: facility.imageUrl || customerFacilityImage(facility.code),
+        image: facility.imageUrl || (isApiAuthenticated() ? '' : customerFacilityImage(facility.code)),
         units: backendUnitTypes.filter(unitType => unitType.facilityId === facility.id).length,
         occupied: 0,
         revenue: 0,
@@ -488,7 +493,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           size: sizeCode,
           sizeCode,
           facilityId: unitType.facilityId,
-          facilityName: facility ? customerFacilityName(facility.code, facility.name) : 'Cơ sở lưu trữ',
+          facilityName: facility
+            ? (isApiAuthenticated() ? facility.name : customerFacilityName(facility.code, facility.name))
+            : (isApiAuthenticated() ? 'Chưa cập nhật' : 'Cơ sở lưu trữ'),
           floor: 1,
           zone: 'Tiêu chuẩn',
           type: unitType.name,
@@ -571,9 +578,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         trolley: backendSpec.trolleyType || 'Chưa cập nhật',
         smallBoxCapacity: backendSpec.smallBoxCapacity ?? 0,
         largeBoxCapacity: backendSpec.largeBoxCapacity ?? 0,
+      } : isApiAuthenticated() ? {
+        aisleWidthM: 0,
+        trolley: 'Chưa cập nhật',
+        smallBoxCapacity: 0,
+        largeBoxCapacity: 0,
       } : customerUnitAmenities(sizeCode)
       const fac = facilities.find(f => f.id === unit.facilityId || f.code === unit.facilityId)
-      const facilityName = fac?.name || unit.facilityName || 'Kho StorageHub'
+      const facilityName = fac?.name || unit.facilityName || (isApiAuthenticated() ? 'Chưa cập nhật' : 'Kho StorageHub')
       const lengthM = unit.dimensions?.lengthM ?? backendSpec?.lengthM ?? 0
       const widthM = unit.dimensions?.widthM ?? backendSpec?.widthM ?? 0
       const heightM = unit.dimensions?.heightM ?? backendSpec?.heightM ?? 0
@@ -641,6 +653,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [bookOpen, setBookOpen] = useState(false)
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1)
   const [bookingReview, setBookingReview] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
   const [inputToken, setInputToken] = useState('')
@@ -758,6 +771,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [])
 
   useEffect(() => {
+    if (isApiAuthenticated()) return
     renewals
       .filter(renewal => renewal.customerId === user.id && renewal.status === 'approved' && renewal.paymentDueAt && new Date(renewal.paymentDueAt).getTime() <= now)
       .forEach(renewal => expireRenewalPayment(renewal.id))
@@ -817,8 +831,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setSchedulePolicyMessage(null)
     setReservationSubmitError(null)
     setValidationViolation(null)
+    setServerRecommendation(null)
+    setRecommendationLoading(false)
+    setRecommendationError(null)
     setBookingStep(1)
     setBookingReview(false)
+    setTermsAccepted(false)
     setBookingVoucherCode('')
   }
   const capacitySamples: PackageSample[] = goodsItems.map((item, index) => ({
@@ -856,6 +874,40 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const latestCheckInTime = policyTimeInput(checkInWindow.deadlineAt)
   const previousReviewRequirement = useRef(hasOtherGoods)
   const previousBookingStart = useRef<number | null>(null)
+
+  const apiGoodsItems = useMemo<GoodsItemInput[]>(() => goodsItems.map(item => {
+    const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
+    const selectedGoodsCategory = catalogCategoryFor(item.category)
+    return {
+      catalogCategoryId: selectedGoodsCategory?.id,
+      catalogMaterialId: selectedGoodsCategory?.materials.find(material => material.label === item.materialName)?.id || null,
+      category: selectedGoodsCategory?.reservationCategory || item.category as GoodsCategory,
+      customGoodsName: item.customGoodsName.trim() || null,
+      materialName: item.materialName.trim() || null,
+      customMaterial: item.customMaterial.trim() || null,
+      description: item.description.trim() || null,
+      customerNote: item.customerNote.trim() || null,
+      quantity,
+      lengthCm: Number(item.lengthCm) || cargoLengthNumber,
+      widthCm: Number(item.widthCm) || cargoWidthNumber,
+      heightCm: Number(item.heightCm) || cargoHeightNumber,
+      weightPerItemKg: Number(item.weightKg) || Math.max(0.01, goodsWeightNumber / quantity),
+      fragile: item.fragile ? item.fragile === 'yes' : item.materialType === 'FRAGILE',
+    }
+  }), [goodsItems, goodsCatalog, packageCountNumber, cargoLengthNumber, cargoWidthNumber, cargoHeightNumber, goodsWeightNumber])
+
+  const recommendationInput = useMemo(() => {
+    const endDate = addMonthsForPreview(earliestCheckInDate, rentalMonths)
+    if (!selectedTarget || endDate === '—' || !selectedPackageId.trim()) return null
+    return {
+      facilityId: selectedTarget.facility.id,
+      startDate: earliestCheckInDate,
+      endDate,
+      pricingPackageCode: selectedPackageId,
+      goodsCondition,
+      goodsItems: apiGoodsItems,
+    }
+  }, [selectedTarget, earliestCheckInDate, rentalMonths, selectedPackageId, goodsCondition, apiGoodsItems])
 
   useEffect(() => {
     if (!bookOpen) return
@@ -1023,7 +1075,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const visibleMyRentalIds = new Set(visibleMyRentals.map(r => r.id))
   const myHoldIds = new Set(myHolds.map(h => h.id))
   const myPayments = payments.filter(p => myHoldIds.has(p.reservationId) || Boolean(p.rentalId && myRentalIds.has(p.rentalId)))
-  const activeRentals = visibleMyRentals.filter(r => r.status === 'active' || r.status === 'return_requested')
+  const activeRentals = visibleMyRentals.filter(r => ['setup', 'active', 'return_requested'].includes(r.status))
   const rentalDeadlineInfo = (rental: (typeof rentals)[number]) => {
     const start = parseCustomerDate(rental.startDate)
     const end = parseCustomerDate(rental.endDate)
@@ -1076,7 +1128,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         .reduce((total, unitType) => total + (availabilityByUnitType[unitType.id] ?? unitType.availableCount ?? 0), 0)
     }
     const facCode = facilities.find(f => f.id === facilityId)?.code
-    const physical = units.filter(unit => (unit.facilityId === facilityId || (facCode && unit.facilityId === facCode)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName) || (unit.size && unitTypeMatches(unit.size, unitTypeName)) || (unit.sizeCode && unitTypeMatches(unit.sizeCode, unitTypeName)))).length
+    const physical = units.filter(unit => (unit.facilityId === facilityId || (facCode && unit.facilityId === facCode)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status)) && (!unitTypeName || unitTypeMatches(unit.type, unitTypeName) || (unit.size && unitTypeMatches(unit.size, unitTypeName)) || (unit.sizeCode && unitTypeMatches(unit.sizeCode, unitTypeName)))).length
     const capacityHeld = activeUnassignedCapacityHolds.filter(hold => (hold.facilityId === facilityId || (facCode && hold.facilityId === facCode)) && (!unitTypeName || unitTypeMatches(hold.unitTypeName, unitTypeName))).length
     return Math.max(0, physical - capacityHeld)
   }
@@ -1107,20 +1159,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       targetId: notification.relatedEntityId || undefined,
       isRead: notification.isRead,
     })),
-    ...myHolds.filter(hold => hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING').map(hold => ({ id: `goods-review-submitted-${hold.id}`, date: hold.goodsReviewSubmittedAt || hold.createdAt, title: 'Yêu cầu hàng hóa đã được gửi', message: `${hold.id} · Kho đang được giữ · Chưa yêu cầu tiền cọc`, page: 'reservations', targetId: hold.id })),
-    ...myHolds.filter(hold => hold.goodsReviewStatus === 'APPROVED').map(hold => ({ id: `goods-review-approved-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa đã được chấp thuận', message: `${hold.id} · Vui lòng thanh toán tiền cọc để hoàn tất đặt kho`, page: 'reservations', targetId: hold.id })),
-    ...myHolds.filter(hold => hold.goodsReviewStatus === 'REJECTED').map(hold => ({ id: `goods-review-rejected-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa chưa được chấp thuận', message: `${hold.id} · Lý do: ${hold.staffReviewNotes || 'Hàng hóa chưa phù hợp điều kiện lưu trữ'}`, page: 'reservations', targetId: hold.id })),
+    ...(isApiAuthenticated() ? [] : myHolds.filter(hold => hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING').map(hold => ({ id: `goods-review-submitted-${hold.id}`, date: hold.goodsReviewSubmittedAt || hold.createdAt, title: 'Yêu cầu hàng hóa đã được gửi', message: `${hold.id} · Kho đang được giữ · Chưa yêu cầu tiền cọc`, page: 'reservations', targetId: hold.id }))),
+    ...(isApiAuthenticated() ? [] : myHolds.filter(hold => hold.goodsReviewStatus === 'APPROVED').map(hold => ({ id: `goods-review-approved-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa đã được chấp thuận', message: `${hold.id} · Vui lòng thanh toán tiền cọc để hoàn tất đặt kho`, page: 'reservations', targetId: hold.id }))),
+    ...(isApiAuthenticated() ? [] : myHolds.filter(hold => hold.goodsReviewStatus === 'REJECTED').map(hold => ({ id: `goods-review-rejected-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa chưa được chấp thuận', message: `${hold.id} · Lý do: ${hold.staffReviewNotes || 'Hàng hóa chưa phù hợp điều kiện lưu trữ'}`, page: 'reservations', targetId: hold.id }))),
     ...(isApiAuthenticated() ? [] : contractExpiryNotifications),
-    ...visibleMyHolds.filter(h => h.assignedUnitId).map(h => {
+    ...(isApiAuthenticated() ? [] : visibleMyHolds.filter(h => h.assignedUnitId).map(h => {
       const assignmentActivity = activities.find(activity => activity.action === 'UNIT_ASSIGNED' && activity.entityId === h.id)
       return { id: `unit-${h.id}-${h.assignedUnitId}`, date: h.unitAssignedAt || assignmentActivity?.timestamp || h.reviewedAt || h.createdAt, title: 'Gian kho đã được xác định', message: `${h.assignedUnitId} · ${h.facilityName}`, page: 'reservations', targetId: h.id }
-    }),
-    ...visibleMyRentals.filter(rental => rental.status !== 'completed').map(rental => {
+    })),
+    ...(isApiAuthenticated() ? [] : visibleMyRentals.filter(rental => rental.status !== 'completed').map(rental => {
       const hold = myHolds.find(item => item.id === rental.holdId)
       const checkin = checkins.find(item => item.holdId === rental.holdId)
       const confirmed = Boolean(rental.receiptConfirmedAt)
       return { id: `receipt-${rental.id}-${confirmed ? rental.receiptConfirmedAt : 'pending'}`, date: rental.receiptConfirmedAt || hold?.checkedInAt || checkin?.completedAt || rental.startDate, title: confirmed ? ('Đã xác nhận nhận kho') : ('Vui lòng xác nhận đã nhận kho'), message: `${rental.unitId} · ${rental.facilityName}`, page: 'rental-records', targetId: rental.id }
-    }),
+    })),
     ...(isApiAuthenticated() ? [] : renewals).filter(r => r.customerId === user.id && r.status !== 'pending').map(r => {
       const title = r.status === 'rejected'
         ? ('Gia hạn bị từ chối')
@@ -1133,7 +1185,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               : ('Cập nhật yêu cầu gia hạn')
       return { id: `renewal-${r.id}-${r.status}-${r.paidAt || r.approvedAt || r.requestedAt}`, date: r.paidAt || r.approvedAt || r.requestedAt, title, message: r.status === 'rejected' && r.notes ? `${r.unitId} · ${'Lý do'}: ${r.notes}` : `${r.unitId} · ${r.newEndDate}`, page: 'rental-records', targetId: r.rentalId }
     }),
-    ...myReturns.filter(r => visibleMyRentalIds.has(r.rentalId) && ['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(r.status)).map(r => ({ id: `return-${r.id}-${r.status}-${r.completedAt || r.customerConfirmedAt || r.inspectedAt || r.requestedAt}`, date: r.completedAt || r.customerConfirmedAt || r.inspectedAt || r.requestedAt, title: r.status === 'awaiting_customer_confirmation' ? ('Cần xác nhận quyết toán') : r.status === 'payment_due' ? ('Cần thanh toán phần quyết toán còn thiếu') : r.status === 'refund_pending' ? ('Hồ sơ thuê hết hiệu lực · Chờ hoàn cọc') : r.status === 'completed' ? ('Hồ sơ thuê đã hết hiệu lực') : ('Đang xem xét khiếu nại'), message: `${r.unitId} · ${r.status === 'payment_due' ? ('Cần đóng thêm') : ('Hoàn cọc dự kiến')} ${formatVnd(r.status === 'payment_due' ? (r.amountDueFromCustomer ?? 0) : r.netRefundAmount)}`, page: 'rental-records', targetId: r.rentalId })),
+    ...(isApiAuthenticated() ? [] : myReturns.filter(r => visibleMyRentalIds.has(r.rentalId) && ['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(r.status)).map(r => ({ id: `return-${r.id}-${r.status}-${r.completedAt || r.customerConfirmedAt || r.inspectedAt || r.requestedAt}`, date: r.completedAt || r.customerConfirmedAt || r.inspectedAt || r.requestedAt, title: r.status === 'awaiting_customer_confirmation' ? ('Cần xác nhận quyết toán') : r.status === 'payment_due' ? ('Cần thanh toán phần quyết toán còn thiếu') : r.status === 'refund_pending' ? ('Hồ sơ thuê hết hiệu lực · Chờ hoàn cọc') : r.status === 'completed' ? ('Hồ sơ thuê đã hết hiệu lực') : ('Đang xem xét khiếu nại'), message: `${r.unitId} · ${r.status === 'payment_due' ? ('Cần đóng thêm') : ('Hoàn cọc dự kiến')} ${formatVnd(r.status === 'payment_due' ? (r.amountDueFromCustomer ?? 0) : r.netRefundAmount)}`, page: 'rental-records', targetId: r.rentalId }))),
     ...(isApiAuthenticated() ? [] : myTickets).flatMap(ticket => {
       const latestStaffMessage = [...ticket.messages].reverse().find(message => message.role === 'staff')
       const notificationTitle = ticket.status === 'resolved'
@@ -1144,6 +1196,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   ].sort((a, b) => notificationTimestamp(b.date) - notificationTimestamp(a.date))
 
   useEffect(() => {
+    if (isApiAuthenticated()) return
     myHolds.forEach(hold => {
       const emailExpired = hold.status === 'awaiting_email' && hold.emailVerification && new Date(hold.emailVerification.expiresAt).getTime() <= now
       const reviewExpired = hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING' && hold.goodsReviewDueAt && new Date(hold.goodsReviewDueAt).getTime() <= now
@@ -1155,6 +1208,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [now, myHolds, expireReservation])
 
   useEffect(() => {
+    if (isApiAuthenticated()) return
     visibleMyHolds
       .filter(hold => ['CANCELLED', 'EXPIRED'].includes(hold.status))
       .forEach(hold => {
@@ -1163,6 +1217,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [archiveReservationHistory, user, visibleMyHolds])
 
   useEffect(() => {
+    if (isApiAuthenticated()) return
     visibleMyRentals
       .filter(rental => rental.status === 'completed' && myReturns.some(returnCase => returnCase.rentalId === rental.id && returnCase.status === 'completed'))
       .forEach(rental => {
@@ -1185,6 +1240,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingReview(false)
     setServerQuote(null)
     setServerCompatibility(null)
+    setServerRecommendation(null)
+    setRecommendationLoading(false)
+    setRecommendationError(null)
     reservationIdempotencyKey.current = null
     setValidationViolation(null)
     setBookingErrors({})
@@ -1232,10 +1290,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingReview(false)
     setServerQuote(null)
     setServerCompatibility(null)
+    setServerRecommendation(null)
+    setRecommendationLoading(false)
+    setRecommendationError(null)
     reservationIdempotencyKey.current = crypto.randomUUID()
     setBookingErrors({})
     setSelectedTarget({ facility, unitType })
     const sizeCode = storageSizeCode(unitType.name)
+    const backendSpec = backendUnitTypes.find(item => item.id === unitType.id)
     const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
     const unitRentalPackages = isApiAuthenticated()
       ? []
@@ -1273,14 +1335,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       type: unitType.name.split(' ')[0] as any,
       areaM2: unitType.areaM2,
       dimensions: { lengthM: unitType.lengthM, widthM: unitType.widthM, heightM: unitType.heightM },
-      doorDimensions: { widthM: 1.1, heightM: 2.2 },
+      doorDimensions: isApiAuthenticated() ? { widthM: 0, heightM: 0 } : { widthM: 1.1, heightM: 2.2 },
       volumeM3: unitType.volumeM3,
       maxLoadKg: unitType.maxLoadKg,
-      allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
-      prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+      allowedGoods: isApiAuthenticated() ? [] : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
+      prohibitedGoods: isApiAuthenticated() ? [] : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
       price: unitType.monthlyPrice,
-      deposit: unitType.monthlyPrice,
-      climate: true,
+      deposit: isApiAuthenticated() ? backendSpec?.securityDepositAmount ?? 0 : unitType.monthlyPrice,
+      climate: isApiAuthenticated() ? facility.climate : true,
       status: 'available',
       rentalPackages: unitRentalPackages,
       reservedPeriods: [],
@@ -1294,6 +1356,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const handleOpenSpecs = (facility: Facility, unitType: UnitType, availableCount: number, exactUnit?: StorageUnit) => {
     setSelectedTarget({ facility, unitType })
     const sizeCode = storageSizeCode(unitType.name)
+    const backendSpec = backendUnitTypes.find(item => item.id === unitType.id)
     const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
     const unitRentalPackages = isApiAuthenticated()
       ? []
@@ -1308,14 +1371,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       type: unitType.name.split(' ')[0] as any,
       areaM2: unitType.areaM2,
       dimensions: { lengthM: unitType.lengthM, widthM: unitType.widthM, heightM: unitType.heightM },
-      doorDimensions: { widthM: 1.1, heightM: 2.2 },
+      doorDimensions: isApiAuthenticated() ? { widthM: 0, heightM: 0 } : { widthM: 1.1, heightM: 2.2 },
       volumeM3: unitType.volumeM3,
       maxLoadKg: unitType.maxLoadKg,
-      allowedGoods: ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
-      prohibitedGoods: ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
+      allowedGoods: isApiAuthenticated() ? [] : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
+      prohibitedGoods: isApiAuthenticated() ? [] : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
       price: unitType.monthlyPrice,
-      deposit: unitType.monthlyPrice,
-      climate: true,
+      deposit: isApiAuthenticated() ? backendSpec?.securityDepositAmount ?? 0 : unitType.monthlyPrice,
+      climate: isApiAuthenticated() ? facility.climate : true,
       status: availableCount > 0 ? 'available' : 'reserved',
       rentalPackages: unitRentalPackages,
       reservedPeriods: [],
@@ -1388,9 +1451,47 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const selectedRackCount = selectedBackendUnitType?.rackCount ?? selectedCatalogUnit?.rackCount ?? 0
   const selectedRackDimensions: [number, number, number] = selectedBackendUnitType
     ? [selectedBackendUnitType.rackLengthM, selectedBackendUnitType.rackWidthM, selectedBackendUnitType.rackHeightM]
-    : [4, 2, 4.5]
+    : isApiAuthenticated() ? [0, 0, 0] : [4, 2, 4.5]
   const selectedUsableRackVolumeM3 = usableRackVolumeM3(selectedRackDimensions) * selectedRackCount
   const allPackageSamplesValid = capacitySamples.length > 0 && capacitySamples.every(isPackageSampleValid)
+  const recommendationFormReady = allPackageSamplesValid
+    && Boolean(goodsCondition.trim())
+    && goodsItems.every(item => {
+      const category = catalogCategoryFor(item.category)
+      return Boolean(item.category && item.description.trim()
+        && (category?.custom ? item.customGoodsName.trim() && item.customMaterial.trim() : item.materialName.trim()))
+    })
+  useEffect(() => {
+    if (!isApiAuthenticated() || !bookOpen || !selectedTarget || !recommendationFormReady || !recommendationInput) {
+      setRecommendationLoading(false)
+      setServerRecommendation(null)
+      setRecommendationError(null)
+      return
+    }
+    let cancelled = false
+    setRecommendationLoading(true)
+    setRecommendationError(null)
+    const timer = window.setTimeout(() => {
+      void recommendReservationUnitType(recommendationInput)
+        .then(result => {
+          if (cancelled) return
+          setServerRecommendation(result)
+          setRecommendationError(null)
+        })
+        .catch(error => {
+          if (cancelled) return
+          setServerRecommendation(null)
+          setRecommendationError(error instanceof Error && error.message.trim()
+            ? error.message
+            : 'Không thể kiểm tra kho phù hợp lúc này.')
+        })
+        .finally(() => { if (!cancelled) setRecommendationLoading(false) })
+    }, 350)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [bookOpen, selectedTarget?.facility.id, selectedTarget?.unitType.id, recommendationFormReady, recommendationInput, recommendationRetry])
   const packageCapacityResults = allPackageSamplesValid ? capacitySamples.map(sample => {
     const capacityPerFrame = selectedUnit ? packageCapacityPerRack(sample, selectedRackDimensions) : 0
     return {
@@ -1403,7 +1504,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const totalFramesRequired = hasUnplaceablePackage
     ? Number.POSITIVE_INFINITY
     : requiredRackCountForSamples(capacitySamples, selectedRackDimensions)
-  const warehouseRecommendation = allPackageSamplesValid
+  const localWarehouseRecommendation = allPackageSamplesValid && !isApiAuthenticated()
     ? backendUnitTypes
       .filter(candidate => !selectedTarget || candidate.facilityId === selectedTarget.facility.id)
       .filter(candidate => (availabilityByUnitType[candidate.id] ?? candidate.availableCount ?? 0) > 0)
@@ -1417,9 +1518,23 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         return framesRequired <= candidate.rackCount && goodsWeightNumber <= candidate.maxLoadKg
       })
     : undefined
+  const serverRecommendedUnitType = serverRecommendation?.recommendedUnitTypeId
+    ? backendUnitTypes.find(candidate => candidate.id === serverRecommendation.recommendedUnitTypeId)
+    : undefined
+  const warehouseRecommendation = allPackageSamplesValid
+    ? isApiAuthenticated() ? serverRecommendedUnitType : localWarehouseRecommendation
+    : undefined
   const recommendedUnitType = warehouseRecommendation
     ? unitTypes.find(candidate => candidate.id === warehouseRecommendation.id)
     : undefined
+  const selectedUnitTypeIncompatible = Boolean(
+    isApiAuthenticated()
+      && selectedTarget?.unitType.id
+      && serverRecommendation?.incompatibleUnitTypeIds.includes(selectedTarget.unitType.id),
+  )
+  const recommendationNeedsReview = Boolean(
+    isApiAuthenticated() && serverRecommendation?.result === 'REVIEW_REQUIRED',
+  )
   const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
   const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
 
@@ -1658,26 +1773,92 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
     const endDate = addMonthsForPreview(earliestCheckInDate, rentalMonths)
     if (endDate === '—') return
-    const apiGoodsItems: GoodsItemInput[] = goodsItems.map(item => {
-      const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
-      const selectedGoodsCategory = catalogCategoryFor(item.category)
-      return {
-        catalogCategoryId: selectedGoodsCategory?.id,
-        catalogMaterialId: selectedGoodsCategory?.materials.find(material => material.label === item.materialName)?.id || null,
-        category: selectedGoodsCategory?.reservationCategory || item.category as GoodsCategory,
-        customGoodsName: item.customGoodsName.trim() || null,
-        materialName: item.materialName.trim() || null,
-        customMaterial: item.customMaterial.trim() || null,
-        description: item.description.trim() || null,
-        customerNote: item.customerNote.trim() || null,
-        quantity,
-        lengthCm: Number(item.lengthCm) || cargoLengthNumber,
-        widthCm: Number(item.widthCm) || cargoWidthNumber,
-        heightCm: Number(item.heightCm) || cargoHeightNumber,
-        weightPerItemKg: Number(item.weightKg) || Math.max(0.01, goodsWeightNumber / quantity),
-        fragile: item.fragile ? item.fragile === 'yes' : item.materialType === 'FRAGILE',
+
+    if (!isApiAuthenticated()) {
+      const primaryItem = goodsItems[0]
+      const legacyGoods = {
+        category: primaryItem?.category || '',
+        packageCount: packageCountNumber,
+        lengthCm: cargoLengthNumber,
+        widthCm: cargoWidthNumber,
+        heightCm: cargoHeightNumber,
+        weightKg: goodsWeightNumber,
+        dimWeightKg: dimensionalWeightKg(capacitySamples),
+        material: primaryItem?.materialName || primaryItem?.customMaterial || '',
+        condition: goodsCondition,
+        fragile: goodsItems.some(item => item.fragile === 'yes' || item.materialType === 'FRAGILE'),
+        notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | '),
+        items: goodsItems.map(item => ({
+          id: item.id,
+          category: item.category,
+          materialType: item.materialType,
+          materialName: item.materialName,
+          customGoodsName: item.customGoodsName,
+          description: item.description,
+          customMaterial: item.customMaterial,
+          quantity: Number(item.quantity) || 1,
+          dimensions: {
+            lengthCm: Number(item.lengthCm) || cargoLengthNumber,
+            widthCm: Number(item.widthCm) || cargoWidthNumber,
+            heightCm: Number(item.heightCm) || cargoHeightNumber,
+          },
+          weightKg: Number(item.weightKg) || goodsWeightNumber,
+          fragile: item.fragile === 'yes' || item.materialType === 'FRAGILE',
+          customerNote: item.customerNote,
+        })),
       }
-    })
+      setReservationSubmitting(true)
+      try {
+        const result = validateAndCreateReservation({
+          customer: user,
+          unitTypeId: selectedTarget.unitType.id,
+          facilityId: selectedTarget.facility.id,
+          goods: legacyGoods,
+          rentalMonths,
+          moveInDate: earliestCheckInDate,
+          identityId: customerIdCard.trim(),
+          customerPhone: customerPhone.trim(),
+          customerAddress: customerAddress.trim(),
+          appointmentTime: bookingAppointmentTime,
+          largestItemDimensionsCm: {
+            lengthCm: cargoLengthNumber,
+            widthCm: cargoWidthNumber,
+            heightCm: cargoHeightNumber,
+          },
+          capacityValidatedByFrames: packagesFitSelectedUnit,
+          customerCatalogUnit: selectedCatalogUnit ? {
+            id: selectedCatalogUnit.id,
+            facilityName: selectedCatalogUnit.facilityName,
+            doorWidthM: selectedCatalogUnit.doorDimensions.widthM,
+            doorHeightM: selectedCatalogUnit.doorDimensions.heightM,
+            physicalUnitId: selectedCatalogUnit.id,
+          } : undefined,
+          packageId: selectedActivePackage?.id,
+          packageName: selectedActivePackage?.name,
+          packagePrice: selectedActivePackage?.packagePrice,
+          freeSetupDays: selectedActivePackage?.freeSetupDays,
+        })
+        if (result.outcome === 'HARD_VIOLATION') {
+          setValidationViolation({
+            reason: result.rejectionReason,
+            suggestedUnitTypeId: result.suggestedUnitTypeId,
+            suggestedUnitTypeName: result.suggestedUnitTypeName,
+            suggestedVolumeM3: result.suggestedVolumeM3,
+          })
+          showToast(result.messageVi)
+          return
+        }
+        resetBookingForm()
+        setBookOpen(false)
+        setSelectedUnit(null)
+        setPage('reservations')
+        showToast(result.messageVi)
+      } finally {
+        setReservationSubmitting(false)
+      }
+      return
+    }
+
     const selection = {
       facilityId: selectedTarget.facility.id,
       unitTypeId: selectedTarget.unitType.id,
@@ -1693,7 +1874,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         const compatibility = await checkCompatibility(selection)
         setServerCompatibility(compatibility)
         if (compatibility.result === 'INCOMPATIBLE' || compatibility.availableUnitCount <= 0) {
-          setValidationViolation({ reason: compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.' })
+          const recommendation = isApiAuthenticated() && recommendationInput
+            ? await recommendReservationUnitType(recommendationInput).catch(() => null)
+            : null
+          if (recommendation) setServerRecommendation(recommendation)
+          const suggestedType = recommendation?.recommendedUnitTypeId
+            ? backendUnitTypes.find(item => item.id === recommendation.recommendedUnitTypeId)
+            : undefined
+          setValidationViolation({
+            reason: compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.',
+            suggestedUnitTypeId: suggestedType?.id,
+            suggestedUnitTypeName: suggestedType?.name,
+            suggestedVolumeM3: suggestedType?.volumeM3,
+          })
           showToast(compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.')
           return
         }
@@ -1707,6 +1900,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           voucherCode: bookingVoucherCode.trim() || undefined,
         })
         setServerQuote(quote)
+        setTermsAccepted(false)
         setValidationViolation(null)
         setBookingReview(true)
         setBookingStep(3)
@@ -1726,6 +1920,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         appointmentAt: bookingAppointmentTime
           ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`).toISOString()
           : undefined,
+        acceptedTerms: termsAccepted,
       }, idempotencyKey)
       let goodsImageError = ''
       const imageCount = goodsItems.reduce((total, item) => total + item.images.length, 0)
@@ -1826,7 +2021,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   useEffect(() => {
-    if (!isApiAuthenticated() || !['browse-units', 'reservations'].includes(page)) return
+    if (!isApiAuthenticated() || !['browse-units', 'reservations', 'contracts'].includes(page)) return
     const refresh = () => { void refreshBackendReservations().catch(error => showToast(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái đơn.')) }
     refresh()
     const timer = window.setInterval(refresh, 30_000)
@@ -2055,24 +2250,23 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               const displayCode = display?.code ?? facility.id.toUpperCase()
               const displayName = display?.name ?? facility.name
               const displayAddress = display?.address ?? facility.address
+              const facilityImage = facility.image
+                ? (facility.image.startsWith('/') || facility.image.startsWith('http') || facility.image.startsWith('data:')
+                  ? facility.image
+                  : `https://images.unsplash.com/${facility.image}?w=720&h=352&fit=crop&auto=format`)
+                : null
 
               return (
                 <Card key={facility.id} className="overflow-hidden stat-card-hover">
                   <div className="relative h-44 bg-stone-200">
-                    <img
-                      src={
-                        facility.image?.startsWith('/') || facility.image?.startsWith('http') || facility.image?.startsWith('data:')
-                          ? facility.image
-                          : facility.image
-                          ? `https://images.unsplash.com/${facility.image}?w=720&h=352&fit=crop&auto=format`
-                          : '/images/facilities/binh-duong.jpg'
-                      }
+                    {facilityImage ? <img
+                      src={facilityImage}
                       alt={`Hình ảnh ${displayName}`}
                       className="h-full w-full object-cover"
                       onError={e => {
-                        (e.currentTarget as HTMLImageElement).src = '/images/facilities/binh-duong.jpg'
+                        if (!isApiAuthenticated()) (e.currentTarget as HTMLImageElement).src = '/images/facilities/binh-duong.jpg'
                       }}
-                    />
+                    /> : <div className="flex h-full items-center justify-center px-4 text-center text-sm text-stone-500">Chưa có hình ảnh cơ sở</div>}
                     <div className="absolute left-3 top-3 z-10">
                       <span className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-extrabold backdrop-blur-sm ${availCount > 0 ? 'border-emerald-300 bg-emerald-700/95 text-white shadow-[0_8px_22px_rgba(4,120,87,0.55)]' : 'border-red-300 bg-red-700/95 text-white shadow-[0_8px_22px_rgba(185,28,28,0.5)]'}`}>
                         {availCount} {'gian kho còn trống'}
@@ -2089,8 +2283,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {facility.rating > 0 && <span className="text-sm font-semibold text-amber-700">Đánh giá: {facility.rating}</span>}
                     </div>
                     <div className="my-4 flex flex-wrap gap-2">
-                      <Badge variant="muted">{'Camera 24/7'}</Badge>
+                      {!isApiAuthenticated() && <Badge variant="muted">{'Camera 24/7'}</Badge>}
                       {facility.climate && <Badge variant="info">{'Điều hòa độ ẩm'}</Badge>}
+                      {isApiAuthenticated() && facility.security && <Badge variant="muted">{facility.security}</Badge>}
                     </div>
                     <div className="flex items-end justify-between border-t border-stone-100 pt-4">
                       <div>
@@ -2688,9 +2883,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           {'Hợp đồng thuê'}
                         </Button>
 
-                        {rental.status === 'active' && (
+                        {['setup', 'active'].includes(rental.status) && (
                           <>
-                            <Button
+                            {rental.status === 'active' && <Button
                               variant="outline"
                               size="sm"
                               disabled={!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status))}
@@ -2703,7 +2898,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               }}
                             >
                                {!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status)) ? ('Đang xử lý gia hạn') : ('Yêu cầu gia hạn')}
-                            </Button>
+                            </Button>}
                             <Button
                               variant="outline"
                               size="sm"
@@ -2718,6 +2913,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                                {'Yêu cầu trả kho'}
                             </Button>
                           </>
+                        )}
+                        {rental.status === 'setup' && (
+                          <Badge variant="warning">Đang setup miễn phí</Badge>
                         )}
                         {rental.status === 'return_requested' && (
                           <Badge variant="warning">{'Đã gửi yêu cầu trả kho'}</Badge>
@@ -2893,7 +3091,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         </div>
       )}
 
-      {page === 'contracts' && <div className="fade-in space-y-4">
+      {page === 'contracts' && isApiAuthenticated() && <div className="fade-in space-y-4">
+        <SectionHeader title="Hợp đồng của tôi" subtitle="Hồ sơ hợp đồng và văn bản bàn giao được lưu theo reservation trên hệ thống." />
+        <Card className="space-y-4 p-5 text-sm text-stone-700">
+          <p>Hợp đồng ký và văn bản bàn giao không lấy từ dữ liệu demo. Hãy mở từng hồ sơ đặt kho để xem hoặc tải phiếu xác nhận, văn bản bàn giao và bằng chứng đã lưu trên backend.</p>
+          {backendReservations.length > 0 ? <div className="space-y-2">{backendReservations.map(reservation => <div key={reservation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3"><div><p className="font-bold text-stone-900">{reservation.reservationCode}</p><p className="text-xs text-stone-600">{reservation.startDate} → {reservation.endDate} · {reservation.status}</p></div><Button size="sm" variant="outline" onClick={() => { setPage('reservations'); window.setTimeout(() => revealNotificationTarget(reservation.id), 0) }}>Mở hồ sơ</Button></div>)}</div> : <p className="rounded-lg border border-dashed border-stone-300 p-4 text-stone-500">Chưa có reservation từ backend.</p>}
+        </Card>
+      </div>}
+      {page === 'contracts' && !isApiAuthenticated() && <div className="fade-in space-y-4">
         <SectionHeader title={'Hợp đồng của tôi'} subtitle={'Bản scan hợp đồng giấy đã ký tại cơ sở'} />
         <div className="flex flex-wrap gap-2" aria-label="Lọc hợp đồng">{([['all', 'Tất cả'], ['active', 'Còn hiệu lực'], ['completed', 'Đã kết thúc']] as const).map(([value, label]) => <Button key={value} size="sm" variant={contractFilter === value ? 'primary' : 'outline'} onClick={() => setContractFilter(value)}>{label}</Button>)}</div>
         <Card className="p-4 text-sm text-stone-700"><p className="font-bold">Các điều khoản áp dụng cùng hợp đồng giấy</p><p className="mt-2">Cọc giữ chỗ theo báo giá được trừ vào tiền thuê. Mã xác minh có hiệu lực 10 phút. Sau khi xác minh, hoặc sau khi hàng “Khác” được duyệt, thời hạn thanh toán là 15 phút. Hồ sơ hàng hóa cần duyệt được xử lý theo thứ tự đến trước. Khách đến sớm chỉ được nhận kho sau khi nhân viên xác minh danh tính, hợp đồng, thanh toán và hiện trạng. Khi trả kho, hai bên đối chiếu biên bản, ảnh và từng khoản phí. Khách có quyền yêu cầu xem xét lại trước khi quyết toán. Tiền cọc đảm bảo kho còn lại được hoàn theo chứng từ giao dịch, sau khi trừ công nợ và phí phát sinh đã xác nhận.</p></Card>
@@ -2995,11 +3200,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       >
         {selectedUnit && (() => {
           const backendSpec = backendUnitTypes.find(item => item.id === selectedTarget?.unitType.id)
-          if (isApiAuthenticated() && backendSpec && selectedTarget) return <CustomerUnitDetails
-            unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
-            availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
-            rentalPackages={backendRentalPackages}
-            onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
+          if (isApiAuthenticated() && selectedTarget) {
+            if (!backendSpec) return <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Không tìm thấy thông tin loại kho từ Backend. Vui lòng tải lại dữ liệu trước khi tiếp tục.</div>
+            return <CustomerUnitDetails
+              unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
+              availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
+              rentalPackages={backendRentalPackages}
+              allowDefaultImage={false}
+              isUserSelected
+              onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
+          }
           const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
 
           return (
@@ -3349,13 +3559,21 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             </div>
 
+            {allPackageSamplesValid && isApiAuthenticated() && recommendationLoading && (
+              <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                Đang kiểm tra dữ liệu kho, kích thước, tải trọng và kỳ thuê trên hệ thống…
+              </div>
+            )}
             {allPackageSamplesValid && warehouseRecommendation && (
-              <div className={`rounded-xl border p-4 text-sm ${warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
+              <div className={`rounded-xl border p-4 text-sm ${selectedUnitTypeIncompatible ? 'border-red-300 bg-red-50 text-red-950' : warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-bold">Gợi ý kho phù hợp theo số lượng và kích thước đã nhập</p>
+                    <p className="font-bold">{isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho — cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
                     <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
-                    {warehouseRecommendation.id === selectedTarget?.unitType.id && <p className="mt-1 text-xs font-semibold">Cỡ kho bạn đang chọn đã phù hợp.</p>}
+                    {selectedUnitTypeIncompatible && <p className="mt-1 text-xs font-semibold text-red-800">Kho bạn tự chọn không còn phù hợp với hàng hóa hoặc không còn chỗ trong kỳ thuê này.</p>}
+                    {warehouseRecommendation.id === selectedTarget?.unitType.id
+                      ? <p className="mt-1 text-xs font-semibold">Kho bạn đang chọn cũng chính là kho hệ thống đề xuất.</p>
+                      : <p className="mt-1 text-xs">Kho hiện tại là lựa chọn của bạn; kho trên là lựa chọn hệ thống đề xuất.</p>}
                   </div>
                   {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && (
                     <Button
@@ -3373,7 +3591,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </div>
               </div>
             )}
-            {allPackageSamplesValid && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900"><b>Chưa có cỡ kho còn trống phù hợp</b><p className="mt-1 text-xs">Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.</p></div>}
+            {allPackageSamplesValid && isApiAuthenticated() && recommendationFormReady && !recommendationLoading && recommendationError && (
+              <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <b>Không thể kiểm tra kho phù hợp</b>
+                <p className="mt-1 text-xs">{recommendationError}</p>
+                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setRecommendationRetry(value => value + 1)}>
+                  Thử lại
+                </Button>
+              </div>
+            )}
+            {allPackageSamplesValid && (!isApiAuthenticated() || recommendationFormReady) && !recommendationLoading && !recommendationError && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900"><b>Chưa có cỡ kho còn trống phù hợp</b><p className="mt-1 text-xs">{isApiAuthenticated() ? (serverRecommendation?.issues.join(' ') || 'Dữ liệu hàng hóa không phù hợp với các loại kho đang còn chỗ tại cơ sở này.') : 'Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.'}</p></div>}
 
             {/* Check-in schedule is intentionally placed after goods declaration because OTHER goods add a review stage. */}
             </>}
@@ -3463,11 +3690,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       <Button
                         size="sm"
                         onClick={() => {
-                          const targetTypePrefix = validationViolation.suggestedUnitTypeName?.split(' ')[0] || ''
-                          const upgradeType = unitTypes.find(
-                            ut => ut.id === validationViolation.suggestedUnitTypeId ||
-                                  ut.name.toLowerCase().includes(targetTypePrefix.toLowerCase())
-                          )
+                          const upgradeType = validationViolation.suggestedUnitTypeId
+                            ? unitTypes.find(ut => ut.id === validationViolation.suggestedUnitTypeId)
+                            : undefined
                           if (upgradeType && selectedTarget) {
                             handleStartReservation(selectedTarget.facility, upgradeType, undefined, 2)
                             setValidationViolation(null)
@@ -3488,6 +3713,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
 
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={serverQuote} needsReview={hasOtherGoods} />}
+            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá, ngày setup miễn phí, phí chấm dứt sớm và cách tính lại ưu đãi nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
             {bookingStep === 3 && bookingReview && !isApiAuthenticated() && (() => {
               const totalValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
               const deposit = Math.round(totalValue * 0.2 * 100) / 100
@@ -3571,8 +3797,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {reservationSubmitting ? 'Đang lập báo giá...' : 'Kiểm tra và lấy báo giá'}
                 </Button>
               )}
-              {bookingStep === 3 && <Button onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
-              {bookingStep === 4 && <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
+              {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
+              {bookingStep === 4 && <Button disabled={reservationSubmitting || !termsAccepted} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
         )}
