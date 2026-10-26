@@ -12,7 +12,7 @@ export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning =
 }
 
 export const rentalLabels: Record<string, string> = {
-  setup: "Đang setup miễn phí",
+  setup: "Đang chuẩn bị",
   active: "Đang hiệu lực",
   return_requested: "Đã yêu cầu trả kho",
   return_inspection: "Đang kiểm tra trả kho",
@@ -22,12 +22,12 @@ export const rentalLabels: Record<string, string> = {
 export const renewalLabels: Record<string, string> = {
   pending: "Hệ thống đang kiểm tra điều kiện",
   accepted: "Đã xác nhận, thanh toán chưa mở",
-  deposit_paid: "Đã thanh toán cọc gia hạn",
-  full_rent_paid: "Đã thanh toán toàn kỳ gia hạn",
+  deposit_paid: "Chờ ký gia hạn",
+  full_rent_paid: "Chờ ký gia hạn",
   approved: "Đã mở thanh toán (hồ sơ cũ)",
   appointment_scheduled: "Đã hẹn",
-  payment_processing: "Đang xử lý thanh toán",
-  payment_failed: "Thanh toán thất bại",
+  payment_processing: "Chờ kết quả thanh toán",
+  payment_failed: "Chờ thanh toán lại",
   payment_expired: "Hết hạn thanh toán",
   rejected: "Đã đóng (hồ sơ cũ)",
   cancelled: "Đã hủy",
@@ -75,7 +75,7 @@ export function rentalError(error: unknown) {
       ["Eligibility UNKNOWN", "Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau, nếu vẫn gặp lỗi, liên hệ quản lý cơ sở."],
       ["Eligibility/cutoff missing", "Chưa có dữ liệu xác định hạn xử lý gia hạn. Vui lòng tải lại sau."],
       ["Unverified date provenance/cutoff", "Ngày hết hạn hoặc mốc xử lý của hồ sơ chưa được xác minh. Vui lòng liên hệ quản lý cơ sở để kiểm tra hồ sơ."],
-      ["BO renewal policy missing", "Cơ sở chưa công bố chính sách gia hạn đang có hiệu lực. Vui lòng liên hệ quản lý cơ sở."],
+      ["BO renewal policy missing", "Chưa tải được các gói gia hạn của cơ sở. Vui lòng thử lại."],
       ["Incomplete BO policy", "Chính sách gia hạn của cơ sở còn thiếu thông tin bắt buộc. Vui lòng liên hệ quản lý cơ sở."],
       ["Rental date provenance is unknown", "Chưa xác minh được ngày thuê của hồ sơ nên chưa thể tính kỳ gia hạn. Vui lòng liên hệ quản lý cơ sở."],
       ["Rental date provenance unknown", "Chưa xác minh được ngày thuê của hồ sơ nên chưa thể tính kỳ gia hạn. Vui lòng liên hệ quản lý cơ sở."],

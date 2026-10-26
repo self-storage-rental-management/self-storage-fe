@@ -8,6 +8,8 @@
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "statuses:generate": "node scripts/generate-status-contracts.mjs",
+    "statuses:check": "node scripts/generate-status-contracts.mjs --check",
     "preview": "vite preview",
     "format": "oxfmt"
   },

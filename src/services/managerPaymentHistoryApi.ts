@@ -1,5 +1,6 @@
 import { ApiClientError, apiRequest } from "./apiClient"
 import { isUuid } from "./renewalOperationsApi"
+import { isRenewalTransactionStatus } from '../types/renewalStatus'
 import type {
   ManagerPaymentHistoryItem,
   ManagerPaymentHistoryPage,

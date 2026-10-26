@@ -6,6 +6,7 @@ const responseCase = {
   checkInId: 'checkin-1',
   checkInStatus: 'scheduled',
   reservationId: 'reservation-1',
+  reservationStatus: 'READY_FOR_CHECKIN',
 }
 
 function mockEnvelope(data: unknown) {

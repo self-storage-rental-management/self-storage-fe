@@ -152,7 +152,8 @@ function stepForCheckIn(item: CheckInCase) {
     case "identity_verified": return 2
     case "contract_signed": return 3
     case "payment_collected": return 4
-    case "setup_in_progress": return 5
+    case "setup_in_progress":
+      return item.setupDueAt && new Date(item.setupDueAt).getTime() <= Date.now() ? 6 : 5
     case "setup_completed": return 6
     case "completed": return 6
     default: return 1
@@ -244,6 +245,10 @@ export default function StaffCheckInOperationsPanel({
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
 
   const [contractFile, setContractFile] = useState<File | null>(null)
+  const [confirmedSetupTerms, setConfirmedSetupTerms] = useState<string | null>(null)
+  const setupTermsKey = handoverTarget?.setupEarlyExitPolicyVersion
+    ? JSON.stringify([handoverTarget.checkInId, handoverTarget.setupEarlyExitPolicyVersion, handoverTarget.setupEarlyExitFee])
+    : null
 
   const [paymentEvidenceFile, setPaymentEvidenceFile] = useState<File | null>(null)
 
@@ -578,6 +583,7 @@ export default function StaffCheckInOperationsPanel({
       })
 
       setContractFile(null)
+      setConfirmedSetupTerms(null)
 
       setPaymentEvidenceFile(null)
 
@@ -609,8 +615,11 @@ export default function StaffCheckInOperationsPanel({
         setChecklist((current) => ({ ...current, identityVerified: true, reservationMatched: true }))
       } else if (handoverStep === 2) {
         if (!contractFile) return
+        if (setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null)) {
+          throw new Error('Cần đối chiếu điều khoản phí trả kho trong setup trong hợp đồng đã ký trước khi tiếp tục.')
+        }
         const asset = await uploadCheckInEvidence(handoverTarget.checkInId, contractFile)
-        updated = await signCheckInContract(handoverTarget.checkInId, asset.id)
+        updated = await signCheckInContract(handoverTarget.checkInId, asset.id, handoverTarget.setupEarlyExitPolicyVersion)
         setChecklist((current) => ({ ...current, contractVerified: true }))
       } else if (handoverStep === 3) {
         const due = handoverTarget.dueAtCheckIn ?? 0
@@ -767,6 +776,7 @@ export default function StaffCheckInOperationsPanel({
     setEvidenceFiles([])
 
     setContractFile(null)
+    setConfirmedSetupTerms(null)
 
     setPaymentEvidenceFile(null)
 
@@ -1146,8 +1156,12 @@ export default function StaffCheckInOperationsPanel({
                   </div>
                 ) : (
                   <>
-                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh) *<input disabled={isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setContractFile(event.target.files?.[0] || null)} /></label>
-                    <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => setContractFile(null)} disabled={submitting || isReviewingCompletedStep} />
+                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => { setContractFile(event.target.files?.[0] || null); setConfirmedSetupTerms(null) }} /></label>
+                    <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => { setContractFile(null); setConfirmedSetupTerms(null) }} disabled={submitting || isReviewingCompletedStep} />
+                    {setupTermsKey && <label className="flex items-start gap-2 text-sm text-blue-950">
+                      <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
+                      <span>Đã đối chiếu hợp đồng đã ký có điều khoản phí trả kho trong setup một lần {handoverTarget.setupEarlyExitFee == null ? '(chưa xác định, cần đối soát)' : `${handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng`}, đúng điều khoản khách đã chấp nhận khi đặt kho.</span>
+                    </label>}
                   </>
                 )}
                 {handoverTarget.contractSignedAt && <p className="text-xs text-stone-600">Đã ký lúc: <b>{formatStaffDateTime(handoverTarget.contractSignedAt)}</b></p>}
@@ -1223,7 +1237,7 @@ export default function StaffCheckInOperationsPanel({
               ) : handoverStep < 6 ? (
                 <Button disabled={submitting ||
                   (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
-                  (handoverStep === 2 && !contractFile) ||
+                  (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
                   (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
                   (handoverStep === 4 && !keyLockReference.trim())
                 } onClick={() => void submitWorkflowStep()}>{submitting ? "Đang lưu…" : handoverStep === 5 ? "Khách đã setup xong" : "Xác nhận và tiếp tục"}</Button>

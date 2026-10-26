@@ -1,5 +1,6 @@
+import type { RentalStatus, PaymentStatus } from './statusContracts'
 export type RentalApiRole = "customer" | "manager" | "staff"
-export type RentalApiStatus = "setup" | "active" | "return_requested" | "return_inspection" | "closing" | "completed"
+export type RentalApiStatus = RentalStatus
 export interface RentalApiPage<T> {
   data: T[]
   pagination: {
@@ -89,7 +90,7 @@ export interface RentalBookingEvidence {
   payments: {
     id: string
     purpose: "RESERVATION_DEPOSIT" | "RENTAL_BALANCE" | "MONTHLY_RENT" | "RENEWAL" | "DAMAGE_FEE" | "OTHER"
-    status: "PENDING" | "PROCESSING" | "PAID" | "NOT_RECEIVED" | "FAILED" | "CANCELLED"
+    status: PaymentStatus
     amount: number
     processedAt: string | null
     verification: "SIMULATED" | "UNVERIFIED" | "VERIFIED" | "SANDBOX" | "DISPUTED" | "ATTEMPT"
