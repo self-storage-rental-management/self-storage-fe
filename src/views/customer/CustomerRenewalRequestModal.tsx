@@ -29,13 +29,15 @@ export default function CustomerRenewalRequestModal({
   rentalId: string
   revision?: RenewalApiRecord
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (record?: RenewalApiRecord) => void
   onNavigateToRenewals?: () => void
 }) {
   const options = useRentalApiResource(`${actorId}:${rentalId}:options`, () =>
     getRenewalOptions(rentalId),
   )
   const [code, setCode] = useState("")
+  const [fullPayment, setFullPayment] = useState(true)
+  const [startDate, setStartDate] = useState("")
   const note = ""
   const [quote, setQuote] = useState<RenewalApiQuote>()
   const [quoteError, setQuoteError] = useState<unknown>()
@@ -55,7 +57,7 @@ export default function CustomerRenewalRequestModal({
     setQuoteError(undefined)
     setConfirmed(false)
     setQuoteBusy(true)
-    void quoteRenewal(rentalId, code)
+    void quoteRenewal(rentalId, code, fullPayment, startDate || undefined)
       .then((nextQuote) => {
         if (current) {
           setQuote(nextQuote)
@@ -71,7 +73,7 @@ export default function CustomerRenewalRequestModal({
     return () => {
       current = false
     }
-  }, [code, rentalId])
+  }, [code, rentalId, fullPayment, startDate])
   const locked = command.busy || command.uncertain || quoteBusy
   return (
     <Modal
@@ -85,31 +87,125 @@ export default function CustomerRenewalRequestModal({
       <div className="space-y-4">
         <RenewalRiskNotice rentalId={rentalId} />
         <ApiReadState {...options} retry={options.refresh} />
+
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-950">
+          <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-sm">
+            <span>✓</span> Tiền cọc đảm bảo hợp đồng (Security Deposit)
+          </div>
+          <p className="mt-1 leading-relaxed text-emerald-900">
+            Khoản tiền cọc bạn đã nộp khi bắt đầu hợp đồng thuê ban đầu vẫn được lưu giữ trong hệ thống và sẽ <b>tiếp tục được bảo lưu chuyển tiếp</b> sang kỳ mới. Quý khách <b>không cần nộp thêm tiền cọc</b> khi gia hạn.
+          </p>
+        </div>
+
         {options.data && (
-          <label className="block">
-            Gói gia hạn
-            <select
-              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2"
-              value={code}
-              disabled={locked}
-              onChange={(e) => {
-                setCode(e.target.value)
-                setQuote(undefined)
-                setConfirmed(false)
-              }}
-            >
-              <option value="">Chọn gói gia hạn</option>
-              {options.data.map((o) => (
-                <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
-                  {o.pricingPackageName?.trim() || `Gói thuê ${o.rentalMonths} tháng`}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-semibold text-stone-900">Gói gia hạn</span>
+              <select
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                value={code}
+                disabled={locked}
+                onChange={(e) => {
+                  setCode(e.target.value)
+                  setQuote(undefined)
+                  setConfirmed(false)
+                }}
+              >
+                <option value="">Chọn gói gia hạn</option>
+                {options.data.map((o) => (
+                  <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
+                    {o.pricingPackageName?.trim() || `Gói thuê ${o.rentalMonths} tháng`}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-semibold text-stone-900">Ngày bắt đầu gia hạn</span>
+              <input
+                type="date"
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                value={startDate || quote?.extensionStartDate || ""}
+                disabled={locked}
+                onChange={(e) => {
+                  setStartDate(e.target.value)
+                  setQuote(undefined)
+                  setConfirmed(false)
+                }}
+              />
+              <span className="mt-1 block text-[11px] text-stone-500">
+                {startDate
+                  ? `Bắt đầu từ ${rentalDate(startDate)}.`
+                  : "Mặc định nối tiếp sau ngày kết thúc hiện tại."}
+              </span>
+            </label>
+          </div>
         )}
         {options.data?.length === 0 && (
           <p>Không có dữ liệu</p>
         )}
+
+        {options.data && options.data.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-stone-900">Hình thức thanh toán tiền thuê</label>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <label
+                className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition ${
+                  fullPayment
+                    ? "border-amber-600 bg-amber-50/60 ring-1 ring-amber-600"
+                    : "border-stone-200 bg-white hover:bg-stone-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renewalPaymentOption"
+                  className="mt-0.5 h-4 w-4 accent-amber-600"
+                  checked={fullPayment}
+                  disabled={locked}
+                  onChange={() => {
+                    setFullPayment(true)
+                    setQuote(undefined)
+                    setConfirmed(false)
+                  }}
+                />
+                <div>
+                  <p className="font-bold text-stone-900">Thanh toán 100% (Một lần)</p>
+                  <p className="mt-0.5 leading-snug text-stone-600">
+                    Thanh toán toàn bộ kỳ thuê qua VNPay, hợp đồng tự động gia hạn thành công ngay.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition ${
+                  !fullPayment
+                    ? "border-amber-600 bg-amber-50/60 ring-1 ring-amber-600"
+                    : "border-stone-200 bg-white hover:bg-stone-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renewalPaymentOption"
+                  className="mt-0.5 h-4 w-4 accent-amber-600"
+                  checked={!fullPayment}
+                  disabled={locked}
+                  onChange={() => {
+                    setFullPayment(false)
+                    setQuote(undefined)
+                    setConfirmed(false)
+                  }}
+                />
+                <div>
+                  <p className="font-bold text-stone-900">Chia 2 đợt thanh toán</p>
+                  <p className="mt-0.5 leading-snug text-stone-600">
+                    Trả trước 20% để giữ chỗ kỳ mới, 80% còn lại thanh toán khi ký phụ lục.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
         {quoteBusy ? <p role="status">Đang lấy báo giá…</p> : null}
         {quoteError ? <p role="alert">{rentalError(quoteError)}</p> : null}
         {quote && (
@@ -129,9 +225,33 @@ export default function CustomerRenewalRequestModal({
                     valueClassName="text-emerald-700"
                   />
                 )}
-                <QuoteLine label="Tổng thanh toán" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
-                <QuoteLine label="Cọc gia hạn trả trước" value={rentalMoney(quote.renewalDepositAmount, quote.currency)} />
-                <QuoteLine label="Tiền thuê còn lại khi ký" value={rentalMoney(quote.remainingRentalAmount, quote.currency)} />
+                <QuoteLine label="Tổng tiền thuê kỳ mới" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
+                {fullPayment || quote.remainingRentalAmount === 0 ? (
+                  <>
+                    <QuoteLine
+                      label="Thanh toán ngay qua VNPay (100%)"
+                      value={rentalMoney(quote.totalAfterDiscount, quote.currency)}
+                      valueClassName="font-bold text-amber-700"
+                    />
+                    <QuoteLine
+                      label="Tiền thuê còn lại khi ký"
+                      value="0 đ (Đã thanh toán đủ)"
+                      valueClassName="text-emerald-700"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <QuoteLine
+                      label="Thanh toán đợt 1 (Trả trước 20%)"
+                      value={rentalMoney(quote.renewalDepositAmount, quote.currency)}
+                      valueClassName="font-bold text-amber-700"
+                    />
+                    <QuoteLine
+                      label="Thanh toán đợt 2 (80% còn lại khi ký)"
+                      value={rentalMoney(quote.remainingRentalAmount, quote.currency)}
+                    />
+                  </>
+                )}
               </div>
             </div>
           </section>
@@ -185,7 +305,7 @@ export default function CustomerRenewalRequestModal({
                       key,
                     )
                   : submitRenewal(rentalId, quote.id, note, key),
-              onSuccess,
+              (created) => onSuccess(created as RenewalApiRecord),
             )
           }}
         >
@@ -197,7 +317,7 @@ export default function CustomerRenewalRequestModal({
         </Button>
         {command.error && !command.uncertain ? (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={onSuccess}>
+            <Button variant="outline" onClick={() => onSuccess()}>
               Đóng và tải lại hồ sơ
             </Button>
             {onNavigateToRenewals && (

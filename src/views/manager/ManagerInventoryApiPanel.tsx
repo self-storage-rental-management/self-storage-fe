@@ -45,6 +45,7 @@ import {
 } from "./managerInventoryApi"
 import { archiveManagerUnitType, createManagerUnitType, updateManagerUnitType } from "../../services/managerUnitTypeApi"
 import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
+import { generateUnitTypeCode, previewPhysicalUnitCodes } from "./managerUnitCodeHelpers"
 import ManagerGoodsCatalogPanel from "./ManagerGoodsCatalogPanel"
 import { getManagerGoodsCatalog } from "../../services/managerGoodsCatalogApi"
 import type { GoodsCatalog } from "../../services/customerReservationApi"
@@ -56,6 +57,8 @@ const statusLabels: Record<InventoryUnit["status"], string> = {
   assigned: "Đã phân gian",
   held: "Đang giữ tạm thời",
   maintenance: "Đang bảo trì",
+  inactive: "Tạm ngưng",
+  archived: "Đã lưu trữ",
 }
 const statusClasses: Record<InventoryUnit["status"], string> = {
   available: "bg-green-100 text-green-700",
@@ -64,6 +67,8 @@ const statusClasses: Record<InventoryUnit["status"], string> = {
   assigned: "bg-violet-50 text-violet-700",
   held: "bg-amber-50 text-amber-800",
   maintenance: "bg-red-50 text-red-700",
+  inactive: "bg-stone-100 text-stone-700",
+  archived: "bg-stone-200 text-stone-600",
 }
 const inputClass =
   "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -217,7 +222,7 @@ function InventoryRead({
                 <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
                 <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '—'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
                 <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
-                <div><dt className="text-xs text-stone-500">Tiền duy trì cơ sở vật chất</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
+                <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo kho</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
               </dl>
             </div> : <p className="p-4 text-sm text-stone-500">Đang tải thông tin chi tiết loại kho...</p>}
           </article>
@@ -237,10 +242,27 @@ function InventoryRead({
           </div>
         )}
       </Card>
+      <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} />
       <ManagerGoodsCatalogPanel />
-      <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
+      <CreateUnitTypeModal
+        open={createOpen}
+        facilityId={facilityId}
+        existingCodes={read.data.catalog.map(c => c.code)}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => { setCreateOpen(false); read.refresh() }}
+      />
       {reviewNotice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{reviewNotice}</p>}
-      {editingType && <CreateUnitTypeModal key={editingType.id} open facilityId={facilityId} initial={editingType} onClose={() => setEditingType(undefined)} onCreated={() => { setEditingType(undefined); setReviewNotice('Đã gửi thay đổi để quản lý vận hành duyệt. Khách hàng vẫn thấy thông tin đã được duyệt trước đó.'); read.refresh() }} />}
+      {editingType && (
+        <CreateUnitTypeModal
+          key={editingType.id}
+          open
+          facilityId={facilityId}
+          initial={editingType}
+          existingCodes={read.data.catalog.map(c => c.code)}
+          onClose={() => setEditingType(undefined)}
+          onCreated={() => { setEditingType(undefined); setReviewNotice('Đã lưu thay đổi loại kho và cập nhật số lượng gian kho thành công.'); read.refresh() }}
+        />
+      )}
       <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Lưu trữ loại kho">
         <div className="space-y-4"><p>Chuyển loại kho <b>{deletingType?.name}</b> sang trạng thái lưu trữ? Dữ liệu lịch sử và các đơn đặt chỗ cũ vẫn được giữ nguyên.</p>
           {actionError && <p role="alert" className="text-sm text-red-700">{actionError}</p>}
@@ -261,9 +283,10 @@ function InventoryRead({
   )
 }
 
-function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: {
+function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, onCreated, initial }: {
   open: boolean
   facilityId: string
+  existingCodes?: string[]
   onClose: () => void
   onCreated: () => void
   initial?: CustomerUnitType & { floor?: string; zone?: string }
@@ -276,6 +299,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     ...(initial ? Object.fromEntries(Object.entries(initial).filter(([key]) => ['code', 'name', 'description', 'lengthM', 'widthM', 'heightM', 'maxLoadKg', 'rackCount', 'rackLengthM', 'rackWidthM', 'rackHeightM', 'aisleWidthM', 'trolleyType', 'smallBoxCapacity', 'largeBoxCapacity', 'floor', 'zone', 'imageUrl'].includes(key)).map(([key, value]) => [key, value == null ? '' : String(value)])) : {}),
     ...(initial ? { physicalUnitCount: String(initial.totalCount ?? 0) } : {}),
   })
+  const [isAutoCode, setIsAutoCode] = useState(!initial)
   const [busy, setBusy] = useState(false)
   const [imageReading, setImageReading] = useState(false)
   const [error, setError] = useState<string>()
@@ -290,14 +314,47 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     getManagerGoodsCatalog().then(setGoodsCatalog).catch(cause => setError(managerDisplayError(cause)))
   }, [open, initial?.id])
 
+  const handleNameChange = (newName: string) => {
+    setForm(current => {
+      const next = { ...current, name: newName }
+      if (isAutoCode && !initial) {
+        next.code = newName.trim() ? generateUnitTypeCode(newName, existingCodes) : ''
+      }
+      return next
+    })
+  }
+
+  const toggleAutoCode = () => {
+    if (isAutoCode) {
+      setIsAutoCode(false)
+    } else {
+      setIsAutoCode(true)
+      const nextCode = form.name.trim() ? generateUnitTypeCode(form.name, existingCodes) : ''
+      setForm(current => ({ ...current, code: nextCode }))
+    }
+  }
+
+  const isDuplicateCode = useMemo(() => {
+    const code = form.code.trim().toUpperCase()
+    if (!code) return false
+    return existingCodes.some(
+      c => c.trim().toUpperCase() === code && (!initial || c.trim().toUpperCase() !== initial.code.trim().toUpperCase())
+    )
+  }, [form.code, existingCodes, initial])
 
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
-      <input className={`${inputClass} mt-1 disabled:bg-stone-100`} disabled={busy || (!!initial && ['code', 'physicalUnitCount', 'floor', 'zone'].includes(key))} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
+      <input
+        className={`${inputClass} mt-1 disabled:bg-stone-100`}
+        disabled={busy || (!!initial && key === 'code')}
+        type={type}
+        value={form[key]}
+        onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))}
+      />
     </label>
   )
   const submit = async () => {
-    if (imageReading) return
+    if (imageReading || isDuplicateCode) return
     setBusy(true); setError(undefined)
     try {
       const input = {
@@ -324,7 +381,81 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     <div className="space-y-5">
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Thông tin loại kho</h3>
-        <div className="grid gap-4 sm:grid-cols-2">{initial ? field('code', 'Mã loại kho') : <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600"><b>Mã loại kho</b><p className="mt-1">Được hệ thống tự tạo và không thay đổi về sau.</p></div>}{field('name', 'Tên loại kho')}</div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Tên loại kho */}
+          <label className="block text-sm font-medium text-stone-700">
+            Tên loại kho *
+            <input
+              className={`${inputClass} mt-1`}
+              disabled={busy}
+              type="text"
+              placeholder="VD: Kho Đồ Gia Đình, Kho Mini..."
+              value={form.name}
+              onChange={event => handleNameChange(event.target.value)}
+            />
+          </label>
+
+          {/* Mã loại kho (Phương án 2) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5">
+                <label className="text-sm font-medium text-stone-700">Mã loại kho *</label>
+                {isAutoCode && !initial && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    <svg className="w-2.5 h-2.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Tự động tạo
+                  </span>
+                )}
+              </div>
+
+              {!initial && (
+                <button
+                  type="button"
+                  onClick={toggleAutoCode}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:text-amber-900 transition-colors cursor-pointer"
+                  title={isAutoCode ? "Mở khóa để sửa mã thủ công" : "Khóa để tự động sinh mã theo tên loại kho"}
+                >
+                  {isAutoCode ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-stone-500 hover:text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <span>Sửa tay</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span className="text-emerald-700 font-semibold">Tự động</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            <input
+              type="text"
+              readOnly={isAutoCode || !!initial}
+              disabled={busy}
+              className={`${inputClass} font-mono font-bold uppercase ${
+                isAutoCode || !!initial
+                  ? 'border-stone-300 bg-stone-100 text-stone-700 cursor-not-allowed select-all'
+                  : isDuplicateCode || !form.code.trim()
+                    ? 'border-red-400 bg-red-50/40 text-red-900 focus:ring-red-500'
+                    : 'border-stone-300 bg-white text-stone-900 focus:ring-amber-500'
+              }`}
+              placeholder={isAutoCode ? "Tự động sinh khi nhập tên (VD: KDGD-T01)" : "VD: VIP-01, MINI-A"}
+              value={form.code}
+              onChange={event => setForm(current => ({ ...current, code: event.target.value.toUpperCase() }))}
+            />
+            {isDuplicateCode && (
+              <p className="mt-1 text-xs text-red-600 font-medium">⚠️ Mã loại kho này đã tồn tại trong cơ sở.</p>
+            )}
+          </div>
+        </div>
         <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
           <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
         </label>
@@ -352,7 +483,74 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Số lượng và vị trí gian kho</h3>
-        <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {field('physicalUnitCount', 'Số gian kho', 'number')}
+          {field('floor', 'Tầng')}
+          {field('zone', 'Khu vực')}
+        </div>
+
+        {/* Preview mã gian kho vật lý (Cách B) */}
+        {!initial ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-950 space-y-2">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-900">
+              <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <span>Quy tắc sinh mã gian kho vật lý (Chuẩn Tòa nhà / Khách sạn):</span>
+            </div>
+            <p className="text-stone-600">
+              Định dạng: <span className="font-semibold font-mono text-stone-800">[Khu vực]-[Tầng][Số thứ tự]</span>
+              {' '}(VD: Khu A, Tầng 1 → <span className="font-mono font-semibold text-amber-800">A-101, A-102...</span>)
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/60 font-mono">
+              <span className="font-semibold text-stone-700 font-sans">Mã gian kho sinh ra:</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded bg-white border border-amber-300 font-bold text-amber-800 shadow-xs">
+                {previewPhysicalUnitCodes(form.zone, form.floor, Number(form.physicalUnitCount) || 1)}
+              </span>
+              <span className="text-xs text-stone-500 font-sans">
+                ({Number(form.physicalUnitCount) || 1} gian kho vật lý tự động tạo sẵn)
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-3.5 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-stone-800 flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Điều chỉnh số lượng gian kho:
+              </span>
+              <span className="text-stone-500">
+                Hiện có: <b className="text-stone-800">{initial.totalCount ?? 0}</b> gian
+              </span>
+            </div>
+            {(() => {
+              const current = initial.totalCount ?? 0
+              const target = Math.max(0, Number(form.physicalUnitCount) || 0)
+              const diff = target - current
+              if (diff > 0) {
+                return (
+                  <p className="text-emerald-700 font-medium">
+                    Tăng thêm <b>+{diff}</b> gian kho vật lý mới (tổng thành <b>{target}</b> gian). Hệ thống tự sinh mã mới và bỏ qua mọi mã đã từng tồn tại, kể cả mã của gian đã lưu trữ.
+                  </p>
+                )
+              }
+              if (diff < 0) {
+                return (
+                  <p className="text-amber-700 font-medium">
+                    Giảm <b>{Math.abs(diff)}</b> gian kho trống (từ <b>{current}</b> xuống <b>{target}</b> gian). Các gian được chuyển sang trạng thái Đã lưu trữ, không bị xóa và mã cũ không được tái sử dụng.
+                  </p>
+                )
+              }
+              return (
+                <p className="text-stone-600">
+                  Số lượng gian kho giữ nguyên (<b>{current}</b> gian). Bạn có thể thay đổi số lượng ở ô trên để thêm hoặc giảm gian kho.
+                </p>
+              )
+            })()}
+          </div>
+        )}
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-3">
         <div><h3 className="font-semibold text-stone-900">Loại hàng được nhận</h3><p className="mt-1 text-sm text-stone-500">Chọn loại hàng trước, sau đó chọn các vật liệu được phép lưu trong loại kho này. Thay đổi phạm vi này cần BO xác nhận lại giá.</p></div>
@@ -369,7 +567,7 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         })}
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.name.trim() || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Gửi BO duyệt' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim() || isDuplicateCode || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
@@ -424,6 +622,7 @@ export function InventoryContent({
   ].sort((a, b) => a.localeCompare(b, "vi", { numeric: true }))
   const count = (status: InventoryUnit["status"]) =>
     units.filter((u) => u.status === status).length
+  const operationalCount = units.filter((u) => u.status !== "inactive" && u.status !== "archived").length
   const occupied = count("occupied")
   const change = (patch: Partial<InventoryFilters>) => {
     setFilters((f) => ({ ...f, ...patch }))
@@ -455,7 +654,7 @@ export function InventoryContent({
   return (
     <>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <StatCard title="Tổng số gian" value={units.length} icon={Icon.box} />
+        <StatCard title="Tổng số gian" value={operationalCount} icon={Icon.box} />
         <StatCard
           title="Còn trống"
           value={count("available")}
@@ -492,6 +691,8 @@ export function InventoryContent({
             ["allocated", "Đã phân gian / giữ chỗ"],
             ["held", statusLabels.held],
             ["maintenance", statusLabels.maintenance],
+            ["inactive", statusLabels.inactive],
+            ["archived", statusLabels.archived],
           ])}
           {filter("Loại gian kho", "type", [
             ["all", "Tất cả loại gian kho"],

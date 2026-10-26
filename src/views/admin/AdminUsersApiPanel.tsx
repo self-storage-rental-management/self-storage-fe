@@ -18,6 +18,7 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
+import { clearAuthTokens } from '../../services/apiClient'
 import type { Role, User } from '../../types'
 import {
   createAdminUser,
@@ -679,7 +680,10 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       {error && (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <span>{error}</span>
-          <Button variant="outline" size="sm" onClick={() => setRefreshKey(v => v + 1)}>
+          <Button variant="outline" size="sm" onClick={() => {
+            clearAuthTokens()
+            setRefreshKey(v => v + 1)
+          }}>
             Thử lại
           </Button>
         </div>
