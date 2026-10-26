@@ -67,6 +67,8 @@ export interface CheckInCase {
   rejectionDisposition: 'AVAILABLE' | 'MAINTENANCE' | null
   performedBy: string | null
   performedByName: string | null
+  assignedStaff: string | null
+  assignedStaffName: string | null
   reservationId: string
   reservationCode: string
   reservationStatus: CheckInReservationStatus
@@ -237,6 +239,7 @@ export async function scheduleCheckIn(
     contractVerified: boolean
     paymentVerified: boolean
     note: string
+    assignedStaffId?: string
   },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
@@ -383,7 +386,7 @@ export async function recordCredentialAccessEvent(
     throw new Error('Thông tin log truy cập không hợp lệ.')
   }
   return assertCredentialAccessEventEnvelope(await apiRequest<unknown>(
-    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access`,
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access-events`,
     { method: 'POST', body: JSON.stringify({ eventType, note: note?.trim() || undefined }) },
   ))
 }
@@ -401,7 +404,7 @@ export async function recordCredentialAccess(credentialId: string, request: {
   accessedAt?: string
 } = {}) {
   const payload = await apiRequest<unknown>(
-    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access-events`,
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access`,
     { method: 'POST', body: JSON.stringify(request) },
   )
   if (!payload || typeof payload !== 'object' || !('data' in payload) ||

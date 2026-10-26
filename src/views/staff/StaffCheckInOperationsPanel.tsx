@@ -1374,6 +1374,9 @@ export default function StaffCheckInOperationsPanel({
                 {detailTarget.performedByName ||
                   detailTarget.performedBy ||
                   "nhân viên cơ sở"}
+                {detailTarget.assignedStaffName && (
+                  <> · Phụ trách: {detailTarget.assignedStaffName}</>
+                )}
               </p>
             </div>
             <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 sm:grid-cols-3">
