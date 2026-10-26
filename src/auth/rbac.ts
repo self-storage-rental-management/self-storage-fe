@@ -63,7 +63,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read',
     'reservations:approve', 'storage_units:assign', 'contracts:read', 'checkins:read', 'rentals:read', 'rentals:update',
     'returns:read', 'payments:read', 'payments:confirm', 'payments:collect', 'refunds:approve', 'fees:waive',
-    'support:read', 'support:update', 'inventory:update', 'policies:read', 'staff_tasks:update', 'reports:read'
+    'support:read', 'inventory:update', 'policies:read', 'staff_tasks:update', 'reports:read'
   ),
   business: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',

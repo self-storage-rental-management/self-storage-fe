@@ -852,7 +852,7 @@ export default function StaffApp({
       permission: "returns:read",
     },
 
-    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
 
     {
       id: "support",
