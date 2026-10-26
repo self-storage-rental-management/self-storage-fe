@@ -300,6 +300,7 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
         <div className="mt-2 space-y-3 text-xs text-stone-600">
           <div>
             <p className="font-semibold text-stone-800">Bạn cần hoàn tất ký trước: {rentalDate(s.effectiveSigningDeadline)}</p>
+            <p>Đổi lịch ký không tự kéo dài hạn hoàn tất này.</p>
             <p className="mt-1">Vui lòng đến cơ sở, thanh toán phần còn lại và ký hợp đồng trước thời điểm này. Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ. Kỳ thuê mới chỉ được xác nhận khi hoàn tất thủ tục.</p>
           </div>
           {s.originalSigningDeadline && s.originalSigningDeadline !== s.effectiveSigningDeadline && <p>Hạn hoàn tất trước khi được điều chỉnh: {rentalDate(s.originalSigningDeadline)}</p>}

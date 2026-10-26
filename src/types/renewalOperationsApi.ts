@@ -99,7 +99,7 @@ export type RenewalOperationCommand = {
   body: Version & {
     identityVerified?: true
     arrivalRef: string
-    signedDocumentFileId?: string
+    signedDocumentFileId: string
     completionNote?: string
     expectedEffectiveStartDate?: string
   }

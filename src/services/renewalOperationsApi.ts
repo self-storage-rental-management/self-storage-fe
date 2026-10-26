@@ -486,6 +486,8 @@ export async function sendRenewalOperation(
   }
   if (command.action === "completion" && command.body.identityVerified !== undefined && command.body.identityVerified !== true)
     throw new Error("Cần xác minh danh tính.")
+  if (command.action === "completion" && !isUuid(command.body.signedDocumentFileId))
+    throw new Error("Cần upload hợp đồng gia hạn đã ký trước khi hoàn tất.")
   const [role, method, route] = routes[command.action]
   const result = readRentalEnvelope<RenewalOperationResult>(
     await apiRequest(`${path(role, id)}/${route}`, {

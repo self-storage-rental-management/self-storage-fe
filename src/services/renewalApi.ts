@@ -1,5 +1,6 @@
 import { apiRequest } from "./apiClient"
 import { isRenewalStatusSummary, isRenewalTransactionStatus } from '../types/renewalStatus'
+import { isRenewalStatus, isPaymentStatus } from '../types/statusContracts'
 import { readRentalEnvelope, readRentalPage, rentalQuery } from "./rentalApi"
 import type { RentalApiRole } from "../types/rentalApi"
 import type {
@@ -27,6 +28,7 @@ function isAcceptedTerms(value: unknown): value is AcceptedTerms {
     t.renewalDepositAmount, t.remainingRentalAmount]
   return validPeriodMetadata(t) && money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
     typeof t.discountRate === "number" && Number.isFinite(t.discountRate) && t.discountRate >= 0 && t.discountRate <= 1 &&
+    (t.signingWindowDays == null || (Number.isInteger(t.signingWindowDays) && t.signingWindowDays >= 1 && t.signingWindowDays <= 14)) &&
     Number.isInteger(t.rentalMonths) && t.rentalMonths > 0 &&
     [t.unitTypeId, t.storageUnitId, t.facilityId, t.pricingPackageCode, t.packagePolicyRef,
       t.packagePolicyVersion, t.renewalPolicyRef, t.renewalPolicyVersion, t.currency]
@@ -53,20 +55,7 @@ export function isRenewalRecord(value: unknown): boolean {
     !!r.facility?.id &&
     !!r.customer?.id &&
     !!r.storageUnit?.id &&
-    [
-      "pending",
-      "accepted",
-      "deposit_paid",
-      "full_rent_paid",
-      "approved",
-      "appointment_scheduled",
-      "payment_processing",
-      "payment_failed",
-      "payment_expired",
-      "rejected",
-      "cancelled",
-      "completed",
-    ].includes(r.status) &&
+    isRenewalStatus(r.status) &&
     ["READY", "AWAITING_CUSTOMER_CONFIRMATION", "UNKNOWN"].includes(
       r.reviewState,
     ) &&
@@ -144,6 +133,7 @@ export async function getRenewalOptions(rentalId: string) {
         (o) =>
           typeof o?.pricingPackageCode === "string" &&
             (o.pricingPackageName === undefined || o.pricingPackageName === null || typeof o.pricingPackageName === "string") &&
+          (o.signingWindowDays == null || (Number.isInteger(o.signingWindowDays) && o.signingWindowDays >= 1 && o.signingWindowDays <= 14)) &&
           Number.isInteger(o.rentalMonths) &&
           o.rentalMonths > 0,
       ),
@@ -266,7 +256,7 @@ function isRenewalPaymentResponse(value: unknown,renewalId: string): value is Re
     &&result.currency==="VND"
     &&(result.transactionStatus===undefined||isRenewalTransactionStatus(result.transactionStatus))
     &&(result.receiptAvailable===undefined||typeof result.receiptAvailable==='boolean')
-    &&["PENDING","PROCESSING","PAID","NOT_RECEIVED","FAILED","CANCELLED"].includes(result.paymentStatus)
+    &&isPaymentStatus(result.paymentStatus)
     &&(result.paymentDeadline===null||Number.isFinite(Date.parse(result.paymentDeadline)))
     &&(result.paidAt===null||Number.isFinite(Date.parse(result.paidAt)))
     &&typeof result.reconciliationRequired==="boolean"&&typeof result.message==="string"
