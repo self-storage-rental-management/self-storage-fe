@@ -67,7 +67,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsState = {
   ),
   business: makePermissions(
     'dashboard:read', 'facilities:read', 'storage_units:read', 'reservations:read', 'contracts:read',
-    'rentals:read', 'returns:read', 'payments:read', 'refunds:approve', 'refunds:execute', 'fees:waive', 'reports:read', 'support:read', 'policies:read', 'policies:update'
+    'rentals:read', 'returns:read', 'payments:read', 'refunds:approve', 'fees:waive', 'reports:read', 'support:read', 'policies:read', 'policies:update'
   ),
   admin: makePermissions('dashboard:read', 'users:manage', 'roles:manage', 'settings:manage', 'audit_logs:read', 'sessions:manage'),
 }
@@ -102,18 +102,24 @@ export const normalizeRolePermissions = (value: unknown): RolePermissionsState =
   normalized.manager['checkins:process'] = false
   normalized.manager['returns:process'] = false
   normalized.manager['refunds:execute'] = false
-  normalized.manager['support:update'] = true
+  normalized.manager['renewals:operate'] = false
+  normalized.manager['support:update'] = false
   normalized.business['policies:read'] = true
   normalized.business['policies:update'] = true
   normalized.business['returns:read'] = true
   normalized.business['returns:process'] = false
+  normalized.business['refunds:execute'] = false
   normalized.business['rentals:update'] = false
   normalized.business['settings:manage'] = false
   normalized.business['payments:collect'] = false
+  normalized.business['payments:confirm'] = false
   normalized.business['reservations:approve'] = false
   normalized.business['checkins:process'] = false
   normalized.business['storage_units:assign'] = false
   normalized.business['support:update'] = false
+  normalized.business['renewals:operate'] = false
+  normalized.business['inventory:update'] = false
+  normalized.business['staff_tasks:update'] = false
   normalized.admin = { ...DEFAULT_ROLE_PERMISSIONS.admin }
   return normalized
 }

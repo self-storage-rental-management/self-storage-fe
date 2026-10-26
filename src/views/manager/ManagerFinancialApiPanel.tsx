@@ -11,13 +11,17 @@ import ApiPager from '../rental-api/ApiPager'
 import { loadManagerPaymentHistory, managerApiIdentity, requireManagerRead } from './managerD1D5Api'
 import { managerDisplayError } from './managerPresentation'
 import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
+import { requestVnpayRefund } from '../../services/vnpayRefundApi'
+import { ApiClientError } from '../../services/apiClient'
 
 const typeLabels: Record<ManagerPaymentHistoryType, string> = {
   RESERVATION_DEPOSIT: 'Cọc giữ chỗ',
   RENTAL_BALANCE: 'Nhận kho',
   MONTHLY_RENT: 'Tiền thuê',
   RENEWAL: 'Gia hạn',
+  RENEWAL_INSTALLMENT: 'Đợt thanh toán gia hạn',
   DAMAGE_FEE: 'Phí phát sinh',
+  EARLY_TERMINATION_FEE: 'Phí chấm dứt sớm',
   OTHER: 'Khoản thu khác',
   RETURN_REFUND: 'Hoàn cọc',
   RETURN_SETTLEMENT: 'Quyết toán',
@@ -82,6 +86,11 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [receipt, setReceipt] = useState<ManagerPaymentHistoryItem>()
+  const [refundTarget, setRefundTarget] = useState<ManagerPaymentHistoryItem>()
+  const [refundAmount, setRefundAmount] = useState('')
+  const [refundReason, setRefundReason] = useState('')
+  const [refundBusy, setRefundBusy] = useState(false)
+  const [refundFeedback, setRefundFeedback] = useState('')
   const identity = managerApiIdentity(actor)
   const read = useRentalApiResource(`${identity}:payment-history:${facilityId}:${page}:${search}`, () =>
     loadManagerPaymentHistory(actor, { facilityId, page, size: 10, search }))
@@ -97,6 +106,25 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
     setDraft('')
     setSearch('')
     setPage(0)
+  }
+
+  async function submitRefund(event: FormEvent) {
+    event.preventDefault()
+    if (!refundTarget) return
+    setRefundBusy(true)
+    setRefundFeedback('')
+    try {
+      await requestVnpayRefund(refundTarget.id, Number(refundAmount), refundReason)
+      setRefundFeedback('Đã gửi yêu cầu hoàn tiền VNPay. Nếu vượt hạn mức Manager, hồ sơ đã được chuyển sang Business duyệt.')
+      setRefundTarget(undefined)
+      setRefundAmount('')
+      setRefundReason('')
+      read.refresh()
+    } catch (error) {
+      setRefundFeedback(error instanceof ApiClientError ? error.message : error instanceof Error ? error.message : 'Không thể gửi yêu cầu hoàn tiền.')
+    } finally {
+      setRefundBusy(false)
+    }
   }
 
   return <div className="mx-auto w-full max-w-[1600px] space-y-4">
@@ -164,6 +192,9 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
             <Td className="text-center"><span className="inline-flex whitespace-nowrap"><Badge variant={statusVariants[item.status]}>{statusLabels[item.status]}</Badge></span></Td>
             <Td><PaymentTime value={item.occurredAt} /></Td>
             <Td className="text-center">
+              {item.paymentMethod === 'VNPAY' && item.status === 'PAID' && <Button type="button" size="sm" variant="outline" className="mb-2 whitespace-nowrap" onClick={() => { setRefundTarget(item); setRefundAmount(String(Math.max(0, item.amount - item.refundedAmount))); setRefundReason('Hoàn tiền theo quyết toán hồ sơ thuê.') }}>
+                Hoàn VNPay
+              </Button>}
               {item.receiptFileId
                 ? <EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" previewOnly />
                 : ['PAID', 'REFUNDED'].includes(item.status)
@@ -194,6 +225,15 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
               ['Số tiền', money(receipt.amount, receipt.currency)], ['Tiền tệ', receipt.currency],
               ['Thời điểm ghi nhận', new Date(receipt.occurredAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })],
             ]} footer="Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở." />}
+    </Modal>}
+    {refundTarget && <Modal open title="Hoàn tiền qua VNPay" size="lg" onClose={() => { if (!refundBusy) setRefundTarget(undefined) }}>
+      <form onSubmit={submitRefund} className="space-y-4">
+        <p className="text-sm text-stone-600">Payment <span className="font-mono">{refundTarget.id}</span> · Số tiền gốc {money(refundTarget.amount, refundTarget.currency)} · Đã hoàn {money(refundTarget.refundedAmount, refundTarget.currency)}</p>
+        <label className="block text-sm font-medium text-stone-700">Số tiền hoàn<input required type="number" min="1" step="1" max={Math.max(0, refundTarget.amount - refundTarget.refundedAmount)} value={refundAmount} onChange={event => setRefundAmount(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" /></label>
+        <label className="block text-sm font-medium text-stone-700">Lý do<textarea required maxLength={1000} rows={3} value={refundReason} onChange={event => setRefundReason(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" /></label>
+        {refundFeedback && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{refundFeedback}</p>}
+        <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={refundBusy} onClick={() => setRefundTarget(undefined)}>Hủy</Button><Button type="submit" disabled={refundBusy}>{refundBusy ? 'Đang gửi…' : 'Gửi hoàn tiền'}</Button></div>
+      </form>
     </Modal>}
   </div>
 }

@@ -828,7 +828,7 @@ setSavingProfile(true)
     .filter(([permission]) => user.permissions?.includes(permission))
     .map(([, label]) => label)
   const userRentals = rentals.filter(item => item.customerId === user.id || item.customerEmail === user.email)
-  const activeRentals = userRentals.filter(item => ['active', 'return_requested'].includes(item.status))
+  const activeRentals = userRentals.filter(item => ['setup', 'active', 'return_requested'].includes(item.status))
   const assignedTasks = staffTasks.filter(item => item.assignedStaffId === user.id || item.facilityId === user.facilityId)
   const openTasks = assignedTasks.filter(item => ['open', 'in_progress'].includes(item.status))
   const openApiTasks = apiMaintenanceTasks.filter(item => ['open', 'in_progress'].includes(item.status))
@@ -914,7 +914,7 @@ setSavingProfile(true)
                         {unitTypeName && <p className="text-xs text-stone-600 font-normal">{unitTypeName}</p>}
                       </div>
                       <Badge variant={rental.status === 'active' ? 'success' : 'warning'}>
-                        {rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
+                        {rental.status === 'setup' ? 'Đang setup miễn phí' : rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-stone-700">{facName}</p>

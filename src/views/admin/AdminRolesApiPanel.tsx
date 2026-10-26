@@ -14,11 +14,11 @@ type PermissionModule = 'Kho bãi & vận hành' | 'Hợp đồng & dịch vụ'
 const INTERNAL_ROLE_CODES: InternalRoleCode[] = ['ADMIN', 'MANAGER', 'STAFF', 'BUSINESS']
 const MODULES: PermissionModule[] = ['Kho bãi & vận hành', 'Hợp đồng & dịch vụ', 'Tài chính & báo cáo', 'Hỗ trợ & quản trị']
 const MANAGER_REQUIRED = new Set(['reservations:approve', 'storage_units:assign', 'rentals:update', 'policies:read', 'payments:read', 'payments:collect', 'payments:confirm', 'refunds:approve', 'fees:waive', 'staff_tasks:update', 'reports:read'])
-const MANAGER_RESTRICTED = new Set(['checkins:process', 'returns:process', 'refunds:execute', 'support:update'])
+const MANAGER_RESTRICTED = new Set(['checkins:process', 'returns:process', 'refunds:execute', 'renewals:operate', 'support:update', 'policies:update'])
 const STAFF_REQUIRED = new Set(['reservations:approve', 'checkins:process', 'returns:process', 'payments:read', 'payments:collect', 'refunds:execute', 'renewals:operate', 'support:read', 'support:update'])
 const STAFF_RESTRICTED = new Set(['storage_units:assign', 'rentals:update', 'payments:confirm', 'refunds:approve', 'fees:waive', 'policies:update', 'staff_tasks:update'])
-const BUSINESS_REQUIRED = new Set(['refunds:approve', 'refunds:execute', 'fees:waive'])
-const BUSINESS_RESTRICTED = new Set(['settings:manage', 'payments:collect', 'payments:confirm', 'reservations:approve', 'returns:process', 'rentals:update', 'checkins:process', 'storage_units:assign', 'support:update'])
+const BUSINESS_REQUIRED = new Set(['policies:read', 'policies:update', 'refunds:approve', 'fees:waive'])
+const BUSINESS_RESTRICTED = new Set(['settings:manage', 'payments:collect', 'payments:confirm', 'reservations:approve', 'returns:process', 'rentals:update', 'checkins:process', 'storage_units:assign', 'support:update', 'renewals:operate', 'refunds:execute', 'inventory:update', 'staff_tasks:update'])
 
 const roleKey = (code: InternalRoleCode) => code.toLowerCase() as Role
 const roleDescription: Record<InternalRoleCode, string> = {
