@@ -1,3 +1,4 @@
+import type { RenewalTransactionStatus } from './renewalStatus'
 export type ManagerPaymentHistoryStatus =
   | "PENDING"
   | "PROCESSING"

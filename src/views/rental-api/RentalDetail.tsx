@@ -101,6 +101,10 @@ export default function RentalDetail({
               {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Hạn kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
             </dd>
           </div>}
+          {rental.setupExitReviewRequired && <div>
+            <dt>Xử lý hủy/trả trong setup</dt>
+            <dd><Badge variant="warning">Chờ Business quyết định</Badge><p className="mt-2 text-xs leading-5 text-stone-500">{rental.moveInCompletedAt ? 'Hàng đã chuyển vào: phải dọn hàng và kiểm tra trả kho trước khi quyết toán.' : 'Hàng chưa chuyển vào: xử lý như hủy sau check-in; không cần kiểm kê hàng.'} Không tự động hoàn tiền.</p></dd>
+          </div>}
           <div>
             <dt>Giá thuê / tháng</dt>
             <dd>{rentalMoney(rental.monthlyPrice, rental.currency)}</dd>

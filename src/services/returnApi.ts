@@ -54,8 +54,27 @@ export function isOverdueSettlement(value: unknown): value is OverdueSettlement 
       && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
 }
 export interface ApiReturn {
+  setupExitRequested?: boolean
+  setupEarlyExit?: boolean
+  setupReturnedAt?: string | null
+  setupEarlyExitPolicyVersion?: string | null
+  rentalRefundCredit?: number | null
+  earlyTerminationFee?: number | null
   id: string; rentalId: string; facilityId: string; customerId: string
   facilityName: string; unitNumber: string; customerName: string
+  storageUnitId?: string
+  customerEmail?: string | null
+  customerPhone?: string | null
+  requestedAt?: string | null
+  completedAt?: string | null
+  settlementPaymentId?: string | null
+  settlementPaidAt?: string | null
+  returnedKey?: boolean
+  returnedCard?: boolean
+  returnedLock?: boolean
+  inventoryMatch?: 'match' | 'missing' | 'excess' | null
+  damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
+  settlementReceipt?: { direction: string; amount: number; paymentMethod: string; transactionReference: string; receiptFileId: string | null; recordedAt: string } | null
   status: typeof returnStatuses[number]; scheduledDate: string
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'EARLY_RETURN' | 'NORMAL'
   settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
@@ -203,6 +222,7 @@ export async function updateReturnRequest(id: string, scheduledDate: string, not
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>
 export interface InspectionInput extends ReturnFees {
+  unitVacated?: boolean
   inventoryMatch: 'match' | 'missing' | 'excess'; damageClassification: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods'
   staffNotes: string; evidencePhotos: string[]; returnedKey: boolean; returnedCard: boolean; returnedLock: boolean
   proposedUnitStatus: 'available' | 'maintenance'
@@ -262,17 +282,16 @@ export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
     || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
     throw new Error('Chọn phương thức, nhập mã giao dịch, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền.')
 }
-export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string) {
-  const a = actor('staff', true)
-  if (!a.permissions.includes('payments:collect')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
+export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string, role: ReturnRole = 'staff') {
+  const a = actor(role, true)
+  if (!a.permissions.includes('payments:collect') && !a.permissions.includes('refunds:execute')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
   if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   validateReturnSettlementReceipt(body)
-  if (a.roles.includes('STAFF') && body.paymentMethod !== 'CASH') {
-    throw new ApiClientError('Staff chỉ được ghi nhận thu tiền mặt trong phiên thu.', { status: 403 })
-  }
-  return bound(await apiRequest(`/api/staff/returns/${id}/settlement-receipts`, {
+
+  if (role === 'business') return completeRefund(id, body)
+  return bound(await apiRequest(`/api/${role}/returns/${id}/settlement-receipts`, {
     method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
-  }), 'staff', id)
+  }), role, id)
 }
 
 export interface ReturnEvidenceAsset {
@@ -296,8 +315,8 @@ function readReturnEvidenceAsset(payload: unknown): ReturnEvidenceAsset {
   }
 }
 
-export async function uploadReturnEvidence(returnId: string, file: File) {
-  actor('staff', true)
+export async function uploadReturnEvidence(returnId: string, file: File, role: ReturnRole = 'staff') {
+  actor(role, true)
   if (!isUuid(returnId)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   if (!file || file.size <= 0) throw new Error('Tệp bằng chứng không được để trống.')
   const form = new FormData()

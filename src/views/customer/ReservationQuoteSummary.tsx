@@ -12,6 +12,10 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
   const payableAmountClass = `${amountClass} text-base font-bold text-amber-700`
   const deductionAmountClass = `${amountClass} text-base font-bold text-emerald-700`
 
+  const earlyExitTerms = <p className="text-xs text-stone-600">{q.setupEarlyExitPolicyVersion && q.setupEarlyExitFee != null
+    ? <>Trả kho sớm trong setup: phí chấm dứt sớm một lần là {formatVndAmount(q.setupEarlyExitFee)} (một tháng đơn giá đã chốt), chỉ áp dụng khi trả kho; không thu khi đặt kho.</>
+    : 'Hồ sơ chưa có điều khoản trả kho sớm trong setup; cần cơ sở đối soát, không tự áp dụng phí.'}</p>
+
   if (context === 'reservation') {
     return (
       <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm">
@@ -60,6 +64,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           <div><b>Tổng nghĩa vụ tài chính</b><p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền cọc đảm bảo kho</p></div>
           <b className="text-base tabular-nums">{formatVndAmount(q.totalInitialObligation)}</b>
         </div>
+        {earlyExitTerms}
       </section>
     )
   }
@@ -193,6 +198,8 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           <span className={`${amountClass} block text-xl font-bold text-white`}>{formatVndAmount(q.totalInitialObligation)}</span>
         </div>
       </div>
+
+      {earlyExitTerms}
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}
       {context === 'quote' && <p className="text-xs text-stone-500">

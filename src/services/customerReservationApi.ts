@@ -214,6 +214,8 @@ export interface ReservationRentalPackage {
 }
 
 export interface ReservationQuote {
+  setupEarlyExitPolicyVersion?: string | null
+  setupEarlyExitFee?: number | null
   quoteId: string
   facilityId: string
   facilityName?: string | null
@@ -252,6 +254,7 @@ export interface ReservationQuote {
 }
 
 export interface CreateReservationInput {
+  acceptedSetupEarlyExitPolicyVersion?: string | null
   quoteId: string
   identityDocumentNumber: string
   customerPhone?: string | null
@@ -264,22 +267,36 @@ export interface CreateReservationInput {
 }
 
 export interface CustomerReservation {
+  setupEarlyExitPolicyVersion?: string | null
+  setupEarlyExitFee?: number | null
+  setupReturnRentalId?: string | null
+  setupReturnCaseId?: string | null
+  pricingPolicyVersion?: string | null
+  pricingSnapshotStatus?: 'COMPLETE' | 'INCOMPLETE' | null
+  pricingQuotedAt?: string | null
+  pricingExpiresAt?: string | null
+  snapshotWarnings?: string[]
+  unitTypeSnapshot?: {
+    name: string; lengthM: number; widthM: number; heightM: number; areaM2: number; volumeM3: number
+    maxLoadKg: number; rackCount: number; rackLengthM: number; rackWidthM: number; rackHeightM: number
+  } | null
   id: string
   reservationCode: string
-  quoteId: string
+  quoteId: string | null
   facilityId: string
   unitTypeId: string
+  unitTypeName?: string | null
   status: ReservationStatus
   goodsReviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
   compatibilityResult: CompatibilityResult
   startDate: string
   endDate: string
-  totalRentalAmount: number
-  reservationDepositAmount: number
-  securityDepositAmount: number
-  remainingRentalAmount: number
-  dueAtCheckIn: number
-  totalInitialObligation: number
+  totalRentalAmount: number | null
+  reservationDepositAmount: number | null
+  securityDepositAmount: number | null
+  remainingRentalAmount: number | null
+  dueAtCheckIn: number | null
+  totalInitialObligation: number | null
   pricingPackageCode?: string | null
   rentalMonths?: number
   freeSetupDays?: number
@@ -499,18 +516,18 @@ export async function createVnpayPaymentUrl(reservationId: string, idempotencyKe
 
 export async function getReservationPayment(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<ReservationPaymentResult>>(`/api/customer/reservations/${reservationId}/payment`)
-  return response.data
+  return checkedPayment(response.data)
 }
 
 export async function listReservationPayments(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<ReservationPaymentResult[]>>(
     `/api/customer/reservations/${reservationId}/payments`,
   )
-  return response.data
+  return response.data.map(checkedPayment)
 }
 
 export async function listCustomerPaymentHistory(page = 0, size = 50) {
-  return apiRequest<PageResponse<ReservationPaymentResult>>(`/api/customer/reservations/payment-history?page=${page}&size=${size}`)
+  return checkedStatusPage(await apiRequest<PageResponse<ReservationPaymentResult>>(`/api/customer/reservations/payment-history?page=${page}&size=${size}`), checkedPayment)
 }
 
 function query(params: Record<string, string | number | undefined>) {
@@ -601,27 +618,27 @@ export async function createCustomerReservation(input: CreateReservationInput, i
     headers: { 'Idempotency-Key': idempotencyKey },
     body: JSON.stringify(input),
   })
-  return response.data
+  return checkedReservation(response.data)
 }
 
 export async function listCustomerReservations(status?: ReservationStatus, page = 0, size = 20) {
-  return apiRequest<PageResponse<CustomerReservation>>(
+  return checkedStatusPage(await apiRequest<PageResponse<CustomerReservation>>(
     `/api/customer/reservations${query({ status, page, size })}`,
-  )
+  ), checkedReservation)
 }
 
 export async function getCustomerReservation(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${reservationId}`,
   )
-  return response.data
+  return checkedReservationDetail(response.data)
 }
 export async function confirmCustomerReceipt(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
     { method: 'POST' },
   )
-  return response.data
+  return checkedReservationDetail(response.data)
 }
 
 export async function updateSetupGoods(
@@ -632,7 +649,7 @@ export async function updateSetupGoods(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
     { method: 'POST', body: JSON.stringify(input) },
   )
-  return response.data
+  return checkedReservationDetail(response.data)
 }
 
 export async function setCustomerCheckInAppointment(reservationId: string, appointmentAt: string) {
@@ -640,7 +657,7 @@ export async function setCustomerCheckInAppointment(reservationId: string, appoi
     `/api/customer/reservations/${reservationId}/check-in-appointment`,
     { method: 'POST', body: JSON.stringify({ appointmentAt }) },
   )
-  return response.data
+  return checkedReservation(response.data)
 }
 
 export async function getCustomerCheckInDocuments(reservationId: string) {
@@ -663,7 +680,7 @@ export async function cancelCustomerReservation(reservationId: string, reason: s
     `/api/customer/reservations/${reservationId}/cancel`,
     { method: 'POST', body: JSON.stringify({ reason }) },
   )
-  return response.data
+  return checkedReservationDetail(response.data)
 }
 
 export async function resendReservationOtp(reservationId: string) {
@@ -671,7 +688,7 @@ export async function resendReservationOtp(reservationId: string) {
     `/api/customer/reservations/${reservationId}/email-verification/resend`,
     { method: 'POST' },
   )
-  return response.data
+  return checkedReservationState(response.data)
 }
 
 export async function verifyReservationOtp(reservationId: string, code: string) {
@@ -679,5 +696,5 @@ export async function verifyReservationOtp(reservationId: string, code: string) 
     `/api/customer/reservations/${reservationId}/email-verification`,
     { method: 'POST', body: JSON.stringify({ code }) },
   )
-  return response.data
+  return checkedReservationState(response.data)
 }

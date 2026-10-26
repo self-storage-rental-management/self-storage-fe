@@ -5,6 +5,7 @@ import { listRenewals } from "./renewalApi"
 import { listRenewalOperationEvents } from "./renewalOperationsApi"
 import { isOverdueSettlement, type OverdueSettlement } from "./returnApi"
 import { isUuid } from "./renewalOperationsApi"
+import { isRenewalTransactionStatus, renewalTransactionLabels } from '../types/renewalStatus'
 import {
   listCustomerPaymentHistory,
   type ReservationPaymentResult,
@@ -12,10 +13,10 @@ import {
 
 export const paymentCategories = {
   deposit: "Thanh toán cọc giữ chỗ",
-  renewal: "Thanh toán cọc gia hạn",
+  renewal: "Thanh toán tiền thuê gia hạn trả trước",
   damage: "Thanh toán bổ sung khi trả kho",
   refund: "Hoàn tiền trả kho",
-  returnOffset: "Khấu trừ cọc trả kho",
+  returnOffset: "Đối trừ quyết toán trả kho",
   checkin: "Thanh toán tại chỗ khi nhận kho",
   renewalSigning: "Thanh toán tại chỗ khi ký gia hạn",
   other: "Thanh toán khác",
@@ -30,6 +31,10 @@ export interface HistoryEntry {
   timestamp: string | null
   updatedAt?: string | null
   status: string
+  statusSource?: 'RENEWAL_PROJECTION'
+  receiptAvailable?: boolean
+  refundedAmount?: number | null
+  paymentReference?: string | null
   method: string | null
   reservationPayment?: ReservationPaymentResult
   renewalId?: string
@@ -37,6 +42,9 @@ export interface HistoryEntry {
   unitCode?: string
   facilityName?: string
   returnSettlement?: {
+    rentalRefundCredit?: number | null
+    earlyTerminationFee?: number | null
+    setupEarlyExit?: boolean
     depositAmount: number | null
     totalDeductions: number | null
     damageFee: number | null
@@ -47,6 +55,21 @@ export interface HistoryEntry {
     overdueSettlement: OverdueSettlement | null
     receiptFileId: string | null
   }
+}
+export function isRenewalHistoryEntry(entry: HistoryEntry): boolean {
+  return !!entry.renewalId || entry.category === 'renewal' || entry.category === 'renewalSigning'
+    || entry.reservationPayment?.purpose === 'RENEWAL'
+}
+export function customerHistoryStatusLabel(entry: HistoryEntry): string {
+  return entry.statusSource === 'RENEWAL_PROJECTION' && isRenewalTransactionStatus(entry.status)
+    ? renewalTransactionLabels[entry.status]
+    : 'Chưa đối soát'
+}
+export function canViewCustomerHistoryReceipt(entry: HistoryEntry): boolean {
+  if (isRenewalHistoryEntry(entry)) return entry.statusSource === 'RENEWAL_PROJECTION'
+    && entry.receiptAvailable === true && !!entry.renewalId
+    && ['SUCCEEDED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(entry.status)
+  return ['PAID', 'REFUNDED', 'SETTLED'].includes(entry.status)
 }
 export function reservationPaymentCategory(
   payment: ReservationPaymentResult,
@@ -78,9 +101,12 @@ export function latestPaymentRecords(entries: HistoryEntry[]): HistoryEntry[] {
     const value = entry.updatedAt || entry.timestamp
     return value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : 0
   }
+  const priority = (value: HistoryEntry) => value.statusSource === 'RENEWAL_PROJECTION' ? 2 : value.renewalId ? 1 : 0
   for (const entry of entries) {
     const existing = latest.get(entry.id)
-    if (!existing || updateTime(entry) > updateTime(existing)) latest.set(entry.id, entry)
+    // Current backend projection wins even when an old event has a later metadata timestamp.
+    if (!existing || priority(entry) > priority(existing)
+      || priority(entry) === priority(existing) && updateTime(entry) > updateTime(existing)) latest.set(entry.id, entry)
   }
   return sortPaymentHistory([...latest.values()])
 }
@@ -111,6 +137,10 @@ async function allPages<T>(
   return entries
 }
 interface ReturnPayment {
+  setupExitRequested?: boolean
+  setupEarlyExit?: boolean
+  rentalRefundCredit?: number | null
+  earlyTerminationFee?: number | null
   id: string
   customerId: string
   unitNumber: string
@@ -142,7 +172,7 @@ function isReturnPayment(value: unknown): value is ReturnPayment {
     typeof r.id === "string" &&
     r.customerId === getAuthenticatedActor()?.id &&
     typeof r.unitNumber === "string" &&
-    [r.depositAmount, r.totalDeductions, r.damageFee, r.cleaningFee, r.lostItemFee, r.overdueFee, r.outstandingFee]
+    [r.rentalRefundCredit, r.earlyTerminationFee, r.depositAmount, r.totalDeductions, r.damageFee, r.cleaningFee, r.lostItemFee, r.overdueFee, r.outstandingFee]
       .every(value => value == null || typeof value === "number" && Number.isFinite(value) && value >= 0) &&
     (r.overdueSettlement == null || isOverdueSettlement(r.overdueSettlement)) &&
     (r.settlementPaymentId === null ||
@@ -184,8 +214,11 @@ export async function loadCustomerPaymentHistory(): Promise<{
     category: reservationPaymentCategory(payment), amount: payment.amount, currency: payment.currency,
     timestamp: payment.paidAt || payment.processedAt || payment.createdAt || null,
     updatedAt: payment.processedAt || payment.createdAt || null,
-    status: payment.paymentStatus, method: payment.paymentMethod || null, reservationPayment: payment,
+    status: payment.purpose === 'RENEWAL' ? 'UNKNOWN' : payment.paymentStatus,
+    receiptAvailable: payment.purpose === 'RENEWAL' ? false : undefined,
+    method: payment.paymentMethod || null, reservationPayment: payment,
   }))
+  const originalPayments = new Map(reservationEntries.map(entry => [entry.id, entry]))
   const supplemental = await Promise.allSettled([
     (async (): Promise<HistoryEntry[]> => {
       const renewals = await allPages((page) =>
@@ -205,30 +238,58 @@ export async function loadCustomerPaymentHistory(): Promise<{
               ),
               () => warnings.push(`Chưa tải được đầy đủ thanh toán của đơn gia hạn ${renewal.id}.`),
             )
-            return events.map((event) => {
-              const data = event.data as Record<string, unknown>,
-                cash = event.kind === "CASH"
-              return {
-                id: String(cash ? data.paymentId || data.reference : data.paymentRef),
+            const metadata: HistoryEntry[] = events.flatMap((event) => {
+              const data = event.data as Record<string, unknown>
+              const cash = event.kind === "CASH"
+              const paymentId = cash ? data.paymentId || data.reference : data.paymentRef
+              if (typeof paymentId !== 'string' || !paymentId.trim()) return []
+              const recordedAt = cash ? data.receivedAt : data.paidAt
+              return [{
+                id: paymentId,
                 reference: `Gia hạn ${renewal.id}`,
                 renewalId: renewal.id,
                 rentalId: renewal.rentalId,
                 unitCode: renewal.storageUnit.code,
                 facilityName: renewal.facility.name,
-                category: cash ? "renewalSigning" : "renewal",
-                amount: typeof data.amount === "number" ? data.amount : null,
-                currency: "VND",
-                timestamp: String(
-                  cash ? data.receivedAt : data.paidAt || event.occurredAt,
-                ),
+                category: cash ? 'renewalSigning' : 'renewal',
+                amount: typeof data.amount === 'number' ? data.amount : null,
+                currency: 'VND',
+                timestamp: typeof recordedAt === 'string' ? recordedAt : event.occurredAt,
                 updatedAt: event.occurredAt,
-                status:
-                  cash || data.outcome === "SUCCESS" || (!data.outcome && !!data.paidAt)
-                    ? "PAID"
-                    : String(data.outcome),
-                method: cash ? data.paymentMethod === "BANK_TRANSFER" ? "Chuyển khoản" : "Tiền mặt tại cơ sở" : "VNPay",
-              } satisfies HistoryEntry
+                status: 'UNKNOWN',
+                receiptAvailable: false,
+                refundedAmount: null,
+                method: cash ? data.paymentMethod === 'BANK_TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt tại cơ sở' : 'VNPay',
+              } satisfies HistoryEntry]
             })
+            const byId = new Map(latestPaymentRecords(metadata).map(entry => [entry.id, entry]))
+            const projected = renewal.statusSummary?.transactions ?? []
+            const projectedIds = new Set(projected.map(transaction => transaction.paymentId))
+            const transactions: HistoryEntry[] = projected.map(transaction => {
+              const event = byId.get(transaction.paymentId)
+              const original = originalPayments.get(transaction.paymentId)
+              return {
+                id: transaction.paymentId,
+                reference: `Gia hạn ${renewal.id}`,
+                renewalId: renewal.id,
+                rentalId: renewal.rentalId,
+                unitCode: renewal.storageUnit.code,
+                facilityName: renewal.facility.name,
+                category: transaction.purpose === 'RENTAL_BALANCE' ? 'renewalSigning' : 'renewal',
+                amount: transaction.amount,
+                refundedAmount: transaction.refundedAmount,
+                currency: transaction.currency,
+                timestamp: transaction.paidAt ?? event?.timestamp ?? original?.timestamp ?? null,
+                updatedAt: renewal.statusSummary!.checkedAt,
+                status: transaction.status,
+                statusSource: 'RENEWAL_PROJECTION',
+                receiptAvailable: transaction.receiptAvailable,
+                paymentReference: transaction.reference ?? original?.reservationPayment?.transactionReference ?? null,
+                method: event?.method ?? original?.method ?? null,
+              }
+            })
+            // Unmatched historical events remain visible, but never certify a successful payment.
+            return [...transactions, ...metadata.filter(entry => !projectedIds.has(entry.id))]
           }),
         )
       ).flat()
@@ -244,7 +305,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
       return returns
         .filter(
           (r) =>
-            r.settlementReceipt || r.settlementPaymentId && r.settlementPaidAt,
+            r.settlementReceipt,
         )
         .flatMap((r): HistoryEntry[] => {
           const receipt = r.settlementReceipt
@@ -261,8 +322,11 @@ export async function loadCustomerPaymentHistory(): Promise<{
             currency: "VND",
             timestamp: r.settlementPaidAt ?? receipt?.recordedAt ?? null,
             status: offset ? "SETTLED" : refund ? "REFUNDED" : "PAID",
-            method: offset ? "Khấu trừ cọc" : receipt ? receipt.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản" : null,
+            method: offset ? "Đối trừ quyết toán" : receipt ? receipt.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản" : null,
             returnSettlement: {
+              rentalRefundCredit: r.rentalRefundCredit ?? null,
+              earlyTerminationFee: r.earlyTerminationFee ?? null,
+              setupEarlyExit: r.setupEarlyExit,
               depositAmount: r.depositAmount ?? null,
               totalDeductions: r.totalDeductions ?? null,
               damageFee: r.damageFee ?? null,

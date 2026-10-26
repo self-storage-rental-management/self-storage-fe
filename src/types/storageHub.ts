@@ -1,6 +1,10 @@
-export type UnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
+import type { RentalStatus } from './statusContracts'
+export type { ReservationStatus, RentalStatus, PaymentStatus } from './statusContracts'
 
-export type ReservationStatus =
+export type UnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned' | 'inactive' | 'archived'
+
+/** Persisted local/demo lifecycle only. Never use as an API ReservationStatus. */
+export type LegacyReservationStatus =
   | 'CREATED'
   | 'awaiting_email'
   | 'awaiting_review'
@@ -14,7 +18,7 @@ export type ReservationStatus =
 
 // Backward-compatible alias for existing code
 export type HoldStatus =
-  | ReservationStatus
+  | LegacyReservationStatus
   | 'awaiting_deposit'
   | 'deposit_paid'
   | 'full_rent_paid'
@@ -317,7 +321,7 @@ export interface StorageReservation {
   startDate: string
   endDate: string
   moveInDate: string
-  status: ReservationStatus | HoldStatus
+  status: LegacyReservationStatus | HoldStatus
   expireReason?: 'NO_SHOW' | 'CUSTOMER_CANCELLED' | 'PAYMENT_EXPIRED'
   freeSetupDays?: number
   cancellationType?: 'BEFORE_CHECKIN_FULL_REFUND' | 'BEFORE_CHECKIN_EARLY_FEE' | 'SETUP_EXIT_REVIEW'
@@ -359,7 +363,7 @@ export interface StorageReservation {
   }
   payment: {
     amount: number
-    status: PaymentStatus
+    status: LegacyPaymentStatus
     method?: string
     transactionId?: string
     paidAt?: string
@@ -604,7 +608,7 @@ export interface RentalRecord {
   deposit: number // Security deposit amount
   securityDeposit: number
   status: RentalStatus
-  paymentStatus: PaymentStatus
+  paymentStatus: LegacyPaymentStatus
   autoRenew: boolean
   gateCode: string
   accessCredentials?: AccessCredential[]
