@@ -37,6 +37,8 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod)],
       ['Người ghi nhận', payment.initiatedByName || '—'],
       ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Cọc giữ chỗ đã được đơn xác nhận' : 'Giao dịch cọc giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
+      ['Số hóa đơn', payment.invoiceNumber || '—'], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
+      ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? new Date(payment.invoiceIssuedAt).toLocaleString('vi-VN') : '—'],
     ]}
     footer={isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là cọc được chấp nhận.'} />
 }

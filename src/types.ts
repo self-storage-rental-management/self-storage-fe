@@ -56,6 +56,8 @@ export interface User {
   facilityScopes?: Record<string, 'READ' | 'OPERATE' | 'MANAGE'>
   facilityNames?: Record<string, string>
   mustChangePassword?: boolean
+  /** Backend authorization version used to invalidate stale permission state. */
+  authzVersion?: number
   /** Permissions returned by the backend for the current authenticated actor. */
   permissions?: PermissionKey[]
 }

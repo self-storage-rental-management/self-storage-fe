@@ -13,8 +13,8 @@ const statuses: ManagerPaymentHistoryStatus[] = [
   "PENDING", "PROCESSING", "PAID", "NOT_RECEIVED", "FAILED", "CANCELLED", "REFUNDED",
 ]
 const types: ManagerPaymentHistoryType[] = [
-  "RESERVATION_DEPOSIT", "RENTAL_BALANCE", "MONTHLY_RENT", "RENEWAL",
-  "DAMAGE_FEE", "OTHER", "RETURN_REFUND", "RETURN_SETTLEMENT",
+  "RESERVATION_DEPOSIT", "RENTAL_BALANCE", "MONTHLY_RENT", "RENEWAL", "RENEWAL_INSTALLMENT",
+  "DAMAGE_FEE", "EARLY_TERMINATION_FEE", "OTHER", "RETURN_REFUND", "RETURN_SETTLEMENT",
 ]
 
 function invalidResponse(): never {
@@ -38,8 +38,9 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
     && typeof row.occurredAt === "string" && Number.isFinite(Date.parse(row.occurredAt))
     && (row.renewalId == null || isUuid(row.renewalId))
     && (row.receiptFileId == null || isUuid(row.receiptFileId))
-    && (row.transactionStatus == null || isRenewalTransactionStatus(row.transactionStatus))
-    && (row.receiptAvailable == null || typeof row.receiptAvailable === 'boolean')
+    && (row.invoiceNumber == null || typeof row.invoiceNumber === "string")
+    && (row.invoiceStatus == null || ["DRAFT", "PAID", "VOID", "REFUNDED"].includes(row.invoiceStatus as string))
+    && (row.invoiceIssuedAt == null || (typeof row.invoiceIssuedAt === "string" && Number.isFinite(Date.parse(row.invoiceIssuedAt))))
 }
 
 export async function listManagerPaymentHistory(

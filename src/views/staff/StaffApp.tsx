@@ -94,8 +94,9 @@ import {
   staffErrorMessage,
   type StaffTaskSort,
 } from "./staffPresentation"
+import type { ApiReservationStatus } from "../../types/statusContracts"
 
-type LegacyReservationStatus = "CREATED" | "REVIEW_REQUIRED" | "AWAITING_DEPOSIT" | "DEPOSIT_PAID" | "UNIT_RESERVED" | "READY_FOR_CHECKIN" | "COMPLETED" | "CANCELLED" | "EXPIRED"
+type ReservationStatus = ApiReservationStatus
 
 type StaffReservation = Omit<typeof RESERVATIONS[number], "status"> & {
   status: LegacyReservationStatus
@@ -242,7 +243,7 @@ const sortStaffList = <T,>(
   })
 
 const reservationDeadline = (reservation: StaffReservation) =>
-  reservation.status === "REVIEW_REQUIRED" && reservation.reviewDueAt
+  reservation.status === "AWAITING_REVIEW" && reservation.reviewDueAt
     ? reservation.reviewDueAt
     : reservation.checkInDeadline || reservation.appointmentDate
 
@@ -260,14 +261,14 @@ const staffTaskTypeLabel: Record<FacilityTask["type"], string> = {
 
 const sharedReservationStatus = (
   reservation: StorageReservation,
-): LegacyReservationStatus => {
-  if (reservation.status === "awaiting_review") return "REVIEW_REQUIRED"
+): ReservationStatus => {
+  if (reservation.status === "awaiting_review") return "AWAITING_REVIEW"
 
-  if (reservation.status === "awaiting_email") return "CREATED"
+  if (reservation.status === "awaiting_email") return "AWAITING_EMAIL"
 
-  if (reservation.status === "awaiting_payment") return "AWAITING_DEPOSIT"
+  if (reservation.status === "awaiting_payment") return "AWAITING_PAYMENT"
 
-  if (reservation.status === "DEPOSIT_PAID") return "DEPOSIT_PAID"
+  if (reservation.status === "DEPOSIT_PAID") return "CONFIRMED"
 
   if (reservation.status === "UNIT_RESERVED") return "UNIT_RESERVED"
 
@@ -279,7 +280,7 @@ const sharedReservationStatus = (
 
   if (reservation.status === "EXPIRED") return "EXPIRED"
 
-  return "CREATED"
+  return "AWAITING_EMAIL"
 }
 
 const mapSharedReservation = (
@@ -550,18 +551,18 @@ const mapSharedReturn = (
 const reservationSeed: StaffReservation[] = DEMO_DATA_ENABLED ? RESERVATIONS.map((item, index) => ({
   ...item,
 
-  // Keep one realistic exception in the Staff queue so the REVIEW_REQUIRED
+  // Keep one realistic exception in the Staff queue so the AWAITING_REVIEW
 
   // workflow can be exercised without changing the shared demo data.
 
   status:
     item.id === "RSV-2049"
-      ? "REVIEW_REQUIRED"
+      ? "AWAITING_REVIEW"
       : item.paid
         ? item.unit
           ? "UNIT_RESERVED"
-          : "DEPOSIT_PAID"
-        : "CREATED",
+          : "CONFIRMED"
+          : "AWAITING_EMAIL",
 
   appointmentDate: item.moveIn,
 
@@ -768,13 +769,13 @@ const statusLabelMap: Record<string, string> = {
 
   closed: "Đã đóng",
 
-  CREATED: "Chờ khách hàng xác minh thư điện tử",
+  AWAITING_EMAIL: "Chờ khách hàng xác minh thư điện tử",
 
-  REVIEW_REQUIRED: "Cần nhân viên rà soát ngoại lệ",
+  AWAITING_REVIEW: "Cần nhân viên rà soát ngoại lệ",
 
-  AWAITING_DEPOSIT: "Đã duyệt · Chờ thanh toán cọc",
+  AWAITING_PAYMENT: "Đã duyệt · Chờ thanh toán cọc",
 
-  DEPOSIT_PAID: "Đã cọc · Chờ nhận kho",
+  CONFIRMED: "Đã cọc · Chờ nhận kho",
 
   UNIT_RESERVED: "Đã giữ gian kho",
 
@@ -1574,7 +1575,7 @@ export default function StaffApp({
     (r) => r.customer,
   )
 
-  const facilityTickets = hasFacilityScope
+  const facilityTickets = isApiAuthenticated() ? [] : hasFacilityScope
     ? hub.tickets.filter((ticket) =>
         isFacilityVisible(user, ticket.facilityId, ticket.facility),
       )
@@ -1717,7 +1718,7 @@ export default function StaffApp({
     (returnItem) => returnItem.customer,
   )
 
-  const assignedFacilityTasks = hub.staffTasks
+  const assignedFacilityTasks = isApiAuthenticated() ? [] : hub.staffTasks
 
     .filter(
       (task) =>
@@ -1857,7 +1858,7 @@ export default function StaffApp({
 
     ...reservations
 
-      .filter((r) => r.status === "REVIEW_REQUIRED")
+      .filter((r) => r.status === "AWAITING_REVIEW")
 
       .map((r) => ({
         id: `review-${r.id}`,
@@ -1879,7 +1880,7 @@ export default function StaffApp({
 
     ...reservations
 
-      .filter((r) => r.status === "DEPOSIT_PAID")
+      .filter((r) => r.status === "CONFIRMED")
 
       .map((r) => ({
         id: `allocation-${r.id}`,
@@ -2259,36 +2260,83 @@ export default function StaffApp({
       roleColor="bg-green-100 text-green-700"
     >
       {page === "renewal-signing" && isApiAuthenticated() && <StaffRenewalOperationsApiPanel key={user.id} />}
-      {page === "renewal-signing" && !isApiAuthenticated() && scheduledRenewals.length > 0 && (
-        <div className="fade-in mt-8 space-y-3">
-          <SectionHeader
-            title="Lịch ký gia hạn đã lưu"
-            subtitle="Chỉ xem dữ liệu lịch sử; đối soát và xử lý gia hạn tại hồ sơ trực tuyến"
-          />
-          {renewalsPagination.items.map((renewal) => (
-            <Card key={renewal.id} className="p-5">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-slate-900">
-                    {renewal.unitId} · {renewal.customerName}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Hẹn {formatDate(renewal.appointmentDate)} lúc{" "}
-                    {formatTime(renewal.appointmentTime)} · Gia hạn đến{" "}
-                    {formatDate(renewal.newEndDate)}
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-amber-800">
-                    Phần còn lại đã lưu: {legacyRenewalMoney(renewal.remainingAmount)}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setSelectedRenewal(renewal)
-                  }}
-                >
-                  Xem hồ sơ cũ
-                </Button>
+      {page === "renewal-signing" && !isApiAuthenticated() && (
+        <div className="fade-in mt-4 space-y-6">
+          {/* 1. YÊU CẦU GIA HẠN CHỜ DUYỆT */}
+          <div className="space-y-3">
+            <SectionHeader
+              title={`Yêu cầu gia hạn chờ duyệt (${pendingRenewals.length})`}
+              subtitle="Khách hàng đã tạo đơn xin gia hạn; nhân viên kiểm tra và duyệt để hoàn tất gia hạn hợp đồng cho khách."
+            />
+            {pendingRenewals.length > 0 ? (
+              <div className="grid gap-3">
+                {pendingRenewals.map((renewal) => {
+                  const rental = hub.rentals.find((r) => r.id === renewal.rentalId)
+                  return (
+                    <Card key={renewal.id} className="p-5 border-amber-200 bg-amber-50/20">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-base">
+                              {renewal.unitId} · {renewal.customerName}
+                            </span>
+                            <Badge variant="warning">Chờ nhân viên duyệt</Badge>
+                          </div>
+                          <p className="text-xs text-slate-600">
+                            Kỳ hạn hiện tại hết hạn: <b>{renewal.oldEndDate}</b> → Đề xuất gia hạn đến: <b className="text-emerald-700">{renewal.newEndDate}</b> ({renewal.renewalMonths} tháng)
+                          </p>
+                          <p className="text-xs text-slate-600">
+                            Đơn giá: {formatMoney(renewal.originalMonthlyRate || rental?.monthlyRate || 0)}/tháng · Tổng tiền: <b className="text-slate-900">{formatMoney(renewal.totalAmount || renewal.renewalFee)}</b>
+                            {renewal.discountAmount ? ` (Ưu đãi giảm: ${formatMoney(renewal.discountAmount)})` : ""}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            Mã yêu cầu: <span className="font-mono">{renewal.id}</span> · Gửi lúc: {formatDate(renewal.requestedAt)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            onClick={async () => {
+                              try {
+                                if (isApiAuthenticated()) {
+                                  try { await approveRenewalTicket(renewal.id) } catch {}
+                                }
+                                hub.approveRenewal(renewal.id, user)
+                                showToast(`Đã duyệt gia hạn thành công cho hồ sơ ${renewal.id}! Hợp đồng thuê đã được tự động kéo dài đến ${renewal.newEndDate}.`)
+                              } catch (err: any) {
+                                showToast(err?.message || "Có lỗi khi duyệt gia hạn.")
+                              }
+                            }}
+                          >
+                            ✓ Duyệt gia hạn
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-300 text-red-700 hover:bg-red-50"
+                            onClick={async () => {
+                              const reason = prompt("Nhập lý do từ chối yêu cầu gia hạn:", "Cơ sở có kế hoạch bảo trì kho hoặc lịch không khả dụng.")
+                              if (reason && reason.trim()) {
+                                try {
+                                  if (isApiAuthenticated()) {
+                                    try { await rejectRenewalTicket(renewal.id, reason.trim()) } catch {}
+                                  }
+                                  hub.rejectRenewal(renewal.id, user, reason.trim())
+                                  showToast(`Đã từ chối yêu cầu gia hạn ${renewal.id}.`)
+                                } catch (err: any) {
+                                  showToast(err?.message || "Có lỗi khi từ chối gia hạn.")
+                                }
+                              }
+                            }}
+                          >
+                            ✕ Từ chối
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
               </div>
             </Card>
           ))}
@@ -2311,7 +2359,7 @@ export default function StaffApp({
               title={"Đơn đã cọc · Chờ nhận kho"}
               value={isApiAuthenticated()
                 ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
-                : reservations.filter((r) => r.status === "DEPOSIT_PAID").length}
+                : reservations.filter((r) => r.status === "CONFIRMED").length}
               icon={Icon.alert}
               iconBg="bg-amber-50"
             />
@@ -2612,13 +2660,13 @@ export default function StaffApp({
               >
                 <option value="all">{"Tất cả"}</option>
                 {([
-                  "CREATED",
+                  "AWAITING_EMAIL",
 
-                  "REVIEW_REQUIRED",
+                  "AWAITING_REVIEW",
 
-                  "AWAITING_DEPOSIT",
+                  "AWAITING_PAYMENT",
 
-                  "DEPOSIT_PAID",
+                  "CONFIRMED",
 
                   "UNIT_RESERVED",
 
@@ -2705,16 +2753,16 @@ export default function StaffApp({
                       </p>
                       <p
                         className={`text-[11px] ${
-                          r.status === "REVIEW_REQUIRED"
+                          r.status === "AWAITING_REVIEW"
                             ? "font-semibold text-red-700"
                             : "text-stone-500"
                         }`}
                       >
-                        {r.status === "REVIEW_REQUIRED"
-                          ? "Hạn duyệt hàng hóa trong 12 giờ"
+                        {r.status === "AWAITING_REVIEW"
+                          ? "Hạn duyệt hàng hóa trong 6 giờ"
                           : "Hạn cuối"}
                         :{" "}
-                        {r.status === "REVIEW_REQUIRED"
+                        {r.status === "AWAITING_REVIEW"
                           ? formatExactDateTime(r.reviewDueAt)
                           : formatDate(r.checkInDeadline)}
                       </p>
@@ -2733,13 +2781,13 @@ export default function StaffApp({
                     </Td>
                     <Td>
                       {s(r.status, {
-                        CREATED: "warning",
+                        AWAITING_EMAIL: "warning",
 
-                        REVIEW_REQUIRED: "error",
+                        AWAITING_REVIEW: "error",
 
-                        AWAITING_DEPOSIT: "warning",
+                        AWAITING_PAYMENT: "warning",
 
-                        DEPOSIT_PAID: "info",
+                        CONFIRMED: "info",
 
                         UNIT_RESERVED: "info",
 
@@ -2765,7 +2813,7 @@ export default function StaffApp({
                         >
                           {"Xem"}
                         </Button>
-                        {r.status === "REVIEW_REQUIRED" && (
+                        {r.status === "AWAITING_REVIEW" && (
                           <Button
                             variant="primary"
                             size="sm"
@@ -2778,17 +2826,17 @@ export default function StaffApp({
                             {"Rà soát ngoại lệ"}
                           </Button>
                         )}
-                        {r.status === "CREATED" && (
+                        {r.status === "AWAITING_EMAIL" && (
                           <Badge variant="warning">
                             {"Theo dõi · chờ cọc"}
                           </Badge>
                         )}
-                        {r.status === "AWAITING_DEPOSIT" && (
+                        {r.status === "AWAITING_PAYMENT" && (
                           <Badge variant="warning">
                             {"Chờ khách hàng thanh toán"}
                           </Badge>
                         )}
-                        {r.status === "DEPOSIT_PAID" && (
+                        {r.status === "CONFIRMED" && (
                           <Badge variant="info">
                             {"Đã cọc · Chờ nhận kho"}
                           </Badge>
@@ -3270,12 +3318,12 @@ export default function StaffApp({
                 </span>
                 <span>
                   <b>
-                    {selectedReservation.status === "REVIEW_REQUIRED"
-                      ? "Hạn duyệt 12 giờ"
+                    {selectedReservation.status === "AWAITING_REVIEW"
+                      ? "Hạn duyệt 6 giờ"
                       : "Hạn cuối"}
                     :
                   </b>{" "}
-                  {selectedReservation.status === "REVIEW_REQUIRED"
+                  {selectedReservation.status === "AWAITING_REVIEW"
                     ? formatExactDateTime(selectedReservation.reviewDueAt)
                     : formatDate(selectedReservation.checkInDeadline)}
                 </span>
@@ -3286,7 +3334,7 @@ export default function StaffApp({
                 }
               </p>
             </div>
-            {selectedReservation.status === "REVIEW_REQUIRED" && (
+            {selectedReservation.status === "AWAITING_REVIEW" && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
                 <p className="font-semibold">
                   {"Hồ sơ hàng hóa “Khác” cần nhân viên xác nhận trong 12 giờ"}
@@ -3316,7 +3364,7 @@ export default function StaffApp({
                         const updated = {
                           ...selectedReservation,
 
-                          status: "AWAITING_DEPOSIT" as LegacyReservationStatus,
+                          status: "AWAITING_PAYMENT" as ReservationStatus,
                         }
 
                         setReservations((items) =>

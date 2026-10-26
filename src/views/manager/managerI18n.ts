@@ -12,6 +12,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   held: labels('Held', 'Đang giữ'),
   assigned: labels('Assigned', 'Đã phân công'),
   active: labels('Active', 'Đang hiệu lực'),
+  setup: labels('Free setup', 'Đang setup miễn phí'),
   paid: labels('Paid', 'Đã thanh toán'),
   refunded: labels('Refunded', 'Đã hoàn tiền'),
   overdue: labels('Overdue', 'Quá hạn'),
