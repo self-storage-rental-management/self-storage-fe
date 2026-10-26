@@ -49,3 +49,15 @@ export function normalizeRentalStatus(value: unknown): ApiRentalStatus | null {
   return typeof value === 'string' && ['setup', 'active', 'return_requested', 'return_inspection', 'closing', 'completed'].includes(value)
     ? value as ApiRentalStatus : null
 }
+
+export function isReservationStatus(value: unknown): value is ApiReservationStatus {
+  return normalizeReservationStatus(value) !== null
+}
+
+export function isPaymentStatus(value: unknown): value is ApiPaymentStatus {
+  return normalizePaymentStatus(value) !== null
+}
+
+export function isRentalStatus(value: unknown): value is ApiRentalStatus {
+  return normalizeRentalStatus(value) !== null
+}

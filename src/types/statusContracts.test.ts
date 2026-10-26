@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { normalizePaymentStatus, normalizeRentalStatus, normalizeReservationStatus } from './statusContracts'
+import {
+  isPaymentStatus,
+  isRentalStatus,
+  isReservationStatus,
+  normalizePaymentStatus,
+  normalizeRentalStatus,
+  normalizeReservationStatus,
+} from './statusContracts'
 
 describe('status contracts', () => {
   it('normalizes legacy reservation and payment aliases to API values', () => {
@@ -12,5 +19,12 @@ describe('status contracts', () => {
   it('keeps rental lifecycle values aligned with the backend contract', () => {
     expect(normalizeRentalStatus('setup')).toBe('setup')
     expect(normalizeRentalStatus('unknown')).toBeNull()
+  })
+
+  it('exposes runtime guards for API status validation', () => {
+    expect(isPaymentStatus('PAID')).toBe(true)
+    expect(isPaymentStatus('unknown')).toBe(false)
+    expect(isReservationStatus('CONFIRMED')).toBe(true)
+    expect(isRentalStatus('active')).toBe(true)
   })
 })
