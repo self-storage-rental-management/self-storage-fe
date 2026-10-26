@@ -43,7 +43,6 @@ export default function RenewalDetail({
   const extensionStartDate = r.effectivePeriod?.startDate ?? terms?.extensionStartDate
   const extensionEndDate = r.effectivePeriod?.newEndDate ?? r.newEndDate
   const extensionPeriodLabel = r.effectivePeriod?.finalized ? 'Kỳ gia hạn có hiệu lực' : 'Kỳ gia hạn dự kiến'
-  const isSplit = !!terms && terms.remainingRentalAmount > 0
   const hasDeposit = !!terms && terms.renewalDepositAmount > 0
   const isManager = role === "manager"
   const canOpenPayment = role === "customer" && r.status === "accepted" && r.acceptedRevision !== null
@@ -153,31 +152,42 @@ export default function RenewalDetail({
           </section>}
           {role === "customer" && paymentError && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{paymentError}</p>}
       </div>
-      {financeHistory}
-      {evidenceDocuments}
       {receiptPaymentId && <Modal open onClose={() => setReceiptPaymentId(null)} title="Biên lai khoản thu gia hạn" size="lg">
         <RenewalReceipt id={r.id} paymentId={receiptPaymentId} role={role} />
       </Modal>}
       {terms ? (
-        <details className="rounded-xl border border-stone-200 bg-white p-3">
-          <summary className="cursor-pointer font-semibold">Điều khoản</summary>
-          <div className="mt-3 space-y-2">
-            <p className="text-sm text-stone-600">Gói gia hạn: {terms.rentalMonths} tháng</p>
-            {terms.signingWindowDays != null && <p className="text-sm text-stone-600">Thời gian đến ký: {terms.signingWindowDays} ngày từ khi thanh toán khoản trả trước thành công, trong giới hạn xử lý quá hạn. Đây là thời gian chuẩn bị đến ký, không phải setup miễn phí.</p>}
-            <p className="text-sm text-stone-600">{extensionPeriodLabel}: {rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</p>
-            <p className="text-sm text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký, phí quá hạn tính riêng cho các ngày trước đó. Không cộng ngày setup.</p>
-            <dl className="grid gap-2 text-sm sm:grid-cols-2">
-              <div><dt className="text-stone-500">Đơn giá/tháng</dt><dd className="font-medium">{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
-              <div><dt className="text-stone-500">Tổng trước giảm</dt><dd className="font-medium">{rentalMoney(terms.subtotal, terms.currency)}</dd></div>
-              <div><dt className="text-stone-500">Giảm giá</dt><dd className="font-medium">{rentalMoney(terms.discountAmount, terms.currency)}</dd></div>
-              <div><dt className="text-stone-500">Tổng sau điều chỉnh</dt><dd className="font-semibold">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>
-              {hasDeposit ? <>
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền thuê gia hạn trả trước</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
-                <div><dt className="text-stone-500">Tiền thuê còn lại khi ký</dt><dd className="font-medium">{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
-              </> : <div><dt className="text-stone-500">Tiền cần thanh toán</dt><dd className="font-medium">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
-            </dl>
-            <p className="text-sm text-stone-600">Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. Không thu lại cọc bảo đảm kho đang giữ. Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
-            {isManager && <p className="text-sm text-stone-600">Đây là số tiền theo báo giá, chưa xác nhận đã phát sinh nghĩa vụ hoặc đã thu tiền.</p>}
+        <details className="rounded-xl border border-stone-200 bg-white p-4">
+          <summary className="cursor-pointer font-semibold text-stone-900">Điều khoản và chi phí gia hạn</summary>
+          <div className="mt-4 space-y-5 text-sm">
+            <section aria-label="Thông tin gia hạn">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Thông tin gia hạn</h4>
+              <dl className="grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
+                <div><dt className="text-stone-500">Gói gia hạn</dt><dd className="mt-1 font-semibold text-stone-900">{terms.rentalMonths} tháng</dd></div>
+                <div><dt className="text-stone-500">{extensionPeriodLabel}</dt><dd className="mt-1 font-semibold text-stone-900">{rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</dd></div>
+                {terms.signingWindowDays != null && <div className="sm:col-span-2"><dt className="text-stone-500">Thời gian đến ký</dt><dd className="mt-1 text-stone-900">{terms.signingWindowDays} ngày từ khi thanh toán khoản trả trước thành công, trong giới hạn xử lý quá hạn.</dd></div>}
+              </dl>
+              <p className="mt-2 text-xs leading-5 text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký; phí quá hạn tính riêng cho các ngày trước đó.</p>
+            </section>
+            <section aria-label="Chi phí gia hạn">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Chi phí gia hạn</h4>
+              <dl className="divide-y divide-stone-100 rounded-lg border border-stone-200 px-3">
+                <div className="flex justify-between gap-4 py-2"><dt className="text-stone-600">Đơn giá/tháng</dt><dd className="text-right font-medium text-stone-900">{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
+                <div className="flex justify-between gap-4 py-2"><dt className="text-stone-600">Tổng trước giảm</dt><dd className="text-right font-medium text-stone-900">{rentalMoney(terms.subtotal, terms.currency)}</dd></div>
+                <div className="flex justify-between gap-4 py-2"><dt className="text-stone-600">Giảm giá</dt><dd className="text-right font-medium text-stone-900">{rentalMoney(terms.discountAmount, terms.currency)}</dd></div>
+                <div className="flex justify-between gap-4 py-3"><dt className="font-semibold text-stone-900">Tổng sau điều chỉnh</dt><dd className="text-right font-bold text-stone-900">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>
+              </dl>
+            </section>
+            <section aria-label="Kế hoạch thanh toán">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Kế hoạch thanh toán</h4>
+              <dl className="grid gap-2 sm:grid-cols-2">
+                {hasDeposit ? <>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền thuê gia hạn trả trước</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
+                  <div className="rounded-lg border border-stone-200 p-3"><dt className="text-stone-600">Tiền thuê còn lại khi ký</dt><dd className="mt-1 text-lg font-semibold text-stone-900">{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
+                </> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền cần thanh toán</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
+              </dl>
+              <p className="mt-2 text-xs leading-5 text-stone-600">{hasDeposit && 'Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. '}Không thu lại cọc bảo đảm kho đang giữ. Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
+            </section>
+            {isManager && <p className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Đây là số tiền theo báo giá, chưa xác nhận đã phát sinh nghĩa vụ hoặc đã thu tiền.</p>}
           </div>
         </details>
       ) : (
@@ -195,19 +205,11 @@ export default function RenewalDetail({
           </p>
         </div>
       )}
-      {role === "customer" && r.status === "accepted" && payment?.paymentStatus !== "PAID" && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-1">
-          <h4 className="font-bold text-blue-900 text-sm">Thanh toán gia hạn trực tuyến</h4>
-          <p className="text-xs text-blue-800 leading-relaxed">
-            Quý khách bấm <b>{isSplit ? "Thanh toán đợt 1 qua VNPay" : "Thanh toán gia hạn qua VNPay"}</b> bên dưới. Sau khi thanh toán được xác minh, vui lòng hoàn tất đối chiếu và ký tại cơ sở. Kỳ gia hạn có hiệu lực được xác nhận khi hoàn tất ký.
-          </p>
-        </div>
-      )}
       {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
       {appointmentSelection}
-      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && <p className="text-sm text-stone-600">Lưu lịch ký trước khi {hasDeposit ? "thanh toán tiền thuê trả trước" : "thanh toán"}.</p>}
+      {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && !appointmentSelection && <p className="text-sm text-stone-600">Vui lòng chọn lịch ký trước khi thanh toán.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
           disabled={operationsLocked||paymentBusy||paymentExpired||payment?.paymentStatus==="PAID"}
@@ -230,6 +232,8 @@ export default function RenewalDetail({
             </Button>
           ))}
       </div>
+      {financeHistory}
+      {evidenceDocuments}
     </Card>
   )
 }

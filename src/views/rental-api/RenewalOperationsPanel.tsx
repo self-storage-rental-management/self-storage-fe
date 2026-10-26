@@ -480,14 +480,7 @@ export default function RenewalOperationsPanel({
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <>
-          {appointmentOnly ? (
-            <section className="space-y-2" aria-label="Chọn lịch ký gia hạn">
-              <h3 className="font-semibold">Lịch ký gia hạn</h3>
-              <p>{read.data.appointmentRef
-                ? `Giờ hẹn đến ký: ${rentalDate(read.data.appointmentStart)}`
-                : "Chọn và lưu lịch ký trước khi thanh toán tiền thuê trả trước."}</p>
-            </section>
-          ) : <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
+          {!appointmentOnly && <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
           {role === "manager" && !selected && <RenewalCoordinationPanel
             key={`${identity}:${revision}`}
             state={read.data} facilityId={facilityId} status={status}
@@ -571,6 +564,7 @@ export default function RenewalOperationsPanel({
         key={`${identity}:${revision}:inline-appointment`}
         action={read.data.appointmentRef ? "reschedule" : "appointment"}
         state={read.data}
+        appointmentOnly
         onLocked={lock}
         onCancel={() => { setRevision(v => v + 1); onChanged?.() }}
         onSuccess={event => {
@@ -653,6 +647,7 @@ function OperationForm({
   action,
   state: s,
   proposal,
+  appointmentOnly = false,
   onLocked,
   onCancel,
   onSuccess,
@@ -660,6 +655,7 @@ function OperationForm({
   action: RenewalOperationAction
   state: RenewalOperationState
   proposal?: RenewalExceptionProposal | null
+  appointmentOnly?: boolean
   onLocked: (locked: boolean) => void
   onCancel: () => void
   onSuccess: (event: RenewalOperationEvent) => void
@@ -852,8 +848,11 @@ function OperationForm({
     }
   }
   return (
-    <Card className="p-4 space-y-3">
-      <h4 className="font-semibold">{copy(operationLabels[action])}</h4>
+    <Card className={appointmentOnly ? "space-y-5 rounded-2xl p-5 shadow-none sm:p-6" : "space-y-3 p-4"}>
+      {appointmentOnly ? <header className="flex items-start justify-between gap-4">
+        <div><h4 className="text-xl font-semibold text-stone-900">Lịch ký gia hạn</h4><p className="mt-1 text-sm text-stone-500">Chọn thời gian đến cơ sở để ký hợp đồng gia hạn.</p></div>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon mt-1 h-5 w-5 shrink-0 text-stone-500"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </header> : <h4 className="font-semibold">{copy(operationLabels[action])}</h4>}
       <fieldset disabled={locked} className="space-y-3">
         {action === "confirmation" && <>
           {proposal && <RenewalExceptionProposalCard proposal={proposal} />}
@@ -1048,8 +1047,11 @@ function OperationForm({
         <p role="alert">
           Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại, không đóng hoặc tải lại trang.</p>
       )}
-      <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-4">
+      <div className={`flex flex-wrap items-center gap-3 border-t border-stone-200 pt-4 ${appointmentOnly ? "justify-end" : ""}`}>
+        {appointmentOnly && <p className="mr-auto text-sm text-stone-500">{scheduleReady ? "Đã chọn đủ ngày và giờ" : "Chưa chọn đủ ngày và giờ"}</p>}
         <Button
+          size={appointmentOnly ? "md" : undefined}
+          className={appointmentOnly ? "rounded-full px-5 disabled:!bg-stone-100 disabled:!text-stone-400" : undefined}
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
