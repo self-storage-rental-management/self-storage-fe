@@ -162,6 +162,16 @@ export interface CredentialAlert {
   reason: string
 }
 
+export interface CredentialAccessResponse {
+  credentialId: string
+  rentalId: string | null
+  accessedAt: string
+  allowed: boolean
+  duringSetup: boolean
+  reason: string
+  accessHours: string | null
+}
+
 function assertPage(payload: unknown): CheckInPage {
   const value = payload as Partial<CheckInPage> | null
   if (!value || !Array.isArray(value.data) || !value.pagination
@@ -345,6 +355,22 @@ export async function revokeAccessCredential(credentialId: string, reason: strin
     `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/revoke`,
     { method: 'POST', body: JSON.stringify({ reason }) },
   ))
+}
+
+export async function recordCredentialAccess(credentialId: string, request: {
+  source?: string
+  note?: string
+  accessedAt?: string
+} = {}) {
+  const payload = await apiRequest<unknown>(
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access-events`,
+    { method: 'POST', body: JSON.stringify(request) },
+  )
+  if (!payload || typeof payload !== 'object' || !('data' in payload) ||
+    !payload.data || typeof payload.data !== 'object') {
+    throw new ApiClientError('Backend trả về kết quả truy cập credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return (payload as ApiEnvelope<CredentialAccessResponse>).data
 }
 
 export interface ReissueAccessCredentialRequest {
