@@ -19,6 +19,7 @@ import type { RenewalApiQuery, RenewalApiRecord } from "../../types/renewalApi"
 import type { RenewalOperationEvent } from "../../types/renewalOperationsApi"
 import ApiReadState from "./ApiReadState"
 import CustomerRenewalGroups from './CustomerRenewalGroups'
+import ManagerRentalGroups from './ManagerRentalGroups'
 import RentalDetail from "./RentalDetail"
 import RenewalDetail from "./RenewalDetail"
 import RenewalOperationsPanel, { RenewalDocumentHistory, RenewalPaymentHistory } from "./RenewalOperationsPanel"
@@ -54,14 +55,6 @@ type Action = {
   kind: "cancel"
   renewal: RenewalApiRecord
 }
-const customerRenewalFilterStatuses = new Set([
-  "pending",
-  "accepted",
-  "deposit_paid",
-  "full_rent_paid",
-  "appointment_scheduled",
-])
-
 function Pager({
   page,
   pages,
@@ -179,7 +172,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId }: { role:
         setTab(t)
         setSearch("")
         setRq((q) => ({ ...q, search: undefined, page: 0 }))
-        setNq((q) => ({ ...q, search: undefined, page: 0 }))
+        setNq((q) => ({ ...q, search: undefined, status: undefined, rentalId: undefined, page: 0 }))
         setDetail(undefined)
         setAction(undefined)
       }}
@@ -234,7 +227,6 @@ function WorkspaceData({
 
   const actor = getAuthenticatedActor()!
   const [returnRental, setReturnRental] = useState<{ id: string; active: boolean }>()
-  const [rentalFilterDraft, setRentalFilterDraft] = useState(nq.rentalId || "")
   const dataTab = tab === "renewal" ? "renewal" : "rental"
   const query = dataTab === "rental" ? rq : nq
   const read = useRentalApiResource(
@@ -335,12 +327,13 @@ function WorkspaceData({
   }, [read.data, dataTab, rq, nq, setRq, setNq])
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-stone-200 bg-white px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
-        <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
+          <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
+        </div>
+      <div className="grid gap-3 sm:grid-cols-2">
         {[
           "Tổng hồ sơ",
           "Đang hiệu lực",
@@ -358,40 +351,23 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="flex w-fit flex-wrap gap-2 rounded-xl border border-stone-200 bg-white p-1.5">
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-white p-1.5">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
+          className="!border-0"
           onClick={() => setTab("rental")}
         >
           Hồ sơ thuê
         </Button>
         <Button
           variant={tab === "renewal" ? "primary" : "outline"}
+          className="!border-0"
           onClick={() => setTab("renewal")}
         >
           Yêu cầu gia hạn
         </Button>
       </div>
-      <Card className={`grid items-end gap-3 p-4 sm:grid-cols-2 ${role === "manager" ? (tab === "renewal" ? "xl:grid-cols-4" : "xl:grid-cols-3") : "xl:grid-cols-2"}`}>
-        <label className="block min-w-0">
-          Trạng thái
-          <select
-            className={`${inputClass} mt-1 block h-[42px] w-full`}
-            value={query.status || ""}
-            onChange={(e) =>
-              change({ status: e.target.value || undefined } as RentalApiQuery)
-            }
-          >
-            <option value="">Tất cả</option>
-            {Object.entries(tab === "rental" ? rentalLabels : renewalLabels)
-              .filter(([value]) => tab !== "renewal" || role === "manager" || customerRenewalFilterStatuses.has(value))
-              .map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-              ))}
-          </select>
-        </label>
+      {(tab === "rental" || role === "manager") && <div className={`grid items-end gap-3 ${role === "manager" ? (tab === "renewal" ? "lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]") : "sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]"}`}>
         {(tab === "rental" || role === "manager") && (
           <form
             className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
@@ -400,7 +376,7 @@ function WorkspaceData({
               change({ search: search.trim() || undefined })
             }}
           >
-        <label className="block min-w-0">
+            <label className="block min-w-0">
               Tìm kiếm
               <input
                 className={`${inputClass} mt-1 block h-[42px] w-full`}
@@ -410,28 +386,26 @@ function WorkspaceData({
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
-            <Button type="submit" className="h-[42px] shrink-0 self-end">
-              Tìm kiếm
-            </Button>
+            <Button type="submit" className="h-[42px] shrink-0 self-end">Tìm kiếm</Button>
           </form>
         )}
-        {tab === "renewal" && (
-          <label className="block min-w-0">
-            Mã hồ sơ thuê
-            <input
-              className={`${inputClass} mt-1 block h-[42px] w-full`}
-              value={rentalFilterDraft}
-              onChange={(e) => setRentalFilterDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter")
-                  change({ rentalId: rentalFilterDraft.trim() || undefined })
-              }}
-              onBlur={() =>
-                change({ rentalId: rentalFilterDraft.trim() || undefined })
-              }
-            />
-          </label>
-        )}
+        {tab === "rental" && <label className="block min-w-0">
+          Trạng thái
+          <select
+            className={`${inputClass} mt-1 block h-[42px] w-full`}
+            value={query.status || ""}
+            onChange={(e) =>
+              change({ status: e.target.value || undefined } as RentalApiQuery)
+            }
+          >
+            <option value="">Tất cả</option>
+            {Object.entries(rentalLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+              ))}
+          </select>
+        </label>}
         {role === "manager" && (
           <label className="block min-w-0">
             Sắp xếp
@@ -451,12 +425,12 @@ function WorkspaceData({
             </select>
           </label>
         )}
-      </Card>
+      </div>}
+      </section>
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <Card className={role === 'customer' ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
-          {role !== 'customer' && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3"><h2 className="font-bold text-stone-900">{tab === 'rental' ? 'Danh sách hồ sơ thuê' : 'Danh sách yêu cầu gia hạn'}</h2><span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">{read.data.page.pagination.totalItems} hồ sơ</span></div>}
-          {role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
+          {role === 'manager' ? <ManagerRentalGroups kind={read.data.kind} rows={read.data.page.data} onDetail={id => setDetail({ kind: read.data!.kind, id })} /> : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
             { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, quá hạn hoặc đang xử lý trả kho.', rows: read.data.page.data.filter(row => row.status !== 'completed'), active: true },
             { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
           ].map(group => <section key={group.id} aria-labelledby={`rental-group-${group.id}`} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
@@ -467,7 +441,7 @@ function WorkspaceData({
             {group.rows.length ? <div className="overflow-x-auto bg-stone-50/60 p-4">
             <div className="min-w-[1050px] space-y-2">
             <div className={`${customerRentalColumns} border-l-4 border-transparent px-1 text-xs font-semibold text-stone-500`}>
-              {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className="px-3 py-2">{label}</div>)}
+              {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className={`px-3 py-2 ${label === 'Trạng thái' ? 'text-center' : ''}`}>{label}</div>)}
             </div>
             {group.rows.map(row => {
               const days = rentalDaysUntilDeadline(row)
@@ -477,9 +451,9 @@ function WorkspaceData({
                 <div className={`${customerRentalColumns} items-center divide-x divide-stone-100 px-1 py-2`}>
                     <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
                     <div className="min-w-0 px-3"><span className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
-                    <div className="flex flex-wrap gap-1.5 px-3">
+                    <div className="flex flex-col items-center gap-1.5 px-3 [&_.ui-badge]:!flex [&_.ui-badge]:!min-h-8 [&_.ui-badge]:!w-[95%] [&_.ui-badge]:!items-center [&_.ui-badge]:!justify-center [&_.ui-badge]:!border-0 [&_.ui-badge]:!text-center">
                       <Badge variant={recordStatusTone(row.status)}>{copy(rentalLabels[row.status])}</Badge>
-                      {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
+                      {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`inline-flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
                     </div>
                   <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
                   <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
@@ -509,7 +483,7 @@ function WorkspaceData({
                   {[
                     "Mã hồ sơ",
                     role === 'customer' ? 'Trạng thái' : 'Khách hàng',
-                    role === "manager" ? "Gian kho" : "Gian kho / Loại",
+                    "Gian kho / Loại",
                     "Thời hạn",
                     "Thao tác",
                   ].map((h, i) => (
@@ -536,8 +510,8 @@ function WorkspaceData({
                     </td>
                     <td className="px-4 py-2.5 align-middle">
                       <p className="truncate font-mono text-xs font-medium leading-5 text-stone-800" title={row.storageUnit.code}>{row.storageUnit.code}</p>
-                      {role !== "manager" && 'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
-                      {role !== "manager" && "unitType" in row && (
+                      {'facility' in row && <p className="mt-1 break-words text-xs text-stone-600">{row.facility.name}</p>}
+                      {"unitType" in row && (
                         <p className="mt-1 text-xs leading-4 text-stone-500">{copy(row.unitType.name)}</p>
                       )}
                     </td>
@@ -545,9 +519,6 @@ function WorkspaceData({
                       <p className="whitespace-nowrap text-xs leading-5 tabular-nums">{"contractEndDate" in row
                         ? rentalPeriodText(row, false)
                         : rentalDate(row.newEndDate)}</p>
-                      {role === 'manager' && <div className="mt-1"><Badge variant={recordStatusTone(row.status)}>
-                        {copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}
-                      </Badge></div>}
                     </td>
                     <td className="px-4 py-2.5 align-middle text-center">
                       <div className="flex justify-center">
@@ -737,7 +708,20 @@ function DetailModal({
             financeHistory={<RenewalPaymentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:finance`} />}
             evidenceDocuments={<RenewalDocumentHistory id={detail.id} role={role} identity={`${detail.id}:${read.data.record.version ?? "unknown"}:documents`} extraEvents={documentEvents} />}
             operationsLocked={operationsLocked}
-            appointmentSelection={undefined}
+            appointmentSelection={role === "customer" && read.data.record.status === "accepted" && operationOwner ? (
+              <RenewalOperationsPanel
+                id={detail.id}
+                role="customer"
+                status={read.data.record.status}
+                {...operationOwner}
+                appointmentOnly
+                onLocked={setOperationLocked}
+                onChanged={() => {
+                  read.refresh()
+                  onChanged()
+                }}
+              />
+            ) : undefined}
             onAction={(action) => {
               if (operationLock.current) return
               const renewal = read.data!.record as RenewalApiRecord
