@@ -1700,14 +1700,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           voucherCode: bookingVoucherCode.trim() || undefined,
         })
         setServerQuote(quote)
+        setAcceptedSetupQuoteId(null)
         setValidationViolation(null)
         setBookingReview(true)
         setBookingStep(3)
         return
       }
 
-      if (!serverQuote.setupEarlyExitPolicyVersion || acceptedSetupQuoteId !== serverQuote.quoteId) {
-        throw new Error('Vui lòng đọc và xác nhận điều khoản trả kho trong setup trước khi đặt kho.')
+      if (!serverQuote.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null) {
+        throw new Error('Báo giá chưa có điều khoản trả kho trong setup. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
+      }
+      if (acceptedSetupQuoteId !== serverQuote.quoteId) {
+        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong setup trước khi xác nhận đặt kho.')
       }
       const idempotencyKey = reservationIdempotencyKey.current || crypto.randomUUID()
       reservationIdempotencyKey.current = idempotencyKey
@@ -1807,11 +1811,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const cancelBackendReservation = (reservation: CustomerReservation) => {
     void cancelCustomerReservation(reservation.id, 'Khách hàng chủ động hủy trên cổng khách hàng')
-      .then(async detail => {
-        const result = await listCustomerReservations(undefined, 0, 50)
+      .then(() => listCustomerReservations(undefined, 0, 50))
+      .then(result => {
         setBackendReservations(result.data)
         setAvailabilityRevision(value => value + 1)
-        showToast(detail.reservation.setupReturnCaseId ? 'Đã mở hồ sơ trả kho và quyết toán sau bàn giao.' : `Đã hủy ${reservation.reservationCode}.`)
+        showToast(`Đã hủy ${reservation.reservationCode}.`)
       })
       .catch(error => showToast(error instanceof Error ? error.message : 'Không thể hủy đơn đặt kho.'))
   }
@@ -2249,9 +2253,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 key={reservation.id}
                 reservation={reservation}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
-                unitTypeName={reservation.unitTypeName || 'Thiếu dữ liệu lịch sử, cần đối soát'}
+                unitTypeName={reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
                 facilityDetails={backendFacilities.find(item => item.id === reservation.facilityId) || null}
+                unitTypeDetails={backendUnitTypes.find(item => item.id === reservation.unitTypeId) || null}
                 facility={facilities.find(item => item.id === reservation.facilityId)}
+                unitType={unitTypes.find(item => item.id === reservation.unitTypeId)}
                 onVerify={() => {
                   setBackendOtpReservation(reservation)
                   setBackendOtpCode('')
@@ -3357,6 +3363,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
                 <b>Ngày bắt đầu tính kỳ thuê:</b> {earliestCheckInDate}. Kỳ thuê bắt đầu từ ngày kho sẵn sàng sớm nhất, không phụ thuộc việc bạn chọn đến muộn hơn trong thời hạn 7 ngày.
               </div>
+              {isApiAuthenticated() && serverQuote && <div className="space-y-2 text-xs leading-5 text-stone-600">
+                {serverQuote.setupEarlyExitPolicyVersion && serverQuote.setupEarlyExitFee != null ? <>
+                  <p><b className="text-stone-900">Điều khoản trả kho trong setup:</b> nếu khách chủ động trả kho sau bàn giao và kho được nghiệm thu trống trước khi hết setup, phí chấm dứt sớm một lần là <b>{formatVnd(serverQuote.setupEarlyExitFee)}</b> theo báo giá đã chốt. Tiền thuê và cọc bảo đảm thực thu được quyết toán sau khi trừ phí này, chi phí có chứng cứ và công nợ đã xác minh. Khoản trả trước đã nằm trong tiền thuê. Trả thực tế sau setup áp dụng quyết toán kỳ thuê đã bắt đầu.</p>
+                  <label className="flex items-start gap-2 text-stone-700">
+                    <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
+                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong setup của báo giá này.</span>
+                  </label>
+                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong setup. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
+              </div>}
             </div>}
 
             {bookingStep === 2 && <>
@@ -3504,10 +3519,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               )
             })()}
 
-            {serverQuote && bookingStep >= 3 && <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-              <input type="checkbox" className="mt-1" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting || !serverQuote.setupEarlyExitPolicyVersion} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
-              <span>Tôi đã đọc và đồng ý điều khoản trả kho trong setup: phí chấm dứt sớm một lần {serverQuote.setupEarlyExitFee == null ? 'chưa xác định' : formatVnd(serverQuote.setupEarlyExitFee)}, khấu trừ khi quyết toán tiền thuê và cọc bảo đảm đã thực thu.</span>
-            </label>}
             {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
               <p className="font-bold">Chưa thể xác nhận đặt kho</p>
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
@@ -3540,7 +3551,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </Button>
               )}
               {bookingStep === 3 && <Button onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
-              {bookingStep === 4 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && acceptedSetupQuoteId !== serverQuote?.quoteId)} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
+              {bookingStep === 4 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && (!serverQuote?.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null || acceptedSetupQuoteId !== serverQuote.quoteId))} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
         )}

@@ -4,14 +4,14 @@ import { decideStaffReservationReview, listStaffActiveReservations, listStaffRes
 describe('staff goods review API', () => {
   afterEach(() => vi.unstubAllGlobals())
   it('loads the backend queue without inventing a facility scope', async () => {
-    const result = { data: [{ reservationId: 'r1', goodsReviewStatus: 'PENDING' }], pagination: { totalPages: 1 } }
+    const result = { data: [{ reservationId: 'r1', goodsReviewStatus: 'PENDING', reservationStatus: 'AWAITING_REVIEW' }], pagination: { totalPages: 1 } }
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     expect(await listStaffReservationReviews()).toEqual(result)
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/staff/reservation-reviews?page=0&size=20')
   })
   it.each(['APPROVE', 'REJECT'] as const)('sends %s to the backend decision endpoint', async decision => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { reservationId: 'r1' } }), { headers: { 'Content-Type': 'application/json' } }))
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { reservationId: 'r1', reservationStatus: decision === 'APPROVE' ? 'AWAITING_PAYMENT' : 'REJECTED' } }), { headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     await decideStaffReservationReview('r1', decision, ' Reviewed goods ')
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/staff/reservation-reviews/r1/decision', expect.objectContaining({
