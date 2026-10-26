@@ -27,6 +27,12 @@ export interface CustomerRental {
   status: CustomerRentalStatus
   startDate?: string
   contractEndDate?: string | null
+  setupStartedAt?: string | null
+  setupEndsAt?: string | null
+  inventoryDueAt?: string | null
+  inventoryPending?: boolean
+  moveInCompletedAt?: string | null
+  setupExitReviewRequired?: boolean
   monthlyPrice?: number
   currency?: string
   actualReturnedAt?: string | null
