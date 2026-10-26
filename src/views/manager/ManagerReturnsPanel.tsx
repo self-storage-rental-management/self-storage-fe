@@ -1,3 +1,5 @@
+import { isApiAuthenticated } from '../../services/authApi'
+import ReturnApiPanel from '../return-api/ReturnApiPanel'
 import React, { useEffect, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -24,7 +26,7 @@ interface ManagerReturnsPanelProps {
   onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
 }
 
-export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork }: ManagerReturnsPanelProps) {
+function LegacyManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork }: ManagerReturnsPanelProps) {
   const {
     returns: storeReturns,
     users,
@@ -1371,4 +1373,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       />
     </div>
   )
+}
+
+export default function ManagerReturnsPanel(props: ManagerReturnsPanelProps) {
+  return isApiAuthenticated() ? <ReturnApiPanel role="manager" /> : <LegacyManagerReturnsPanel {...props} />
 }

@@ -15,7 +15,7 @@ import type {
   ReservationValidationResult,
   UnitType,
   DamageClassification,
-  ReservationStatus,
+  LegacyReservationStatus,
   AccessCredential,
   RenewalRecord,
   MaintenanceTask,
@@ -2321,7 +2321,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const earlierCapacityHolds = state.holds.filter(item => item.id !== reservation.id && !item.assignedUnitId && item.facilityId === reservation.facilityId && item.unitTypeId === reservation.unitTypeId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status) && item.createdAt < reservation.createdAt).length
       if (capacity <= earlierCapacityHolds) throw new Error('Loại kho này không còn suất trống để duyệt hồ sơ.')
     }
-    const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as ReservationStatus, 'APPROVE')
+    const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as LegacyReservationStatus, 'APPROVE')
     const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
     const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
@@ -2434,7 +2434,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       // Check if all 4 conditions are met for READY_FOR_CHECKIN
       const hasContract = prev.contracts.some(c => c.reservationId === reservation.id && c.status === 'SIGNED')
       const isBalancePaid = reservation.remainingAmount <= 0
-      const nextStatus: ReservationStatus = (hasContract && isBalancePaid) ? 'READY_FOR_CHECKIN' : 'UNIT_RESERVED'
+      const nextStatus: LegacyReservationStatus = (hasContract && isBalancePaid) ? 'READY_FOR_CHECKIN' : 'UNIT_RESERVED'
 
       // System generates PIN if ready for checkin
       let generatedPin = reservation.generatedAccessPin
@@ -2655,7 +2655,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => {
       const isBalancePaid = reservation.remainingAmount <= 0
       const hasUnit = Boolean(reservation.assignedUnitId)
-      const nextStatus: ReservationStatus = (isBalancePaid && hasUnit) ? 'READY_FOR_CHECKIN' : 'UNIT_RESERVED'
+      const nextStatus: LegacyReservationStatus = (isBalancePaid && hasUnit) ? 'READY_FOR_CHECKIN' : 'UNIT_RESERVED'
 
       // System generates PIN if ready for check-in
       let generatedPin = reservation.generatedAccessPin
@@ -2755,7 +2755,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => {
       const hasContract = prev.contracts.some(c => c.reservationId === reservation.id && c.status === 'SIGNED')
       const hasUnit = Boolean(reservation.assignedUnitId)
-      const nextStatus: ReservationStatus = (hasContract && hasUnit) ? 'READY_FOR_CHECKIN' : 'UNIT_RESERVED'
+      const nextStatus: LegacyReservationStatus = (hasContract && hasUnit) ? 'READY_FOR_CHECKIN' : 'UNIT_RESERVED'
 
       let generatedPin = reservation.generatedAccessPin
       let newCred: AccessCredential | undefined
@@ -2961,106 +2961,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const requestRenewal: StorageHubContextValue['requestRenewal'] = () => legacyRenewalUnavailable()
   const updateRenewalRequest: StorageHubContextValue['updateRenewalRequest'] = () => legacyRenewalUnavailable()
 
-  const cancelRenewalRequest = (renewalId: string, customer: User) => {
-    assertPermission(customer, 'rentals:update')
-    const renewal = state.renewals.find(item => item.id === renewalId)
-    if (!renewal || !['pending', 'approved', 'appointment_scheduled'].includes(renewal.status)) throw new Error('Chỉ có thể hủy yêu cầu trước khi ký phụ lục và hoàn tất gia hạn.')
-    if (renewal.customerId !== customer.id) throw new Error('Yêu cầu gia hạn không thuộc tài khoản này.')
-    const cancelledAt = new Date().toISOString()
-    const wasApproved = renewal.status === 'approved'
-    const depositWasPaid = renewal.status === 'appointment_scheduled'
-    setState(prev => ({
-      ...prev,
-      renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'cancelled', cancelledAt, notes: depositWasPaid ? 'Customer hủy sau khi đã cọc; tiền thuê gia hạn trả trước không hoàn lại.' : wasApproved ? 'Customer hủy sau khi được duyệt; hóa đơn gia hạn đã mất hiệu lực.' : 'Customer chủ động hủy trước khi Manager xét duyệt.' } : item),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REQUEST_CANCELLED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, notes: depositWasPaid ? `Khách đã hủy yêu cầu ${renewal.id} sau khi cọc; cọc ${formatVnd(renewal.bookingDepositAmount ?? 0)} không hoàn lại. Manager đã được thông báo.` : wasApproved ? `Khách đã hủy yêu cầu gia hạn ${renewal.id} sau khi duyệt. Hóa đơn ${renewal.invoiceNumber || 'gia hạn'} đã mất hiệu lực.` : `Khách đã hủy yêu cầu gia hạn ${renewal.id}. Manager không cần tiếp tục xét duyệt.`, timestamp: cancelledAt }, ...prev.activities]
-    }))
-  }
-
-  const approveRenewal = (renewalId: string, managerUser: User) => {
-    assertPermission(managerUser, 'rentals:update')
-    const renewal = state.renewals.find(r => r.id === renewalId)
-    if (!renewal || renewal.status !== 'pending') {
-      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
-      return
-    }
-    const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
-
-    if (managerUser.role === 'manager') {
-      if (!rental || rental.status !== 'active') throw new Error('Hợp đồng không còn hiệu lực để gia hạn.')
-      if (renewal.oldEndDate !== rental.endDate) throw new Error('Thời hạn hợp đồng đã thay đổi. Vui lòng yêu cầu khách cập nhật lại đề nghị gia hạn.')
-      if (renewal.newEndDate <= renewal.oldEndDate) throw new Error('Ngày kết thúc gia hạn phải sau ngày kết thúc hợp đồng hiện tại.')
-    }
-
-    const isConflicted = managerUser.role === 'manager'
-      ? unitHasAllocationConflict(
-          renewal.unitId,
-          renewal.oldEndDate,
-          renewal.newEndDate,
-          renewal.id,
-          state.holds,
-          state.rentals.filter(item => item.id !== renewal.rentalId)
-        )
-      : state.holds.some(
-          h => h.assignedUnitId === renewal.unitId && ['DEPOSIT_PAID', 'UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(h.status) &&
-               checkDateOverlap(renewal.oldEndDate, renewal.newEndDate, h.startDate, h.endDate)
-        )
-
-    if (isConflicted) {
-      throw new Error('Kho đã có booking khác trong khoảng thời gian gia hạn yêu cầu.')
-    }
-
-    const now = new Date()
-    const paymentDueAt = new Date(now.getTime() + 72 * 60 * 60 * 1000)
-    const invoiceNumber = `INV-RNW-${Date.now().toString().slice(-8)}`
-    setState(prev => ({
-      ...prev,
-      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'approved', approvedBy: managerUser.name, approvedAt: now.toISOString(), paymentDueAt: paymentDueAt.toISOString(), invoiceNumber, invoiceIssuedAt: now.toISOString() } : r),
-      activities: [
-        {
-          id: `act-${Date.now()}`,
-          action: 'RENEWAL_APPROVED',
-          actorId: managerUser.id,
-          actorName: managerUser.name,
-          actorRole: managerUser.role,
-          facilityId: renewal.facilityId,
-          entityType: 'rental',
-          entityId: renewal.rentalId,
-          correlationId: renewal.id,
-          beforeState: { status: renewal.status, endDate: renewal.oldEndDate },
-          afterState: { status: 'approved', requestedEndDate: renewal.newEndDate, invoiceNumber, paymentDueAt: paymentDueAt.toISOString() },
-          notes: `Manager duyệt gia hạn kho ${renewal.unitId} đến ${renewal.newEndDate}. Chờ khách thanh toán.`,
-          timestamp: now.toISOString()
-        },
-        ...prev.activities
-      ]
-    }))
-  }
-
-  const rejectRenewal = (renewalId: string, managerUser: User, reason: string) => {
-    assertPermission(managerUser, 'rentals:update')
-    const renewal = state.renewals.find(r => r.id === renewalId)
-    if (!renewal || renewal.status !== 'pending') {
-      if (managerUser.role === 'manager') throw new Error('Yêu cầu gia hạn không còn ở trạng thái chờ duyệt.')
-      return
-    }
-    const rental = state.rentals.find(item => item.id === renewal.rentalId)
-    assertFacilityManager(managerUser, renewal.facilityId, rental?.facilityName || renewal.facilityId)
-    if (!reason.trim()) throw new Error('Vui lòng nhập lý do từ chối yêu cầu gia hạn.')
-    const now = new Date()
-
-    setState(prev => ({
-      ...prev,
-      renewals: prev.renewals.map(r => r.id === renewalId ? { ...r, status: 'rejected', approvedBy: managerUser.name, approvedAt: now.toISOString(), notes: reason.trim() } : r),
-      activities: [{ id: `act-${Date.now()}`, action: 'RENEWAL_REJECTED', actorId: managerUser.id, actorName: managerUser.name, actorRole: managerUser.role, facilityId: renewal.facilityId, entityType: 'rental', entityId: renewal.rentalId, correlationId: renewal.id, beforeState: { status: renewal.status, endDate: renewal.oldEndDate }, afterState: { status: 'rejected', reason: reason.trim() }, notes: `Từ chối yêu cầu ${renewal.id}. Lý do: ${reason.trim()}`, timestamp: now.toISOString() }, ...prev.activities]
-    }))
-  }
-
-  const expireRenewalPayment = (renewalId: string) => {
-    const renewal = state.renewals.find(item => item.id === renewalId)
-    if (!renewal || renewal.status !== 'approved' || !renewal.paymentDueAt || new Date(renewal.paymentDueAt).getTime() > Date.now()) return
-    setState(prev => ({ ...prev, renewals: prev.renewals.map(item => item.id === renewalId ? { ...item, status: 'payment_expired', notes: 'Quá hạn thanh toán toàn kỳ gia hạn.' } : item) }))
-  }
+  // Historical records cannot issue, invalidate or settle invoices locally.
+  const cancelRenewalRequest: StorageHubContextValue['cancelRenewalRequest'] = () => legacyRenewalUnavailable()
+  const approveRenewal: StorageHubContextValue['approveRenewal'] = () => legacyRenewalUnavailable()
+  const rejectRenewal: StorageHubContextValue['rejectRenewal'] = () => legacyRenewalUnavailable()
+  const expireRenewalPayment: StorageHubContextValue['expireRenewalPayment'] = () => legacyRenewalUnavailable()
 
   const payRenewal: StorageHubContextValue['payRenewal'] = () => legacyRenewalUnavailable()
   const completeRenewalAtFacility: StorageHubContextValue['completeRenewalAtFacility'] = () => legacyRenewalUnavailable()
@@ -4954,7 +4859,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
     if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 15 phút thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
-    const paidStatus = transitionReservation(targetHold.status as ReservationStatus, 'PAY_DEPOSIT')
+    const paidStatus = transitionReservation(targetHold.status as LegacyReservationStatus, 'PAY_DEPOSIT')
     if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
     if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong cửa sổ 7 ngày. Vui lòng đổi lịch trước khi thanh toán.')
@@ -5384,7 +5289,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               : new Date(verifiedAt.getTime() + 15 * 60 * 1000).toISOString()
             return {
               ...h,
-              status: requiresGoodsReview ? transitionReservation(h.status as ReservationStatus, 'VERIFY_EMAIL') : 'awaiting_payment',
+              status: requiresGoodsReview ? transitionReservation(h.status as LegacyReservationStatus, 'VERIFY_EMAIL') : 'awaiting_payment',
               goodsReviewSubmittedAt: requiresGoodsReview ? verifiedAt.toISOString() : h.goodsReviewSubmittedAt,
               goodsReviewDueAt,
               paymentExpiresAt,

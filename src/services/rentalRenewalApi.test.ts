@@ -34,6 +34,14 @@ afterEach(() => {
 })
 
 describe("D1/D2 wire contracts", () => {
+  it("reads the backend signing window without recalculating it", async () => {
+    response({ data: [{ pricingPackageCode: "M6", rentalMonths: 6, signingWindowDays: 8 }] })
+    expect((await getRenewalOptions("r1"))[0].signingWindowDays).toBe(8)
+  })
+  it.each([0, -1, 15, 1.5, "8"])("rejects invalid backend signing window %s", async signingWindowDays => {
+    response({ data: [{ pricingPackageCode: "M6", rentalMonths: 6, signingWindowDays }] })
+    await expect(getRenewalOptions("r1")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
   it.each([
     { totalItems: 0 }, { totalPages: 0 }, { pageSize: 101 },
     { page: 1 }, { totalItems: Number.MAX_SAFE_INTEGER + 1 }, { sort: null },

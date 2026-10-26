@@ -25,7 +25,8 @@ import { reservationProgress } from './reservationPresentation'
 import { requestReturn as requestReturnApi } from '../../services/returnApi'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
-import { LEGACY_RENEWAL_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
+import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
+import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
@@ -430,6 +431,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return { startDate, endDate: addMonthsForPreview(startDate, 3) }
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
+  const [acceptedSetupQuoteId, setAcceptedSetupQuoteId] = useState<string | null>(null)
   const [serverCompatibility, setServerCompatibility] = useState<CompatibilityCheckResult | null>(null)
   const [bookingVoucherCode, setBookingVoucherCode] = useState('')
   const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
@@ -752,11 +754,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return () => clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    renewals
-      .filter(renewal => renewal.customerId === user.id && renewal.status === 'approved' && renewal.paymentDueAt && new Date(renewal.paymentDueAt).getTime() <= now)
-      .forEach(renewal => expireRenewalPayment(renewal.id))
-  }, [expireRenewalPayment, now, renewals, user.id])
+
 
   const formatCountdown = (expiresAt?: string) => {
     if (!expiresAt) return { text: '--:--', isUrgent: false, isExpired: false }
@@ -1708,10 +1706,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         return
       }
 
+      if (!serverQuote.setupEarlyExitPolicyVersion || acceptedSetupQuoteId !== serverQuote.quoteId) {
+        throw new Error('Vui lòng đọc và xác nhận điều khoản trả kho trong setup trước khi đặt kho.')
+      }
       const idempotencyKey = reservationIdempotencyKey.current || crypto.randomUUID()
       reservationIdempotencyKey.current = idempotencyKey
       const reservation = await createCustomerReservation({
         quoteId: serverQuote.quoteId,
+        acceptedSetupEarlyExitPolicyVersion: serverQuote.setupEarlyExitPolicyVersion,
         identityDocumentNumber: customerIdCard.trim(),
         customerPhone: customerPhone.trim(),
         customerAddress: customerAddress.trim(),
@@ -1805,11 +1807,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const cancelBackendReservation = (reservation: CustomerReservation) => {
     void cancelCustomerReservation(reservation.id, 'Khách hàng chủ động hủy trên cổng khách hàng')
-      .then(() => listCustomerReservations(undefined, 0, 50))
-      .then(result => {
+      .then(async detail => {
+        const result = await listCustomerReservations(undefined, 0, 50)
         setBackendReservations(result.data)
         setAvailabilityRevision(value => value + 1)
-        showToast(`Đã hủy ${reservation.reservationCode}.`)
+        showToast(detail.reservation.setupReturnCaseId ? 'Đã mở hồ sơ trả kho và quyết toán sau bàn giao.' : `Đã hủy ${reservation.reservationCode}.`)
       })
       .catch(error => showToast(error instanceof Error ? error.message : 'Không thể hủy đơn đặt kho.'))
   }
@@ -2247,11 +2249,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 key={reservation.id}
                 reservation={reservation}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
-                unitTypeName={reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
+                unitTypeName={reservation.unitTypeName || 'Thiếu dữ liệu lịch sử, cần đối soát'}
                 facilityDetails={backendFacilities.find(item => item.id === reservation.facilityId) || null}
-                unitTypeDetails={backendUnitTypes.find(item => item.id === reservation.unitTypeId) || null}
                 facility={facilities.find(item => item.id === reservation.facilityId)}
-                unitType={unitTypes.find(item => item.id === reservation.unitTypeId)}
                 onVerify={() => {
                   setBackendOtpReservation(reservation)
                   setBackendOtpCode('')
@@ -2750,51 +2750,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     if (!rentalRenewals.length) return null
                     return <div className="space-y-2 border-t border-stone-200 px-5 py-4">
                       <p className="text-xs font-bold text-stone-900">{'Yêu cầu gia hạn'}</p>
-                      {rentalRenewals.map(renewal => {
-                        const paymentExpired = renewal.paymentDueAt ? new Date(renewal.paymentDueAt).getTime() <= now : false
-                        const contractOverdue = new Date(`${renewal.oldEndDate}T23:59:59`).getTime() < now
-                        return <div key={renewal.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="font-bold text-stone-900">{`Gói gia hạn ${renewal.renewalMonths || 1} tháng`} · {renewal.oldEndDate} → {renewal.newEndDate}</p>
-                              <p className="mt-1 text-stone-500">{renewal.id} · {badgeFor(renewal.status)}</p>
-                              {renewal.invoiceNumber && <p className="mt-1 text-stone-600">{'Hóa đơn'}: <b>{renewal.invoiceNumber}</b></p>}
-                              {renewal.status === 'approved' && renewal.paymentDueAt && <p className={`mt-1 font-semibold ${paymentExpired ? 'text-red-700' : 'text-amber-700'}`}>{'Hạn thanh toán toàn kỳ'}: {new Date(renewal.paymentDueAt).toLocaleString('vi-VN')}</p>}
-                              {renewal.status === 'approved' && renewal.paymentDueAt && !paymentExpired && <p className="mt-1 text-sm font-extrabold text-red-700">⏱ {'Còn lại'}: {formatCountdown(renewal.paymentDueAt).text}</p>}
-                              {renewal.status === 'approved' && contractOverdue && <p className="mt-1 font-semibold text-red-700">{'Hợp đồng cũ đã hết hạn; phí muộn được tính từ ngày kế tiếp ngày hết hạn đến ngày thanh toán/ký thực tế.'}</p>}
-                              {renewal.status === 'pending' && <p className="mt-1 text-blue-700">{'Yêu cầu đang chờ hệ thống xác nhận điều kiện thanh toán. Manager có thể theo dõi hồ sơ; không cần Manager duyệt để thanh toán.'}</p>}
-                              {renewal.updatedAt && <p className="mt-1 text-stone-500">{'Cập nhật gần nhất'}: {new Date(renewal.updatedAt).toLocaleString('vi-VN')}</p>}
-                              {renewal.status === 'payment_expired' && <p className="mt-1 text-red-700">{'Yêu cầu đã hết hiệu lực. Hãy gửi yêu cầu mới để Manager kiểm tra lại khả dụng.'}</p>}
-                              {renewal.status === 'rejected' && renewal.notes && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">{'Lý do Manager từ chối'}: {renewal.notes}</p>}
-                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Hẹn ký gia hạn ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Số tiền còn phải thanh toán: ${legacyRenewalMoney(renewal.remainingAmount)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
-                              {renewal.status === 'completed' && <p className="mt-1 text-emerald-700">{`Phụ lục ${renewal.addendumNumber} · Hiệu lực từ ${renewal.effectiveAt ? new Date(renewal.effectiveAt).toLocaleString('vi-VN') : renewal.paidAt}`}</p>}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <b>{formatVnd(renewal.totalAmount ?? renewal.renewalFee)}</b>
-                              {renewal.status === 'pending' && <><Button variant="outline" size="sm" onClick={() => { setActiveRentalForRenewal(rental); setRenewalMonths(renewal.renewalMonths); setEditingRenewalId(renewal.id); setRenewalModalOpen(true) }}>{'Chỉnh sửa'}</Button><Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy yêu cầu gia hạn', message: 'Bạn chắc chắn muốn hủy yêu cầu gia hạn này?', confirmLabel: 'Hủy yêu cầu', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy yêu cầu. Quản lý cơ sở đã nhận được cập nhật.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy yêu cầu.') } } })}>{'Hủy yêu cầu'}</Button></>}
-                              {renewal.status === 'approved' && !paymentExpired && <Button size="sm" onClick={() => {
-                                setActiveRenewalForPayment(renewal)
-                                setRenewalTermsAccepted(false)
-                                const suggestedSigningDate = new Date()
-                                if (new Date(`${renewal.oldEndDate}T23:59:59`).getTime() >= now) suggestedSigningDate.setDate(suggestedSigningDate.getDate() + 1)
-                                setRenewalAppointmentDate(dateInputValue(suggestedSigningDate))
-                                setRenewalAppointmentTime('09:00')
-                                setRenewalPaymentOpen(true)
-                              }}>{'Xem hóa đơn & thanh toán'}</Button>}
-                              {renewal.status === 'approved' && !paymentExpired && <Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => {
-                                requestConfirmation({ title: 'Hủy gia hạn đã được duyệt', message: `Hủy yêu cầu sẽ làm hóa đơn ${renewal.invoiceNumber || ''} mất hiệu lực. Bạn chắc chắn muốn tiếp tục?`, confirmLabel: 'Hủy gia hạn', tone: 'danger', onConfirm: () => { try {
-                                  cancelRenewalRequest(renewal.id, user)
-                                  setRenewalPaymentOpen(false)
-                                  showToast('Đã hủy gia hạn và vô hiệu hóa hóa đơn. Quản lý cơ sở đã nhận được thông báo.')
-                                } catch (error) {
-                                  showToast(error instanceof Error ? error.message : 'Không thể hủy yêu cầu gia hạn.')
-                                } } })
-                              }}>{'Hủy gia hạn'}</Button>}
-                              {renewal.status === 'appointment_scheduled' && <Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy lịch gia hạn', message: 'Hủy lịch ký gia hạn? Các khoản đã thanh toán (nếu có) cần được đối soát theo giao dịch thực tế.', confirmLabel: 'Vẫn hủy lịch', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy lịch gia hạn. Các khoản đã thanh toán cần được đối soát theo giao dịch thực tế.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy gia hạn.') } } })}>{'Hủy lịch gia hạn'}</Button>}
-                            </div>
+                      <p className="text-stone-600">{LEGACY_RENEWAL_HISTORY_NOTICE}</p>
+                      {rentalRenewals.map(renewal => <div key={renewal.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-bold text-stone-900">{renewal.id} · Kỳ đề nghị đã lưu: {renewal.oldEndDate} → {renewal.newEndDate}</p>
+                            <p>Trạng thái đã lưu: {badgeFor(renewal.status)}</p>
+                            {renewal.invoiceNumber && <p>Mã chứng từ cũ: <b>{renewal.invoiceNumber}</b></p>}
+                            {renewal.paymentDueAt && <p>Hạn thanh toán đã lưu: {new Date(renewal.paymentDueAt).toLocaleString('vi-VN')}</p>}
+                            <p>Tiền thuê đã lưu: <b>{legacyRenewalMoney(renewal.totalAmount ?? renewal.renewalFee)}</b></p>
                           </div>
+                          <Button variant="outline" size="sm" onClick={() => { setActiveRenewalForPayment(renewal); setRenewalPaymentOpen(true) }}>Xem dữ liệu đã lưu</Button>
                         </div>
-                      })}
+                      </div>)}
+
                     </div>
                   })()}
                   {(() => {
@@ -3535,6 +3504,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               )
             })()}
 
+            {serverQuote && bookingStep >= 3 && <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              <input type="checkbox" className="mt-1" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting || !serverQuote.setupEarlyExitPolicyVersion} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
+              <span>Tôi đã đọc và đồng ý điều khoản trả kho trong setup: phí chấm dứt sớm một lần {serverQuote.setupEarlyExitFee == null ? 'chưa xác định' : formatVnd(serverQuote.setupEarlyExitFee)}, khấu trừ khi quyết toán tiền thuê và cọc bảo đảm đã thực thu.</span>
+            </label>}
             {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
               <p className="font-bold">Chưa thể xác nhận đặt kho</p>
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
@@ -3567,7 +3540,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </Button>
               )}
               {bookingStep === 3 && <Button onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
-              {bookingStep === 4 && <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
+              {bookingStep === 4 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && acceptedSetupQuoteId !== serverQuote?.quoteId)} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
         )}
@@ -3827,7 +3800,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     ].map((term, index) => <div key={term} className="flex gap-2 rounded-lg bg-stone-50 p-3 leading-5"><span className="font-bold text-amber-700">{index + 1}.</span><span>{term}</span></div>)}</div></section>
                     {completedRenewals.length > 0 && <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'4. Hợp đồng gia hạn đã phát hành'}</p><div className="space-y-2">{completedRenewals.map(renewal => {
                       const renewalContract = contracts.find(contract => contract.id === renewal.renewalContractId || contract.renewalId === renewal.id)
-                      return <article key={renewal.id} className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-emerald-950">{renewal.renewalContractNumber || renewalContract?.contractNumber || renewal.addendumNumber || renewal.id}</p><p className="mt-1 text-emerald-800">{renewal.oldEndDate} → {renewal.newEndDate} · {renewal.renewalMonths} {'tháng'}</p></div><p className="font-bold text-emerald-900">{formatVnd(renewal.totalAmount ?? renewal.renewalFee)}</p></div><div className="mt-3 grid gap-2 text-stone-700 sm:grid-cols-2"><p>{'Hóa đơn'}: <b>{renewal.invoiceNumber}</b></p><p>{'Thanh toán hoàn tất'}: <b>{renewal.signedAt ? new Date(renewal.signedAt).toLocaleDateString('vi-VN') : '—'}</b></p></div>{renewalContract && <div className="mt-3 flex gap-2 border-t border-emerald-200 pt-3"><a href={renewalContract.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold text-emerald-900 underline">{'Xem hợp đồng đã ký'}</a><a href={renewalContract.scannedFileUrl} download={renewalContract.scannedFileName} className="font-bold text-emerald-900 underline">{'Tải xuống'}</a></div>}</article>
+                      return <article key={renewal.id} className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                        <p className="font-bold">{renewal.renewalContractNumber || renewalContract?.contractNumber || renewal.addendumNumber || renewal.id}</p>
+                        <p className="text-sm text-stone-600">{LEGACY_RENEWAL_HISTORY_NOTICE}</p>
+                        <p>Kỳ đã lưu: {renewal.oldEndDate} → {renewal.newEndDate} · {renewal.renewalMonths} tháng</p>
+                        <p>Tiền thuê đã lưu: {legacyRenewalMoney(renewal.totalAmount ?? renewal.renewalFee)}</p>
+                        <p>Mã chứng từ cũ: {renewal.invoiceNumber || '—'}</p>
+                        <p>Ngày ký đã lưu: {renewal.signedAt ? new Date(renewal.signedAt).toLocaleDateString('vi-VN') : '—'}</p>
+                        {renewalContract && <div className="flex gap-2 border-t border-stone-200 pt-3"><a href={renewalContract.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="underline">Xem tệp hợp đồng đã lưu</a><a href={renewalContract.scannedFileUrl} download={renewalContract.scannedFileName} className="underline">Tải xuống</a></div>}
+                      </article>
                     })}</div></section>}
                   </div>
                   <div className="grid gap-3 border-t border-stone-200 p-5 sm:grid-cols-4">
@@ -3878,7 +3859,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               const balance = totalValue === null || totalPaid === null ? null : Math.max(0, totalValue - totalPaid)
               return <div className="space-y-4 text-xs">
                 <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{legacyRenewalMoney(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo kho'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{legacyRenewalMoney(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{legacyRenewalMoney(balance)}</p></div></div></div>
-                {receiptPayments.map(payment => <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai thanh toán số dư gia hạn' : payment.type === 'RENEWAL' ? 'Biên lai thanh toán gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
+                {receiptPayments.map(payment => isLegacyRenewalPayment(payment) ? <LegacyRenewalPaymentRecord key={payment.id} payment={payment} /> : <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai thanh toán số dư gia hạn' : payment.type === 'RENEWAL' ? 'Biên lai thanh toán gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
                   ['Số biên nhận', payment.id],
                   ['Ngày giờ thanh toán', payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—'],
                   ['Người nộp tiền', `${activeHoldForContract.customerName} · ${activeHoldForContract.customerEmail}`],
@@ -4005,14 +3986,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       <Modal open={renewalModalOpen && !isApiAuthenticated()} onClose={() => { setRenewalModalOpen(false); setEditingRenewalId(null) }} title="Gia hạn hồ sơ cũ">
         <div className="space-y-4">
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_NOTICE}</p>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_HISTORY_NOTICE} {LEGACY_RENEWAL_NOTICE}</p>
           {activeRentalForRenewal && <p className="text-sm">Gian kho {activeRentalForRenewal.unitId} · Hạn thuê đã lưu: {activeRentalForRenewal.endDate}</p>}
           <div className="flex justify-end"><Button variant="outline" onClick={() => setRenewalModalOpen(false)}>Đóng</Button></div>
         </div>
       </Modal>
       <Modal open={renewalPaymentOpen && !isApiAuthenticated()} onClose={() => setRenewalPaymentOpen(false)} title="Thông tin gia hạn đã lưu">
         <div className="space-y-4">
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_NOTICE}</p>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_HISTORY_NOTICE} {LEGACY_RENEWAL_NOTICE}</p>
           {activeRenewalForPayment && <dl className="space-y-2 text-sm">
             <div><dt>Mã gia hạn</dt><dd>{activeRenewalForPayment.id}</dd></div>
             <div><dt>Tiền thuê đã lưu</dt><dd>{legacyRenewalMoney(activeRenewalForPayment.totalAmount ?? activeRenewalForPayment.renewalFee)}</dd></div>
