@@ -12,6 +12,7 @@ import RenewalOperationsPanel, {
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
 import { rentalError } from "../rental-api/presentation"
+import { approveRenewalTicket } from "../../services/renewalApi"
 
 function signingDate(value: string | null, time = false) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Chưa có lịch"
@@ -170,9 +171,29 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
                     {s.effectiveSigningDeadline && <p className="mt-1 text-xs text-stone-500">{signingDate(s.effectiveSigningDeadline, true)}</p>}
                   </td>
                   <td className="px-4 py-4 text-right align-middle">
-                    <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}>
-                      {["COMPLETED", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "Xem chi tiết" : "Xử lý"}
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      {s.phase !== "COMPLETED" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold whitespace-nowrap"
+                          onClick={async () => {
+                            try {
+                              await approveRenewalTicket(s.renewalId)
+                              alert("Đã duyệt gia hạn thành công! Hợp đồng thuê đã được tự động kéo dài.")
+                              read.refresh()
+                            } catch (err: any) {
+                              alert(err?.message || "Không thể duyệt gia hạn.")
+                            }
+                          }}
+                        >
+                          ✓ Duyệt gia hạn
+                        </Button>
+                      )}
+                      <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}>
+                        {["COMPLETED", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "Xem chi tiết" : "Xử lý"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>)}
               </tbody>

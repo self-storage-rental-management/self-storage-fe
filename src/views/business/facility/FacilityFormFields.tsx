@@ -34,6 +34,94 @@ export interface FacilityGeneralInfoProps {
   lang?: 'vi' | 'en'
 }
 
+// Helper to remove Vietnamese tones and accents
+export function removeVietnameseTones(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+}
+
+// Generate acronym from Name or City
+export function generateFacilityPrefix(name: string, city: string): string {
+  const cleanName = removeVietnameseTones(name || '').trim()
+  if (cleanName) {
+    const words = cleanName.split(/[^a-zA-Z0-9]+/).filter(Boolean)
+    if (words.length > 0) {
+      const acronym = words.map((w, idx) => {
+        if (/^\d+$/.test(w)) return w
+        if (/^[a-zA-Z]+\d+$/.test(w)) return w.toUpperCase()
+        const nextWord = words[idx + 1]
+        if (nextWord && /^\d+$/.test(nextWord)) {
+          return w[0].toUpperCase()
+        }
+        return w[0].toUpperCase()
+      }).join('')
+
+      if (acronym.length >= 2) return acronym
+      if (acronym.length === 1 && cleanName.length >= 2) {
+        return cleanName.slice(0, 3).toUpperCase()
+      }
+    }
+  }
+
+  // Fallback to City acronym nếu Tên cơ sở chưa nhập
+  const cleanCity = removeVietnameseTones(city || '').trim()
+  if (cleanCity) {
+    const cityMap: Record<string, string> = {
+      'ho chi minh': 'HCM',
+      'ha noi': 'HN',
+      'da nang': 'DN',
+      'binh duong': 'BD',
+      'can tho': 'CT',
+      'hai phong': 'HP',
+      'dong nai': 'DNA',
+      'bac ninh': 'BN',
+      'khanh hoa': 'KH',
+      'lam dong': 'LD',
+      'quang ninh': 'QN',
+      'ba ria vung tau': 'BRVT',
+      'vung tau': 'VT',
+      'thua thien hue': 'HUE',
+      'hue': 'HUE',
+      'long an': 'LA',
+      'tien giang': 'TG',
+      'an giang': 'AG',
+      'kien giang': 'KG',
+    }
+    const lowerCity = cleanCity.toLowerCase()
+    if (cityMap[lowerCity]) return cityMap[lowerCity]
+    const words = cleanCity.split(/[^a-zA-Z0-9]+/).filter(Boolean)
+    return words.map(w => w[0].toUpperCase()).join('')
+  }
+
+  return 'FAC'
+}
+
+// Function to generate the next unique code
+export function generateFacilityCode(
+  name: string,
+  city: string,
+  existingFacilities: { id: string; code?: string }[],
+  currentFacilityId?: string,
+): string {
+  const prefix = generateFacilityPrefix(name, city)
+  const existingCodes = new Set(
+    (existingFacilities || [])
+      .filter(f => !currentFacilityId || f.id !== currentFacilityId)
+      .map(f => (f.code || f.id || '').trim().toUpperCase())
+  )
+
+  let index = 1
+  let candidate = `${prefix}-F${String(index).padStart(2, '0')}`
+  while (existingCodes.has(candidate)) {
+    index++
+    candidate = `${prefix}-F${String(index).padStart(2, '0')}`
+  }
+  return candidate
+}
+
 export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   isEditing,
   code,
@@ -52,6 +140,45 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   lang = 'vi',
 }) => {
   const [isCityListOpen, setIsCityListOpen] = useState(false)
+  const [isAutoCode, setIsAutoCode] = useState(!isEditing)
+
+  // Tự động cập nhật mã khi ở chế độ tạo mới và đang bật Auto
+  useEffect(() => {
+    if (!isEditing && isAutoCode) {
+      if (name.trim() || city.trim()) {
+        const nextCode = generateFacilityCode(name, city, existingFacilities, currentFacilityId)
+        if (nextCode && nextCode !== code) {
+          onChangeCode(nextCode)
+        }
+      }
+    }
+  }, [name, city, isAutoCode, isEditing, existingFacilities, currentFacilityId])
+
+  const toggleAutoCode = () => {
+    if (isAutoCode) {
+      setIsAutoCode(false)
+    } else {
+      setIsAutoCode(true)
+      const nextCode = generateFacilityCode(name, city, existingFacilities, currentFacilityId)
+      onChangeCode(nextCode)
+    }
+  }
+
+  const handleNameChange = (val: string) => {
+    onChangeName(val)
+    if (isAutoCode && !isEditing) {
+      const nextCode = generateFacilityCode(val, city, existingFacilities, currentFacilityId)
+      onChangeCode(nextCode)
+    }
+  }
+
+  const handleCityChange = (val: string) => {
+    onChangeCity(val)
+    if (isAutoCode && !isEditing) {
+      const nextCode = generateFacilityCode(name, val, existingFacilities, currentFacilityId)
+      onChangeCode(nextCode)
+    }
+  }
 
   // Validate duplicate code
   const isDuplicate = existingFacilities.some(
@@ -75,18 +202,58 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Mã cơ sở */}
         <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1">
-            {lang === 'vi' ? 'Mã cơ sở *' : 'Facility Code *'}
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs font-semibold text-stone-700">
+                {lang === 'vi' ? 'Mã cơ sở *' : 'Facility Code *'}
+              </label>
+              {isAutoCode && !isEditing && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {lang === 'vi' ? 'Tự động tạo' : 'Auto-generated'}
+                </span>
+              )}
+            </div>
+
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={toggleAutoCode}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:text-amber-900 transition-colors cursor-pointer"
+                title={isAutoCode ? (lang === 'vi' ? 'Mở khóa để sửa mã thủ công' : 'Unlock to edit manually') : (lang === 'vi' ? 'Khóa để tự động sinh mã' : 'Lock to auto-generate')}
+              >
+                {isAutoCode ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-stone-500 hover:text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span>{lang === 'vi' ? 'Sửa tay' : 'Custom'}</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span className="text-emerald-700 font-semibold">{lang === 'vi' ? 'Tự động' : 'Auto'}</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
           <input
             type="text"
-            disabled={isEditing}
-            className={`w-full border rounded-lg px-3 py-2 text-sm font-bold uppercase bg-white focus:outline-none focus:ring-1 ${
-              isDuplicate || !code.trim()
-                ? 'border-red-400 bg-red-50/40 text-red-900 focus:ring-red-500'
-                : 'border-stone-300 text-stone-900 focus:ring-amber-500'
+            readOnly={isAutoCode || isEditing}
+            className={`w-full border rounded-lg px-3 py-2 text-sm font-bold uppercase focus:outline-none focus:ring-1 ${
+              isAutoCode || isEditing
+                ? 'border-stone-300 bg-stone-100/80 text-stone-700 cursor-not-allowed select-all'
+                : isDuplicate || !code.trim()
+                  ? 'border-red-400 bg-red-50/40 text-red-900 focus:ring-red-500'
+                  : 'border-stone-300 bg-white text-stone-900 focus:ring-amber-500'
             }`}
-            placeholder="VD: HN-F02"
+            placeholder={isAutoCode ? (lang === 'vi' ? 'Tự động điền theo Tên/Tỉnh...' : 'Auto-filled...') : 'VD: HCM-Q1-F01'}
             value={code}
             onChange={(e) => onChangeCode(e.target.value.toUpperCase())}
           />
@@ -114,7 +281,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
               type="text"
               className="w-full border border-stone-300 rounded-lg pl-3 pr-10 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
               value={city}
-              onChange={(e) => onChangeCity(e.target.value)}
+              onChange={(e) => handleCityChange(e.target.value)}
               onFocus={() => setIsCityListOpen(true)}
               onBlur={() => setIsCityListOpen(false)}
               placeholder={lang === 'vi' ? 'Nhập hoặc chọn tỉnh/thành phố' : 'Enter or select a city/province'}
@@ -149,7 +316,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
                   className={`block w-full px-3 py-2 text-left text-sm hover:bg-amber-50 ${city === province ? 'bg-amber-50 font-semibold text-amber-900' : 'text-stone-800'}`}
                   onMouseDown={(event) => {
                     event.preventDefault()
-                    onChangeCity(province)
+                    handleCityChange(province)
                     setIsCityListOpen(false)
                   }}
                 >
@@ -169,9 +336,9 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
         <input
           type="text"
           className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold"
-          placeholder="VD: Kho Việt Đà Nẵng..."
+          placeholder="VD: Kho Tân Bình..."
           value={name}
-          onChange={(e) => onChangeName(e.target.value)}
+          onChange={(e) => handleNameChange(e.target.value)}
         />
       </div>
 
@@ -236,66 +403,26 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
   initialStatus,
   lang = 'vi',
 }) => {
-  const is24_7 = accessHours.includes('24/7')
-
-  // Giờ mở và đóng cửa trích xuất nếu có dạng HH:MM - HH:MM
-  const timeMatch = accessHours.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/)
-  const [openTime, setOpenTime] = useState<string>(timeMatch ? timeMatch[1] : '06:00')
-  const [closeTime, setCloseTime] = useState<string>(timeMatch ? timeMatch[2] : '22:00')
-
-  useEffect(() => {
-    if (timeMatch) {
-      setOpenTime(timeMatch[1])
-      setCloseTime(timeMatch[2])
-    }
-  }, [accessHours])
-
-  const handleTimeChange = (newOpen: string, newClose: string) => {
-    setOpenTime(newOpen)
-    setCloseTime(newClose)
-    onChangeAccessHours(`${newOpen} - ${newClose} hàng ngày`)
-  }
-
   return (
     <div className="pt-2">
       <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
         {lang === 'vi' ? 'Thông số vận hành' : 'Operation Settings'}
       </h4>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
-        {/* Khung giờ ra vào / Giờ mở cửa */}
+        {/* Khung giờ mở cửa */}
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
-            {lang === 'vi' ? 'Khung giờ ra vào / Giờ mở cửa' : 'Access Hours'}
+            {lang === 'vi' ? 'Khung giờ mở cửa' : 'Opening Hours'}
           </label>
 
-          {/* Ô nhập trực tiếp giờ hoạt động (toàn quyền set/gõ theo ý muốn) */}
+          {/* Ô nhập trực tiếp giờ hoạt động */}
           <input
             type="text"
             className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            placeholder="VD: 06:00 - 22:00 hàng ngày"
+            placeholder="08:00 - 17:00"
             value={accessHours}
             onChange={(e) => onChangeAccessHours(e.target.value)}
           />
-
-          {/* Bộ chọn nhanh giờ mở - đóng cửa */}
-          <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-[11px] text-stone-500">
-            <span className="whitespace-nowrap">Chọn nhanh:</span>
-            <input
-              type="time"
-              className="min-w-0 w-full border border-stone-200 rounded px-2 py-1 text-xs bg-stone-50 text-stone-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              value={openTime}
-              onChange={(e) => handleTimeChange(e.target.value, closeTime)}
-              aria-label="Giờ mở cửa"
-            />
-            <span className="text-stone-400">đến</span>
-            <input
-              type="time"
-              className="min-w-0 w-full border border-stone-200 rounded px-2 py-1 text-xs bg-stone-50 text-stone-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              value={closeTime}
-              onChange={(e) => handleTimeChange(openTime, e.target.value)}
-              aria-label="Giờ đóng cửa"
-            />
-          </div>
         </div>
 
         {/* Trạng thái hoạt động (chỉ dùng Tiếng Việt) */}
@@ -328,23 +455,6 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
               <span className="font-semibold text-emerald-900">
                 {lang === 'vi' ? 'Cơ sở đã kích hoạt thành công và đang hiển thị công khai cho khách hàng.' : 'Facility is active and visible to customers.'}
               </span>
-            </div>
-          ) : status === 'active' ? (
-            <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/90 p-2.5 text-xs text-amber-950">
-              <div className="font-semibold flex items-center gap-1.5 text-amber-800">
-                <svg className="w-4 h-4 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {lang === 'vi' ? 'Điều kiện để chuyển sang Đang hoạt động:' : 'Conditions to activate:'}
-              </div>
-              <ul className="list-disc list-inside mt-1.5 space-y-1 text-[11px] text-amber-900 leading-snug pl-1">
-                <li>{lang === 'vi' ? 'Quản lý cơ sở đã khai báo ít nhất 1 loại kho & gian kho sẵn sàng' : 'Manager defined unit types & available units'}</li>
-                <li>{lang === 'vi' ? 'BO đã cấu hình đơn giá thuê > 0 (tại mục Bảng Giá Loại Kho)' : 'BO configured monthly rental price > 0'}</li>
-                <li>{lang === 'vi' ? 'Cơ sở đã được gán vào gói thuê kỳ hạn còn hiệu lực' : 'Facility assigned to an active rental package'}</li>
-              </ul>
-              <p className="mt-1.5 text-[10.5px] italic text-amber-700">
-                {lang === 'vi' ? '*Nếu cơ sở mới tạo chưa có đủ các điều kiện trên, vui lòng giữ trạng thái "Đang thiết lập" để tiếp tục cấu hình.' : '*If prerequisites are not met yet, keep status as "Setup".'}
-              </p>
             </div>
           ) : null}
         </div>

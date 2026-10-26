@@ -83,7 +83,7 @@ function MainContent() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
-  const [restoringSession, setRestoringSession] = useState(() => Boolean(getRefreshToken()))
+  const [restoringSession, setRestoringSession] = useState(() => Boolean(!getAuthenticatedActor() && getRefreshToken()))
   const [guestView, setGuestView] = useState<GuestView>(resolveGuestView)
   const logoutLock = useRef(false)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -173,8 +173,22 @@ function MainContent() {
 
   useEffect(() => {
     const syncUpdatedActor = () => setApiActor(getAuthenticatedActor())
+    const handleAuthExpired = () => {
+      const wasApiUser = Boolean(getAuthenticatedActor() || apiActor)
+      clearAuthTokens()
+      setApiActor(null)
+      if (wasApiUser) {
+        setSessionUserId(null)
+        setSessionId(null)
+        setGuestView(resolveGuestView())
+      }
+    }
     window.addEventListener('storagehub:actor-updated', syncUpdatedActor)
-    return () => window.removeEventListener('storagehub:actor-updated', syncUpdatedActor)
+    window.addEventListener('storagehub:auth-expired', handleAuthExpired)
+    return () => {
+      window.removeEventListener('storagehub:actor-updated', syncUpdatedActor)
+      window.removeEventListener('storagehub:auth-expired', handleAuthExpired)
+    }
   }, [])
 
   useEffect(() => {

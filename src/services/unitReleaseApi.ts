@@ -2,7 +2,7 @@ import { ApiClientError, apiRequest } from './apiClient'
 
 export type UnitReleaseDisposition = 'AVAILABLE' | 'MAINTENANCE'
 export type UnitAssignmentStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED'
-export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
+export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned' | 'inactive' | 'archived'
 
 export interface UnitReleaseEligibility {
   releasable: boolean
