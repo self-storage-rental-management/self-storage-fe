@@ -383,7 +383,7 @@ export async function recordCredentialAccessEvent(
     throw new Error('Thông tin log truy cập không hợp lệ.')
   }
   return assertCredentialAccessEventEnvelope(await apiRequest<unknown>(
-    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access-events`,
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access`,
     { method: 'POST', body: JSON.stringify({ eventType, note: note?.trim() || undefined }) },
   ))
 }
