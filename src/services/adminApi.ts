@@ -85,6 +85,15 @@ export interface AdminApiSetting {
   updatedAt: string
 }
 
+export interface AdminApiDashboard {
+  totalUsers: number
+  usersByRole: Partial<Record<ApiRoleCode, number>>
+  lockedAccountsCount: number
+  disabledAccountsCount: number
+  recentLoginFailures: AdminApiLoginHistory[]
+  recentSecurityEvents: AdminApiActivityLog[]
+}
+
 export interface AdminUserPage {
   data: AdminApiUser[]
   pagination: {
@@ -113,6 +122,27 @@ function readData<T>(payload: unknown): T {
     throw new ApiClientError('Backend trả về dữ liệu không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as { data: T }).data
+}
+
+function readDashboard(payload: unknown): AdminApiDashboard {
+  const value = readData<Partial<AdminApiDashboard>>(payload)
+  if (!value
+    || typeof value.totalUsers !== 'number'
+    || typeof value.lockedAccountsCount !== 'number'
+    || typeof value.disabledAccountsCount !== 'number'
+    || !value.usersByRole || typeof value.usersByRole !== 'object'
+    || !Array.isArray(value.recentLoginFailures)
+    || !Array.isArray(value.recentSecurityEvents)) {
+    throw new ApiClientError('Backend trả về tổng quan quản trị không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return {
+    totalUsers: value.totalUsers,
+    usersByRole: value.usersByRole,
+    lockedAccountsCount: value.lockedAccountsCount,
+    disabledAccountsCount: value.disabledAccountsCount,
+    recentLoginFailures: value.recentLoginFailures,
+    recentSecurityEvents: value.recentSecurityEvents,
+  }
 }
 
 function readPage<T>(payload: unknown): { data: T[]; pagination: AdminUserPage['pagination'] } {
@@ -144,6 +174,10 @@ function queryString(params: AdminUserListParams) {
   if (params.status && params.status !== 'all') query.set('status', params.status)
   if (params.facilityId && params.facilityId !== 'all') query.set('facilityId', params.facilityId)
   return query.toString()
+}
+
+export async function getAdminDashboard() {
+  return readDashboard(await apiRequest<unknown>('/api/admin/dashboard'))
 }
 
 export async function listAdminUsers(params: AdminUserListParams) {
