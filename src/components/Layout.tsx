@@ -104,7 +104,7 @@ interface LayoutProps {
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, roleColor, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
 }: LayoutProps) {
   const roleTaskbarColor: Record<Role, string> = {
     customer: '#F4C542',
@@ -420,25 +420,26 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-4 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col overflow-hidden transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
-        <div className="shrink-0 px-5 py-5 border-b border-[#44453f] flex items-center justify-between">
-          <BrandLogo light subtitle={'Lưu trữ an toàn'} />
+        <div className="shrink-0 px-5 py-4 border-b border-white/10 flex items-center justify-between">
+          <BrandLogo light subtitle={'Lưu trữ an toàn'} imgClassName="h-8 w-auto max-w-full object-contain" />
         </div>
 
         {/* Role & Facility badge */}
         <div className="shrink-0 px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className={`inline-flex items-center px-2.5 py-1 rounded text-[10px] tracking-[.08em] font-semibold border ${roleColor || 'bg-[#3a3933] text-[#f3c675] border-[#4b4940]'}`}>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-normal text-stone-300">
               {getTranslatedRole()}
             </span>
           </div>
           {(user.role === 'manager' || user.role === 'staff') && (
             user.facility ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#3a3933]/80 border border-[#4b4940] text-[11px] text-amber-300">
-                <span className="truncate font-medium">{user.facility}</span>
+              <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-stone-300">
+                <span>🏢</span>
+                <span className="truncate font-normal" title={user.facility}>{user.facility}</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/40 border border-amber-800/60 text-[11px] text-amber-400">
@@ -462,6 +463,7 @@ export default function Layout({
                 )}
                 <button
                   onClick={() => { navigate(item.id); setSidebarOpen(false) }}
+                  aria-current={currentPage === item.id ? 'page' : undefined}
                   className={`sidebar-link w-full mb-0.5 ${currentPage === item.id ? 'active' : ''}`}
                 >
                   <span>{getNavLabel(item)}</span>
@@ -472,22 +474,22 @@ export default function Layout({
         </nav>
 
         {/* User section */}
-        <div className="shrink-0 px-4 py-4 border-t border-[#44453f]">
+        <div className="shrink-0 px-3 py-3 border-t border-white/10">
           <button
             type="button"
             onClick={() => { navigate('profile'); setSidebarOpen(false) }}
-            className={`w-full flex items-center gap-3 p-2 rounded-lg transition text-left mb-2.5 group ${currentPage === 'profile'
-                ? 'bg-[#3a3933] border border-[#4b4940] shadow-sm'
+            className={`w-full flex items-center gap-2.5 p-2 rounded-lg transition text-left mb-1 group ${currentPage === 'profile'
+                ? 'bg-white/10'
                 : 'hover:bg-white/5'
               }`}
             title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
           >
-            <Avatar name={user.name} size="md" imageUrl={user.avatar} />
+            <Avatar name={user.name} size="sm" imageUrl={user.avatar} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-stone-100 truncate group-hover:text-amber-200 transition">{user.name}</p>
+              <p className="text-sm font-medium text-stone-200 truncate group-hover:text-white transition">{user.name}</p>
               <p className="text-xs text-stone-400 truncate">{user.email}</p>
             </div>
-            <span className={`text-xs font-mono px-1.5 py-0.5 rounded transition ${currentPage === 'profile' ? 'bg-[#e9a12c] text-[#292a27] font-semibold' : 'text-stone-400 group-hover:text-stone-200'
+            <span className={`text-xs px-1.5 py-0.5 rounded transition ${currentPage === 'profile' ? 'text-white font-medium' : 'text-stone-400 group-hover:text-stone-200'
               }`}>
               {'Hồ sơ'}
             </span>
@@ -537,9 +539,8 @@ export default function Layout({
           {(user.role === 'manager' || user.role === 'staff') && (
             <div className="hidden sm:flex items-center ml-2">
               {user.facility ? (
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Cơ sở: <strong className="font-bold text-emerald-950">{user.facility}</strong></span>
+                <div className="ui-badge inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium">
+                  <span>Cơ sở: <strong className="font-semibold">{user.facility}</strong></span>
                 </div>
               ) : (
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">

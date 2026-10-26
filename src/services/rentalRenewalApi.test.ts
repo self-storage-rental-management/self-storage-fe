@@ -34,6 +34,14 @@ afterEach(() => {
 })
 
 describe("D1/D2 wire contracts", () => {
+  it("reads the backend signing window without recalculating it", async () => {
+    response({ data: [{ pricingPackageCode: "M6", rentalMonths: 6, signingWindowDays: 8 }] })
+    expect((await getRenewalOptions("r1"))[0].signingWindowDays).toBe(8)
+  })
+  it.each([0, -1, 15, 1.5, "8"])("rejects invalid backend signing window %s", async signingWindowDays => {
+    response({ data: [{ pricingPackageCode: "M6", rentalMonths: 6, signingWindowDays }] })
+    await expect(getRenewalOptions("r1")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
   it.each([
     { totalItems: 0 }, { totalPages: 0 }, { pageSize: 101 },
     { page: 1 }, { totalItems: Number.MAX_SAFE_INTEGER + 1 }, { sort: null },
@@ -144,7 +152,7 @@ describe("D1/D2 wire contracts", () => {
     expect(fetch.mock.calls[0][0]).toMatch(/\/api\/customer\/rental-records\/r1$/)
   })
   it("keeps the shared Customer rental client and flat DTO unchanged", async () => {
-    const shared = { data: [{ id: "r1", storageUnitCode: "A-01", facilityName: "Facility" }], pagination: page([]).pagination }
+    const shared = { data: [{ id: "r1", status: "active", storageUnitCode: "A-01", facilityName: "Facility" }], pagination: page([]).pagination }
     const fetch = response(shared)
     expect(await listCustomerRentals("active", 0, 20)).toEqual(shared)
     expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/api/customer/rentals")
@@ -205,6 +213,13 @@ describe("D1/D2 wire contracts", () => {
     expect(await quoteRenewal("r1", "P3")).toEqual(quote)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
       pricingPackageCode: "P3",
+    })
+  })
+  it("requests a renewal quote with its date and no full-payment option", async () => {
+    const fetch = response({ data: quote })
+    await quoteRenewal("r1", "P3", "2026-11-01")
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      pricingPackageCode: "P3", startDate: "2026-11-01",
     })
   })
   it("does not accept the Booking quoteId shape", async () => {

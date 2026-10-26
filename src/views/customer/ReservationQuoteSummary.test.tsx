@@ -8,6 +8,7 @@ const quote: ReservationQuote = {
   rentalMonths: 3, monthlyPrice: 5500000, subtotal: 16500000, discountRate: 0.03, discountAmount: 495000,
   totalAfterDiscount: 16005000, reservationDepositAmount: 3201000, remainingRentalAmount: 12804000,
   securityDepositAmount: 5500000, dueAtCheckIn: 18304000, totalInitialObligation: 21505000,
+  setupEarlyExitPolicyVersion: 'SETUP_EARLY_EXIT_ONE_MONTH_V1', setupEarlyExitFee: 5500000,
   policyVersion: 'v1', quotedAt: '2026-10-05T00:00:00Z', expiresAt: '2026-10-05T00:10:00Z',
 }
 describe('authoritative backend pricing', () => {
@@ -37,4 +38,17 @@ describe('authoritative backend pricing', () => {
     expect(html).toContain('2.400.750 ₫')
     expect(html).toContain('Tiền thuê còn lại (85%)')
   })
+  it.each(['quote', 'reservation'] as const)('shows the accepted early-exit fee in %s without charging it at booking', context => {
+    const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview={false} context={context} />)
+    expect(html).toContain('Trả kho sớm trong setup')
+    expect(html).toContain('một tháng đơn giá đã chốt')
+    expect(html).toContain('21.505.000')
+    expect(html).not.toContain('27.005.000')
+  })
+  it('does not invent an early-exit fee for historical quotes without accepted terms', () => {
+    const html = renderToStaticMarkup(<ReservationQuoteSummary quote={{ ...quote, setupEarlyExitPolicyVersion: null, setupEarlyExitFee: null }} needsReview={false} context="reservation" />)
+    expect(html).toContain('chưa có điều khoản')
+    expect(html).not.toContain('phí chấm dứt sớm một lần')
+  })
+
 })
