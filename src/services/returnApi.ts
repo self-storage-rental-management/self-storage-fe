@@ -30,6 +30,19 @@ export interface ApiReturn {
   earlyTerminationFee?: number | null
   id: string; rentalId: string; facilityId: string; customerId: string
   facilityName: string; unitNumber: string; customerName: string
+  storageUnitId?: string
+  customerEmail?: string | null
+  customerPhone?: string | null
+  requestedAt?: string | null
+  completedAt?: string | null
+  settlementPaymentId?: string | null
+  settlementPaidAt?: string | null
+  returnedKey?: boolean
+  returnedCard?: boolean
+  returnedLock?: boolean
+  inventoryMatch?: 'match' | 'missing' | 'excess' | null
+  damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
+  settlementReceipt?: { direction: string; amount: number; paymentMethod: string; transactionReference: string; receiptFileId: string | null; recordedAt: string } | null
   status: typeof returnStatuses[number]; scheduledDate: string
   inspectionNotes: string | null; managerResolutionNote: string | null
   customerNotes?: string | null
@@ -50,7 +63,15 @@ const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const money = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 999999999999.99 && Math.abs(v * 100 - Math.round(v * 100)) < 0.01
 const date = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v
 export function isApiReturn(v: unknown): v is ApiReturn {
-  return object(v) && ['rentalRefundCredit', 'earlyTerminationFee'].every(k => v[k] == null || money(v[k])) &&
+  return object(v) && (v.storageUnitId === undefined || isUuid(v.storageUnitId)) &&
+    (v.settlementReceipt == null || object(v.settlementReceipt) && money(v.settlementReceipt.amount) &&
+      ['direction', 'paymentMethod', 'transactionReference', 'recordedAt'].every(k => typeof (v.settlementReceipt as Record<string, unknown>)[k] === 'string') &&
+      (isUuid(v.settlementReceipt.receiptFileId) || v.settlementReceipt.direction === 'OFFSET' && v.settlementReceipt.receiptFileId == null)) &&
+    ['customerEmail', 'customerPhone', 'requestedAt', 'completedAt', 'settlementPaymentId', 'settlementPaidAt'].every(k => v[k] == null || typeof v[k] === 'string') &&
+    ['returnedKey', 'returnedCard', 'returnedLock'].every(k => v[k] === undefined || typeof v[k] === 'boolean') &&
+    (v.inventoryMatch == null || ['match', 'missing', 'excess'].includes(String(v.inventoryMatch))) &&
+    (v.damageClassification == null || ['no_damage', 'minor_damage', 'major_damage', 'abandoned_goods'].includes(String(v.damageClassification))) &&
+    ['rentalRefundCredit', 'earlyTerminationFee'].every(k => v[k] == null || money(v[k])) &&
     ['setupExitRequested', 'setupEarlyExit'].every(k => v[k] == null || typeof v[k] === 'boolean') &&
     (v.setupReturnedAt == null || typeof v.setupReturnedAt === 'string' && Number.isFinite(Date.parse(v.setupReturnedAt))) &&
     ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
