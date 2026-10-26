@@ -65,6 +65,7 @@ export function isOperationState(
     [
       "UNKNOWN",
       "AWAITING_PAYMENT_INTENT",
+      "PREPARATION_BLOCKED",
       "AWAITING_DEPOSIT",
       "SIGNING",
       "SIGNING_EXPIRY_PENDING",
@@ -141,6 +142,8 @@ export function isOperationEvent(
         "DEPOSIT_DISPOSITION",
         "DEPOSIT_REVIEW_REQUIRED",
         "REFUND_EXECUTION",
+        "PREPARATION_BLOCKED",
+        "PREPARATION_RESOLUTION",
         "COMPLETION",
         "EXPIRY",
       ].includes(e.kind) &&
@@ -152,6 +155,11 @@ export function isOperationEvent(
   )
     return false
   const d = e.data as Record<string, unknown>
+  if (e.kind === 'PREPARATION_BLOCKED') return isUuid(d.paymentId) && d.status === 'ON_HOLD'
+    && d.reason === 'SIGNING_PREPARATION_FAILED' && Number.isSafeInteger(d.attempts) && Number(d.attempts) > 0
+  if (e.kind === 'PREPARATION_RESOLUTION') return isUuid(d.paymentId) && d.action === 'RETRY' && d.status === 'RETRY_REQUESTED'
+    && typeof d.reason === 'string' && d.reason.trim().length > 0
+    && Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.length > 0 && d.evidenceFileIds.every(isUuid)
   if (e.kind === "DEPOSIT_REVIEW_REQUIRED") return ["AWAITING_FAULT_REVIEW", "FACILITY_FAULT"].includes(String(d.status))
   if (e.kind === "FAULT_REVIEW")
     return isUuid(d.incidentId) && typeof d.facilityFault === "boolean" &&
@@ -309,6 +317,8 @@ export async function getRenewalPayableStatement(id: string) {
       const s = v as RenewalPayableStatement | null
       return (
         !!s &&
+        ((s.effectiveStartDate == null && s.effectiveEndDate == null) ||
+          [s.effectiveStartDate, s.effectiveEndDate].every(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(d))) && s.effectiveStartDate! <= s.effectiveEndDate!) &&
         isUuid(s.reference) &&
         s.renewalId === id &&
         typeof s.version === "string" &&
@@ -414,7 +424,7 @@ const commandFields: Record<RenewalOperationCommand["action"], readonly string[]
   arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion"],
   incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
   cash: ["payableStatementRef", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
-  completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion"],
+  completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion", "expectedEffectiveStartDate"],
   exception: ["incidentId", "action", "appointmentAt", "revisedDeadline", "reason", "evidenceFileIds", "expectedVersion"],
   refund: ["incidentId", "decision", "reason", "evidenceFileIds", "expectedVersion"],
 }
@@ -476,6 +486,8 @@ export async function sendRenewalOperation(
   }
   if (command.action === "completion" && command.body.identityVerified !== undefined && command.body.identityVerified !== true)
     throw new Error("Cần xác minh danh tính.")
+  if (command.action === "completion" && !isUuid(command.body.signedDocumentFileId))
+    throw new Error("Cần upload hợp đồng gia hạn đã ký trước khi hoàn tất.")
   const [role, method, route] = routes[command.action]
   const result = readRentalEnvelope<RenewalOperationResult>(
     await apiRequest(`${path(role, id)}/${route}`, {

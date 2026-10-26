@@ -25,7 +25,7 @@ const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), {
 describe('customerReservationApi', () => {
   afterEach(() => { clearAuthTokens(); vi.unstubAllGlobals() })
   it('confirms receipt through the existing backend endpoint and returns committed state', async () => {
-    const detail = { reservation: { id: 'reservation-1', status: 'COMPLETED' } }
+    const detail = { reservation: { id: 'reservation-1', status: 'COMPLETED' }, payments: [] }
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: detail }))
     vi.stubGlobal('fetch', fetchMock)
     expect(await confirmCustomerReceipt('reservation-1')).toEqual(detail)
@@ -38,7 +38,7 @@ describe('customerReservationApi', () => {
   })
 
   it('reloads stored payment details from the backend for receipts', async () => {
-    const result = { paymentId: 'payment-1', reservationId: 'reservation-1', paymentStatus: 'PAID', amount: 600000 }
+    const result = { paymentId: 'payment-1', reservationId: 'reservation-1', paymentStatus: 'PAID', reservationStatus: 'CONFIRMED', amount: 600000 }
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: result }))
     vi.stubGlobal('fetch', fetchMock)
     expect(await getReservationPayment('reservation-1')).toEqual(result)
@@ -116,7 +116,7 @@ describe('customerReservationApi', () => {
   })
 
   it('sends an idempotency key when creating a reservation', async () => {
-    const reservation = { id: 'reservation-1', reservationCode: 'RSV-1' }
+    const reservation = { id: 'reservation-1', reservationCode: 'RSV-1', status: 'AWAITING_EMAIL' }
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: reservation }))
     vi.stubGlobal('fetch', fetchMock)
     const input = {
@@ -160,7 +160,7 @@ describe('customerReservationApi', () => {
   })
 
   it('cancels a reservation with the customer-provided reason', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { reservation: { id: 'reservation-1' } } }))
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { reservation: { id: 'reservation-1', status: 'CANCELLED' }, payments: [] } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await cancelCustomerReservation('reservation-1', 'Changed storage plan')
@@ -176,8 +176,8 @@ describe('customerReservationApi', () => {
 
   it('resends and verifies reservation OTP through backend endpoints', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ data: { reservationId: 'reservation-1', verified: false } }))
-      .mockResolvedValueOnce(jsonResponse({ data: { reservationId: 'reservation-1', verified: true } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { reservationId: 'reservation-1', verified: false, reservationStatus: 'AWAITING_EMAIL' } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { reservationId: 'reservation-1', verified: true, reservationStatus: 'AWAITING_PAYMENT' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await resendReservationOtp('reservation-1')

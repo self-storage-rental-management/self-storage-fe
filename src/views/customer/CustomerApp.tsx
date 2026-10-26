@@ -25,7 +25,8 @@ import { reservationProgress } from './reservationPresentation'
 import { requestReturn as requestReturnApi } from '../../services/returnApi'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
-import { calculateRenewalPaymentSplit } from '../../domain/renewalPricing'
+import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
+import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
@@ -163,9 +164,6 @@ const rentalDiscountRate = (months: number, customPackages?: RentalPackage[]) =>
   return months === 3 ? 0.03 : months === 6 ? 0.05 : months === 12 ? 0.08 : months === 24 ? 0.12 : 0
 }
 
-const renewalDiscountRate = (months: number) => {
-  return months === 3 ? 0.02 : months === 6 ? 0.03 : months === 12 ? 0.05 : months === 24 ? 0.08 : 0
-}
 const parsePositiveNumber = (rawValue: string) => {
   if (rawValue.trim() === '') return null
   const value = Number(rawValue)
@@ -399,8 +397,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     payments,
     scheduleCheckIn,
     requestReturn,
-    requestRenewal,
-    updateRenewalRequest,
     cancelRenewalRequest,
     expireRenewalPayment,
     confirmUnitReceipt,
@@ -435,6 +431,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return { startDate, endDate: addMonthsForPreview(startDate, 3) }
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
+  const [acceptedSetupQuoteId, setAcceptedSetupQuoteId] = useState<string | null>(null)
   const [serverCompatibility, setServerCompatibility] = useState<CompatibilityCheckResult | null>(null)
   const [bookingVoucherCode, setBookingVoucherCode] = useState('')
   const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
@@ -718,13 +715,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const [renewalModalOpen, setRenewalModalOpen] = useState(false)
   const [activeRentalForRenewal, setActiveRentalForRenewal] = useState<typeof rentals[0] | null>(null)
-  const [renewalMonths, setRenewalMonths] = useState(1)
+  const [, setRenewalMonths] = useState(1)
   const [editingRenewalId, setEditingRenewalId] = useState<string | null>(null)
   const [renewalPaymentOpen, setRenewalPaymentOpen] = useState(false)
   const [activeRenewalForPayment, setActiveRenewalForPayment] = useState<typeof renewals[0] | null>(null)
-  const [renewalTermsAccepted, setRenewalTermsAccepted] = useState(false)
-  const [renewalAppointmentDate, setRenewalAppointmentDate] = useState('')
-  const [renewalAppointmentTime, setRenewalAppointmentTime] = useState('09:00')
+  const [, setRenewalTermsAccepted] = useState(false)
+  const [, setRenewalAppointmentDate] = useState('')
+  const [, setRenewalAppointmentTime] = useState('09:00')
 
   // Search & Filter state
   const [sizeFilter, setSizeFilter] = useState('All')
@@ -757,11 +754,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return () => clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    renewals
-      .filter(renewal => renewal.customerId === user.id && renewal.status === 'approved' && renewal.paymentDueAt && new Date(renewal.paymentDueAt).getTime() <= now)
-      .forEach(renewal => expireRenewalPayment(renewal.id))
-  }, [expireRenewalPayment, now, renewals, user.id])
+
 
   const formatCountdown = (expiresAt?: string) => {
     if (!expiresAt) return { text: '--:--', isUrgent: false, isExpired: false }
@@ -1707,16 +1700,24 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           voucherCode: bookingVoucherCode.trim() || undefined,
         })
         setServerQuote(quote)
+        setAcceptedSetupQuoteId(null)
         setValidationViolation(null)
         setBookingReview(true)
         setBookingStep(3)
         return
       }
 
+      if (!serverQuote.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null) {
+        throw new Error('Báo giá chưa có điều khoản trả kho trong setup. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
+      }
+      if (acceptedSetupQuoteId !== serverQuote.quoteId) {
+        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong setup trước khi xác nhận đặt kho.')
+      }
       const idempotencyKey = reservationIdempotencyKey.current || crypto.randomUUID()
       reservationIdempotencyKey.current = idempotencyKey
       const reservation = await createCustomerReservation({
         quoteId: serverQuote.quoteId,
+        acceptedSetupEarlyExitPolicyVersion: serverQuote.setupEarlyExitPolicyVersion,
         identityDocumentNumber: customerIdCard.trim(),
         customerPhone: customerPhone.trim(),
         customerAddress: customerAddress.trim(),
@@ -2755,51 +2756,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     if (!rentalRenewals.length) return null
                     return <div className="space-y-2 border-t border-stone-200 px-5 py-4">
                       <p className="text-xs font-bold text-stone-900">{'Yêu cầu gia hạn'}</p>
-                      {rentalRenewals.map(renewal => {
-                        const paymentExpired = renewal.paymentDueAt ? new Date(renewal.paymentDueAt).getTime() <= now : false
-                        const contractOverdue = new Date(`${renewal.oldEndDate}T23:59:59`).getTime() < now
-                        return <div key={renewal.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="font-bold text-stone-900">{`Gói gia hạn ${renewal.renewalMonths || 1} tháng`} · {renewal.oldEndDate} → {renewal.newEndDate}</p>
-                              <p className="mt-1 text-stone-500">{renewal.id} · {badgeFor(renewal.status)}</p>
-                              {renewal.invoiceNumber && <p className="mt-1 text-stone-600">{'Hóa đơn'}: <b>{renewal.invoiceNumber}</b></p>}
-                              {renewal.status === 'approved' && renewal.paymentDueAt && <p className={`mt-1 font-semibold ${paymentExpired ? 'text-red-700' : 'text-amber-700'}`}>{'Hạn thanh toán toàn kỳ'}: {new Date(renewal.paymentDueAt).toLocaleString('vi-VN')}</p>}
-                              {renewal.status === 'approved' && renewal.paymentDueAt && !paymentExpired && <p className="mt-1 text-sm font-extrabold text-red-700">⏱ {'Còn lại'}: {formatCountdown(renewal.paymentDueAt).text}</p>}
-                              {renewal.status === 'approved' && contractOverdue && <p className="mt-1 font-semibold text-red-700">{'Hợp đồng cũ đã hết hạn; phí muộn được tính từ ngày kế tiếp ngày hết hạn đến ngày thanh toán/ký thực tế.'}</p>}
-                              {renewal.status === 'pending' && <p className="mt-1 text-blue-700">{'Yêu cầu đang chờ hệ thống xác nhận điều kiện thanh toán. Manager có thể theo dõi hồ sơ; không cần Manager duyệt để thanh toán.'}</p>}
-                              {renewal.updatedAt && <p className="mt-1 text-stone-500">{'Cập nhật gần nhất'}: {new Date(renewal.updatedAt).toLocaleString('vi-VN')}</p>}
-                              {renewal.status === 'payment_expired' && <p className="mt-1 text-red-700">{'Yêu cầu đã hết hiệu lực. Hãy gửi yêu cầu mới để Manager kiểm tra lại khả dụng.'}</p>}
-                              {renewal.status === 'rejected' && renewal.notes && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">{'Lý do Manager từ chối'}: {renewal.notes}</p>}
-                              {renewal.status === 'appointment_scheduled' && <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-blue-900"><p className="font-bold">{`Hẹn ký gia hạn ${renewal.appointmentDate} lúc ${renewal.appointmentTime}`}</p><p className="mt-1">{`Số tiền còn phải thanh toán: ${formatVnd(renewal.remainingAmount ?? renewal.totalAmount ?? renewal.renewalFee)}${renewal.lateFeeAmount ? ` + phụ thu trễ ${formatVnd(renewal.lateFeeAmount)}` : ''}. Hợp đồng chưa được kéo dài.`}</p></div>}
-                              {renewal.status === 'completed' && <p className="mt-1 text-emerald-700">{`Phụ lục ${renewal.addendumNumber} · Hiệu lực từ ${renewal.effectiveAt ? new Date(renewal.effectiveAt).toLocaleString('vi-VN') : renewal.paidAt}`}</p>}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <b>{formatVnd(renewal.totalAmount ?? renewal.renewalFee)}</b>
-                              {renewal.status === 'pending' && <><Button variant="outline" size="sm" onClick={() => { setActiveRentalForRenewal(rental); setRenewalMonths(renewal.renewalMonths); setEditingRenewalId(renewal.id); setRenewalModalOpen(true) }}>{'Chỉnh sửa'}</Button><Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy yêu cầu gia hạn', message: 'Bạn chắc chắn muốn hủy yêu cầu gia hạn này?', confirmLabel: 'Hủy yêu cầu', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy yêu cầu. Quản lý cơ sở đã nhận được cập nhật.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy yêu cầu.') } } })}>{'Hủy yêu cầu'}</Button></>}
-                              {renewal.status === 'approved' && !paymentExpired && <Button size="sm" onClick={() => {
-                                setActiveRenewalForPayment(renewal)
-                                setRenewalTermsAccepted(false)
-                                const suggestedSigningDate = new Date()
-                                if (new Date(`${renewal.oldEndDate}T23:59:59`).getTime() >= now) suggestedSigningDate.setDate(suggestedSigningDate.getDate() + 1)
-                                setRenewalAppointmentDate(dateInputValue(suggestedSigningDate))
-                                setRenewalAppointmentTime('09:00')
-                                setRenewalPaymentOpen(true)
-                              }}>{'Xem hóa đơn & thanh toán'}</Button>}
-                              {renewal.status === 'approved' && !paymentExpired && <Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => {
-                                requestConfirmation({ title: 'Hủy gia hạn đã được duyệt', message: `Hủy yêu cầu sẽ làm hóa đơn ${renewal.invoiceNumber || ''} mất hiệu lực. Bạn chắc chắn muốn tiếp tục?`, confirmLabel: 'Hủy gia hạn', tone: 'danger', onConfirm: () => { try {
-                                  cancelRenewalRequest(renewal.id, user)
-                                  setRenewalPaymentOpen(false)
-                                  showToast('Đã hủy gia hạn và vô hiệu hóa hóa đơn. Quản lý cơ sở đã nhận được thông báo.')
-                                } catch (error) {
-                                  showToast(error instanceof Error ? error.message : 'Không thể hủy yêu cầu gia hạn.')
-                                } } })
-                              }}>{'Hủy gia hạn'}</Button>}
-                              {renewal.status === 'appointment_scheduled' && <Button variant="outline" size="sm" className="border-red-300 text-red-700" onClick={() => requestConfirmation({ title: 'Hủy lịch gia hạn', message: 'Hủy lịch ký gia hạn? Các khoản đã thanh toán (nếu có) cần được đối soát theo giao dịch thực tế.', confirmLabel: 'Vẫn hủy lịch', tone: 'danger', onConfirm: () => { try { cancelRenewalRequest(renewal.id, user); showToast('Đã hủy lịch gia hạn. Các khoản đã thanh toán cần được đối soát theo giao dịch thực tế.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể hủy gia hạn.') } } })}>{'Hủy lịch gia hạn'}</Button>}
-                            </div>
+                      <p className="text-stone-600">{LEGACY_RENEWAL_HISTORY_NOTICE}</p>
+                      {rentalRenewals.map(renewal => <div key={renewal.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-bold text-stone-900">{renewal.id} · Kỳ đề nghị đã lưu: {renewal.oldEndDate} → {renewal.newEndDate}</p>
+                            <p>Trạng thái đã lưu: {badgeFor(renewal.status)}</p>
+                            {renewal.invoiceNumber && <p>Mã chứng từ cũ: <b>{renewal.invoiceNumber}</b></p>}
+                            {renewal.paymentDueAt && <p>Hạn thanh toán đã lưu: {new Date(renewal.paymentDueAt).toLocaleString('vi-VN')}</p>}
+                            <p>Tiền thuê đã lưu: <b>{legacyRenewalMoney(renewal.totalAmount ?? renewal.renewalFee)}</b></p>
                           </div>
+                          <Button variant="outline" size="sm" onClick={() => { setActiveRenewalForPayment(renewal); setRenewalPaymentOpen(true) }}>Xem dữ liệu đã lưu</Button>
                         </div>
-                      })}
+                      </div>)}
+
                     </div>
                   })()}
                   {(() => {
@@ -3150,7 +3120,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </div>
 
                     <p className="text-[11px] text-emerald-800">
-                      Gói gia hạn tiếp theo: 3 tháng giảm {Math.round(renewalDiscountRate(3) * 100)}%, 6 tháng giảm {Math.round(renewalDiscountRate(6) * 100)}%, 12 tháng giảm {Math.round(renewalDiscountRate(12) * 100)}%, 24 tháng giảm {Math.round(renewalDiscountRate(24) * 100)}%.
+                      Giá và ưu đãi gia hạn được xác định trong báo giá khi đăng nhập và mở Hồ sơ thuê.
                     </p>
                   </div>
                 )
@@ -3393,6 +3363,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
                 <b>Ngày bắt đầu tính kỳ thuê:</b> {earliestCheckInDate}. Kỳ thuê bắt đầu từ ngày kho sẵn sàng sớm nhất, không phụ thuộc việc bạn chọn đến muộn hơn trong thời hạn 7 ngày.
               </div>
+              {isApiAuthenticated() && serverQuote && <div className="space-y-2 text-xs leading-5 text-stone-600">
+                {serverQuote.setupEarlyExitPolicyVersion && serverQuote.setupEarlyExitFee != null ? <>
+                  <p><b className="text-stone-900">Điều khoản trả kho trong setup:</b> nếu khách chủ động trả kho sau bàn giao và kho được nghiệm thu trống trước khi hết setup, phí chấm dứt sớm một lần là <b>{formatVnd(serverQuote.setupEarlyExitFee)}</b> theo báo giá đã chốt. Tiền thuê và cọc bảo đảm thực thu được quyết toán sau khi trừ phí này, chi phí có chứng cứ và công nợ đã xác minh. Khoản trả trước đã nằm trong tiền thuê. Trả thực tế sau setup áp dụng quyết toán kỳ thuê đã bắt đầu.</p>
+                  <label className="flex items-start gap-2 text-stone-700">
+                    <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
+                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong setup của báo giá này.</span>
+                  </label>
+                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong setup. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
+              </div>}
             </div>}
 
             {bookingStep === 2 && <>
@@ -3572,7 +3551,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </Button>
               )}
               {bookingStep === 3 && <Button onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
-              {bookingStep === 4 && <Button disabled={reservationSubmitting} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
+              {bookingStep === 4 && <Button disabled={reservationSubmitting || (isApiAuthenticated() && (!serverQuote?.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null || acceptedSetupQuoteId !== serverQuote.quoteId))} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
         )}
@@ -3795,11 +3774,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 const pricedRenewals = activeRenewals.filter(renewal => ['approved', 'appointment_scheduled', 'completed'].includes(renewal.status))
                 const effectiveEndDate = relatedRental?.endDate || signed?.endDate || activeHoldForContract.endDate
                 const initialTermValue = activeHoldForContract.quote.baseMonthlyPrice * activeHoldForContract.rentalMonths
-                const completedRenewalValue = completedRenewals.reduce((sum, renewal) => sum + (renewal.totalAmount ?? renewal.renewalFee), 0)
-                const currentTermValue = initialTermValue + completedRenewalValue
-                const totalBookingDeposit = deposit + pricedRenewals.reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).depositAmount), 0)
-                const depositDueNow = activeRenewals.filter(renewal => renewal.status === 'approved').reduce((sum, renewal) => sum + (renewal.bookingDepositAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).depositAmount), 0)
-                const balance = activeRenewals.reduce((sum, renewal) => ['approved', 'appointment_scheduled'].includes(renewal.status) ? sum + (renewal.remainingAmount ?? calculateRenewalPaymentSplit(renewal.totalAmount ?? renewal.renewalFee).remainingAmount) + (renewal.lateFeeAmount ?? 0) : sum, 0)
+                const currentTermValue = completedRenewals.length ? null : initialTermValue
+                const totalBookingDeposit = pricedRenewals.length ? null : deposit
+                const balance = activeRenewals.length ? null : 0
                 const totalRentalMonths = activeHoldForContract.rentalMonths + completedRenewals.reduce((sum, renewal) => sum + renewal.renewalMonths, 0)
                 return <>
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-4">
@@ -3822,8 +3799,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       ['Lịch nhận kho / bàn giao', appointment]
                     ].map(([label, value]) => <div key={label} className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</p><p className="mt-1 font-bold leading-5 text-stone-900">{value}</p></div>)}</div></section>
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'3. Điều khoản chính'}</p><div className="grid gap-2 sm:grid-cols-2">{[
-                      `Đơn giá hiện hành: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng. Tổng giá trị tiền thuê sau gia hạn là ${formatVnd(currentTermValue)}.`,
-                      `Tổng cọc giữ chỗ đã ghi nhận (${formatVnd(totalBookingDeposit)}) được trừ vào tiền thuê. Tiền cọc đảm bảo kho ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần còn lại được hoàn sau nghiệm thu.`,
+                      `Đơn giá đã lưu: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng. Tổng giá trị tiền thuê sau gia hạn cần được đối soát trong Hồ sơ thuê.`,
+                      `Khoản giữ chỗ ban đầu đã lưu (${formatVnd(deposit)}) được trừ vào tiền thuê. Tiền cọc đảm bảo kho ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần còn lại được hoàn sau nghiệm thu.`,
                       'Khách hoàn tất nhận kho trong vòng 7 ngày. Việc đổi lịch cũng phải nằm trong thời hạn này.',
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
                       'Gia hạn theo gói tháng. Hệ thống kiểm tra điều kiện và mở thanh toán khi các nguồn cần thiết sẵn sàng; quản lý cơ sở theo dõi hồ sơ.',
@@ -3834,14 +3811,22 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     ].map((term, index) => <div key={term} className="flex gap-2 rounded-lg bg-stone-50 p-3 leading-5"><span className="font-bold text-amber-700">{index + 1}.</span><span>{term}</span></div>)}</div></section>
                     {completedRenewals.length > 0 && <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'4. Hợp đồng gia hạn đã phát hành'}</p><div className="space-y-2">{completedRenewals.map(renewal => {
                       const renewalContract = contracts.find(contract => contract.id === renewal.renewalContractId || contract.renewalId === renewal.id)
-                      return <article key={renewal.id} className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-emerald-950">{renewal.renewalContractNumber || renewalContract?.contractNumber || renewal.addendumNumber || renewal.id}</p><p className="mt-1 text-emerald-800">{renewal.oldEndDate} → {renewal.newEndDate} · {renewal.renewalMonths} {'tháng'}</p></div><p className="font-bold text-emerald-900">{formatVnd(renewal.totalAmount ?? renewal.renewalFee)}</p></div><div className="mt-3 grid gap-2 text-stone-700 sm:grid-cols-2"><p>{'Hóa đơn'}: <b>{renewal.invoiceNumber}</b></p><p>{'Thanh toán hoàn tất'}: <b>{renewal.signedAt ? new Date(renewal.signedAt).toLocaleDateString('vi-VN') : '—'}</b></p></div>{renewalContract && <div className="mt-3 flex gap-2 border-t border-emerald-200 pt-3"><a href={renewalContract.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold text-emerald-900 underline">{'Xem hợp đồng đã ký'}</a><a href={renewalContract.scannedFileUrl} download={renewalContract.scannedFileName} className="font-bold text-emerald-900 underline">{'Tải xuống'}</a></div>}</article>
+                      return <article key={renewal.id} className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                        <p className="font-bold">{renewal.renewalContractNumber || renewalContract?.contractNumber || renewal.addendumNumber || renewal.id}</p>
+                        <p className="text-sm text-stone-600">{LEGACY_RENEWAL_HISTORY_NOTICE}</p>
+                        <p>Kỳ đã lưu: {renewal.oldEndDate} → {renewal.newEndDate} · {renewal.renewalMonths} tháng</p>
+                        <p>Tiền thuê đã lưu: {legacyRenewalMoney(renewal.totalAmount ?? renewal.renewalFee)}</p>
+                        <p>Mã chứng từ cũ: {renewal.invoiceNumber || '—'}</p>
+                        <p>Ngày ký đã lưu: {renewal.signedAt ? new Date(renewal.signedAt).toLocaleDateString('vi-VN') : '—'}</p>
+                        {renewalContract && <div className="flex gap-2 border-t border-stone-200 pt-3"><a href={renewalContract.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="underline">Xem tệp hợp đồng đã lưu</a><a href={renewalContract.scannedFileUrl} download={renewalContract.scannedFileName} className="underline">Tải xuống</a></div>}
+                      </article>
                     })}</div></section>}
                   </div>
                   <div className="grid gap-3 border-t border-stone-200 p-5 sm:grid-cols-4">
-                    <div className="rounded-lg bg-stone-50 p-3"><p className="text-stone-500">{'Tổng giá trị thuê hiện hành'}</p><p className="mt-1 text-base font-bold text-stone-950">{formatVnd(currentTermValue)}</p><p className="mt-1 text-[10px] text-stone-500">{totalRentalMonths} {'tháng, gồm các kỳ gia hạn đã hoàn tất'}</p></div>
-                    <div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Tổng cọc giữ chỗ đã ghi nhận'}</p><p className="mt-1 text-base font-bold text-blue-800">{formatVnd(totalBookingDeposit)}</p>{depositDueNow > 0 && <p className="mt-1 text-[10px] font-semibold text-blue-700">{`Cần thanh toán ngay: ${formatVnd(depositDueNow)}`}</p>}</div>
+                    <div className="rounded-lg bg-stone-50 p-3"><p className="text-stone-500">{'Tổng giá trị thuê hiện hành'}</p><p className="mt-1 text-base font-bold text-stone-950">{legacyRenewalMoney(currentTermValue)}</p><p className="mt-1 text-[10px] text-stone-500">{totalRentalMonths} {'tháng, gồm các kỳ gia hạn đã hoàn tất'}</p></div>
+                    <div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Tổng cọc giữ chỗ đã ghi nhận'}</p><p className="mt-1 text-base font-bold text-blue-800">{legacyRenewalMoney(totalBookingDeposit)}</p></div>
                     <div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo kho'}</p><p className="mt-1 text-base font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div>
-                    <div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn thanh toán tại cơ sở'}</p><p className="mt-1 text-base font-bold text-amber-900">{formatVnd(balance)}</p><p className="mt-1 text-[10px] text-amber-700">{balance > 0 ? ('Theo lịch gia hạn đang chờ hoàn tất') : ('Không còn khoản gia hạn phải thanh toán')}</p></div>
+                    <div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn thanh toán tại cơ sở'}</p><p className="mt-1 text-base font-bold text-amber-900">{legacyRenewalMoney(balance)}</p><p className="mt-1 text-[10px] text-amber-700">{balance === null ? 'Đăng nhập để đối soát công nợ gia hạn' : 'Không có yêu cầu gia hạn đang mở'}</p></div>
                   </div>
                   <section className="border-t border-stone-200 bg-stone-50 p-5">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -3878,14 +3863,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 })
               const relatedRental = rentals.find(rental => rental.holdId === activeHoldForContract.id || (rental.customerId === activeHoldForContract.customerId && rental.unitId === (activeHoldForContract.assignedUnitId || activeHoldForContract.unitId)))
               const completedRenewals = renewals.filter(renewal => renewal.rentalId === relatedRental?.id && renewal.status === 'completed')
-              const rentalValue = activeHoldForContract.quote.baseMonthlyPrice * activeHoldForContract.rentalMonths + completedRenewals.reduce((sum, renewal) => sum + (renewal.totalAmount ?? renewal.renewalFee), 0)
+              const rentalValue = completedRenewals.length ? null : activeHoldForContract.quote.baseMonthlyPrice * activeHoldForContract.rentalMonths
               const securityDeposit = activeHoldForContract.securityDepositAmount ?? activeHoldForContract.quote.depositAmount
-              const totalValue = rentalValue + securityDeposit
-              const totalPaid = receiptPayments.filter(payment => payment.status === 'PAID' && payment.type !== 'REFUND').reduce((sum, payment) => sum + payment.amount, 0)
-              const balance = Math.max(0, totalValue - totalPaid)
+              const totalValue = rentalValue === null ? null : rentalValue + securityDeposit
+              const totalPaid = receiptPayments.some(payment => payment.renewalId || payment.type === 'RENEWAL') ? null : receiptPayments.filter(payment => payment.status === 'PAID' && payment.type !== 'REFUND').reduce((sum, payment) => sum + payment.amount, 0)
+              const balance = totalValue === null || totalPaid === null ? null : Math.max(0, totalValue - totalPaid)
               return <div className="space-y-4 text-xs">
-                <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{formatVnd(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo kho'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{formatVnd(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{formatVnd(balance)}</p></div></div></div>
-                {receiptPayments.map(payment => <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai thanh toán số dư gia hạn' : payment.type === 'RENEWAL' ? 'Biên lai thanh toán gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{legacyRenewalMoney(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo kho'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{legacyRenewalMoney(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{legacyRenewalMoney(balance)}</p></div></div></div>
+                {receiptPayments.map(payment => isLegacyRenewalPayment(payment) ? <LegacyRenewalPaymentRecord key={payment.id} payment={payment} /> : <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai thanh toán số dư gia hạn' : payment.type === 'RENEWAL' ? 'Biên lai thanh toán gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
                   ['Số biên nhận', payment.id],
                   ['Ngày giờ thanh toán', payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—'],
                   ['Người nộp tiền', `${activeHoldForContract.customerName} · ${activeHoldForContract.customerEmail}`],
@@ -4010,128 +3995,25 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         )}
       </Modal>
 
-      {/* ── MODAL: REQUEST RENEWAL ────────────────────────────── */}
-      <Modal
-        open={renewalModalOpen && !isApiAuthenticated()}
-        onClose={() => { setRenewalModalOpen(false); setEditingRenewalId(null) }}
-        title={editingRenewalId ? ('Chỉnh Sửa Yêu Cầu Gia Hạn') : ('Yêu Cầu Gia Hạn Hợp Đồng Thuê')}
-      >
-        {activeRentalForRenewal && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-blue-700 bg-blue-700 p-3 text-xs text-white space-y-1">
-              <p className="font-semibold">{`Gian kho ${activeRentalForRenewal.unitId} (${activeRentalForRenewal.facilityName})`}</p>
-              <p>{`Hạn hợp đồng hiện tại: ${activeRentalForRenewal.endDate}. Giá thuê: ${formatVnd(activeRentalForRenewal.monthlyRate)}/tháng.`}</p>
-              <p className="text-[11px] text-white">
-                {'hệ thống sẽ kiểm tra điều kiện và xung đột lịch; quản lý cơ sở theo dõi hồ sơ, không cần duyệt để khách hàng thanh toán.'}
-              </p>
-            </div>
-
-            <Select label={'Chọn gói gia hạn'} value={renewalMonths.toString()} onChange={e => setRenewalMonths(Number(e.target.value))}>
-              <option value="1">1 {'tháng'} · {'không giảm'}</option>
-              <option value="3">3 {'tháng'} · {renewalDiscountRate(3) > 0 ? `giảm ${Math.round(renewalDiscountRate(3) * 100)}%` : 'không giảm'}</option>
-              <option value="6">6 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(6) * 100)}%`}</option>
-              <option value="12">12 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(12) * 100)}%`}</option>
-              <option value="24">24 {'tháng'} · {`giảm ${Math.round(renewalDiscountRate(24) * 100)}%`}</option>
-            </Select>
-            {(() => {
-              const grossRenewalAmount = activeRentalForRenewal.monthlyRate * renewalMonths
-              const discountRate = renewalDiscountRate(renewalMonths)
-              const discountAmount = Math.round(grossRenewalAmount * discountRate * 100) / 100
-              const renewalTotal = Math.round((grossRenewalAmount - discountAmount) * 100) / 100
-              return <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs sm:grid-cols-2"><div><p className="text-stone-500">{'Ngày hết hạn mới dự kiến'}</p><p className="mt-1 font-bold">{addMonthsForPreview(activeRentalForRenewal.endDate, renewalMonths)}</p></div><div className="space-y-1"><div className="flex justify-between gap-3"><span className="text-stone-500">{'Tiền gia hạn gốc'}</span><b>{formatVnd(grossRenewalAmount)}</b></div><div className="flex justify-between gap-3 text-emerald-700"><span>{`Giảm giá (${Math.round(discountRate * 100)}%)`}</span><b>− {formatVnd(discountAmount)}</b></div><div className="flex justify-between gap-3 border-t border-stone-200 pt-1"><span className="font-semibold">{'Phí gia hạn sau giảm'}</span><b>{formatVnd(renewalTotal)}</b></div></div><p className="sm:col-span-2 text-stone-600">{discountRate > 0 ? `Gói gia hạn ${renewalMonths} tháng được áp dụng mức giảm ${Math.round(discountRate * 100)}%.` : 'Kỳ hạn dưới 3 tháng không áp dụng chiết khấu gia hạn.'}</p></div>
-            })()}
-
-            <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
-              <Button variant="outline" onClick={() => setRenewalModalOpen(false)}>{'Hủy'}</Button>
-              <Button
-                onClick={() => {
-                  try {
-                    if (editingRenewalId) updateRenewalRequest(editingRenewalId, renewalMonths, user)
-                    else requestRenewal(activeRentalForRenewal.id, renewalMonths, user)
-                    setRenewalModalOpen(false)
-                    setEditingRenewalId(null)
-                    showToast(editingRenewalId ? ('Đã cập nhật yêu cầu gia hạn.') : ('Đã gửi yêu cầu gia hạn để hệ thống kiểm tra.'))
-                  } catch (err: any) {
-                    showToast(err?.message || 'Error requesting renewal')
-                  }
-                }}
-              >
-                 {editingRenewalId ? ('Lưu thay đổi') : ('Gửi yêu cầu gia hạn')}
-              </Button>
-            </div>
-          </div>
-        )}
+      <Modal open={renewalModalOpen && !isApiAuthenticated()} onClose={() => { setRenewalModalOpen(false); setEditingRenewalId(null) }} title="Gia hạn hồ sơ cũ">
+        <div className="space-y-4">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_HISTORY_NOTICE} {LEGACY_RENEWAL_NOTICE}</p>
+          {activeRentalForRenewal && <p className="text-sm">Gian kho {activeRentalForRenewal.unitId} · Hạn thuê đã lưu: {activeRentalForRenewal.endDate}</p>}
+          <div className="flex justify-end"><Button variant="outline" onClick={() => setRenewalModalOpen(false)}>Đóng</Button></div>
+        </div>
       </Modal>
-
-      <Modal
-        open={renewalPaymentOpen && !isApiAuthenticated()}
-        onClose={() => setRenewalPaymentOpen(false)}
-        title={'Xác nhận thanh toán gia hạn'}
-        size="xl"
-      >
-        {activeRenewalForPayment && (() => {
-          const rental = rentals.find(item => item.id === activeRenewalForPayment.rentalId)
-          const paymentExpired = Boolean(activeRenewalForPayment.paymentDueAt && new Date(activeRenewalForPayment.paymentDueAt).getTime() <= now)
-          const renewalTotal = activeRenewalForPayment.totalAmount ?? activeRenewalForPayment.renewalFee
-          const renewalGrossTotal = (activeRenewalForPayment.originalMonthlyRate ?? rental?.monthlyRate ?? 0) * activeRenewalForPayment.renewalMonths
-          const renewalDiscountAmount = activeRenewalForPayment.discountAmount ?? Math.max(0, Math.round((renewalGrossTotal - renewalTotal) * 100) / 100)
-          const appliedRenewalDiscountRate = activeRenewalForPayment.discountRate ?? (renewalGrossTotal > 0 ? renewalDiscountAmount / renewalGrossTotal : 0)
-          const legacyRenewalDeposit = activeRenewalForPayment.bookingDepositAmount ?? 0
-          const oldEndAt = new Date(`${activeRenewalForPayment.oldEndDate}T23:59:59`)
-          const isOverdue = oldEndAt.getTime() < now
-          const latestAppointment = new Date(now); latestAppointment.setDate(latestAppointment.getDate() + 7)
-          const renewalEffectiveAt = new Date(`${activeRenewalForPayment.oldEndDate}T12:00:00`); renewalEffectiveAt.setDate(renewalEffectiveAt.getDate() + 1)
-          const renewalMonthlyRate = activeRenewalForPayment.originalMonthlyRate ?? rental?.monthlyRate ?? 0
-          const dailyRentalRate = Math.round((renewalMonthlyRate / 30) * 100) / 100
-          const lateFeePerDay = Math.round(((renewalMonthlyRate / 30) * 0.5) * 100) / 100
-          const selectedAppointmentDay = renewalAppointmentDate ? new Date(`${renewalAppointmentDate}T00:00:00`) : new Date(now)
-          const paymentDay = new Date(now); paymentDay.setHours(0, 0, 0, 0)
-          const projectedLateThrough = selectedAppointmentDay.getTime() > paymentDay.getTime() ? selectedAppointmentDay : paymentDay
-          const overdueStart = new Date(`${activeRenewalForPayment.oldEndDate}T00:00:00`); overdueStart.setDate(overdueStart.getDate() + 1)
-          const projectedOverdueDays = projectedLateThrough.getTime() >= overdueStart.getTime() ? Math.floor((projectedLateThrough.getTime() - overdueStart.getTime()) / 86_400_000) + 1 : 0
-          const projectedLateFee = Math.round(projectedOverdueDays * lateFeePerDay * 100) / 100
-          const renewalPaymentReady = false
-          return <div className="space-y-5 text-sm">
-            <div className="overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white">
-              <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-amber-700">{'Hóa đơn gia hạn đã được duyệt'}</p><p className="mt-1 text-xl font-extrabold text-stone-950">{activeRenewalForPayment.invoiceNumber}</p><p className="mt-1 text-stone-600">Gian kho <b>{activeRenewalForPayment.unitId}</b> · Gói <b>{activeRenewalForPayment.renewalMonths} tháng</b></p></div>
-                <div className="rounded-xl bg-stone-950 px-5 py-4 text-left text-white sm:min-w-56 sm:text-right"><p className="text-xs text-stone-300">{legacyRenewalDeposit > 0 ? 'Điều khoản gia hạn cũ: cọc đã ghi nhận' : 'Toàn bộ tiền gia hạn cần thanh toán'}</p><p className="mt-1 text-2xl font-extrabold">{formatVnd(legacyRenewalDeposit > 0 ? legacyRenewalDeposit : renewalTotal)}</p></div>
-              </div>
-              <div className="grid border-t border-amber-200 bg-white/70 sm:grid-cols-4">
-                <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Hợp đồng cũ đến'}</p><p className="mt-1 font-bold text-stone-900">{activeRenewalForPayment.oldEndDate}</p></div>
-                <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Kỳ gia hạn mới'}</p><p className="mt-1 font-bold text-stone-900">{dateInputValue(renewalEffectiveAt)} → {activeRenewalForPayment.newEndDate}</p></div>
-                <div className="border-b border-amber-100 p-4 sm:border-b-0 sm:border-r"><p className="text-xs text-stone-500">{'Đơn giá mỗi tháng'}</p><p className="mt-1 font-bold text-stone-900">{formatVnd(activeRenewalForPayment.originalMonthlyRate ?? rental?.monthlyRate ?? 0)}</p></div>
-                <div className="p-4"><p className="text-xs text-stone-500">{'Hạn thanh toán toàn kỳ (nếu đã mở)'}</p><p className={`mt-1 font-bold ${paymentExpired ? 'text-red-700' : 'text-amber-800'}`}>{activeRenewalForPayment.paymentDueAt ? new Date(activeRenewalForPayment.paymentDueAt).toLocaleString('vi-VN') : '—'}</p></div>
-              </div>
-            </div>
-            {!paymentExpired && activeRenewalForPayment.paymentDueAt && <div className="flex flex-col gap-1 rounded-xl bg-red-700 px-5 py-3 text-white sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-bold uppercase tracking-wider">{'Thời gian thanh toán toàn kỳ còn lại'}</p><p className="text-xl font-extrabold">{formatCountdown(activeRenewalForPayment.paymentDueAt).text}</p></div>}
-            <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
-              <div className="space-y-4">
-                <section className="rounded-xl border border-stone-200 p-4">
-                  <h3 className="font-bold text-stone-950">{'1. Chọn lịch ký tại cơ sở'}</h3>
-                  <p className="mt-1 text-xs leading-5 text-stone-500">{`Chọn lịch trong 7 ngày, chậm nhất ${dateInputValue(latestAppointment)}. Gia hạn chỉ có hiệu lực sau khi ký hồ sơ tại cơ sở.`}</p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:items-end"><Input label={'Ngày đến ký hợp đồng'} type="date" min={dateInputValue(new Date(now))} max={dateInputValue(latestAppointment)} value={renewalAppointmentDate} onChange={event => setRenewalAppointmentDate(event.target.value)} /><Input label={'Giờ hẹn'} type="time" min="08:00" max="17:00" value={renewalAppointmentTime} onChange={event => setRenewalAppointmentTime(event.target.value)} /></div>
-                  <p className={`mt-3 rounded-lg p-3 text-xs leading-5 ${isOverdue || projectedOverdueDays > 0 ? 'border border-red-200 bg-red-50 font-semibold text-red-800' : 'bg-stone-100 text-stone-600'}`}>{`Hợp đồng cũ hết hạn ${activeRenewalForPayment.oldEndDate}. Nếu ký sau ngày này, hệ thống tính phụ thu từ ngày kế tiếp sau khi hết hạn đến ngày ký thực tế.`}</p>
-                </section>
-                <section className="rounded-xl border border-stone-200 p-4">
-                  <h3 className="font-bold text-stone-950">{'2. Thanh toán toàn bộ kỳ gia hạn'}</h3>
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">{'Renewal mới không thu cọc riêng. Thanh toán toàn kỳ VNPay Sandbox được mở trong hồ sơ gia hạn API khi hệ thống xác nhận đủ điều kiện.'}</div>
-                </section>
-                <section className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs leading-5 text-red-900"><h3 className="text-sm font-bold">{'Chính sách phụ thu quá hạn'}</h3><p className="mt-1">{`Mức phụ thu ${formatVnd(lateFeePerDay)}/ngày, tương đương 50% đơn giá thuê ngày (${formatVnd(renewalMonthlyRate)} ÷ 30 = ${formatVnd(dailyRentalRate)}/ngày).`}</p></section>
-              </div>
-              <div className="space-y-4">
-                <div className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm">
-                  <div className="border-b border-stone-200 bg-stone-50 px-4 py-3"><p className="font-bold text-stone-950">{'Tóm tắt thanh toán'}</p><p className="mt-0.5 text-xs text-stone-500">{'Kiểm tra số tiền trước khi xác nhận'}</p></div>
-                  <div className="space-y-3 p-4 text-stone-700"><div className="flex justify-between gap-4"><span>{'Tiền gia hạn gốc'}</span><b>{formatVnd(renewalGrossTotal)}</b></div><div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700"><span>{`Ưu đãi gói ${activeRenewalForPayment.renewalMonths} tháng (${Math.round(appliedRenewalDiscountRate * 100)}%)`}</span><b>− {formatVnd(renewalDiscountAmount)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-3 font-semibold"><span>{legacyRenewalDeposit > 0 ? 'Tổng giá trị điều khoản gia hạn cũ' : 'Tổng tiền cần thanh toán một lần'}</span><b>{formatVnd(renewalTotal)}</b></div><div className={`flex justify-between gap-4 ${projectedLateFee > 0 ? 'font-semibold text-red-700' : ''}`}><span>{`Phí muộn dự kiến (${projectedOverdueDays} ngày)`}</span><b>{formatVnd(projectedLateFee)}</b></div></div>
-                  <div className="flex items-center justify-between gap-4 border-t border-stone-200 bg-stone-950 px-4 py-4 text-white"><span className="font-semibold">{'Tổng tiền gia hạn'}</span><span className="text-lg font-extrabold">{formatVnd(renewalTotal)}</span></div>
-                </div>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-300 bg-stone-50 p-4 text-xs leading-5"><input type="checkbox" className="mt-1 h-4 w-4 accent-stone-900" checked={renewalTermsAccepted} onChange={event => setRenewalTermsAccepted(event.target.checked)} /><span>{'Tôi xác nhận thanh toán một lần toàn bộ tiền gia hạn sau khi VNPay Sandbox được mở và đến cơ sở ký hồ sơ theo lịch.'}</span></label>
-              </div>
-            </div>
-            {paymentExpired && <p className="rounded-lg bg-red-50 p-3 font-semibold text-red-700">{'Đã quá thời hạn thanh toán 72 giờ. Vui lòng gửi yêu cầu gia hạn mới.'}</p>}
-            <div className="flex justify-end gap-2 border-t border-stone-100 pt-3"><Button variant="outline" onClick={() => setRenewalPaymentOpen(false)}>{'Đóng'}</Button><Button disabled={!renewalPaymentReady || paymentExpired || !renewalAppointmentDate || !renewalAppointmentTime || !renewalTermsAccepted} onClick={() => showToast('Mở yêu cầu gia hạn trong Hồ sơ thuê của tôi để thanh toán VNPay Sandbox khi hệ thống xác nhận đủ điều kiện.')}>{'Thanh toán toàn kỳ'}</Button></div>
-          </div>
-        })()}
+      <Modal open={renewalPaymentOpen && !isApiAuthenticated()} onClose={() => setRenewalPaymentOpen(false)} title="Thông tin gia hạn đã lưu">
+        <div className="space-y-4">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_HISTORY_NOTICE} {LEGACY_RENEWAL_NOTICE}</p>
+          {activeRenewalForPayment && <dl className="space-y-2 text-sm">
+            <div><dt>Mã gia hạn</dt><dd>{activeRenewalForPayment.id}</dd></div>
+            <div><dt>Tiền thuê đã lưu</dt><dd>{legacyRenewalMoney(activeRenewalForPayment.totalAmount ?? activeRenewalForPayment.renewalFee)}</dd></div>
+            <div><dt>Khoản trả trước đã lưu</dt><dd>{legacyRenewalMoney(activeRenewalForPayment.bookingDepositAmount)}</dd></div>
+            <div><dt>Phần còn lại đã lưu</dt><dd>{legacyRenewalMoney(activeRenewalForPayment.remainingAmount)}</dd></div>
+            <div><dt>Phí quá hạn đã lưu</dt><dd>{legacyRenewalMoney(activeRenewalForPayment.lateFeeAmount)}</dd></div>
+          </dl>}
+          <div className="flex justify-end"><Button variant="outline" onClick={() => setRenewalPaymentOpen(false)}>Đóng</Button></div>
+        </div>
       </Modal>
 
       <Modal open={Boolean(confirmation)} onClose={closeConfirmation} title={confirmation?.title || 'Xác nhận thao tác'}>

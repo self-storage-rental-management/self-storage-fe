@@ -36,13 +36,12 @@ export default function CustomerRenewalRequestModal({
     getRenewalOptions(rentalId),
   )
   const [code, setCode] = useState("")
-  const [fullPayment, setFullPayment] = useState(true)
-  const [startDate, setStartDate] = useState("")
   const note = ""
   const [quote, setQuote] = useState<RenewalApiQuote>()
   const [quoteError, setQuoteError] = useState<unknown>()
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  const [startInfoOpen, setStartInfoOpen] = useState(false)
   const command = useRenewalCommand()
   useEffect(() => {
     let current = true
@@ -57,7 +56,7 @@ export default function CustomerRenewalRequestModal({
     setQuoteError(undefined)
     setConfirmed(false)
     setQuoteBusy(true)
-    void quoteRenewal(rentalId, code, fullPayment, startDate || undefined)
+    void quoteRenewal(rentalId, code)
       .then((nextQuote) => {
         if (current) {
           setQuote(nextQuote)
@@ -73,7 +72,7 @@ export default function CustomerRenewalRequestModal({
     return () => {
       current = false
     }
-  }, [code, rentalId, fullPayment, startDate])
+  }, [code, rentalId])
   const locked = command.busy || command.uncertain || quoteBusy
   return (
     <Modal
@@ -84,25 +83,18 @@ export default function CustomerRenewalRequestModal({
       }}
       size="lg"
     >
-      <div className="space-y-4">
+      <div className="space-y-5 text-[15px] text-stone-900">
         <RenewalRiskNotice rentalId={rentalId} />
         <ApiReadState {...options} retry={options.refresh} />
 
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-950">
-          <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-sm">
-            <span>✓</span> Tiền cọc đảm bảo hợp đồng (Security Deposit)
-          </div>
-          <p className="mt-1 leading-relaxed text-emerald-900">
-            Khoản tiền cọc bạn đã nộp khi bắt đầu hợp đồng thuê ban đầu vẫn được lưu giữ trong hệ thống và sẽ <b>tiếp tục được bảo lưu chuyển tiếp</b> sang kỳ mới. Quý khách <b>không cần nộp thêm tiền cọc</b> khi gia hạn.
-          </p>
-        </div>
-
         {options.data && (
+          <section aria-label="Thông tin gia hạn">
+          <p className="mb-2 text-xs font-medium uppercase text-stone-500">Thông tin gia hạn</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="text-sm font-semibold text-stone-900">Gói gia hạn</span>
+              <span className="flex h-7 items-center text-[15px] font-semibold text-stone-900">Gói gia hạn</span>
               <select
-                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                className="mt-1 h-11 w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
                 value={code}
                 disabled={locked}
                 onChange={(e) => {
@@ -120,142 +112,106 @@ export default function CustomerRenewalRequestModal({
               </select>
             </label>
 
-            <label className="block">
-              <span className="text-sm font-semibold text-stone-900">Ngày bắt đầu gia hạn</span>
+            <div>
+              <div className="flex h-7 items-center gap-1">
+                <label htmlFor="renewal-start-date" className="text-[15px] font-semibold text-stone-900">Ngày bắt đầu</label>
+                <div className="relative" onMouseEnter={() => setStartInfoOpen(true)} onMouseLeave={() => setStartInfoOpen(false)} onKeyDown={(event) => {
+                  if (event.key === "Escape" && startInfoOpen) {
+                    event.stopPropagation()
+                    setStartInfoOpen(false)
+                  }
+                }}>
+                  <button
+                    type="button"
+                    aria-label="Giải thích ngày bắt đầu gia hạn"
+                    aria-describedby={startInfoOpen ? "renewal-start-policy" : undefined}
+                    onFocus={() => setStartInfoOpen(true)}
+                    onBlur={() => setStartInfoOpen(false)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600"
+                  >
+                    <svg className="show-icon h-4 w-4" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 11v5M12 8h.01" />
+                    </svg>
+                  </button>
+                  <div hidden={!startInfoOpen} className="absolute right-0 top-full z-20 w-64 max-w-[calc(100vw-4rem)] pt-1">
+                  <p id="renewal-start-policy" role="tooltip" className="rounded-lg border border-stone-200 bg-white p-3 text-sm leading-relaxed text-stone-600 shadow-md">
+                    Ngày do hệ thống xác định. Chưa quá hạn: nối tiếp kỳ cũ. Đã quá hạn: bắt đầu từ ngày hoàn tất ký; ngày trong báo giá là dự kiến.
+                  </p>
+                  </div>
+                </div>
+              </div>
               <input
-                type="date"
-                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-                value={startDate || quote?.extensionStartDate || ""}
-                disabled={locked}
-                onChange={(e) => {
-                  setStartDate(e.target.value)
-                  setQuote(undefined)
-                  setConfirmed(false)
-                }}
+                id="renewal-start-date"
+                type="text"
+                className="mt-1 h-11 w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
+                value={quote ? rentalDate(quote.extensionStartDate) : ""}
+                placeholder="dd/mm/yyyy"
+                readOnly
+                aria-describedby="renewal-start-policy"
               />
-              <span className="mt-1 block text-[11px] text-stone-500">
-                {startDate
-                  ? `Bắt đầu từ ${rentalDate(startDate)}.`
-                  : "Mặc định nối tiếp sau ngày kết thúc hiện tại."}
-              </span>
-            </label>
-          </div>
-        )}
-        {options.data?.length === 0 && (
-          <p>Không có dữ liệu</p>
-        )}
-
-        {options.data && options.data.length > 0 && (
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-stone-900">Hình thức thanh toán tiền thuê</label>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <label
-                className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition ${
-                  fullPayment
-                    ? "border-amber-600 bg-amber-50/60 ring-1 ring-amber-600"
-                    : "border-stone-200 bg-white hover:bg-stone-50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="renewalPaymentOption"
-                  className="mt-0.5 h-4 w-4 accent-amber-600"
-                  checked={fullPayment}
-                  disabled={locked}
-                  onChange={() => {
-                    setFullPayment(true)
-                    setQuote(undefined)
-                    setConfirmed(false)
-                  }}
-                />
-                <div>
-                  <p className="font-bold text-stone-900">Thanh toán 100% (Một lần)</p>
-                  <p className="mt-0.5 leading-snug text-stone-600">
-                    Thanh toán toàn bộ kỳ thuê qua VNPay, hợp đồng tự động gia hạn thành công ngay.
-                  </p>
-                </div>
-              </label>
-
-              <label
-                className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition ${
-                  !fullPayment
-                    ? "border-amber-600 bg-amber-50/60 ring-1 ring-amber-600"
-                    : "border-stone-200 bg-white hover:bg-stone-50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="renewalPaymentOption"
-                  className="mt-0.5 h-4 w-4 accent-amber-600"
-                  checked={!fullPayment}
-                  disabled={locked}
-                  onChange={() => {
-                    setFullPayment(false)
-                    setQuote(undefined)
-                    setConfirmed(false)
-                  }}
-                />
-                <div>
-                  <p className="font-bold text-stone-900">Chia 2 đợt thanh toán</p>
-                  <p className="mt-0.5 leading-snug text-stone-600">
-                    Trả trước 20% để giữ chỗ kỳ mới, 80% còn lại thanh toán khi ký phụ lục.
-                  </p>
-                </div>
-              </label>
             </div>
           </div>
+          {quote && <div className="mt-3 px-2"><QuoteLine label="Thời gian gia hạn" value={<>{rentalDate(quote.extensionStartDate)} – {rentalDate(quote.newEndDate)}</>} /></div>}
+          </section>
+        )}
+        {options.data?.length === 0 && (
+          <p>Cơ sở hiện chưa có gói thuê còn hiệu lực để gia hạn.</p>
         )}
 
         {quoteBusy ? <p role="status">Đang lấy báo giá…</p> : null}
         {quoteError ? <p role="alert">{rentalError(quoteError)}</p> : null}
         {quote && (
           <>
-          <section aria-label="Chi tiết báo giá gia hạn" className="rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5">
+          <section aria-label="Chi tiết báo giá gia hạn" className="border-t border-stone-200 pt-4">
+            <h3 className="mb-3 text-xs font-medium uppercase text-stone-500">Chi tiết chi phí</h3>
             <div className="space-y-3">
-              <div className="space-y-2 border-b border-dashed border-slate-200 pb-3">
-                <QuoteLine label="Kỳ gia hạn" value={<>{rentalDate(quote.extensionStartDate)} → {rentalDate(quote.newEndDate)}</>} />
                 <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
-              </div>
-              <div className="space-y-2">
-                <QuoteLine label="Tạm tính" value={rentalMoney(quote.subtotal, quote.currency)} />
+                <QuoteLine label={`Tạm tính (${quote.rentalMonths} tháng)`} value={rentalMoney(quote.subtotal, quote.currency)} />
                 {quote.discountAmount > 0 && (
                   <QuoteLine
-                    label={`Giảm giá (${Math.round(quote.discountRate * 100)}%)`}
+                    label={`Ưu đãi gói (${Math.round(quote.discountRate * 100)}%)`}
                     value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
-                    valueClassName="text-emerald-700"
+                    valueClassName="!text-emerald-700"
                   />
                 )}
-                <QuoteLine label="Tổng tiền thuê kỳ mới" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
-                {fullPayment || quote.remainingRentalAmount === 0 ? (
-                  <>
-                    <QuoteLine
-                      label="Thanh toán ngay qua VNPay (100%)"
-                      value={rentalMoney(quote.totalAfterDiscount, quote.currency)}
-                      valueClassName="font-bold text-amber-700"
-                    />
-                    <QuoteLine
-                      label="Tiền thuê còn lại khi ký"
-                      value="0 đ (Đã thanh toán đủ)"
-                      valueClassName="text-emerald-700"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <QuoteLine
-                      label="Thanh toán đợt 1 (Trả trước 20%)"
-                      value={rentalMoney(quote.renewalDepositAmount, quote.currency)}
-                      valueClassName="font-bold text-amber-700"
-                    />
-                    <QuoteLine
-                      label="Thanh toán đợt 2 (80% còn lại khi ký)"
-                      value={rentalMoney(quote.remainingRentalAmount, quote.currency)}
-                    />
-                  </>
-                )}
+            </div>
+            <div className="mt-4 border-t border-stone-200 pt-4">
+              <QuoteLine label="Tổng tiền gia hạn" value={rentalMoney(quote.totalAfterDiscount, quote.currency)} emphasis />
+            </div>
+          </section>
+          <section aria-label="Kế hoạch thanh toán" className="border-t border-stone-200 pt-4">
+            <h3 className="mb-3 text-xs font-medium uppercase text-stone-500">Kế hoạch thanh toán</h3>
+            <div className="divide-y divide-stone-200 rounded-xl border border-stone-200 px-3">
+              <div className="flex items-center justify-between gap-4 py-3">
+                <div><p className="font-medium">Thanh toán trước (20%)</p><p className="mt-1 text-sm text-stone-500">Sau khi gửi yêu cầu</p></div>
+                <p className="shrink-0 text-right font-semibold tabular-nums">{rentalMoney(quote.renewalDepositAmount, quote.currency)}</p>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <div><p className="font-medium">Thanh toán khi ký (80%)</p><p className="mt-1 text-sm text-stone-500">Sau khi trừ khoản trả trước</p></div>
+                <p className="shrink-0 text-right font-semibold tabular-nums">{rentalMoney(quote.remainingRentalAmount, quote.currency)}</p>
               </div>
             </div>
           </section>
-            <label className="flex items-start gap-2 text-sm text-stone-700">
+          <section aria-label="Thời hạn ký hợp đồng" className="px-2">
+            <h3 className="flex items-center gap-2 font-medium">
+              <svg className="show-icon h-4 w-4 text-stone-500" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l3 2M9 2h6M12 2v3" /></svg>
+              Thời hạn ký hợp đồng
+            </h3>
+            {quote.signingWindowDays != null
+              ? <p className="mt-2 text-sm leading-5">Trong vòng <strong className="font-medium">{quote.signingWindowDays} ngày</strong> kể từ khi khoản thanh toán trước được xác nhận.</p>
+              : <p className="mt-2 text-sm leading-5">Hạn ký cụ thể được hệ thống xác nhận theo hồ sơ sau khi thanh toán.</p>}
+            <p className="mt-1 text-sm text-stone-500">Đổi lịch không gia hạn thời hạn này.</p>
+            <details className="mt-2 text-sm text-stone-500">
+              <summary className="w-fit cursor-pointer rounded py-1 focus-visible:outline-2 focus-visible:outline-amber-600">Xem điều khoản gia hạn</summary>
+              <div className="mt-2 space-y-2 leading-5">
+                <p>Khoản trả trước được trừ vào tiền thuê kỳ mới. Không thu lại cọc bảo đảm kho đang giữ.</p>
+                <p>Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
+                <p>Hạn ký không vượt quá hạn xử lý quá hạn của hồ sơ. Gia hạn chỉ hoàn tất khi đủ tiền và hợp đồng đã ký được ghi nhận.</p>
+              </div>
+            </details>
+          </section>
+            <label className="flex items-start gap-2 border-t border-stone-200 pt-4 text-sm leading-5 text-stone-700">
               <input
                 type="checkbox"
                 className="mt-0.5 h-4 w-4 accent-amber-600"
@@ -263,7 +219,7 @@ export default function CustomerRenewalRequestModal({
                 disabled={locked}
                 onChange={(e) => setConfirmed(e.target.checked)}
               />
-              Tôi xác nhận kỳ thuê, giá và điều khoản trên.
+              Tôi đã đọc và đồng ý với giá thuê cùng điều khoản gia hạn.
             </label>
           </>
         )}
@@ -275,6 +231,8 @@ export default function CustomerRenewalRequestModal({
             Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm thử lại cùng yêu cầu, không đóng hộp thoại hoặc gửi yêu cầu mới.
           </p>
         )}
+        <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" disabled={locked} onClick={onClose}>Hủy</Button>
         <Button
           disabled={
             command.busy ||
@@ -313,8 +271,9 @@ export default function CustomerRenewalRequestModal({
             ? "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : "Xác nhận và gửi"}
+              : "Gửi yêu cầu gia hạn"}
         </Button>
+        </div>
         {command.error && !command.uncertain ? (
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => onSuccess()}>
@@ -347,9 +306,9 @@ function QuoteLine({
   valueClassName?: string
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 text-sm sm:text-[15px]">
-      <span className="text-slate-600">{label}</span>
-      <span className={`text-right text-slate-900 ${emphasis ? "text-base font-semibold" : "font-medium"} ${valueClassName}`}>
+    <div className="flex items-start justify-between gap-4 text-[15px]">
+      <span className={emphasis ? "font-semibold text-stone-900" : "text-stone-500"}>{label}</span>
+      <span className={`text-right tabular-nums text-stone-900 ${emphasis ? "text-lg font-semibold" : "font-medium"} ${valueClassName}`}>
         {value}
       </span>
     </div>

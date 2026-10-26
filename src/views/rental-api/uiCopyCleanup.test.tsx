@@ -95,7 +95,7 @@ describe("Dương delete-first UI copy regression", () => {
   })
   it("D3 deposit history discloses simulation, without labeling an actual CASH receipt as simulated", () => {
     let html = renderToStaticMarkup(<OperationEventCard event={operationEvent} />)
-    expect(html).toContain("Thanh toán cọc gia hạn")
+    expect(html).toContain("Thanh toán tiền thuê gia hạn trả trước")
     expect(html).toContain("Thanh toán thử nghiệm - không thu tiền thật.")
     expect(html).toContain("3.201.000 đ")
     html = renderToStaticMarkup(<OperationEventCard event={{ ...operationEvent, kind: "CASH" }} />)

@@ -1,3 +1,4 @@
+import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
@@ -103,34 +104,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const calculatedGoodsVolumeM3 = totalGoodsVolumeM3(goodsItems)
   const calculatedGoodsWeightKg = goodsItems.reduce((total, item) => total + item.quantity * item.weightPerItemKg, 0)
   const formatMeasurement = formatGoodsVolume
-  const rentalMonths = r.rentalMonths && r.rentalMonths > 0 ? r.rentalMonths : Math.max(1, Math.round((new Date(r.endDate).getTime() - new Date(r.startDate).getTime()) / (30.4375 * 86_400_000)))
-  const discountAmount = r.discountAmount ?? 0
-  const voucherDiscountAmount = r.voucherDiscountAmount ?? 0
-  const grossRentalAmount = r.grossRentalAmount ?? r.totalRentalAmount + discountAmount + voucherDiscountAmount
-  const savedQuote = {
-    quoteId: r.quoteId,
-    facilityId: r.facilityId,
-    unitTypeId: r.unitTypeId,
-    startDate: r.startDate,
-    endDate: r.endDate,
-    rentalMonths,
-    freeSetupDays: r.freeSetupDays ?? 0,
-    monthlyPrice: r.monthlyPrice ?? grossRentalAmount / rentalMonths,
-    subtotal: grossRentalAmount,
-    discountRate: r.discountRate ?? (grossRentalAmount > 0 ? discountAmount / grossRentalAmount : 0),
-    discountAmount,
-    totalAfterDiscount: r.totalRentalAmount,
-    reservationDepositAmount: r.reservationDepositAmount,
-    securityDepositAmount: r.securityDepositAmount,
-    remainingRentalAmount: r.remainingRentalAmount,
-    dueAtCheckIn: r.dueAtCheckIn,
-    totalInitialObligation: r.totalInitialObligation,
-    policyVersion: r.pricingPackageCode ?? 'Đã lưu cùng đơn',
-    voucherCode: r.voucherCode,
-    voucherDiscountAmount,
-    quotedAt: r.createdAt,
-    expiresAt: r.holdExpiresAt,
-  }
+  const savedQuote = savedReservationQuote(r)
   const beginSetupGoodsEdit = () => {
     setSetupGoodsDraft(goodsItems.map(item => ({
       catalogCategoryId: item.catalogCategoryId,
@@ -418,7 +392,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             </>}
           </section>
 
-          <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" />
+          {savedQuote ? <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
             {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Business quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian setup không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
@@ -438,7 +412,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>}
       </div>
       <div className="flex min-w-0 flex-col items-stretch gap-3 lg:items-end">
-        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{formatVnd(r.totalInitialObligation)}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {formatVnd(r.reservationDepositAmount)}</p></div>
+        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
         {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />

@@ -14,8 +14,8 @@ describe('Return summary', () => {
     expect(html).toContain('Chưa xác định')
   })
   it('preserves settlement blocker warning instead of implying final payment', () => {
-    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, settlementBlocker: 'UNKNOWN' }} />)
-    expect(html).toContain('Hồ sơ chưa được xác nhận thanh toán/hoàn tiền thành công')
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, settlementBlocker: 'Đơn cũ thiếu điều khoản setup, cần đối soát thủ công.' }} />)
+    expect(html).toContain('Đơn cũ thiếu điều khoản setup, cần đối soát thủ công.')
   })
   it('displays prominent red warning badge when return is disputed', () => {
     const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, status: 'disputed' }} />)
@@ -23,4 +23,11 @@ describe('Return summary', () => {
     expect(html).toContain('bg-rose-100')
     expect(html).toContain('text-rose-800')
   })
+  it('uses the actual inspection cutoff returned by backend rather than the request date', () => {
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, setupExitRequested: true,
+      setupEarlyExit: false, setupReturnedAt: '2026-10-30T00:00:00Z', rentalRefundCredit: 0, earlyTerminationFee: 0 }} />)
+    expect(html).toContain('sau hạn setup')
+    expect(html).not.toContain('Phí chấm dứt sớm một lần')
+  })
+
 })
