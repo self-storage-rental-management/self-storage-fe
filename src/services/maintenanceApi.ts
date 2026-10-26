@@ -3,7 +3,7 @@ import { readRentalEnvelope, readRentalPage } from './rentalApi'
 
 export type MaintenanceTaskPriority = 'low' | 'medium' | 'high'
 export type MaintenanceTaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled'
-export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
+export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned' | 'inactive' | 'archived'
 
 export interface MaintenanceTaskApi {
   id: string

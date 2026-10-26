@@ -236,6 +236,7 @@ export interface CustomerReservation {
   quoteId: string
   facilityId: string
   unitTypeId: string
+  unitTypeName?: string | null
   status: ReservationStatus
   goodsReviewStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED'
   compatibilityResult: CompatibilityResult
