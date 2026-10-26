@@ -41,6 +41,19 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       expect(perms['reservations:approve']).toBe(false)
       expect(perms['staff_tasks:update']).toBe(false)
     })
+
+    it('keeps internal role defaults aligned with the separation-of-duties policy', () => {
+      const admin = DEFAULT_ROLE_PERMISSIONS.admin
+      expect(admin['dashboard:read']).toBe(true)
+      expect(admin['users:manage']).toBe(true)
+      expect(admin['roles:manage']).toBe(true)
+      expect(admin['facilities:read']).toBe(false)
+      expect(admin['reservations:read']).toBe(false)
+
+      expect(DEFAULT_ROLE_PERMISSIONS.manager['support:update']).toBe(false)
+      expect(DEFAULT_ROLE_PERMISSIONS.staff['support:update']).toBe(true)
+      expect(DEFAULT_ROLE_PERMISSIONS.business['policies:update']).toBe(true)
+    })
   })
 
   describe('Facility Code Suggestion Logic', () => {
