@@ -212,7 +212,7 @@ export default function RenewalDetail({
       {paymentExpired ? <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p> : canOpenPayment && !appointmentSelected && !appointmentSelection && <p className="text-sm text-stone-600">Vui lòng chọn lịch ký trước khi thanh toán.</p>}
       <div className="flex flex-wrap gap-2">
         {canOpenPayment&&<Button
-          disabled={operationsLocked||paymentBusy||paymentExpired||payment?.paymentStatus==="PAID"}
+          disabled={operationsLocked||paymentBusy||paymentExpired||payment?.paymentStatus==="PAID"||!appointmentSelected}
           onClick={openRenewalPayment}
         >{paymentBusy?"Đang mở VNPay":payment&&["PENDING","PROCESSING","NOT_RECEIVED"].includes(payment.paymentStatus)?"Tiếp tục thanh toán":hasDeposit?"Thanh toán tiền thuê trả trước":"Thanh toán toàn kỳ"}</Button>}
         {actions
