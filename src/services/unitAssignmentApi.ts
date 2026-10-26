@@ -1,6 +1,7 @@
 import { ApiClientError, apiRequest } from './apiClient'
+import { checkedReservationState } from './statusContractValidation'
 
-export type AssignmentReservationStatus = 'CONFIRMED' | 'UNIT_RESERVED' | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED'
+export type AssignmentReservationStatus = import('../types/statusContracts').ReservationStatus
 export type AssignmentStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED'
 export type AssignmentUnitStatus = 'available' | 'reserved'
 
@@ -138,7 +139,7 @@ export async function createUnitAssignment(reservationId: string, storageUnitId:
     `/api/manager/unit-assignments/${encodeURIComponent(reservationId)}`,
     { method: 'POST', body: JSON.stringify({ storageUnitId }) },
   )
-  return assertEnvelope<UnitAssignmentResult>(payload).data
+  return checkedReservationState(assertEnvelope<UnitAssignmentResult>(payload).data)
 }
 
 export async function changeUnitAssignment(reservationId: string, storageUnitId: string, reason: string) {
@@ -146,5 +147,5 @@ export async function changeUnitAssignment(reservationId: string, storageUnitId:
     `/api/manager/unit-assignments/${encodeURIComponent(reservationId)}/change`,
     { method: 'PUT', body: JSON.stringify({ storageUnitId, reason }) },
   )
-  return assertEnvelope<UnitAssignmentResult>(payload).data
+  return checkedReservationState(assertEnvelope<UnitAssignmentResult>(payload).data)
 }

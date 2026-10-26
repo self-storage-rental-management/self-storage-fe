@@ -16,7 +16,7 @@ export const paymentCategories = {
   renewal: "Thanh toán tiền thuê gia hạn trả trước",
   damage: "Thanh toán bổ sung khi trả kho",
   refund: "Hoàn tiền trả kho",
-  returnOffset: "Khấu trừ cọc trả kho",
+  returnOffset: "Đối trừ quyết toán trả kho",
   checkin: "Thanh toán tại chỗ khi nhận kho",
   renewalSigning: "Thanh toán tại chỗ khi ký gia hạn",
   other: "Thanh toán khác",
@@ -42,6 +42,9 @@ export interface HistoryEntry {
   unitCode?: string
   facilityName?: string
   returnSettlement?: {
+    rentalRefundCredit?: number | null
+    earlyTerminationFee?: number | null
+    setupEarlyExit?: boolean
     depositAmount: number | null
     totalDeductions: number | null
     damageFee: number | null
@@ -134,6 +137,10 @@ async function allPages<T>(
   return entries
 }
 interface ReturnPayment {
+  setupExitRequested?: boolean
+  setupEarlyExit?: boolean
+  rentalRefundCredit?: number | null
+  earlyTerminationFee?: number | null
   id: string
   customerId: string
   unitNumber: string
@@ -165,7 +172,7 @@ function isReturnPayment(value: unknown): value is ReturnPayment {
     typeof r.id === "string" &&
     r.customerId === getAuthenticatedActor()?.id &&
     typeof r.unitNumber === "string" &&
-    [r.depositAmount, r.totalDeductions, r.damageFee, r.cleaningFee, r.lostItemFee, r.overdueFee, r.outstandingFee]
+    [r.rentalRefundCredit, r.earlyTerminationFee, r.depositAmount, r.totalDeductions, r.damageFee, r.cleaningFee, r.lostItemFee, r.overdueFee, r.outstandingFee]
       .every(value => value == null || typeof value === "number" && Number.isFinite(value) && value >= 0) &&
     (r.overdueSettlement == null || isOverdueSettlement(r.overdueSettlement)) &&
     (r.settlementPaymentId === null ||
@@ -298,7 +305,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
       return returns
         .filter(
           (r) =>
-            r.settlementReceipt || r.settlementPaymentId && r.settlementPaidAt,
+            r.settlementReceipt,
         )
         .flatMap((r): HistoryEntry[] => {
           const receipt = r.settlementReceipt
@@ -315,8 +322,11 @@ export async function loadCustomerPaymentHistory(): Promise<{
             currency: "VND",
             timestamp: r.settlementPaidAt ?? receipt?.recordedAt ?? null,
             status: offset ? "SETTLED" : refund ? "REFUNDED" : "PAID",
-            method: offset ? "Khấu trừ cọc" : receipt ? receipt.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản" : null,
+            method: offset ? "Đối trừ quyết toán" : receipt ? receipt.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản" : null,
             returnSettlement: {
+              rentalRefundCredit: r.rentalRefundCredit ?? null,
+              earlyTerminationFee: r.earlyTerminationFee ?? null,
+              setupEarlyExit: r.setupEarlyExit,
               depositAmount: r.depositAmount ?? null,
               totalDeductions: r.totalDeductions ?? null,
               damageFee: r.damageFee ?? null,

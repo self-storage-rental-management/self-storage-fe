@@ -22,6 +22,12 @@ export function isOverdueSettlement(value: unknown): value is OverdueSettlement 
       && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
 }
 export interface ApiReturn {
+  setupExitRequested?: boolean
+  setupEarlyExit?: boolean
+  setupReturnedAt?: string | null
+  setupEarlyExitPolicyVersion?: string | null
+  rentalRefundCredit?: number | null
+  earlyTerminationFee?: number | null
   id: string; rentalId: string; facilityId: string; customerId: string
   facilityName: string; unitNumber: string; customerName: string
   status: typeof returnStatuses[number]; scheduledDate: string
@@ -44,7 +50,10 @@ const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const money = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 999999999999.99 && Math.abs(v * 100 - Math.round(v * 100)) < 0.01
 const date = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v
 export function isApiReturn(v: unknown): v is ApiReturn {
-  return object(v) && ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
+  return object(v) && ['rentalRefundCredit', 'earlyTerminationFee'].every(k => v[k] == null || money(v[k])) &&
+    ['setupExitRequested', 'setupEarlyExit'].every(k => v[k] == null || typeof v[k] === 'boolean') &&
+    (v.setupReturnedAt == null || typeof v.setupReturnedAt === 'string' && Number.isFinite(Date.parse(v.setupReturnedAt))) &&
+    ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
     (v.overdueSettlement == null || isOverdueSettlement(v.overdueSettlement)) &&
     ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && date(v.scheduledDate) &&
     returnStatuses.includes(v.status as ApiReturn['status']) && typeof v.customerConfirmed === 'boolean' && money(v.totalDeductions) &&
@@ -120,6 +129,7 @@ export async function updateReturnRequest(id: string, scheduledDate: string, not
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>
 export interface InspectionInput extends ReturnFees {
+  unitVacated?: boolean
   inventoryMatch: 'match' | 'missing' | 'excess'; damageClassification: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods'
   staffNotes: string; evidencePhotos: string[]; returnedKey: boolean; returnedCard: boolean; returnedLock: boolean
   proposedUnitStatus: 'available' | 'maintenance'
@@ -138,7 +148,7 @@ export function inspectReturn(id: string, body: InspectionInput) {
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, 'inspection', body)
 }
-export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string } = {}) {
+export async function completeRefund(id: string, body: { transactionReference?: string; notes?: string; paymentMethod?: 'CASH' | 'BANK_TRANSFER'; receiptFileId?: string; amount?: number; confirmed?: boolean } = {}) {
   const a = getAuthenticatedActor()
   if (!a || a.status !== 'ACTIVE' || !a.roles.some(role => role === 'STAFF' || role === 'BUSINESS' || role === 'ADMIN' || role === 'MANAGER')) {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
@@ -170,17 +180,16 @@ export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
     || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
     throw new Error('Chọn phương thức, nhập mã giao dịch, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền.')
 }
-export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string) {
-  const a = actor('staff', true)
-  if (!a.permissions.includes('payments:collect')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
+export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string, role: ReturnRole = 'staff') {
+  const a = actor(role, true)
+  if (!a.permissions.includes('payments:collect') && !a.permissions.includes('refunds:execute')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
   if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   validateReturnSettlementReceipt(body)
-  if (a.roles.includes('STAFF') && body.paymentMethod !== 'CASH') {
-    throw new ApiClientError('Staff chỉ được ghi nhận thu tiền mặt trong phiên thu.', { status: 403 })
-  }
-  return bound(await apiRequest(`/api/staff/returns/${id}/settlement-receipts`, {
+
+  if (role === 'business') return completeRefund(id, body)
+  return bound(await apiRequest(`/api/${role}/returns/${id}/settlement-receipts`, {
     method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
-  }), 'staff', id)
+  }), role, id)
 }
 
 export interface ReturnEvidenceAsset {
@@ -204,8 +213,8 @@ function readReturnEvidenceAsset(payload: unknown): ReturnEvidenceAsset {
   }
 }
 
-export async function uploadReturnEvidence(returnId: string, file: File) {
-  actor('staff', true)
+export async function uploadReturnEvidence(returnId: string, file: File, role: ReturnRole = 'staff') {
+  actor(role, true)
   if (!isUuid(returnId)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   if (!file || file.size <= 0) throw new Error('Tệp bằng chứng không được để trống.')
   const form = new FormData()

@@ -1,4 +1,4 @@
-import { LEGACY_RENEWAL_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
+import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
 import { useEffect, useRef, useState } from "react"
 
 import Layout, {
@@ -95,10 +95,10 @@ import {
   type StaffTaskSort,
 } from "./staffPresentation"
 
-type ReservationStatus = "CREATED" | "REVIEW_REQUIRED" | "AWAITING_DEPOSIT" | "DEPOSIT_PAID" | "UNIT_RESERVED" | "READY_FOR_CHECKIN" | "COMPLETED" | "CANCELLED" | "EXPIRED"
+type LegacyReservationStatus = "CREATED" | "REVIEW_REQUIRED" | "AWAITING_DEPOSIT" | "DEPOSIT_PAID" | "UNIT_RESERVED" | "READY_FOR_CHECKIN" | "COMPLETED" | "CANCELLED" | "EXPIRED"
 
 type StaffReservation = Omit<typeof RESERVATIONS[number], "status"> & {
-  status: ReservationStatus
+  status: LegacyReservationStatus
 
   sizeCode?: string
 
@@ -260,7 +260,7 @@ const staffTaskTypeLabel: Record<FacilityTask["type"], string> = {
 
 const sharedReservationStatus = (
   reservation: StorageReservation,
-): ReservationStatus => {
+): LegacyReservationStatus => {
   if (reservation.status === "awaiting_review") return "REVIEW_REQUIRED"
 
   if (reservation.status === "awaiting_email") return "CREATED"
@@ -2262,8 +2262,8 @@ export default function StaffApp({
       {page === "renewal-signing" && !isApiAuthenticated() && scheduledRenewals.length > 0 && (
         <div className="fade-in mt-8 space-y-3">
           <SectionHeader
-            title="Lịch ký phụ lục gia hạn"
-            subtitle="Thu phần tiền còn lại, tải phụ lục đã ký và kích hoạt thời hạn mới"
+            title="Lịch ký gia hạn đã lưu"
+            subtitle="Chỉ xem dữ liệu lịch sử; đối soát và xử lý gia hạn tại hồ sơ trực tuyến"
           />
           {renewalsPagination.items.map((renewal) => (
             <Card key={renewal.id} className="p-5">
@@ -2629,7 +2629,7 @@ export default function StaffApp({
                   "CANCELLED",
 
                   "EXPIRED",
-                ] as ReservationStatus[]).map((status) => (
+                ] as LegacyReservationStatus[]).map((status) => (
                   <option key={status} value={status}>
                     {statusLabelMap[status]}
                   </option>
@@ -3316,7 +3316,7 @@ export default function StaffApp({
                         const updated = {
                           ...selectedReservation,
 
-                          status: "AWAITING_DEPOSIT" as ReservationStatus,
+                          status: "AWAITING_DEPOSIT" as LegacyReservationStatus,
                         }
 
                         setReservations((items) =>
@@ -3348,7 +3348,7 @@ export default function StaffApp({
                           const updated = {
                             ...selectedReservation,
 
-                            status: "CANCELLED" as ReservationStatus,
+                            status: "CANCELLED" as LegacyReservationStatus,
                           }
 
                           setReservations((items) =>
@@ -4474,7 +4474,7 @@ export default function StaffApp({
       </Modal>
       <Modal closeLabel="Đóng hộp thoại" open={Boolean(selectedRenewal) && !isApiAuthenticated()} onClose={() => setSelectedRenewal(null)} title="Hồ sơ gia hạn cũ">
         <div className="space-y-4">
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_NOTICE}</p>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_HISTORY_NOTICE} {LEGACY_RENEWAL_NOTICE}</p>
           {selectedRenewal && <dl className="space-y-2 text-sm">
             <div><dt>Hồ sơ</dt><dd>{selectedRenewal.unitId} · {selectedRenewal.customerName}</dd></div>
             <div><dt>Phần còn lại đã lưu</dt><dd>{legacyRenewalMoney(selectedRenewal.remainingAmount)}</dd></div>

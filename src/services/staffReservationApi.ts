@@ -1,5 +1,6 @@
 import { apiDownload, apiRequest } from './apiClient'
 import type { PageResponse, ReservationGoodsItem, ReservationStatus } from './customerReservationApi'
+import { checkedReservation, checkedReservationState, checkedStatusPage } from './statusContractValidation'
 
 export interface ReservationReview {
   reservationId: string
@@ -43,7 +44,7 @@ export interface StaffReservationProgress {
 }
 
 export async function listStaffReservationReviews(page = 0, size = 20) {
-  return apiRequest<PageResponse<ReservationReview>>(`/api/staff/reservation-reviews?page=${page}&size=${size}`)
+  return checkedStatusPage(await apiRequest<PageResponse<ReservationReview>>(`/api/staff/reservation-reviews?page=${page}&size=${size}`), checkedReservationState)
 }
 
 export async function decideStaffReservationReview(reservationId: string, decision: 'APPROVE' | 'REJECT', note: string) {
@@ -51,7 +52,7 @@ export async function decideStaffReservationReview(reservationId: string, decisi
   const result = await apiRequest<{ data: ReservationReview }>(`/api/staff/reservation-reviews/${reservationId}/decision`, {
     method: 'POST', body: JSON.stringify({ decision, note: note.trim() || null }),
   })
-  return result.data
+  return checkedReservationState(result.data)
 }
 
 export async function listStaffActiveReservations(params: {
@@ -65,7 +66,7 @@ export async function listStaffActiveReservations(params: {
   query.set('size', String(params.size ?? 10))
   if (params.q?.trim()) query.set('q', params.q.trim())
   if (params.status) query.set('status', params.status)
-  return apiRequest<PageResponse<StaffReservationProgress>>(`/api/staff/reservations?${query}`)
+  return checkedStatusPage(await apiRequest<PageResponse<StaffReservationProgress>>(`/api/staff/reservations?${query}`), checkedReservation)
 }
 
 export function downloadStaffReservationGoodsImage(fileId: string) {

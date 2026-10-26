@@ -67,7 +67,7 @@ describe("Customer payment history", () => {
   it.each([
     ['REFUND', 'CASH', 'TM-refund', 3500000, 'refund', 'REFUNDED', 'Tiền mặt'],
     ['COLLECTION', 'BANK_TRANSFER', 'BANK-collect', 2100000, 'damage', 'PAID', 'Chuyển khoản'],
-    ['OFFSET', 'DEPOSIT_OFFSET', 'OFFSET:return', 5500000, 'returnOffset', 'SETTLED', 'Khấu trừ cọc'],
+    ['OFFSET', 'DEPOSIT_OFFSET', 'OFFSET:return', 5500000, 'returnOffset', 'SETTLED', 'Đối trừ quyết toán'],
   ])('uses recorded %s amount and method instead of the zero remaining balance', async (direction, method, reference, amount, category, status, label) => {
     vi.mocked(apiRequest).mockResolvedValue(page([{
       id: 'return', customerId: 'customer', unitNumber: 'A1',
@@ -87,6 +87,25 @@ describe("Customer payment history", () => {
       settlementPaidAt: '2026-10-20T13:50:30Z', amountDueFromCustomer: 0, netRefundAmount: 0,
     }]))
     expect((await loadCustomerPaymentHistory()).entries.map(entry => entry.id)).toEqual(['deposit'])
+  })
+  it('does not certify a legacy refund reference without a recorded settlement receipt', async () => {
+    vi.mocked(apiRequest).mockResolvedValue(page([{
+      id: 'return', customerId: 'customer', unitNumber: 'A1', settlementPaymentId: 'legacy-refund',
+      settlementPaidAt: '2026-10-26T03:00:00Z', amountDueFromCustomer: 0, netRefundAmount: 5700000,
+    }]))
+    expect((await loadCustomerPaymentHistory()).entries.map(entry => entry.id)).toEqual(['deposit'])
+  })
+  it('keeps the backend setup breakdown and actual refund proof together', async () => {
+    vi.mocked(apiRequest).mockResolvedValue(page([{
+      id: 'setup-return', customerId: 'customer', unitNumber: 'A1', settlementPaymentId: 'SETUP-REFUND',
+      settlementPaidAt: '2026-10-26T03:00:00Z', amountDueFromCustomer: 0, netRefundAmount: 5700000,
+      setupEarlyExit: true, rentalRefundCredit: 6000000, earlyTerminationFee: 2000000,
+      depositAmount: 2000000, damageFee: 300000, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0, totalDeductions: 2300000,
+      settlementReceipt: { direction: 'REFUND', amount: 5700000, paymentMethod: 'CASH', transactionReference: 'SETUP-REFUND', receiptFileId: null, recordedAt: '2026-10-26T03:00:00Z' },
+    }]))
+    const entry = (await loadCustomerPaymentHistory()).entries.find(row => row.id === 'SETUP-REFUND')!
+    expect(entry).toMatchObject({ amount: 5700000, status: 'REFUNDED', method: 'Tiền mặt',
+      returnSettlement: { rentalRefundCredit: 6000000, earlyTerminationFee: 2000000, totalDeductions: 2300000, setupEarlyExit: true } })
   })
   beforeEach(() => {
     vi.resetAllMocks()
@@ -158,6 +177,7 @@ describe("Customer payment history", () => {
           settlementPaymentId: "settlement",
           settlementPaidAt: "2026-10-15T08:00:00Z",
           amountDueFromCustomer: 400,
+          settlementReceipt: { direction: 'COLLECTION', amount: 400, paymentMethod: 'CASH', transactionReference: 'settlement', receiptFileId: null, recordedAt: '2026-10-15T08:00:00Z' },
         },
         {
           id: "unpaid-return",

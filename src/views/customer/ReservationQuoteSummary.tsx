@@ -54,6 +54,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           <div><b>Tổng nghĩa vụ tài chính</b><p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền cọc đảm bảo kho</p></div>
           <b className="text-base tabular-nums">{formatVndAmount(q.totalInitialObligation)}</b>
         </div>
+        <SetupEarlyExitTerms quote={q} />
       </section>
     )
   }
@@ -74,12 +75,13 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           Kỳ thuê: <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-          <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế. Các ngày này không nằm trong kỳ thuê đã thanh toán;
+          <b>{q.freeSetupDays == null ? 'Chưa xác định số ngày setup miễn phí' : `${q.freeSetupDays} ngày setup miễn phí`}</b> tính từ ngày bàn giao thực tế. Các ngày này không nằm trong kỳ thuê đã thanh toán;
           ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày check-in thực tế. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
         </div>
       </div>
 
       {/* ── KHỐI 1: TÍNH TOÁN TIỀN THUÊ KHO ── */}
+      <SetupEarlyExitTerms quote={q} />
       <div className="space-y-2.5">
         <p className="text-xs font-bold uppercase tracking-wider text-stone-700">1. Chi tiết tiền thuê kho</p>
         <div className="space-y-2.5 rounded-xl border border-stone-200 bg-white p-4">
@@ -191,4 +193,11 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
       )}
     </section>
   )
+}
+
+function SetupEarlyExitTerms({ quote }: { quote: ReservationQuote }) {
+  if (!quote.setupEarlyExitPolicyVersion || quote.setupEarlyExitFee == null) return <p className="mt-3 text-xs text-amber-900">Đơn chưa có điều khoản quyết toán trả kho trong setup. Vui lòng liên hệ cơ sở để đối soát.</p>
+  return <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
+    <b>Trả kho sớm trong setup:</b> sau bàn giao, khách chủ động trả kho và được nghiệm thu kho trống trước khi hết setup chịu phí chấm dứt sớm một lần <b>{formatVndAmount(quote.setupEarlyExitFee)}</b> (một tháng đơn giá đã chốt). Tiền thuê và cọc bảo đảm đã thực thu được quyết toán sau khi trừ khoản phí này, chi phí kiểm kê có chứng cứ và công nợ đã xác minh. Khoản trả trước lúc đặt kho đã nằm trong tiền thuê. Nếu thực trả kho sau setup, áp dụng quyết toán của kỳ thuê đã bắt đầu.
+  </p>
 }

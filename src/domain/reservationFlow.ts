@@ -1,4 +1,4 @@
-import type { ReservationStatus } from '../types/storageHub'
+import type { LegacyReservationStatus } from '../types/storageHub'
 
 export type ReservationEvent =
   | 'VERIFY_EMAIL'
@@ -8,7 +8,7 @@ export type ReservationEvent =
   | 'READY_FOR_CHECKIN'
   | 'COMPLETE_CHECKIN'
 
-const transitions: Partial<Record<ReservationStatus, Partial<Record<ReservationEvent, ReservationStatus>>>> = {
+const transitions: Partial<Record<LegacyReservationStatus, Partial<Record<ReservationEvent, LegacyReservationStatus>>>> = {
   awaiting_email: { VERIFY_EMAIL: 'awaiting_review' },
   awaiting_review: { APPROVE: 'awaiting_payment' },
   awaiting_payment: { PAY_DEPOSIT: 'DEPOSIT_PAID' },
@@ -17,7 +17,7 @@ const transitions: Partial<Record<ReservationStatus, Partial<Record<ReservationE
   READY_FOR_CHECKIN: { COMPLETE_CHECKIN: 'COMPLETED' },
 }
 
-export function transitionReservation(status: ReservationStatus, event: ReservationEvent): ReservationStatus {
+export function transitionReservation(status: LegacyReservationStatus, event: ReservationEvent): LegacyReservationStatus {
   const next = transitions[status]?.[event]
   if (!next) throw new Error(`Invalid reservation transition: ${status} -> ${event}`)
   return next

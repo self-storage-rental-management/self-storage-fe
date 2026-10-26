@@ -7,9 +7,10 @@ export default function RenewalStatusPanel({ summary, onReceipt }: { summary: Re
   const known = !['UNKNOWN', 'NOT_ISSUED'].includes(i.status)
   return <section className="space-y-4 rounded-xl border border-stone-200 p-4" aria-label="Khoản phải thu và giao dịch gia hạn">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h4 className="font-semibold">Khoản phải thu gia hạn</h4>
+      <h4 className="font-semibold">Bảng kê khoản phải thu gia hạn</h4>
       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${i.status === 'PAID' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{renewalInvoiceLabels[i.status]}</span>
     </div>
+    <p className="text-xs text-stone-500">Bảng kê theo dõi khoản phải thu, không xác nhận hóa đơn đã phát hành. Biên lai nằm trong từng giao dịch đã đối soát bên dưới.</p>
     {known ? <>
       <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
         {([

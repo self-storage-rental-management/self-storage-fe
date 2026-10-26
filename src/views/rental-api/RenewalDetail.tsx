@@ -136,7 +136,7 @@ export default function RenewalDetail({
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền thuê trả trước đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
       <div className="space-y-3">
-          {r.statusSummary && <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId} />}
+          {r.statusSummary ? <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId} /> : <p className="rounded-lg border border-stone-200 p-3 text-sm text-stone-600" role="status">Chưa xác định được bảng kê khoản phải thu. Cần đối soát trước khi xác nhận số tiền đã thanh toán hoặc còn phải thu.</p>}
           {role === "customer" && payment && <section className={`rounded-xl border p-4 ${payment.reconciliationRequired ? "border-amber-200 bg-amber-50/50" : "border-stone-200 bg-white"}`} aria-label="Thanh toán gia hạn" aria-live="polite">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-sm font-semibold text-stone-700">{hasDeposit ? "Tiền thuê gia hạn trả trước" : "Thanh toán toàn kỳ"}</h4>
@@ -163,6 +163,7 @@ export default function RenewalDetail({
           <summary className="cursor-pointer font-semibold">Điều khoản</summary>
           <div className="mt-3 space-y-2">
             <p className="text-sm text-stone-600">Gói gia hạn: {terms.rentalMonths} tháng</p>
+            {terms.signingWindowDays != null && <p className="text-sm text-stone-600">Thời gian đến ký: {terms.signingWindowDays} ngày từ khi thanh toán khoản trả trước thành công, trong giới hạn xử lý quá hạn. Đây là thời gian chuẩn bị đến ký, không phải setup miễn phí.</p>}
             <p className="text-sm text-stone-600">{extensionPeriodLabel}: {rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</p>
             <p className="text-sm text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký, phí quá hạn tính riêng cho các ngày trước đó. Không cộng ngày setup.</p>
             <dl className="grid gap-2 text-sm sm:grid-cols-2">

@@ -4,16 +4,17 @@ import { useRenewalCommand } from '../../hooks/useRenewalCommand'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { getRecoveryOperations, recoveryOperationError, sendRecoveryCommand, validateRecoveryCommand, type RecoveryCommand, type RecoveryOperations } from '../../services/recoveryTaskOperationsApi'
-import { recordReturnSettlement, returnError, uploadReturnEvidence, validateReturnSettlementReceipt, type ApiReturn } from '../../services/returnApi'
+import { recordReturnSettlement, returnError, uploadReturnEvidence, validateReturnSettlementReceipt, type ApiReturn, type ReturnRole } from '../../services/returnApi'
 import { EvidenceUpload } from '../rental-support-integration/EvidenceControls'
 
 type ReceiptCommand = Extract<RecoveryCommand, { action: 'settlement-receipts' }>
-type Props = { record: ApiReturn; busy: boolean; onChanged: () => void; onLocked: (locked: boolean) => void }
+type Props = { role?: ReturnRole; record: ApiReturn; busy: boolean; onChanged: () => void; onLocked: (locked: boolean) => void }
 
 export default function RecoveryReturnSettlement(props: Props) {
   return props.record.sourceType === 'RECOVERY'
     ? <RecoveryReceiptLoader {...props} />
-    : <ReceiptForm {...props} refresh={props.onChanged} />
+    : <ReceiptForm key={JSON.stringify([props.record.id, props.record.status, props.record.netRefundAmount,
+      props.record.amountDueFromCustomer, props.record.totalDeductions, props.record.setupReturnedAt])} {...props} refresh={props.onChanged} />
 }
 
 function RecoveryReceiptLoader(props: Props) {
@@ -29,7 +30,7 @@ function RecoveryReceiptLoader(props: Props) {
   return <ReceiptForm key={`${read.data.expectedVersion}:${record.status}`} {...props} view={read.data} refresh={read.refresh} />
 }
 
-function ReceiptForm({ record, view, busy, onChanged, onLocked, refresh }: Props & { view?: RecoveryOperations; refresh: () => void }) {
+function ReceiptForm({ role = 'staff', record, view, busy, onChanged, onLocked, refresh }: Props & { view?: RecoveryOperations; refresh: () => void }) {
   const actor = getAuthenticatedActor()
   const command = useRenewalCommand()
   const pending = useRef<(ReceiptCommand & { body: ReceiptCommand['body'] & { amount: number } }) | null>(null)
@@ -43,9 +44,9 @@ function ReceiptForm({ record, view, busy, onChanged, onLocked, refresh }: Props
   const [confirmed, setConfirmed] = useState(false)
   const [validation, setValidation] = useState('')
   useEffect(() => () => listener.current(false), [])
-  const allowed = actor?.status === 'ACTIVE' && actor.roles.includes('STAFF')
-    && ['rentals:read', 'returns:process', 'payments:collect'].every(p => actor.permissions.includes(p))
-    && ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[record.facilityId])
+  const allowed = actor?.status === 'ACTIVE' && actor.roles.some(r => ['STAFF', 'MANAGER', 'BUSINESS', 'ADMIN'].includes(r))
+    && actor.permissions.includes(record.status === 'refund_pending' && !view ? 'refunds:execute' : 'payments:collect')
+    && (actor.roles.includes('ADMIN') || actor.roles.includes('BUSINESS') && !Object.keys(actor.facilityScopes).length || (role === 'staff' ? ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[record.facilityId]) : actor.facilityScopes[record.facilityId] === 'MANAGE'))
     && (!view || (view.status === 'IN_PROGRESS' && view.settlementStatus === record.status))
     && !record.settlementBlocker && (record.status === 'payment_due' ? (record.amountDueFromCustomer ?? 0) > 0 : record.status === 'refund_pending' && (record.netRefundAmount ?? 0) > 0)
   const frozen = busy || uploading || command.busy || command.uncertain
@@ -61,7 +62,7 @@ function ReceiptForm({ record, view, busy, onChanged, onLocked, refresh }: Props
     setValidation('')
     listener.current(true)
     void command.run(JSON.stringify(request), key => {
-      if (!view) return recordReturnSettlement(record.id, request.body, key)
+      if (!view) return recordReturnSettlement(record.id, request.body, key, role)
       const { amount: _amount, ...body } = request.body
       return sendRecoveryCommand('staff', record.recoveryTaskId!, { action: request.action, body }, key)
     }, () => {
@@ -75,7 +76,7 @@ function ReceiptForm({ record, view, busy, onChanged, onLocked, refresh }: Props
       <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" value={method} onChange={event => setMethod(event.target.value as typeof method)}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
       <label className="block">Mã giao dịch hoặc biên nhận<input className="block w-full rounded border p-2" required maxLength={64} value={reference} onChange={event => setReference(event.target.value)} /></label>
       <EvidenceUpload entityType="DUONG_RECOVERY_SETTLEMENT" entityId={record.recoveryTaskId!} label="Biên lai quyết toán" limit={1} value={files} onChange={setFiles}
-        upload={view ? undefined : file => uploadReturnEvidence(record.id, file)}
+        upload={view ? undefined : file => uploadReturnEvidence(record.id, file, role)}
         disabled={frozen || !allowed || command.conflict} onBusy={value => { uploadLock.current = value; setUploading(value); listener.current(value || command.isLocked()) }} />
       <label className="block"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> Tôi xác nhận đã thực thu hoặc thực hoàn đúng số tiền quyết toán, kèm biên lai đã đối chiếu.</label>
     </fieldset>

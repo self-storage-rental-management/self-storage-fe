@@ -79,7 +79,7 @@ describe("Dương verified empty-data presentation", () => {
   it("D2 Customer empty renewal options", () => {
     state.actor = operationsActor("customer"); state.mode = "options"
     const modal = <CustomerRenewalRequestModal actorId={ids.customer} rentalId={ids.rental} onClose={vi.fn()} onSuccess={vi.fn()} />
-    verifyEmptyOnlyAfterSuccess(modal)
+    verifyEmptyOnlyAfterSuccess(modal, "Cơ sở hiện chưa có gói thuê còn hiệu lực để gia hạn.")
     expect(renderToStaticMarkup(modal)).not.toContain("Lấy báo giá mới")
   })
   it("D3 Staff empty appointment list", () => {

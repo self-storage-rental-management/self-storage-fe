@@ -1,3 +1,4 @@
+import ReturnApiPanel from '../return-api/ReturnApiPanel'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
@@ -221,7 +222,7 @@ const SAMPLE_RETURNS: Array<{
   },
 ]
 
-export default function BusinessReturnsPanel({ user }: Props) {
+function LegacyBusinessReturnsPanel({ user }: Props) {
   const hub = useStorageHub()
   const useApi = isApiAuthenticated()
   const isBusiness = user.role === 'business'
@@ -1930,4 +1931,8 @@ export default function BusinessReturnsPanel({ user }: Props) {
       )}
     </div>
   )
+}
+
+export default function BusinessReturnsPanel(props: Props) {
+  return isApiAuthenticated() ? <ReturnApiPanel role="business" /> : <LegacyBusinessReturnsPanel {...props} />
 }
