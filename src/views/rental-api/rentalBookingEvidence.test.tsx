@@ -15,7 +15,8 @@ const evidence: RentalBookingEvidence = {
   agreedAmounts: { netRentalAmount: 100, reservationDepositAmount: 20, securityDepositAmount: 10,
     remainingRentalAmount: 80, dueAtCheckIn: 90, totalInitialObligation: 110 },
   payments: [{ id: "p1", purpose: "RESERVATION_DEPOSIT", status: "PAID", amount: 20,
-    processedAt: "2026-10-10T00:00:00Z", verification: "SIMULATED" }], paymentsTruncated: false,
+    processedAt: "2026-10-10T00:00:00Z", verification: "SIMULATED", invoiceNumber: "INV-TEST",
+    invoiceStatus: "PAID", invoiceIssuedAt: "2026-10-10T00:00:00Z" }], paymentsTruncated: false,
 }
 beforeEach(() => vi.clearAllMocks())
 describe("Booking evidence connects DB response without financial or permission shortcuts", () => {

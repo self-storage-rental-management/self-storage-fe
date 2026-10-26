@@ -1,46 +1,51 @@
-// Generated from backend enums. Run npm run statuses:generate; do not edit manually.
+/** Values emitted by the backend API. Demo/local-store aliases are normalized here. */
+export type ApiReservationStatus =
+  | 'AWAITING_EMAIL' | 'AWAITING_REVIEW' | 'AWAITING_PAYMENT'
+  | 'PAYMENT_GRACE' | 'PAYMENT_REVIEW' | 'CONFIRMED' | 'UNIT_RESERVED'
+  | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED'
+  | 'CANCELLED' | 'EXPIRED' | 'REJECTED'
 
-// Backend: src/main/java/com/storagehub/domain/model/PaymentStatus.java
-export const paymentStatusValues = ["PENDING","PROCESSING","PAID","NOT_RECEIVED","FAILED","CANCELLED"] as const
-export type PaymentStatus = (typeof paymentStatusValues)[number]
-export const isPaymentStatus = (value: unknown): value is PaymentStatus => typeof value === 'string' && (paymentStatusValues as readonly string[]).includes(value)
+export type ApiPaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
+export type ApiInvoiceStatus = 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'
+export type ApiRentalStatus = 'setup' | 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
+export type ApiRenewalStatus = 'pending' | 'accepted' | 'deposit_paid' | 'full_rent_paid' | 'approved' | 'appointment_scheduled' | 'payment_processing' | 'payment_failed' | 'payment_expired' | 'rejected' | 'cancelled' | 'completed'
+export type ApiReturnStatus = 'requested' | 'scheduled' | 'inspected' | 'awaiting_business_review' | 'awaiting_customer_confirmation' | 'disputed' | 'payment_due' | 'refund_pending' | 'completed'
 
-// Backend: src/main/java/com/storagehub/domain/model/ReservationStatus.java
-export const reservationStatusValues = ["AWAITING_EMAIL","AWAITING_REVIEW","AWAITING_PAYMENT","PAYMENT_GRACE","PAYMENT_REVIEW","CONFIRMED","UNIT_RESERVED","READY_FOR_CHECKIN","AWAITING_CUSTOMER_RECEIPT","COMPLETED","CANCELLED","EXPIRED","REJECTED"] as const
-export type ReservationStatus = (typeof reservationStatusValues)[number]
-export const isReservationStatus = (value: unknown): value is ReservationStatus => typeof value === 'string' && (reservationStatusValues as readonly string[]).includes(value)
+const reservationAliases: Record<string, ApiReservationStatus> = {
+  CREATED: 'AWAITING_PAYMENT',
+  awaiting_email: 'AWAITING_EMAIL',
+  awaiting_review: 'AWAITING_REVIEW',
+  awaiting_payment: 'AWAITING_PAYMENT',
+  DEPOSIT_PAID: 'CONFIRMED',
+  deposit_paid: 'CONFIRMED',
+  UNIT_RESERVED: 'UNIT_RESERVED',
+  READY_FOR_CHECKIN: 'READY_FOR_CHECKIN',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  cancelled: 'CANCELLED',
+  EXPIRED: 'EXPIRED',
+  expired: 'EXPIRED',
+  REJECTED: 'REJECTED',
+  rejected: 'REJECTED',
+}
 
-// Backend: src/main/java/com/storagehub/domain/model/RentalStatus.java
-export const rentalStatusValues = ["setup","active","return_requested","return_inspection","closing","completed"] as const
-export type RentalStatus = (typeof rentalStatusValues)[number]
-export const isRentalStatus = (value: unknown): value is RentalStatus => typeof value === 'string' && (rentalStatusValues as readonly string[]).includes(value)
+export function normalizeReservationStatus(value: unknown): ApiReservationStatus | null {
+  if (typeof value !== 'string') return null
+  return reservationAliases[value] ?? (Object.values(reservationAliases).includes(value as ApiReservationStatus)
+    ? value as ApiReservationStatus : null)
+}
 
-// Backend: src/main/java/com/storagehub/domain/model/RenewalStatus.java
-export const renewalStatusValues = ["pending","accepted","deposit_paid","full_rent_paid","approved","appointment_scheduled","payment_processing","payment_failed","payment_expired","rejected","cancelled","completed"] as const
-export type RenewalStatus = (typeof renewalStatusValues)[number]
-export const isRenewalStatus = (value: unknown): value is RenewalStatus => typeof value === 'string' && (renewalStatusValues as readonly string[]).includes(value)
+export function normalizePaymentStatus(value: unknown): ApiPaymentStatus | null {
+  if (typeof value !== 'string') return null
+  const aliases: Record<string, ApiPaymentStatus> = {
+    pending: 'PENDING', paid: 'PAID', overdue: 'NOT_RECEIVED', cancelled: 'CANCELLED',
+    PENDING: 'PENDING', PROCESSING: 'PROCESSING', PAID: 'PAID', NOT_RECEIVED: 'NOT_RECEIVED',
+    FAILED: 'FAILED', CANCELLED: 'CANCELLED',
+  }
+  return aliases[value] ?? null
+}
 
-// Backend: src/main/java/com/storagehub/domain/model/CheckInStatus.java
-export const checkInStatusValues = ["scheduled","identity_verified","contract_signed","payment_collected","setup_in_progress","setup_completed","completed","rejected","no_show","cancelled"] as const
-export type CheckInStatus = (typeof checkInStatusValues)[number]
-export const isCheckInStatus = (value: unknown): value is CheckInStatus => typeof value === 'string' && (checkInStatusValues as readonly string[]).includes(value)
-
-// Backend: src/main/java/com/storagehub/api/StatusContract.java
-export const invoiceStatusValues = ["NOT_ISSUED","UNPAID","PARTIALLY_PAID","PAID","CANCELLED","UNKNOWN"] as const
-export type InvoiceStatus = (typeof invoiceStatusValues)[number]
-export const isInvoiceStatus = (value: unknown): value is InvoiceStatus => typeof value === 'string' && (invoiceStatusValues as readonly string[]).includes(value)
-
-// Backend: src/main/java/com/storagehub/api/StatusContract.java
-export const invoiceRefundStatusValues = ["NONE","PENDING","PARTIALLY_REFUNDED","REFUNDED","UNKNOWN"] as const
-export type InvoiceRefundStatus = (typeof invoiceRefundStatusValues)[number]
-export const isInvoiceRefundStatus = (value: unknown): value is InvoiceRefundStatus => typeof value === 'string' && (invoiceRefundStatusValues as readonly string[]).includes(value)
-
-// Backend: src/main/java/com/storagehub/api/StatusContract.java
-export const paymentTransactionStatusValues = ["PENDING","PROCESSING","RECONCILIATION_REQUIRED","SUCCEEDED","FAILED","CANCELLED","EXPIRED","PARTIALLY_REFUNDED","REFUNDED"] as const
-export type PaymentTransactionStatus = (typeof paymentTransactionStatusValues)[number]
-export const isPaymentTransactionStatus = (value: unknown): value is PaymentTransactionStatus => typeof value === 'string' && (paymentTransactionStatusValues as readonly string[]).includes(value)
-
-// Backend: src/main/java/com/storagehub/api/StatusContract.java
-export const renewalWorkflowStatusValues = ["UNDER_REVIEW","AWAITING_PAYMENT","AWAITING_RECONCILIATION","AWAITING_SIGNING","SIGNING_IN_PROGRESS","SIGNING_EXPIRED","PAYMENT_WINDOW_EXPIRED","ON_HOLD","COMPLETED","CANCELLED","REJECTED"] as const
-export type RenewalWorkflowStatus = (typeof renewalWorkflowStatusValues)[number]
-export const isRenewalWorkflowStatus = (value: unknown): value is RenewalWorkflowStatus => typeof value === 'string' && (renewalWorkflowStatusValues as readonly string[]).includes(value)
+export function normalizeRentalStatus(value: unknown): ApiRentalStatus | null {
+  return typeof value === 'string' && ['setup', 'active', 'return_requested', 'return_inspection', 'closing', 'completed'].includes(value)
+    ? value as ApiRentalStatus : null
+}

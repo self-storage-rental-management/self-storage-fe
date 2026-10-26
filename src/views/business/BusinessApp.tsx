@@ -3,6 +3,7 @@ import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorks
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
 import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
+import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 
@@ -272,6 +273,7 @@ export interface DurationDiscountItem {
   id: string
   months: number | 'other'
   rentalYears?: number | null
+  freeSetupDays?: number | null
   title: string
   label: string
   discountPercent: number
@@ -365,9 +367,10 @@ export default function BusinessApp({
   onLogout: () => void
 }) {
   const hub = useStorageHub()
+  const visibleRuntimeFees = isApiAuthenticated() ? [] : RUNTIME_FEES
 
   const {
-    facilities: facilitiesList,
+    facilities: localFacilitiesList,
     units: unitsList,
     rentals: rentalsList = [],
     contracts: contractsList = [],
@@ -383,6 +386,7 @@ export default function BusinessApp({
   // Local/demo data may use the facility code as its id. Keep the canonical
   // backend UUID by code so edit requests always target the persisted record.
   const [backendFacilityIdsByCode, setBackendFacilityIdsByCode] = useState<Record<string, string>>({})
+  const [apiFacilitiesReady, setApiFacilitiesReady] = useState(() => !isApiAuthenticated())
   const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null; revenue: number }>>({})
   const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
   const [facilityDetailTypes, setFacilityDetailTypes] = useState<CustomerUnitType[]>([])
@@ -390,6 +394,18 @@ export default function BusinessApp({
   const [businessNotifications, setBusinessNotifications] = useState<ApiNotification[]>([])
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewRequestId, setReviewRequestId] = useState<string | null>(null)
+
+  // Authenticated Business screens must not render the local/demo catalog while
+  // the backend catalog is still being loaded or unavailable.
+  const facilitiesList = isApiAuthenticated()
+    ? !apiFacilitiesReady
+      ? []
+      : localFacilitiesList.filter(facility => {
+        const code = (facility.code || '').trim().toUpperCase()
+        return Object.values(backendFacilityIdsByCode).includes(facility.id)
+          || (code !== '' && backendFacilityIdsByCode[code] === facility.id)
+      })
+    : localFacilitiesList
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -434,6 +450,7 @@ export default function BusinessApp({
     listAllFacilitiesApi()
       .then((backendFacs) => {
         if (!isMounted || !Array.isArray(backendFacs)) return
+        if (isApiAuthenticated()) setApiFacilitiesReady(true)
         if (isMounted) setFacilityDataError(undefined)
         setBackendFacilityIdsByCode(Object.fromEntries(
           backendFacs.map((facility) => [facility.code.trim().toUpperCase(), facility.id]),
@@ -445,10 +462,10 @@ export default function BusinessApp({
           revenue: facility.monthRevenue ?? 0,
         }])))
 
-        if (isApiAuthenticated() && backendFacs.length > 0) {
+        if (isApiAuthenticated()) {
           const backendIds = new Set(backendFacs.map(bf => bf.id))
           const backendCodes = new Set(backendFacs.map(bf => (bf.code || '').trim().toUpperCase()))
-          facilitiesList.forEach(f => {
+          localFacilitiesList.forEach(f => {
             const code = (f.code || '').trim().toUpperCase()
             if (!backendIds.has(f.id) && !backendCodes.has(code)) {
               deleteFacility(f.id, user, true)
@@ -457,7 +474,7 @@ export default function BusinessApp({
         }
         backendFacs.forEach((bf) => {
           const cleanBf = sanitizeFacilityStrings(bf)
-          const matching = facilitiesList.find(
+          const matching = localFacilitiesList.find(
             (f) => f.id === cleanBf.id || (f.code && f.code.toUpperCase() === (cleanBf.code || '').toUpperCase()),
           )
           if (!matching) {
@@ -521,6 +538,7 @@ export default function BusinessApp({
       .catch(error => {
         if (!isMounted) return
         if (isApiAuthenticated()) {
+          setApiFacilitiesReady(false)
           setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.')
         }
       })
@@ -534,6 +552,7 @@ export default function BusinessApp({
       if (!fac) return 0
       const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
       if (stats) return stats.occupied
+      if (isApiAuthenticated()) return 0
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
@@ -553,6 +572,7 @@ export default function BusinessApp({
       if (!fac) return 0
       const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
       if (stats) return stats.total
+      if (isApiAuthenticated()) return 0
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
@@ -643,7 +663,9 @@ export default function BusinessApp({
 
   const [pricingModal, setPricingModal] = useState(false)
 
-  const [policiesList, setPoliciesList] = useState<PolicyItem[]>(loadInitialPolicies)
+  const [policiesList, setPoliciesList] = useState<PolicyItem[]>(() =>
+    isApiAuthenticated() ? [] : loadInitialPolicies(),
+  )
 
   const [policyModal, setPolicyModal] = useState(false)
 
@@ -1035,6 +1057,7 @@ export default function BusinessApp({
           id: current?.id ?? `api-${policy.code}-${policy.rentalMonths}`,
           months: policy.rentalMonths,
           rentalYears: policy.rentalYears,
+          freeSetupDays: policy.freeSetupDays,
           title: policy.name,
           label: policy.rentalYears ? `${policy.rentalYears} năm (${policy.rentalMonths} tháng)` : `${policy.rentalMonths} tháng`,
           discountPercent: Number(policy.discountRate) * 100,
@@ -1089,6 +1112,7 @@ export default function BusinessApp({
   const [formCreateDurationTitle, setFormCreateDurationTitle] = useState("")
   const [formCreateDurationLabel, setFormCreateDurationLabel] = useState("")
   const [formCreateDurationMonths, setFormCreateDurationMonths] = useState<number | string>(9)
+  const [formCreateDurationSetupDays, setFormCreateDurationSetupDays] = useState<number | string>('')
   const [formCreateDurationPercent, setFormCreateDurationPercent] = useState<number>(6)
   const [formCreateDurationRenewalPercent, setFormCreateDurationRenewalPercent] = useState<number>(4)
   const [formCreateDurationDepositPercent, setFormCreateDurationDepositPercent] = useState<number>(20)
@@ -1110,6 +1134,7 @@ export default function BusinessApp({
   const [selectedDurationItem, setSelectedDurationItem] = useState<DurationDiscountItem | null>(null)
   const [formDurationTitle, setFormDurationTitle] = useState("")
   const [formDurationLabel, setFormDurationLabel] = useState("")
+  const [formDurationSetupDays, setFormDurationSetupDays] = useState<number | string>('')
   const [formDurationPercent, setFormDurationPercent] = useState<number>(0)
   const [formDurationRenewalPercent, setFormDurationRenewalPercent] = useState<number>(0)
   const [formDurationDepositPercent, setFormDurationDepositPercent] = useState<number>(20)
@@ -1124,6 +1149,7 @@ export default function BusinessApp({
     setFormCreateDurationTitle("")
     setFormCreateDurationLabel("")
     setFormCreateDurationMonths(9)
+    setFormCreateDurationSetupDays('')
     setFormCreateDurationPercent(6)
     setFormCreateDurationRenewalPercent(4)
     setFormCreateDurationDepositPercent(20)
@@ -1162,6 +1188,7 @@ export default function BusinessApp({
       status: formCreateDurationStatus,
       scopeType: formCreateDurationScopeType,
       facilityIds: formCreateDurationScopeType === 'specific' ? formCreateDurationFacilityIds : [],
+      freeSetupDays: formCreateDurationSetupDays === '' ? null : Math.max(0, Number(formCreateDurationSetupDays) || 0),
     }
 
     if (isApiAuthenticated()) {
@@ -1178,6 +1205,7 @@ export default function BusinessApp({
           name: title,
           rentalMonths: rentalMonthsNumber,
           rentalYears,
+          freeSetupDays: newPkg.freeSetupDays,
           discountRate: newPkg.discountPercent / 100,
           depositRate: (newPkg.depositPercent ?? 20) / 100,
           policyVersion: `v${Date.now()}`,
@@ -1200,7 +1228,7 @@ export default function BusinessApp({
     }
     const next = [...durationDiscounts, newPkg]
     setDurationDiscounts(next)
-    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
     setCreateDurationModal(false)
     showToast(lang === 'vi' ? `Đã tạo gói thuê "${newPkg.title}" thành công!` : `Created package "${newPkg.title}"!`)
   }
@@ -1216,6 +1244,7 @@ export default function BusinessApp({
     setSelectedDurationItem(item)
     setFormDurationTitle(item.title)
     setFormDurationLabel(item.label)
+    setFormDurationSetupDays(item.freeSetupDays ?? '')
     setFormDurationPercent(item.discountPercent)
     setFormDurationRenewalPercent(item.renewalDiscountPercent)
     setFormDurationDepositPercent(item.depositPercent ?? 20)
@@ -1253,6 +1282,7 @@ export default function BusinessApp({
           code: existing?.code || selectedDurationItem.id.replace(/^api-/, '').slice(0, 30),
           name: formDurationTitle.trim() || selectedDurationItem.title,
           rentalMonths: typeof selectedDurationItem.months === 'number' ? selectedDurationItem.months : 1,
+          freeSetupDays: formDurationSetupDays === '' ? undefined : Math.max(0, Number(formDurationSetupDays) || 0),
           discountRate: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)) / 100,
           depositRate: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)) / 100,
           policyVersion: `v${Date.now()}`,
@@ -1279,6 +1309,7 @@ export default function BusinessApp({
           ...d,
           title: formDurationTitle.trim() || d.title,
           label: formDurationLabel.trim() || d.label,
+          freeSetupDays: formDurationSetupDays === '' ? d.freeSetupDays : Math.max(0, Number(formDurationSetupDays) || 0),
           discountPercent: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)),
           renewalDiscountPercent: Math.max(0, Math.min(100, Number(formDurationRenewalPercent) || 0)),
           depositPercent: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)),
@@ -1293,7 +1324,7 @@ export default function BusinessApp({
       return d
     })
     setDurationDiscounts(next)
-    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
     setEditDurationModal(false)
     showToast(
       lang === "vi"
@@ -1323,7 +1354,7 @@ export default function BusinessApp({
       }
       const next = durationDiscounts.filter((d) => d.id !== id)
       setDurationDiscounts(next)
-      localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+      if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
       if (selectedDurationItem?.id === id) setEditDurationModal(false)
       showToast(lang === 'vi' ? `Đã xóa gói "${item.title}"!` : `Package deleted!`)
     }
@@ -1343,7 +1374,7 @@ export default function BusinessApp({
       return d
     })
     setDurationDiscounts(next)
-    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
   }
 
   const [revenueFacilityFilter, setRevenueFacilityFilter] =
@@ -1483,11 +1514,7 @@ export default function BusinessApp({
       if (!fac) return 0
       const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
       if (stats) return stats.revenue
-      const isSeed =
-        fac.id === "fac-001" ||
-        fac.id === "fac-002" ||
-        fac.code === "HCM-Q1-F01" ||
-        fac.code === "BD-F01"
+      if (isApiAuthenticated()) return 0
 
       const facHoldIds = new Set(
         (holdsList || [])
@@ -1518,6 +1545,7 @@ export default function BusinessApp({
   )
 
   const activeRevenueData: MonthlyRevenueRecord[] = useMemo(() => {
+    if (isApiAuthenticated()) return []
     const months = ["Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9"]
     const relevantPayments = (paymentsList || []).filter((p) => {
       if (p.status !== "PAID" || p.type === "REFUND") return false
@@ -1629,6 +1657,7 @@ export default function BusinessApp({
       : 10000000
 
   const [pricingTiers, setPricingTiers] = useState<PricingTierItem[]>(() => {
+    if (isApiAuthenticated()) return []
     try {
       const stored = localStorage.getItem("storagehub:pricingTiers")
       if (stored) {
@@ -1655,6 +1684,7 @@ export default function BusinessApp({
       Record<string, { basePrice: number; highDemandMultiplier: number }>
     >
   >(() => {
+    if (isApiAuthenticated()) return {}
     try {
       const stored = localStorage.getItem("storagehub:facility-pricing")
       if (stored) return JSON.parse(stored)
@@ -1715,10 +1745,10 @@ export default function BusinessApp({
     setEditingPriceFacility(fac)
     const currentOverrides = facilityPricingOverrides[fac.id] || {}
     setFacilityPricesForm({
-      S: currentOverrides["tier-1"]?.basePrice ?? 5500000,
-      M: currentOverrides["tier-2"]?.basePrice ?? 9500000,
-      L: currentOverrides["tier-3"]?.basePrice ?? 15000000,
-      XL: currentOverrides["tier-4"]?.basePrice ?? 22500000,
+      S: isApiAuthenticated() ? 0 : currentOverrides["tier-1"]?.basePrice ?? 5500000,
+      M: isApiAuthenticated() ? 0 : currentOverrides["tier-2"]?.basePrice ?? 9500000,
+      L: isApiAuthenticated() ? 0 : currentOverrides["tier-3"]?.basePrice ?? 15000000,
+      XL: isApiAuthenticated() ? 0 : currentOverrides["tier-4"]?.basePrice ?? 22500000,
     })
     setFacilityMultiplierForm({
       S: currentOverrides["tier-1"]?.highDemandMultiplier ?? 1.0,
@@ -1920,6 +1950,14 @@ export default function BusinessApp({
   // Helper lấy giá thực tế theo từng cỡ kho (S, M, L, XL, custom) của một cơ sở
   const getFacilitySizePrice = useCallback(
     (fac: any, size: "S" | "M" | "L" | "XL" | string): number => {
+      if (isApiAuthenticated()) {
+        const backendTypes = pricingCatalogByCode[(fac?.code || fac?.id || '').toUpperCase()] || []
+        const backendType = backendTypes.find(type => {
+          const normalized = (type.code || type.name || '').toUpperCase()
+          return normalized === size.toUpperCase() || normalized.includes(`-${size.toUpperCase()}-`) || normalized.includes(`(${size.toUpperCase()})`)
+        })
+        return backendType?.monthlyPrice ?? 0
+      }
       if (!fac) return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
 
       // 1. Kiểm tra override trong bảng giá (Bảng giá & Biểu phí)
@@ -1977,7 +2015,7 @@ export default function BusinessApp({
 
       return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
     },
-    [facilityPricingOverrides, unitsList, pricingTiers],
+    [facilityPricingOverrides, pricingCatalogByCode, unitsList, pricingTiers],
   )
 
   const getFacilitySizePriceFormatted = useCallback(
@@ -2413,6 +2451,7 @@ export default function BusinessApp({
   // Mở modal thêm cơ sở mới với thông tin nhận diện để trống cho BO khai báo.
 
   const handleOpenCreateFacility = () => {
+    const apiMode = isApiAuthenticated()
     setFormFacCode("")
     setFormFacName("")
     setFormFacAddress("")
@@ -2430,43 +2469,43 @@ export default function BusinessApp({
 
     setFormFacUnits(0)
 
-    setFormFacPriceS("5.500.000đ")
-    setFormFacPriceM("9.500.000đ")
-    setFormFacPriceL("15.000.000đ")
-    setFormFacPriceXL("22.500.000đ")
-    setFormFacPrice("5.500.000đ")
+    setFormFacPriceS(apiMode ? "" : "5.500.000đ")
+    setFormFacPriceM(apiMode ? "" : "9.500.000đ")
+    setFormFacPriceL(apiMode ? "" : "15.000.000đ")
+    setFormFacPriceXL(apiMode ? "" : "22.500.000đ")
+    setFormFacPrice(apiMode ? "" : "5.500.000đ")
 
-    setFormFacLoadS(1000)
-    setFormFacLoadM(1600)
-    setFormFacLoadL(2800)
-    setFormFacLoadXL(4000)
+    setFormFacLoadS(apiMode ? 0 : 1000)
+    setFormFacLoadM(apiMode ? 0 : 1600)
+    setFormFacLoadL(apiMode ? 0 : 2800)
+    setFormFacLoadXL(apiMode ? 0 : 4000)
 
-    setFormFacLengthS(UNIT_SPECS.S.lengthM)
-    setFormFacLengthM(UNIT_SPECS.M.lengthM)
-    setFormFacLengthL(UNIT_SPECS.L.lengthM)
-    setFormFacLengthXL(UNIT_SPECS.XL.lengthM)
+    setFormFacLengthS(apiMode ? 0 : UNIT_SPECS.S.lengthM)
+    setFormFacLengthM(apiMode ? 0 : UNIT_SPECS.M.lengthM)
+    setFormFacLengthL(apiMode ? 0 : UNIT_SPECS.L.lengthM)
+    setFormFacLengthXL(apiMode ? 0 : UNIT_SPECS.XL.lengthM)
 
-    setFormFacWidthS(UNIT_SPECS.S.widthM)
-    setFormFacWidthM(UNIT_SPECS.M.widthM)
-    setFormFacWidthL(UNIT_SPECS.L.widthM)
-    setFormFacWidthXL(UNIT_SPECS.XL.widthM)
+    setFormFacWidthS(apiMode ? 0 : UNIT_SPECS.S.widthM)
+    setFormFacWidthM(apiMode ? 0 : UNIT_SPECS.M.widthM)
+    setFormFacWidthL(apiMode ? 0 : UNIT_SPECS.L.widthM)
+    setFormFacWidthXL(apiMode ? 0 : UNIT_SPECS.XL.widthM)
 
-    setFormFacLaneS(UNIT_SPECS.S.vehicleLaneWidthM)
-    setFormFacLaneM(UNIT_SPECS.M.vehicleLaneWidthM)
-    setFormFacLaneL(UNIT_SPECS.L.vehicleLaneWidthM)
-    setFormFacLaneXL(UNIT_SPECS.XL.vehicleLaneWidthM)
+    setFormFacLaneS(apiMode ? 0 : UNIT_SPECS.S.vehicleLaneWidthM)
+    setFormFacLaneM(apiMode ? 0 : UNIT_SPECS.M.vehicleLaneWidthM)
+    setFormFacLaneL(apiMode ? 0 : UNIT_SPECS.L.vehicleLaneWidthM)
+    setFormFacLaneXL(apiMode ? 0 : UNIT_SPECS.XL.vehicleLaneWidthM)
 
     setFormFacImage("")
 
     setFormFacClimate(false)
 
-    setFormFacSecurity("Khóa riêng tự quản, Bảo vệ cổng")
+    setFormFacSecurity(apiMode ? "" : "Khóa riêng tự quản, Bảo vệ cổng")
 
-    setFormFacAccessHours("08:00 - 17:00")
+    setFormFacAccessHours(apiMode ? "" : "08:00 - 17:00")
 
-    setFormFacStatus(isApiAuthenticated() ? "setup" : "active")
+    setFormFacStatus(apiMode ? "setup" : "active")
 
-    const defaultSpecs = (isApiAuthenticated() ? [] : DEFAULT_FACILITY_UNIT_SPECS).map((s) => ({
+    const defaultSpecs = (apiMode ? [] : DEFAULT_FACILITY_UNIT_SPECS).map((s) => ({
       ...s,
       count: 5,
       rentalPackages: generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice),
@@ -2629,13 +2668,13 @@ export default function BusinessApp({
 
         manager: isApiAuthenticated() ? "Chưa phân công" : (formFacManager.trim() || "Quản lý cơ sở"),
 
-        phone: formFacPhone.trim() || "1900 6868",
+        phone: formFacPhone.trim() || (isApiAuthenticated() ? "" : "1900 6868"),
 
         units: isApiAuthenticated() ? 0 : totalCalculatedUnits,
 
         unitDistribution: isApiAuthenticated() ? {} : unitDistribution,
 
-        price: (() => {
+        price: isApiAuthenticated() ? "" : (() => {
           const parsed = parseInt(formFacPrice.replace(/\D/g, ""), 10)
           return !isNaN(parsed) && parsed > 0
             ? `${Math.round(parsed).toLocaleString("vi-VN")}đ`
@@ -2714,6 +2753,7 @@ export default function BusinessApp({
   }
 
   const handleOpenEditFacility = (f: any) => {
+    const apiMode = isApiAuthenticated()
     setFacilityEditError(undefined)
     setSelectedFacility(f)
 
@@ -2727,7 +2767,7 @@ export default function BusinessApp({
 
     setFormFacManager(f.manager)
 
-    setFormFacPhone(f.phone || "1900 6868")
+    setFormFacPhone(f.phone || (isApiAuthenticated() ? "" : "1900 6868"))
 
     // Find current unit breakdown
 
@@ -2768,7 +2808,7 @@ export default function BusinessApp({
         (u) =>
           ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL",
       ).length
-    } else {
+    } else if (!isApiAuthenticated()) {
       const base = Math.floor((f.units || 20) / 4)
 
       sCount = base
@@ -2784,7 +2824,7 @@ export default function BusinessApp({
     let loadedSpecs: FacilityCustomUnitSpec[] = []
     if (f.unitCustomSpecs && Array.isArray(f.unitCustomSpecs) && f.unitCustomSpecs.length > 0) {
       loadedSpecs = (f.unitCustomSpecs as FacilityCustomUnitSpec[]).map((s: FacilityCustomUnitSpec) => {
-        const specFallback = UNIT_SPECS[s.sizeCode as keyof typeof UNIT_SPECS]
+        const specFallback = apiMode ? undefined : UNIT_SPECS[s.sizeCode as keyof typeof UNIT_SPECS]
         const fallbackDims = specFallback?.frameDimensions
         const rawDims = s.frameDimensions || f.unitFrameDimensions?.[s.sizeCode] || (fallbackDims ? {
           lengthM: fallbackDims.lengthM ?? fallbackDims.depthM,
@@ -2796,12 +2836,12 @@ export default function BusinessApp({
         return {
           ...s,
           count: f.unitDistribution?.[s.sizeCode] ?? s.count ?? 0,
-          monthlyPrice: f.unitPrices?.[s.sizeCode] ?? s.monthlyPrice ?? 5500000,
+          monthlyPrice: f.unitPrices?.[s.sizeCode] ?? s.monthlyPrice ?? (apiMode ? 0 : 5500000),
           lengthM: f.unitDimensions?.[s.sizeCode]?.lengthM ?? s.lengthM,
           widthM: f.unitDimensions?.[s.sizeCode]?.widthM ?? s.widthM,
-          heightM: (f.unitDimensions?.[s.sizeCode] as any)?.heightM ?? s.heightM ?? 5,
-          laneWidthM: f.unitLaneWidths?.[s.sizeCode] ?? s.laneWidthM ?? 4,
-          maxLoadKg: f.unitLoadLimits?.[s.sizeCode] ?? s.maxLoadKg ?? 1000,
+          heightM: (f.unitDimensions?.[s.sizeCode] as any)?.heightM ?? s.heightM ?? (apiMode ? 0 : 5),
+          laneWidthM: f.unitLaneWidths?.[s.sizeCode] ?? s.laneWidthM ?? (apiMode ? 0 : 4),
+          maxLoadKg: f.unitLoadLimits?.[s.sizeCode] ?? s.maxLoadKg ?? (apiMode ? 0 : 1000),
           frameCount: s.frameCount ?? f.unitFrameCounts?.[s.sizeCode] ?? specFallback?.frameCount ?? 0,
           frameDimensions: rawDims ? {
             lengthM: rawDims.lengthM ?? (rawDims as any).depthM ?? 1,
@@ -2811,6 +2851,8 @@ export default function BusinessApp({
           } : undefined
         }
       })
+    } else if (isApiAuthenticated()) {
+      loadedSpecs = []
     } else {
       const dist = f.unitDistribution || {}
       const sizeKeys = Array.from(new Set<string>([
@@ -2930,26 +2972,26 @@ export default function BusinessApp({
       facUnits.find(
         (u) => ((u as any).size || (u.type === "Small" ? "S" : "")) === "S",
       )?.maxLoadKg ??
-      1000
+      (apiMode ? 0 : 1000)
     const mLoad =
       f.unitLoadLimits?.M ??
       facUnits.find(
         (u) => ((u as any).size || (u.type === "Medium" ? "M" : "")) === "M",
       )?.maxLoadKg ??
-      1600
+      (apiMode ? 0 : 1600)
     const lLoad =
       f.unitLoadLimits?.L ??
       facUnits.find(
         (u) => ((u as any).size || (u.type === "Large" ? "L" : "")) === "L",
       )?.maxLoadKg ??
-      2800
+      (apiMode ? 0 : 2800)
     const xlLoad =
       f.unitLoadLimits?.XL ??
       facUnits.find(
         (u) =>
           ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL",
       )?.maxLoadKg ??
-      4000
+      (apiMode ? 0 : 4000)
 
     setFormFacLoadS(sLoad)
     setFormFacLoadM(mLoad)
@@ -2961,15 +3003,15 @@ export default function BusinessApp({
     const lUnit = facUnits.find((u) => ((u as any).size || (u.type === "Large" ? "L" : "")) === "L")
     const xlUnit = facUnits.find((u) => ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL")
 
-    const sLength = f.unitDimensions?.S?.lengthM ?? sUnit?.dimensions?.lengthM ?? UNIT_SPECS.S.lengthM
-    const mLength = f.unitDimensions?.M?.lengthM ?? mUnit?.dimensions?.lengthM ?? UNIT_SPECS.M.lengthM
-    const lLength = f.unitDimensions?.L?.lengthM ?? lUnit?.dimensions?.lengthM ?? UNIT_SPECS.L.lengthM
-    const xlLength = f.unitDimensions?.XL?.lengthM ?? xlUnit?.dimensions?.lengthM ?? UNIT_SPECS.XL.lengthM
+    const sLength = f.unitDimensions?.S?.lengthM ?? sUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.S.lengthM)
+    const mLength = f.unitDimensions?.M?.lengthM ?? mUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.M.lengthM)
+    const lLength = f.unitDimensions?.L?.lengthM ?? lUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.L.lengthM)
+    const xlLength = f.unitDimensions?.XL?.lengthM ?? xlUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.XL.lengthM)
 
-    const sWidth = f.unitDimensions?.S?.widthM ?? sUnit?.dimensions?.widthM ?? UNIT_SPECS.S.widthM
-    const mWidth = f.unitDimensions?.M?.widthM ?? mUnit?.dimensions?.widthM ?? UNIT_SPECS.M.widthM
-    const lWidth = f.unitDimensions?.L?.widthM ?? lUnit?.dimensions?.widthM ?? UNIT_SPECS.L.widthM
-    const xlWidth = f.unitDimensions?.XL?.widthM ?? xlUnit?.dimensions?.widthM ?? UNIT_SPECS.XL.widthM
+    const sWidth = f.unitDimensions?.S?.widthM ?? sUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.S.widthM)
+    const mWidth = f.unitDimensions?.M?.widthM ?? mUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.M.widthM)
+    const lWidth = f.unitDimensions?.L?.widthM ?? lUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.L.widthM)
+    const xlWidth = f.unitDimensions?.XL?.widthM ?? xlUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.XL.widthM)
 
     setFormFacLengthS(sLength)
     setFormFacLengthM(mLength)
@@ -2981,10 +3023,10 @@ export default function BusinessApp({
     setFormFacWidthL(lWidth)
     setFormFacWidthXL(xlWidth)
 
-    const sLane = f.unitLaneWidths?.S ?? UNIT_SPECS.S.vehicleLaneWidthM
-    const mLane = f.unitLaneWidths?.M ?? UNIT_SPECS.M.vehicleLaneWidthM
-    const lLane = f.unitLaneWidths?.L ?? UNIT_SPECS.L.vehicleLaneWidthM
-    const xlLane = f.unitLaneWidths?.XL ?? UNIT_SPECS.XL.vehicleLaneWidthM
+    const sLane = f.unitLaneWidths?.S ?? (apiMode ? 0 : UNIT_SPECS.S.vehicleLaneWidthM)
+    const mLane = f.unitLaneWidths?.M ?? (apiMode ? 0 : UNIT_SPECS.M.vehicleLaneWidthM)
+    const lLane = f.unitLaneWidths?.L ?? (apiMode ? 0 : UNIT_SPECS.L.vehicleLaneWidthM)
+    const xlLane = f.unitLaneWidths?.XL ?? (apiMode ? 0 : UNIT_SPECS.XL.vehicleLaneWidthM)
 
     setFormFacLaneS(sLane)
     setFormFacLaneM(mLane)
@@ -2995,10 +3037,10 @@ export default function BusinessApp({
 
     setFormFacClimate(Boolean(f.climate))
 
-    setFormFacSecurity(f.security || "Khóa riêng tự quản, Bảo vệ cổng")
+    setFormFacSecurity(f.security || (apiMode ? "" : "Khóa riêng tự quản, Bảo vệ cổng"))
 
     setFormFacAccessHours(
-      f.accessHours || "08:00 - 17:00",
+      f.accessHours || (isApiAuthenticated() ? "" : "08:00 - 17:00"),
     )
 
     setFormFacStatus(f.status)
@@ -3575,8 +3617,8 @@ export default function BusinessApp({
       onNavigate={next => { if (!integrationLocked) setPage(next) }}
       onLogout={() => { if (!integrationLocked) onLogout() }}
       canAccess={(permission) => {
-        if (user.role === 'business' || user.role === 'admin') return true
         if (isApiAuthenticated()) return canApiActor(user, permission)
+        if (user.role === 'business' || user.role === 'admin') return true
         return hub?.can ? hub.can(user, permission) : true
       }}
       roleLabel={"Giám Đốc Thương Mại"}
@@ -3593,6 +3635,7 @@ export default function BusinessApp({
                 : "Monitor, supervise, and resolve warehouse return cases and deposit settlements across all facilities"
             }
           />
+          <BusinessRefundRequestsPanel />
           <BusinessReturnsPanel user={user} />
         </div>
       )}
@@ -3793,7 +3836,7 @@ export default function BusinessApp({
                           <div>{cleanF.address} · <b>{cleanF.city}</b></div>
                           <div>Quản lý: <b>{cleanF.manager}</b></div>
                           <div>Hotline: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
-                          <div>Khung giờ mở cửa: <b>{cleanF.accessHours || "08:00 - 17:00"}</b></div>
+                          <div>Khung giờ mở cửa: <b>{cleanF.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}</b></div>
                         </div>
                         {/* Cơ cấu gian kho */}
                         <div className="flex flex-wrap gap-2 text-xs">
@@ -4051,6 +4094,12 @@ export default function BusinessApp({
                             {item.depositPercent ?? 20}%
                           </span>
                         </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
+                          <span className="text-[11px] text-slate-600 font-medium">Setup miễn phí:</span>
+                          <span className="font-mono font-bold text-blue-800">
+                            {item.freeSetupDays == null ? 'Theo kỳ hạn' : `${item.freeSetupDays} ngày`}
+                          </span>
+                        </div>
                       </div>
 
                       <p className="text-[11px] text-slate-500 mt-2 line-clamp-3 leading-relaxed">
@@ -4230,14 +4279,14 @@ export default function BusinessApp({
                 </tr>
               </Thead>
               <Tbody>
-                {RUNTIME_FEES.length === 0 ? (
+                {visibleRuntimeFees.length === 0 ? (
                   <Tr>
                     <Td colSpan={4} className="text-center py-6 text-slate-400">
                       {lang === "vi" ? "Chưa có biểu phí dịch vụ phát sinh ngoài giá thuê & cọc." : "No fee schedule configured."}
                     </Td>
                   </Tr>
                 ) : (
-                  RUNTIME_FEES.map((f) => (
+                  visibleRuntimeFees.map((f) => (
                     <Tr key={f.type}>
                       <Td className="font-medium text-slate-900">
                         {getFeeType(f.type, lang)}
@@ -4953,7 +5002,7 @@ export default function BusinessApp({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <Input
               label={lang === "vi" ? "Số tháng kỳ hạn" : "Months"}
               type="number"
@@ -4961,6 +5010,15 @@ export default function BusinessApp({
               max={120}
               value={formCreateDurationMonths.toString()}
               onChange={(e) => setFormCreateDurationMonths(Number(e.target.value))}
+            />
+            <Input
+              label={lang === "vi" ? "Setup miễn phí (ngày)" : "Free setup (days)"}
+              type="number"
+              min={0}
+              max={365}
+              placeholder={lang === "vi" ? "Để trống = theo kỳ hạn" : "Blank = duration default"}
+              value={formCreateDurationSetupDays.toString()}
+              onChange={(e) => setFormCreateDurationSetupDays(e.target.value === '' ? '' : Number(e.target.value))}
             />
             <Input
               label={lang === "vi" ? "Giảm giá đặt mới (%)" : "New Booking (%)"}
@@ -5196,7 +5254,16 @@ export default function BusinessApp({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <Input
+                label="Setup miễn phí (ngày)"
+                type="number"
+                min={0}
+                max={365}
+                placeholder="Để trống = theo kỳ hạn"
+                value={formDurationSetupDays.toString()}
+                onChange={(e) => setFormDurationSetupDays(e.target.value === '' ? '' : Number(e.target.value))}
+              />
               <Input
                 label="Giảm giá khi đặt mới (%)"
                 type="number"
@@ -6049,21 +6116,28 @@ export default function BusinessApp({
             const defaultLoadL = selectedFacility.unitLoadLimits?.L ?? 2800
             const defaultLoadXL = selectedFacility.unitLoadLimits?.XL ?? 4000
 
-            const totalFacilityLoadTon =
-              selectedFacility.totalDesignLoadTon ??
-              Math.round(
-                (((selectedFacility.unitDistribution?.S ?? 0) * defaultLoadS +
-                  (selectedFacility.unitDistribution?.M ?? 0) * defaultLoadM +
-                  (selectedFacility.unitDistribution?.L ?? 0) * defaultLoadL +
-                  (selectedFacility.unitDistribution?.XL ?? 0) * defaultLoadXL) /
-                  1000) *
-                10,
+            const totalFacilityLoadTon = isApiAuthenticated()
+              ? Math.round(
+                facilityDetailTypes.reduce(
+                  (total, type) => total + (Number(type.totalCount) || 0) * (Number(type.maxLoadKg) || 0),
+                  0,
+                ) / 100,
               ) / 10
+              : selectedFacility.totalDesignLoadTon ??
+                Math.round(
+                  (((selectedFacility.unitDistribution?.S ?? 0) * defaultLoadS +
+                    (selectedFacility.unitDistribution?.M ?? 0) * defaultLoadM +
+                    (selectedFacility.unitDistribution?.L ?? 0) * defaultLoadL +
+                    (selectedFacility.unitDistribution?.XL ?? 0) * defaultLoadXL) /
+                    1000) *
+                  10,
+                ) / 10
 
-            const hasWarehouseInfo =
-              facilityUnits.length > 0 ||
-              (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
-              Object.values(selectedFacility.unitDistribution || {}).some((count) => Number(count || 0) > 0)
+            const hasWarehouseInfo = isApiAuthenticated()
+              ? facilityDetailTypes.length > 0
+              : facilityUnits.length > 0 ||
+                (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
+                Object.values(selectedFacility.unitDistribution || {}).some((count) => Number(count || 0) > 0)
 
             return (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
@@ -6184,7 +6258,7 @@ export default function BusinessApp({
                       Khung giờ mở cửa:
                     </span>
                     <b className="text-slate-800 block text-xs">
-                      {selectedFacility.accessHours || "08:00 - 17:00"}
+                      {selectedFacility.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}
                     </b>
                   </div>
                 </div>
@@ -6328,8 +6402,8 @@ export default function BusinessApp({
                 {/* 4. Chính sách và quy định áp dụng (Đồng bộ trực quan với Customer Portal) */}
                 {(() => {
                   const repType = facilityDetailTypes.find(t => Number(t.monthlyPrice) > 0) || facilityDetailTypes[0]
-                  const samplePrice = repType && Number(repType.monthlyPrice) > 0 ? Number(repType.monthlyPrice) : 3000000
-                  const overdueFeePerDay = samplePrice / 30 * 0.5
+                  const samplePrice = isApiAuthenticated() ? null : repType && Number(repType.monthlyPrice) > 0 ? Number(repType.monthlyPrice) : null
+                  const overdueFeePerDay = samplePrice == null ? null : samplePrice / 30 * 0.5
                   const overdueExampleDays = 4
 
                   return (
@@ -6351,10 +6425,10 @@ export default function BusinessApp({
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
                             <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Phí quá hạn</h5>
                             <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
-                              50% đơn giá thuê ngày cho mỗi ngày trễ
+                              {isApiAuthenticated() ? 'Chưa có chính sách phí quá hạn từ backend.' : '50% đơn giá thuê ngày cho mỗi ngày trễ'}
                             </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.
+                              {isApiAuthenticated() ? 'Chi tiết phí quá hạn chỉ hiển thị khi backend có dữ liệu chính sách.' : 'Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.'}
                             </p>
                           </article>
 
@@ -6366,23 +6440,31 @@ export default function BusinessApp({
                                 : "Theo biểu giá từng loại kho"}
                             </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Thu khi nhận kho; hoàn trả lại cho khách hàng sau khi nghiệm thu bàn giao trả kho (trừ công nợ, hư hại nếu có).
+                              {isApiAuthenticated() ? 'Số tiền cọc được lấy từ loại kho backend; điều kiện quyết toán hiển thị theo hồ sơ thực tế.' : 'Thu khi nhận kho; hoàn trả lại cho khách hàng sau khi nghiệm thu bàn giao trả kho (trừ công nợ, hư hại nếu có).'}
                             </p>
                           </article>
 
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
                             <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Thời hạn thuê tối thiểu</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">01 tháng</p>
+                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
+                              {isApiAuthenticated()
+                                ? (durationDiscounts.filter(item => item.status === 'active' && typeof item.months === 'number').map(item => item.months as number).sort((a, b) => a - b)[0]
+                                  ? `${durationDiscounts.filter(item => item.status === 'active' && typeof item.months === 'number').map(item => item.months as number).sort((a, b) => a - b)[0]} tháng`
+                                  : 'Chưa có dữ liệu')
+                                : '01 tháng'}
+                            </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.
+                              {isApiAuthenticated() ? 'Kỳ hạn và ưu đãi cụ thể lấy từ các gói đang hiệu lực trên backend.' : 'Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.'}
                             </p>
                           </article>
 
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
                             <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Gia hạn quá hạn</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">Tối đa 7 ngày</p>
+                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
+                              {isApiAuthenticated() ? 'Chưa có dữ liệu' : 'Tối đa 7 ngày'}
+                            </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.
+                              {isApiAuthenticated() ? 'Chưa có dữ liệu thời hạn xử lý quá hạn từ backend.' : 'Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.'}
                             </p>
                           </article>
                         </div>
@@ -6394,23 +6476,31 @@ export default function BusinessApp({
                           <article className="rounded-xl border border-rose-200 bg-white p-4 text-xs">
                             <b className="text-slate-800 text-sm">Trả kho sau ngày hết hạn</b>
                             <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                              <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
-                              <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                              <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo kho được đưa vào quyết toán.</li>
+                              {isApiAuthenticated() ? <li>Chưa có chính sách phí quá hạn được backend công bố cho cơ sở này.</li> : <>
+                                <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
+                                <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
+                                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo kho được đưa vào quyết toán.</li>
+                              </>}
                             </ul>
                           </article>
 
                           <article className="rounded-xl border border-amber-200 bg-white p-4 text-xs">
                             <b className="text-slate-800 text-sm">Gia hạn kỳ thuê</b>
                             <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                              <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
-                              <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
+                              {isApiAuthenticated() ? <li>Chi tiết gia hạn được lấy theo chính sách backend của từng cơ sở.</li> : <>
+                                <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
+                                <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
+                              </>}
                             </ul>
                           </article>
                         </div>
 
                         <p className="rounded-lg bg-rose-100 p-3 text-xs leading-5 text-rose-950 font-medium">
-                          Theo giá hiện tại ({repType ? repType.name : 'Loại kho'}): {formatVndAmount(samplePrice)} ÷ 30 × 50% = {formatVndAmount(overdueFeePerDay)}/ngày. Trễ {overdueExampleDays} ngày tương ứng {formatVndAmount(overdueFeePerDay * overdueExampleDays)}.
+                          {isApiAuthenticated()
+                            ? 'Chưa có chính sách phí quá hạn từ backend để tính ví dụ.'
+                            : samplePrice == null || overdueFeePerDay == null
+                              ? 'Chưa có đơn giá loại kho để tính ví dụ phí quá hạn.'
+                            : `Theo giá hiện tại (${repType ? repType.name : 'Loại kho'}): ${formatVndAmount(samplePrice)} ÷ 30 × 50% = ${formatVndAmount(overdueFeePerDay)}/ngày. Trễ ${overdueExampleDays} ngày tương ứng ${formatVndAmount(overdueFeePerDay * overdueExampleDays)}.`}
                         </p>
                       </section>
                     </>

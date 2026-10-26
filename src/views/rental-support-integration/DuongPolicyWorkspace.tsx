@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { ApiClientError, apiRequest } from "../../services/apiClient"
-import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
+import { getAuthenticatedActor, isApiAuthenticated, type ApiActor } from "../../services/authApi"
 import type { User } from "../../types"
-import { useStorageHub } from "../../store/StorageHubContext"
 import type {
   CustomerFacility,
   PageResponse,
@@ -798,14 +797,6 @@ function PolicyEditor({
   )
 }
 
-function useSafeStorageHub() {
-  try {
-    return useStorageHub()
-  } catch {
-    return null
-  }
-}
-
 export default function DuongPolicyWorkspace({
   user,
   onLocked,
@@ -813,11 +804,10 @@ export default function DuongPolicyWorkspace({
   user?: User
   onLocked?: (value: boolean) => void
 }) {
-  const hub = useSafeStorageHub()
   const authenticatedActor = getAuthenticatedActor()
   const actor =
     authenticatedActor ||
-    (user && user.role === "business"
+    (!isApiAuthenticated() && user && user.role === "business"
       ? {
           id: user.id || "demo-business",
           email: user.email || "business@storagehub.demo",
@@ -861,41 +851,17 @@ export default function DuongPolicyWorkspace({
     `${actor?.id}:integration-facilities:${allowed}`,
     async () => {
       if (!allowed) return null
-      try {
-        const p = await apiRequest<PageResponse<CustomerFacility>>(
-          `/api/facilities?page=0&size=50`,
-        )
-        if (
-          !Array.isArray(p.data) ||
-          !p.data.every((f) => isUuid(f.id) && typeof f.name === "string")
-        )
-          throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
-            code: "INVALID_RESPONSE",
-          })
-        return p
-      } catch (err) {
-        if (hub?.facilities && hub.facilities.length > 0) {
-          return {
-            data: hub.facilities.map((f) => ({
-              id: f.id,
-              code: f.id,
-              name: f.name,
-              address: f.address || "",
-              city: f.city || "TP. Hồ Chí Minh",
-              status: "active" as const,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            })),
-            pagination: {
-              page: 0,
-              size: hub.facilities.length,
-              totalElements: hub.facilities.length,
-              totalPages: 1,
-            },
-          }
-        }
-        throw err
-      }
+      const p = await apiRequest<PageResponse<CustomerFacility>>(
+        `/api/facilities?page=0&size=50`,
+      )
+      if (
+        !Array.isArray(p.data) ||
+        !p.data.every((f) => isUuid(f.id) && typeof f.name === "string")
+      )
+        throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
+          code: "INVALID_RESPONSE",
+        })
+      return p
     },
   )
 

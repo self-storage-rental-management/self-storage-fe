@@ -171,8 +171,9 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                   {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && <p className="mt-1 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>}
                 </Td>
                 <Td>
-                  <div className="flex justify-center">
-                    <span className={"flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-bold " + ((isRenewalHistoryEntry(entry) ? canViewCustomerHistoryReceipt(entry) : ["PAID", "REFUNDED", "SETTLED"].includes(entry.status)) ? "bg-emerald-100 text-emerald-800" : ["FAILED", "CANCELLED", "EXPIRED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                  <div className="space-y-2">
+                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (["PAID", "REFUNDED", "SETTLED"].includes(entry.status) ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                    {entry.reservationPayment?.invoiceNumber && <p className="font-mono text-[10px] text-stone-500">Hóa đơn: {entry.reservationPayment.invoiceNumber} · {entry.reservationPayment.invoiceStatus || "DRAFT"}</p>}
                   </div>
                 </Td>
                 <Td>{!loading && !error && canViewCustomerHistoryReceipt(entry) && <Button variant="outline" size="sm" onClick={() => setReceiptId(entry.id)}>Xem biên lai</Button>}</Td>

@@ -1,7 +1,6 @@
 import type { RentalApiRecord } from "./rentalApi"
-import type { RenewalStatusSummary, RenewalTransactionStatus } from './renewalStatus'
-import type { RenewalStatus, PaymentStatus } from './statusContracts'
-export type RenewalApiStatus = RenewalStatus
+import type { ApiRenewalStatus } from './statusContracts'
+export type RenewalApiStatus = ApiRenewalStatus
 export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {
   effectivePeriod?: { startDate: string; endExclusive: string; newEndDate: string; finalized: boolean } | null
@@ -64,6 +63,9 @@ export interface RenewalVnpayPaymentResponse {
   reconciliationRequired: boolean
   message: string
   paymentUrl: string | null
+  invoiceNumber: string | null
+  invoiceStatus: "DRAFT" | "PAID" | "VOID" | "REFUNDED"
+  invoiceIssuedAt: string | null
   settlementStage?: "AWAITING_PAYMENT" | "VERIFIED_AWAITING_ALLOCATION" | "ALLOCATED_AWAITING_SIGNING" | "AWAITING_SIGNING" | "COMPLETED" | "RECONCILIATION_REQUIRED"
   transactionStatus?: RenewalTransactionStatus
   receiptAvailable?: boolean

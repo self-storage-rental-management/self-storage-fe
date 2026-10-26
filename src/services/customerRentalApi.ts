@@ -1,8 +1,7 @@
 import { apiRequest } from './apiClient'
-import type { RentalStatus } from '../types/statusContracts'
-import { checkedRental, checkedStatusPage } from './statusContractValidation'
+import type { ApiRentalStatus } from '../types/statusContracts'
 
-export type CustomerRentalStatus = RentalStatus
+export type CustomerRentalStatus = ApiRentalStatus
 
 export interface CustomerRental {
   id: string

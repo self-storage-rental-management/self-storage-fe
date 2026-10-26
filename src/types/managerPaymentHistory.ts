@@ -7,13 +7,16 @@ export type ManagerPaymentHistoryStatus =
   | "FAILED"
   | "CANCELLED"
   | "REFUNDED"
+export type InvoiceStatus = "DRAFT" | "PAID" | "VOID" | "REFUNDED"
 
 export type ManagerPaymentHistoryType =
   | "RESERVATION_DEPOSIT"
   | "RENTAL_BALANCE"
   | "MONTHLY_RENT"
   | "RENEWAL"
+  | "RENEWAL_INSTALLMENT"
   | "DAMAGE_FEE"
+  | "EARLY_TERMINATION_FEE"
   | "OTHER"
   | "RETURN_REFUND"
   | "RETURN_SETTLEMENT"
@@ -31,8 +34,9 @@ export interface ManagerPaymentHistoryItem {
   occurredAt: string
   renewalId?: string | null
   receiptFileId?: string | null
-  transactionStatus?: RenewalTransactionStatus | null
-  receiptAvailable?: boolean | null
+  invoiceNumber?: string | null
+  invoiceStatus?: InvoiceStatus
+  invoiceIssuedAt?: string | null
 }
 
 export interface ManagerPaymentHistoryPage {

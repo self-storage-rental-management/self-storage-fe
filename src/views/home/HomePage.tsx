@@ -252,7 +252,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   const facilitiesList = DEMO_DATA_ENABLED
     ? contextFacilities.map(f => {
       const facCode = f.code || f.id.toUpperCase()
-      const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
+      const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
       const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
       return {
         ...f,

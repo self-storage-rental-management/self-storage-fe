@@ -18,7 +18,8 @@ export const bookingPaymentVerification: Record<RentalBookingEvidence["payments"
   UNVERIFIED: "Chưa có bằng chứng xác minh tiền thực nhận",
 }
 export function isRentalBookingEvidence(value: unknown, rentalId: string, reservationId: string | null): boolean {
-  // Compatible with servers before the additive field was introduced, never synthetic evidence.
+  // Payment evidence is accepted only when its invoice metadata follows the
+  // same contract as the reservation/payment endpoints.
   if (value == null) return true
   const e = value as RentalBookingEvidence
   const money = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0
@@ -42,7 +43,10 @@ export function isRentalBookingEvidence(value: unknown, rentalId: string, reserv
       !isPaymentStatus(p.status) ||
       !Object.prototype.hasOwnProperty.call(bookingPaymentVerification, p.verification) ||
       !(p.processedAt === null || (typeof p.processedAt === "string" &&
-        /^\d{4}-\d{2}-\d{2}T/.test(p.processedAt) && Number.isFinite(Date.parse(p.processedAt))))) return false
+        /^\d{4}-\d{2}-\d{2}T/.test(p.processedAt) && Number.isFinite(Date.parse(p.processedAt)))) ||
+      (p.invoiceNumber !== null && typeof p.invoiceNumber !== "string") ||
+      !["DRAFT", "PAID", "VOID", "REFUNDED"].includes(p.invoiceStatus) ||
+      !(p.invoiceIssuedAt === null || (typeof p.invoiceIssuedAt === "string" && Number.isFinite(Date.parse(p.invoiceIssuedAt))))) return false
     ids.add(p.id)
     if (p.projectRecognition != null) {
       const r = p.projectRecognition

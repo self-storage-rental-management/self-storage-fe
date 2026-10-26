@@ -18,7 +18,6 @@ import { isVietnameseMobilePhone, VIETNAMESE_PHONE_HINT } from '../domain/vietna
 import StepIndicator from './auth/StepIndicator'
 import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
-import { USERS } from '../data/demoDatabase'
 
 export const DEMO_LOGIN_ACCOUNTS = [
   { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', color: 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100', icon: '👤' },
