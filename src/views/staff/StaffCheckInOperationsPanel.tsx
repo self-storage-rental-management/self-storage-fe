@@ -152,7 +152,8 @@ function stepForCheckIn(item: CheckInCase) {
     case "identity_verified": return 2
     case "contract_signed": return 3
     case "payment_collected": return 4
-    case "setup_in_progress": return 5
+    case "setup_in_progress":
+      return item.setupDueAt && new Date(item.setupDueAt).getTime() <= Date.now() ? 6 : 5
     case "setup_completed": return 6
     case "completed": return 6
     default: return 1

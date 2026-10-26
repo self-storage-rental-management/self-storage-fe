@@ -143,7 +143,7 @@ export async function createUnitAssignment(reservationId: string, storageUnitId:
 
 export async function changeUnitAssignment(reservationId: string, storageUnitId: string, reason: string) {
   const payload = await apiRequest<unknown>(
-    `/api/staff/unit-assignments/${encodeURIComponent(reservationId)}/change`,
+    `/api/manager/unit-assignments/${encodeURIComponent(reservationId)}/change`,
     { method: 'PUT', body: JSON.stringify({ storageUnitId, reason }) },
   )
   return assertEnvelope<UnitAssignmentResult>(payload).data
