@@ -1985,7 +1985,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           actorName: 'StorageHub',
           actorRole: 'admin' as const,
           facilityId: rental.facilityId,
-          entityType: 'rental',
+          entityType: 'rental' as const,
           entityId: rental.id,
           notes: `Hết ${rental.freeSetupDays || 0} ngày setup miễn phí, hợp đồng tự chuyển sang ACTIVE.`,
           timestamp: new Date(nowMs).toISOString(),
@@ -2057,6 +2057,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     packageId?: string
     packageName?: string
     packagePrice?: number
+    freeSetupDays?: number
   }): ReservationValidationResult => {
     assertPermission(params.customer, 'reservations:create')
     const normalizedTargetId =

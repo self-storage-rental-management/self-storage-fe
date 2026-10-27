@@ -30,6 +30,18 @@ const paymentPage = (data: unknown[]) => ({ data, pagination: {
 }, correlationId: 'test' })
 
 describe('Manager payment history screen', () => {
+  it.each([
+    { transactionStatus: 'RECONCILIATION_REQUIRED', receiptAvailable: false },
+    { reconciliationRequired: true, receiptAvailable: true },
+  ])('keeps an unreconciled transaction blocked even when it has a receipt file: %j', metadata => {
+    state.list = { data: paymentPage([{ ...item, type: 'RENEWAL', renewalId: 'renewal-id', receiptFileId: 'saved-file', ...metadata }]) }
+    const html = render()
+    expect(html).toContain('Chờ đối soát')
+    expect(html).not.toContain('>Đã thu<')
+    expect(html).not.toContain('Xem trước')
+    expect(html).not.toContain('Tải xuống')
+    expect(html).not.toContain('Hoàn VNPay')
+  })
   it('does not present a raw PAID renewal needing reconciliation as collected or offer a receipt', () => {
     state.list = { data: paymentPage([{ ...item, type: 'RENEWAL', renewalId: 'renewal-id', transactionStatus: 'RECONCILIATION_REQUIRED', receiptAvailable: false }]) }
     const html = render()

@@ -313,6 +313,11 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 4. Refund Form
   const [refundReference, setRefundReference] = useState('')
   const [refundNotes, setRefundNotes] = useState('')
+  const [refundMethod, setRefundMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
+  const [refundFile, setRefundFile] = useState<File | null>(null)
+  const [refundConfirmed, setRefundConfirmed] = useState(false)
+  const refundLock = useRef(false)
+  const refundUpload = useRef<{ file: File; id: string } | null>(null)
   const [setupRefundAmount, setSetupRefundAmount] = useState(0)
   const [setupRentalRefundAmount, setSetupRentalRefundAmount] = useState(0)
   const [setupDecisionNote, setSetupDecisionNote] = useState('')
@@ -449,7 +454,12 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // Mở modal chi tiết hồ sơ
   const handleOpenDetail = (item: (typeof displayItems)[0], initialTab: typeof activeTab = 'overview') => {
+    if (refundLock.current) return
     setSelectedItem(item)
+    setRefundMethod('BANK_TRANSFER')
+    setRefundFile(null)
+    setRefundConfirmed(false)
+    refundUpload.current = null
     setActiveTab(initialTab)
     setReviewFees({
       damageFee: item.damageFee || 0,
@@ -792,7 +802,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // 4. Thao tác: Thực hiện giải ngân hoàn tiền cọc (Complete Refund)
   const handleCompleteRefund = async () => {
-    if (!selectedItem) return
+    if (!selectedItem || refundLock.current) return
     if (isBusiness) {
       setFeedback('Business chỉ phê duyệt/giám sát, Staff mới được ghi nhận thu hoặc hoàn tiền kèm biên lai thực tế.')
       return
@@ -801,24 +811,37 @@ export default function BusinessReturnsPanel({ user }: Props) {
       setFeedback('Vui lòng nhập mã giao dịch hoàn tiền thực tế trước khi hoàn tất hồ sơ.')
       return
     }
+    if (useApi && (!refundFile || !refundConfirmed || selectedItem.status !== 'refund_pending'
+      || !Number.isFinite(selectedItem.netRefundAmount) || Number(selectedItem.netRefundAmount) <= 0)) {
+      setFeedback('Kiểm tra số tiền được hoàn, tải biên lai và xác nhận đã thực hoàn trước khi ghi nhận.')
+      return
+    }
+    refundLock.current = true
     setSubmitting(true)
     setFeedback('')
 
     try {
       if (useApi) {
-        await completeRefund(selectedItem.id, {
+        let receiptFileId = refundUpload.current?.file === refundFile ? refundUpload.current.id : undefined
+        if (!receiptFileId) {
+          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!)
+          receiptFileId = asset.id
+          refundUpload.current = { file: refundFile!, id: asset.id }
+        }
+        const proof = {
+          amount: selectedItem.netRefundAmount!,
           transactionReference: refundReference.trim(),
+          paymentMethod: refundMethod,
+          receiptFileId,
+          confirmed: refundConfirmed,
+        }
+        validateReturnSettlementReceipt(proof)
+        await completeRefund(selectedItem.id, {
+          ...proof,
           notes: refundNotes.trim() || 'Hoàn tiền cọc quyết toán',
         })
         await loadApiData()
         setFeedback('Đã ghi nhận chứng từ hoàn tiền và hoàn tất hồ sơ theo kết quả backend.')
-        setActiveTab('overview')
-        return
-      }
-
-      if (useApi) {
-        setSelectedItem((prev) => prev ? { ...prev, status: 'completed', settlementPaymentId: refundReference.trim(), completedAt: new Date().toLocaleString('vi-VN') } : null)
-        setFeedback('Đã giải ngân tiền hoàn cọc thành công! Hồ sơ thanh lý đã hoàn tất và gian kho đã được giải phóng.')
         setActiveTab('overview')
         return
       }

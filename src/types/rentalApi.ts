@@ -1,4 +1,4 @@
-import type { RentalStatus, PaymentStatus } from './statusContracts'
+import type { ApiRentalStatus as RentalStatus, PaymentStatus } from './statusContracts'
 export type RentalApiRole = "customer" | "manager" | "staff"
 export type RentalApiStatus = RentalStatus
 export interface RentalApiPage<T> {

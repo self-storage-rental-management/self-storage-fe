@@ -1,5 +1,4 @@
-import type { RentalStatus } from './statusContracts'
-export type { ReservationStatus, RentalStatus, PaymentStatus } from './statusContracts'
+export type { ReservationStatus } from './statusContracts'
 
 export type UnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned' | 'inactive' | 'archived'
 
@@ -43,7 +42,8 @@ export type HoldStatus =
 
 export type RentalStatus = 'setup' | 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
 
-export type PaymentStatus = 'pending' | 'paid' | 'overdue' | 'refunded' | 'cancelled'
+export type LegacyPaymentStatus = 'pending' | 'paid' | 'overdue' | 'refunded' | 'cancelled'
+export type PaymentStatus = LegacyPaymentStatus
 
 import type { ApiReturnStatus } from './statusContracts'
 export type ReturnStatus = ApiReturnStatus
@@ -97,6 +97,7 @@ export interface FacilityCustomUnitSpec {
 }
 
 export interface RentalPackage {
+  freeSetupDays?: number
   id: string
   facilityId?: string
   unitTypeId?: string // Mã loại kho: 'S', 'M', 'L', 'XL' hoặc custom
