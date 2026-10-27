@@ -1,3 +1,4 @@
+import { useBackendNotifications } from '../../hooks/useBackendNotifications'
 import { useEffect, useState } from 'react'
 import { ManagerPresentationProvider } from './managerPresentation'
 import './managerTypography.css'
@@ -19,6 +20,7 @@ import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerApiStaffTasksPanel from './ManagerApiStaffTasksPanel'
 import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
+import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
@@ -35,31 +37,14 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'rentals:read' as const }] : []),
     ...(isApiAuthenticated() ? [{ id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' as const }] : []),
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
+    ...(isApiAuthenticated() ? [{ id: 'support', label: 'Yêu cầu hỗ trợ', icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
-  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+  const [supportTarget, setSupportTarget] = useState<{ id: string; request: number }>()
+  const notificationFeed = useBackendNotifications(user.id, isApiAuthenticated())
+  const { items: backendNotifications, setItems: setBackendNotifications } = notificationFeed
 
-  useEffect(() => {
-    if (!isApiAuthenticated()) return
-    let cancelled = false
-    const loadNotifications = async () => {
-      try {
-        const result = await listNotifications(0, 50)
-        if (!cancelled) setBackendNotifications(result.data)
-      } catch {
-        // Manager operations remain available if notifications are temporarily unavailable.
-      }
-    }
-    void loadNotifications()
-    const refreshNotifications = () => void loadNotifications()
-    window.addEventListener('storagehub:notifications-refresh', refreshNotifications)
-    const timer = window.setInterval(refreshNotifications, 10_000)
-    return () => {
-      cancelled = true
-      window.removeEventListener('storagehub:notifications-refresh', refreshNotifications)
-      window.clearInterval(timer)
-    }
-  }, [])
+
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
   const [inventoryRentalId, setInventoryRentalId] = useState<string | undefined>()
   const [inventoryMaintenanceDraft, setInventoryMaintenanceDraft] = useState<{ unitId: string; unitCode: string } | null>(null)
@@ -136,13 +121,14 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     })
   const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
   const managerNotificationPage = (type: ApiNotification['type']) => {
+    if (type === 'SUPPORT') return 'support'
     if (type === 'CHECKIN' || type === 'RETURN') return 'dashboard'
     if (type === 'RESERVATION') return 'unit-assignment'
     if (type === 'RENEWAL') return 'rentals'
     if (type === 'PAYMENT' || type === 'OVERDUE') return type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
     return 'dashboard'
   }
-  const managerApiNotifications: LayoutNotification[] = backendNotifications.filter(notification => notification.type !== 'SUPPORT').map(notification => ({
+  const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
     id: `api-notification-${notification.id}`,
     title: notification.title,
     message: notification.content,
@@ -152,14 +138,18 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     isRead: notification.isRead,
   }))
 
-  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={resolvedUser} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} onNotificationClick={(notification) => {
+  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={resolvedUser} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} notificationError={notificationFeed.error} notificationsLoading={notificationFeed.loading} hasMoreNotifications={notificationFeed.hasMore} onLoadMoreNotifications={notificationFeed.loadMore} onRetryNotifications={notificationFeed.refresh} onNotificationClick={(notification) => {
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.replace('api-notification-', '')
       setPage(notification.page)
+      if (notification.page === 'support' && notification.targetId) setSupportTarget({ id: notification.targetId, request: Date.now() })
       setBackendNotifications(current => current.map(item =>
         item.id === notificationId ? { ...item, isRead: true } : item
       ))
-      void markNotificationRead(notificationId).catch(() => undefined)
+      void markNotificationRead(notificationId).catch(reason => {
+        notificationFeed.reportFailure(reason)
+        notificationFeed.refresh()
+      })
       return
     }
     setPage(notification.page)
@@ -176,5 +166,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}
     {page === 'profile' && <ProfileView user={user} />}
+    {page === 'support' && isApiAuthenticated() && <SupportApiWorkspace role="manager" openTicket={supportTarget} />}
   </Layout></div></ManagerPresentationProvider>
 }

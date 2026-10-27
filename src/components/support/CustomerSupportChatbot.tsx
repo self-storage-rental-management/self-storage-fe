@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
 import { useState, useRef, useEffect } from 'react'
 import type { User } from '../../types'
@@ -275,7 +276,7 @@ export default function CustomerSupportChatbot({
         )
       }
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Không thể chuyển yêu cầu.')
+      showToast(userFacingError(err, 'Không thể chuyển yêu cầu.'))
     }
   }
 

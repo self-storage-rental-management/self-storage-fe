@@ -73,7 +73,7 @@ export function ReturnSummary({ record }: { record: ApiReturn }) {
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
         ? 'Quyết toán trả kho trong setup. Tiền thuê thực thu và cọc bảo đảm được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
-        : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn setup; áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Staff cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản setup áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
+        : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn setup, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Staff cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản setup áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
           {record.settlementBlocker}
@@ -107,7 +107,7 @@ function RecoveryReturnSummary({ record }: { record: ApiReturn }) {
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
         ? 'Quyết toán trả kho trong setup. Tiền thuê thực thu và cọc bảo đảm được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
-        : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn setup; áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Staff cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản setup áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
+        : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn setup, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Staff cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản setup áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
           {record.settlementBlocker}

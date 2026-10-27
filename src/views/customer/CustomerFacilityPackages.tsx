@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from 'react'
 import { listReservationRentalPackages, type ReservationRentalPackage } from '../../services/customerReservationApi'
 export default function CustomerFacilityPackages({ facilityId }: { facilityId: string }) {
@@ -10,7 +11,7 @@ export default function CustomerFacilityPackages({ facilityId }: { facilityId: s
       try {
         const result = await listReservationRentalPackages(facilityId)
         if (!disposed) { setPackages([...result].sort((a, b) => a.rentalMonths - b.rentalMonths)); setError('') }
-      } catch (e) { if (!disposed) setError(e instanceof Error ? e.message : 'Không tải được gói thuê cơ sở.') }
+      } catch (e) { if (!disposed) setError(userFacingError(e, 'Không tải được gói thuê cơ sở.')) }
       finally { if (!disposed) setLoading(false) }
     }
     setLoading(true); setPackages([]); setError('')

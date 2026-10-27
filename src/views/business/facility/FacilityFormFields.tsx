@@ -259,7 +259,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
           />
           {isDuplicate ? (
             <p className="text-[10px] font-semibold text-red-600 mt-1">
-              Mã cơ sở &quot;{code.trim().toUpperCase()}&quot; đã tồn tại! Vui lòng chọn mã khác.
+              Mã cơ sở &quot, {code.trim().toUpperCase()}&quot, đã tồn tại! Vui lòng chọn mã khác.
             </p>
           ) : isCodeModified ? (
             <p className="text-[10px] font-semibold text-amber-700 mt-1 flex items-center gap-1">

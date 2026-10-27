@@ -2276,7 +2276,7 @@ export default function StaffApp({
           <div className="space-y-3">
             <SectionHeader
               title={`Yêu cầu gia hạn chờ duyệt (${pendingRenewals.length})`}
-              subtitle="Khách hàng đã tạo đơn xin gia hạn; nhân viên kiểm tra và duyệt để hoàn tất gia hạn hợp đồng cho khách."
+              subtitle="Khách hàng đã tạo đơn xin gia hạn, nhân viên kiểm tra và duyệt để hoàn tất gia hạn hợp đồng cho khách."
             />
             {pendingRenewals.length > 0 ? (
               <div className="grid gap-3">

@@ -47,6 +47,7 @@ import { archiveManagerUnitType, createManagerUnitType, updateManagerUnitType } 
 import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
 import { generateUnitTypeCode, previewPhysicalUnitCodes } from "./managerUnitCodeHelpers"
 import ManagerGoodsCatalogPanel from "./ManagerGoodsCatalogPanel"
+import { subscribeGoodsCatalog } from '../../services/goodsCatalogEvents'
 import { getManagerGoodsCatalog } from "../../services/managerGoodsCatalogApi"
 import type { GoodsCatalog } from "../../services/customerReservationApi"
 
@@ -311,8 +312,26 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
     if (!open) return
     setSelectedCategories(initial?.acceptedGoodsCategoryIds || [])
     setSelectedMaterials(initial?.acceptedGoodsMaterialIds || [])
-    getManagerGoodsCatalog().then(setGoodsCatalog).catch(cause => setError(managerDisplayError(cause)))
+    let cancelled = false
+    const load = () => void getManagerGoodsCatalog().then(value => {
+      if (!cancelled) setGoodsCatalog(value)
+    }).catch(cause => { if (!cancelled) setError(managerDisplayError(cause)) })
+    load()
+    const unsubscribe = subscribeGoodsCatalog(load)
+    return () => { cancelled = true; unsubscribe() }
   }, [open, initial?.id])
+
+  useEffect(() => {
+    if (!goodsCatalog || !open) return
+    const activeCategories = goodsCatalog.categories.filter(category => category.status === 'ACTIVE')
+    const categoryIds = new Set(activeCategories.map(category => category.id))
+    const materialIds = new Set(activeCategories.flatMap(category => category.materials.filter(material => material.status === 'ACTIVE').map(material => material.id)))
+    if (selectedCategories.some(id => !categoryIds.has(id)) || selectedMaterials.some(id => !materialIds.has(id))) {
+      setSelectedCategories(current => current.filter(id => categoryIds.has(id)))
+      setSelectedMaterials(current => current.filter(id => materialIds.has(id)))
+      setError('Một số loại hàng hoặc vật liệu đã ngừng áp dụng. Vui lòng kiểm tra lại phạm vi hàng được nhận trước khi lưu. Cấu hình đã duyệt chỉ thay đổi sau khi bạn gửi và được phê duyệt.')
+    }
+  }, [goodsCatalog, open, selectedCategories, selectedMaterials])
 
   const handleNameChange = (newName: string) => {
     setForm(current => {

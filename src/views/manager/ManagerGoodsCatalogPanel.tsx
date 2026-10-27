@@ -5,6 +5,7 @@ import type { GoodsCatalog, GoodsCatalogCategory, GoodsCatalogMaterial, GoodsCat
 import { addGoodsCategory, addGoodsMaterial, getManagerGoodsCatalog, reorderGoodsCategories, reorderGoodsMaterials, updateGoodsCategory, updateGoodsMaterial } from '../../services/managerGoodsCatalogApi'
 import { managerDisplayError } from './managerPresentation'
 import { ApiClientError } from '../../services/apiClient'
+import { subscribeGoodsCatalog } from '../../services/goodsCatalogEvents'
 
 const inputClass = 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500'
 const statusText: Record<GoodsCatalogStatus, string> = { ACTIVE: 'Đang dùng', INACTIVE: 'Tạm ẩn', ARCHIVED: 'Ngừng sử dụng' }
@@ -25,6 +26,7 @@ export default function ManagerGoodsCatalogPanel() {
   const [catalog, setCatalog] = useState<GoodsCatalog>()
   const [editor, setEditor] = useState<Editor>()
   const [error, setError] = useState<string>()
+  const [feedback, setFeedback] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [archiving, setArchiving] = useState<{ category: GoodsCatalogCategory; material?: GoodsCatalogMaterial }>()
@@ -39,7 +41,10 @@ export default function ManagerGoodsCatalogPanel() {
     try { setCatalog(await getManagerGoodsCatalog()); setError(undefined) }
     catch (reason) { setError(managerDisplayError(reason)) }
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+    return subscribeGoodsCatalog(() => void load())
+  }, [])
 
   const startPointerSort = (event: ReactPointerEvent<HTMLButtonElement>, category: GoodsCatalogCategory, material?: GoodsCatalogMaterial) => {
     if (busy || event.button !== 0) return
@@ -147,6 +152,7 @@ export default function ManagerGoodsCatalogPanel() {
         await addGoodsMaterial(editor.category.id, { label: editor.label.trim(), fragile: editor.fragile, status: editor.status })
       }
       setEditor(undefined); await load()
+      setFeedback('Đã lưu danh mục. Khách hàng được cập nhật khi nhận thay đổi. Mục mới cần được chọn trong phạm vi hàng được nhận của loại kho.')
     } catch (reason) { setError(managerDisplayError(reason)) }
     finally { setBusy(false) }
   }
@@ -158,6 +164,7 @@ export default function ManagerGoodsCatalogPanel() {
       if (archiving.material) await updateGoodsMaterial(archiving.material.id, { label: archiving.material.label, fragile: archiving.material.fragile, status: 'ARCHIVED' })
       else await updateGoodsCategory(archiving.category.id, { label: archiving.category.label, status: 'ARCHIVED' })
       setArchiving(undefined); await load()
+      setFeedback('Đã ngừng sử dụng mục này cho khai báo mới. Thông tin đã chốt trong đơn cũ được giữ nguyên.')
     } catch (reason) { setError(managerDisplayError(reason)) }
     finally { setBusy(false) }
   }
@@ -170,6 +177,7 @@ export default function ManagerGoodsCatalogPanel() {
     </div>
     {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"><p>{error}</p><Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>Tải lại danh mục</Button></div>}
     {busy && <p role="status" className="text-xs text-stone-500">Đang lưu thay đổi…</p>}
+    {feedback && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{feedback}</p>}
     {floating && createPortal(<div aria-hidden="true" className="pointer-events-none fixed z-[9999] flex items-center gap-4 rounded-xl border border-amber-400 bg-white px-4 py-4 shadow-[0_18px_50px_-10px_rgba(0,0,0,0.35)] ring-4 ring-amber-100" style={{ left: floating.x, top: floating.y, width: floating.width, minHeight: floating.height, transform: 'rotate(-0.7deg) scale(1.015)' }}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-100 text-sm font-bold text-amber-900">{floating.number}</span><div><p className="font-semibold text-stone-900">{floating.label}</p><p className="mt-1 text-xs text-stone-500">Thả vào vị trí được đánh dấu</p></div></div>, document.body)}
     {!catalog ? <p className="text-sm text-stone-500">Đang tải danh mục...</p> : <div className="space-y-2">
       {catalog.categories.map((category, categoryIndex) => {
@@ -200,7 +208,7 @@ export default function ManagerGoodsCatalogPanel() {
             </div>
           </div>
           {isOpen && <div className="border-t border-stone-100 bg-stone-50/60 px-4 py-3 sm:pl-12">
-            {category.custom ? <p className="border-l-2 border-stone-300 py-2 pl-5 text-sm text-stone-500">Khách sẽ tự nhập tên hàng và vật liệu; hồ sơ cần được duyệt.</p> : category.materials.length === 0 ? <p className="border-l-2 border-stone-300 py-2 pl-5 text-sm text-stone-500">Chưa có vật liệu chính.</p> : <div className="border-l-2 border-stone-300 pl-5">
+            {category.custom ? <p className="border-l-2 border-stone-300 py-2 pl-5 text-sm text-stone-500">Khách sẽ tự nhập tên hàng và vật liệu, hồ sơ cần được duyệt.</p> : category.materials.length === 0 ? <p className="border-l-2 border-stone-300 py-2 pl-5 text-sm text-stone-500">Chưa có vật liệu chính.</p> : <div className="border-l-2 border-stone-300 pl-5">
               {category.materials.map((material, materialIndex) => <div key={material.id} data-material-id={material.id} data-category-id={category.id}
                 onDragOver={event => { if (draggingMaterial?.categoryId === category.id) event.preventDefault() }}
                 onDrop={event => { event.preventDefault(); if (draggingMaterial?.categoryId === category.id) void moveMaterial(category, draggingMaterial.materialId, material.id) }}
@@ -217,7 +225,7 @@ export default function ManagerGoodsCatalogPanel() {
     {editor && <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2">
         <label className="text-sm">Tên hiển thị<input className={`${inputClass} mt-1`} value={editor.label} onChange={event => setEditor({ ...editor, label: event.target.value })} /></label>
-        <label className="text-sm">Trạng thái<select className={`${inputClass} mt-1`} value={editor.status} onChange={event => setEditor({ ...editor, status: event.target.value as GoodsCatalogStatus })}><option value="ACTIVE">Đang dùng</option><option value="INACTIVE">Tạm ẩn</option>{editor.status === 'ARCHIVED' && <option value="ARCHIVED">Ngừng sử dụng</option>}</select><span className="mt-1 block text-xs leading-5 text-stone-500">{editor.status === 'ACTIVE' ? 'Hiển thị cho khách hàng khi khai báo.' : editor.status === 'INACTIVE' ? 'Tạm thời ẩn khỏi khách hàng và có thể bật lại bất cứ lúc nào.' : 'Không dùng cho khai báo mới; dữ liệu lịch sử vẫn được giữ.'}</span></label>
+        <label className="text-sm">Trạng thái<select className={`${inputClass} mt-1`} value={editor.status} onChange={event => setEditor({ ...editor, status: event.target.value as GoodsCatalogStatus })}><option value="ACTIVE">Đang dùng</option><option value="INACTIVE">Tạm ẩn</option>{editor.status === 'ARCHIVED' && <option value="ARCHIVED">Ngừng sử dụng</option>}</select><span className="mt-1 block text-xs leading-5 text-stone-500">{editor.status === 'ACTIVE' ? 'Hiển thị cho khách hàng khi khai báo.' : editor.status === 'INACTIVE' ? 'Tạm thời ẩn khỏi khách hàng và có thể bật lại bất cứ lúc nào.' : 'Không dùng cho khai báo mới, dữ liệu lịch sử vẫn được giữ.'}</span></label>
         {editor.kind === 'material' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editor.fragile} onChange={event => setEditor({ ...editor, fragile: event.target.checked })} /> Vật liệu dễ vỡ</label>}
       </div>
       <div className="flex flex-col-reverse gap-3 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">

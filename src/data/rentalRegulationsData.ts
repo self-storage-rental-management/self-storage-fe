@@ -95,7 +95,7 @@ export const REGULATIONS: RegulationArticle[] = [
     clauses: [
       'Khách hàng có trách nhiệm đóng gói, sắp xếp và bảo quản tài sản phù hợp với điều kiện của kho.',
       'Các bên phối hợp ghi nhận hiện trạng, lập biên bản khi phát hiện mất mát hoặc hư hỏng.',
-      'Trách nhiệm của mỗi bên được xác định dựa trên nguyên nhân, chứng cứ, thỏa thuận và quy định pháp luật; không mặc nhiên loại trừ trách nhiệm của bất kỳ bên nào.',
+      'Trách nhiệm của mỗi bên được xác định dựa trên nguyên nhân, chứng cứ, thỏa thuận và quy định pháp luật, không mặc nhiên loại trừ trách nhiệm của bất kỳ bên nào.',
       'Khách hàng được thông báo rõ về phạm vi bảo hiểm nếu có và trách nhiệm đối với tài sản của mình.',
     ],
   },
