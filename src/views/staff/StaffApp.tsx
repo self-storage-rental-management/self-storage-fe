@@ -68,6 +68,7 @@ import type {
   ReturnCase,
   StorageReservation,
   StorageUnit,
+  LegacyReservationStatus,
 } from "../../types/storageHub"
 
 import {
@@ -97,9 +98,11 @@ import {
 import type { ApiReservationStatus } from "../../types/statusContracts"
 
 type ReservationStatus = ApiReservationStatus
+// The shared view adapts API records and persisted demo records separately.
+type StaffReservationStatus = ApiReservationStatus | LegacyReservationStatus
 
 type StaffReservation = Omit<typeof RESERVATIONS[number], "status"> & {
-  status: LegacyReservationStatus
+  status: StaffReservationStatus
 
   sizeCode?: string
 
@@ -2276,7 +2279,7 @@ export default function StaffApp({
           <div className="space-y-3">
             <SectionHeader
               title={`Yêu cầu gia hạn chờ duyệt (${pendingRenewals.length})`}
-              subtitle="Khách hàng đã tạo đơn xin gia hạn; nhân viên kiểm tra và duyệt để hoàn tất gia hạn hợp đồng cho khách."
+              subtitle="Khách hàng đã tạo đơn xin gia hạn, nhân viên kiểm tra và duyệt để hoàn tất gia hạn hợp đồng cho khách."
             />
             {pendingRenewals.length > 0 ? (
               <div className="grid gap-3">
@@ -2309,9 +2312,6 @@ export default function StaffApp({
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                             onClick={async () => {
                               try {
-                                if (isApiAuthenticated()) {
-                                  try { await approveRenewalTicket(renewal.id) } catch {}
-                                }
                                 hub.approveRenewal(renewal.id, user)
                                 showToast(`Đã duyệt gia hạn thành công cho hồ sơ ${renewal.id}! Hợp đồng thuê đã được tự động kéo dài đến ${renewal.newEndDate}.`)
                               } catch (err: any) {
@@ -2329,9 +2329,6 @@ export default function StaffApp({
                               const reason = prompt("Nhập lý do từ chối yêu cầu gia hạn:", "Cơ sở có kế hoạch bảo trì kho hoặc lịch không khả dụng.")
                               if (reason && reason.trim()) {
                                 try {
-                                  if (isApiAuthenticated()) {
-                                    try { await rejectRenewalTicket(renewal.id, reason.trim()) } catch {}
-                                  }
                                   hub.rejectRenewal(renewal.id, user, reason.trim())
                                   showToast(`Đã từ chối yêu cầu gia hạn ${renewal.id}.`)
                                 } catch (err: any) {
@@ -2381,15 +2378,9 @@ export default function StaffApp({
                       size="sm"
                       onClick={() => {
                         setSelectedRenewal(renewal)
-                        setRenewalContractFile("")
-                        setRenewalContractFileName("")
-                        setRenewalContractNumber(`PL-${renewal.id}`)
-                        setRenewalPaymentReference("")
-                        setRenewalIdentityVerified(false)
-                        setRenewalTermsVerified(false)
                       }}
                     >
-                      Hoàn tất gia hạn
+                      Xem hồ sơ gia hạn cũ
                     </Button>
                   </div>
                 </Card>

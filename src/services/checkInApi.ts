@@ -168,6 +168,15 @@ export interface CredentialAlert {
 }
 
 export type CredentialAccessEventType = 'ENTRY' | 'EXIT'
+export interface CredentialAccessResponse {
+  credentialId: string
+  rentalId: string | null
+  accessedAt: string
+  allowed: boolean
+  duringSetup: boolean
+  reason: string
+  accessHours: string
+}
 export interface CredentialAccessEvent {
   credentialId: string
   rentalId: string | null

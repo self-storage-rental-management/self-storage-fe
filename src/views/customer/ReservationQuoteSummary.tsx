@@ -13,8 +13,8 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
   const deductionAmountClass = `${amountClass} text-base font-bold text-emerald-700`
 
   const earlyExitTerms = <p className="text-xs text-stone-600">{q.setupEarlyExitPolicyVersion && q.setupEarlyExitFee != null
-    ? <>Trả kho sớm trong setup: phí chấm dứt sớm một lần là {formatVndAmount(q.setupEarlyExitFee)} (một tháng đơn giá đã chốt), chỉ áp dụng khi trả kho; không thu khi đặt kho.</>
-    : 'Hồ sơ chưa có điều khoản trả kho sớm trong setup; cần cơ sở đối soát, không tự áp dụng phí.'}</p>
+    ? <>Trả kho sớm trong setup: phí chấm dứt sớm một lần là {formatVndAmount(q.setupEarlyExitFee)} (một tháng đơn giá đã chốt), chỉ áp dụng khi trả kho, không thu khi đặt kho.</>
+    : 'Hồ sơ chưa có điều khoản trả kho sớm trong setup, cần cơ sở đối soát, không tự áp dụng phí.'}</p>
 
   if (context === 'reservation') {
     return (
@@ -33,10 +33,10 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
               {q.facilityName ? `${q.facilityName} · ` : ''}{formatDisplayDate(q.startDate)}–{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng
             </p>
             <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-              <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế; không cộng thêm khi gia hạn. Mốc này được lưu cùng đơn đặt kho.
+              <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế, không cộng thêm khi gia hạn. Mốc này được lưu cùng đơn đặt kho.
             </p>
             <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-              Nếu chấm dứt sớm: phí dự kiến tối đa theo báo giá là <b>{formatVndAmount(q.earlyTerminationFee ?? 0)}</b>; thông báo trước {q.earlyTerminationNoticeDays ?? 14} ngày. Tiền cọc đảm bảo kho được quyết toán riêng.
+              Nếu chấm dứt sớm: phí dự kiến tối đa theo báo giá là <b>{formatVndAmount(q.earlyTerminationFee ?? 0)}</b>, thông báo trước {q.earlyTerminationNoticeDays ?? 14} ngày. Tiền cọc đảm bảo kho được quyết toán riêng.
             </p>
           </div>
           <div className="text-right"><span className="text-xs text-stone-500">Đơn giá/tháng</span><b className="block tabular-nums text-stone-900">{formatVndAmount(q.monthlyPrice)}</b></div>
@@ -85,12 +85,11 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           Kỳ thuê: <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-          <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế. Các ngày này không nằm trong kỳ thuê đã thanh toán;
-          ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày check-in thực tế. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
+          <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế. Các ngày này không nằm trong kỳ thuê đã thanh toán, ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày check-in thực tế. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
         </div>
         <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
           Chấm dứt sớm theo chính sách đã lưu tại thời điểm báo giá: phí dự kiến <b>{formatVndAmount(q.earlyTerminationFee ?? 0)}</b>, thông báo trước {q.earlyTerminationNoticeDays ?? 14} ngày. Cọc đảm bảo kho xử lý riêng sau kiểm tra trả kho.
-          <span className="mt-1 block">Nếu trả sau khi hồ sơ ACTIVE, hệ thống xét số tháng đã hoàn thành và bảng giá gói đã snapshot; dưới 3 tháng áp dụng giá niêm yết cộng phí chấm dứt sớm, các mốc gói tiếp theo tính lại ngày setup được hưởng. Tổng tiền tính lại không vượt tổng tiền thuê của gói.</span>
+          <span className="mt-1 block">Nếu trả sau khi hồ sơ ACTIVE, hệ thống xét số tháng đã hoàn thành và bảng giá gói đã snapshot, dưới 3 tháng áp dụng giá niêm yết cộng phí chấm dứt sớm, các mốc gói tiếp theo tính lại ngày setup được hưởng. Tổng tiền tính lại không vượt tổng tiền thuê của gói.</span>
         </div>
         {(q.earlyTerminationTiers?.length ?? 0) > 0 && <div className="mt-3 overflow-x-auto rounded-xl border border-stone-200 bg-white p-4">
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-stone-700">Bảng tier tính lại ưu đãi khi trả sớm</p>

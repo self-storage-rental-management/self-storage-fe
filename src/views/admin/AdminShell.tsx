@@ -50,7 +50,7 @@ export default function AdminShell({ user, onLogout }: { user: User; onLogout: (
         header button[title*="Notification" i] svg,
         header button[aria-label*="thông báo" i] svg,
         header button[aria-label*="notification" i] svg,
-        header .relative > button > svg { display: block !important; }
+        header .relative > button > svg { display: block !important, }
       `}</style>
       {page === 'dashboard' && hasPermission('dashboard:read') && <AdminDashboardApiPanel />}
       {page === 'users' && hasPermission('users:manage') && <AdminUsersApiPanel user={user} showToast={showToast} />}

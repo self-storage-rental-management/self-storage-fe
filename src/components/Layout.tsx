@@ -4,6 +4,8 @@ import BrandLogo from './BrandLogo'
 import type { PermissionKey, User, Role } from '../types'
 import { isApiAuthenticated } from '../services/authApi'
 import { markAllNotificationsRead } from '../services/notificationApi'
+import { userFacingError } from '../presentation/userFacingError'
+import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
 
 export interface NavItem {
   id: string
@@ -89,6 +91,11 @@ interface LayoutProps {
   roleLabel: string
   roleColor: string
   notifications?: LayoutNotification[]
+  notificationError?: string
+  notificationsLoading?: boolean
+  hasMoreNotifications?: boolean
+  onLoadMoreNotifications?: () => void
+  onRetryNotifications?: () => void
   additionalNotifications?: LayoutNotification[]
   onNotificationClick?: (notification: LayoutNotification) => void
   canAccess?: (permission: PermissionKey) => boolean
@@ -96,8 +103,10 @@ interface LayoutProps {
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess,
+  notificationError, notificationsLoading, hasMoreNotifications, onLoadMoreNotifications, onRetryNotifications
 }: LayoutProps) {
+  useDisplayPunctuation(user.role === 'customer' || user.role === 'manager')
   const roleTaskbarColor: Record<Role, string> = {
     customer: '#F4C542',
     staff: '#22C55E',
@@ -109,6 +118,7 @@ export default function Layout({
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notificationActionError, setNotificationActionError] = useState('')
   const notificationAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -374,7 +384,12 @@ export default function Layout({
     else navigate(notification.page, false)
   }
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    setNotificationActionError('')
+    if (isApiAuthenticated()) {
+      try { await markAllNotificationsRead() }
+      catch (reason) { setNotificationActionError(userFacingError(reason, 'Chưa lưu được trạng thái đã đọc. Vui lòng thử lại.')); return }
+    }
     const allIds = notifications.map(item => item.id)
     const nextReadIds = Array.from(new Set([...readNotificationIds, ...allIds]))
     setReadNotificationIds(nextReadIds)
@@ -387,7 +402,6 @@ export default function Layout({
       return updated
     })
     if (isApiAuthenticated()) {
-      void markAllNotificationsRead().catch(() => undefined)
       window.dispatchEvent(new Event('storagehub:notifications-refresh'))
     }
   }
@@ -580,6 +594,8 @@ export default function Layout({
                   </div>
                 </div>
                 <div className="max-h-96 overflow-y-auto divide-y divide-stone-100">
+                  {notificationError && <div role="alert" className="space-y-2 bg-amber-50 p-3 text-sm text-amber-900"><p>{notificationError}</p><button type="button" disabled={notificationsLoading} className="underline" onClick={onRetryNotifications}>Thử tải lại</button></div>}
+                  {notificationActionError && <p role="alert" className="bg-amber-50 p-3 text-sm text-amber-900">{notificationActionError}</p>}
                   {notifications.length ? notifications.map(item => (
                     <button
                       type="button"
@@ -604,6 +620,7 @@ export default function Layout({
                       <p className="text-xs text-stone-400 mt-1">{'Mọi thông báo vận hành và hệ thống sẽ xuất hiện tại đây.'}</p>
                     </div>
                   )}
+                  {hasMoreNotifications && <button type="button" className="w-full p-3 text-sm font-semibold text-amber-800" disabled={notificationsLoading} onClick={onLoadMoreNotifications}>{notificationsLoading ? 'Đang tải thông báo…' : 'Xem thông báo cũ hơn'}</button>}
                 </div>
               </div>
             )}

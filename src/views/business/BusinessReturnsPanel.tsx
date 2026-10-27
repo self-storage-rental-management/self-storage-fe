@@ -313,6 +313,11 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 4. Refund Form
   const [refundReference, setRefundReference] = useState('')
   const [refundNotes, setRefundNotes] = useState('')
+  const [refundMethod, setRefundMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
+  const [refundFile, setRefundFile] = useState<File | null>(null)
+  const [refundConfirmed, setRefundConfirmed] = useState(false)
+  const refundLock = useRef(false)
+  const refundUpload = useRef<{ file: File; id: string } | null>(null)
   const [setupRefundAmount, setSetupRefundAmount] = useState(0)
   const [setupRentalRefundAmount, setSetupRentalRefundAmount] = useState(0)
   const [setupDecisionNote, setSetupDecisionNote] = useState('')
@@ -449,7 +454,12 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // Mở modal chi tiết hồ sơ
   const handleOpenDetail = (item: (typeof displayItems)[0], initialTab: typeof activeTab = 'overview') => {
+    if (refundLock.current) return
     setSelectedItem(item)
+    setRefundMethod('BANK_TRANSFER')
+    setRefundFile(null)
+    setRefundConfirmed(false)
+    refundUpload.current = null
     setActiveTab(initialTab)
     setReviewFees({
       damageFee: item.damageFee || 0,
@@ -492,7 +502,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const handleSetupExitDecision = async () => {
     if (!selectedItem || !selectedItem.setupExitReviewRequired) return
     if (selectedItem.moveInCompletedAt && !selectedItem.inspectedAt) {
-      setFeedback('Hàng đã được đưa vào kho; Staff phải kiểm kê/trả kho trước khi Business quyết định số tiền hoàn.')
+      setFeedback('Hàng đã được đưa vào kho, Staff phải kiểm kê/trả kho trước khi Business quyết định số tiền hoàn.')
       return
     }
     if (!setupDecisionNote.trim()) {
@@ -713,7 +723,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     if (!selectedItem) return
     if (useApi) { setFeedback('Xem xét khiếu nại thuộc Manager theo quyền hiện tại.'); return }
     if (isBusiness) {
-      setFeedback('Business không thẩm định khiếu nại; thao tác này thuộc Manager.')
+      setFeedback('Business không thẩm định khiếu nại, thao tác này thuộc Manager.')
       return
     }
     if (!resolutionNote.trim()) {
@@ -792,33 +802,46 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // 4. Thao tác: Thực hiện giải ngân hoàn tiền cọc (Complete Refund)
   const handleCompleteRefund = async () => {
-    if (!selectedItem) return
+    if (!selectedItem || refundLock.current) return
     if (isBusiness) {
-      setFeedback('Business chỉ phê duyệt/giám sát; Staff mới được ghi nhận thu hoặc hoàn tiền kèm biên lai thực tế.')
+      setFeedback('Business chỉ phê duyệt/giám sát, Staff mới được ghi nhận thu hoặc hoàn tiền kèm biên lai thực tế.')
       return
     }
     if (useApi && !refundReference.trim()) {
       setFeedback('Vui lòng nhập mã giao dịch hoàn tiền thực tế trước khi hoàn tất hồ sơ.')
       return
     }
+    if (useApi && (!refundFile || !refundConfirmed || selectedItem.status !== 'refund_pending'
+      || !Number.isFinite(selectedItem.netRefundAmount) || Number(selectedItem.netRefundAmount) <= 0)) {
+      setFeedback('Kiểm tra số tiền được hoàn, tải biên lai và xác nhận đã thực hoàn trước khi ghi nhận.')
+      return
+    }
+    refundLock.current = true
     setSubmitting(true)
     setFeedback('')
 
     try {
       if (useApi) {
-        await completeRefund(selectedItem.id, {
+        let receiptFileId = refundUpload.current?.file === refundFile ? refundUpload.current.id : undefined
+        if (!receiptFileId) {
+          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!)
+          receiptFileId = asset.id
+          refundUpload.current = { file: refundFile!, id: asset.id }
+        }
+        const proof = {
+          amount: selectedItem.netRefundAmount!,
           transactionReference: refundReference.trim(),
+          paymentMethod: refundMethod,
+          receiptFileId,
+          confirmed: refundConfirmed,
+        }
+        validateReturnSettlementReceipt(proof)
+        await completeRefund(selectedItem.id, {
+          ...proof,
           notes: refundNotes.trim() || 'Hoàn tiền cọc quyết toán',
         })
         await loadApiData()
         setFeedback('Đã ghi nhận chứng từ hoàn tiền và hoàn tất hồ sơ theo kết quả backend.')
-        setActiveTab('overview')
-        return
-      }
-
-      if (useApi) {
-        setSelectedItem((prev) => prev ? { ...prev, status: 'completed', settlementPaymentId: refundReference.trim(), completedAt: new Date().toLocaleString('vi-VN') } : null)
-        setFeedback('Đã giải ngân tiền hoàn cọc thành công! Hồ sơ thanh lý đã hoàn tất và gian kho đã được giải phóng.')
         setActiveTab('overview')
         return
       }
@@ -860,7 +883,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     if (!selectedItem) return
     if (useApi) { setFeedback('Thu khoản còn thiếu thuộc Staff tại cơ sở.'); return }
     if (isBusiness) {
-      setFeedback('Business không ghi nhận phụ phí; thao tác này thuộc Customer/Staff theo contract.')
+      setFeedback('Business không ghi nhận phụ phí, thao tác này thuộc Customer/Staff theo contract.')
       return
     }
     setSubmitting(true)
@@ -912,7 +935,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // 6. Thao tác: Tạo yêu cầu trả kho mới (+ Tạo hồ sơ)
   const handleCreateNewReturn = async () => {
-    if (useApi) { setFeedback('Khách hàng tạo yêu cầu từ hồ sơ thuê; BO không tạo hồ sơ giả thay cho API.'); return }
+    if (useApi) { setFeedback('Khách hàng tạo yêu cầu từ hồ sơ thuê, BO không tạo hồ sơ giả thay cho API.'); return }
     if (!newScheduledDate) {
       alert('Vui lòng chọn ngày hẹn trả kho.')
       return
@@ -1473,13 +1496,12 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     <div>
                       <p className="font-bold text-amber-950 text-sm">Quyết định trả/hủy trong thời gian setup</p>
                       <p className="text-xs text-amber-900 mt-1">
-                        Setup chưa phải kỳ thuê đã trả. Business quyết định số tiền hoàn; Staff chỉ thực hiện sau khi có chứng từ thực tế.
+                        Setup chưa phải kỳ thuê đã trả. Business quyết định số tiền hoàn, Staff chỉ thực hiện sau khi có chứng từ thực tế.
                         {selectedItem.moveInCompletedAt && !selectedItem.inspectedAt && ' Hàng đã vào kho nên cần Staff kiểm tra trả kho trước.'}
                       </p>
                       {selectedItem.earlyTerminationPolicy && <p className="mt-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-950">
                         Theo snapshot lúc đặt: phí chấm dứt sớm <b>{formatVnd(selectedItem.earlyTerminationPolicy.earlyTerminationFee)}</b>
-                        {selectedItem.earlyTerminationPolicy.type === 'GOODS_MOVED_IN' && <> + phí dùng hàng {selectedItem.earlyTerminationPolicy.billableSetupDays} ngày ({formatVnd(selectedItem.earlyTerminationPolicy.usedGoodsCharge)})</>};
-                        tiền thuê dự kiến hoàn <b>{formatVnd(selectedItem.earlyTerminationPolicy.rentalRefundAmount)}</b>. Cọc đảm bảo kho vẫn quyết toán riêng.
+                        {selectedItem.earlyTerminationPolicy.type === 'GOODS_MOVED_IN' && <> + phí dùng hàng {selectedItem.earlyTerminationPolicy.billableSetupDays} ngày ({formatVnd(selectedItem.earlyTerminationPolicy.usedGoodsCharge)})</>}, tiền thuê dự kiến hoàn <b>{formatVnd(selectedItem.earlyTerminationPolicy.rentalRefundAmount)}</b>. Cọc đảm bảo kho vẫn quyết toán riêng.
                       </p>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1570,7 +1592,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
                     <p className="font-bold">Tính lại ưu đãi do trả kho sau khi ACTIVE</p>
                     <p className="mt-1">
-                      Đã đủ {selectedItem.activeReturnPolicy.completedRentalMonths} tháng; áp dụng tier {selectedItem.activeReturnPolicy.pricingTierMonths ?? 'niêm yết'}.
+                      Đã đủ {selectedItem.activeReturnPolicy.completedRentalMonths} tháng, áp dụng tier {selectedItem.activeReturnPolicy.pricingTierMonths ?? 'niêm yết'}.
                       Phí chấm dứt sớm: <b>{formatVnd(selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
                       Phí sử dụng/notice: <b>{formatVnd(selectedItem.activeReturnPolicy.totalRentalCharge - selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
                       Hoàn tiền thuê dự kiến: <b>{formatVnd(selectedItem.activeReturnPolicy.rentalRefundAmount)}</b>.

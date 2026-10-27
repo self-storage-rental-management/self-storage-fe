@@ -83,7 +83,7 @@ export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: 
       </dl>
       <p className="text-xs leading-relaxed text-stone-600">{r.kind === 'PAYMENT_DUE'
         ? 'Đây là khoản thanh toán đã đến hạn còn nợ, không phải trạng thái hết thời hạn thuê hoặc kết quả của một giao dịch.'
-        : 'Đây là quá hạn thời hạn sử dụng kho. Thanh toán thành công chưa tự động hoàn tất gia hạn; hồ sơ cần hoàn tất ký theo quy định.'}</p>
+        : 'Đây là quá hạn thời hạn sử dụng kho. Thanh toán thành công chưa tự động hoàn tất gia hạn, hồ sơ cần hoàn tất ký theo quy định.'}</p>
       <details className="border-t border-stone-100 pt-3 text-xs text-stone-500">
         <summary className="w-fit cursor-pointer py-1 hover:text-stone-800">Mã tham chiếu</summary>
         <dl className="mt-2 grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
