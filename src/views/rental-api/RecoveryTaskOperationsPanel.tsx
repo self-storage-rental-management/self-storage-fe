@@ -142,7 +142,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     {action && !(needsReconciliation && action === 'settlement-receipts') && <form onSubmit={e => { e.preventDefault(); submit(e.currentTarget) }} className="space-y-4 rounded-lg border border-stone-200 p-4">
       <h3 className="font-semibold">{actionLabels[action]}</h3>
       {!canProcess && <p className="text-sm">Cần quyền xử lý trả kho và quyền thao tác tại cơ sở để xử lý nhiệm vụ.</p>}
-      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền; Staff không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
+      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền, Staff không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
       <fieldset disabled={frozen || !allowed || command.conflict} className="space-y-4 disabled:opacity-70">
         {action === 'inspection' && <>
           <p className="text-sm text-stone-600">Phí quá hạn và công nợ được hệ thống tính khi lưu kiểm kê. Số tiền sẽ hiển thị trong quyết toán để khách hàng xác nhận.</p>

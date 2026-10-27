@@ -110,7 +110,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
         ? "Hồ sơ thuê đang có yêu cầu trả kho hoặc đang tất toán, không thể gia hạn."
         : 'Hồ sơ thuê không còn hiệu lực để gia hạn.'
     }
-    if (isManagerRentalOverdue(rental)) return "Hồ sơ thuê đang có khoản quá hạn; hệ thống chưa thể mở thanh toán gia hạn."
+    if (isManagerRentalOverdue(rental)) return "Hồ sơ thuê đang có khoản quá hạn, hệ thống chưa thể mở thanh toán gia hạn."
     if (renewal.oldEndDate !== rental.endDate) return "Thời hạn hồ sơ thuê đã thay đổi, khách hàng cần cập nhật lại yêu cầu."
     if (managerDateValue(renewal.newEndDate) <= managerDateValue(renewal.oldEndDate)) return 'Ngày kết thúc mới không hợp lệ.'
     const conflicted = unitHasAllocationConflict(renewal.unitId, renewal.oldEndDate, renewal.newEndDate, renewal.id, reservations, rentals.filter(item => item.id !== rental.id))
@@ -182,7 +182,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
     <SectionHeader eyebrow="Vận hành thuê kho" title="Hồ sơ thuê & Gia hạn" subtitle="Theo dõi hồ sơ thuê, thời hạn, thanh toán và xử lý yêu cầu gia hạn tại cơ sở." />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><StatCard title={'Đang setup/thuê'} value={facilityRentals.filter(rental => ['setup', 'active'].includes(rental.status)).length} icon={Icon.check} /><StatCard title={'Tổng hồ sơ'} value={facilityRentals.length} icon={Icon.policy} /><StatCard title={'Sắp hết hạn 30 ngày'} value={facilityRentals.filter(rental => { const days = (managerDateValue(rental.endDate) - Date.now()) / 86_400_000; return rental.status === 'active' && days >= 0 && days <= 30 }).length} icon={Icon.clock} /><StatCard title={'Yêu cầu gia hạn cần theo dõi'} value={allPendingRenewals.length} icon={Icon.refresh} /></div>
 
-    <ManagerActionNotice tone={allPendingRenewals.length ? 'warning' : 'info'}>{allPendingRenewals.length ? `${allPendingRenewals.length} yêu cầu gia hạn đang được theo dõi; hệ thống tự kiểm tra điều kiện thanh toán.` : "Chưa có yêu cầu gia hạn cần theo dõi."}</ManagerActionNotice>
+    <ManagerActionNotice tone={allPendingRenewals.length ? 'warning' : 'info'}>{allPendingRenewals.length ? `${allPendingRenewals.length} yêu cầu gia hạn đang được theo dõi, hệ thống tự kiểm tra điều kiện thanh toán.` : "Chưa có yêu cầu gia hạn cần theo dõi."}</ManagerActionNotice>
 
     {allPendingRenewals.length > 0 && <Card className="border-stone-200"><div className="border-b border-stone-200 p-4"><h3 className="font-bold text-stone-900">Theo dõi yêu cầu gia hạn</h3><p className="text-xs text-stone-500">Manager xem trạng thái và thông tin hồ sơ. Việc mở thanh toán do hệ thống kiểm tra, không chờ Manager duyệt.</p><div className="mt-3"><Input value={renewalQuery} onChange={event => setRenewalQuery(event.target.value)} placeholder="Tìm mã gia hạn, hồ sơ thuê, khách hàng hoặc gian kho…" /></div></div><div className="space-y-3 p-4">{renewalPagination.items.map(renewal => {
       const blockedReason = renewalPaymentReadinessBlock(renewal)
@@ -236,9 +236,9 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
           : latestRenewal.status === 'pending' && renewalBlock
             ? renewalBlock
             : latestRenewal.status === 'pending'
-              ? "Yêu cầu đang được theo dõi; hệ thống tự kiểm tra điều kiện mở thanh toán."
+              ? "Yêu cầu đang được theo dõi, hệ thống tự kiểm tra điều kiện mở thanh toán."
               : ['approved', 'deposit_paid', 'full_rent_paid', 'payment_processing', 'appointment_scheduled'].includes(latestRenewal.status)
-                ? "Hệ thống đã mở bước thanh toán; thời hạn chỉ được cập nhật sau khi khách hàng hoàn tất các nghĩa vụ của luồng gia hạn."
+                ? "Hệ thống đã mở bước thanh toán, thời hạn chỉ được cập nhật sau khi khách hàng hoàn tất các nghĩa vụ của luồng gia hạn."
                 : latestRenewal.status === 'completed'
                   ? 'Gia hạn đã hoàn tất và thời hạn thuê đã được cập nhật.'
                   : `Yêu cầu đang ở trạng thái ${managerStatusLabel(latestRenewal.status, 'vi')}, quản lý cơ sở không có thao tác tiếp theo ở trạng thái này.`

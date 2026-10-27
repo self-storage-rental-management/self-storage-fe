@@ -492,7 +492,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const handleSetupExitDecision = async () => {
     if (!selectedItem || !selectedItem.setupExitReviewRequired) return
     if (selectedItem.moveInCompletedAt && !selectedItem.inspectedAt) {
-      setFeedback('Hàng đã được đưa vào kho; Staff phải kiểm kê/trả kho trước khi Business quyết định số tiền hoàn.')
+      setFeedback('Hàng đã được đưa vào kho, Staff phải kiểm kê/trả kho trước khi Business quyết định số tiền hoàn.')
       return
     }
     if (!setupDecisionNote.trim()) {
@@ -713,7 +713,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     if (!selectedItem) return
     if (useApi) { setFeedback('Xem xét khiếu nại thuộc Manager theo quyền hiện tại.'); return }
     if (isBusiness) {
-      setFeedback('Business không thẩm định khiếu nại; thao tác này thuộc Manager.')
+      setFeedback('Business không thẩm định khiếu nại, thao tác này thuộc Manager.')
       return
     }
     if (!resolutionNote.trim()) {
@@ -794,7 +794,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const handleCompleteRefund = async () => {
     if (!selectedItem) return
     if (isBusiness) {
-      setFeedback('Business chỉ phê duyệt/giám sát; Staff mới được ghi nhận thu hoặc hoàn tiền kèm biên lai thực tế.')
+      setFeedback('Business chỉ phê duyệt/giám sát, Staff mới được ghi nhận thu hoặc hoàn tiền kèm biên lai thực tế.')
       return
     }
     if (useApi && !refundReference.trim()) {
@@ -860,7 +860,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     if (!selectedItem) return
     if (useApi) { setFeedback('Thu khoản còn thiếu thuộc Staff tại cơ sở.'); return }
     if (isBusiness) {
-      setFeedback('Business không ghi nhận phụ phí; thao tác này thuộc Customer/Staff theo contract.')
+      setFeedback('Business không ghi nhận phụ phí, thao tác này thuộc Customer/Staff theo contract.')
       return
     }
     setSubmitting(true)
@@ -912,7 +912,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // 6. Thao tác: Tạo yêu cầu trả kho mới (+ Tạo hồ sơ)
   const handleCreateNewReturn = async () => {
-    if (useApi) { setFeedback('Khách hàng tạo yêu cầu từ hồ sơ thuê; BO không tạo hồ sơ giả thay cho API.'); return }
+    if (useApi) { setFeedback('Khách hàng tạo yêu cầu từ hồ sơ thuê, BO không tạo hồ sơ giả thay cho API.'); return }
     if (!newScheduledDate) {
       alert('Vui lòng chọn ngày hẹn trả kho.')
       return
@@ -1473,13 +1473,12 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     <div>
                       <p className="font-bold text-amber-950 text-sm">Quyết định trả/hủy trong thời gian setup</p>
                       <p className="text-xs text-amber-900 mt-1">
-                        Setup chưa phải kỳ thuê đã trả. Business quyết định số tiền hoàn; Staff chỉ thực hiện sau khi có chứng từ thực tế.
+                        Setup chưa phải kỳ thuê đã trả. Business quyết định số tiền hoàn, Staff chỉ thực hiện sau khi có chứng từ thực tế.
                         {selectedItem.moveInCompletedAt && !selectedItem.inspectedAt && ' Hàng đã vào kho nên cần Staff kiểm tra trả kho trước.'}
                       </p>
                       {selectedItem.earlyTerminationPolicy && <p className="mt-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-950">
                         Theo snapshot lúc đặt: phí chấm dứt sớm <b>{formatVnd(selectedItem.earlyTerminationPolicy.earlyTerminationFee)}</b>
-                        {selectedItem.earlyTerminationPolicy.type === 'GOODS_MOVED_IN' && <> + phí dùng hàng {selectedItem.earlyTerminationPolicy.billableSetupDays} ngày ({formatVnd(selectedItem.earlyTerminationPolicy.usedGoodsCharge)})</>};
-                        tiền thuê dự kiến hoàn <b>{formatVnd(selectedItem.earlyTerminationPolicy.rentalRefundAmount)}</b>. Cọc đảm bảo kho vẫn quyết toán riêng.
+                        {selectedItem.earlyTerminationPolicy.type === 'GOODS_MOVED_IN' && <> + phí dùng hàng {selectedItem.earlyTerminationPolicy.billableSetupDays} ngày ({formatVnd(selectedItem.earlyTerminationPolicy.usedGoodsCharge)})</>}, tiền thuê dự kiến hoàn <b>{formatVnd(selectedItem.earlyTerminationPolicy.rentalRefundAmount)}</b>. Cọc đảm bảo kho vẫn quyết toán riêng.
                       </p>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1570,7 +1569,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
                     <p className="font-bold">Tính lại ưu đãi do trả kho sau khi ACTIVE</p>
                     <p className="mt-1">
-                      Đã đủ {selectedItem.activeReturnPolicy.completedRentalMonths} tháng; áp dụng tier {selectedItem.activeReturnPolicy.pricingTierMonths ?? 'niêm yết'}.
+                      Đã đủ {selectedItem.activeReturnPolicy.completedRentalMonths} tháng, áp dụng tier {selectedItem.activeReturnPolicy.pricingTierMonths ?? 'niêm yết'}.
                       Phí chấm dứt sớm: <b>{formatVnd(selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
                       Phí sử dụng/notice: <b>{formatVnd(selectedItem.activeReturnPolicy.totalRentalCharge - selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
                       Hoàn tiền thuê dự kiến: <b>{formatVnd(selectedItem.activeReturnPolicy.rentalRefundAmount)}</b>.

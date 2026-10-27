@@ -167,7 +167,7 @@ export default function RenewalDetail({
                 <div><dt className="text-stone-500">{extensionPeriodLabel}</dt><dd className="mt-1 font-semibold text-stone-900">{rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</dd></div>
                 {terms.signingWindowDays != null && <div className="sm:col-span-2"><dt className="text-stone-500">Thời gian đến ký</dt><dd className="mt-1 text-stone-900">{terms.signingWindowDays} ngày từ khi thanh toán khoản trả trước thành công, trong giới hạn xử lý quá hạn.</dd></div>}
               </dl>
-              <p className="mt-2 text-xs leading-5 text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký; phí quá hạn tính riêng cho các ngày trước đó.</p>
+              <p className="mt-2 text-xs leading-5 text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký, phí quá hạn tính riêng cho các ngày trước đó.</p>
             </section>
             <section aria-label="Chi phí gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Chi phí gia hạn</h4>

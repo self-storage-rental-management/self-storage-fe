@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { useRef, useState, type FormEvent } from 'react'
 import { downloadPaymentReceipt } from '../../utils/downloadPaymentReceipt'
 import { getRenewalReceipt } from '../../services/renewalReceiptApi'
@@ -164,7 +165,7 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
       setRefundReason('')
       read.refresh()
     } catch (error) {
-      setRefundFeedback(error instanceof ApiClientError ? error.message : error instanceof Error ? error.message : 'Không thể gửi yêu cầu hoàn tiền.')
+      setRefundFeedback(userFacingError(error))
     } finally {
       setRefundBusy(false)
     }

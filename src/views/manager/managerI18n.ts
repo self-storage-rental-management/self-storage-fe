@@ -60,7 +60,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   APPROVED: labels('Approved', 'Đã duyệt'),
   REJECTED: labels('Rejected', 'Đã từ chối'),
   approved: labels('Approved', 'Đã duyệt'),
-  accepted: labels('Accepted', 'Đã xác nhận; chưa mở thanh toán'),
+  accepted: labels('Accepted', 'Đã xác nhận, chưa mở thanh toán'),
   rejected: labels('Rejected', 'Đã từ chối'),
   deposit_paid: labels('Deposit paid', 'Đã thanh toán cọc'),
   full_rent_paid: labels('Full rent paid', 'Đã thanh toán toàn kỳ gia hạn'),

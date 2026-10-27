@@ -1,3 +1,5 @@
+import { useBackendNotifications } from '../../hooks/useBackendNotifications'
+import { userFacingError } from '../../presentation/userFacingError'
 import { useState, useEffect, useRef, useMemo, type ChangeEvent } from 'react'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar } from '../../components/ui'
@@ -20,6 +22,8 @@ import { resolveCustomerInitialPage } from './customerRentalApiIntegration'
 import CustomerReservationOtpModal from './CustomerReservationOtpModal'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
+import { subscribeGoodsCatalog } from '../../services/goodsCatalogEvents'
+import { goodsCatalogIssue, resolveDraftMaterial } from '../../domain/goodsCatalog'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { reservationProgress } from './reservationPresentation'
 import { requestReturn as requestReturnApi } from '../../services/returnApi'
@@ -130,6 +134,7 @@ type GoodsDeclarationItem = {
   category: string
   materialType: '' | 'NORMAL' | 'FRAGILE'
   materialName: string
+  catalogMaterialId?: string
   customGoodsName: string
   description: string
   customMaterial: string
@@ -146,6 +151,7 @@ type PackageSample = ReservationPackageSample & { id: string; sourceLabel?: stri
 type CapacityStatus = 'invalid' | 'fits' | 'not-fit'
 
 type GoodsCategoryCode = string
+const OPTIONAL_MATERIAL_CATEGORY_CODES = new Set(['ELECTRONICS', 'CAMERA_EQUIPMENT', 'MUSICAL_INSTRUMENTS'])
 const createGoodsDeclarationItem = (id = `goods-${Date.now()}`): GoodsDeclarationItem => ({ id, category: '', materialType: '', materialName: '', customGoodsName: '', description: '', customMaterial: '', quantity: '', lengthCm: '', widthCm: '', heightCm: '', weightKg: '', fragile: '', customerNote: '', images: [] })
 
 const rentalDiscountRate = (months: number, customPackages?: RentalPackage[]) => {
@@ -417,6 +423,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [backendFacilities, setBackendFacilities] = useState<CustomerFacility[]>([])
   const [backendUnitTypes, setBackendUnitTypes] = useState<CustomerUnitType[]>([])
   const [goodsCatalog, setGoodsCatalog] = useState<GoodsCatalog | null>(null)
+  const [catalogUpdateNotice, setCatalogUpdateNotice] = useState('')
+  const previousGoodsCatalog = useRef<GoodsCatalog | null>(null)
   const GOODS_CATEGORY_OPTIONS = useMemo(() => goodsCatalog?.categories.map(category => [category.code, category.label] as const) ?? [], [goodsCatalog])
   const MATERIALS_BY_CATEGORY = useMemo(() => Object.fromEntries((goodsCatalog?.categories ?? []).map(category => [category.code, {
     normal: category.materials.filter(material => !material.fragile).map(material => material.label),
@@ -432,6 +440,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return { startDate, endDate: addMonthsForPreview(startDate, 3) }
   })
   const [serverQuote, setServerQuote] = useState<ReservationQuote | null>(null)
+  const quotedGoodsItems = useRef<GoodsItemInput[] | null>(null)
   const [acceptedSetupQuoteId, setAcceptedSetupQuoteId] = useState<string | null>(null)
   const [serverCompatibility, setServerCompatibility] = useState<CompatibilityCheckResult | null>(null)
   const [serverRecommendation, setServerRecommendation] = useState<ReservationRecommendation | null>(null)
@@ -442,7 +451,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [backendRentalPackages, setBackendRentalPackages] = useState<ReservationRentalPackage[]>([])
   const [rentalPackagesLoading, setRentalPackagesLoading] = useState(false)
   const [backendReservations, setBackendReservations] = useState<CustomerReservation[]>([])
-  const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+  const notificationFeed = useBackendNotifications(user.id, isApiAuthenticated())
+  const { items: backendNotifications, setItems: setBackendNotifications } = notificationFeed
   const [reservationSubmitting, setReservationSubmitting] = useState(false)
   const [backendOtpReservation, setBackendOtpReservation] = useState<CustomerReservation | null>(null)
   const [backendOtpCode, setBackendOtpCode] = useState('')
@@ -648,6 +658,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [selectedUnit, setSelectedUnit] = useState<StorageUnit | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [bookOpen, setBookOpen] = useState(false)
+  useEffect(() => {
+    if (previousGoodsCatalog.current && goodsCatalog && bookOpen
+      && JSON.stringify(previousGoodsCatalog.current) !== JSON.stringify(goodsCatalog)) {
+      setCatalogUpdateNotice('Danh mục hàng hóa vừa được cập nhật. Vui lòng kiểm tra lại loại hàng và vật liệu đang chọn. Thông tin đã chốt trong báo giá còn hạn và đơn cũ được giữ nguyên.')
+    }
+    previousGoodsCatalog.current = goodsCatalog
+    if (!bookOpen) setCatalogUpdateNotice('')
+  }, [goodsCatalog, bookOpen])
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1)
   const [bookingReview, setBookingReview] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
@@ -655,25 +673,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [activeHoldForEmail, setActiveHoldForEmail] = useState<StorageHold | null>(null)
   const [inputToken, setInputToken] = useState('')
 
-  useEffect(() => {
-    if (!isApiAuthenticated()) return
-    let cancelled = false
-    const load = async () => {
-      try {
-        const result = await listNotifications(0, 50)
-        if (!cancelled) setBackendNotifications(result.data)
-      } catch { /* The reservation screens remain usable if notifications are temporarily unavailable. */ }
-    }
-    void load()
-    const refreshAfterPayment = () => void load()
-    window.addEventListener('storagehub:notifications-refresh', refreshAfterPayment)
-    const timer = window.setInterval(() => void load(), 10_000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-      window.removeEventListener('storagehub:notifications-refresh', refreshAfterPayment)
-    }
-  }, [])
+
 
   useEffect(() => {
     let cancelled = false
@@ -684,7 +684,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         if (!cancelled) setBackendReservations(result.data)
       } catch (error) {
         if (!cancelled && initialLoad) {
-          showToast(error instanceof Error ? error.message : 'Không thể tải danh sách đặt kho.')
+          showToast(userFacingError(error, 'Không thể tải danh sách đặt kho.'))
         }
       } finally {
         initialLoad = false
@@ -811,7 +811,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       facilityId: unitType.facilityId, unitTypeId: unitType.id, ...availabilityPeriod,
     }))).then(results => {
       if (!cancelled) setAvailabilityByUnitType(Object.fromEntries(results.map(result => [result.unitTypeId, result.availableCount])))
-    }).catch(error => { if (!cancelled) showToast(error instanceof Error ? error.message : 'Không thể cập nhật số kho trống.') })
+    }).catch(error => { if (!cancelled) showToast(userFacingError(error, 'Không thể cập nhật số kho trống.')) })
     return () => { cancelled = true }
   }, [backendUnitTypes, availabilityPeriod, availabilityRevision])
   const resetBookingForm = () => {
@@ -858,8 +858,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const cargoLengthNumber = Number(cargoLength)
   const cargoWidthNumber = Number(cargoWidth)
   const cargoHeightNumber = Number(cargoHeight)
-  const goodsType = goodsItems.map(item => GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]).filter(Boolean).join(', ')
-  const goodsMaterial = goodsItems.map(item => catalogCategoryFor(item.category)?.custom || item.category === 'OTHER' ? item.customMaterial : item.materialName).filter(Boolean).join(', ')
+  const quotedDeclaration = bookingReview && serverQuote ? quotedGoodsItems.current : null
+  const goodsType = quotedDeclaration
+    ? quotedDeclaration.map(item => item.customGoodsName || item.categoryName).filter(Boolean).join(', ')
+    : goodsItems.map(item => GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]).filter(Boolean).join(', ')
+  const goodsMaterial = quotedDeclaration
+    ? quotedDeclaration.map(item => item.customMaterial || item.materialName).filter(Boolean).join(', ')
+    : goodsItems.map(item => catalogCategoryFor(item.category)?.custom || item.category === 'OTHER' ? item.customMaterial : item.materialName).filter(Boolean).join(', ')
   const hasOtherGoods = goodsItems.some(item => catalogCategoryFor(item.category)?.custom || item.category === 'OTHER')
   const checkInWindow = useMemo(
     () => plannedCheckInWindow(bookingStartedAt, hasOtherGoods),
@@ -875,7 +880,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const apiGoodsItems = useMemo<GoodsItemInput[]>(() => goodsItems.map(item => {
     const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
     const selectedGoodsCategory = catalogCategoryFor(item.category)
-    const selectedGoodsMaterial = selectedGoodsCategory?.materials.find(material => material.label === item.materialName)
+    const selectedGoodsMaterial = resolveDraftMaterial(item, selectedGoodsCategory)
     return {
       catalogCategoryId: selectedGoodsCategory?.id,
       catalogMaterialId: selectedGoodsMaterial?.id || null,
@@ -893,7 +898,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       widthCm: Number(item.widthCm) || cargoWidthNumber,
       heightCm: Number(item.heightCm) || cargoHeightNumber,
       weightPerItemKg: Number(item.weightKg) || Math.max(0.01, goodsWeightNumber / quantity),
-      fragile: item.fragile ? item.fragile === 'yes' : item.materialType === 'FRAGILE',
+      fragile: item.fragile === 'yes',
     }
   }), [goodsItems, goodsCatalog, packageCountNumber, cargoLengthNumber, cargoWidthNumber, cargoHeightNumber, goodsWeightNumber])
 
@@ -960,7 +965,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         if (cancelled) return
         setBackendRentalPackages([])
         setSelectedPackageId('')
-        setReservationSubmitError(error instanceof Error ? error.message : 'Không thể tải gói thuê từ hệ thống.')
+        setReservationSubmitError(userFacingError(error, 'Không thể tải gói thuê từ hệ thống.'))
       })
       .finally(() => { if (!cancelled) setRentalPackagesLoading(false) })
     return () => { cancelled = true }
@@ -1005,37 +1010,46 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => {
     let cancelled = false
-    let initialLoad = true
+    let catalogRequest = 0
     const loadCatalog = async () => {
-      if (initialLoad) {
-        setCatalogLoading(true)
-        setCatalogError(null)
-      }
+      const request = ++catalogRequest
       try {
-        const [facilityPage, loadedGoodsCatalog] = await Promise.all([listCustomerFacilities(), getGoodsCatalog()])
-        const activeFacilities = facilityPage.data
-        const unitTypePages = await Promise.all(
-          activeFacilities.map(facility => listCustomerUnitTypes(facility.id)),
-        )
-        if (cancelled) return
-        setBackendFacilities(activeFacilities)
-        setBackendUnitTypes(unitTypePages.flatMap(result => result.data))
+        const loadedGoodsCatalog = await getGoodsCatalog()
+        if (cancelled || request !== catalogRequest) return
         setGoodsCatalog(loadedGoodsCatalog)
+        setCatalogError(null)
       } catch (error) {
+        if (!cancelled && request === catalogRequest) setCatalogError('Chưa cập nhật được danh mục hàng hóa. Vui lòng kiểm tra kết nối và thử lại.')
+      }
+    }
+    const loadWarehouses = async () => {
+      try {
+        const facilityPage = await listCustomerFacilities()
+        const unitTypePages = await Promise.all(facilityPage.data.map(facility => listCustomerUnitTypes(facility.id)))
         if (cancelled) return
-        const message = error instanceof Error ? error.message : 'Không thể tải danh mục kho. Vui lòng thử lại.'
-        if (initialLoad) {
-          setCatalogError(message)
-          showToast(message)
-        }
+        setBackendFacilities(facilityPage.data)
+        setBackendUnitTypes(unitTypePages.flatMap(result => result.data))
       } finally {
-        if (!cancelled && initialLoad) setCatalogLoading(false)
-        initialLoad = false
+        if (!cancelled) setCatalogLoading(false)
       }
     }
     void loadCatalog()
-    const timer = window.setInterval(() => void loadCatalog(), 10_000)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    const refreshWarehouses = () => void loadWarehouses().catch(() => {
+      if (!cancelled) showToast('Chưa cập nhật được thông tin kho. Vui lòng kiểm tra kết nối và thử lại.')
+    })
+    refreshWarehouses()
+    const unsubscribe = subscribeGoodsCatalog(() => void loadCatalog())
+    const timer = window.setInterval(() => { void loadCatalog(); refreshWarehouses() }, 30_000)
+    const focus = () => { void loadCatalog(); refreshWarehouses() }
+    window.addEventListener('focus', focus)
+    window.addEventListener('online', focus)
+    return () => {
+      cancelled = true
+      unsubscribe()
+      window.clearInterval(timer)
+      window.removeEventListener('focus', focus)
+      window.removeEventListener('online', focus)
+    }
   }, [])
 
   const badgeFor = (status: string) => {
@@ -1449,6 +1463,23 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return category.materials.filter(material =>
       !selectedBackendUnitType?.acceptedGoodsMaterialIds?.length || selectedBackendUnitType.acceptedGoodsMaterialIds.includes(material.id))
   }
+  const isMaterialOptional = (categoryCode: string) => OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode)
+  const catalogIssues = goodsItems.map(item => goodsCatalogIssue(item, goodsCatalog,
+    selectedBackendUnitType?.acceptedGoodsCategoryIds, selectedBackendUnitType?.acceptedGoodsMaterialIds))
+  const hasValidQuotedGoods = bookingReview && !!serverQuote && Date.parse(serverQuote.expiresAt) > Date.now() && !!quotedGoodsItems.current
+  useEffect(() => {
+    if (!goodsCatalog || hasValidQuotedGoods) return
+    setGoodsItems(current => {
+      let changed = false
+      const next = current.map(item => {
+        const material = resolveDraftMaterial(item, goodsCatalog.categories.find(category => category.code === item.category))
+        if (!material || (material.id === item.catalogMaterialId && material.label === item.materialName)) return item
+        changed = true
+        return { ...item, catalogMaterialId: material.id, materialName: material.label }
+      })
+      return changed ? next : current
+    })
+  }, [goodsCatalog, hasValidQuotedGoods])
   const selectedRackCount = selectedBackendUnitType?.rackCount ?? selectedCatalogUnit?.rackCount ?? 0
   const selectedRackDimensions: [number, number, number] = selectedBackendUnitType
     ? [selectedBackendUnitType.rackLengthM, selectedBackendUnitType.rackWidthM, selectedBackendUnitType.rackHeightM]
@@ -1456,11 +1487,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const selectedUsableRackVolumeM3 = usableRackVolumeM3(selectedRackDimensions) * selectedRackCount
   const allPackageSamplesValid = capacitySamples.length > 0 && capacitySamples.every(isPackageSampleValid)
   const recommendationFormReady = allPackageSamplesValid
+    && !catalogIssues.some(Boolean)
     && Boolean(goodsCondition.trim())
     && goodsItems.every(item => {
       const category = catalogCategoryFor(item.category)
       return Boolean(item.category && item.description.trim()
-        && (category?.custom ? item.customGoodsName.trim() && item.customMaterial.trim() : item.materialName.trim()))
+        && (category?.custom
+          ? item.customGoodsName.trim()
+          : isMaterialOptional(item.category) || item.materialName.trim()))
     })
   useEffect(() => {
     if (!isApiAuthenticated() || !bookOpen || !selectedTarget || !recommendationFormReady || !recommendationInput) {
@@ -1482,9 +1516,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         .catch(error => {
           if (cancelled) return
           setServerRecommendation(null)
-          setRecommendationError(error instanceof Error && error.message.trim()
-            ? error.message
-            : 'Không thể kiểm tra kho phù hợp lúc này.')
+          setRecommendationError(userFacingError(error, 'Không thể kiểm tra kho phù hợp lúc này.'))
         })
         .finally(() => { if (!cancelled) setRecommendationLoading(false) })
     }, 350)
@@ -1644,7 +1676,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const notificationId = notification.id.slice('api-notification-'.length)
       void markNotificationRead(notificationId).then(updated => {
         setBackendNotifications(current => current.map(item => item.id === updated.id ? updated : item))
-      }).catch(() => undefined)
+      }).catch(reason => notificationFeed.reportFailure(reason))
     }
     if (notification.page === 'support') { openSupportWidget(notification.targetId); return }
     navigateTo(notification.page)
@@ -1713,7 +1745,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const selectedGoodsCategory = catalogCategoryFor(item.category)
       const isFreeformGoods = selectedGoodsCategory?.custom === true
       if (!item.category) errors[`goodsCategory-${item.id}`] = `Dòng hàng hóa ${index + 1}: Vui lòng chọn loại hàng hóa.`
-      if (item.category && !isFreeformGoods && !item.materialType) errors[`goodsMaterial-${item.id}`] = `Dòng hàng hóa ${index + 1}: Vui lòng chọn chất liệu chính.`
+      if (!hasValidQuotedGoods && catalogIssues[index]) errors[`goodsCategory-${item.id}`] = catalogIssues[index]
+      if (item.category && !isFreeformGoods && !isMaterialOptional(item.category) && !item.materialType) errors[`goodsMaterial-${item.id}`] = `Dòng hàng hóa ${index + 1}: Vui lòng chọn chất liệu chính.`
       if (!item.description.trim()) errors[`goodsDescription-${item.id}`] = 'Vui lòng nhập mô tả hàng hóa.'
       if (!Number.isInteger(Number(item.quantity)) || Number(item.quantity) <= 0) errors[`goodsQuantity-${item.id}`] = 'Số lượng phải là số nguyên lớn hơn 0.'
       if (parsePositiveNumber(item.lengthCm) === null) errors[`goodsLength-${item.id}`] = 'Chiều dài phải lớn hơn 0.'
@@ -1724,7 +1757,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (item.images.length > 10) errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
       if (isFreeformGoods) {
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
-        if (!item.customMaterial.trim()) errors[`customMaterial-${item.id}`] = 'Vui lòng nhập chất liệu chính.'
       }
     })
     if (!goodsCondition.trim()) errors.condition = 'Vui lòng mô tả tình trạng đóng gói.'
@@ -1822,7 +1854,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         dimWeightKg: dimensionalWeightKg(capacitySamples),
         material: primaryItem?.materialName || primaryItem?.customMaterial || '',
         condition: goodsCondition,
-        fragile: goodsItems.some(item => item.fragile === 'yes' || item.materialType === 'FRAGILE'),
+        fragile: goodsItems.some(item => item.fragile === 'yes'),
         notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | '),
         items: goodsItems.map(item => ({
           id: item.id,
@@ -1839,7 +1871,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             heightCm: Number(item.heightCm) || cargoHeightNumber,
           },
           weightKg: Number(item.weightKg) || goodsWeightNumber,
-          fragile: item.fragile === 'yes' || item.materialType === 'FRAGILE',
+          fragile: item.fragile === 'yes',
           customerNote: item.customerNote,
         })),
       }
@@ -1918,12 +1950,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             ? backendUnitTypes.find(item => item.id === recommendation.recommendedUnitTypeId)
             : undefined
           setValidationViolation({
-            reason: compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.',
+            reason: userFacingError(compatibility.issues.join(' '), 'Loại kho không phù hợp hoặc đã hết chỗ.'),
             suggestedUnitTypeId: suggestedType?.id,
             suggestedUnitTypeName: suggestedType?.name,
             suggestedVolumeM3: suggestedType?.volumeM3,
           })
-          showToast(compatibility.issues.join(' ') || 'Loại kho không phù hợp hoặc đã hết chỗ.')
+          showToast(userFacingError(compatibility.issues.join(' '), 'Loại kho không phù hợp hoặc đã hết chỗ.'))
           return
         }
         const packageCode = selectedBackendRentalPackage?.code
@@ -1936,6 +1968,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           voucherCode: bookingVoucherCode.trim() || undefined,
         })
         setServerQuote(quote)
+        quotedGoodsItems.current = structuredClone(apiGoodsItems)
         setTermsAccepted(false)
         setValidationViolation(null)
         setBookingReview(true)
@@ -1959,7 +1992,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         customerAddress: customerAddress.trim(),
         goodsCondition: goodsCondition.trim(),
         notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | ') || null,
-        goodsItems: apiGoodsItems,
+        goodsItems: quotedGoodsItems.current || apiGoodsItems,
         appointmentAt: bookingAppointmentTime
           ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`).toISOString()
           : undefined,
@@ -1974,7 +2007,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             (goodsItems[index]?.images ?? []).map(file => uploadReservationGoodsImage(savedItem.id, file)),
           ))
         } catch (error) {
-          goodsImageError = `Đơn đã được tạo nhưng chưa tải đủ ảnh hàng hóa: ${error instanceof Error ? error.message : 'Lỗi tải ảnh'}.`
+          goodsImageError = `Đơn đã được tạo nhưng chưa tải đủ ảnh hàng hóa: ${userFacingError(error, 'Lỗi tải ảnh')}.`
         }
       }
       // Creation does not send an email in the current BE contract. Issue the first OTP here.
@@ -1998,7 +2031,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           }
           setBackendOtpMessage(goodsImageError || null)
         } catch (error) {
-          setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${error instanceof Error ? error.message : 'Lỗi kết nối'}. Bạn có thể gửi lại.${goodsImageError ? ` ${goodsImageError}` : ''}`)
+          setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${userFacingError(error, 'Lỗi kết nối')}. Bạn có thể gửi lại.${goodsImageError ? ` ${goodsImageError}` : ''}`)
         } finally { setBackendOtpBusy(false) }
       }
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
@@ -2035,10 +2068,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           : error instanceof ApiClientError && error.status === 409
         ? backendMessage.includes('No storage unit is available')
           ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
-          : backendMessage
+          : userFacingError(error)
         : error instanceof ApiClientError && error.code === 'VALIDATION_ERROR'
           ? validationMessage || 'Thông tin đặt kho chưa hợp lệ. Vui lòng kiểm tra lại các trường đã nhập.'
-        : backendMessage || 'Không thể tạo đơn đặt kho.'
+        : userFacingError(error, 'Không thể tạo đơn đặt kho.')
       setReservationSubmitError(message)
       showToast(message)
     } finally {
@@ -2054,7 +2087,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         setAvailabilityRevision(value => value + 1)
         showToast(`Đã hủy ${reservation.reservationCode}.`)
       })
-      .catch(error => showToast(error instanceof Error ? error.message : 'Không thể hủy đơn đặt kho.'))
+      .catch(error => showToast(userFacingError(error, 'Không thể hủy đơn đặt kho.')))
   }
 
   const refreshBackendReservations = async () => {
@@ -2065,7 +2098,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => {
     if (!isApiAuthenticated() || !['browse-units', 'reservations', 'contracts'].includes(page)) return
-    const refresh = () => { void refreshBackendReservations().catch(error => showToast(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái đơn.')) }
+    const refresh = () => { void refreshBackendReservations().catch(error => showToast(userFacingError(error, 'Không thể cập nhật trạng thái đơn.'))) }
     refresh()
     const timer = window.setInterval(refresh, 30_000)
     return () => window.clearInterval(timer)
@@ -2089,7 +2122,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         ? 'Email đã xác minh. Hồ sơ đang chờ nhân viên duyệt.'
         : 'Email đã xác minh. Bạn có thể tiếp tục thanh toán.')
     } catch (error) {
-      setBackendOtpMessage(error instanceof Error ? error.message : 'Không thể xác minh OTP.')
+      setBackendOtpMessage(userFacingError(error, 'Không thể xác minh OTP.'))
     } finally {
       setBackendOtpBusy(false)
     }
@@ -2107,7 +2140,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
       setBackendOtpMessage(null)
     } catch (error) {
-      setBackendOtpMessage(error instanceof Error ? error.message : 'Không thể gửi lại OTP.')
+      setBackendOtpMessage(userFacingError(error, 'Không thể gửi lại OTP.'))
     } finally {
       setBackendOtpBusy(false)
     }
@@ -2123,6 +2156,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       roleLabel="Khách hàng"
       roleColor="bg-blue-100 text-blue-700"
       notifications={customerNotifications}
+      notificationError={notificationFeed.error}
+      notificationsLoading={notificationFeed.loading}
+      hasMoreNotifications={notificationFeed.hasMore}
+      onLoadMoreNotifications={notificationFeed.loadMore}
+      onRetryNotifications={notificationFeed.refresh}
       onNotificationClick={handleNotificationClick}
       canAccess={permission => isApiAuthenticated() ? canApiCustomerNavigate(user, permission) : hub.can(user, permission)}
     >
@@ -2507,7 +2545,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     }
                     setBackendOtpMessage(`Đã gửi OTP tới ${reservation.customerEmail || 'email tài khoản của bạn'}. Vui lòng kiểm tra cả hộp thư rác.`)
                   }).catch(error => {
-                    setBackendOtpMessage(error instanceof Error ? error.message : 'Không thể gửi OTP. Hãy kiểm tra kết nối tới backend và thử lại.')
+                    setBackendOtpMessage(userFacingError(error, 'Không thể gửi OTP. Hãy kiểm tra kết nối tới backend và thử lại.'))
                   })
                 }}
                 onCancel={() => cancelBackendReservation(reservation)}
@@ -2722,7 +2760,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {/* COMPLETED: Check-in complete, show rental */}
                       {hold.status === 'COMPLETED' && (
                         <div className="flex flex-wrap justify-end gap-2">
-                          <Button variant="primary" size="sm" onClick={() => { try { confirmUnitReceipt(hold.id, user); setPage('rental-records'); showToast('Đã xác nhận nhận kho. Đơn giữ kho đã được chuyển sang Hồ sơ thuê của tôi.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xác nhận bàn giao.') } }}>Xác nhận đã nhận kho</Button>
+                          <Button variant="primary" size="sm" onClick={() => { try { confirmUnitReceipt(hold.id, user); setPage('rental-records'); showToast('Đã xác nhận nhận kho. Đơn giữ kho đã được chuyển sang Hồ sơ thuê của tôi.') } catch (error) { showToast(userFacingError(error, 'Không thể xác nhận bàn giao.')) } }}>Xác nhận đã nhận kho</Button>
                         </div>
                       )}
 
@@ -2758,7 +2796,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         </div>
                       )}
                       {linkedRentalEnded && <div className="inactive-record-alert rounded-lg border border-red-300 bg-red-100 px-3 py-2 text-right text-xs text-red-800"><p className="font-bold">{'Hồ sơ giữ kho đã hết hiệu lực'}</p><p className="mt-0.5">{'Hợp đồng đã hoàn tất trả kho. Mã ra vào đã bị thu hồi.'}</p></div>}
-                      {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử.') } } })}> {'Xóa lịch sử'}</Button>}
+                      {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(userFacingError(error, 'Không thể xóa lịch sử.')) } } })}> {'Xóa lịch sử'}</Button>}
                     </div>
                   </div>
                 </Card>
@@ -2964,7 +3002,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <Badge variant="warning">{'Đã gửi yêu cầu trả kho'}</Badge>
                         )}
                         {rental.status === 'completed' && (
-                          <><span className="inactive-record-alert rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-xs font-bold text-red-800">{'Hồ sơ hết hiệu lực · Mã ra vào đã thu hồi'}</span><Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hồ sơ thuê', message: 'Xóa hồ sơ thuê này khỏi danh sách của bạn? Dữ liệu đối soát vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveRentalHistory(rental.id, user); showToast('Đã xóa lịch sử hồ sơ thuê khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hồ sơ thuê.') } } })}> {'Xóa lịch sử'}</Button></>
+                          <><span className="inactive-record-alert rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-xs font-bold text-red-800">{'Hồ sơ hết hiệu lực · Mã ra vào đã thu hồi'}</span><Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hồ sơ thuê', message: 'Xóa hồ sơ thuê này khỏi danh sách của bạn? Dữ liệu đối soát vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveRentalHistory(rental.id, user); showToast('Đã xóa lịch sử hồ sơ thuê khỏi danh sách.') } catch (error) { showToast(userFacingError(error, 'Không thể xóa lịch sử hồ sơ thuê.')) } } })}> {'Xóa lịch sử'}</Button></>
                         )}
                       </div>
                     </div>
@@ -3078,11 +3116,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           </div>
                           <div className="flex flex-wrap justify-end gap-2">
                             <Button variant="outline" size="sm" onClick={() => { setReturnDisputeTargetId(returnCase.id); setReturnDisputeReason('') }}>{'Yêu cầu xem xét lại'}</Button>
-                            <Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền cọc đảm bảo kho. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và mã ra vào đã hết hiệu lực, đang chờ nhân viên chuyển hoàn cọc.')) } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xác nhận quyết toán.') } } }) }}>{'Đồng ý quyết toán'}</Button>
+                            <Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền cọc đảm bảo kho. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và mã ra vào đã hết hiệu lực, đang chờ nhân viên chuyển hoàn cọc.')) } catch (error) { showToast(userFacingError(error, 'Không thể xác nhận quyết toán.')) } } }) }}>{'Đồng ý quyết toán'}</Button>
                           </div>
                         </div>
                       )}
-                      {returnCase.status === 'payment_due' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-3"><div><p className="font-bold text-red-900">{`Cần thanh toán thêm ${formatVnd(returnCase.amountDueFromCustomer ?? 0)}`}</p><p className="mt-1 text-red-700">{'Sau khi thanh toán, hệ thống sẽ đóng hồ sơ và phát hành biên nhận trong Lịch sử thanh toán.'}</p></div><Button size="sm" onClick={() => requestConfirmation({ title: 'Xác nhận thanh toán', message: `Thanh toán ${formatVnd(returnCase.amountDueFromCustomer ?? 0)} bằng chuyển khoản?`, confirmLabel: 'Thanh toán', onConfirm: () => { const reference = `RET-BAL-${Date.now()}`; try { payReturnBalance(returnCase.id, user, 'BANK_TRANSFER', reference); showToast('Đã thanh toán phần thiếu và phát hành biên nhận.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể thanh toán.') } } })}>{'Thanh toán phần thiếu'}</Button></div>}
+                      {returnCase.status === 'payment_due' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-3"><div><p className="font-bold text-red-900">{`Cần thanh toán thêm ${formatVnd(returnCase.amountDueFromCustomer ?? 0)}`}</p><p className="mt-1 text-red-700">{'Sau khi thanh toán, hệ thống sẽ đóng hồ sơ và phát hành biên nhận trong Lịch sử thanh toán.'}</p></div><Button size="sm" onClick={() => requestConfirmation({ title: 'Xác nhận thanh toán', message: `Thanh toán ${formatVnd(returnCase.amountDueFromCustomer ?? 0)} bằng chuyển khoản?`, confirmLabel: 'Thanh toán', onConfirm: () => { const reference = `RET-BAL-${Date.now()}`; try { payReturnBalance(returnCase.id, user, 'BANK_TRANSFER', reference); showToast('Đã thanh toán phần thiếu và phát hành biên nhận.') } catch (error) { showToast(userFacingError(error, 'Không thể thanh toán.')) } } })}>{'Thanh toán phần thiếu'}</Button></div>}
                       {returnCase.status === 'disputed' && <p className="mt-3 rounded-lg bg-amber-100 p-3 font-semibold text-amber-900">{'Đang chờ quản lý cơ sở xem xét lại'}: {returnCase.customerDecisionNote}</p>}
                       {returnCase.status === 'refund_pending' && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900">{'Hồ sơ thuê và mã ra vào đã hết hiệu lực. Nhân viên đang chuyển hoàn cọc, biên nhận sẽ xuất hiện sau khi xác nhận giao dịch.'}</p>}
                       {rental.status === 'completed' && units.find(unit => unit.id === rental.unitId)?.status === 'maintenance' && <p className="mt-3 rounded-lg border border-stone-300 bg-stone-100 p-3 font-semibold text-stone-700">{'Gian kho đang chờ quản lý cơ sở nghiệm thu vệ sinh hoặc bảo trì. Kho chưa được tính vào số lượng còn trống.'}</p>}
@@ -3133,7 +3171,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <div className="flex items-center justify-between gap-3"><div><p className="font-bold">{c.contractNumber}</p>{c.contractType === 'RENEWAL' && <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">{'Hợp đồng gia hạn'}</p>}</div><span className="rounded border border-black px-2 py-0.5 text-xs font-semibold">{c.status}</span></div>
             <p>{'Ngày ký'}: {c.signedAt}</p><p>{'Hiệu lực'}: {c.startDate} – {c.endDate}</p>
             <p className="truncate text-stone-600">{c.scannedFileName}</p>
-            <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể xóa lịch sử hợp đồng.') } } })}> {'Xóa lịch sử'}</Button>}</div>
+            <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(userFacingError(error, 'Không thể xóa lịch sử hợp đồng.')) } } })}> {'Xóa lịch sử'}</Button>}</div>
           </div>
         </Card>})}</div> : <Card className="p-4 text-sm text-stone-500">{'Chưa có hợp đồng giấy đã ký. Hợp đồng sẽ xuất hiện sau khi nhân viên lưu bản scan.'}</Card>}
       </div>}
@@ -3532,15 +3570,21 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {/* Goods Declaration */}
             <div className="border-t border-stone-200 pt-3">
               <p className="mb-3 text-sm font-semibold text-stone-900">Khai báo hàng hóa</p>
+              {catalogUpdateNotice && <p role="status" className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">{catalogUpdateNotice}</p>}
               <div className="space-y-3">
                 {goodsItems.map((item, index) => <div key={item.id} className="relative rounded-xl border border-stone-200 bg-stone-50 p-3 pr-10">
+                  {catalogIssues[index] && <p role="alert" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{hasValidQuotedGoods
+                    ? 'Danh mục hàng hóa đã thay đổi. Báo giá còn hạn vẫn giữ thông tin đã chốt. Nếu chỉnh sửa khai báo, bạn cần chọn mục đang được áp dụng và lấy báo giá mới.'
+                    : catalogIssues[index]}</p>}
                   <button type="button" aria-label={`Xóa loại hàng hóa ${index + 1}`} title="Xóa loại hàng hóa" className="absolute right-3 top-2 flex h-7 w-7 items-center justify-center bg-transparent p-0 text-2xl leading-none text-stone-400 transition hover:text-red-700" onClick={() => setGoodsItems(items => items.length === 1 ? [createGoodsDeclarationItem('goods-1')] : items.filter(row => row.id !== item.id))}>×</button>
                   <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
-                    <div><Select label="Loại hàng hóa" value={item.category} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, category: e.target.value, materialType: '', materialName: '' } : row))}><option value="">Chọn loại hàng hóa</option>{bookingCategoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{bookingErrors[`goodsCategory-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsCategory-${item.id}`]}</p>}</div>
-                     {!catalogCategoryFor(item.category)?.custom ? <div><Select label="Chất liệu chính" value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const material = bookingMaterials(item.category).find(value => value.label === materialName); const materialType: GoodsDeclarationItem['materialType'] = !materialName ? '' : material?.fragile ? 'FRAGILE' : 'NORMAL'; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, materialType, fragile: materialType === 'FRAGILE' ? 'yes' : row.fragile } : row)) }}><option value="">Chọn chất liệu cụ thể</option>{item.category && bookingMaterials(item.category).map(material => <option key={material.id} value={material.label}>{material.label}</option>)}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div> : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần nhân viên cơ sở duyệt trước khi thu cọc</div>}
+                    <div><Select label="Loại hàng hóa" value={item.category} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, category: e.target.value, materialType: '', materialName: '', catalogMaterialId: undefined } : row))}><option value="">Chọn loại hàng hóa</option>{item.category && !bookingCategories.some(category => category.code === item.category) && <option value={item.category} disabled>Loại hàng không còn được áp dụng</option>}{bookingCategoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{bookingErrors[`goodsCategory-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsCategory-${item.id}`]}</p>}</div>
+                     {!catalogCategoryFor(item.category)?.custom ? (isMaterialOptional(item.category) && bookingMaterials(item.category).length === 0
+                       ? <div className="self-end rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">Không yêu cầu vật liệu chính</div>
+                       : <div><Select label={`Chất liệu chính${isMaterialOptional(item.category) ? ' (không bắt buộc)' : ''}`} value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const material = bookingMaterials(item.category).find(value => value.label === materialName); const materialType: GoodsDeclarationItem['materialType'] = !materialName ? '' : 'NORMAL'; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, catalogMaterialId: material?.id, materialType } : row)) }}><option value="">{isMaterialOptional(item.category) ? 'Không chọn vật liệu' : 'Chọn chất liệu cụ thể'}</option>{item.materialName && !bookingMaterials(item.category).some(material => material.label === item.materialName) && <option value={item.materialName} disabled>{item.materialName} (không còn áp dụng)</option>}{item.category && bookingMaterials(item.category).map(material => <option key={material.id} value={material.label}>{material.label}</option>)}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div>) : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần nhân viên cơ sở duyệt trước khi thu cọc</div>}
                   </div>
                    <div className="mt-4"><label className="text-sm font-medium text-stone-700">Mô tả hàng hóa *</label><textarea className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={item.description} placeholder="Mô tả tên đồ vật, tình trạng hoặc đặc điểm cần lưu ý" onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, description: e.target.value } : row))} />{bookingErrors[`goodsDescription-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsDescription-${item.id}`]}</p>}</div>
-                  <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-950">Kích thước tính theo từng kiện/chiếc. Với tủ lạnh hoặc đồ cồng kềnh, hãy nhập kích thước phủ bì thực tế của từng chiếc; hệ thống sẽ cộng theo số lượng.</p>
+                  <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-950">Kích thước tính theo từng kiện/chiếc. Với tủ lạnh hoặc đồ cồng kềnh, hãy nhập kích thước phủ bì thực tế của từng chiếc, hệ thống sẽ cộng theo số lượng.</p>
                   <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-5 sm:items-start">
                      <div className="flex h-full flex-col"><Input type="number" min="1" step="1" label="Số lượng *" value={item.quantity} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, quantity: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsQuantity-${item.id}`] || ''}</p></div>
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Dài (cm) *" value={item.lengthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, lengthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsLength-${item.id}`] || ''}</p></div>
@@ -3554,7 +3598,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
                       {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
                         <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
-                        <div><Input label="Chất liệu chính *" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} />{bookingErrors[`customMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customMaterial-${item.id}`]}</p>}</div>
+                        <div><Input label="Chất liệu chính (nếu xác định được)" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} /></div>
                       </div>}
                       <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
                       <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
@@ -3586,8 +3630,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     {warehouseRecommendation.id === selectedTarget?.unitType.id
                       ? <p className="mt-1 text-xs font-semibold">Kho bạn đang chọn cũng chính là kho hệ thống đề xuất.</p>
                       : largerWarehouseRecommendation
-                        ? <p className="mt-1 text-xs">Kho bạn đang chọn không đủ sức chứa; hãy chuyển sang kho lớn hơn được đề xuất.</p>
-                        : <p className="mt-1 text-xs">Kho hiện tại vẫn phù hợp; hệ thống đề xuất kho nhỏ hơn để tránh dư dung tích và chi phí.</p>}
+                        ? <p className="mt-1 text-xs">Kho bạn đang chọn không đủ sức chứa, hãy chuyển sang kho lớn hơn được đề xuất.</p>
+                        : <p className="mt-1 text-xs">Kho hiện tại vẫn phù hợp, hệ thống đề xuất kho nhỏ hơn để tránh dư dung tích và chi phí.</p>}
                   </div>
                   {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && (
                     <Button
@@ -3618,8 +3662,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <b>Chưa có cỡ kho còn trống phù hợp</b>
               <p className="mt-1 text-xs">
                 {noValidLargerUnitAvailable && largestAvailableLargerUnitType
-                  ? `Kho lớn nhất còn chỗ là ${unitTypeLabel(largestAvailableLargerUnitType.name)}, nhưng chỉ đáp ứng tối đa ${largestAvailableLargerUnitType.maxLoadKg.toLocaleString('vi-VN')} kg và khoảng ${largestAvailableLargerUnitUsableVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³ hữu dụng; hàng đang khai báo ${goodsWeightNumber.toLocaleString('vi-VN')} kg và ${goodsVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³. Vui lòng giảm số lượng, kích thước hoặc trọng lượng hàng hóa, hoặc chia thành nhiều kho.`
-                  : isApiAuthenticated() ? (serverRecommendation?.issues.join(' ') || 'Dữ liệu hàng hóa không phù hợp với các loại kho đang còn chỗ tại cơ sở này.') : 'Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.'}
+                  ? `Kho lớn nhất còn chỗ là ${unitTypeLabel(largestAvailableLargerUnitType.name)}, nhưng chỉ đáp ứng tối đa ${largestAvailableLargerUnitType.maxLoadKg.toLocaleString('vi-VN')} kg và khoảng ${largestAvailableLargerUnitUsableVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³ hữu dụng, hàng đang khai báo ${goodsWeightNumber.toLocaleString('vi-VN')} kg và ${goodsVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³. Vui lòng giảm số lượng, kích thước hoặc trọng lượng hàng hóa, hoặc chia thành nhiều kho.`
+                  : isApiAuthenticated() ? userFacingError(serverRecommendation?.issues.join(' '), 'Dữ liệu hàng hóa không phù hợp với các loại kho đang còn chỗ tại cơ sở này.') : 'Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.'}
               </p>
             </div>}
 
@@ -3655,7 +3699,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {bookingStep === 2 && <>
 
             {/* Storage Space & Cost Breakdown */}
-            <p className="text-xs leading-5 text-stone-600">Thể tích mỗi loại hàng (m³) = số lượng × dài × rộng × cao (cm) ÷ 1.000.000. Tổng thể tích là tổng của tất cả loại hàng; kích thước khai báo là kích thước mỗi kiện sau đóng gói.</p>
+            <p className="text-xs leading-5 text-stone-600">Thể tích mỗi loại hàng (m³) = số lượng × dài × rộng × cao (cm) ÷ 1.000.000. Tổng thể tích là tổng của tất cả loại hàng, kích thước khai báo là kích thước mỗi kiện sau đóng gói.</p>
             {(() => {
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
                 <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'Phù hợp — có thể dùng kho nhỏ hơn' : 'Phù hợp' : 'Không phù hợp'}</span>}</div>
@@ -3692,7 +3736,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className="flex items-center justify-between border-b border-stone-200 pb-2">
                     <div>
                       <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
-                      <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Sức chứa hữu dụng tính tối đa 80% thể tích; hệ thống thử đủ 6 hướng xoay.</p>
+                      <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Sức chứa hữu dụng tính tối đa 80% thể tích, hệ thống thử đủ 6 hướng xoay.</p>
                     </div>
                     {capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'border-amber-600 bg-amber-600 text-white' : 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'Kho chứa vừa — có thể dùng kho nhỏ hơn' : 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
                   </div>
@@ -3782,7 +3826,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className="divide-y divide-stone-200 border-y border-stone-200">
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · {formatRackDimensions(selectedRackDimensions)} m/khung</p></section>
-                    <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa và sức chứa</p><ul className="list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}><b>{sample.sourceLabel || `Hàng hóa ${index + 1}`}:</b> {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg{!sample.canFitFrame && ' · không thể xếp vừa khung'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện:</b> {packageCountNumber}</p><p><b>Tổng thể tích:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</p><p><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</p><p><b>Khung cần dùng:</b> {hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</p><p className="text-xs text-stone-500">Mỗi kiện được tính theo kích thước thực tế; tổng thể tích = số lượng × dài × rộng × cao. Sức chứa khung đã trừ 20% khoảng trống.</p><p><b>Tổng cân nặng:</b> {goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
+                    <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa và sức chứa</p><ul className="list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}><b>{sample.sourceLabel || `Hàng hóa ${index + 1}`}:</b> {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg{!sample.canFitFrame && ' · không thể xếp vừa khung'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện:</b> {packageCountNumber}</p><p><b>Tổng thể tích:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</p><p><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</p><p><b>Khung cần dùng:</b> {hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</p><p className="text-xs text-stone-500">Mỗi kiện được tính theo kích thước thực tế, tổng thể tích = số lượng × dài × rộng × cao. Sức chứa khung đã trừ 20% khoảng trống.</p><p><b>Tổng cân nặng:</b> {goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch nhận kho:</b> {displayDateValue(moveInDate)} · {bookingAppointmentTime}</p><p><b>Ngày bắt đầu kỳ thuê:</b> {displayDateValue(earliestCheckInDate)}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, thời điểm mới vẫn phải nằm trong thời hạn nhận kho 7 ngày.</p></section>
                   </div>
                   {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, nhân viên có tối đa 6 giờ để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
@@ -4097,8 +4141,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       `Khoản giữ chỗ ban đầu đã lưu (${formatVnd(deposit)}) được trừ vào tiền thuê. Tiền cọc đảm bảo kho ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần còn lại được hoàn sau nghiệm thu.`,
                       'Khách hoàn tất nhận kho trong vòng 7 ngày. Việc đổi lịch cũng phải nằm trong thời hạn này.',
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
-                      'Gia hạn theo gói tháng. Hệ thống kiểm tra điều kiện và mở thanh toán khi các nguồn cần thiết sẵn sàng; quản lý cơ sở theo dõi hồ sơ.',
-                      'Khi trả kho, nhân viên lập biên bản trước–sau; khấu trừ phải có nội dung, số tiền và minh chứng.',
+                      'Gia hạn theo gói tháng. Hệ thống kiểm tra điều kiện và mở thanh toán khi các nguồn cần thiết sẵn sàng, quản lý cơ sở theo dõi hồ sơ.',
+                      'Khi trả kho, nhân viên lập biên bản trước–sau, khấu trừ phải có nội dung, số tiền và minh chứng.',
                       'Khách được xem, đồng ý hoặc yêu cầu xem xét lại quyết toán trước khi đóng hồ sơ.',
                       'Sự cố kết cấu hạ tầng: Cơ sở chịu 100% trách nhiệm, xử lý khẩn cấp trong 4 đến 12 giờ. Cơ sở kích hoạt di dời khẩn cấp miễn phí sang kho tương đương và giữ nguyên hợp đồng.',
                       'Phân định trách nhiệm ẩm mốc khi trả kho: Hoàn 100% cọc và đền bù nếu do thấm dột hoặc hỏng máy lạnh của cơ sở. Khách hàng tự chịu và bị khấu trừ phí khử trùng 1.500.000₫ nếu do đóng gói ẩm hoặc vi phạm hàng cấm.'
@@ -4219,7 +4263,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     setScheduleModalOpen(false)
                     showToast(`Đã lên lịch nhận kho vào ${appointmentTime} ngày ${appointmentDate}!`)
                   } catch (error) {
-                    showToast(error instanceof Error ? error.message : 'Không thể đặt lịch hẹn.')
+                    showToast(userFacingError(error, 'Không thể đặt lịch hẹn.'))
                   }
                 }}
               >
@@ -4278,7 +4322,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     setReturnModalOpen(false)
                     showToast('Yêu cầu trả kho đã được tiếp nhận. Nhân viên sẽ chuẩn bị biên bản nghiệm thu!')
                   } catch (error) {
-                    showToast(error instanceof Error ? error.message : 'Không thể gửi yêu cầu trả kho.')
+                    showToast(userFacingError(error, 'Không thể gửi yêu cầu trả kho.'))
                   }
                 }}
               >
@@ -4344,7 +4388,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           </div>
 
           <div><label className="text-sm font-medium text-stone-700">Lý do cần xem xét lại *</label><textarea rows={4} value={returnDisputeReason} onChange={event => setReturnDisputeReason(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" placeholder="Mô tả khoản phí hoặc kết quả nghiệm thu cần kiểm tra lại..." /></div>
-          <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => { setReturnDisputeTargetId(null); setReturnDisputeReason('') }}>{'Hủy'}</Button><Button disabled={!returnDisputeReason.trim()} onClick={() => { if (!returnDisputeTargetId) return; try { confirmReturnSettlement(returnDisputeTargetId, user, 'disputed', returnDisputeReason.trim()); setReturnDisputeTargetId(null); setReturnDisputeReason(''); showToast('Đã gửi yêu cầu xem xét lại.') } catch (error) { showToast(error instanceof Error ? error.message : 'Không thể gửi yêu cầu.') } }}>{'Gửi yêu cầu'}</Button></div>
+          <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => { setReturnDisputeTargetId(null); setReturnDisputeReason('') }}>{'Hủy'}</Button><Button disabled={!returnDisputeReason.trim()} onClick={() => { if (!returnDisputeTargetId) return; try { confirmReturnSettlement(returnDisputeTargetId, user, 'disputed', returnDisputeReason.trim()); setReturnDisputeTargetId(null); setReturnDisputeReason(''); showToast('Đã gửi yêu cầu xem xét lại.') } catch (error) { showToast(userFacingError(error, 'Không thể gửi yêu cầu.')) } }}>{'Gửi yêu cầu'}</Button></div>
         </div>
       </Modal>
 
@@ -4389,7 +4433,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       setReplyText('')
                       showToast(selectedTicket.status === 'resolved' ? ('Đã gửi tin nhắn và mở lại yêu cầu.') : ('Đã gửi tin nhắn!'))
                     } catch (error) {
-                      showToast(error instanceof Error ? error.message : 'Không thể gửi tin nhắn.')
+                      showToast(userFacingError(error, 'Không thể gửi tin nhắn.'))
                     }
                   }}
                 >
@@ -4470,7 +4514,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   setTicketRelatedRecord('general')
                   showToast('Đã gửi yêu cầu hỗ trợ tới ban quản lý!')
                 } catch (error) {
-                  showToast(error instanceof Error ? error.message : 'Không thể tạo yêu cầu hỗ trợ.')
+                  showToast(userFacingError(error, 'Không thể tạo yêu cầu hỗ trợ.'))
                 }
               }}
             >

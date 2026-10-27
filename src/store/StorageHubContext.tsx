@@ -953,7 +953,7 @@ const INITIAL_RENTALS: RentalRecord[] = [
     paymentStatus: 'paid',
     autoRenew: false,
     gateCode: '7318#',
-    initialCondition: 'Kho sạch, tường và khóa nguyên vẹn; kiện đồ gia dụng gỗ và thiết bị.',
+    initialCondition: 'Kho sạch, tường và khóa nguyên vẹn, kiện đồ gia dụng gỗ và thiết bị.',
     evidencePhotos: ['EV-IN-118 · 6 ảnh hiện trạng lúc nhận kho']
   },
   {
@@ -1032,7 +1032,7 @@ const INITIAL_RETURNS: ReturnCase[] = [
     requestedAt: '2026-09-15T09:00:00Z',
     scheduledDate: '2026-09-18',
     status: 'scheduled',
-    initialConditionSnapshot: 'Kho sạch, tường và khóa nguyên vẹn; 6 kiện đồ gia dụng gỗ và vải.',
+    initialConditionSnapshot: 'Kho sạch, tường và khóa nguyên vẹn, 6 kiện đồ gia dụng gỗ và vải.',
     initialConditionSnapshotEn: 'The unit was clean with intact walls and lock; six packages of wooden and fabric household goods.',
     packageCount: 6,
     initialWeightKg: 132,
@@ -1954,7 +1954,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             ...hold,
             status: 'EXPIRED' as const,
             depositRequired: false,
-            evidence: [...hold.evidence, `EXPIRED · Đơn tự động hết hạn do ${reason}; gian kho được giải phóng.`]
+            evidence: [...hold.evidence, `EXPIRED · Đơn tự động hết hạn do ${reason}, gian kho được giải phóng.`]
           }
         })
         const setupActivated = prev.rentals.filter(rental => rental.status === 'setup'
@@ -1987,7 +1987,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: rental.facilityId,
           entityType: 'rental',
           entityId: rental.id,
-          notes: `Hết ${rental.freeSetupDays || 0} ngày setup miễn phí; hợp đồng tự chuyển sang ACTIVE.`,
+          notes: `Hết ${rental.freeSetupDays || 0} ngày setup miễn phí, hợp đồng tự chuyển sang ACTIVE.`,
           timestamp: new Date(nowMs).toISOString(),
         }))
         const inventoryTasks: FacilityTask[] = inventoryTaskRentals.map(rental => ({
@@ -2000,7 +2000,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           dueAt: rentals.find(item => item.id === rental.id)?.inventoryDueAt || new Date(nowMs + 3 * 86_400_000).toISOString(),
           priority: 'high',
           status: 'open',
-          notes: 'Rental đã ACTIVE theo thời gian; cần Staff kiểm kê và khóa snapshot hàng hóa.',
+          notes: 'Rental đã ACTIVE theo thời gian, cần Staff kiểm kê và khóa snapshot hàng hóa.',
           createdAt: new Date(nowMs).toISOString(),
         }))
         return { ...prev, holds, units, rentals, staffTasks: [...inventoryTasks, ...prev.staffTasks], activities: [...setupActivities, ...prev.activities] }
@@ -2349,7 +2349,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const approvedAt = new Date().toISOString()
     const isGoodsReview = reservation.goodsReviewStatus === 'PENDING'
     if (isGoodsReview && (!reservation.emailVerification?.verified || reservation.status !== 'awaiting_review')) {
-      throw new Error('Khách hàng chưa xác minh email; hồ sơ chưa sẵn sàng để duyệt.')
+      throw new Error('Khách hàng chưa xác minh email, hồ sơ chưa sẵn sàng để duyệt.')
     }
     if (isGoodsReview && reservation.goodsReviewDueAt && new Date(reservation.goodsReviewDueAt).getTime() < Date.now()) {
       throw new Error('Thời hạn duyệt hàng hóa 12 giờ đã hết. Kho đã được giải phóng.')
@@ -2391,7 +2391,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ hàng hóa thuộc nghiệp vụ của Facility Staff.')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || reservation.goodsReviewStatus !== 'PENDING') throw new Error('Không tìm thấy yêu cầu hàng hóa đang chờ duyệt.')
-    if (!reservation.emailVerification?.verified || reservation.status !== 'awaiting_review') throw new Error('Khách hàng chưa xác minh email; hồ sơ chưa sẵn sàng để duyệt.')
+    if (!reservation.emailVerification?.verified || reservation.status !== 'awaiting_review') throw new Error('Khách hàng chưa xác minh email, hồ sơ chưa sẵn sàng để duyệt.')
     if (reviewer.role === 'manager' || reviewer.role === 'admin') {
       assertFacilityManager(reviewer, reservation.facilityId, reservation.facilityName)
     } else if (!isFacilityVisible(reviewer, reservation.facilityId, reservation.facilityName)) {
@@ -3019,7 +3019,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         facilityId: rental.facilityId,
         entityType: 'rental',
         entityId: rental.id,
-        notes: `Khách hàng xác nhận đã nhận gian kho ${rental.unitId}; hệ thống lập hồ sơ thuê và ẩn đơn đặt giữ kho.`,
+        notes: `Khách hàng xác nhận đã nhận gian kho ${rental.unitId}, hệ thống lập hồ sơ thuê và ẩn đơn đặt giữ kho.`,
         timestamp: now.toLocaleString('vi-VN')
       }, ...prev.activities]
     }))
@@ -3198,7 +3198,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: unit.facilityId,
           entityType: 'return',
           entityId: returnCase.id,
-          notes: `Đã nghiệm thu kho ${unit.code}. ${isFacilityFault ? 'Ghi nhận lỗi cơ sở gây ẩm; miễn trừ phạt cho khách.' : ''} Quá hạn ${overdueDays} ngày. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ; khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
+          notes: `Đã nghiệm thu kho ${unit.code}. ${isFacilityFault ? 'Ghi nhận lỗi cơ sở gây ẩm, miễn trừ phạt cho khách.' : ''} Quá hạn ${overdueDays} ngày. ${amountDueFromCustomer > 0 ? `Tiền đảm bảo không đủ, khách cần đóng thêm ${formatVnd(amountDueFromCustomer)}.` : `Đề xuất hoàn ${formatVnd(netRefund)}.`} Chờ khách hàng xác nhận quyết toán.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -3592,7 +3592,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           unableReason: undefined
         }
         action = 'FACILITY_TASK_REASSIGNED'
-        activityNote = `Manager giao nhiệm vụ cho ${assignedStaff.name}; chờ Staff nhận việc.`
+        activityNote = `Manager giao nhiệm vụ cho ${assignedStaff.name}, chờ Staff nhận việc.`
       } else {
         normalizedUpdates = {
           ...(updates.dueAt !== undefined ? { dueAt: updates.dueAt } : {}),
@@ -3955,7 +3955,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         entityId: userId,
         beforeState: accountSnapshot(target),
         afterState: accountSnapshot(updated),
-        notes: 'Đã tạo yêu cầu reset mật khẩu; mật khẩu mới phải được xử lý bởi auth backend/email service.',
+        notes: 'Đã tạo yêu cầu reset mật khẩu, mật khẩu mới phải được xử lý bởi auth backend/email service.',
         timestamp: now
       }, ...prev.activities]
     }))
@@ -4054,7 +4054,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const resetToDemoData = () => {
-    if (!DEMO_DATA_ENABLED) throw new Error('Dữ liệu demo đang tắt; dữ liệu phải được đọc từ backend.')
+    if (!DEMO_DATA_ENABLED) throw new Error('Dữ liệu demo đang tắt, dữ liệu phải được đọc từ backend.')
     localStorage.removeItem(STORAGE_KEY)
     try {
       localStorage.removeItem('storagehub:facilities')
@@ -4924,7 +4924,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const targetHold = assertHoldPermission(holdId, 'reservations:create')
     if (targetHold.customerId !== customer.id && targetHold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
     assertPermission(customer, 'reservations:create')
-    if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt; chưa thể thanh toán tiền cọc.')
+    if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt, chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
     if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 15 phút thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
     const paidStatus = transitionReservation(targetHold.status as LegacyReservationStatus, 'PAY_DEPOSIT')
@@ -5066,7 +5066,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       returns: prev.returns.map(r => r.id === returnId ? { ...r, status: amountDueFromCustomer > 0 ? 'payment_due' : returnCase.netRefundAmount > 0 ? 'refund_pending' : 'completed', customerConfirmed: true, customerConfirmedAt: now.toISOString(), customerDecision: 'accepted', customerDecisionNote: note?.trim(), completedAt: amountDueFromCustomer > 0 || returnCase.netRefundAmount > 0 ? undefined : now.toISOString() } : r),
       accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === rental.id ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
       maintenanceTasks: prev.maintenanceTasks.some(task => task.unitId === unit.id && task.status !== 'completed') ? prev.maintenanceTasks : [maintenanceTask, ...prev.maintenanceTasks],
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_SETTLEMENT_CONFIRMED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `${amountDueFromCustomer > 0 ? `Khách xác nhận quyết toán và cần đóng thêm ${formatVnd(amountDueFromCustomer)} do tổng phí vượt tiền đảm bảo.` : returnCase.netRefundAmount > 0 ? `Khách hàng xác nhận quyết toán. Chờ Staff xác nhận chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}.` : 'Khách hàng xác nhận quyết toán; không phát sinh khoản hoàn cọc.'} Gian kho chuyển sang chờ Manager nghiệm thu trước khi mở lại.`, timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_SETTLEMENT_CONFIRMED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `${amountDueFromCustomer > 0 ? `Khách xác nhận quyết toán và cần đóng thêm ${formatVnd(amountDueFromCustomer)} do tổng phí vượt tiền đảm bảo.` : returnCase.netRefundAmount > 0 ? `Khách hàng xác nhận quyết toán. Chờ Staff xác nhận chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}.` : 'Khách hàng xác nhận quyết toán, không phát sinh khoản hoàn cọc.'} Gian kho chuyển sang chờ Manager nghiệm thu trước khi mở lại.`, timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
     }))
   }
 
@@ -5363,7 +5363,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               paymentExpiresAt,
               expiresAt: requiresGoodsReview ? goodsReviewDueAt! : paymentExpiresAt!,
               evidence: requiresGoodsReview
-                ? [...h.evidence, `EMAIL_VERIFIED · Khách đã xác minh email; hồ sơ hàng hóa được gửi Staff duyệt trước ${goodsReviewDueAt}.`]
+                ? [...h.evidence, `EMAIL_VERIFIED · Khách đã xác minh email, hồ sơ hàng hóa được gửi Staff duyệt trước ${goodsReviewDueAt}.`]
                 : h.evidence,
               emailVerification: {
                 ...h.emailVerification,
