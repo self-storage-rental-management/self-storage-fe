@@ -29,6 +29,7 @@ const activeStatusLabels: Partial<Record<ReservationStatus, string>> = {
   UNIT_RESERVED: "Đã phân gian kho",
   READY_FOR_CHECKIN: "Sẵn sàng nhận kho",
   AWAITING_CUSTOMER_RECEIPT: "Chờ khách xác nhận bàn giao",
+  COMPLETED: "Đã hoàn tất bàn giao",
 }
 
 const progressSteps = ["Xác minh email", "Duyệt hồ sơ", "Thanh toán cọc", "Phân gian", "Nhận kho", "Bàn giao"]
@@ -39,7 +40,7 @@ function progressIndex(status: ReservationStatus) {
   if (["AWAITING_PAYMENT", "PAYMENT_GRACE", "PAYMENT_REVIEW"].includes(status)) return 2
   if (status === "CONFIRMED") return 3
   if (["UNIT_RESERVED", "READY_FOR_CHECKIN"].includes(status)) return 4
-  if (status === "AWAITING_CUSTOMER_RECEIPT") return 5
+  if (status === "AWAITING_CUSTOMER_RECEIPT" || status === "COMPLETED") return 5
   return 0
 }
 
@@ -253,7 +254,7 @@ export default function StaffReservationReviews({
               className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"
             >
               <p className="font-bold">
-                {item.customGoodsName || staffGoodsCategoryLabel(item.category)}
+                {item.customGoodsName || item.categoryName || staffGoodsCategoryLabel(item.category)}
               </p>
               <p>Mô tả: {item.description || "Không có"}</p>
               <p>

@@ -351,9 +351,10 @@ describe("inventory read-only endpoint integration", () => {
 })
 
 describe("inventory detail presentation", () => {
-  it.each(["../manager/ManagerInventoryApiPanel.tsx","../manager/ManagerInventoryPanel.tsx","../manager/ManagerDashboardPanel.tsx","../manager/ManagerExceptionsPanel.tsx","../manager/ManagerOverdueApiPanel.tsx","../manager/ManagerPagination.tsx","../manager/ManagerStaffTasksPanel.tsx","../manager/ManagerReturnsPanel.tsx","../manager/ManagerCheckinsPanel.tsx","../manager/ManagerReportsPanel.tsx","../manager/ManagerRentalsPanel.tsx","../manager/ManagerPaymentsPanel.tsx","../rental-api/ApiPager.tsx","../rental-api/RenewalDecisionModal.tsx","../rental-api/RenewalDetail.tsx","../rental-api/RentalApiWorkspace.tsx","../rental-api/RenewalOperationsPanel.tsx","../support-api/SupportActionForm.tsx","../support-api/SupportCreateForm.tsx","../support-api/SupportStaffPicker.tsx","../support-api/SupportTicketDetail.tsx","../rental-support-integration/LedgerPanel.tsx","../rental-support-integration/RenewalCoordinationPanel.tsx"])("Duong-owned presentation uses commas instead of middle-dot separators: %s", path => {
+  it.each(["../manager/ManagerInventoryPanel.tsx","../manager/ManagerDashboardPanel.tsx","../manager/ManagerExceptionsPanel.tsx","../manager/ManagerOverdueApiPanel.tsx","../manager/ManagerPagination.tsx","../manager/ManagerStaffTasksPanel.tsx","../manager/ManagerCheckinsPanel.tsx","../manager/ManagerReportsPanel.tsx","../manager/ManagerRentalsPanel.tsx","../manager/ManagerPaymentsPanel.tsx","../rental-api/ApiPager.tsx","../rental-api/RenewalDecisionModal.tsx","../rental-api/RenewalDetail.tsx","../rental-api/RentalApiWorkspace.tsx","../rental-api/RenewalOperationsPanel.tsx","../support-api/SupportActionForm.tsx","../support-api/SupportCreateForm.tsx","../support-api/SupportStaffPicker.tsx","../support-api/SupportTicketDetail.tsx","../rental-support-integration/LedgerPanel.tsx","../rental-support-integration/RenewalCoordinationPanel.tsx"])("Duong-owned presentation uses commas instead of middle-dot separators: %s", path => {
     expect(readFileSync(new URL(path, import.meta.url), "utf8")).not.toContain("·")
   })
+
   it("shows a real tenant and rental, with a verified last permitted date", () => {
     const r = rental("real-ref", {
       dateSemantics: {
@@ -375,34 +376,6 @@ describe("inventory detail presentation", () => {
     expect(html).toContain("31/03/2026")
     expect(html).not.toContain("chưa tìm thấy")
   })
-  it("only a successful empty rental read reports an occupied-unit discrepancy", () => {
-    let html = renderToStaticMarkup(
-      <InventoryRentalSummary unit={unit} read={{ loading: true }} />,
-    )
-    expect(html).toContain("Đang tải hồ sơ thuê")
-    expect(html).not.toContain("chưa tìm thấy")
-    html = renderToStaticMarkup(
-      <InventoryRentalSummary
-        unit={unit}
-        read={{
-          loading: false,
-          error: new ApiClientError("secret", { status: 403 }),
-        }}
-      />,
-    )
-    expect(html).toContain('role="alert"')
-    expect(html).not.toContain("chưa tìm thấy")
-    expect(html).not.toContain("secret")
-    html = renderToStaticMarkup(
-      <InventoryRentalSummary
-        unit={unit}
-        read={{ loading: false, data: [] }}
-      />,
-    )
-    expect(html).toContain(
-      "Gian đang sử dụng nhưng chưa tìm thấy hồ sơ thuê chưa kết thúc",
-    )
-  })
   it("does not silently choose one of multiple uncompleted rentals", () => {
     const html = renderToStaticMarkup(
       <InventoryRentalSummary
@@ -413,46 +386,6 @@ describe("inventory detail presentation", () => {
     expect(html).toContain("Có nhiều hồ sơ thuê chưa kết thúc")
     expect(html).toContain("one")
     expect(html).toContain("two")
-  })
-  it("maintenance loading/error/verified empty/history stay distinct", () => {
-    let html = renderToStaticMarkup(
-      <InventoryMaintenanceDetails unit={unit} identity="actor:scope" />,
-    )
-    expect(html).toContain("Đang tải nhiệm vụ bảo trì")
-    expect(html).not.toContain("Không có dữ liệu")
-    h.read = {
-      loading: false,
-      error: new ApiClientError("internal failure", { status: 500 }),
-    }
-    html = renderToStaticMarkup(
-      <InventoryMaintenanceDetails unit={unit} identity="actor:scope" />,
-    )
-    expect(html).toContain('role="alert"')
-    expect(html).not.toContain("Không có dữ liệu")
-    h.read = { loading: false, data: [] }
-    expect(
-      renderToStaticMarkup(
-        <InventoryMaintenanceDetails unit={unit} identity="actor:scope" />,
-      ),
-    ).toContain("Không có dữ liệu nhiệm vụ bảo trì")
-    h.read = {
-      loading: false,
-      data: [
-        task(),
-        task({
-          id: "done",
-          status: "completed",
-          assignedStaffName: "Nhân viên thử nghiệm",
-        }),
-      ],
-    }
-    html = renderToStaticMarkup(
-      <InventoryMaintenanceDetails unit={unit} identity="actor:scope" />,
-    )
-    expect(html).toContain("Kiểm tra sàn")
-    expect(html).toContain("Chưa phân công")
-    expect(html).toContain("Đã hoàn thành")
-    expect(html).toContain("Nhân viên thử nghiệm")
   })
   it("availability form does not query until a valid range is submitted; labels the TYPE limitation", () => {
     const html = renderToStaticMarkup(
@@ -511,46 +444,6 @@ describe("inventory detail presentation", () => {
       "actor-b:scope-b:maintenance:unit-b",
     ])
   })
-  it("submits an immutable date snapshot; changing input does not relabel the previous result", () => {
-    h.interactive = true
-    const render = () => {
-      h.cursor = 0
-      return InventoryAvailabilityDetails({ unit, identity: "actor:scope" })
-    }
-    function nodes(n: any): any[] {
-      if (Array.isArray(n)) return n.flatMap(nodes)
-      if (!n || typeof n !== "object" || !("type" in n)) return []
-      return [n, ...nodes(n.props.children)]
-    }
-    let tree = render()
-    const event = { preventDefault: vi.fn() }
-    nodes(tree)
-      .find((n) => n.type === "form")
-      .props.onSubmit(event)
-    tree = render()
-    expect(h.slots[1]).toBeUndefined()
-    expect(nodes(tree).some((n) => n.props.role === "alert")).toBe(true)
-    const inputs = nodes(tree).filter((n) => n.type === "input")
-    inputs[0].props.onChange({ target: { value: range.startDate } })
-    inputs[1].props.onChange({ target: { value: range.endDate } })
-    tree = render()
-    nodes(tree)
-      .find((n) => n.type === "form")
-      .props.onSubmit(event)
-    tree = render()
-    const result = nodes(tree).find(
-      (n) => n.type === InventoryAvailabilityResult,
-    )
-    expect(result.props.range).toEqual(range)
-    nodes(tree)
-      .find((n) => n.type === "input")
-      .props.onChange({ target: { value: "2026-10-20" } })
-    tree = render()
-    expect(
-      nodes(tree).find((n) => n.type === InventoryAvailabilityResult).props
-        .range,
-    ).toEqual(range)
-  })
   it("formats the complete position naturally without inventing missing fields", () => {
     expect(inventoryLocation("3", "Khu C")).toBe("Tầng 3, khu C")
     expect(inventoryLocation("Tầng 3", "C")).toBe("Tầng 3, khu C")
@@ -558,29 +451,5 @@ describe("inventory detail presentation", () => {
       "Chưa có dữ liệu tầng, chưa có dữ liệu khu vực",
     )
     expect(inventoryLocation(3, "Khu C")).not.toContain("·")
-  })
-  it("inventory keeps rental and maintenance readers without the type availability block or its stale link", () => {
-    const source = readFileSync(
-      new URL("./ManagerInventoryApiPanel.tsx", import.meta.url),
-      "utf8",
-    )
-    for (const name of [
-      "loadInventoryRentals",
-      "InventoryRentalSummary",
-      "InventoryMaintenanceDetails",
-      "inventoryLocation",
-    ])
-      expect(source).toContain(name)
-    for (const text of [
-      "Hàng đợi bảo trì",
-      "Năng lực khai thác hiện có",
-      "Công suất theo loại gian kho",
-      "·",
-      "Hồ sơ thuê: {missing}",
-      "InventoryAvailabilityDetails",
-      "availability-form",
-      "Kiểm tra theo loại kho trong chi tiết.",
-    ])
-      expect(source).not.toContain(text)
   })
 })

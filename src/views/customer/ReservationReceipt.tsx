@@ -15,17 +15,6 @@ function formatGatewayPayDate(value: string | null) {
   return `${day}/${month}/${year} ${hour}:${minute}:${second}`
 }
 
-function formatGatewayPayDate(value: string | null) {
-  if (!value || !/^\d{14}$/.test(value)) return null
-  const year = value.slice(0, 4)
-  const month = value.slice(4, 6)
-  const day = value.slice(6, 8)
-  const hour = value.slice(8, 10)
-  const minute = value.slice(10, 12)
-  const second = value.slice(12, 14)
-  return `${day}/${month}/${year} ${hour}:${minute}:${second}`
-}
-
 export default function ReservationReceipt({ payment, reservationCode }: { payment: ReservationPaymentResult; reservationCode: string }) {
   if (payment.paymentStatus !== 'PAID') return <p className="text-sm text-amber-900">Giao dịch chưa được ghi nhận thành công, chưa có biên lai thanh toán.</p>
   const accepted = bookingDepositAccepted(payment)
@@ -48,6 +37,8 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod)],
       ['Người ghi nhận', payment.initiatedByName || '—'],
       ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Cọc giữ chỗ đã được đơn xác nhận' : 'Giao dịch cọc giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
+      ['Số hóa đơn', payment.invoiceNumber || '—'], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
+      ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? new Date(payment.invoiceIssuedAt).toLocaleString('vi-VN') : '—'],
     ]}
     footer={isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là cọc được chấp nhận.'} />
 }

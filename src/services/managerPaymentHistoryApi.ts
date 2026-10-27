@@ -1,4 +1,6 @@
 import { ApiClientError, apiRequest } from "./apiClient"
+import { isUuid } from "./renewalOperationsApi"
+import { isRenewalTransactionStatus } from '../types/renewalStatus'
 import type {
   ManagerPaymentHistoryItem,
   ManagerPaymentHistoryPage,
@@ -11,8 +13,8 @@ const statuses: ManagerPaymentHistoryStatus[] = [
   "PENDING", "PROCESSING", "PAID", "NOT_RECEIVED", "FAILED", "CANCELLED", "REFUNDED",
 ]
 const types: ManagerPaymentHistoryType[] = [
-  "RESERVATION_DEPOSIT", "RENTAL_BALANCE", "MONTHLY_RENT", "RENEWAL",
-  "DAMAGE_FEE", "OTHER", "RETURN_REFUND", "RETURN_SETTLEMENT",
+  "RESERVATION_DEPOSIT", "RENTAL_BALANCE", "MONTHLY_RENT", "RENEWAL", "RENEWAL_INSTALLMENT",
+  "DAMAGE_FEE", "EARLY_TERMINATION_FEE", "OTHER", "RETURN_REFUND", "RETURN_SETTLEMENT",
 ]
 
 function invalidResponse(): never {
@@ -34,6 +36,11 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
     && typeof row.refundedAmount === "number" && Number.isFinite(row.refundedAmount) && row.refundedAmount >= 0
     && (row.paymentMethod === null || typeof row.paymentMethod === "string")
     && typeof row.occurredAt === "string" && Number.isFinite(Date.parse(row.occurredAt))
+    && (row.renewalId == null || isUuid(row.renewalId))
+    && (row.receiptFileId == null || isUuid(row.receiptFileId))
+    && (row.invoiceNumber == null || typeof row.invoiceNumber === "string")
+    && (row.invoiceStatus == null || ["DRAFT", "PAID", "VOID", "REFUNDED"].includes(row.invoiceStatus as string))
+    && (row.invoiceIssuedAt == null || (typeof row.invoiceIssuedAt === "string" && Number.isFinite(Date.parse(row.invoiceIssuedAt))))
 }
 
 export async function listManagerPaymentHistory(

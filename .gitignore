@@ -1,5 +1,7 @@
 node_modules/
 dist/
+/.local/
+/test-results/
 
 .env
 .env.local
@@ -19,3 +21,5 @@ sumProject
 # Local documentation & agent instructions
 RUN_PROJECT.md
 GEMINI.md
+
+.vitest/

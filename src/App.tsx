@@ -1,9 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { User } from './types'
 import { StorageHubProvider, useStorageHub } from './store/StorageHubContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './views/Login'
-import AdminPortalLogin from './views/auth/AdminPortalLogin'
 import HomePage from './views/home/HomePage'
 import RequiredPasswordChange from './views/RequiredPasswordChange'
 import { actorToUser, getAuthenticatedActor, logoutFromApi, refreshApiSession, type ApiActor } from './services/authApi'
@@ -35,7 +34,7 @@ const ManagerApp = lazyWithChunkRecovery(() => import('./views/manager/ManagerAp
 const BusinessApp = lazyWithChunkRecovery(() => import('./views/business/BusinessApp'))
 const AdminApp = lazyWithChunkRecovery(() => import('./views/admin/AdminApp'))
 
-type GuestView = 'home' | 'login' | 'register' | 'admin-login'
+type GuestView = 'home' | 'login' | 'register'
 
 function normalizedPathname() {
   return window.location.pathname.replace(/\/+$/, '') || '/'
@@ -46,29 +45,13 @@ function resolveGuestView(): GuestView {
   const pathname = normalizedPathname()
   const hostname = window.location.hostname.toLowerCase()
 
-  // 1. Subdomain matching: staff.storagehub.vn or admin.storagehub.vn
-  if (hostname.startsWith('staff.') || hostname.startsWith('admin.')) {
-    return 'admin-login'
-  }
-  // Subdomain matching: portal.storagehub.vn
+  // Customer portal subdomain
   if (hostname.startsWith('portal.')) {
     if (pathname === '/register') return 'register'
     return 'login'
   }
 
-  // 2. Back-office / Admin routes: /admin/login, /staff/login, /admin, /staff
-  if (
-    pathname === '/admin/login'
-    || pathname === '/staff/login'
-    || pathname === '/admin'
-    || pathname === '/staff'
-    || pathname.startsWith('/admin/')
-    || pathname.startsWith('/staff/')
-  ) {
-    return 'admin-login'
-  }
-
-  // 3. Customer Portal routes
+  // Customer portal routes
   if (pathname === '/register') return 'register'
   if (
     pathname === '/login'
@@ -100,8 +83,16 @@ function MainContent() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [apiActor, setApiActor] = useState<ApiActor | null>(() => getAuthenticatedActor())
-  const [restoringSession, setRestoringSession] = useState(() => Boolean(getRefreshToken()))
+  const [restoringSession, setRestoringSession] = useState(() => Boolean(!getAuthenticatedActor() && getRefreshToken()))
   const [guestView, setGuestView] = useState<GuestView>(resolveGuestView)
+  const logoutLock = useRef(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string>()
+  const logoutDialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    if (loggingOut) logoutDialog.current?.showModal()
+    else logoutDialog.current?.close()
+  }, [loggingOut])
 
   useEffect(() => {
     if (!getRefreshToken()) {
@@ -182,8 +173,22 @@ function MainContent() {
 
   useEffect(() => {
     const syncUpdatedActor = () => setApiActor(getAuthenticatedActor())
+    const handleAuthExpired = () => {
+      const wasApiUser = Boolean(getAuthenticatedActor() || apiActor)
+      clearAuthTokens()
+      setApiActor(null)
+      if (wasApiUser) {
+        setSessionUserId(null)
+        setSessionId(null)
+        setGuestView(resolveGuestView())
+      }
+    }
     window.addEventListener('storagehub:actor-updated', syncUpdatedActor)
-    return () => window.removeEventListener('storagehub:actor-updated', syncUpdatedActor)
+    window.addEventListener('storagehub:auth-expired', handleAuthExpired)
+    return () => {
+      window.removeEventListener('storagehub:actor-updated', syncUpdatedActor)
+      window.removeEventListener('storagehub:auth-expired', handleAuthExpired)
+    }
   }, [])
 
   useEffect(() => {
@@ -194,7 +199,7 @@ function MainContent() {
   }, [user])
 
   const handleLogin = (nextUser: User) => {
-    if (['/login', '/register', '/admin/login', '/staff/login', '/admin', '/staff', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
+    if (['/login', '/register', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
       window.history.replaceState(null, '', '/')
     }
     const authenticatedActor = getAuthenticatedActor()
@@ -208,14 +213,25 @@ function MainContent() {
     setSessionUserId(nextUser.id)
   }
 
-  const handleLogout = () => {
-    if (apiActor) void logoutFromApi()
-    if (user && sessionId) endSession(sessionId, user)
-    setApiActor(null)
-    setSessionUserId(null)
-    setSessionId(null)
-    setGuestView('home')
-    window.history.replaceState(null, '', '/')
+  const handleLogout = async () => {
+    if (logoutLock.current) return
+    logoutLock.current = true
+    setLoggingOut(true)
+    setLogoutError(undefined)
+    try {
+      if (apiActor && !await logoutFromApi()) return
+      if (user && sessionId) endSession(sessionId, user)
+      setApiActor(null)
+      setSessionUserId(null)
+      setSessionId(null)
+      setGuestView('home')
+      window.history.replaceState(null, '', '/')
+    } catch {
+      setLogoutError('Chưa lưu được nội dung chat nên chưa đăng xuất. Nội dung vẫn được giữ tại đây. Vui lòng kiểm tra kết nối hoặc lỗi lưu chat rồi thử lại.')
+    } finally {
+      logoutLock.current = false
+      setLoggingOut(false)
+    }
   }
 
   if (restoringSession) {
@@ -228,17 +244,6 @@ function MainContent() {
         <HomePage
           onOpenLogin={() => navigateGuest('/login', 'login', setGuestView)}
           onOpenRegister={() => navigateGuest('/register', 'register', setGuestView)}
-          onOpenAdminLogin={() => navigateGuest('/admin/login', 'admin-login', setGuestView)}
-        />
-      )
-    }
-
-    if (guestView === 'admin-login') {
-      return (
-        <AdminPortalLogin
-          onLogin={handleLogin}
-          onBackToHome={() => navigateGuest('/', 'home', setGuestView)}
-          onSwitchToCustomerPortal={() => navigateGuest('/login', 'login', setGuestView)}
         />
       )
     }
@@ -248,16 +253,13 @@ function MainContent() {
         onLogin={handleLogin}
         initialTab={guestView === 'register' ? 'register' : 'login'}
         onBackToHome={() => navigateGuest('/', 'home', setGuestView)}
-        onSwitchToAdminPortal={() => navigateGuest('/admin/login', 'admin-login', setGuestView)}
       />
     )
   }
 
-  if (apiActor?.mustChangePassword) {
-    return <RequiredPasswordChange actor={apiActor} onChanged={setApiActor} onLogout={handleLogout} />
-  }
-
-  const roleApp = (() => {
+  const roleApp = apiActor?.mustChangePassword
+    ? <RequiredPasswordChange actor={apiActor} onChanged={setApiActor} onLogout={handleLogout} />
+    : (() => {
     switch (user.role) {
       case 'customer': return <CustomerApp user={user} onLogout={handleLogout} onUpdateUser={() => setApiActor(getAuthenticatedActor())} />
       case 'staff': return <StaffApp user={user} onLogout={handleLogout} />
@@ -267,7 +269,13 @@ function MainContent() {
     }
   })()
 
-  return <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm font-medium text-stone-600">Đang tải không gian làm việc…</div>}>{roleApp}</Suspense>
+  return <>
+    {logoutError && <div role="alert" className="fixed left-1/2 top-4 z-[100] flex w-[min(560px,calc(100vw-32px))] -translate-x-1/2 items-start gap-3 rounded-xl bg-amber-50 p-4 text-sm text-stone-800 shadow-lg"><p>{logoutError}</p><button type="button" aria-label="Đóng thông báo đăng xuất" onClick={() => setLogoutError(undefined)} className="shrink-0 px-1">×</button></div>}
+    <div inert={loggingOut} aria-busy={loggingOut}>
+      <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm font-medium text-stone-600">Đang tải không gian làm việc…</div>}>{roleApp}</Suspense>
+    </div>
+    <dialog ref={logoutDialog} aria-label="Đang đăng xuất" onCancel={event => event.preventDefault()} className="fixed inset-0 m-auto rounded-xl border-0 bg-white p-5 text-sm text-stone-700 shadow-lg backdrop:bg-black/20"><p role="status">Đang lưu cuộc trò chuyện và đăng xuất…</p></dialog>
+  </>
 }
 
 export default function App() {

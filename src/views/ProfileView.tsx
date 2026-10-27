@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { PermissionKey, Role, User } from '../types'
-import { Card, Button, Input, PasswordField, Badge, Avatar, Modal } from '../components/ui'
+import { Card, Button, Input, PasswordField, Badge, Modal } from '../components/ui'
+import ProfileHeaderCard from '../components/ProfileHeaderCard'
 import { useStorageHub } from '../store/StorageHubContext'
 import { actorToUser, changePasswordWithApi, getAuthenticatedActor, isApiAuthenticated, listMySessions, updateCurrentProfileWithApi, type ApiSession } from '../services/authApi'
 import { listAccessibleFacilities, listCustomerFacilities, type CustomerFacility } from '../services/customerReservationApi'
@@ -8,6 +9,7 @@ import { listAllCustomerRentals, type CustomerRental } from '../services/custome
 import { listManagerMaintenanceTasks, listStaffMaintenanceTasks, type MaintenanceTask } from '../services/maintenanceApi'
 import { getManagerReportSummary, type ManagerReportSummary } from '../services/managerReportingApi'
 import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
+import { isVietnameseMobilePhone, VIETNAMESE_PHONE_HINT } from '../domain/vietnamesePhone'
 import StaffMaintenanceOperationsPanel from './staff/StaffMaintenanceOperationsPanel'
 
 interface ProfileViewProps {
@@ -20,11 +22,19 @@ const MAX_AVATAR_DATA_LENGTH = 450_000
 type ProfileTab = 'profile' | 'security' | 'role' | 'notifications'
 
 export const roleLabelMap: Record<Role, string> = {
-  customer: 'Khách Hàng Thuê Kho',
-  staff: 'Chuyên Viên Vận Hành Cơ Sở',
-  manager: 'Giám Đốc Quản Lý Cơ Sở',
-  business: 'Quản Lý Vận Hành Kinh Doanh',
-  admin: 'Quản Trị Viên Hệ Thống'
+  customer: 'Khách hàng thuê kho',
+  staff: 'Chuyên viên vận hành cơ sở',
+  manager: 'Giám đốc quản lý cơ sở',
+  business: 'Quản lý vận hành kinh doanh',
+  admin: 'Quản trị viên hệ thống'
+}
+
+const roleBadgeColorMap: Record<Role, string> = {
+  customer: 'bg-blue-100 text-blue-700',
+  staff: 'bg-green-100 text-green-700',
+  manager: 'bg-purple-100 text-purple-700',
+  business: 'bg-amber-100 text-amber-700',
+  admin: 'bg-red-100 text-red-700',
 }
 
 export interface NotificationChannel {
@@ -274,15 +284,6 @@ function profileTabFromLocation(): ProfileTab {
   return 'profile'
 }
 
-function cleanProfilePhone(value: string): string {
-  let phone = value.replace(/[\s().-]/g, '')
-  if (phone.startsWith('+84')) phone = `0${phone.slice(3)}`
-  if (phone.startsWith('84')) phone = `0${phone.slice(2)}`
-  return phone
-}
-
-const PROFILE_PHONE_PATTERN = /^(?:\+?[1-9]\d{7,14}|0\d{9,10})$/
-
 function validateProfileForm(fields: {
   name: string
   phone: string
@@ -293,14 +294,11 @@ function validateProfileForm(fields: {
   const name = fields.name.trim()
   const address = fields.permanentAddress.trim()
   const emergencyName = fields.emergencyContactName.trim()
-  const phone = cleanProfilePhone(fields.phone.trim())
-  const emergencyPhone = cleanProfilePhone(fields.emergencyContactPhone.trim())
-
   if (name.length < 2) return 'Họ và tên phải có ít nhất 2 ký tự.'
-  if (fields.phone.trim() && !PROFILE_PHONE_PATTERN.test(phone)) return 'Số điện thoại không đúng định dạng.'
+  if (fields.phone && !isVietnameseMobilePhone(fields.phone)) return VIETNAMESE_PHONE_HINT
   if (address && address.length < 5) return 'Địa chỉ thường trú phải có ít nhất 5 ký tự.'
   if (emergencyName && emergencyName.length < 2) return 'Tên người liên hệ khẩn cấp phải có ít nhất 2 ký tự.'
-  if (fields.emergencyContactPhone.trim() && !PROFILE_PHONE_PATTERN.test(emergencyPhone)) return 'SĐT liên hệ khẩn cấp không đúng định dạng.'
+  if (fields.emergencyContactPhone && !isVietnameseMobilePhone(fields.emergencyContactPhone)) return `SĐT liên hệ khẩn cấp: ${VIETNAMESE_PHONE_HINT}`
   if (emergencyName && !fields.emergencyContactPhone.trim()) return 'Vui lòng nhập SĐT cho người liên hệ khẩn cấp.'
   if (fields.emergencyContactPhone.trim() && !emergencyName) return 'Vui lòng nhập tên người liên hệ khẩn cấp.'
   return null
@@ -377,7 +375,7 @@ function SectionTitle({ title, description }: { title: string; description: stri
   return (
     <div className="mb-5 border-b border-stone-100 pb-4">
       <h2 className="text-lg font-bold text-stone-900">{title}</h2>
-      <p className="mt-1 text-xs leading-relaxed text-stone-500">{description}</p>
+      <p className="mt-1 text-xs leading-relaxed text-stone-600">{description}</p>
     </div>
   )
 }
@@ -385,7 +383,7 @@ function SectionTitle({ title, description }: { title: string; description: stri
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-stone-100 py-2 last:border-0">
-      <span className="text-stone-500">{label}</span>
+      <span className="text-stone-600">{label}</span>
       <span className="text-right font-semibold text-stone-800">{value}</span>
     </div>
   )
@@ -394,7 +392,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function MetricTile({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-      <p className="text-xs text-stone-500">{label}</p>
+      <p className="text-xs text-stone-600">{label}</p>
       <p className="mt-1 text-2xl font-bold text-stone-900">{value}</p>
     </div>
   )
@@ -414,9 +412,11 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const isCustomer = user.role === 'customer'
   const apiProfile = isApiAuthenticated()
   const [savingProfile, setSavingProfile] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
   const isInternal = !isCustomer
   const apiMode = isApiAuthenticated()
   const apiActor = getAuthenticatedActor()
+  const canChangeAvatar = apiMode || isCustomer
   const [activeTab, setActiveTab] = useState<ProfileTab>(profileTabFromLocation)
 
   // Form states
@@ -427,7 +427,6 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [emergencyContactName, setEmergencyContactName] = useState(user.emergencyContactName || '')
   const [emergencyContactPhone, setEmergencyContactPhone] = useState(user.emergencyContactPhone || '')
   const [avatarUrl, setAvatarUrl] = useState(user.avatar || '')
-  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   // Security states
   const [currentPassword, setCurrentPassword] = useState('')
@@ -457,7 +456,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [requestReason, setRequestReason] = useState('')
-  const [requestFields, setRequestFields] = useState<string[]>(['Họ và Tên', 'Email liên hệ'])
+  const [requestFields, setRequestFields] = useState<string[]>(['Họ và tên', 'Email liên hệ'])
   const [apiSessions, setApiSessions] = useState<ApiSession[]>([])
   const [apiFacilities, setApiFacilities] = useState<CustomerFacility[]>([])
   const [apiFacilitiesError, setApiFacilitiesError] = useState(false)
@@ -467,6 +466,22 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [apiMaintenanceError, setApiMaintenanceError] = useState(false)
   const [apiManagerSummary, setApiManagerSummary] = useState<ManagerReportSummary | null>(null)
   const [apiManagerSummaryError, setApiManagerSummaryError] = useState(false)
+
+  const profileHasChanges =
+    name !== user.name ||
+    phone !== (user.phone || '') ||
+    permanentAddress !== (user.permanentAddress || '') ||
+    emergencyContactName !== (user.emergencyContactName || '') ||
+    emergencyContactPhone !== (user.emergencyContactPhone || '')
+
+  const handleCancelProfileChanges = () => {
+    setName(user.name)
+    setEmail(user.email)
+    setPhone(user.phone || '')
+    setPermanentAddress(user.permanentAddress || '')
+    setEmergencyContactName(user.emergencyContactName || '')
+    setEmergencyContactPhone(user.emergencyContactPhone || '')
+  }
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
@@ -533,7 +548,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
-if (!isCustomer || savingProfile) return
+    if (!isCustomer || savingProfile || !profileHasChanges) return
 
 const validationError = validateProfileForm({
   name,
@@ -550,14 +565,12 @@ if (validationError) {
 
 setSavingProfile(true)
     try {
-      const normalizedPhone = cleanProfilePhone(phone.trim())
-      const normalizedEmergencyPhone = cleanProfilePhone(emergencyContactPhone.trim())
       const profile = {
         fullName: name.trim(),
-        phone: normalizedPhone,
+        phone,
         permanentAddress: permanentAddress.trim(),
         emergencyContactName: emergencyContactName.trim(),
-        emergencyContactPhone: normalizedEmergencyPhone,
+        emergencyContactPhone,
         avatarUrl,
       }
       if (isApiAuthenticated()) {
@@ -601,10 +614,13 @@ setSavingProfile(true)
     setActiveTab(tab)
   }
 
-  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
+  const handleAvatarChange = async (file: File) => {
+    if (avatarUploading) return
+    if (!canChangeAvatar) {
+      throw new Error('Tài khoản demo nội bộ không hỗ trợ đổi ảnh đại diện.')
+    }
+    const previousAvatarUrl = avatarUrl
+    setAvatarUploading(true)
     try {
       const nextAvatarUrl = await compressAvatar(file)
       setAvatarUrl(nextAvatarUrl)
@@ -618,9 +634,11 @@ setSavingProfile(true)
       } else if (isCustomer) {
         updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, avatar: nextAvatarUrl }, user)
       }
-      showToast('Đã cập nhật ảnh đại diện.')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể cập nhật ảnh đại diện.')
+      setAvatarUrl(previousAvatarUrl)
+      throw error
+    } finally {
+      setAvatarUploading(false)
     }
   }
 
@@ -789,11 +807,11 @@ setSavingProfile(true)
   }
 
   const roleTabLabels: Record<Role, string> = {
-    admin: 'Bảo Mật Cấp Cao',
-    customer: 'Kho & Liên Hệ',
-    staff: 'Công Việc & Ca Trực',
-    manager: 'Phạm Vi & Ủy Quyền',
-    business: 'Phê Duyệt & Báo Cáo',
+    admin: 'Bảo mật cấp cao',
+    customer: 'Kho & liên hệ',
+    staff: 'Công việc & ca trực',
+    manager: 'Phạm vi & ủy quyền',
+    business: 'Phê duyệt & báo cáo',
   }
   const currentFacility = facilities.find(item => item.id === user.facilityId || item.code === user.facilityId)
   const apiFacility = apiFacilities.find(item => item.id === user.facilityId || item.code === user.facilityId)
@@ -810,7 +828,7 @@ setSavingProfile(true)
     .filter(([permission]) => user.permissions?.includes(permission))
     .map(([, label]) => label)
   const userRentals = rentals.filter(item => item.customerId === user.id || item.customerEmail === user.email)
-  const activeRentals = userRentals.filter(item => ['active', 'return_requested'].includes(item.status))
+  const activeRentals = userRentals.filter(item => ['setup', 'active', 'return_requested'].includes(item.status))
   const assignedTasks = staffTasks.filter(item => item.assignedStaffId === user.id || item.facilityId === user.facilityId)
   const openTasks = assignedTasks.filter(item => ['open', 'in_progress'].includes(item.status))
   const openApiTasks = apiMaintenanceTasks.filter(item => ['open', 'in_progress'].includes(item.status))
@@ -831,7 +849,7 @@ setSavingProfile(true)
             <div className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-stone-200 p-4">
               <div>
                 <p className="font-semibold text-stone-900">Mã khôi phục khẩn cấp</p>
-                <p className="mt-1 text-xs text-stone-500">Chưa phát hành bộ mã dự phòng.</p>
+                <p className="mt-1 text-xs text-stone-600">Chưa phát hành bộ mã dự phòng.</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => showToast('Chưa thể tạo mã khôi phục khi backend chưa bật MFA.')}>Tạo mã</Button>
             </div>
@@ -844,12 +862,12 @@ setSavingProfile(true)
                 <div key={session.id} className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 p-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-stone-900">{session.userAgent || 'Thiết bị không xác định'}</p>
-                    <p className="text-xs text-stone-500">{session.createdIp || 'Không có IP'} · {new Date(session.createdAt).toLocaleString('vi-VN')}</p>
+                    <p className="text-xs text-stone-600">{session.createdIp || 'Không có IP'} · {new Date(session.createdAt).toLocaleString('vi-VN')}</p>
                   </div>
                   <Badge variant={session.active ? 'success' : 'muted'}>{session.active ? 'Đang hoạt động' : 'Đã đóng'}</Badge>
                 </div>
               ))}
-              {!apiSessions.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-500">Chưa có dữ liệu truy cập từ backend.</p>}
+              {!apiSessions.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Chưa có dữ liệu truy cập từ backend.</p>}
             </div>
           </Card>
 
@@ -862,14 +880,14 @@ setSavingProfile(true)
           </Card>
           <Card className="p-6 xl:col-span-2">
             <SectionTitle title="Nhật ký thao tác của tôi" description="Các thay đổi do tài khoản này thực hiện trên hệ thống." />
-            <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-500">Nhật ký cá nhân sẽ hiển thị khi backend cung cấp bộ lọc theo người thực hiện.</p>
+            <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Nhật ký cá nhân sẽ hiển thị khi backend cung cấp bộ lọc theo người thực hiện.</p>
           </Card>
         </div>
       )
     }
 
     if (user.role === 'customer') {
-      const visibleApiRentals = apiRentals.filter(rental => ['active', 'return_requested'].includes(rental.status))
+  const visibleApiRentals = apiRentals.filter(rental => ['setup', 'active', 'return_requested'].includes(rental.status))
       const visibleRentals = apiMode ? visibleApiRentals : activeRentals
       return (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -893,17 +911,17 @@ setSavingProfile(true)
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-bold text-stone-900 text-base">{unitCode}</p>
-                        {unitTypeName && <p className="text-xs text-stone-500 font-normal">{unitTypeName}</p>}
+                        {unitTypeName && <p className="text-xs text-stone-600 font-normal">{unitTypeName}</p>}
                       </div>
                       <Badge variant={rental.status === 'active' ? 'success' : 'warning'}>
-                        {rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
+                        {rental.status === 'setup' ? 'Đang setup miễn phí' : rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-stone-700">{facName}</p>
-                    <p className="mt-1 text-xs text-stone-500">
+                    <p className="mt-1 text-xs text-stone-600">
                       Hết hạn: {rental.contractEndDate ? new Date(rental.contractEndDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}
                     </p>
-                    <p className="mt-1 text-xs text-stone-500">
+                    <p className="mt-1 text-xs text-stone-600">
                       Địa chỉ cơ sở: <span className="text-stone-700">{facAddress}</span>
                     </p>
                   </div>
@@ -919,15 +937,15 @@ setSavingProfile(true)
                       <Badge variant="success">Đang thuê</Badge>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-stone-700">{rental.facilityName}</p>
-                    <p className="mt-1 text-xs text-stone-500">Hết hạn: {new Date(rental.endDate).toLocaleDateString('vi-VN')}</p>
-                    <p className="mt-1 text-xs text-stone-500">Địa chỉ cơ sở: <span className="text-stone-700">{facAddress}</span></p>
-                    <p className="mt-1 text-xs text-stone-500">Mã PIN: {rental.gateCode || 'Được cấp khi bàn giao'}</p>
+                    <p className="mt-1 text-xs text-stone-600">Hết hạn: {new Date(rental.endDate).toLocaleDateString('vi-VN')}</p>
+                    <p className="mt-1 text-xs text-stone-600">Địa chỉ cơ sở: <span className="text-stone-700">{facAddress}</span></p>
+                    <p className="mt-1 text-xs text-stone-600">Mã PIN: {rental.gateCode || 'Được cấp khi bàn giao'}</p>
                   </div>
                 )
               })}
               {apiMode && apiRentalsError && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700 md:col-span-2">Không tải được hồ sơ thuê từ backend.</p>}
-              {apiMode && !apiRentalsError && !visibleApiRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-500 md:col-span-2">Chưa có hồ sơ thuê đang hiệu lực.</p>}
-              {!apiMode && !activeRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-500 md:col-span-2">Chưa có kho đang thuê trong dữ liệu tài khoản.</p>}
+              {apiMode && !apiRentalsError && !visibleApiRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600 md:col-span-2">Chưa có hồ sơ thuê đang hiệu lực.</p>}
+              {!apiMode && !activeRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600 md:col-span-2">Chưa có kho đang thuê trong dữ liệu tài khoản.</p>}
             </div>
           </Card>
           <Card className="p-6">
@@ -942,7 +960,7 @@ setSavingProfile(true)
             <div className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 p-4">
               <div>
                 <p className="font-semibold text-stone-900">Phương thức thanh toán mặc định</p>
-                <p className="mt-1 text-xs text-stone-500">Chưa liên kết thẻ hoặc tài khoản ngân hàng.</p>
+                <p className="mt-1 text-xs text-stone-600">Chưa liên kết thẻ hoặc tài khoản ngân hàng.</p>
               </div>
               <Badge variant="muted">Chưa thiết lập</Badge>
             </div>
@@ -978,7 +996,7 @@ setSavingProfile(true)
                     <MetricTile label="Đang xử lý" value={openApiTasks.length} />
                     <MetricTile label="Tổng nhiệm vụ" value={apiMaintenanceTasks.length} />
                   </div>
-                  {!apiMaintenanceTasks.length && <p className="mt-4 rounded-lg bg-stone-50 p-3 text-xs text-stone-500">Chưa có nhiệm vụ được phân công.</p>}
+                  {!apiMaintenanceTasks.length && <p className="mt-4 rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Chưa có nhiệm vụ được phân công.</p>}
                 </>
               )
             ) : (
@@ -987,7 +1005,7 @@ setSavingProfile(true)
                   <MetricTile label="Đang xử lý" value={openTasks.length} />
                   <MetricTile label="Tổng nhiệm vụ" value={assignedTasks.length} />
                 </div>
-                <p className="mt-4 rounded-lg bg-stone-50 p-3 text-xs text-stone-500">Lịch ca chi tiết sẽ hiển thị khi backend ca trực được kết nối.</p>
+                <p className="mt-4 rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Lịch ca chi tiết sẽ hiển thị khi backend ca trực được kết nối.</p>
               </>
             )}
           </Card>
@@ -1012,13 +1030,15 @@ setSavingProfile(true)
             <SectionTitle title="Ủy quyền ca trực" description="Thiết lập người thay thế khi vắng mặt hoặc nghỉ phép." />
             <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
               <p className="font-semibold text-stone-800">Chưa có người được ủy quyền</p>
-              <p className="mt-1 text-xs text-stone-500">Dữ liệu ủy quyền cần được lưu và kiểm tra từ backend.</p>
+              <p className="mt-1 text-xs text-stone-600">Dữ liệu ủy quyền cần được lưu và kiểm tra từ backend.</p>
               <Button className="mt-3" variant="outline" size="sm" onClick={() => showToast('Tính năng ủy quyền chưa được bật.')}>Thiết lập</Button>
             </div>
           </Card>
         </div>
       )
     }
+
+    if (user.role !== 'business' && user.role !== 'admin') return null
 
     return (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -1027,7 +1047,13 @@ setSavingProfile(true)
           <div className="space-y-3">
             <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <span className="text-sm font-semibold text-emerald-900">Phạm vi dữ liệu</span>
-              <Badge variant="success">{apiMode && Object.keys(apiActor?.facilityScopes ?? {}).length ? 'Theo cơ sở được cấp' : 'Toàn quốc (Tất cả cơ sở)'}</Badge>
+              <Badge variant="success">{apiMode
+                ? (user.role as string) === 'admin'
+                  ? 'Toàn hệ thống'
+                  : Object.keys(apiActor?.facilityScopes ?? {}).length
+                    ? 'Theo cơ sở được cấp'
+                    : 'Chưa được cấp phạm vi cơ sở'
+                : 'Theo dữ liệu tài khoản'}</Badge>
             </div>
             <InfoRow label="Số cơ sở trong phạm vi" value={apiMode ? (apiFacilities.length ? `${apiFacilities.length} cơ sở` : apiFacilitiesError ? 'Không tải được dữ liệu cơ sở' : 'Chưa có dữ liệu') : facilities.length ? `${facilities.length} cơ sở` : 'Chưa có dữ liệu'} />
             <InfoRow
@@ -1043,7 +1069,7 @@ setSavingProfile(true)
           <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
             <div>
               <p className="font-semibold text-stone-800">Approval PIN</p>
-              <p className="mt-1 text-xs text-stone-500">Chưa thiết lập mã xác nhận trong backend.</p>
+              <p className="mt-1 text-xs text-stone-600">Chưa thiết lập mã xác nhận trong backend.</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => showToast('Approval PIN chưa được bật.')}>Thiết lập</Button>
           </div>
@@ -1053,7 +1079,7 @@ setSavingProfile(true)
   }
 
   return (
-    <div className="fade-in mx-auto w-full max-w-7xl space-y-6">
+    <div className="fade-in mx-auto min-w-0 w-full max-w-7xl overflow-x-hidden space-y-6">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 right-6 z-50 bg-[#292a27] text-white px-5 py-3 rounded-lg shadow-xl border border-amber-500/40 flex items-center gap-3 fade-in">
@@ -1062,52 +1088,21 @@ setSavingProfile(true)
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-xl border border-[#deddd2] bg-gradient-to-r from-[#292a27] to-[#3a3933] text-white p-6 sm:p-8 shadow-sm">
-        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-64 h-64 bg-[#e9a12c]/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5 justify-between">
-          <div className="flex items-center gap-5">
-            <div className="relative">
-              <Avatar name={user.name} size="lg" imageUrl={avatarUrl} />
-              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-              <button
-                type="button"
-                className="absolute -bottom-1 -right-1 bg-[#e9a12c] text-[#292a27] p-1.5 rounded-full hover:bg-amber-400 transition shadow cursor-pointer"
-                title="Đổi ảnh đại diện"
-                aria-label="Đổi ảnh đại diện"
-                onClick={() => avatarInputRef.current?.click()}
-              >
-                <svg className="show-icon w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
-            </div>
-            <div>
-              <div className="mb-1 flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-stone-100">{user.name}</h1>
-                <span className="inline-flex items-center rounded bg-[#e9a12c] px-2.5 py-0.5 text-[11px] font-mono font-semibold uppercase tracking-[.08em] text-[#3f2607]">
-                  {roleLabelMap[user.role] ?? user.role}
-                </span>
-              </div>
-              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-300">
-                <span>{user.email}</span>
-                <span className="text-stone-500">•</span>
-                <span>Mã người dùng: {user.id.slice(0, 12).toUpperCase()}</span>
-                {user.facility && <><span className="text-stone-500">•</span><span>Cơ sở: {user.facility}</span></>}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      <ProfileHeaderCard
+        user={{ ...user, avatarUrl }}
+        roleLabel={roleLabelMap[user.role] ?? user.role}
+        roleColor={roleBadgeColorMap[user.role]}
+        canChangeAvatar={canChangeAvatar}
+        avatarUploading={avatarUploading}
+        onAvatarChange={handleAvatarChange}
+      />
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-[#deddd2] pb-1">
         {([
-          ['profile', 'Thông Tin Cơ Bản'],
-          ['security', 'Bảo Mật Tài Khoản'],
+          ['profile', 'Thông tin cơ bản'],
+          ['security', 'Bảo mật tài khoản'],
           ['role', roleTabLabels[user.role]],
-          ['notifications', 'Tùy Chọn Thông Báo'],
+          ['notifications', 'Tùy chọn thông báo'],
         ] as [ProfileTab, string][]).map(([tab, label]) => (
           <button
             key={tab}
@@ -1115,7 +1110,7 @@ setSavingProfile(true)
             className={`-mb-[2px] rounded-t-lg border-b-2 px-4 py-2 text-sm font-semibold transition ${
               activeTab === tab
                 ? 'border-[#e9a12c] bg-white text-stone-900 shadow-xs'
-                : 'border-transparent text-stone-500 hover:text-stone-800'
+                : 'border-transparent text-stone-600 hover:text-stone-800'
             }`}
           >
             {label}
@@ -1125,15 +1120,14 @@ setSavingProfile(true)
 
       {/* TAB 1: General Info */}
       {activeTab === 'profile' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-2">
             {isInternal ? (
               /* Internal Staff / Manager / Business / Admin: Clean Key-Value Profile Card */
               <Card className="p-6">
                 <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-100">
                   <div>
-                    <h2 className="text-lg font-bold text-stone-900">Thông Tin Cơ Bản</h2>
-                    <p className="text-xs text-stone-500">Thông tin nhận diện và liên hệ của tài khoản</p>
+                    <p className="text-xs text-stone-600">Thông tin nhận diện và liên hệ của tài khoản</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold px-2.5 py-1 rounded bg-stone-100 text-stone-700">Hồ sơ nội bộ</span>
@@ -1142,28 +1136,23 @@ setSavingProfile(true)
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Họ và Tên</span>
+                    <span className="text-[11px] font-semibold tracking-wider text-stone-600 block mb-1">Họ và tên</span>
                     <span className="font-bold text-stone-900 text-base">{name}</span>
                   </div>
 
                   <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Địa Chỉ Email Công Tác</span>
+                    <span className="text-[11px] font-semibold tracking-wider text-stone-600 block mb-1">Địa chỉ email công tác</span>
                     <span className="font-semibold text-stone-900 text-sm">{email}</span>
                   </div>
 
                   <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Số Điện Thoại Chính</span>
+                    <span className="text-[11px] font-semibold tracking-wider text-stone-600 block mb-1">Số điện thoại chính</span>
                     <span className="font-semibold text-stone-900 text-sm">{phone || 'Chưa cập nhật'}</span>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 block mb-1">Mã Định Danh Người Dùng</span>
-                    <span className="font-mono text-xs font-semibold text-stone-900">{user.id}</span>
                   </div>
 
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-500">
+                <div className="mt-6 pt-4 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-600">
                   <span>Thông tin nhân sự được đồng bộ tập trung. Khi cần thay đổi, hãy gửi yêu cầu tới Admin/HR.</span>
                   <Button
                     variant="outline"
@@ -1171,7 +1160,7 @@ setSavingProfile(true)
                     onClick={() => setRequestModalOpen(true)}
                     className="shrink-0 border-stone-300 hover:bg-stone-100 text-stone-800 cursor-pointer"
                   >
-                    Gửi Yêu Cầu Chỉnh Sửa
+                    Gửi yêu cầu chỉnh sửa
                   </Button>
                 </div>
               </Card>
@@ -1180,8 +1169,7 @@ setSavingProfile(true)
               <Card className="p-6">
                 <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
                   <div>
-                    <h2 className="text-lg font-bold text-stone-900">Thông Tin Cơ Bản</h2>
-                    <p className="text-xs text-stone-500">Cập nhật thông tin liên hệ và người liên hệ khẩn cấp</p>
+                    <p className="text-xs text-stone-600">Cập nhật thông tin liên hệ và người liên hệ khẩn cấp</p>
                   </div>
                 </div>
 
@@ -1193,32 +1181,40 @@ setSavingProfile(true)
                       onChange={e => setName(e.target.value)}
                       required
                     />
-                    <Input
-                      label="Địa Chỉ Email"
-                      type="email"
-                      value={email}
-                      readOnly
-                      title="Email đăng nhập không thể thay đổi"
-                    />
+                    <div>
+                      <div className="relative">
+                        <Input
+                          label="Địa chỉ email"
+                          type="email"
+                          value={email}
+                          readOnly
+                          aria-readonly="true"
+                          title="Email đăng nhập không thể thay đổi"
+                          className="cursor-not-allowed bg-stone-100 pr-10 text-stone-600"
+                        />
+                        <span className="pointer-events-none absolute right-3 top-9 text-stone-600" aria-hidden="true">
+                          <svg className="show-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <rect x="5" y="10" width="14" height="10" rx="2" strokeWidth={1.8} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10V7a4 4 0 118 0v3" />
+                          </svg>
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-stone-600">Email dùng để đăng nhập nên không thể đổi.</p>
+                    </div>
                   </div>
 
                   <Input
                     label="Số điện thoại Việt Nam"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    placeholder="0901 234 567"
+                    placeholder="0901234567"
                     inputMode="tel"
                   />
-
-                  <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
-                    <span className="block text-xs font-medium text-stone-500">Mã định danh người dùng</span>
-                    <span className="font-mono text-xs font-semibold text-stone-800">{user.id}</span>
-                  </div>
 
                   <label className="space-y-1 block text-sm font-medium text-stone-700">
                     <div className="flex items-center justify-between">
                       <span>Địa chỉ thường trú</span>
-                      <span className="text-xs text-stone-400 font-normal">Tối thiểu 5 ký tự</span>
+                      <span className="text-xs text-stone-600 font-normal">Tối thiểu 5 ký tự</span>
                     </div>
                     <textarea
                       value={permanentAddress}
@@ -1237,46 +1233,57 @@ setSavingProfile(true)
                         onChange={e => setEmergencyContactName(e.target.value)}
                         placeholder="Họ và tên người liên hệ"
                       />
-                      <p className="mt-1 text-[11px] text-stone-400">Tối thiểu 2 ký tự</p>
+                      <p className="mt-1 text-[11px] text-stone-600">Tối thiểu 2 ký tự</p>
                     </div>
                     <div>
                       <Input
                         label="SĐT liên hệ khẩn cấp"
                         value={emergencyContactPhone}
                         onChange={e => setEmergencyContactPhone(e.target.value)}
-                        placeholder="0901 234 567"
+                        placeholder="0901234567"
                         inputMode="tel"
                       />
-                      <p className="mt-1 text-[11px] text-stone-400">10–11 số bắt đầu bằng 0 hoặc số quốc tế</p>
+                      <p className="mt-1 text-[11px] text-stone-600">Nhập 10–11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
                     </div>
                   </div>
 
-                  <div className="pt-4 flex justify-end gap-3 border-t border-stone-100">
-                    <Button type="submit" variant="primary" className="cursor-pointer" disabled={savingProfile}>
-                      {savingProfile ? 'Đang lưu…' : 'Lưu Thay Đổi'}
-                    </Button>
-                  </div>
+                  {profileHasChanges && (
+                    <div className="sticky bottom-0 z-10 flex flex-col justify-end gap-3 border-t border-stone-200 bg-white/95 pt-4 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="min-h-11 cursor-pointer"
+                        onClick={handleCancelProfileChanges}
+                        disabled={savingProfile}
+                      >
+                        Hủy
+                      </Button>
+                      <Button type="submit" variant="primary" className="min-h-11 cursor-pointer" disabled={savingProfile}>
+                        {savingProfile ? 'Đang lưu…' : 'Lưu thay đổi'}
+                      </Button>
+                    </div>
+                  )}
                 </form>
               </Card>
             )}
           </div>
 
           {/* Supporting information */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {isInternal && (
               <Card className="p-5 bg-[#fbfaf6] border-stone-200">
-                <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông Tin Tổ Chức</h3>
+                <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông tin tổ chức</h3>
                 <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu audit log.</p>
                 <Button className="mt-4 w-full cursor-pointer" size="sm" onClick={() => setRequestModalOpen(true)}>
-                  Gửi Yêu Cầu Chỉnh Sửa
+                  Gửi yêu cầu chỉnh sửa
                 </Button>
               </Card>
             )}
 
             {isCustomer && (
-              <Card className="p-5 bg-[#fbfaf6] border-stone-200">
-                <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-stone-500 mb-2">
-                  Bảo vệ tài khoản Khách hàng
+              <Card className="sticky top-6 self-start p-5 bg-[#fbfaf6] border-stone-200">
+                <h3 className="text-xs font-mono font-semibold tracking-wider text-stone-600 mb-2">
+                  Bảo vệ tài khoản khách hàng
                 </h3>
                 <p className="text-xs text-stone-600 leading-relaxed">Hồ sơ khách hàng được bảo mật theo tiêu chuẩn StorageHub. Bạn có thể đổi mật khẩu trực tiếp ở tab Bảo mật.</p>
               </Card>
@@ -1291,14 +1298,14 @@ setSavingProfile(true)
           <div className="max-w-5xl space-y-6">
             <Card className="p-6">
               <div className="pb-4 mb-5 border-b border-stone-100">
-                <h2 className="text-lg font-bold text-stone-900">Đổi Mật Khẩu Cá Nhân</h2>
-                <p className="text-xs text-stone-500">{PASSWORD_POLICY_HINT}</p>
+                <h2 className="text-lg font-bold text-stone-900">Đổi mật khẩu cá nhân</h2>
+                <p className="text-xs text-stone-600">{PASSWORD_POLICY_HINT}</p>
               </div>
 
               <form onSubmit={handleChangePassword} className="space-y-4">
                 <PasswordField
                   id="profile-current-password"
-                  label="Mật Khẩu Hiện Tại"
+                  label="Mật khẩu hiện tại"
                   placeholder="Nhập mật khẩu hiện tại..."
                   value={currentPassword}
                   onChange={e => setCurrentPassword(e.target.value)}
@@ -1306,7 +1313,7 @@ setSavingProfile(true)
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <PasswordField
                     id="profile-new-password"
-                    label="Mật Khẩu Mới"
+                    label="Mật khẩu mới"
                     placeholder={`Ít nhất ${PASSWORD_MIN_LENGTH} ký tự...`}
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
@@ -1314,7 +1321,7 @@ setSavingProfile(true)
                   />
                   <PasswordField
                     id="profile-confirm-password"
-                    label="Xác Nhận Mật Khẩu Mới"
+                    label="Xác nhận mật khẩu mới"
                     placeholder="Nhập lại mật khẩu mới..."
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
@@ -1323,7 +1330,7 @@ setSavingProfile(true)
                 </div>
                 <div className="flex justify-end pt-2">
                   <Button type="submit" variant="primary" className="cursor-pointer">
-                    Đổi Mật Khẩu
+                    Đổi mật khẩu
                   </Button>
                 </div>
               </form>
@@ -1336,7 +1343,7 @@ setSavingProfile(true)
                   <h2 className="text-lg font-bold text-stone-900">
                     {'Phiên Đăng Nhập Đang Hoạt Động'}
                   </h2>
-                  <p className="text-xs text-stone-500">
+                  <p className="text-xs text-stone-600">
                     {'Các thiết bị hiện đang được xác thực với tài khoản này'}
                   </p>
                 </div>
@@ -1352,7 +1359,7 @@ setSavingProfile(true)
               </div>
 
               <div className="space-y-3">
-                {!sessionRows.length && <p className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-500">Chưa có phiên nào được ghi nhận cho tài khoản này.</p>}
+                {!sessionRows.length && <p className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">Chưa có phiên nào được ghi nhận cho tài khoản này.</p>}
                 {sessionRows.map(session => (
                   <div key={session.id} className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${session.status === 'active' ? 'border-emerald-200 bg-emerald-50/50' : 'border-stone-200 bg-white'}`}>
                     <div className="min-w-0">
@@ -1362,7 +1369,7 @@ setSavingProfile(true)
                           {session.status === 'active' ? 'Đang hoạt động' : session.status === 'revoked' ? 'Đã thu hồi' : 'Đã đăng xuất'}
                         </Badge>
                       </div>
-                      <p className="text-xs text-stone-500">{session.location} · Bắt đầu {session.createdAt}</p>
+                      <p className="text-xs text-stone-600">{session.location} · Bắt đầu {session.createdAt}</p>
                     </div>
                     {session.status === 'active' && !isApiAuthenticated() && (
                       <Button
@@ -1406,7 +1413,7 @@ setSavingProfile(true)
                   Vai trò: {roleLabelMap[user.role] ?? roleConfig.roleTitle}
                 </span>
               </div>
-              <p className="text-xs text-stone-500 leading-relaxed max-w-xl">
+              <p className="text-xs text-stone-600 leading-relaxed max-w-xl">
                 {roleConfig.subtitle}
               </p>
             </div>
@@ -1428,7 +1435,7 @@ setSavingProfile(true)
               <button
                 type="button"
                 onClick={handleResetChannelDefaults}
-                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-stone-200 text-stone-500 hover:text-stone-800 hover:bg-stone-50 transition cursor-pointer"
+                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-stone-200 text-stone-600 hover:text-stone-800 hover:bg-stone-50 transition cursor-pointer"
                 title="Khôi phục mặc định"
               >
                 Mặc định
@@ -1455,7 +1462,7 @@ setSavingProfile(true)
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-stone-500 leading-relaxed">
+                    <p className="text-xs text-stone-600 leading-relaxed">
                       {channel.description}
                     </p>
                   </div>
@@ -1470,7 +1477,7 @@ setSavingProfile(true)
             })}
           </div>
 
-          <div className="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
+          <div className="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-600">
             <span>Tùy chọn được lưu tự động theo tài khoản của bạn trên thiết bị này</span>
             <span className="font-mono text-emerald-600 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1480,9 +1487,9 @@ setSavingProfile(true)
         </Card>
       )}
 
-      <Modal open={requestModalOpen && isInternal} onClose={() => setRequestModalOpen(false)} title="Gửi Yêu Cầu Chỉnh Sửa Hồ Sơ">
+      <Modal open={requestModalOpen && isInternal} onClose={() => setRequestModalOpen(false)} title="Gửi yêu cầu chỉnh sửa hồ sơ">
         <div className="space-y-5">
-          <p className="text-xs text-stone-500 leading-relaxed">
+          <p className="text-xs text-stone-600 leading-relaxed">
             Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (audit log).
           </p>
 
@@ -1492,7 +1499,7 @@ setSavingProfile(true)
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {[
-                { id: 'Họ và Tên', label: 'Họ và Tên' },
+                { id: 'Họ và tên', label: 'Họ và tên' },
                 { id: 'Email liên hệ', label: 'Email công tác' },
                 { id: 'Số điện thoại', label: 'Số điện thoại' },
                 { id: 'Mật khẩu', label: 'Mật khẩu đăng nhập' },
@@ -1539,9 +1546,9 @@ setSavingProfile(true)
               placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456; Điều chuyển cơ sở sang Kho Việt – Cơ sở Quận 1...)"
               className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none transition"
             />
-            <div className="flex justify-between items-center mt-1 text-[11px] text-stone-400">
+            <div className="flex justify-between items-center mt-1 text-[11px] text-stone-600">
               <span>Tối thiểu 10 ký tự</span>
-              <span className={requestReason.trim().length >= 10 ? 'text-emerald-600 font-semibold' : 'text-stone-400'}>
+              <span className={requestReason.trim().length >= 10 ? 'text-emerald-600 font-semibold' : 'text-stone-600'}>
                 {requestReason.trim().length}/10 ký tự
               </span>
             </div>
@@ -1561,7 +1568,7 @@ setSavingProfile(true)
               disabled={!requestFields.length || requestReason.trim().length < 10}
               onClick={handleSubmitProfileRequest}
             >
-              Gửi Yêu Cầu Tới Admin/HR
+              Gửi yêu cầu tới Admin/HR
             </Button>
           </div>
         </div>

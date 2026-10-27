@@ -1,7 +1,8 @@
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
-import type { RentalApiRecord } from "../../types/rentalApi"
+import type { RentalApiRecord, RentalApiRole } from "../../types/rentalApi"
 
 export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning = true) {
   const verified = rental.dateSemantics?.completeness === "COMPLETE"
@@ -11,6 +12,7 @@ export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning =
 }
 
 export const rentalLabels: Record<string, string> = {
+  setup: "Đang chuẩn bị",
   active: "Đang hiệu lực",
   return_requested: "Đã yêu cầu trả kho",
   return_inspection: "Đang kiểm tra trả kho",
@@ -20,12 +22,12 @@ export const rentalLabels: Record<string, string> = {
 export const renewalLabels: Record<string, string> = {
   pending: "Hệ thống đang kiểm tra điều kiện",
   accepted: "Đã xác nhận, thanh toán chưa mở",
-  deposit_paid: "Đã thanh toán cọc gia hạn",
-  full_rent_paid: "Đã thanh toán toàn kỳ gia hạn",
+  deposit_paid: "Chờ ký gia hạn",
+  full_rent_paid: "Chờ ký gia hạn",
   approved: "Đã mở thanh toán (hồ sơ cũ)",
   appointment_scheduled: "Đã hẹn",
-  payment_processing: "Đang xử lý thanh toán",
-  payment_failed: "Thanh toán thất bại",
+  payment_processing: "Chờ kết quả thanh toán",
+  payment_failed: "Chờ thanh toán lại",
   payment_expired: "Hết hạn thanh toán",
   rejected: "Đã đóng (hồ sơ cũ)",
   cancelled: "Đã hủy",
@@ -47,7 +49,7 @@ export function rentalDate(value: string | null | undefined) {
   const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
   if (date) return `${date[3]}/${date[2]}/${date[1]}`
   if (!Number.isFinite(Date.parse(value))) return unknown
-  return new Date(value).toLocaleString("vi-VN", {
+  return parseVietnamDate(value).toLocaleString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
   })
 }
@@ -60,11 +62,20 @@ export function rentalError(error: unknown) {
     if (error.status === 404)
       return "Không có"
     const renewalErrors: Array<[string, string]> = [
-      ["Appointment expired during reservation", "Lịch hẹn đã qua trong lúc xử lý. Hãy tải lại hồ sơ và chọn lịch khác; lịch mới chưa được lưu."],
-      ["Eligibility UNKNOWN", "Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau; nếu vẫn gặp lỗi, liên hệ quản lý cơ sở."],
+      ["Renewal cutoff has passed", "Đã qua hạn gia hạn. Bạn không thể gửi yêu cầu mới, vui lòng liên hệ cơ sở để được hỗ trợ."],
+      ["Recovery handoff blocks renewal", "Hồ sơ đã chuyển sang xử lý thu hồi nên không thể gia hạn trực tuyến. Vui lòng liên hệ cơ sở."],
+      ["Recorded Recovery handoff blocks Renewal payment", "Hồ sơ đã chuyển sang xử lý thu hồi nên không thể tiếp tục thanh toán gia hạn. Vui lòng liên hệ cơ sở."],
+      ["Return or non-active rental blocks renewal", "Hồ sơ thuê đã ngừng hiệu lực hoặc đang trả kho nên không thể gia hạn."],
+      ["Active maintenance blocks renewal", "Gian kho đang được bảo trì nên chưa thể gia hạn. Vui lòng liên hệ cơ sở."],
+      ["Another rental is committed to this unit", "Gian kho đã được bố trí cho hồ sơ thuê khác nên không thể gia hạn. Vui lòng liên hệ cơ sở."],
+      ["Another booking is committed to this unit", "Gian kho đã có lịch đặt khác nên không thể gia hạn. Vui lòng liên hệ cơ sở."],
+      ["Rental unit is no longer occupied by the current rental", "Gian kho không còn thuộc hồ sơ thuê này. Vui lòng liên hệ cơ sở để kiểm tra."],
+      ["Existing return case blocks renewal", "Hồ sơ đang có yêu cầu trả kho nên chưa thể gia hạn. Vui lòng liên hệ cơ sở để xử lý yêu cầu trả kho trước khi gửi gia hạn."],
+      ["Appointment expired during reservation", "Lịch hẹn đã qua trong lúc xử lý. Hãy tải lại hồ sơ và chọn lịch khác, lịch mới chưa được lưu."],
+      ["Eligibility UNKNOWN", "Chưa thể xác minh hồ sơ có đủ điều kiện gia hạn. Hãy thử lại sau, nếu vẫn gặp lỗi, liên hệ quản lý cơ sở."],
       ["Eligibility/cutoff missing", "Chưa có dữ liệu xác định hạn xử lý gia hạn. Vui lòng tải lại sau."],
       ["Unverified date provenance/cutoff", "Ngày hết hạn hoặc mốc xử lý của hồ sơ chưa được xác minh. Vui lòng liên hệ quản lý cơ sở để kiểm tra hồ sơ."],
-      ["BO renewal policy missing", "Cơ sở chưa công bố chính sách gia hạn đang có hiệu lực. Vui lòng liên hệ quản lý cơ sở."],
+      ["BO renewal policy missing", "Chưa tải được các gói gia hạn của cơ sở. Vui lòng thử lại."],
       ["Incomplete BO policy", "Chính sách gia hạn của cơ sở còn thiếu thông tin bắt buộc. Vui lòng liên hệ quản lý cơ sở."],
       ["Rental date provenance is unknown", "Chưa xác minh được ngày thuê của hồ sơ nên chưa thể tính kỳ gia hạn. Vui lòng liên hệ quản lý cơ sở."],
       ["Rental date provenance unknown", "Chưa xác minh được ngày thuê của hồ sơ nên chưa thể tính kỳ gia hạn. Vui lòng liên hệ quản lý cơ sở."],
@@ -83,9 +94,9 @@ export function rentalError(error: unknown) {
       ["Verified remaining-rent and overdue-fee allocations required", "Chưa ghi nhận đủ tiền thuê còn lại hoặc phí quá hạn theo bảng kê. Hãy hoàn tất bước ghi nhận thanh toán trước khi ký gia hạn."],
       ["Financial state UNKNOWN", "Chưa xác minh được tình trạng thanh toán của hồ sơ. Vui lòng tải lại sau."],
       ["Financial state incomplete", "Dữ liệu thanh toán của hồ sơ chưa đầy đủ để xét gia hạn. Vui lòng liên hệ quản lý cơ sở."],
-      ["Consistent financial source missing", "Chưa kết nối được nguồn đối soát thanh toán của cơ sở. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
-      ["Atomic shared extension hold unavailable", "Hệ thống chưa thể giữ gian kho an toàn cho yêu cầu này. Chưa có thay đổi nào được xác nhận; vui lòng thử lại sau."],
-      ["System payment deadline/hold lifecycle unavailable", "Hệ thống chưa sẵn sàng theo dõi hạn thanh toán và giữ gian kho. Yêu cầu chưa được xử lý; vui lòng thử lại sau."],
+      ["Consistent financial source missing", "Chưa kết nối được nguồn đối soát thanh toán của cơ sở. Yêu cầu chưa được xử lý, vui lòng thử lại sau."],
+      ["Atomic shared extension hold unavailable", "Hệ thống chưa thể giữ gian kho an toàn cho yêu cầu này. Chưa có thay đổi nào được xác nhận, vui lòng thử lại sau."],
+      ["System payment deadline/hold lifecycle unavailable", "Hệ thống chưa sẵn sàng theo dõi hạn thanh toán và giữ gian kho. Yêu cầu chưa được xử lý, vui lòng thử lại sau."],
       ["Terms changed: new quote and Customer confirmation required", "Điều khoản hoặc giá đã thay đổi. Hãy lấy báo giá mới và xác nhận lại trước khi gửi."],
       ["Rental allocation/end changed; requote required", "Gian kho hoặc ngày hết hạn đã thay đổi. Hãy tải lại hồ sơ và lấy báo giá mới."],
       ["Accepted Renewal terms do not match persisted request", "Điều khoản được xác nhận không còn khớp với yêu cầu đã lưu. Hãy tải lại yêu cầu và xác nhận báo giá mới."],
@@ -94,7 +105,7 @@ export function rentalError(error: unknown) {
     const specific = renewalErrors.find(([sourceText]) => error.message.includes(sourceText))
     if (specific) return specific[1]
     if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))
-      return "Một nguồn dữ liệu cần thiết cho gia hạn hiện chưa sẵn sàng. Yêu cầu chưa được xử lý; vui lòng thử lại sau hoặc liên hệ quản lý cơ sở nếu lỗi tiếp diễn."
+      return "Một nguồn dữ liệu cần thiết cho gia hạn hiện chưa sẵn sàng. Yêu cầu chưa được xử lý, vui lòng thử lại sau hoặc liên hệ quản lý cơ sở nếu lỗi tiếp diễn."
     if (error.status === 409)
       return "Hồ sơ đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng mở lại hồ sơ, nếu điều khoản thay đổi hãy xác nhận báo giá mới."
     if (error.status === null || error.status >= 500)
@@ -113,7 +124,7 @@ export function hasRenewalAction(
   record: RenewalApiRecord,
   action: RenewalApiAction,
   actor: ApiActor | null,
-  role: "customer" | "manager",
+  role: RentalApiRole,
 ) {
   if (
     !actor ||
@@ -122,7 +133,7 @@ export function hasRenewalAction(
     !record.allowedActions.includes(action)
   )
     return false
-  if (role === "manager") return false
+  if (role !== "customer") return false
   return (
     actor.roles.includes("CUSTOMER") &&
     actor.id === record.customer.id &&

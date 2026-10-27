@@ -15,7 +15,7 @@ import { rentalDate, rentalMoney } from "../rental-api/presentation"
 const kinds = {
   RENT: "Tiền thuê",
   SECURITY_DEPOSIT: "Cọc bảo đảm",
-  RENEWAL_DEPOSIT: "Cọc gia hạn",
+  RENEWAL_DEPOSIT: "Tiền thuê gia hạn trả trước",
   RENEWAL_REMAINDER: "Tiền thuê gia hạn còn lại",
 }
 export function ledgerReadError(error: unknown): string {
@@ -85,8 +85,8 @@ function CoverageDetails({ data }: { data: LedgerView }) {
   const inventory = data.coverageInventory
   if (!inventory) return null
   const labels = [...new Set(inventory.gaps.map(gap => {
-    if (gap === "RENEWAL_DEPOSIT_UNPOSTED_OR_INVALID") return "Nghĩa vụ cọc gia hạn chưa khớp số tiền, hạn trả hoặc nguồn duyệt."
-    if (gap === "RENEWAL_APPROVAL_UNCERTIFIED") return "Chưa xác minh quyết định duyệt làm phát sinh cọc gia hạn."
+    if (gap === "RENEWAL_DEPOSIT_UNPOSTED_OR_INVALID") return "Nghĩa vụ tiền thuê gia hạn trả trước chưa khớp số tiền, hạn trả hoặc nguồn duyệt."
+    if (gap === "RENEWAL_APPROVAL_UNCERTIFIED") return "Chưa xác minh quyết định duyệt làm phát sinh tiền thuê gia hạn trả trước."
     if (gap === "RENEWAL_TERMINAL_ACCOUNTING_UNRECONCILED") return "Gia hạn đã kết thúc hoặc hết hạn cần đối soát nghĩa vụ đã ghi."
     if (gap.startsWith("INITIAL_OBLIGATION")) return "Nghĩa vụ tiền thuê hoặc cọc chưa được đối soát."
     if (gap.startsWith("BOOKING_SNAPSHOT") || gap === "BOOKING_SOURCE_MISSING") return "Thông tin giá đã chấp nhận chưa được xác minh đầy đủ."
@@ -101,9 +101,9 @@ function CoverageDetails({ data }: { data: LedgerView }) {
   return <section aria-label="Dữ liệu cần đối soát" className="rounded border border-amber-200 p-3">
     <p className="font-semibold">Dữ liệu cần đối soát</p>
     {inventory.renewalDeposits?.map(deposit => <p key={deposit.acceptedRevisionId}>
-      {deposit.status === "NOT_EFFECTIVE" ? "Gia h?n ch?a ph?t sinh ngh?a v? c?c t? quy?t ??nh duy?t." : deposit.status === "MATCHED" ? "Cọc gia hạn đã khớp nguồn duyệt và nghĩa vụ đã ghi; chưa xác nhận đã thanh toán."
-        : deposit.status === "UNPOSTED_OR_INVALID" ? "Cọc gia hạn đã có nguồn duyệt, nhưng nghĩa vụ chưa được đối soát."
-        : "Cọc gia hạn chưa có nguồn duyệt được xác minh."}
+      {deposit.status === "NOT_EFFECTIVE" ? "Gia hạn chưa phát sinh nghĩa vụ tiền thuê trả trước từ quyết định duyệt." : deposit.status === "MATCHED" ? "Tiền thuê gia hạn trả trước đã khớp nguồn duyệt và nghĩa vụ đã ghi, chưa xác nhận đã thanh toán."
+        : deposit.status === "UNPOSTED_OR_INVALID" ? "Tiền thuê gia hạn trả trước đã có nguồn duyệt, nhưng nghĩa vụ chưa được đối soát."
+        : "Tiền thuê gia hạn trả trước chưa có nguồn duyệt được xác minh."}
     </p>)}
     <ul className="list-disc pl-5">{labels.map(label => <li key={label}>{label}</li>)}</ul>
   </section>
@@ -142,7 +142,7 @@ function LedgerRead({ role, id }: {
       {!!read.error && <p role="alert">{ledgerReadError(read.error)}</p>}
       {read.data && <LedgerContent data={read.data} />}
       {error && <p role="alert">{error} Thử lại cùng yêu cầu để xác định kết quả, không tạo khoản thu mới.</p>}
-      {role === "manager" && read.data?.sandboxReconciliationEnabled === true && actor?.permissions.includes("payments:update") && read.data?.revision != null &&
+      {role === "manager" && read.data?.sandboxReconciliationEnabled === true && actor?.permissions.includes("payments:collect") && read.data?.revision != null &&
         read.data.coverageInventory?.payments.filter(canReconcileSandboxPayment).map(p => (
           <Button key={p.paymentId} disabled={busy || (!!pending && pending !== p.paymentId)} onClick={() => void reconcile(p.paymentId)}>
             {pending === p.paymentId ? "Thử lại đối soát Sandbox" : "Đối soát VNPay Sandbox"}

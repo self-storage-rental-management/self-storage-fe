@@ -11,8 +11,13 @@ export interface RentalPackagePolicyApi {
   name: string
   rentalMonths: number
   rentalYears?: number | null
+  freeSetupDays?: number | null
   description?: string | null
   discountRate: number
+  depositRate?: number
+  earlyTerminationFeeCapMonths?: number
+  earlyTerminationFeeCoefficient?: number
+  earlyTerminationNoticeDays?: number
   policyVersion: string
   publicationStatus?: PublicationStatus
   runtimeStatus?: RuntimePolicyStatus
@@ -29,8 +34,13 @@ export interface RentalPackagePolicyInput {
   name: string
   rentalMonths?: number
   rentalYears?: number | null
+  freeSetupDays?: number | null
   description?: string | null
   discountRate: number
+  depositRate?: number
+  earlyTerminationFeeCapMonths?: number
+  earlyTerminationFeeCoefficient?: number
+  earlyTerminationNoticeDays?: number
   policyVersion: string
   publicationStatus?: PublicationStatus
   active?: boolean

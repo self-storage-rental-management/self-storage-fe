@@ -2,7 +2,7 @@ import { apiRequest } from './apiClient'
 import type { CustomerUnitType } from './customerReservationApi'
 
 export interface ManagerUnitTypeInput {
-  code: string
+  code?: string | null
   name: string
   description?: string | null
   lengthM: number
@@ -22,13 +22,18 @@ export interface ManagerUnitTypeInput {
   physicalUnitCount: number
   floor?: string | null
   zone?: string | null
+  acceptedGoodsCategoryIds: string[]
+  acceptedGoodsMaterialIds: string[]
 }
 
 type Envelope<T> = { data: T; correlationId: string }
 
-export async function deleteManagerUnitType(unitTypeId: string) {
+export async function archiveManagerUnitType(unitTypeId: string) {
   return apiRequest(`/api/manager/unit-types/${encodeURIComponent(unitTypeId)}`, { method: 'DELETE' })
 }
+
+/** @deprecated Use archiveManagerUnitType; the endpoint now performs a soft archive. */
+export const deleteManagerUnitType = archiveManagerUnitType
 
 export async function createManagerUnitType(facilityId: string, input: ManagerUnitTypeInput) {
   const response = await apiRequest<Envelope<CustomerUnitType>>(

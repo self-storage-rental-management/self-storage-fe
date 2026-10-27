@@ -57,14 +57,15 @@ export function useRenewalCommand() {
   const run = async (
     signature: string,
     send: (key: string) => Promise<unknown>,
-    success: () => void,
+    success?: (result?: unknown) => void,
   ) => {
     if (lock.current || conflict) return
     lock.current = true
     setBusy(true)
     setError(undefined)
+    let outcome: unknown
     try {
-      await send(attempt.current.key(signature))
+      outcome = await send(attempt.current.key(signature))
       attempt.current.clear()
       setUncertain(false)
     } catch (e) {
@@ -76,7 +77,7 @@ export function useRenewalCommand() {
       lock.current = false
       setBusy(false)
     }
-    success()
+    success?.(outcome)
   }
   // Event/effect callbacks may precede a rerender; read the current attempt lock.
   const isLocked = () => lock.current || attempt.current.isUncertain()

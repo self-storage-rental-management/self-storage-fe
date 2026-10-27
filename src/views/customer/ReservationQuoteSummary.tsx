@@ -12,13 +12,32 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
   const payableAmountClass = `${amountClass} text-base font-bold text-amber-700`
   const deductionAmountClass = `${amountClass} text-base font-bold text-emerald-700`
 
+  const earlyExitTerms = <p className="text-xs text-stone-600">{q.setupEarlyExitPolicyVersion && q.setupEarlyExitFee != null
+    ? <>Trả kho sớm trong setup: phí chấm dứt sớm một lần là {formatVndAmount(q.setupEarlyExitFee)} (một tháng đơn giá đã chốt), chỉ áp dụng khi trả kho; không thu khi đặt kho.</>
+    : 'Hồ sơ chưa có điều khoản trả kho sớm trong setup; cần cơ sở đối soát, không tự áp dụng phí.'}</p>
+
   if (context === 'reservation') {
     return (
       <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm">
         <div className="flex flex-wrap items-start justify-between gap-2 border-b border-stone-200 pb-3">
           <div>
-            <h3 className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</h3>
-            <p className="mt-0.5 text-xs text-stone-500">{formatDisplayDate(q.startDate)}–{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng</p>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-stone-900">Tiền thuê và cọc giữ chỗ</h3>
+              {q.unitTypeName && (
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700 border border-stone-200">
+                  {q.unitTypeName}
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-stone-500">
+              {q.facilityName ? `${q.facilityName} · ` : ''}{formatDisplayDate(q.startDate)}–{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng
+            </p>
+            <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+              <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế; không cộng thêm khi gia hạn. Mốc này được lưu cùng đơn đặt kho.
+            </p>
+            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              Nếu chấm dứt sớm: phí dự kiến tối đa theo báo giá là <b>{formatVndAmount(q.earlyTerminationFee ?? 0)}</b>; thông báo trước {q.earlyTerminationNoticeDays ?? 14} ngày. Tiền cọc đảm bảo kho được quyết toán riêng.
+            </p>
           </div>
           <div className="text-right"><span className="text-xs text-stone-500">Đơn giá/tháng</span><b className="block tabular-nums text-stone-900">{formatVndAmount(q.monthlyPrice)}</b></div>
         </div>
@@ -36,15 +55,16 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
             <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Lộ trình thanh toán</p>
             <div className="flex justify-between gap-3"><span>Cọc giữ chỗ ({depositPercent}%)</span><b className="tabular-nums text-amber-700">{formatVndAmount(q.reservationDepositAmount)}</b></div>
             <div className="flex justify-between gap-3"><span>Tiền thuê còn lại</span><b className="tabular-nums">{formatVndAmount(q.remainingRentalAmount)}</b></div>
-            <div className="flex justify-between gap-3"><span>Tiền duy trì CSVC <small className="text-stone-500">(hoàn trả)</small></span><b className="tabular-nums">{formatVndAmount(q.securityDepositAmount)}</b></div>
+            <div className="flex justify-between gap-3"><span>Tiền cọc đảm bảo kho <small className="text-stone-500">(hoàn trả)</small></span><b className="tabular-nums">{formatVndAmount(q.securityDepositAmount)}</b></div>
             <div className="flex justify-between gap-3 border-t border-stone-200 pt-2"><b>Khoản thu khi nhận kho</b><b className="tabular-nums text-amber-700">{formatVndAmount(q.dueAtCheckIn)}</b></div>
           </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 rounded-lg bg-stone-900 px-3 py-2.5 text-white">
-          <div><b>Tổng nghĩa vụ tài chính</b><p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền duy trì CSVC</p></div>
+          <div><b>Tổng nghĩa vụ tài chính</b><p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền cọc đảm bảo kho</p></div>
           <b className="text-base tabular-nums">{formatVndAmount(q.totalInitialObligation)}</b>
         </div>
+        {earlyExitTerms}
       </section>
     )
   }
@@ -53,10 +73,30 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
     <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-5 text-sm sm:p-6">
       {/* ── HEADER BÁO GIÁ ── */}
       <div className="border-b border-stone-200 pb-4">
-        <h3 className="text-lg font-bold text-stone-900">{context === 'quote' ? 'Xác nhận báo giá đặt kho' : 'Tiền thuê và cọc giữ chỗ'}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-bold text-stone-900">{context === 'quote' ? 'Xác nhận báo giá đặt kho' : 'Tiền thuê và cọc giữ chỗ'}</h3>
+          {(q.facilityName || q.unitTypeName) && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900 border border-amber-200">
+              🏷️ {q.unitTypeName ? q.unitTypeName : 'Loại kho đã chọn'} {q.facilityName ? `· ${q.facilityName}` : ''}
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-xs text-stone-600">
           Kỳ thuê: <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate)}</b> · {q.rentalMonths} tháng
         </p>
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+          <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế. Các ngày này không nằm trong kỳ thuê đã thanh toán;
+          ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày check-in thực tế. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
+        </div>
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          Chấm dứt sớm theo chính sách đã lưu tại thời điểm báo giá: phí dự kiến <b>{formatVndAmount(q.earlyTerminationFee ?? 0)}</b>, thông báo trước {q.earlyTerminationNoticeDays ?? 14} ngày. Cọc đảm bảo kho xử lý riêng sau kiểm tra trả kho.
+          <span className="mt-1 block">Nếu trả sau khi hồ sơ ACTIVE, hệ thống xét số tháng đã hoàn thành và bảng giá gói đã snapshot; dưới 3 tháng áp dụng giá niêm yết cộng phí chấm dứt sớm, các mốc gói tiếp theo tính lại ngày setup được hưởng. Tổng tiền tính lại không vượt tổng tiền thuê của gói.</span>
+        </div>
+        {(q.earlyTerminationTiers?.length ?? 0) > 0 && <div className="mt-3 overflow-x-auto rounded-xl border border-stone-200 bg-white p-4">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-stone-700">Bảng tier tính lại ưu đãi khi trả sớm</p>
+          <table className="w-full min-w-[30rem] text-xs"><thead><tr className="border-b border-stone-200 text-left text-stone-500"><th className="pb-2">Thời gian đã thuê</th><th className="pb-2">Đơn giá áp dụng</th><th className="pb-2">Setup được hưởng</th></tr></thead><tbody>{q.earlyTerminationTiers!.map(tier => <tr key={tier.rentalMonths} className="border-b border-stone-100 last:border-0"><td className="py-2 font-semibold">{tier.rentalMonths} tháng</td><td className="py-2">{formatVndAmount(tier.monthlyPrice)}/tháng</td><td className="py-2">{tier.freeSetupDays} ngày</td></tr>)}</tbody></table>
+          <p className="mt-2 text-[11px] text-stone-500">Quy tắc báo trước: {q.earlyTerminationNoticeBasis === 'REQUESTED_AT_TO_SCHEDULED_DATE' ? 'từ ngày gửi yêu cầu đến ngày trả dự kiến, không tính ngày gửi.' : 'theo chính sách snapshot của báo giá.'}</p>
+        </div>}
       </div>
 
       {/* ── KHỐI 1: TÍNH TOÁN TIỀN THUÊ KHO ── */}
@@ -115,7 +155,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
               <p className="text-sm font-bold text-stone-900">Cọc giữ chỗ ({depositPercent}%)</p>
             </div>
             <div className="ml-auto text-right">
-              <span className={`${amountClass} block text-xl font-bold text-amber-700`}>
+              <span className={`${payableAmountClass} block`}>
                 {formatVndAmount(q.reservationDepositAmount)}
               </span>
             </div>
@@ -135,7 +175,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-stone-600">
-                • Tiền duy trì CSVC <span className="text-stone-400 italic font-normal">(Hoàn trả khi trả kho)</span>
+                • Tiền cọc đảm bảo kho <span className="text-stone-400 italic font-normal">(Hoàn trả khi trả kho)</span>
               </span>
               <span className={`${amountClass} text-sm text-stone-800`}>{formatVndAmount(q.securityDepositAmount)}</span>
             </div>
@@ -152,12 +192,14 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-stone-900 p-4 text-white">
         <div>
           <p className="text-sm font-bold">Tổng nghĩa vụ tài chính</p>
-          <p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền duy trì CSVC hoàn trả</p>
+          <p className="text-[11px] text-stone-300">Tiền thuê sau giảm + tiền cọc đảm bảo kho hoàn trả</p>
         </div>
         <div className="ml-auto text-right">
           <span className={`${amountClass} block text-xl font-bold text-white`}>{formatVndAmount(q.totalInitialObligation)}</span>
         </div>
       </div>
+
+      {earlyExitTerms}
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}
       {context === 'quote' && <p className="text-xs text-stone-500">

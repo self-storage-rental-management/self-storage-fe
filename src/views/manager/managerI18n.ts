@@ -12,6 +12,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   held: labels('Held', 'Đang giữ'),
   assigned: labels('Assigned', 'Đã phân công'),
   active: labels('Active', 'Đang hiệu lực'),
+  setup: labels('Free setup', 'Đang setup miễn phí'),
   paid: labels('Paid', 'Đã thanh toán'),
   refunded: labels('Refunded', 'Đã hoàn tiền'),
   overdue: labels('Overdue', 'Quá hạn'),
@@ -130,7 +131,7 @@ const activities: Record<string, BilingualLabel> = {
   RENEWAL_REQUEST_CANCELLED: labels('Renewal request cancelled', 'Đã hủy yêu cầu gia hạn'),
   RENEWAL_APPROVED: labels('Renewal approved', 'Đã duyệt gia hạn'),
   RENEWAL_REJECTED: labels('Renewal rejected', 'Đã từ chối gia hạn'),
-  RENEWAL_DEPOSIT_PAID: labels('Renewal deposit paid', 'Đã thanh toán cọc gia hạn'),
+  RENEWAL_DEPOSIT_PAID: labels('Renewal deposit paid', 'Đã thanh toán tiền thuê gia hạn trả trước'),
   RENEWAL_COMPLETED_AT_FACILITY: labels('Renewal completed at facility', 'Đã hoàn tất gia hạn tại cơ sở'),
   RETURN_INSPECTION_COMPLETED: labels('Move-out inspection completed', 'Đã nghiệm thu trả kho'),
   RETURN_SETTLEMENT_CONFIRMED: labels('Settlement confirmed', 'Đã xác nhận quyết toán'),
@@ -208,8 +209,13 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return includeTime
-    ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')
-    : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US')
+    ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    })
+    : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    })
 }
 
 export const managerTimeLabel = (value: string | undefined, lang: Language) => {

@@ -16,8 +16,13 @@ export const PERMISSION_KEYS = [
   'returns:read',
   'returns:process',
   'payments:read',
+  'payments:confirm',
+  'refunds:approve',
+  'refunds:execute',
+  'fees:waive',
   'policies:read',
   'payments:collect',
+  'renewals:operate',
   'support:read',
   'support:update',
   'inventory:update',
@@ -28,6 +33,7 @@ export const PERMISSION_KEYS = [
   'users:manage',
   'roles:manage',
   'settings:manage',
+  'sessions:manage',
 ] as const
 
 export type PermissionKey = typeof PERMISSION_KEYS[number]
@@ -50,6 +56,8 @@ export interface User {
   facilityScopes?: Record<string, 'READ' | 'OPERATE' | 'MANAGE'>
   facilityNames?: Record<string, string>
   mustChangePassword?: boolean
+  /** Backend authorization version used to invalidate stale permission state. */
+  authzVersion?: number
   /** Permissions returned by the backend for the current authenticated actor. */
   permissions?: PermissionKey[]
 }

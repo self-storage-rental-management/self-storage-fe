@@ -1,8 +1,9 @@
 import type { RentalApiPage } from "./rentalApi"
 
 export type RenewalOperationsRole = "customer" | "manager" | "staff"
-export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_PAYMENT_INTENT" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED"
+export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_PAYMENT_INTENT" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED" | "PREPARATION_BLOCKED"
 export interface RenewalOperationState {
+  displayCode?: string | null
   renewalId: string
   expectedVersion: number | null
   phase: RenewalOperationsPhase
@@ -25,7 +26,7 @@ export interface RenewalOperationState {
 }
 export interface RenewalOperationEvent {
   id: string
-  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "REFUND_EXECUTION"
+  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "DEPOSIT_REVIEW_REQUIRED" | "REFUND_EXECUTION" | "PREPARATION_BLOCKED" | "PREPARATION_RESOLUTION"
   occurredAt: string
   actorId: string | null
   data: unknown
@@ -51,6 +52,8 @@ export interface RenewalOperationResult {
   event: RenewalOperationEvent
 }
 export interface RenewalPayableStatement {
+  effectiveStartDate?: string | null
+  effectiveEndDate?: string | null
   reference: string
   renewalId: string
   version: string
@@ -87,7 +90,6 @@ export type RenewalOperationCommand = {
   action: "cash"
   body: Version & {
     payableStatementRef: string
-    receiptReference: string
     receiptFileId: string
     paymentMethod?: "CASH" | "BANK_TRANSFER"
     received: true
@@ -95,10 +97,11 @@ export type RenewalOperationCommand = {
 } | {
   action: "completion"
   body: Version & {
-    identityVerified: true
+    identityVerified?: true
     arrivalRef: string
     signedDocumentFileId: string
     completionNote?: string
+    expectedEffectiveStartDate?: string
   }
 } | {
   action: "exception"

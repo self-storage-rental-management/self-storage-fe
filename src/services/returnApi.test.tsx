@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
-import { completeRefund, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
+import { completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import { ReturnSummary } from '../views/return-api/ReturnApiPanel'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
@@ -12,7 +12,7 @@ export const record: ApiReturn = {
   facilityName: 'Cơ sở kiểm thử', unitNumber: 'TEST-1', customerName: 'Khách kiểm thử',
   status: 'awaiting_customer_confirmation', scheduledDate: '2026-10-25', inspectionNotes: 'Đã nghiệm thu', managerResolutionNote: null,
   depositAmount: 500000, totalDeductions: 5000, netRefundAmount: null, amountDueFromCustomer: null,
-  settlementBlocker: 'FIN_06_HELD_DEPOSIT_EVIDENCE_REQUIRED', customerConfirmed: false,
+  settlementBlocker: 'Chưa có chứng cứ tiền thực thu; cần cơ sở đối soát trước khi quyết toán.', customerConfirmed: false,
   damageFee: 5000, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0,
   proposedUnitStatus: 'maintenance',
 }
@@ -36,7 +36,7 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(isApiReturn(record)).toBe(true)
     const html = renderToStaticMarkup(<ReturnSummary record={record} />)
     expect(html).toContain('Chưa xác định')
-    expect(html).toContain('chưa được xác nhận thanh toán/hoàn tiền thành công')
+    expect(html).toContain('cần cơ sở đối soát trước khi quyết toán')
     expect(html).not.toContain('FIN_06')
     expect(html).not.toContain('Khoản hoàn tiền: 0')
   })
@@ -74,21 +74,20 @@ describe('real Return transport and unknown settlement presentation', () => {
       expect(returnError(e)).toContain('chưa xác nhận thành công')
     }
   })
-  it('sends customer settlement payment to the backend endpoint', async () => {
-    const fetch = respond({ data: { ...record, status: 'completed', settlementPaymentId: 'PAY-1' } })
-    state.actor = operationsActor('customer')
-    await paySettlement(ids.event, 'Chuyển khoản', 'Đã thanh toán tại quầy')
+  it('keeps the backend rejection of a customer-declared settlement payment', async () => {
+    const fetch = respond({ error: { message: 'Vui lòng thanh toán tại cơ sở.', code: 'CONFLICT' } }, 409)
+    await expect(paySettlement(ids.event, 'CASH', 'Khách tự khai đã thanh toán')).rejects.toThrow('thanh toán tại cơ sở')
     expect(fetch.mock.calls[0][0]).toContain(`/api/customer/returns/${ids.event}/pay-settlement`)
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ paymentMethod: 'Chuyển khoản', notes: 'Đã thanh toán tại quầy' })
   })
   it('sends inspection with explicit deductions and returned-access items', async () => {
     state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
     const fetch = respond({ data: record })
     await inspectReturn(ids.event, { damageFee: 5000, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0,
       inventoryMatch: 'match', damageClassification: 'minor_damage', staffNotes: 'TEST inspection', evidencePhotos: [],
-      returnedKey: true, returnedCard: false, returnedLock: true, proposedUnitStatus: 'maintenance' })
+      unitVacated: true, returnedKey: true, returnedCard: false, returnedLock: true, proposedUnitStatus: 'maintenance' })
     expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/inspection`)
     expect(JSON.parse(fetch.mock.calls[0][1].body).returnedCard).toBe(false)
+    expect(JSON.parse(fetch.mock.calls[0][1].body).unitVacated).toBe(true)
   })
   it('uploads return evidence and sends the stored asset ID to the inspection endpoint', async () => {
     state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
@@ -110,13 +109,49 @@ describe('real Return transport and unknown settlement presentation', () => {
       returnedKey: true, returnedCard: true, returnedLock: true, proposedUnitStatus: 'available' })
     expect(JSON.parse(fetch.mock.calls[1][1].body).evidencePhotos).toEqual([assetId])
   })
-  it('records the refund transaction reference through the staff endpoint', async () => {
-    state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
+  it('records the refund transaction reference through the Business endpoint for authorized Business Operations', async () => {
+    state.actor = {
+      ...operationsActor('manager'),
+      roles: ['BUSINESS'],
+      permissions: ['returns:read', 'refunds:execute'],
+      facilityScopes: { [ids.facility]: 'MANAGE' },
+    }
     const fetch = respond({ data: { ...record, status: 'completed' } })
-    const result = await completeRefund(ids.event, { transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
+    const proof = { transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.', paymentMethod: 'BANK_TRANSFER' as const, receiptFileId: ids.file, confirmed: true, amount: 5700000 }
+    const result = await completeRefund(ids.event, proof)
     expect(result.status).toBe('completed')
-    expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/complete-refund`)
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ transactionReference: 'REFUND-TEST-001', notes: 'Đã chuyển khoản.' })
+    expect(fetch.mock.calls[0][0]).toContain(`/api/business/returns/${ids.event}/complete-refund`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(proof)
+  })
+  it('sends the server statement amount and saved proof when recording a Staff payout', async () => {
+    state.actor = operationsActor('staff')
+    state.actor.permissions.push('returns:process', 'returns:read', 'refunds:execute')
+    const fetch = respond({ data: { ...record, status: 'completed', settlementBlocker: null } })
+    const proof = { amount: 5700000, paymentMethod: 'CASH' as const, transactionReference: 'CASH-REFUND', receiptFileId: ids.file, confirmed: true }
+    await recordReturnSettlement(ids.event, proof, 'same-refund-command')
+    expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/settlement-receipts`)
+    expect(new Headers(fetch.mock.calls[0][1].headers).get('Idempotency-Key')).toBe('same-refund-command')
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(proof)
+  })
+  it('does not send a payout with missing confirmation or invalid saved evidence', async () => {
+    state.actor = operationsActor('staff')
+    state.actor.permissions.push('returns:process', 'returns:read', 'refunds:execute')
+    const fetch = respond({ data: record })
+    const proof = { amount: 5700000, paymentMethod: 'CASH' as const, transactionReference: 'CASH-REFUND', receiptFileId: ids.file, confirmed: false }
+    await expect(recordReturnSettlement(ids.event, proof, 'not-confirmed')).rejects.toThrow('xác nhận')
+    await expect(recordReturnSettlement(ids.event, { ...proof, confirmed: true, receiptFileId: 'LOCAL-PHOTO' }, 'not-stored')).rejects.toThrow('biên lai')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it('preserves the setup statement from backend without adding the reservation prepayment', () => {
+    const setup = { ...record, setupExitRequested: true, setupEarlyExit: true, rentalRefundCredit: 6000000,
+      earlyTerminationFee: 2000000, totalDeductions: 2300000, netRefundAmount: 5700000, amountDueFromCustomer: 0, settlementBlocker: null }
+    expect(isApiReturn(setup)).toBe(true)
+    const html = renderToStaticMarkup(<ReturnSummary record={setup} />)
+    expect(html).toContain('5.700.000')
+    expect(html).toContain('Phí chấm dứt sớm một lần')
+    expect(html).toContain('6.000.000')
+    expect(isApiReturn({ ...setup, rentalRefundCredit: -1 })).toBe(false)
+    expect(isApiReturn({ ...setup, earlyTerminationFee: '2000000' })).toBe(false)
   })
   it('manager review records deductions without calling payout or local store', async () => {
     state.actor = operationsActor('manager'); state.actor.permissions.push('returns:read', 'rentals:update')
@@ -136,20 +171,24 @@ describe('real Return transport and unknown settlement presentation', () => {
     await expect(listReturns('staff')).rejects.toThrow('quyền')
     expect(fetch).not.toHaveBeenCalled()
   })
-  it('allows business role to view returns across all facilities without facility scope limit', async () => {
+  it('requires a facility scope for Business return reads and accepts a scoped Business actor', async () => {
     state.actor = {
       ...operationsActor('manager'),
       roles: ['BUSINESS'],
-      permissions: ['returns:read', 'rentals:update'],
-      facilityScopes: {},
+      permissions: ['returns:read'],
+      facilityScopes: { '00000000-0000-0000-0000-000000000000': 'MANAGE' },
     }
     respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
-    const page = await listReturns('manager')
+    await expect(listReturns('business')).rejects.toThrow('contract')
+
+    state.actor = { ...state.actor, facilityScopes: { [ids.facility]: 'MANAGE' } }
+    respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test-bo' })
+    const page = await listReturns('business')
     expect(page.data).toHaveLength(1)
     expect(page.data[0].id).toBe(record.id)
 
     respond({ data: record })
-    const detail = await getReturn('manager', ids.event)
+    const detail = await getReturn('business', ids.event)
     expect(detail.id).toBe(record.id)
   })
 })

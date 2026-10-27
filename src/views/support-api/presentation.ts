@@ -10,10 +10,10 @@ export function supportAssigneeLabel(ticket: SupportTicket, role: SupportRole) {
   return ticket.assignedStaffName?.trim() || "Đã phân công (chưa có tên nhân viên)"
 }
 export const supportStatusLabels = {
-  open: "Chờ tiếp nhận",
+  open: "Chờ xử lý",
   in_progress: "Đang xử lý",
-  waiting_customer: "Chờ khách hàng bổ sung",
-  resolved: "Đã xử lý - chờ xác nhận",
+  waiting_customer: "Chờ bổ sung",
+  resolved: "Đã xử lý",
   closed: "Đã đóng",
 }
 export const supportModuleLabels = {
@@ -133,8 +133,8 @@ export function supportActions(
   if (t.status === "open") return ["accept"]
   if (!t.acceptedAt) return []
   return t.status === "in_progress"
-    ? ["message", "information", "resolve", "escalate"]
+    ? ["message", "information", "resolve"]
     : t.status === "waiting_customer"
-      ? ["message"]
+      ? ["message", "resolve"]
       : []
 }

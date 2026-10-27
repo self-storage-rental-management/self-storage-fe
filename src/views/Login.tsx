@@ -14,16 +14,23 @@ import {
   type ApiActor
 } from '../services/authApi'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
+import { isVietnameseMobilePhone, VIETNAMESE_PHONE_HINT } from '../domain/vietnamesePhone'
 import StepIndicator from './auth/StepIndicator'
 import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
-import { USERS } from '../data/demoDatabase'
+
+export const DEMO_LOGIN_ACCOUNTS = [
+  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', color: 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100', icon: '👤' },
+  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', color: 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100', icon: '🛠️' },
+  { role: 'manager', label: 'Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!', color: 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100', icon: '🏢' },
+  { role: 'business', label: 'Ban điều hành', email: 'business@storagehub.demo', password: 'Business@1234!', color: 'bg-pink-50 text-pink-900 border-pink-300 hover:bg-pink-100', icon: '📊' },
+  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', color: 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100', icon: '🛡️' },
+] as const
 
 interface LoginProps {
   onLogin: (user: User) => void
   onBackToHome?: () => void
   initialTab?: 'login' | 'register'
-  onSwitchToAdminPortal?: () => void
 }
 
 type AuthTab = 'login' | 'register'
@@ -31,10 +38,7 @@ type ResetStep = 'identify' | 'verify' | 'new-password' | 'success'
 type RecoveryPurpose = 'password-reset' | 'email-verification'
 
 function normalizeVietnamesePhone(value: string) {
-  let phone = value.replace(/[\s().-]/g, '')
-  if (phone.startsWith('+84')) phone = `0${phone.slice(3)}`
-  if (phone.startsWith('84')) phone = `0${phone.slice(2)}`
-  return /^0[0-9]{9}$/.test(phone) ? phone : ''
+  return isVietnameseMobilePhone(value) ? value : ''
 }
 
 function formatAuthError(error: unknown, fallback: string): string {
@@ -62,11 +66,11 @@ function formatAuthError(error: unknown, fallback: string): string {
       const fieldTranslations: Record<string, string> = {
         password: 'Mật khẩu phải từ 8-128 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (!@#$%^&*...) không có khoảng trắng.',
         email: 'Địa chỉ email không hợp lệ hoặc đã được đăng ký trong hệ thống.',
-        phone: 'Số điện thoại phải là số điện thoại Việt Nam hợp lệ (10 số, bắt đầu bằng 0).',
+        phone: 'Số điện thoại phải gồm 10 chữ số viết liền và đúng đầu số di động Việt Nam.',
         fullName: 'Họ và tên tối thiểu 2 ký tự và không vượt quá 160 ký tự.',
         permanentAddress: 'Địa chỉ thường trú không hợp lệ hoặc để trống.',
         emergencyContactName: 'Họ tên người liên hệ khẩn cấp không hợp lệ hoặc để trống.',
-        emergencyContactPhone: 'Số điện thoại người liên hệ khẩn cấp không hợp lệ (10 số, bắt đầu bằng 0).',
+        emergencyContactPhone: 'Số điện thoại người liên hệ khẩn cấp phải gồm 10 chữ số viết liền và đúng đầu số di động Việt Nam.',
       }
       const entries = Object.entries(details as Record<string, string>)
       if (entries.length > 0) {
@@ -97,14 +101,14 @@ function validateEmail(val: string): string | null {
 }
 
 function cleanPhoneNumber(val: string): string {
-  return val.replace(/[\s.]/g, '')
+  return val
 }
 
 function validatePhone(val: string): string | null {
   const cleaned = cleanPhoneNumber(val)
   if (!cleaned.trim()) return 'Vui lòng nhập số điện thoại.'
-  if (!/^0[0-9]{9}$/.test(cleaned)) {
-    return 'Số điện thoại gồm 10 số, bắt đầu bằng 0'
+  if (!isVietnameseMobilePhone(cleaned)) {
+    return VIETNAMESE_PHONE_HINT
   }
   return null
 }
@@ -153,13 +157,13 @@ function validateEmergencyName(val: string): string | null {
 function validateEmergencyPhone(val: string): string | null {
   const cleaned = cleanPhoneNumber(val)
   if (!cleaned.trim()) return 'Vui lòng nhập SĐT người liên hệ khẩn cấp.'
-  if (!/^0[0-9]{9}$/.test(cleaned)) {
-    return 'Số điện thoại gồm 10 số, bắt đầu bằng 0'
+  if (!isVietnameseMobilePhone(cleaned)) {
+    return VIETNAMESE_PHONE_HINT
   }
   return null
 }
 
-export default function Login({ onLogin, onBackToHome, initialTab = 'login', onSwitchToAdminPortal }: LoginProps) {
+export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
   const [tab, setTab] = useState<AuthTab>(initialTab)
 
   useEffect(() => {
@@ -311,26 +315,12 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
-      const demoMatch = USERS.find(u => u.email.toLowerCase() === normalizedEmail)
-      if (demoMatch) {
-        if (rememberMe) {
-          localStorage.setItem('storagehub:remember_email', normalizedEmail)
-        } else {
-          localStorage.removeItem('storagehub:remember_email')
-        }
-        onLogin({
-          id: demoMatch.id,
-          name: demoMatch.name,
-          email: demoMatch.email,
-          phone: demoMatch.phone,
-          role: demoMatch.role as User['role'],
-          facility: demoMatch.facility,
-          facilityId: demoMatch.facilityId,
-          status: 'active',
-        } as unknown as User)
-        return
+      const matchedDemo = DEMO_LOGIN_ACCOUNTS.find(a => a.email.toLowerCase() === normalizedEmail)
+      if (matchedDemo && password !== matchedDemo.password) {
+        setError(`Mật khẩu không đúng cho tài khoản ${matchedDemo.label}. Mật khẩu chính xác là: ${matchedDemo.password}`)
+      } else {
+        setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
       }
-      setError(formatAuthError(apiError, 'Đăng nhập thất bại.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -478,7 +468,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
 
     // Standard registration with email & password
     if (!normalizedPhone) {
-      setError('Số điện thoại phải là số điện thoại Việt Nam hợp lệ (10 số, bắt đầu bằng 0).')
+      setError('Số điện thoại phải gồm 10 chữ số viết liền và đúng đầu số di động Việt Nam.')
       setRegisterStep(1)
       return
     }
@@ -865,24 +855,8 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
                   </p>
                 </div>
 
-                {/* Switcher to Internal Admin Portal */}
-                {onSwitchToAdminPortal && (
-                  <div className="mt-5 pt-4 border-t border-stone-200/80 text-center">
-                    <p className="text-[11.5px] text-stone-500 mb-1.5 font-medium">
-                      Bạn là Staff, Manager, BOM hoặc Admin?
-                    </p>
-                    <button
-                      type="button"
-                      onClick={onSwitchToAdminPortal}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-700 hover:text-[#F59E0B] transition-colors cursor-pointer bg-stone-100 hover:bg-stone-200/80 px-3 py-1.5 rounded-lg border border-stone-300/80"
-                    >
-                      <svg className="w-3.5 h-3.5 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                      <span>Cổng Nội bộ (Back-office) →</span>
-                    </button>
-                  </div>
-                )}
+
+
               </form>
             </div>
           ) : (
@@ -1215,16 +1189,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login', onS
 
               <div className="mt-4 pt-3 border-t border-stone-200/80 text-center space-y-1.5">
                 <p className="text-xs font-medium text-stone-500">
-                  Nhân viên và quản lý: tài khoản do quản trị viên cấp.{' '}
-                  {onSwitchToAdminPortal && (
-                    <button
-                      type="button"
-                      onClick={onSwitchToAdminPortal}
-                      className="font-semibold text-stone-700 hover:text-[#F59E0B] underline cursor-pointer"
-                    >
-                      Đến Cổng Nội bộ
-                    </button>
-                  )}
+                  Nhân viên và quản lý: tài khoản do quản trị viên cấp.
                 </p>
                 <p className="text-[11px] leading-relaxed text-[#9CA3AF]">
                   Khi đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của StorageHub.

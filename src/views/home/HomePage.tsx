@@ -8,7 +8,6 @@ import { listPublicFacilities, listPublicUnitTypes, type PublicFacilitySummary, 
 interface HomePageProps {
   onOpenLogin: () => void
   onOpenRegister: () => void
-  onOpenAdminLogin?: () => void
 }
 
 interface UnitCategoryCard {
@@ -199,7 +198,7 @@ function MenuIcon({ className = "w-5 h-5" }: { className?: string }) {
   )
 }
 
-export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin }: HomePageProps) {
+export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps) {
   const { facilities: contextFacilities, units, rentals, holds } = useStorageHub()
   const [activeModal, setActiveModal] = useState<'facilities' | 'unit_types' | 'how_it_works' | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -253,7 +252,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
   const facilitiesList = DEMO_DATA_ENABLED
     ? contextFacilities.map(f => {
       const facCode = f.code || f.id.toUpperCase()
-      const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
+      const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
       const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
       return {
         ...f,
@@ -530,18 +529,6 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
                 <span>Đăng Nhập Khách Hàng</span>
                 <ArrowRightIcon className="w-3.5 h-3.5" />
               </button>
-              {onOpenAdminLogin && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOpenAdminLogin()
-                    setMobileMenuOpen(false)
-                  }}
-                  className="w-full py-2 rounded-lg text-xs font-semibold text-center text-amber-400 bg-stone-900 border border-stone-800 hover:bg-stone-800 flex items-center justify-center gap-1.5 mt-1"
-                >
-                  <span>🔒 Cổng Nội Bộ (Staff / Admin)</span>
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -777,7 +764,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
               <div className="relative pt-3.5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-400">
                 <span className="flex items-center gap-1.5 text-stone-300 font-medium">
                   <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Bảo vệ &amp; Giám sát CCTV 24/7</span>
+                  <span>Bảo vệ &amp; Kiểm soát ra vào 24/7</span>
                 </span>
                 <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60 text-[10px] sm:text-[11px]">
                   {publicCatalogLoading ? '…' : facilityCodes || `${facilitiesList.length} cơ sở`}
@@ -807,7 +794,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
               <div className="w-12 h-12 rounded-xl bg-amber-100 text-[#9A5A05] flex items-center justify-center mb-4">
                 <ShieldCheckIcon className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-stone-900 mb-2">An Ninh Giám Sát 24/7</h3>
+              <h3 className="text-base font-bold text-stone-900 mb-2">Bảo Vệ & Kiểm Soát An Ninh</h3>
               <p className="text-xs text-stone-600 leading-relaxed">
                 Kiểm tra thông tin an ninh và điều kiện ra vào của từng cơ sở trước khi đặt thuê.
               </p>
@@ -962,7 +949,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
                     </div>
                     <div>
                       <span className="text-stone-400 text-[10px] block">AN NINH</span>
-                      <span className="font-bold text-stone-800">24/7 CCTV & PIN</span>
+                      <span className="font-bold text-stone-800">Bảo vệ & Khóa PIN</span>
                     </div>
                   </div>
                 </div>
@@ -1072,18 +1059,6 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
               <ul className="space-y-2 text-xs text-stone-400">
                 <li>Kiểm tra điều kiện lưu trữ tại cơ sở trước khi thuê.</li>
                 <li>Theo dõi hợp đồng và các khoản thanh toán trong tài khoản.</li>
-                {onOpenAdminLogin && (
-                  <li className="pt-2 border-t border-[#353630]">
-                    <button
-                      type="button"
-                      onClick={onOpenAdminLogin}
-                      className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-semibold transition cursor-pointer"
-                    >
-                      <span>🔒 Cổng Nội bộ (Back-office / Admin)</span>
-                      <span>→</span>
-                    </button>
-                  </li>
-                )}
               </ul>
             </div>
 
@@ -1132,7 +1107,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister, onOpenAdminLogin
             {activeModal === 'facilities' && (
               <div className="mt-4 space-y-4 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub hiện đang vận hành các cơ sở lưu trữ tại các vị trí giao thông thuận tiện, trang bị camera giám sát và đội ngũ quản lý chuyên nghiệp:
+                  StorageHub hiện đang vận hành các cơ sở lưu trữ tại các vị trí giao thông thuận tiện, trang bị hệ thống kiểm soát an ninh và đội ngũ quản lý chuyên nghiệp:
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {facilitiesList.map(f => (

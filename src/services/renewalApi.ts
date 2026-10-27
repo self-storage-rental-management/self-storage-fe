@@ -1,4 +1,6 @@
 import { apiRequest } from "./apiClient"
+import { isRenewalStatusSummary, isRenewalTransactionStatus } from '../types/renewalStatus'
+import { isRenewalStatus, isPaymentStatus } from '../types/statusContracts'
 import { readRentalEnvelope, readRentalPage, rentalQuery } from "./rentalApi"
 import type { RentalApiRole } from "../types/rentalApi"
 import type {
@@ -17,7 +19,7 @@ function validPeriodMetadata(t: AcceptedTerms): boolean {
     || new Date(t.rentalStartDate).toISOString().slice(0, 10) !== t.rentalStartDate) return false
   const rawEnd = Date.parse(t.oldEndDate), extension = Date.parse(t.extensionStartDate)
   return Date.parse(t.rentalStartDate) < extension
-    && extension - rawEnd === (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
+    && extension - rawEnd >= (t.endDateConvention === "EXCLUSIVE" ? 0 : 86400000)
 }
 function isAcceptedTerms(value: unknown): value is AcceptedTerms {
   if (!value || typeof value !== "object") return false
@@ -26,6 +28,7 @@ function isAcceptedTerms(value: unknown): value is AcceptedTerms {
     t.renewalDepositAmount, t.remainingRentalAmount]
   return validPeriodMetadata(t) && money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
     typeof t.discountRate === "number" && Number.isFinite(t.discountRate) && t.discountRate >= 0 && t.discountRate <= 1 &&
+    (t.signingWindowDays == null || (Number.isInteger(t.signingWindowDays) && t.signingWindowDays >= 1 && t.signingWindowDays <= 14)) &&
     Number.isInteger(t.rentalMonths) && t.rentalMonths > 0 &&
     [t.unitTypeId, t.storageUnitId, t.facilityId, t.pricingPackageCode, t.packagePolicyRef,
       t.packagePolicyVersion, t.renewalPolicyRef, t.renewalPolicyVersion, t.currency]
@@ -38,25 +41,21 @@ export function isRenewalRecord(value: unknown): boolean {
   const r = value as RenewalApiRecord | null
   return (
     !!r &&
+    (r.effectivePeriod == null || (
+      typeof r.effectivePeriod.finalized === 'boolean' && r.effectivePeriod.finalized === (r.status === 'completed') &&
+      [r.effectivePeriod.startDate, r.effectivePeriod.endExclusive, r.effectivePeriod.newEndDate].every(d =>
+        typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d) &&
+      r.effectivePeriod.startDate < r.effectivePeriod.endExclusive &&
+      Date.parse(r.effectivePeriod.endExclusive) - Date.parse(r.effectivePeriod.newEndDate) === 86400000
+    )) &&
+    (r.statusSummary == null || isRenewalStatusSummary(r.statusSummary)) &&
+    (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
     typeof r.id === "string" &&
     typeof r.rentalId === "string" &&
     !!r.facility?.id &&
     !!r.customer?.id &&
     !!r.storageUnit?.id &&
-    [
-      "pending",
-      "accepted",
-      "deposit_paid",
-      "full_rent_paid",
-      "approved",
-      "appointment_scheduled",
-      "payment_processing",
-      "payment_failed",
-      "payment_expired",
-      "rejected",
-      "cancelled",
-      "completed",
-    ].includes(r.status) &&
+    isRenewalStatus(r.status) &&
     ["READY", "AWAITING_CUSTOMER_CONFIRMATION", "UNKNOWN"].includes(
       r.reviewState,
     ) &&
@@ -90,7 +89,8 @@ export function isRenewalRecord(value: unknown): boolean {
     (r.acceptedTerms == null ||
       (isAcceptedTerms(r.acceptedTerms) && r.acceptedTerms.facilityId === r.facility.id &&
         r.acceptedTerms.storageUnitId === r.storageUnit.id &&
-        r.acceptedTerms.oldEndDate === r.oldEndDate && r.acceptedTerms.newEndDate === r.newEndDate &&
+        r.acceptedTerms.oldEndDate === r.oldEndDate &&
+        (r.effectivePeriod?.finalized ? r.effectivePeriod.newEndDate === r.newEndDate : r.acceptedTerms.newEndDate === r.newEndDate) &&
         r.acceptedTerms.totalAfterDiscount === r.amount && r.acceptedTerms.currency === r.currency))
   )
 }
@@ -106,7 +106,7 @@ export async function listRenewals(
       "status",
       "rentalId",
       "sort",
-      ...(role === "manager" ? ["facilityId", "search"] : []),
+      ...(role === "manager" || role === "staff" ? ["facilityId", "search"] : []),
     ],
     ["createdAt", "newEndDate", "amount", "id"],
   )
@@ -133,6 +133,7 @@ export async function getRenewalOptions(rentalId: string) {
         (o) =>
           typeof o?.pricingPackageCode === "string" &&
             (o.pricingPackageName === undefined || o.pricingPackageName === null || typeof o.pricingPackageName === "string") &&
+          (o.signingWindowDays == null || (Number.isInteger(o.signingWindowDays) && o.signingWindowDays >= 1 && o.signingWindowDays <= 14)) &&
           Number.isInteger(o.rentalMonths) &&
           o.rentalMonths > 0,
       ),
@@ -141,11 +142,16 @@ export async function getRenewalOptions(rentalId: string) {
 export async function quoteRenewal(
   rentalId: string,
   pricingPackageCode: string,
+  startDate?: string,
 ) {
+  const body: Record<string, unknown> = { pricingPackageCode }
+  if (startDate) {
+    body.startDate = startDate
+  }
   return readRentalEnvelope<RenewalApiQuote>(
     await apiRequest(
       `/api/customer/rentals/${encodeURIComponent(rentalId)}/renewal-quote`,
-      { method: "POST", body: JSON.stringify({ pricingPackageCode }) },
+      { method: "POST", body: JSON.stringify(body) },
     ),
     (data) => {
       const q = data as RenewalApiQuote | null
@@ -154,7 +160,7 @@ export async function quoteRenewal(
         typeof q.id === "string" &&
         q.rentalId === rentalId &&
         isAcceptedTerms(q) &&
-        Number.isFinite(Date.parse(q.expiresAt)) &&
+        (q.expiresAt == null || Number.isFinite(Date.parse(q.expiresAt))) &&
         [
           "monthlyPrice",
           "subtotal",
@@ -248,11 +254,16 @@ function isRenewalPaymentResponse(value: unknown,renewalId: string): value is Re
     &&(result.acceptedRevisionId===null||typeof result.acceptedRevisionId==="string")
     &&typeof result.transactionReference==="string"&&Number.isFinite(result.amount)&&result.amount>0
     &&result.currency==="VND"
-    &&["PENDING","PROCESSING","PAID","NOT_RECEIVED","FAILED","CANCELLED"].includes(result.paymentStatus)
+    &&(result.transactionStatus===undefined||isRenewalTransactionStatus(result.transactionStatus))
+    &&(result.receiptAvailable===undefined||typeof result.receiptAvailable==='boolean')
+    &&isPaymentStatus(result.paymentStatus)
     &&(result.paymentDeadline===null||Number.isFinite(Date.parse(result.paymentDeadline)))
     &&(result.paidAt===null||Number.isFinite(Date.parse(result.paidAt)))
     &&typeof result.reconciliationRequired==="boolean"&&typeof result.message==="string"
     &&(result.paymentUrl===null||typeof result.paymentUrl==="string")
+     &&(result.invoiceNumber===null||typeof result.invoiceNumber==="string")
+     &&["DRAFT","PAID","VOID","REFUNDED"].includes(result.invoiceStatus)
+     &&(result.invoiceIssuedAt===null||Number.isFinite(Date.parse(result.invoiceIssuedAt)))
     &&(result.settlementStage===undefined||["AWAITING_PAYMENT","VERIFIED_AWAITING_ALLOCATION","ALLOCATED_AWAITING_SIGNING","AWAITING_SIGNING","COMPLETED","RECONCILIATION_REQUIRED"].includes(result.settlementStage))
 }
 

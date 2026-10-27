@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import FilePreviewDialog from '../../components/FilePreviewDialog'
 import { Button, Card } from '../../components/ui'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -62,11 +63,7 @@ function DocumentRow({ file }: { file: RentalHandoverFile }) {
       finally{lock.current=false;if(mounted.current)setBusy(false)}
     }}>{busy ? 'Đang tải...' : 'Tải xuống'}</Button>
     </div>
-    {preview && <div className="w-full overflow-hidden rounded-lg border border-stone-200 bg-stone-50" aria-label={`Xem trước ${file.name}`}>
-      {preview.type === 'application/pdf'
-        ? <iframe src={preview.url} title={`Hợp đồng: ${file.name}`} className="h-[65vh] min-h-80 w-full bg-white" />
-        : <img src={preview.url} alt={file.name} className="mx-auto max-h-[65vh] max-w-full object-contain p-3" />}
-    </div>}
+    {preview && <FilePreviewDialog file={{ ...preview, name: file.name }} onClose={closePreview} />}
   </li>
 }
 export default function RentalHandoverFiles({ role,id,contractsOnly=false }: { role: 'customer' | 'manager'; id: string; contractsOnly?: boolean }) {

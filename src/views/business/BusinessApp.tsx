@@ -3,7 +3,7 @@ import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorks
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
 import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
-import BusinessDiscountsPanel from "./BusinessDiscountsPanel"
+import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 
@@ -38,7 +38,6 @@ import {
   Tr,
   SectionHeader,
   Modal,
-  Tabs,
   ProgressBar,
   Input,
   Select,
@@ -47,7 +46,6 @@ import {
 import type { User } from "../../types"
 
 import type {
-  PromotionItem,
   PricingTierItem,
   MonthlyRevenueRecord,
 } from "../../data/demoDatabase"
@@ -57,7 +55,6 @@ import {
   REVENUE_BREAKDOWN,
   CONVERSION_DATA,
   PRICING_TIERS,
-  DISCOUNTS,
   POLICIES,
   FEES,
 } from "../../data/demoDatabase"
@@ -102,7 +99,6 @@ const RUNTIME_REVENUE_DATA = DEMO_DATA_ENABLED ? REVENUE_DATA : []
 const RUNTIME_REVENUE_BREAKDOWN = DEMO_DATA_ENABLED ? REVENUE_BREAKDOWN : []
 const RUNTIME_CONVERSION_DATA = DEMO_DATA_ENABLED ? CONVERSION_DATA : []
 const RUNTIME_PRICING_TIERS = DEMO_DATA_ENABLED ? PRICING_TIERS : []
-const RUNTIME_DISCOUNTS = DEMO_DATA_ENABLED ? DISCOUNTS : []
 const RUNTIME_FEES = DEMO_DATA_ENABLED ? FEES : []
 
 const facilityStatusLabel = (status: Facility['status']) => ({
@@ -277,10 +273,12 @@ export interface DurationDiscountItem {
   id: string
   months: number | 'other'
   rentalYears?: number | null
+  freeSetupDays?: number | null
   title: string
   label: string
   discountPercent: number
   renewalDiscountPercent: number
+  depositPercent?: number
   description: string
   appliesTo: string
   status: 'active' | 'inactive'
@@ -369,9 +367,10 @@ export default function BusinessApp({
   onLogout: () => void
 }) {
   const hub = useStorageHub()
+  const visibleRuntimeFees = isApiAuthenticated() ? [] : RUNTIME_FEES
 
   const {
-    facilities: facilitiesList,
+    facilities: localFacilitiesList,
     units: unitsList,
     rentals: rentalsList = [],
     contracts: contractsList = [],
@@ -387,6 +386,7 @@ export default function BusinessApp({
   // Local/demo data may use the facility code as its id. Keep the canonical
   // backend UUID by code so edit requests always target the persisted record.
   const [backendFacilityIdsByCode, setBackendFacilityIdsByCode] = useState<Record<string, string>>({})
+  const [apiFacilitiesReady, setApiFacilitiesReady] = useState(() => !isApiAuthenticated())
   const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null; revenue: number }>>({})
   const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
   const [facilityDetailTypes, setFacilityDetailTypes] = useState<CustomerUnitType[]>([])
@@ -394,6 +394,18 @@ export default function BusinessApp({
   const [businessNotifications, setBusinessNotifications] = useState<ApiNotification[]>([])
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewRequestId, setReviewRequestId] = useState<string | null>(null)
+
+  // Authenticated Business screens must not render the local/demo catalog while
+  // the backend catalog is still being loaded or unavailable.
+  const facilitiesList = isApiAuthenticated()
+    ? !apiFacilitiesReady
+      ? []
+      : localFacilitiesList.filter(facility => {
+        const code = (facility.code || '').trim().toUpperCase()
+        return Object.values(backendFacilityIdsByCode).includes(facility.id)
+          || (code !== '' && backendFacilityIdsByCode[code] === facility.id)
+      })
+    : localFacilitiesList
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -438,6 +450,7 @@ export default function BusinessApp({
     listAllFacilitiesApi()
       .then((backendFacs) => {
         if (!isMounted || !Array.isArray(backendFacs)) return
+        if (isApiAuthenticated()) setApiFacilitiesReady(true)
         if (isMounted) setFacilityDataError(undefined)
         setBackendFacilityIdsByCode(Object.fromEntries(
           backendFacs.map((facility) => [facility.code.trim().toUpperCase(), facility.id]),
@@ -449,10 +462,10 @@ export default function BusinessApp({
           revenue: facility.monthRevenue ?? 0,
         }])))
 
-        if (isApiAuthenticated() && backendFacs.length > 0) {
+        if (isApiAuthenticated()) {
           const backendIds = new Set(backendFacs.map(bf => bf.id))
           const backendCodes = new Set(backendFacs.map(bf => (bf.code || '').trim().toUpperCase()))
-          facilitiesList.forEach(f => {
+          localFacilitiesList.forEach(f => {
             const code = (f.code || '').trim().toUpperCase()
             if (!backendIds.has(f.id) && !backendCodes.has(code)) {
               deleteFacility(f.id, user, true)
@@ -461,7 +474,7 @@ export default function BusinessApp({
         }
         backendFacs.forEach((bf) => {
           const cleanBf = sanitizeFacilityStrings(bf)
-          const matching = facilitiesList.find(
+          const matching = localFacilitiesList.find(
             (f) => f.id === cleanBf.id || (f.code && f.code.toUpperCase() === (cleanBf.code || '').toUpperCase()),
           )
           if (!matching) {
@@ -525,6 +538,7 @@ export default function BusinessApp({
       .catch(error => {
         if (!isMounted) return
         if (isApiAuthenticated()) {
+          setApiFacilitiesReady(false)
           setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.')
         }
       })
@@ -538,6 +552,7 @@ export default function BusinessApp({
       if (!fac) return 0
       const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
       if (stats) return stats.occupied
+      if (isApiAuthenticated()) return 0
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
@@ -557,6 +572,7 @@ export default function BusinessApp({
       if (!fac) return 0
       const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
       if (stats) return stats.total
+      if (isApiAuthenticated()) return 0
       const facUnits = unitsList.filter(
         (u) => u.facilityId === fac.id || u.facilityId === fac.code,
       )
@@ -594,13 +610,6 @@ export default function BusinessApp({
       group: "Cơ Sở & Mặt Bằng",
       permission: "facilities:read",
     },
-    {
-      id: "performance",
-      label: "Hiệu Suất Mặt Bằng",
-      icon: Icon.eye,
-      group: "Cơ Sở & Mặt Bằng",
-      permission: "reports:read",
-    },
 
     // ── GIÁ & KHUYẾN MÃI ──
     {
@@ -612,7 +621,7 @@ export default function BusinessApp({
     },
     {
       id: "policies",
-      label: "Gói Thuê Kỳ Hạn",
+      label: "Gói Thuê",
       icon: Icon.calendar,
       group: "Giá & Khuyến Mãi",
       permission: "policies:read",
@@ -639,6 +648,7 @@ export default function BusinessApp({
       label: "Trả Kho & Quyết Toán",
       icon: Icon.clipboard,
       group: "Vận Hành & Hậu Mãi",
+      permission: "returns:read",
     },
     {
       id: "damage-incidents",
@@ -647,15 +657,6 @@ export default function BusinessApp({
       group: "Vận Hành & Hậu Mãi",
       permission: "facilities:read",
     },
-
-    // ── BÁO CÁO THỐNG KÊ ──
-    {
-      id: "revenue",
-      label: "Báo Cáo Doanh Thu",
-      icon: Icon.chart,
-      group: "Báo Cáo Thống Kê",
-      permission: "reports:read",
-    },
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, "facilities"))
@@ -663,9 +664,9 @@ export default function BusinessApp({
 
   const [pricingModal, setPricingModal] = useState(false)
 
-  const [discountModal, setDiscountModal] = useState(false)
-
-  const [policiesList, setPoliciesList] = useState<PolicyItem[]>(loadInitialPolicies)
+  const [policiesList, setPoliciesList] = useState<PolicyItem[]>(() =>
+    isApiAuthenticated() ? [] : loadInitialPolicies(),
+  )
 
   const [policyModal, setPolicyModal] = useState(false)
 
@@ -1057,9 +1058,11 @@ export default function BusinessApp({
           id: current?.id ?? `api-${policy.code}-${policy.rentalMonths}`,
           months: policy.rentalMonths,
           rentalYears: policy.rentalYears,
+          freeSetupDays: policy.freeSetupDays,
           title: policy.name,
           label: policy.rentalYears ? `${policy.rentalYears} năm (${policy.rentalMonths} tháng)` : `${policy.rentalMonths} tháng`,
           discountPercent: Number(policy.discountRate) * 100,
+          depositPercent: policy.depositRate !== undefined ? Math.round(Number(policy.depositRate) * 100) : 20,
           renewalDiscountPercent: 0,
           description: policy.name,
           appliesTo: 'Đặt mới',
@@ -1110,8 +1113,10 @@ export default function BusinessApp({
   const [formCreateDurationTitle, setFormCreateDurationTitle] = useState("")
   const [formCreateDurationLabel, setFormCreateDurationLabel] = useState("")
   const [formCreateDurationMonths, setFormCreateDurationMonths] = useState<number | string>(9)
+  const [formCreateDurationSetupDays, setFormCreateDurationSetupDays] = useState<number | string>('')
   const [formCreateDurationPercent, setFormCreateDurationPercent] = useState<number>(6)
   const [formCreateDurationRenewalPercent, setFormCreateDurationRenewalPercent] = useState<number>(4)
+  const [formCreateDurationDepositPercent, setFormCreateDurationDepositPercent] = useState<number>(20)
   const [formCreateDurationAppliesTo, setFormCreateDurationAppliesTo] = useState("Đặt mới & Gia hạn")
   const [formCreateDurationScopeType, setFormCreateDurationScopeType] = useState<'all' | 'specific'>('all')
   const [formCreateDurationFacilityIds, setFormCreateDurationFacilityIds] = useState<string[]>([])
@@ -1130,8 +1135,10 @@ export default function BusinessApp({
   const [selectedDurationItem, setSelectedDurationItem] = useState<DurationDiscountItem | null>(null)
   const [formDurationTitle, setFormDurationTitle] = useState("")
   const [formDurationLabel, setFormDurationLabel] = useState("")
+  const [formDurationSetupDays, setFormDurationSetupDays] = useState<number | string>('')
   const [formDurationPercent, setFormDurationPercent] = useState<number>(0)
   const [formDurationRenewalPercent, setFormDurationRenewalPercent] = useState<number>(0)
+  const [formDurationDepositPercent, setFormDurationDepositPercent] = useState<number>(20)
   const [formDurationAppliesTo, setFormDurationAppliesTo] = useState("Đặt mới & Gia hạn")
   const [formDurationScopeType, setFormDurationScopeType] = useState<'all' | 'specific'>('all')
   const [formDurationFacilityIds, setFormDurationFacilityIds] = useState<string[]>([])
@@ -1143,8 +1150,10 @@ export default function BusinessApp({
     setFormCreateDurationTitle("")
     setFormCreateDurationLabel("")
     setFormCreateDurationMonths(9)
+    setFormCreateDurationSetupDays('')
     setFormCreateDurationPercent(6)
     setFormCreateDurationRenewalPercent(4)
+    setFormCreateDurationDepositPercent(20)
     setFormCreateDurationAppliesTo("Đặt mới & Gia hạn")
     setFormCreateDurationScopeType("all")
     setFormCreateDurationFacilityIds([])
@@ -1174,11 +1183,13 @@ export default function BusinessApp({
       label,
       discountPercent: Math.max(0, Math.min(100, Number(formCreateDurationPercent) || 0)),
       renewalDiscountPercent: Math.max(0, Math.min(100, Number(formCreateDurationRenewalPercent) || 0)),
+      depositPercent: Math.max(5, Math.min(50, Number(formCreateDurationDepositPercent) || 20)),
       description: formCreateDurationDesc.trim() || `Giảm ${formCreateDurationPercent}% cho hợp đồng mới và giảm ${formCreateDurationRenewalPercent}% khi gia hạn ${label}.`,
       appliesTo: formCreateDurationAppliesTo,
       status: formCreateDurationStatus,
       scopeType: formCreateDurationScopeType,
       facilityIds: formCreateDurationScopeType === 'specific' ? formCreateDurationFacilityIds : [],
+      freeSetupDays: formCreateDurationSetupDays === '' ? null : Math.max(0, Number(formCreateDurationSetupDays) || 0),
     }
 
     if (isApiAuthenticated()) {
@@ -1195,7 +1206,9 @@ export default function BusinessApp({
           name: title,
           rentalMonths: rentalMonthsNumber,
           rentalYears,
+          freeSetupDays: newPkg.freeSetupDays,
           discountRate: newPkg.discountPercent / 100,
+          depositRate: (newPkg.depositPercent ?? 20) / 100,
           policyVersion: `v${Date.now()}`,
           publicationStatus: pubStatus,
           active: pubStatus === 'PUBLISHED',
@@ -1216,7 +1229,7 @@ export default function BusinessApp({
     }
     const next = [...durationDiscounts, newPkg]
     setDurationDiscounts(next)
-    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
     setCreateDurationModal(false)
     showToast(lang === 'vi' ? `Đã tạo gói thuê "${newPkg.title}" thành công!` : `Created package "${newPkg.title}"!`)
   }
@@ -1232,8 +1245,10 @@ export default function BusinessApp({
     setSelectedDurationItem(item)
     setFormDurationTitle(item.title)
     setFormDurationLabel(item.label)
+    setFormDurationSetupDays(item.freeSetupDays ?? '')
     setFormDurationPercent(item.discountPercent)
     setFormDurationRenewalPercent(item.renewalDiscountPercent)
+    setFormDurationDepositPercent(item.depositPercent ?? 20)
     setFormDurationAppliesTo(item.appliesTo || "Đặt mới & Gia hạn")
     setFormDurationScopeType(item.scopeType || "all")
     setFormDurationFacilityIds(item.facilityIds || [])
@@ -1268,7 +1283,9 @@ export default function BusinessApp({
           code: existing?.code || selectedDurationItem.id.replace(/^api-/, '').slice(0, 30),
           name: formDurationTitle.trim() || selectedDurationItem.title,
           rentalMonths: typeof selectedDurationItem.months === 'number' ? selectedDurationItem.months : 1,
+          freeSetupDays: formDurationSetupDays === '' ? undefined : Math.max(0, Number(formDurationSetupDays) || 0),
           discountRate: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)) / 100,
+          depositRate: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)) / 100,
           policyVersion: `v${Date.now()}`,
           active: formDurationStatus === 'active',
           effectiveFrom,
@@ -1293,8 +1310,10 @@ export default function BusinessApp({
           ...d,
           title: formDurationTitle.trim() || d.title,
           label: formDurationLabel.trim() || d.label,
+          freeSetupDays: formDurationSetupDays === '' ? d.freeSetupDays : Math.max(0, Number(formDurationSetupDays) || 0),
           discountPercent: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)),
           renewalDiscountPercent: Math.max(0, Math.min(100, Number(formDurationRenewalPercent) || 0)),
+          depositPercent: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)),
           appliesTo: formDurationAppliesTo,
           scopeType: formDurationScopeType,
           facilityIds: isApiAuthenticated() ? savedFacilityIds : formDurationScopeType === 'specific' ? formDurationFacilityIds : [],
@@ -1306,7 +1325,7 @@ export default function BusinessApp({
       return d
     })
     setDurationDiscounts(next)
-    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
     setEditDurationModal(false)
     showToast(
       lang === "vi"
@@ -1336,7 +1355,7 @@ export default function BusinessApp({
       }
       const next = durationDiscounts.filter((d) => d.id !== id)
       setDurationDiscounts(next)
-      localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+      if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
       if (selectedDurationItem?.id === id) setEditDurationModal(false)
       showToast(lang === 'vi' ? `Đã xóa gói "${item.title}"!` : `Package deleted!`)
     }
@@ -1356,7 +1375,7 @@ export default function BusinessApp({
       return d
     })
     setDurationDiscounts(next)
-    localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
+    if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
   }
 
   const [revenueFacilityFilter, setRevenueFacilityFilter] =
@@ -1496,11 +1515,7 @@ export default function BusinessApp({
       if (!fac) return 0
       const stats = backendFacilityStats[(fac.code || '').trim().toUpperCase()]
       if (stats) return stats.revenue
-      const isSeed =
-        fac.id === "fac-001" ||
-        fac.id === "fac-002" ||
-        fac.code === "HCM-Q1-F01" ||
-        fac.code === "BD-F01"
+      if (isApiAuthenticated()) return 0
 
       const facHoldIds = new Set(
         (holdsList || [])
@@ -1531,6 +1546,7 @@ export default function BusinessApp({
   )
 
   const activeRevenueData: MonthlyRevenueRecord[] = useMemo(() => {
+    if (isApiAuthenticated()) return []
     const months = ["Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9"]
     const relevantPayments = (paymentsList || []).filter((p) => {
       if (p.status !== "PAID" || p.type === "REFUND") return false
@@ -1642,6 +1658,7 @@ export default function BusinessApp({
       : 10000000
 
   const [pricingTiers, setPricingTiers] = useState<PricingTierItem[]>(() => {
+    if (isApiAuthenticated()) return []
     try {
       const stored = localStorage.getItem("storagehub:pricingTiers")
       if (stored) {
@@ -1668,6 +1685,7 @@ export default function BusinessApp({
       Record<string, { basePrice: number; highDemandMultiplier: number }>
     >
   >(() => {
+    if (isApiAuthenticated()) return {}
     try {
       const stored = localStorage.getItem("storagehub:facility-pricing")
       if (stored) return JSON.parse(stored)
@@ -1728,10 +1746,10 @@ export default function BusinessApp({
     setEditingPriceFacility(fac)
     const currentOverrides = facilityPricingOverrides[fac.id] || {}
     setFacilityPricesForm({
-      S: currentOverrides["tier-1"]?.basePrice ?? 5500000,
-      M: currentOverrides["tier-2"]?.basePrice ?? 9500000,
-      L: currentOverrides["tier-3"]?.basePrice ?? 15000000,
-      XL: currentOverrides["tier-4"]?.basePrice ?? 22500000,
+      S: isApiAuthenticated() ? 0 : currentOverrides["tier-1"]?.basePrice ?? 5500000,
+      M: isApiAuthenticated() ? 0 : currentOverrides["tier-2"]?.basePrice ?? 9500000,
+      L: isApiAuthenticated() ? 0 : currentOverrides["tier-3"]?.basePrice ?? 15000000,
+      XL: isApiAuthenticated() ? 0 : currentOverrides["tier-4"]?.basePrice ?? 22500000,
     })
     setFacilityMultiplierForm({
       S: currentOverrides["tier-1"]?.highDemandMultiplier ?? 1.0,
@@ -1772,7 +1790,7 @@ export default function BusinessApp({
         return !value || value.monthlyPrice <= 0 || value.securityDepositAmount < 0
       })
       if (invalid) {
-        showToast('Giá thuê phải lớn hơn 0 và tiền duy trì CSVC không được âm.')
+        showToast('Giá thuê phải lớn hơn 0 và tiền cọc đảm bảo kho không được âm.')
         return
       }
       try {
@@ -1933,6 +1951,14 @@ export default function BusinessApp({
   // Helper lấy giá thực tế theo từng cỡ kho (S, M, L, XL, custom) của một cơ sở
   const getFacilitySizePrice = useCallback(
     (fac: any, size: "S" | "M" | "L" | "XL" | string): number => {
+      if (isApiAuthenticated()) {
+        const backendTypes = pricingCatalogByCode[(fac?.code || fac?.id || '').toUpperCase()] || []
+        const backendType = backendTypes.find(type => {
+          const normalized = (type.code || type.name || '').toUpperCase()
+          return normalized === size.toUpperCase() || normalized.includes(`-${size.toUpperCase()}-`) || normalized.includes(`(${size.toUpperCase()})`)
+        })
+        return backendType?.monthlyPrice ?? 0
+      }
       if (!fac) return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
 
       // 1. Kiểm tra override trong bảng giá (Bảng giá & Biểu phí)
@@ -1990,7 +2016,7 @@ export default function BusinessApp({
 
       return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
     },
-    [facilityPricingOverrides, unitsList, pricingTiers],
+    [facilityPricingOverrides, pricingCatalogByCode, unitsList, pricingTiers],
   )
 
   const getFacilitySizePriceFormatted = useCallback(
@@ -2128,34 +2154,6 @@ export default function BusinessApp({
     )
   }
 
-  // Discounts & Promotions interactive state
-
-  const [promotionsList, setPromotionsList] =
-    useState<PromotionItem[]>(RUNTIME_DISCOUNTS)
-
-  const [promoTab, setPromoTab] = useState("All")
-
-  const [promoSearch, setPromoSearch] = useState("")
-
-  const [newPromoCode, setNewPromoCode] = useState("SPECIAL20")
-
-  const [newPromoName, setNewPromoName] = useState("")
-
-  const [newPromoDesc, setNewPromoDesc] = useState("")
-
-  const [newPromoType, setNewPromoType] =
-    useState<"percentage" | "fixed-amount" | "first-month-free" | "seasonal">(
-      "percentage",
-    )
-
-  const [newPromoValue, setNewPromoValue] = useState("20% OFF")
-
-  const [newPromoMaxUses, setNewPromoMaxUses] = useState("50")
-
-  const [newPromoMinMonths, setNewPromoMinMonths] = useState("3")
-
-  const [newPromoExpiry, setNewPromoExpiry] = useState("2026-12-31")
-
   // ── State Quản Lý Cơ Sở (CRUD Facilities qua StorageHubContext) ──
 
   const [createFacilityModal, setCreateFacilityModal] = useState<boolean>(false)
@@ -2242,7 +2240,7 @@ export default function BusinessApp({
   )
 
   const [formFacAccessHours, setFormFacAccessHours] = useState<string>(
-    "06:00 - 22:00 hàng ngày",
+    "08:00 - 17:00",
   )
 
   const [formFacStatus, setFormFacStatus] = useState<Facility['status']>(
@@ -2360,7 +2358,7 @@ export default function BusinessApp({
       facilities: 'Quản Lý Cơ Sở',
       performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Bảng Giá Loại Kho',
-      policies: 'Gói Thuê Kỳ Hạn',
+      policies: 'Gói Thuê',
       'rental-regulations': 'Quy Định Cho Thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
       returns: 'Trả Kho & Quyết Toán',
@@ -2454,6 +2452,7 @@ export default function BusinessApp({
   // Mở modal thêm cơ sở mới với thông tin nhận diện để trống cho BO khai báo.
 
   const handleOpenCreateFacility = () => {
+    const apiMode = isApiAuthenticated()
     setFormFacCode("")
     setFormFacName("")
     setFormFacAddress("")
@@ -2471,43 +2470,43 @@ export default function BusinessApp({
 
     setFormFacUnits(0)
 
-    setFormFacPriceS("5.500.000đ")
-    setFormFacPriceM("9.500.000đ")
-    setFormFacPriceL("15.000.000đ")
-    setFormFacPriceXL("22.500.000đ")
-    setFormFacPrice("5.500.000đ")
+    setFormFacPriceS(apiMode ? "" : "5.500.000đ")
+    setFormFacPriceM(apiMode ? "" : "9.500.000đ")
+    setFormFacPriceL(apiMode ? "" : "15.000.000đ")
+    setFormFacPriceXL(apiMode ? "" : "22.500.000đ")
+    setFormFacPrice(apiMode ? "" : "5.500.000đ")
 
-    setFormFacLoadS(1000)
-    setFormFacLoadM(1600)
-    setFormFacLoadL(2800)
-    setFormFacLoadXL(4000)
+    setFormFacLoadS(apiMode ? 0 : 1000)
+    setFormFacLoadM(apiMode ? 0 : 1600)
+    setFormFacLoadL(apiMode ? 0 : 2800)
+    setFormFacLoadXL(apiMode ? 0 : 4000)
 
-    setFormFacLengthS(UNIT_SPECS.S.lengthM)
-    setFormFacLengthM(UNIT_SPECS.M.lengthM)
-    setFormFacLengthL(UNIT_SPECS.L.lengthM)
-    setFormFacLengthXL(UNIT_SPECS.XL.lengthM)
+    setFormFacLengthS(apiMode ? 0 : UNIT_SPECS.S.lengthM)
+    setFormFacLengthM(apiMode ? 0 : UNIT_SPECS.M.lengthM)
+    setFormFacLengthL(apiMode ? 0 : UNIT_SPECS.L.lengthM)
+    setFormFacLengthXL(apiMode ? 0 : UNIT_SPECS.XL.lengthM)
 
-    setFormFacWidthS(UNIT_SPECS.S.widthM)
-    setFormFacWidthM(UNIT_SPECS.M.widthM)
-    setFormFacWidthL(UNIT_SPECS.L.widthM)
-    setFormFacWidthXL(UNIT_SPECS.XL.widthM)
+    setFormFacWidthS(apiMode ? 0 : UNIT_SPECS.S.widthM)
+    setFormFacWidthM(apiMode ? 0 : UNIT_SPECS.M.widthM)
+    setFormFacWidthL(apiMode ? 0 : UNIT_SPECS.L.widthM)
+    setFormFacWidthXL(apiMode ? 0 : UNIT_SPECS.XL.widthM)
 
-    setFormFacLaneS(UNIT_SPECS.S.vehicleLaneWidthM)
-    setFormFacLaneM(UNIT_SPECS.M.vehicleLaneWidthM)
-    setFormFacLaneL(UNIT_SPECS.L.vehicleLaneWidthM)
-    setFormFacLaneXL(UNIT_SPECS.XL.vehicleLaneWidthM)
+    setFormFacLaneS(apiMode ? 0 : UNIT_SPECS.S.vehicleLaneWidthM)
+    setFormFacLaneM(apiMode ? 0 : UNIT_SPECS.M.vehicleLaneWidthM)
+    setFormFacLaneL(apiMode ? 0 : UNIT_SPECS.L.vehicleLaneWidthM)
+    setFormFacLaneXL(apiMode ? 0 : UNIT_SPECS.XL.vehicleLaneWidthM)
 
     setFormFacImage("")
 
     setFormFacClimate(false)
 
-    setFormFacSecurity("Khóa riêng tự quản, Bảo vệ cổng")
+    setFormFacSecurity(apiMode ? "" : "Khóa riêng tự quản, Bảo vệ cổng")
 
-    setFormFacAccessHours("06:00 - 22:00 hàng ngày")
+    setFormFacAccessHours(apiMode ? "" : "08:00 - 17:00")
 
-    setFormFacStatus(isApiAuthenticated() ? "setup" : "active")
+    setFormFacStatus(apiMode ? "setup" : "active")
 
-    const defaultSpecs = (isApiAuthenticated() ? [] : DEFAULT_FACILITY_UNIT_SPECS).map((s) => ({
+    const defaultSpecs = (apiMode ? [] : DEFAULT_FACILITY_UNIT_SPECS).map((s) => ({
       ...s,
       count: 5,
       rentalPackages: generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice),
@@ -2670,13 +2669,13 @@ export default function BusinessApp({
 
         manager: isApiAuthenticated() ? "Chưa phân công" : (formFacManager.trim() || "Quản lý cơ sở"),
 
-        phone: formFacPhone.trim() || "1900 6868",
+        phone: formFacPhone.trim() || (isApiAuthenticated() ? "" : "1900 6868"),
 
         units: isApiAuthenticated() ? 0 : totalCalculatedUnits,
 
         unitDistribution: isApiAuthenticated() ? {} : unitDistribution,
 
-        price: (() => {
+        price: isApiAuthenticated() ? "" : (() => {
           const parsed = parseInt(formFacPrice.replace(/\D/g, ""), 10)
           return !isNaN(parsed) && parsed > 0
             ? `${Math.round(parsed).toLocaleString("vi-VN")}đ`
@@ -2755,6 +2754,7 @@ export default function BusinessApp({
   }
 
   const handleOpenEditFacility = (f: any) => {
+    const apiMode = isApiAuthenticated()
     setFacilityEditError(undefined)
     setSelectedFacility(f)
 
@@ -2768,7 +2768,7 @@ export default function BusinessApp({
 
     setFormFacManager(f.manager)
 
-    setFormFacPhone(f.phone || "1900 6868")
+    setFormFacPhone(f.phone || (isApiAuthenticated() ? "" : "1900 6868"))
 
     // Find current unit breakdown
 
@@ -2809,7 +2809,7 @@ export default function BusinessApp({
         (u) =>
           ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL",
       ).length
-    } else {
+    } else if (!isApiAuthenticated()) {
       const base = Math.floor((f.units || 20) / 4)
 
       sCount = base
@@ -2825,7 +2825,7 @@ export default function BusinessApp({
     let loadedSpecs: FacilityCustomUnitSpec[] = []
     if (f.unitCustomSpecs && Array.isArray(f.unitCustomSpecs) && f.unitCustomSpecs.length > 0) {
       loadedSpecs = (f.unitCustomSpecs as FacilityCustomUnitSpec[]).map((s: FacilityCustomUnitSpec) => {
-        const specFallback = UNIT_SPECS[s.sizeCode as keyof typeof UNIT_SPECS]
+        const specFallback = apiMode ? undefined : UNIT_SPECS[s.sizeCode as keyof typeof UNIT_SPECS]
         const fallbackDims = specFallback?.frameDimensions
         const rawDims = s.frameDimensions || f.unitFrameDimensions?.[s.sizeCode] || (fallbackDims ? {
           lengthM: fallbackDims.lengthM ?? fallbackDims.depthM,
@@ -2837,12 +2837,12 @@ export default function BusinessApp({
         return {
           ...s,
           count: f.unitDistribution?.[s.sizeCode] ?? s.count ?? 0,
-          monthlyPrice: f.unitPrices?.[s.sizeCode] ?? s.monthlyPrice ?? 5500000,
+          monthlyPrice: f.unitPrices?.[s.sizeCode] ?? s.monthlyPrice ?? (apiMode ? 0 : 5500000),
           lengthM: f.unitDimensions?.[s.sizeCode]?.lengthM ?? s.lengthM,
           widthM: f.unitDimensions?.[s.sizeCode]?.widthM ?? s.widthM,
-          heightM: (f.unitDimensions?.[s.sizeCode] as any)?.heightM ?? s.heightM ?? 5,
-          laneWidthM: f.unitLaneWidths?.[s.sizeCode] ?? s.laneWidthM ?? 4,
-          maxLoadKg: f.unitLoadLimits?.[s.sizeCode] ?? s.maxLoadKg ?? 1000,
+          heightM: (f.unitDimensions?.[s.sizeCode] as any)?.heightM ?? s.heightM ?? (apiMode ? 0 : 5),
+          laneWidthM: f.unitLaneWidths?.[s.sizeCode] ?? s.laneWidthM ?? (apiMode ? 0 : 4),
+          maxLoadKg: f.unitLoadLimits?.[s.sizeCode] ?? s.maxLoadKg ?? (apiMode ? 0 : 1000),
           frameCount: s.frameCount ?? f.unitFrameCounts?.[s.sizeCode] ?? specFallback?.frameCount ?? 0,
           frameDimensions: rawDims ? {
             lengthM: rawDims.lengthM ?? (rawDims as any).depthM ?? 1,
@@ -2852,6 +2852,8 @@ export default function BusinessApp({
           } : undefined
         }
       })
+    } else if (isApiAuthenticated()) {
+      loadedSpecs = []
     } else {
       const dist = f.unitDistribution || {}
       const sizeKeys = Array.from(new Set<string>([
@@ -2971,26 +2973,26 @@ export default function BusinessApp({
       facUnits.find(
         (u) => ((u as any).size || (u.type === "Small" ? "S" : "")) === "S",
       )?.maxLoadKg ??
-      1000
+      (apiMode ? 0 : 1000)
     const mLoad =
       f.unitLoadLimits?.M ??
       facUnits.find(
         (u) => ((u as any).size || (u.type === "Medium" ? "M" : "")) === "M",
       )?.maxLoadKg ??
-      1600
+      (apiMode ? 0 : 1600)
     const lLoad =
       f.unitLoadLimits?.L ??
       facUnits.find(
         (u) => ((u as any).size || (u.type === "Large" ? "L" : "")) === "L",
       )?.maxLoadKg ??
-      2800
+      (apiMode ? 0 : 2800)
     const xlLoad =
       f.unitLoadLimits?.XL ??
       facUnits.find(
         (u) =>
           ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL",
       )?.maxLoadKg ??
-      4000
+      (apiMode ? 0 : 4000)
 
     setFormFacLoadS(sLoad)
     setFormFacLoadM(mLoad)
@@ -3002,15 +3004,15 @@ export default function BusinessApp({
     const lUnit = facUnits.find((u) => ((u as any).size || (u.type === "Large" ? "L" : "")) === "L")
     const xlUnit = facUnits.find((u) => ((u as any).size || (u.type === "Extra Large" ? "XL" : "")) === "XL")
 
-    const sLength = f.unitDimensions?.S?.lengthM ?? sUnit?.dimensions?.lengthM ?? UNIT_SPECS.S.lengthM
-    const mLength = f.unitDimensions?.M?.lengthM ?? mUnit?.dimensions?.lengthM ?? UNIT_SPECS.M.lengthM
-    const lLength = f.unitDimensions?.L?.lengthM ?? lUnit?.dimensions?.lengthM ?? UNIT_SPECS.L.lengthM
-    const xlLength = f.unitDimensions?.XL?.lengthM ?? xlUnit?.dimensions?.lengthM ?? UNIT_SPECS.XL.lengthM
+    const sLength = f.unitDimensions?.S?.lengthM ?? sUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.S.lengthM)
+    const mLength = f.unitDimensions?.M?.lengthM ?? mUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.M.lengthM)
+    const lLength = f.unitDimensions?.L?.lengthM ?? lUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.L.lengthM)
+    const xlLength = f.unitDimensions?.XL?.lengthM ?? xlUnit?.dimensions?.lengthM ?? (apiMode ? 0 : UNIT_SPECS.XL.lengthM)
 
-    const sWidth = f.unitDimensions?.S?.widthM ?? sUnit?.dimensions?.widthM ?? UNIT_SPECS.S.widthM
-    const mWidth = f.unitDimensions?.M?.widthM ?? mUnit?.dimensions?.widthM ?? UNIT_SPECS.M.widthM
-    const lWidth = f.unitDimensions?.L?.widthM ?? lUnit?.dimensions?.widthM ?? UNIT_SPECS.L.widthM
-    const xlWidth = f.unitDimensions?.XL?.widthM ?? xlUnit?.dimensions?.widthM ?? UNIT_SPECS.XL.widthM
+    const sWidth = f.unitDimensions?.S?.widthM ?? sUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.S.widthM)
+    const mWidth = f.unitDimensions?.M?.widthM ?? mUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.M.widthM)
+    const lWidth = f.unitDimensions?.L?.widthM ?? lUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.L.widthM)
+    const xlWidth = f.unitDimensions?.XL?.widthM ?? xlUnit?.dimensions?.widthM ?? (apiMode ? 0 : UNIT_SPECS.XL.widthM)
 
     setFormFacLengthS(sLength)
     setFormFacLengthM(mLength)
@@ -3022,10 +3024,10 @@ export default function BusinessApp({
     setFormFacWidthL(lWidth)
     setFormFacWidthXL(xlWidth)
 
-    const sLane = f.unitLaneWidths?.S ?? UNIT_SPECS.S.vehicleLaneWidthM
-    const mLane = f.unitLaneWidths?.M ?? UNIT_SPECS.M.vehicleLaneWidthM
-    const lLane = f.unitLaneWidths?.L ?? UNIT_SPECS.L.vehicleLaneWidthM
-    const xlLane = f.unitLaneWidths?.XL ?? UNIT_SPECS.XL.vehicleLaneWidthM
+    const sLane = f.unitLaneWidths?.S ?? (apiMode ? 0 : UNIT_SPECS.S.vehicleLaneWidthM)
+    const mLane = f.unitLaneWidths?.M ?? (apiMode ? 0 : UNIT_SPECS.M.vehicleLaneWidthM)
+    const lLane = f.unitLaneWidths?.L ?? (apiMode ? 0 : UNIT_SPECS.L.vehicleLaneWidthM)
+    const xlLane = f.unitLaneWidths?.XL ?? (apiMode ? 0 : UNIT_SPECS.XL.vehicleLaneWidthM)
 
     setFormFacLaneS(sLane)
     setFormFacLaneM(mLane)
@@ -3036,10 +3038,10 @@ export default function BusinessApp({
 
     setFormFacClimate(Boolean(f.climate))
 
-    setFormFacSecurity(f.security || "Khóa riêng tự quản, Bảo vệ cổng")
+    setFormFacSecurity(f.security || (apiMode ? "" : "Khóa riêng tự quản, Bảo vệ cổng"))
 
     setFormFacAccessHours(
-      f.accessHours || "06:00 - 22:00 hàng ngày",
+      f.accessHours || (isApiAuthenticated() ? "" : "08:00 - 17:00"),
     )
 
     setFormFacStatus(f.status)
@@ -3616,12 +3618,12 @@ export default function BusinessApp({
       onNavigate={next => { if (!integrationLocked) setPage(next) }}
       onLogout={() => { if (!integrationLocked) onLogout() }}
       canAccess={(permission) => {
-        if (user.role === 'business' || user.role === 'admin') return true
         if (isApiAuthenticated()) return canApiActor(user, permission)
+        if (user.role === 'business' || user.role === 'admin') return true
         return hub?.can ? hub.can(user, permission) : true
       }}
       roleLabel={"Giám Đốc Thương Mại"}
-      roleColor="bg-[#F2BDCC] text-[#7A364B] border-[#D99BAE]"
+      roleColor="bg-amber-100 text-amber-700"
     >
       {page === "rental-source-policies" && <DuongPolicyWorkspace user={user} onLocked={setIntegrationLocked} />}
       {page === "returns" && (
@@ -3634,15 +3636,13 @@ export default function BusinessApp({
                 : "Monitor, supervise, and resolve warehouse return cases and deposit settlements across all facilities"
             }
           />
+          <BusinessRefundRequestsPanel />
           <BusinessReturnsPanel user={user} />
         </div>
       )}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
-          <div className="flex justify-end">
-            <Button variant="secondary" onClick={() => { setReviewRequestId(null); setReviewOpen(true) }}>Duyệt thay đổi loại kho</Button>
-          </div>
           <SectionHeader
             title={lang === "vi" ? "Quản Lý Cơ Sở" : "Facility Management"}
             subtitle={
@@ -3663,7 +3663,7 @@ export default function BusinessApp({
               </Button>
             }
           />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <StatCard
               title={lang === "vi" ? "Tổng số cơ sở" : "Total Locations"}
               value={facilitiesList.length}
@@ -3675,14 +3675,6 @@ export default function BusinessApp({
               value={totalUnits}
               icon={Icon.box}
               iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={
-                lang === "vi" ? "Doanh thu tháng (MTD)" : "Total Revenue MTD"
-              }
-              value={formatCurrency(totalRevenue)}
-              icon={Icon.dollar}
-              iconBg="bg-amber-50"
             />
           </div>
           {/* Thanh Công Cụ: Tìm kiếm & Lọc Đa Tiêu Chí */}
@@ -3845,7 +3837,7 @@ export default function BusinessApp({
                           <div>{cleanF.address} · <b>{cleanF.city}</b></div>
                           <div>Quản lý: <b>{cleanF.manager}</b></div>
                           <div>Hotline: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
-                          <div>Giờ mở cửa: <b>{cleanF.accessHours || "06:00 - 22:00 hàng ngày"}</b></div>
+                          <div>Khung giờ mở cửa: <b>{cleanF.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}</b></div>
                         </div>
                         {/* Cơ cấu gian kho */}
                         <div className="flex flex-wrap gap-2 text-xs">
@@ -3856,19 +3848,6 @@ export default function BusinessApp({
                             ).length
                             return count > 0 ? <span key={size} className="rounded border border-stone-200 bg-stone-50 px-2 py-1">{size}: {count} kho</span> : null
                           })}
-                        </div>
-                        {/* Chỉ số vận hành */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
-                          <div>
-                            <p className="text-xs text-slate-500">Doanh thu tháng (MTD)</p>
-                            <p className="font-bold">{isApiAuthenticated() ? formatVndAmount(getFacilityActualRevenue(f)) : formatCurrency(getFacilityActualRevenue(f))}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-500">Cước cơ sở từ</p>
-                            <p className="font-bold">{backendFacilityStats[facCode.trim().toUpperCase()]?.price != null
-                              ? `${formatVndAmount(backendFacilityStats[facCode.trim().toUpperCase()].price!)}/tháng`
-                              : "Chưa cấu hình"}</p>
-                          </div>
                         </div>
 
                         {/* Hàng 2.8: Gói thuê đang áp dụng */}
@@ -3967,7 +3946,7 @@ export default function BusinessApp({
           <SectionHeader
             title={
               lang === "vi"
-                ? "Gói Thuê & Chiết Khấu Kỳ Hạn"
+                ? "Gói Thuê & Chiết Khấu"
                 : "Rental Packages & Discounts"
             }
             subtitle={
@@ -3989,25 +3968,15 @@ export default function BusinessApp({
 
           {/* ── KHỐI 1: GÓI THUÊ & MỨC GIẢM GIÁ THEO KỲ HẠN ── */}
           <Card className="p-5 border border-stone-200/90 shadow-sm bg-white">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-slate-900 text-base">
-                    {lang === "vi" ? "Danh Sách Gói Thuê Kỳ Hạn & Mức Chiết Khấu" : "Rental Packages & Discount Schedule"}
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
-                </p>
+            <div className="border-b border-stone-100 pb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-base">
+                  {lang === "vi" ? "Danh Sách Gói Thuê & Mức Chiết Khấu" : "Rental Packages & Discount Schedule"}
+                </h3>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50 self-start sm:self-auto flex items-center gap-1.5 shrink-0"
-                onClick={handleOpenCreateDuration}
-              >
-                {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
-              </Button>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
+              </p>
             </div>
 
             {/* Cards Tóm Tắt Nhanh Các Gói */}
@@ -4120,6 +4089,18 @@ export default function BusinessApp({
                             {hasRenewal ? `-${item.renewalDiscountPercent}%` : "0% (Không giảm)"}
                           </span>
                         </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
+                          <span className="text-[11px] text-slate-600 font-medium">Cọc giữ chỗ:</span>
+                          <span className="font-mono font-bold text-amber-800">
+                            {item.depositPercent ?? 20}%
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
+                          <span className="text-[11px] text-slate-600 font-medium">Setup miễn phí:</span>
+                          <span className="font-mono font-bold text-blue-800">
+                            {item.freeSetupDays == null ? 'Theo kỳ hạn' : `${item.freeSetupDays} ngày`}
+                          </span>
+                        </div>
                       </div>
 
                       <p className="text-[11px] text-slate-500 mt-2 line-clamp-3 leading-relaxed">
@@ -4176,94 +4157,6 @@ export default function BusinessApp({
                   </div>
                 )
               }))}
-            </div>
-          </Card>
-
-          {/* ── KHỐI 2: QUY CHUẨN VẬN HÀNH & ĐIỀU KHOẢN HỢP ĐỒNG ── */}
-          <Card className="p-6 border border-stone-200/90 shadow-sm bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200/70 pb-4">
-              <div>
-                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200 mb-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  Quy định pháp lý & Vận hành chuẩn hóa
-                </div>
-                <h3 className="font-bold text-slate-900 text-base">
-                  {lang === "vi" ? "Thông Số Vận Hành Cốt Lõi & Quy Định Cho Thuê" : "Core Operational Parameters & Regulations"}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  {lang === "vi"
-                    ? "Các điều khoản pháp quy, tiền duy trì CSVC và quy chế bồi thường được ban hành thống nhất tại Văn Bản Quy Định Toàn Hệ Thống."
-                    : "Legal terms, security deposits, and settlement protocols are governed by official StorageHub regulations."}
-                </p>
-              </div>
-
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                className="bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs px-4 py-2 self-start md:self-auto shrink-0 shadow-sm flex items-center gap-1.5 cursor-pointer"
-                onClick={() => setPage("rental-regulations")}
-              >
-                <span>{lang === "vi" ? "Xem Toàn Văn 12 Điều Khoản (In / PDF)" : "View Full 12 Articles (Print/PDF)"}</span>
-                <span>→</span>
-              </Button>
-            </div>
-
-            {/* 4 Chỉ Số Vận Hành Cốt Lõi */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-4">
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-                <div className="text-base font-extrabold text-amber-700 font-mono mt-1">50% / ngày</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
-              </div>
-
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Duy Trì CSVC</span>
-                <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">Theo loại kho</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Thu khi nhận kho; quyết toán sau kiểm tra nghiệm thu, vệ sinh và công nợ.</p>
-              </div>
-
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Hạn Thuê Tối Thiểu</span>
-                <div className="text-base font-extrabold text-slate-900 font-mono mt-1">01 Tháng</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Kỳ thuê sử dụng trọn tháng. Chi tiết xác nhận trên báo giá hợp đồng.</p>
-              </div>
-
-              <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
-                <div className="text-base font-extrabold text-blue-700 font-mono mt-1">Tối Đa 7 Ngày</div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.</p>
-              </div>
-            </div>
-
-            {/* Quy Định Trả Kho & Gia Hạn Mẫu Hiển Thị Khách Hàng */}
-            <div className="mt-4 pt-4 border-t border-stone-200/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-rose-900 text-sm">Quy định trả kho và gia hạn (Công bố khách hàng)</h4>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-                  Hiển thị tại Customer Portal
-                </span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                <article className="rounded-xl border border-rose-200 bg-white p-3.5">
-                  <b className="text-slate-800 text-sm">Trả kho sau ngày hết hạn</b>
-                  <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                    <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
-                    <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                    <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.</li>
-                  </ul>
-                </article>
-                <article className="rounded-xl border border-amber-200 bg-white p-3.5">
-                  <b className="text-slate-800 text-sm">Gia hạn kỳ thuê</b>
-                  <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                    <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
-                    <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
-                  </ul>
-                </article>
-              </div>
-              <p className="rounded-lg bg-rose-50 border border-rose-200/70 p-3 text-xs leading-5 text-rose-900 font-medium">
-                Ví dụ tính phạt mẫu (giá kho 3.000.000 đ/tháng): 3.000.000 đ ÷ 30 × 50% = 50.000 đ/ngày. Trễ 4 ngày tương ứng 200.000 đ (khấu trừ trực tiếp vào tiền duy trì CSVC khi quyết toán).
-              </p>
             </div>
           </Card>
         </div>
@@ -4362,7 +4255,7 @@ export default function BusinessApp({
                   <Button variant="outline" onClick={() => void handleOpenFacilityPriceModal(fac)}>Chỉnh giá cơ sở này</Button>
                 </div>
                 {!pricingCatalogLoading && !pricingCatalogError && types.length === 0 && <p className="p-5 text-sm text-stone-500">Chưa có loại kho thực tế để cấu hình giá.</p>}
-                {types.length > 0 && <Table><Thead><tr><Th>Loại kho</Th><Th>Kích thước (D × R × C)</Th><Th>Số gian</Th><Th>Giá thuê / tháng</Th><Th>Tiền duy trì CSVC</Th></tr></Thead>
+                {types.length > 0 && <Table><Thead><tr><Th>Loại kho</Th><Th>Kích thước (D × R × C)</Th><Th>Số gian</Th><Th>Giá thuê / tháng</Th><Th>Tiền cọc đảm bảo kho</Th></tr></Thead>
                   <Tbody>{types.map(type => <Tr key={type.id}>
                     <Td><b>{type.code}</b> · {type.name}</Td>
                     <Td>{type.lengthM} × {type.widthM} × {type.heightM} m</Td>
@@ -4387,14 +4280,14 @@ export default function BusinessApp({
                 </tr>
               </Thead>
               <Tbody>
-                {RUNTIME_FEES.length === 0 ? (
+                {visibleRuntimeFees.length === 0 ? (
                   <Tr>
                     <Td colSpan={4} className="text-center py-6 text-slate-400">
                       {lang === "vi" ? "Chưa có biểu phí dịch vụ phát sinh ngoài giá thuê & cọc." : "No fee schedule configured."}
                     </Td>
                   </Tr>
                 ) : (
-                  RUNTIME_FEES.map((f) => (
+                  visibleRuntimeFees.map((f) => (
                     <Tr key={f.type}>
                       <Td className="font-medium text-slate-900">
                         {getFeeType(f.type, lang)}
@@ -4416,59 +4309,6 @@ export default function BusinessApp({
               </Tbody>
             </Table>
           </Card>
-
-          {/* Chính sách và quy định áp dụng đi kèm biểu giá */}
-          <Card className="p-5 border border-blue-200/90 bg-gradient-to-br from-blue-50/60 via-white to-white space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 pb-3">
-              <div>
-                <h3 className="font-bold text-blue-950 text-base">
-                  Chính Sách & Quy Định Áp Dụng Đi Kèm Biểu Giá
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Các thông số này được công bố trực tiếp cho khách hàng khi xem chi tiết loại kho và đặt kho trên Customer Portal.
-                </p>
-              </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                Hiển thị bên Customer
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">50% đơn giá ngày / trễ</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo ngày quá hạn.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Duy Trì CSVC</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">Theo cột Tiền duy trì CSVC</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Thu khi bàn giao kho; dùng khấu trừ hư hỏng, công nợ hoặc phí trễ hạn khi quyết toán.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Hạn Thuê Tối Thiểu</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">01 Tháng</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Kỳ thuê sử dụng trọn tháng. Chi tiết và ưu đãi kỳ hạn xác nhận trên báo giá.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-blue-100 bg-white shadow-2xs">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
-                <p className="my-1.5 text-sm font-bold text-blue-900">Tối Đa 7 Ngày</p>
-                <p className="text-xs text-slate-600 leading-relaxed">Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn trước khi thu hồi kho.</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 space-y-2">
-              <h4 className="font-bold text-rose-900 text-xs uppercase tracking-wider">
-                Quy Định Trả Kho & Gia Hạn
-              </h4>
-              <p className="text-xs text-rose-950 leading-relaxed">
-                • <b>Trả kho sau ngày hết hạn:</b> Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày). Tổng phí = số ngày quá hạn × phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.<br />
-                • <b>Gia hạn kỳ thuê:</b> Khách hàng hoàn tất thủ tục và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.
-              </p>
-            </div>
-          </Card>
         </div>
       )}
 
@@ -4482,1046 +4322,6 @@ export default function BusinessApp({
         />
       )}
 
-      {/* ── DISCOUNTS & PROMOTIONS (LEGACY) ── */}
-      {false &&
-        (() => {
-          const activePromos = promotionsList.filter(
-            (p) => p.status === "active",
-          )
-
-          const totalRedemptions = promotionsList.reduce(
-            (sum, p) => sum + p.uses,
-            0,
-          )
-
-          const totalCapacity = promotionsList.reduce(
-            (sum, p) => sum + p.maxUses,
-            0,
-          )
-
-          const filteredPromos = promotionsList.filter((p) => {
-            const matchTab =
-              promoTab === "All" ||
-              promoTab === "Tất cả" ||
-              ((promoTab === "active" || promoTab === "Đang chạy") &&
-                p.status === "active") ||
-              ((promoTab === "paused" || promoTab === "Tạm dừng") &&
-                p.status === "paused") ||
-              ((promoTab === "expired" || promoTab === "Hết hạn") &&
-                p.status === "expired")
-
-            const query = promoSearch.toLowerCase().trim()
-
-            const matchSearch =
-              !query ||
-              p.name.toLowerCase().includes(query) ||
-              p.code.toLowerCase().includes(query) ||
-              p.applicableUnitType.toLowerCase().includes(query)
-
-            return matchTab && matchSearch
-          })
-
-          const copyCodeToClipboard = (code: string) => {
-            navigator.clipboard?.writeText(code)
-
-            showToast(
-              lang === "vi"
-                ? `Đã sao chép mã ưu đãi "${code}" vào clipboard!`
-                : `Promo code "${code}" copied to clipboard!`,
-            )
-          }
-
-          const togglePromoStatus = (id: string) => {
-            setPromotionsList((prev) =>
-              prev.map((p) => {
-                if (p.id !== id) return p
-
-                const nextStatus = p.status === "active" ? "paused" : "active"
-
-                return {
-                  ...p,
-                  status: nextStatus,
-                  active: nextStatus === "active",
-                }
-              }),
-            )
-
-            showToast(
-              lang === "vi"
-                ? "Đã chuyển đổi trạng thái chiến dịch."
-                : "Campaign status toggled.",
-            )
-          }
-
-          const deletePromo = (id: string) => {
-            setPromotionsList((prev) => prev.filter((p) => p.id !== id))
-
-            showToast(
-              lang === "vi"
-                ? "Đã gỡ bỏ chiến dịch khuyến mãi."
-                : "Promotional campaign removed.",
-            )
-          }
-
-          return (
-            <div className="fade-in space-y-6">
-              <SectionHeader
-                title={
-                  lang === "vi"
-                    ? "Chiến Dịch Khuyến Mãi & Voucher"
-                    : "Discounts & Commercial Promotions"
-                }
-                subtitle={
-                  lang === "vi"
-                    ? "Thiết lập mã giảm giá, quản lý hạn ngạch voucher và theo dõi tỷ lệ chuyển đổi khách mới"
-                    : "Design targeted voucher campaigns, manage concession rules, and track tenant acquisition redemption rates"
-                }
-                action={
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        showToast(
-                          lang === "vi"
-                            ? "Đã xuất dữ liệu hiệu quả chiến dịch!"
-                            : "Campaign performance analytics exported!",
-                        )
-                      }
-                    >
-                      {lang === "vi" ? "Xuất báo cáo" : "Export Report"}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setDiscountModal(true)}
-                    >
-                      {Icon.plus}{" "}
-                      {lang === "vi" ? "Tạo Khuyến Mãi Mới" : "New Promotion"}
-                    </Button>
-                  </div>
-                }
-              />
-
-              {/* Campaign Analytics KPIs */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                  title={
-                    lang === "vi" ? "Chiến dịch đang chạy" : "Active Campaigns"
-                  }
-                  value={activePromos.length}
-                  delta={
-                    lang === "vi"
-                      ? `${promotionsList.length} tổng đã tạo`
-                      : `${promotionsList.length} total created`
-                  }
-                  deltaPositive
-                  icon={Icon.tag}
-                  iconBg="bg-amber-50 text-amber-800"
-                />
-                <StatCard
-                  title={
-                    lang === "vi"
-                      ? "Lượt áp dụng thành công"
-                      : "Total Redemptions"
-                  }
-                  value={totalRedemptions}
-                  delta={`${Math.round((totalRedemptions / (totalCapacity || 1)) * 100)}% ${lang === "vi" ? "hạn ngạch đã nhận" : "quota claimed"
-                    }`}
-                  deltaPositive
-                  icon={Icon.chart}
-                  iconBg="bg-blue-50 text-blue-700"
-                />
-                <StatCard
-                  title={
-                    lang === "vi"
-                      ? "Ước tính ưu đãi đã trao"
-                      : "Granted Savings Est."
-                  }
-                  ///value={`$${(totalRedemptions * 32).toLocaleString()}`}
-
-                  value={formatCurrency(totalRedemptions * 32)}
-                  delta={
-                    lang === "vi"
-                      ? "Khuyến khích khách thuê"
-                      : "Tenant incentive"
-                  }
-                  icon={Icon.dollar}
-                  iconBg="bg-emerald-50 text-emerald-700"
-                />
-                <StatCard
-                  title={
-                    lang === "vi" ? "Gia tăng chuyển đổi" : "Conversion Lift"
-                  }
-                  value="+18.4%"
-                  delta={
-                    lang === "vi"
-                      ? "so với không áp mã"
-                      : "vs non-promo bookings"
-                  }
-                  deltaPositive
-                  icon={Icon.refresh}
-                  iconBg="bg-purple-50 text-purple-700"
-                />
-              </div>
-
-              {/* Filters & Search */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                <Tabs
-                  tabs={
-                    lang === "vi"
-                      ? ["Tất cả", "Đang chạy", "Tạm dừng", "Hết hạn"]
-                      : ["All", "active", "paused", "expired"]
-                  }
-                  active={
-                    promoTab === "All" && lang === "vi"
-                      ? "Tất cả"
-                      : promoTab === "active" && lang === "vi"
-                        ? "Đang chạy"
-                        : promoTab === "paused" && lang === "vi"
-                          ? "Tạm dừng"
-                          : promoTab === "expired" && lang === "vi"
-                            ? "Hết hạn"
-                            : promoTab
-                  }
-                  onChange={(val) => {
-                    if (val === "Tất cả") setPromoTab("All")
-                    else if (val === "Đang chạy") setPromoTab("active")
-                    else if (val === "Tạm dừng") setPromoTab("paused")
-                    else if (val === "Hết hạn") setPromoTab("expired")
-                    else setPromoTab(val)
-                  }}
-                />
-                <div className="w-full sm:w-72">
-                  <input
-                    type="text"
-                    placeholder={
-                      lang === "vi"
-                        ? "Tìm tên chương trình, mã voucher..."
-                        : "Search promo name, code, units..."
-                    }
-                    value={promoSearch}
-                    onChange={(e) => setPromoSearch(e.target.value)}
-                    className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-              </div>
-
-              {/* Campaign Cards Grid */}
-              <div className="space-y-4">
-                {filteredPromos.length === 0 ? (
-                  <Card className="p-10 text-center text-stone-400">
-                    <p className="font-semibold text-stone-700">
-                      {lang === "vi"
-                        ? "Không tìm thấy chiến dịch khuyến mãi nào"
-                        : "No promotion campaigns found in this view"}
-                    </p>
-                    <p className="text-xs mt-1">
-                      {lang === "vi"
-                        ? "Tạo mã voucher mới hoặc đổi bộ lọc trạng thái."
-                        : "Create a new voucher code or switch the status filter."}
-                    </p>
-                  </Card>
-                ) : (
-                  filteredPromos.map((p) => (
-                    <Card
-                      key={p.id}
-                      className="p-5 hover:border-stone-300 transition"
-                    >
-                      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                        {/* Left: Campaign details */}
-                        <div className="space-y-2 flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <h3 className="font-bold text-stone-900 text-base">
-                              {p.name}
-                            </h3>
-                            <Badge
-                              variant={
-                                p.status === "active"
-                                  ? "success"
-                                  : p.status === "paused"
-                                    ? "warning"
-                                    : "muted"
-                              }
-                            >
-                              {p.status === "active"
-                                ? lang === "vi"
-                                  ? "Đang chạy"
-                                  : "active"
-                                : p.status === "paused"
-                                  ? lang === "vi"
-                                    ? "Tạm dừng"
-                                    : "paused"
-                                  : lang === "vi"
-                                    ? "Hết hạn"
-                                    : "expired"}
-                            </Badge>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-amber-50 text-amber-900 border border-amber-200">
-                              {lang === "vi"
-                                ? p.type === "percentage"
-                                  ? "Giảm theo %"
-                                  : p.type === "first-month-free"
-                                    ? "Tháng đầu 0đ"
-                                    : p.type === "fixed-amount"
-                                      ? "Giảm số tiền"
-                                      : "Ưu đãi mùa vụ"
-                                : p.typeLabel}
-                            </span>
-                          </div>
-
-                          <p className="text-xs text-stone-600 leading-relaxed max-w-2xl">
-                            {p.description}
-                          </p>
-
-                          <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500 pt-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-stone-400">
-                                {lang === "vi" ? "Mã voucher:" : "Code:"}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => copyCodeToClipboard(p.code)}
-                                className="font-mono font-bold bg-[#fbfaf6] hover:bg-amber-100 hover:text-amber-900 border border-stone-300 px-2 py-0.5 rounded text-stone-800 transition flex items-center gap-1 group"
-                                title={
-                                  lang === "vi"
-                                    ? "Bấm để copy mã"
-                                    : "Click to copy code"
-                                }
-                              >
-                                <span>{p.code}</span>
-                                <svg
-                                  className="w-3.5 h-3.5 text-stone-400 group-hover:text-amber-700"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
-                            <span>•</span>
-                            <span>
-                              {lang === "vi" ? "Ưu đãi:" : "Benefit:"}{" "}
-                              <strong className="text-stone-800">
-                                {p.discount}
-                              </strong>
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {lang === "vi"
-                                ? "Hợp đồng tối thiểu:"
-                                : "Commitment:"}{" "}
-                              {p.minLeaseMonths}{" "}
-                              {lang === "vi" ? "tháng" : "mo min"}
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {lang === "vi" ? "Phạm vi:" : "Scope:"}{" "}
-                              {lang === "vi" &&
-                                p.applicableFacility === "All facilities"
-                                ? "Toàn bộ cơ sở"
-                                : p.applicableFacility}{" "}
-                              ({p.applicableUnitType})
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Right: Usage Quota & Actions */}
-                        <div className="flex flex-col sm:flex-row lg:flex-col items-end gap-3 flex-shrink-0">
-                          <div className="w-48 text-right">
-                            <div className="flex justify-between text-xs mb-1">
-                              <span className="text-stone-400">
-                                {lang === "vi"
-                                  ? "Hạn ngạch đã dùng"
-                                  : "Claims Quota"}
-                              </span>
-                              <span className="font-bold text-stone-800">
-                                {p.uses} / {p.maxUses}
-                              </span>
-                            </div>
-                            <ProgressBar
-                              value={p.uses}
-                              max={p.maxUses}
-                              color={
-                                p.status === "expired"
-                                  ? "bg-stone-300"
-                                  : "bg-[#e9a12c]"
-                              }
-                            />
-                            <p className="text-[10px] text-stone-400 mt-1">
-                              {lang === "vi" ? "Hiệu lực:" : "Valid:"}{" "}
-                              {p.startDate} – {p.expires}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <Button
-                              variant={
-                                p.status === "active" ? "outline" : "primary"
-                              }
-                              size="sm"
-                              onClick={() => togglePromoStatus(p.id)}
-                            >
-                              {p.status === "active"
-                                ? lang === "vi"
-                                  ? "Tạm dừng"
-                                  : "Pause"
-                                : lang === "vi"
-                                  ? "Kích hoạt"
-                                  : "Activate"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-600 hover:bg-red-50"
-                              onClick={() => deletePromo(p.id)}
-                            >
-                              {lang === "vi" ? "Xóa" : "Delete"}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </div>
-          )
-        })()}
-
-      {/* ── REVENUE REPORTS ───────────────────────────────────── */}
-      {page === "revenue" && (
-        <div className="fade-in space-y-6">
-          <SectionHeader
-            title="Báo Cáo Doanh Thu"
-            subtitle="Hiệu quả tài chính chu kỳ Tháng 4 – Tháng 9 toàn hệ thống StorageHub"
-            action={
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={downloadingExcel}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 shadow-sm cursor-pointer"
-                onClick={() => {
-                  setDownloadingExcel(true)
-
-                  setTimeout(() => {
-                    try {
-                      const fileName = exportRevenueExcel({
-                        facilityName: selectedRevenueFacilityName,
-
-                        revenueData: activeRevenueData,
-                      })
-
-                      setDownloadedFileName(fileName)
-
-                      showToast(`Đã xuất báo cáo Excel: ${fileName}`)
-                    } catch {
-                      showToast("Lỗi khi xuất file Excel!")
-                    } finally {
-                      setDownloadingExcel(false)
-                    }
-                  }, 350)
-                }}
-              >
-                <span>{downloadingExcel ? "⏳" : ""}</span>
-                <span>
-                  {downloadingExcel
-                    ? "Đang tạo file..."
-                    : "Xuất Báo Cáo Excel (.xlsx)"}
-                </span>
-              </Button>
-            }
-          />
-
-          {/* Download Notification Banner */}
-          {downloadedFileName && !downloadingExcel && (
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold text-emerald-950 text-sm">
-                      {downloadedFileName}
-                    </p>
-                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-200 text-emerald-800">
-                      Đã tải về máy (.xlsx)
-                    </span>
-                  </div>
-                  <p className="text-xs text-emerald-700 mt-0.5">
-                    Tệp Excel 2 trang tính: Báo cáo doanh thu Tháng 4 – Tháng 9
-                    & Cơ cấu doanh thu
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold cursor-pointer"
-                  onClick={() => {
-                    exportRevenueExcel({
-                      facilityName: selectedRevenueFacilityName,
-
-                      revenueData: activeRevenueData,
-                    })
-                  }}
-                >
-                   Tải lại file
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
-                  onClick={() => setDownloadedFileName(null)}
-                >
-                  ✕
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Filter Cơ Sở - Tự động cập nhật mọi cơ sở mới thêm vào hệ thống */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Cơ sở:
-              </span>
-              <div className="w-64">
-                <Select
-                  value={
-                    selectedRevenueFacility
-                      ? selectedRevenueFacility.id
-                      : "Toàn bộ cơ sở"
-                  }
-                  onChange={(e) => setRevenueFacilityFilter(e.target.value)}
-                >
-                  <option value="Toàn bộ cơ sở">Toàn bộ cơ sở</option>
-                  {facilitiesList.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-              Phạm vi chu kỳ:{" "}
-              <strong className="text-slate-800">Tháng 4 – Tháng 9</strong>
-            </span>
-          </div>
-
-          {/* 4 Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Doanh thu lũy kế
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentTotalRevenue.toLocaleString("vi-VN")} ₫
-                  </p>
-                  <p className="text-xs text-stone-400 mt-1 font-medium">
-                    Tháng 4 đến Tháng 9
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-green-50 text-emerald-600">
-                  {Icon.dollar}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Doanh thu trung bình/tháng
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentAvgRevenue.toLocaleString("vi-VN")} ₫
-                  </p>
-                  <p className="text-xs text-stone-400 mt-1 font-medium">
-                    {currentTotalRevenue.toLocaleString("vi-VN")} ₫ / 6 tháng
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-                  {Icon.chart}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Tháng doanh thu cao nhất
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentHighestItem.revenue.toLocaleString("vi-VN")} ₫
-                  </p>
-                  <p className="text-xs text-emerald-600 mt-1 font-semibold">
-                    {currentHighestItem.month}
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-purple-50 text-purple-600">
-                  {Icon.check}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-5 stat-card-hover">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-stone-500 font-medium">
-                    Dự báo tháng tới
-                  </p>
-                  <p className="text-2xl font-bold text-stone-900 mt-1">
-                    {currentForecast}
-                  </p>
-                  <p className="text-xs text-amber-600 mt-1 font-medium">
-                    {hasAnyRevenue
-                      ? "Dựa trên xu hướng doanh thu gần đây"
-                      : "Chưa có dữ liệu giao dịch"}
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
-                  {Icon.refresh}
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Biểu Đồ Doanh Thu */}
-          <Card className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-800 text-base">
-                Biểu Đồ Doanh Thu{" "}
-                {selectedRevenueFacility
-                  ? `– ${selectedRevenueFacility.name}`
-                  : "Toàn Hệ Thống"}
-              </h3>
-              <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md font-medium">
-                Đơn vị: Triệu VNĐ
-              </span>
-            </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart
-                data={activeRevenueData}
-                margin={{ top: 10, right: 10, left: 15, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 12, fill: "#64748b" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  domain={[0, chartYMax]}
-                  ticks={[
-                    0,
-                    Math.round(chartYMax * 0.25),
-                    Math.round(chartYMax * 0.5),
-                    Math.round(chartYMax * 0.75),
-                    chartYMax,
-                  ]}
-                  tick={{ fontSize: 12, fill: "#64748b" }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) =>
-                    v === 0 ? "0" : `${Math.round(v / 1000000)} triệu`
-                  }
-                />
-                <Tooltip
-                  formatter={(value: any) => [
-                    `${Number(value).toLocaleString("vi-VN")} ₫`,
-                    "Doanh thu",
-                  ]}
-                  labelFormatter={(label: any) => `${label}`}
-                  contentStyle={{
-                    borderRadius: 8,
-                    border: "1px solid #e2e8f0",
-                    fontSize: 12,
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#2563eb"
-                  strokeWidth={2.5}
-                  fillOpacity={1}
-                  fill="url(#colorRev)"
-                  name="Doanh thu"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Card>
-
-          {/* Bảng Chi Tiết Doanh Thu */}
-          <Card>
-            <div className="p-4 border-b border-stone-100 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800 text-sm">
-                Bảng Chi Tiết Doanh Thu
-              </h3>
-              <span className="text-xs text-slate-400">
-                Đơn vị tiền tệ: VNĐ (₫)
-              </span>
-            </div>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>Tháng</Th>
-                  <Th>Doanh thu</Th>
-                  <Th>Tăng trưởng</Th>
-                  <Th>Số hợp đồng</Th>
-                  <Th>Tỷ lệ lấp đầy</Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {activeRevenueData.map((r) => (
-                  <Tr key={r.month}>
-                    <Td className="font-semibold text-slate-900">{r.month}</Td>
-                    <Td className="font-bold text-slate-900 font-mono">
-                      {r.revenue.toLocaleString("vi-VN")} ₫
-                    </Td>
-                    <Td>
-                      {r.growth === "—" ? (
-                        <span className="text-slate-400 font-medium">—</span>
-                      ) : (
-                        <span className="text-emerald-600 font-semibold font-mono bg-emerald-50 px-2 py-0.5 rounded text-xs">
-                          {r.growth}
-                        </span>
-                      )}
-                    </Td>
-                    <Td className="font-medium text-slate-700">
-                      {r.contracts}
-                    </Td>
-                    <Td className="font-semibold text-slate-800">
-                      {r.occupancyRate}
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Card>
-
-          {/* 2 Cột: Hiệu Suất Kho & Cơ Cấu Doanh Thu */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Section 6: Hiệu Suất Kho */}
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800 text-base">
-                  Hiệu Suất Kho
-                </h3>
-                <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-md">
-                  Vận hành ổn định
-                </span>
-              </div>
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-stone-500 font-medium">
-                      Tỷ lệ lấp đầy hiện tại
-                    </p>
-                    <p className="text-xl font-bold text-stone-900 mt-0.5">
-                      {selectedRevenueFacility
-                        ? `${Math.round((selectedRevenueFacility.occupied / Math.max(1, selectedRevenueFacility.units)) * 100)}%`
-                        : `${facilitiesList.reduce((s, f) => s + (f.units || 0), 0) > 0 ? Math.round((facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0) / facilitiesList.reduce((s, f) => s + (f.units || 0), 0)) * 100) : 19}%`}
-                    </p>
-                  </div>
-                  <div className="w-32">
-                    <ProgressBar
-                      value={
-                        selectedRevenueFacility
-                          ? Math.round(
-                            (selectedRevenueFacility.occupied /
-                              Math.max(1, selectedRevenueFacility.units)) *
-                            100,
-                          )
-                          : facilitiesList.reduce((s, f) => s + (f.units || 0), 0) > 0
-                            ? Math.round((facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0) / facilitiesList.reduce((s, f) => s + (f.units || 0), 0)) * 100)
-                            : 19
-                      }
-                      max={100}
-                      color="bg-blue-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-stone-500 font-medium">
-                      Hợp đồng đang hoạt động
-                    </p>
-                    <p className="text-xl font-bold text-stone-900 mt-0.5">
-                      {selectedRevenueFacility
-                        ? Math.max(
-                          selectedRevenueFacility.occupied,
-                          selectedFacilityContracts.length,
-                          selectedFacilityRentals.length,
-                        )
-                        : facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)}
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded">
-                    {selectedRevenueFacility
-                      ? `${Math.max(
-                        selectedRevenueFacility.occupied,
-                        selectedFacilityContracts.length,
-                        selectedFacilityRentals.length,
-                      )} / ${selectedRevenueFacility.units} gian`
-                      : `${facilitiesList.reduce((s, f) => s + (f.occupied || 0), 0)} / ${facilitiesList.reduce((s, f) => s + (f.units || 0), 0)} gian`}
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-stone-500 font-medium">
-                      Tỷ lệ gia hạn
-                    </p>
-                    <p className="text-xl font-bold text-stone-900 mt-0.5">
-                      0%
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded">
-                    Chưa có dữ liệu
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            {/* Section 7: Cơ Cấu Doanh Thu */}
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800 text-base">
-                  Cơ Cấu Doanh Thu
-                </h3>
-                <span className="text-xs text-slate-500 font-medium">
-                  Tỷ trọng nguồn thu
-                </span>
-              </div>
-              <div className="space-y-3.5">
-                {RUNTIME_REVENUE_BREAKDOWN.length === 0 || !hasAnyRevenue ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">
-                    Chưa có giao dịch phát sinh để phân tích cơ cấu doanh thu (0 ₫).
-                  </p>
-                ) : (
-                  RUNTIME_REVENUE_BREAKDOWN.map((item) => (
-                    <div key={item.category} className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-medium text-slate-700">
-                          {item.category}
-                        </span>
-                        <span className="font-bold text-slate-900">
-                          {item.percentage}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className="h-2.5 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${item.percentage}%`,
-                            backgroundColor: item.color,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* ── PERFORMANCE REPORTS ───────────────────────────────── */}
-      {page === "performance" && (
-        <div className="fade-in space-y-5">
-          <SectionHeader
-            title={
-              lang === "vi"
-                ? "Báo Cáo Hiệu Suất Hoạt Động"
-                : "Performance Reports"
-            }
-            subtitle={
-              lang === "vi"
-                ? "Các chỉ số KPI vận hành trọng yếu trên toàn bộ hệ thống cơ sở"
-                : "Operational KPIs across all facilities"
-            }
-          />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              title={lang === "vi" ? "Lấp đầy trung bình" : "Avg Occupancy"}
-              value={`${totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0}%`}
-              icon={Icon.chart}
-              iconBg="bg-blue-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Tỷ lệ chuyển đổi" : "Conversion Rate"}
-              value="0%"
-              icon={Icon.check}
-              iconBg="bg-green-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Thời gian thuê TB" : "Avg Tenure"}
-              value={lang === "vi" ? "0 tháng" : "0 mo"}
-              icon={Icon.calendar}
-              iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={lang === "vi" ? "Tỷ lệ rời bỏ (Churn)" : "Churn Rate"}
-              value="0%"
-              icon={Icon.refresh}
-              iconBg="bg-amber-50"
-            />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">
-                {lang === "vi"
-                  ? "Tỷ Lệ Chuyển Đổi Khách Thăm Kho"
-                  : "Inquiry Conversion Rate"}
-              </h3>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart
-                  data={RUNTIME_CONVERSION_DATA}
-                  margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12, fill: "#94a3b8" }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <Tooltip
-                    formatter={
-                      ((v: number) => [
-                        `${v}%`,
-                        lang === "vi" ? "Chuyển đổi" : "Conversion",
-                      ]) as any
-                    }
-                    contentStyle={{
-                      borderRadius: 8,
-                      border: "1px solid #e2e8f0",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="rate"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={{ fill: "#10b981", r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-semibold text-slate-800 mb-4">
-                {lang === "vi"
-                  ? "Điểm Hiệu Suất Từng Cơ Sở"
-                  : "Facility Performance Scores"}
-              </h3>
-              {facilitiesList
-                .filter((f) => f.status === "active")
-                .map((f) => {
-                  const occ = getFacilityOccupiedCount(f)
-                  const tot = getFacilityTotalUnits(f)
-                  const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
-                  return (
-                    <div key={f.id} className="mb-4">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-700 font-medium">
-                          {f.name}
-                        </span>
-                        <span className="text-slate-800 font-semibold">
-                          {pct}%
-                        </span>
-                      </div>
-                      <ProgressBar
-                        value={occ}
-                        max={tot || 1}
-                        color={pct >= 85 ? "bg-green-500" : "bg-blue-500"}
-                      />
-                    </div>
-                  )
-                })}
-            </Card>
-          </div>
-          <Card>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{lang === "vi" ? "Cơ Sở" : "Facility"}</Th>
-                  <Th>{lang === "vi" ? "Tỷ Lệ Lấp Đầy" : "Occupancy"}</Th>
-                  <Th>{lang === "vi" ? "Thời Hạn TB" : "Avg Length"}</Th>
-                  <Th>{lang === "vi" ? "Rời Bỏ" : "Churn"}</Th>
-                  <Th>{lang === "vi" ? "Độ Hài Lòng" : "Satisfaction"}</Th>
-                  <Th>
-                    {lang === "vi" ? "Doanh Thu / Năm" : "Revenue / Year"}
-                  </Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {facilitiesList
-                  .filter((f) => f.status === "active")
-                  .map((f) => {
-                    const occ = getFacilityOccupiedCount(f)
-                    const tot = getFacilityTotalUnits(f)
-                    const pct = tot > 0 ? Math.round((occ / tot) * 100) : 0
-                    return (
-                      <Tr key={f.id}>
-                        <Td className="font-medium">{f.name}</Td>
-                        <Td>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">
-                              {pct}%
-                            </span>
-                            <ProgressBar
-                              value={occ}
-                              max={tot || 1}
-                              color="bg-blue-500"
-                            />
-                          </div>
-                        </Td>
-                        <Td>{lang === "vi" ? "0 tháng" : "0 mo"}</Td>
-                        <Td>0%</Td>
-                        <Td>
-                          <div className="flex items-center gap-1 text-slate-400">
-                            ★ 0.0
-                          </div>
-                        </Td>
-                        <Td className="font-semibold text-slate-800 font-mono">
-                          {formatCurrency(getFacilityActualRevenue(f) * 12)} /{" "}
-                          {lang === "vi" ? "năm" : "yr"}
-                        </Td>
-                      </Tr>
-                    )
-                  })}
-              </Tbody>
-            </Table>
-          </Card>
-        </div>
-      )}
 
       {/* ── PROFILE PAGE ─────────────────────────────────────── */}
       {page === "profile" && (
@@ -5649,7 +4449,7 @@ export default function BusinessApp({
                         </span>
                       </div>
                     </label>
-                    <label className="text-[11px] font-semibold text-slate-700">Tiền duy trì CSVC (VNĐ)
+                    <label className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
                       <div className="relative mt-1">
                         <input
                           type="text"
@@ -5750,231 +4550,6 @@ export default function BusinessApp({
         )}
       </Modal>
 
-      {/* Enhanced New Promotion Modal */}
-      <Modal
-        open={discountModal}
-        onClose={() => setDiscountModal(false)}
-        title={
-          lang === "vi"
-            ? "Tạo Chiến Dịch Khuyến Mãi Mới"
-            : "Create Promotional Campaign"
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            label={
-              lang === "vi"
-                ? "Tên chiến dịch ưu đãi"
-                : "Promotion Campaign Name"
-            }
-            placeholder={
-              lang === "vi"
-                ? "Ví dụ: Tri ân khách hàng cuối năm"
-                : "e.g. End of Year Flash Sale"
-            }
-            value={newPromoName}
-            onChange={(e) => setNewPromoName(e.target.value)}
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-stone-700">
-                {lang === "vi" ? "Mã voucher" : "Promo Code"}
-              </label>
-              <div className="flex gap-1.5">
-                <input
-                  type="text"
-                  value={newPromoCode}
-                  onChange={(e) =>
-                    setNewPromoCode(e.target.value.toUpperCase())
-                  }
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono uppercase bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() =>
-                    setNewPromoCode(
-                      `SAVE${Math.floor(10 + Math.random() * 40)}`,
-                    )
-                  }
-                >
-                  {lang === "vi" ? "Tạo mã" : "Gen"}
-                </Button>
-              </div>
-            </div>
-
-            <Select
-              label={lang === "vi" ? "Loại hình ưu đãi" : "Benefit Type"}
-              value={newPromoType}
-              onChange={(e) => setNewPromoType(e.target.value as any)}
-            >
-              <option value="percentage">
-                {lang === "vi"
-                  ? "Giảm theo % (% OFF)"
-                  : "Percentage Discount (% OFF)"}
-              </option>
-              <option value="fixed-amount">
-                {lang === "vi"
-                  ? "Giảm số tiền cố định ($ OFF)"
-                  : "Fixed Dollar Amount ($ OFF)"}
-              </option>
-              <option value="first-month-free">
-                {lang === "vi"
-                  ? "Miễn phí 100% tháng đầu"
-                  : "First Month 100% Free"}
-              </option>
-              <option value="seasonal">
-                {lang === "vi"
-                  ? "Voucher ưu đãi mùa vụ"
-                  : "Seasonal Flash Voucher"}
-              </option>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label={
-                lang === "vi" ? "Giá trị hiển thị" : "Discount Value / Text"
-              }
-              placeholder={
-                lang === "vi"
-                  ? "Ví dụ: GIẢM 20% hoặc GIẢM $30"
-                  : "e.g. 20% OFF or $30 OFF"
-              }
-              value={newPromoValue}
-              onChange={(e) => setNewPromoValue(e.target.value)}
-            />
-            <Input
-              label={
-                lang === "vi"
-                  ? "Hạn mức sử dụng tối đa"
-                  : "Redemption Cap (Max uses)"
-              }
-              type="number"
-              placeholder="50"
-              value={newPromoMaxUses}
-              onChange={(e) => setNewPromoMaxUses(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label={
-                lang === "vi"
-                  ? "Hạn hợp đồng tối thiểu (tháng)"
-                  : "Min Lease Commitment (Months)"
-              }
-              type="number"
-              placeholder="3"
-              value={newPromoMinMonths}
-              onChange={(e) => setNewPromoMinMonths(e.target.value)}
-            />
-            <Input
-              label={lang === "vi" ? "Ngày hết hạn" : "Expiry Date"}
-              type="date"
-              value={newPromoExpiry}
-              onChange={(e) => setNewPromoExpiry(e.target.value)}
-            />
-          </div>
-
-          <Input
-            label={
-              lang === "vi"
-                ? "Mô tả điều khoản chiến dịch"
-                : "Campaign Description"
-            }
-            placeholder={
-              lang === "vi"
-                ? "Ví dụ: Áp dụng cho hợp đồng từ 3 tháng trở lên trên tất cả gian kho 10ft"
-                : "Brief terms for customers (e.g. Valid on all 10ft units with 3-month min lease)"
-            }
-            value={newPromoDesc}
-            onChange={(e) => setNewPromoDesc(e.target.value)}
-          />
-
-          <div className="flex gap-2 justify-end pt-3 border-t border-stone-100">
-            <Button variant="outline" onClick={() => setDiscountModal(false)}>
-              {lang === "vi" ? "Hủy" : "Cancel"}
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!newPromoName.trim() || !newPromoCode.trim()}
-              onClick={() => {
-                const newPromo: PromotionItem = {
-                  id: `DSC-${Date.now().toString().slice(-4)}`,
-
-                  code: newPromoCode.trim().toUpperCase(),
-
-                  name: newPromoName.trim(),
-
-                  description:
-                    newPromoDesc.trim() ||
-                    `${newPromoValue} off eligible storage units.`,
-
-                  value: newPromoValue.trim(),
-
-                  discount: newPromoValue.trim(),
-
-                  type: newPromoType,
-
-                  typeLabel:
-                    newPromoType === "percentage"
-                      ? lang === "vi"
-                        ? "Giảm %"
-                        : "Percentage Off"
-                      : newPromoType === "first-month-free"
-                        ? lang === "vi"
-                          ? "Miễn tháng đầu"
-                          : "Free Month"
-                        : newPromoType === "fixed-amount"
-                          ? lang === "vi"
-                            ? "Giảm tiền"
-                            : "Fixed Amount"
-                          : lang === "vi"
-                            ? "Mùa vụ"
-                            : "Seasonal",
-
-                  active: true,
-
-                  status: "active",
-
-                  uses: 0,
-
-                  maxUses: Number(newPromoMaxUses) || 50,
-
-                  minLeaseMonths: Number(newPromoMinMonths) || 1,
-
-                  applicableFacility: "All facilities",
-
-                  applicableUnitType: "All Sizes",
-
-                  startDate: "Sep 18, 2026",
-
-                  expires: newPromoExpiry || "Dec 31, 2026",
-                }
-
-                setPromotionsList([newPromo, ...promotionsList])
-
-                setDiscountModal(false)
-
-                setNewPromoName("")
-
-                setNewPromoDesc("")
-
-                showToast(
-                  lang === "vi"
-                    ? `Chiến dịch "${newPromo.code}" đã được kích hoạt thành công!`
-                    : `Promotion "${newPromo.code}" published successfully!`,
-                )
-              }}
-            >
-              {lang === "vi" ? "Phát hành chiến dịch" : "Publish Campaign"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* ── MODAL: CHỈNH SỬA CHÍNH SÁCH ─────────────────────── */}
       <Modal
@@ -6428,7 +5003,7 @@ export default function BusinessApp({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <Input
               label={lang === "vi" ? "Số tháng kỳ hạn" : "Months"}
               type="number"
@@ -6436,6 +5011,15 @@ export default function BusinessApp({
               max={120}
               value={formCreateDurationMonths.toString()}
               onChange={(e) => setFormCreateDurationMonths(Number(e.target.value))}
+            />
+            <Input
+              label={lang === "vi" ? "Setup miễn phí (ngày)" : "Free setup (days)"}
+              type="number"
+              min={0}
+              max={365}
+              placeholder={lang === "vi" ? "Để trống = theo kỳ hạn" : "Blank = duration default"}
+              value={formCreateDurationSetupDays.toString()}
+              onChange={(e) => setFormCreateDurationSetupDays(e.target.value === '' ? '' : Number(e.target.value))}
             />
             <Input
               label={lang === "vi" ? "Giảm giá đặt mới (%)" : "New Booking (%)"}
@@ -6452,6 +5036,14 @@ export default function BusinessApp({
               max={100}
               value={formCreateDurationRenewalPercent.toString()}
               onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
+            />
+            <Input
+              label={lang === "vi" ? "Cọc giữ chỗ (%)" : "Deposit (%)"}
+              type="number"
+              min={5}
+              max={50}
+              value={formCreateDurationDepositPercent.toString()}
+              onChange={(e) => setFormCreateDurationDepositPercent(Number(e.target.value))}
             />
           </div>
 
@@ -6663,7 +5255,16 @@ export default function BusinessApp({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <Input
+                label="Setup miễn phí (ngày)"
+                type="number"
+                min={0}
+                max={365}
+                placeholder="Để trống = theo kỳ hạn"
+                value={formDurationSetupDays.toString()}
+                onChange={(e) => setFormDurationSetupDays(e.target.value === '' ? '' : Number(e.target.value))}
+              />
               <Input
                 label="Giảm giá khi đặt mới (%)"
                 type="number"
@@ -6680,6 +5281,15 @@ export default function BusinessApp({
                 max={100}
                 value={formDurationRenewalPercent.toString()}
                 onChange={(e) => setFormDurationRenewalPercent(Number(e.target.value))}
+              />
+
+              <Input
+                label="Cọc giữ chỗ (%)"
+                type="number"
+                min={5}
+                max={50}
+                value={formDurationDepositPercent.toString()}
+                onChange={(e) => setFormDurationDepositPercent(Number(e.target.value))}
               />
             </div>
 
@@ -7174,14 +5784,7 @@ export default function BusinessApp({
                       {/* Sticky footer */}
                       <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
                         <div className="text-xs text-stone-500">
-                          {facilityEditError ? (
-                            <span className="text-red-600 font-semibold flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              <span className="truncate max-w-md">Lỗi: {facilityEditError}</span>
-                            </span>
-                          ) : !isApiAuthenticated() && formFacUnits <= 0 ? (
+                          {!isApiAuthenticated() && formFacUnits <= 0 ? (
                             <span className="text-red-600 font-semibold flex items-center gap-1">
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -7514,21 +6117,28 @@ export default function BusinessApp({
             const defaultLoadL = selectedFacility.unitLoadLimits?.L ?? 2800
             const defaultLoadXL = selectedFacility.unitLoadLimits?.XL ?? 4000
 
-            const totalFacilityLoadTon =
-              selectedFacility.totalDesignLoadTon ??
-              Math.round(
-                (((selectedFacility.unitDistribution?.S ?? 0) * defaultLoadS +
-                  (selectedFacility.unitDistribution?.M ?? 0) * defaultLoadM +
-                  (selectedFacility.unitDistribution?.L ?? 0) * defaultLoadL +
-                  (selectedFacility.unitDistribution?.XL ?? 0) * defaultLoadXL) /
-                  1000) *
-                10,
+            const totalFacilityLoadTon = isApiAuthenticated()
+              ? Math.round(
+                facilityDetailTypes.reduce(
+                  (total, type) => total + (Number(type.totalCount) || 0) * (Number(type.maxLoadKg) || 0),
+                  0,
+                ) / 100,
               ) / 10
+              : selectedFacility.totalDesignLoadTon ??
+                Math.round(
+                  (((selectedFacility.unitDistribution?.S ?? 0) * defaultLoadS +
+                    (selectedFacility.unitDistribution?.M ?? 0) * defaultLoadM +
+                    (selectedFacility.unitDistribution?.L ?? 0) * defaultLoadL +
+                    (selectedFacility.unitDistribution?.XL ?? 0) * defaultLoadXL) /
+                    1000) *
+                  10,
+                ) / 10
 
-            const hasWarehouseInfo =
-              facilityUnits.length > 0 ||
-              (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
-              Object.values(selectedFacility.unitDistribution || {}).some((count) => Number(count || 0) > 0)
+            const hasWarehouseInfo = isApiAuthenticated()
+              ? facilityDetailTypes.length > 0
+              : facilityUnits.length > 0 ||
+                (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
+                Object.values(selectedFacility.unitDistribution || {}).some((count) => Number(count || 0) > 0)
 
             return (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
@@ -7627,14 +6237,11 @@ export default function BusinessApp({
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
-                      Doanh thu tháng (MTD):
+                      {lang === "vi" ? "Cước cơ sở từ:" : "Base rate from:"}
                     </span>
                     <b className="text-slate-800 block text-sm">
-                      {formatCurrency(getFacilityActualRevenue(selectedFacility))}
-                    </b>
-                    <span className="text-slate-500">
                       {hasWarehouseInfo ? `${selectedFacility.price}/tháng từ` : "Chưa cấu hình giá"}
-                    </span>
+                    </b>
                   </div>
                   <div className="bg-amber-50/70 p-3 rounded-lg border border-amber-200/80">
                     <span className="text-amber-800/80 block mb-0.5 font-medium">
@@ -7649,10 +6256,10 @@ export default function BusinessApp({
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
                     <span className="text-slate-400 block mb-0.5">
-                      Giờ hoạt động:
+                      Khung giờ mở cửa:
                     </span>
                     <b className="text-slate-800 block text-xs">
-                      {selectedFacility.accessHours || "06:00 - 22:00"}
+                      {selectedFacility.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}
                     </b>
                   </div>
                 </div>
@@ -7687,7 +6294,7 @@ export default function BusinessApp({
                           ["Đang sử dụng", measure(type.occupiedCount, "gian")],
                           ["Còn trống", measure(type.availableCount, "gian")],
                           ["Giá thuê mỗi tháng", Number(type.monthlyPrice) > 0 ? formatCurrency(type.monthlyPrice) : "Chờ BO định giá"],
-                          ["Tiền duy trì CSVC", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
+                          ["Tiền cọc đảm bảo kho", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
                           ["Trạng thái loại kho", ({ active: "Đã công bố", awaiting_pricing: "Chờ BO định giá / duyệt", draft: "Đang thiết lập", inactive: "Ngừng hoạt động" } as Record<string, string>)[type.status] || type.status],
                         ]},
                       ]
@@ -7796,8 +6403,8 @@ export default function BusinessApp({
                 {/* 4. Chính sách và quy định áp dụng (Đồng bộ trực quan với Customer Portal) */}
                 {(() => {
                   const repType = facilityDetailTypes.find(t => Number(t.monthlyPrice) > 0) || facilityDetailTypes[0]
-                  const samplePrice = repType && Number(repType.monthlyPrice) > 0 ? Number(repType.monthlyPrice) : 3000000
-                  const overdueFeePerDay = samplePrice / 30 * 0.5
+                  const samplePrice = isApiAuthenticated() ? null : repType && Number(repType.monthlyPrice) > 0 ? Number(repType.monthlyPrice) : null
+                  const overdueFeePerDay = samplePrice == null ? null : samplePrice / 30 * 0.5
                   const overdueExampleDays = 4
 
                   return (
@@ -7819,38 +6426,46 @@ export default function BusinessApp({
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
                             <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Phí quá hạn</h5>
                             <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
-                              50% đơn giá thuê ngày cho mỗi ngày trễ
+                              {isApiAuthenticated() ? 'Chưa có chính sách phí quá hạn từ backend.' : '50% đơn giá thuê ngày cho mỗi ngày trễ'}
                             </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.
+                              {isApiAuthenticated() ? 'Chi tiết phí quá hạn chỉ hiển thị khi backend có dữ liệu chính sách.' : 'Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.'}
                             </p>
                           </article>
 
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
-                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Tiền duy trì CSVC</h5>
+                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Tiền cọc đảm bảo kho</h5>
                             <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
                               {repType && Number(repType.securityDepositAmount) > 0
                                 ? formatVndAmount(repType.securityDepositAmount)
-                                : "200.000 đ (hoặc theo loại kho)"}
+                                : "Theo biểu giá từng loại kho"}
                             </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Thu khi nhận kho và được quyết toán sau khi kiểm tra bàn giao, công nợ, vệ sinh và hư hại.
+                              {isApiAuthenticated() ? 'Số tiền cọc được lấy từ loại kho backend; điều kiện quyết toán hiển thị theo hồ sơ thực tế.' : 'Thu khi nhận kho; hoàn trả lại cho khách hàng sau khi nghiệm thu bàn giao trả kho (trừ công nợ, hư hại nếu có).'}
                             </p>
                           </article>
 
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
                             <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Thời hạn thuê tối thiểu</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">01 tháng</p>
+                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
+                              {isApiAuthenticated()
+                                ? (durationDiscounts.filter(item => item.status === 'active' && typeof item.months === 'number').map(item => item.months as number).sort((a, b) => a - b)[0]
+                                  ? `${durationDiscounts.filter(item => item.status === 'active' && typeof item.months === 'number').map(item => item.months as number).sort((a, b) => a - b)[0]} tháng`
+                                  : 'Chưa có dữ liệu')
+                                : '01 tháng'}
+                            </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.
+                              {isApiAuthenticated() ? 'Kỳ hạn và ưu đãi cụ thể lấy từ các gói đang hiệu lực trên backend.' : 'Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.'}
                             </p>
                           </article>
 
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
                             <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Gia hạn quá hạn</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">Tối đa 7 ngày</p>
+                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
+                              {isApiAuthenticated() ? 'Chưa có dữ liệu' : 'Tối đa 7 ngày'}
+                            </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.
+                              {isApiAuthenticated() ? 'Chưa có dữ liệu thời hạn xử lý quá hạn từ backend.' : 'Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.'}
                             </p>
                           </article>
                         </div>
@@ -7862,23 +6477,31 @@ export default function BusinessApp({
                           <article className="rounded-xl border border-rose-200 bg-white p-4 text-xs">
                             <b className="text-slate-800 text-sm">Trả kho sau ngày hết hạn</b>
                             <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                              <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
-                              <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                              <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền duy trì CSVC được đưa vào quyết toán.</li>
+                              {isApiAuthenticated() ? <li>Chưa có chính sách phí quá hạn được backend công bố cho cơ sở này.</li> : <>
+                                <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
+                                <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
+                                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo kho được đưa vào quyết toán.</li>
+                              </>}
                             </ul>
                           </article>
 
                           <article className="rounded-xl border border-amber-200 bg-white p-4 text-xs">
                             <b className="text-slate-800 text-sm">Gia hạn kỳ thuê</b>
                             <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                              <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
-                              <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
+                              {isApiAuthenticated() ? <li>Chi tiết gia hạn được lấy theo chính sách backend của từng cơ sở.</li> : <>
+                                <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
+                                <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
+                              </>}
                             </ul>
                           </article>
                         </div>
 
                         <p className="rounded-lg bg-rose-100 p-3 text-xs leading-5 text-rose-950 font-medium">
-                          Theo giá hiện tại ({repType ? repType.name : 'Loại kho'}): {formatVndAmount(samplePrice)} ÷ 30 × 50% = {formatVndAmount(overdueFeePerDay)}/ngày. Trễ {overdueExampleDays} ngày tương ứng {formatVndAmount(overdueFeePerDay * overdueExampleDays)}.
+                          {isApiAuthenticated()
+                            ? 'Chưa có chính sách phí quá hạn từ backend để tính ví dụ.'
+                            : samplePrice == null || overdueFeePerDay == null
+                              ? 'Chưa có đơn giá loại kho để tính ví dụ phí quá hạn.'
+                            : `Theo giá hiện tại (${repType ? repType.name : 'Loại kho'}): ${formatVndAmount(samplePrice)} ÷ 30 × 50% = ${formatVndAmount(overdueFeePerDay)}/ngày. Trễ ${overdueExampleDays} ngày tương ứng ${formatVndAmount(overdueFeePerDay * overdueExampleDays)}.`}
                         </p>
                       </section>
                     </>

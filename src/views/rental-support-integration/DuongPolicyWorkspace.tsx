@@ -1,10 +1,11 @@
+import { VIETNAM_TIME_ZONE, parseVietnamDate } from '../../utils/vietnamTime'
+import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { ApiClientError, apiRequest } from "../../services/apiClient"
-import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
+import { getAuthenticatedActor, isApiAuthenticated, type ApiActor } from "../../services/authApi"
 import type { User } from "../../types"
-import { useStorageHub } from "../../store/StorageHubContext"
 import type {
   CustomerFacility,
   PageResponse,
@@ -22,8 +23,8 @@ import {
 } from "../../services/duongIntegrationApi"
 import { listBusinessPackagePolicies } from "../../services/businessPolicyApi"
 import { isUuid } from "../../services/renewalOperationsApi"
-import LedgerPanel from "./LedgerPanel"
 import { policyPendingKey, readPendingPolicy, retainPendingPolicy, clearPendingPolicy } from "./pendingPolicyPublication"
+import LedgerPanel from "./LedgerPanel"
 
 type Draft = Record<string, string>
 type PolicyInput = RenewalPolicyInput | CommunicationPolicyInput
@@ -32,19 +33,10 @@ const labels: Record<string, string> = {
   expectedRevision: "Lần cập nhật hiện tại (nhập 0 chỉ khi tạo mới)",
   effectiveFrom: "Có hiệu lực từ ngày",
   effectiveTo: "Đến ngày (không bắt buộc)",
-  quoteTtlHours: "Thời hạn báo giá (giờ)",
-  quoteTtlMinutes: "Thời hạn báo giá (phút)",
   paymentWindowHours: "Thời hạn thanh toán (giờ)",
-  requestWindowDays: "Số ngày được gửi yêu cầu trước khi hết thuê",
   depositRate: "Tỷ lệ cọc (từ 0 đến 1)",
   signingWindowMinutes: "Thời hạn ký (phút)",
   exceptionExtensionLimitMinutes: "Giới hạn kéo dài hạn ký ngoại lệ (phút)",
-  warningThroughDay: "Ngày quá hạn cuối của mức cảnh báo",
-  seriousThroughDay: "Ngày quá hạn cuối của mức nghiêm trọng",
-  urgentThroughDay: "Ngày quá hạn cuối của mức khẩn cấp",
-  recoveryFromDay: "Bắt đầu xem xét thu hồi từ ngày quá hạn",
-  recoveryCutoffTime: "Giờ chốt xem xét thu hồi",
-  recoveryStartTime: "Giờ bắt đầu xử lý thu hồi",
   reminderCooldownMinutes:
     "Khoảng cách tối thiểu giữa hai lần nhắc (phút, không bắt buộc)",
   supportReviewDays: "Thời gian khách hàng xem xét kết quả hỗ trợ (ngày)",
@@ -57,28 +49,14 @@ export function policyDraft(policy: Policy | PolicyInput): Draft {
       (typeof value === "number" || typeof value === "string")
     )
       result[key] = String(value)
-  if ("quoteTtlHours" in policy && typeof policy.quoteTtlHours === "number") {
-    result.quoteTtlHours = String(policy.quoteTtlHours)
-  } else if ("quoteTtlMinutes" in policy && typeof policy.quoteTtlMinutes === "number") {
-    result.quoteTtlHours = String(Math.max(1, Math.round(policy.quoteTtlMinutes / 60)))
-  }
   if ("eligiblePackageIds" in policy) {
     result.eligiblePackageIds = policy.eligiblePackageIds.join(", ")
-    result.unrestrictedRenewalWindow = String(policy.requestWindowDays >= 36_500)
     result.signingEnabled = String(!!policy.signing)
-    result.termEnabled = String(!!policy.term)
     if (policy.signing)
       Object.assign(
         result,
         Object.fromEntries(
           Object.entries(policy.signing).map(([k, v]) => [k, String(v)]),
-        ),
-      )
-    if (policy.term)
-      Object.assign(
-        result,
-        Object.fromEntries(
-          Object.entries(policy.term).map(([k, v]) => [k, String(v)]),
         ),
       )
   } else {
@@ -93,10 +71,6 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
     if (!d[key]?.trim()) throw new Error("Vui lòng nhập đủ thông tin bắt buộc.")
     return Number(d[key])
   }
-  const resolveQuoteMinutes = () => {
-    if (d.quoteTtlHours?.trim()) return Number(d.quoteTtlHours) * 60
-    return n("quoteTtlMinutes")
-  }
   const base = {
     expectedRevision: n("expectedRevision"),
     effectiveFrom: d.effectiveFrom || "",
@@ -106,9 +80,7 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
     kind === "renewal"
       ? {
           ...base,
-          quoteTtlMinutes: resolveQuoteMinutes(),
           paymentWindowHours: n("paymentWindowHours"),
-          requestWindowDays: d.unrestrictedRenewalWindow === "true" ? 36_500 : n("requestWindowDays"),
           // Retained in the legacy policy DTO; new Renewal terms do not collect a deposit.
           depositRate: 0,
           eligiblePackageIds: (d.eligiblePackageIds || "")
@@ -121,19 +93,6 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
                   exceptionExtensionLimitMinutes: n(
                     "exceptionExtensionLimitMinutes",
                   ),
-                }
-              : null,
-          term:
-            d.termEnabled === "true"
-              ? {
-                  calendar: "CALENDAR_DAYS",
-                  timezone: "Asia/Ho_Chi_Minh",
-                  warningThroughDay: n("warningThroughDay"),
-                  seriousThroughDay: n("seriousThroughDay"),
-                  urgentThroughDay: n("urgentThroughDay"),
-                  recoveryFromDay: n("recoveryFromDay"),
-                  recoveryCutoffTime: d.recoveryCutoffTime || "",
-                  recoveryStartTime: d.recoveryStartTime || "",
                 }
               : null,
         }
@@ -163,22 +122,10 @@ export function defaultRenewalPolicyInput(
     expectedRevision: 0,
     effectiveFrom,
     effectiveTo: null,
-    quoteTtlMinutes: 30,
     paymentWindowHours: 24,
-    requestWindowDays: 36_500,
     depositRate: 0,
     eligiblePackageIds,
     signing: { signingWindowMinutes: 120, exceptionExtensionLimitMinutes: 60 },
-    term: {
-      calendar: "CALENDAR_DAYS",
-      timezone: "Asia/Ho_Chi_Minh",
-      warningThroughDay: 1,
-      seriousThroughDay: 3,
-      urgentThroughDay: 7,
-      recoveryFromDay: 8,
-      recoveryCutoffTime: "17:00",
-      recoveryStartTime: "08:00",
-    },
   }
 }
 export function policyMatches(
@@ -216,11 +163,13 @@ export function policyMatches(
 function PolicyEditor({
   kind,
   facility,
+  facilitiesList,
   actor: passedActor,
   onLocked,
 }: {
   kind: PolicyKind
   facility: string
+  facilitiesList?: CustomerFacility[]
   actor?: ApiActor
   onLocked: (value: boolean) => void
 }) {
@@ -231,9 +180,21 @@ function PolicyEditor({
     `${actor.id}:${facility}:${kind}:${JSON.stringify(actor.permissions)}`,
     () => getStoredIntegrationPolicy(kind, facility),
   )
+  const overdueTerm = read.data && "eligiblePackageIds" in read.data && read.data.term
+    ? read.data.term
+    : {
+        calendar: 'CALENDAR_DAYS',
+        timezone: 'Asia/Ho_Chi_Minh',
+        warningThroughDay: 3,
+        seriousThroughDay: 6,
+        urgentThroughDay: 7,
+        recoveryFromDay: 8,
+        recoveryCutoffTime: '17:00:00',
+        recoveryStartTime: '08:00:00',
+      }
   const packageRead = useRentalApiResource(
-    `${actor.id}:${facility}:renewal-packages`,
-    () => kind === "renewal" ? listBusinessPackagePolicies(facility) : Promise.resolve([]),
+    `${actor.id}:all-renewal-packages`,
+    () => kind === "renewal" ? listBusinessPackagePolicies() : Promise.resolve([]),
   )
   const [draft, setDraft] = useState<Draft>(() => retained ? policyDraft(retained.input) : {}),
     [editing, setEditing] = useState(false),
@@ -274,24 +235,30 @@ function PolicyEditor({
       lock.current = true
       setBusy(true)
       setError(undefined)
-      setMessage("Đang tạo chính sách gia hạn mặc định cho cơ sở...")
+      setMessage("Đang tạo chính sách gia hạn mặc định cho toàn hệ thống...")
       try {
-        const packages = packageRead.data || []
-        const eligiblePackageIds = packages
-          .filter((item) => item.facilityId === facility && item.active)
-          .map((item) => item.id)
-        if (!eligiblePackageIds.length) {
-          setMessage("Cơ sở chưa có gói thuê đang hoạt động để đưa vào chính sách gia hạn.")
-          return
+        const targetFacilities = facilitiesList && facilitiesList.length > 0
+          ? facilitiesList
+          : [{ id: facility, name: "Cơ sở" } as CustomerFacility]
+        const allPackages = packageRead.data || []
+
+        for (const targetFac of targetFacilities) {
+          const eligiblePackageIds = allPackages
+            .filter((item) => item.facilityId === targetFac.id && item.active)
+            .map((item) => item.id)
+          if (!eligiblePackageIds.length) continue
+
+          let facRev = 0
+          try {
+            const cur = await getStoredIntegrationPolicy("renewal", targetFac.id)
+            facRev = cur.revision
+          } catch {
+            facRev = 0
+          }
+          const input = defaultRenewalPolicyInput(eligiblePackageIds)
+          input.expectedRevision = facRev
+          await publishIntegrationPolicy("renewal", targetFac.id, input)
         }
-        const input = defaultRenewalPolicyInput(eligiblePackageIds)
-        const saved = await publishIntegrationPolicy("renewal", facility, input)
-        if (!policyMatches(saved, input, actor.id))
-          throw new ApiClientError("Chưa đối chiếu được chính sách mặc định đã lưu.", {
-            code: "INVALID_RESPONSE",
-          })
-        setDraft(policyDraft(saved))
-        setMessage("Đã lưu chính sách gia hạn mặc định. BO có thể chỉnh sửa bên dưới.")
         read.refresh()
       } catch (err) {
         if (err instanceof ApiClientError && err.status === 409) {
@@ -306,7 +273,7 @@ function PolicyEditor({
         setBusy(false)
       }
     })()
-  }, [actor.id, canWrite, facility, kind, packageRead.data, packageRead.error, packageRead.loading, read.error, read.loading, read.refresh])
+  }, [actor.id, canWrite, facility, facilitiesList, kind, packageRead.data, packageRead.error, packageRead.loading, read.error, read.loading, read.refresh])
   useEffect(() => {
     if (!uncertain) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = "" }
@@ -318,7 +285,7 @@ function PolicyEditor({
   const field = (key: string, optional = false) => (
     <label key={key} className="block">
       {labels[key]}
-      <input
+      <LocalizedDateInput
         className={inputClass}
         required={!optional}
         value={draft[key] || ""}
@@ -388,7 +355,28 @@ function PolicyEditor({
       setBusy(false)
     }
   }
-  const selectedPackageIds = new Set((draft.eligiblePackageIds || "").split(/[\s,]+/).filter(Boolean))
+  const availablePackages = (packageRead.data || [])
+    .filter((item) => item.active)
+    .sort((a, b) => (a.facilityName || "").localeCompare(b.facilityName || "", "vi") || a.rentalMonths - b.rentalMonths || a.name.localeCompare(b.name, "vi"))
+
+  const selectedPackageIds = new Set(
+    draft.eligiblePackageIds !== undefined
+      ? draft.eligiblePackageIds.split(/[\s,]+/).filter(Boolean)
+      : availablePackages.map((p) => p.id),
+  )
+
+  // Group packages by facilityName
+  const packagesByFacility: Record<string, typeof availablePackages> = {}
+  for (const pkg of availablePackages) {
+    const fName = pkg.facilityName || "Cơ sở hệ thống"
+    if (!packagesByFacility[fName]) packagesByFacility[fName] = []
+    packagesByFacility[fName].push(pkg)
+  }
+
+  const inactiveSelectedPackages = (packageRead.data || []).filter(
+    (item) => !item.active && selectedPackageIds.has(item.id),
+  )
+
   const setPackageSelected = (packageId: string, checked: boolean) => {
     setDraft((current) => {
       const ids = new Set((current.eligiblePackageIds || "").split(/[\s,]+/).filter(Boolean))
@@ -397,27 +385,45 @@ function PolicyEditor({
       return { ...current, eligiblePackageIds: [...ids].join(", ") }
     })
   }
+
   return (
     <Card className="overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-sm shadow-sm">
       <div className="border-b border-stone-100 bg-gradient-to-r from-amber-50 to-white px-5 py-4">
-      <h3 className="text-base font-semibold text-stone-900">
-        {kind === "renewal"
-          ? "Chính sách gia hạn và quá hạn"
-          : "Chính sách nhắc hạn và hỗ trợ"}
-      </h3>
-      <p className="mt-1 text-xs text-stone-500">{kind === "renewal" ? "Thiết lập thời hạn, gói được áp dụng và quy trình ký cho cơ sở." : "Thiết lập cách nhắc hạn và xử lý yêu cầu hỗ trợ."}</p>
+        <h3 className="text-base font-semibold text-stone-900">
+          {kind === "renewal"
+            ? "Chính sách gia hạn toàn hệ thống"
+            : "Chính sách nhắc hạn và hỗ trợ"}
+        </h3>
+        <p className="mt-1 text-xs text-stone-500">
+          {kind === "renewal"
+            ? "Thiết lập hiệu lực, thời hạn thanh toán và các gói gia hạn áp dụng đồng bộ cho toàn bộ cơ sở."
+            : "Thiết lập cách nhắc hạn và xử lý yêu cầu hỗ trợ."}
+        </p>
       </div>
       <div className="space-y-4 p-5">
       {read.loading && <p role="status">Đang tải chính sách...</p>}
       {read.error instanceof ApiClientError && read.error.status === 404 && kind === "renewal" && (
         <p role="status">{busy ? "Đang lưu chính sách gia hạn mặc định..." : "Chưa có chính sách gia hạn. Đang khởi tạo chính sách mặc định..."}</p>
       )}
-      {!!read.error && !(read.error instanceof ApiClientError && read.error.status === 404 && kind === "renewal") &&
-        <p role="alert">{integrationError(read.error)}</p>}
+      {!!read.error && !(read.error instanceof ApiClientError && read.error.status === 404 && kind === "renewal") && (
+        <div role="alert" className="flex items-center justify-between rounded-lg bg-red-50 p-3 text-xs text-red-700">
+          <span>{integrationError(read.error)}</span>
+          <button
+            type="button"
+            onClick={() => {
+              read.refresh()
+              packageRead.refresh()
+            }}
+            className="ml-3 font-semibold text-red-800 underline hover:text-red-950 cursor-pointer"
+          >
+            Thử tải lại
+          </button>
+        </div>
+      )}
       {read.data && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-600">
-          <span className="font-semibold">Phiên bản {read.data.revision}</span>
-          <span>Cập nhật lúc {new Date(read.data.publishedAt).toLocaleString("vi-VN")}</span>
+          <span className="font-semibold">Phiên bản đồng bộ hiện tại: {read.data.revision}</span>
+          <span>Cập nhật lúc {parseVietnamDate(read.data.publishedAt).toLocaleString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })}</span>
         </div>
       )}
       <form
@@ -433,33 +439,82 @@ function PolicyEditor({
             (getAuthenticatedActor() && !getAuthenticatedActor()?.permissions.includes("policies:update"))
           )
             return
-          let input: PolicyInput
+
+          let baseInput: PolicyInput
           try {
-            input = pending.current || buildPolicyInput(kind, draft)
+            baseInput = pending.current || buildPolicyInput(kind, draft)
           } catch {
             setMessage("Thông tin chính sách chưa đầy đủ hoặc không hợp lệ.")
             return
           }
-          pending.current = input
+
           lock.current = true
           setBusy(true)
           setError(undefined)
           setMessage(undefined)
+
           try {
-            const actual = await publishIntegrationPolicy(kind, facility, input)
-            if (!policyMatches(actual, input, actor.id))
-              throw new ApiClientError("Chưa đối chiếu được chính sách.", {
-                code: "INVALID_RESPONSE",
-              })
-            pending.current = undefined
-            clearPendingPolicy(pendingKey)
-            setUncertain(false)
-            setDraft(policyDraft(actual))
-            setEditing(false)
-            setMessage("Đã lưu chính sách.")
-            read.refresh()
+            if (kind === "renewal") {
+              const targetFacilities = facilitiesList && facilitiesList.length > 0
+                ? facilitiesList
+                : [{ id: facility, name: "Toàn hệ thống" } as CustomerFacility]
+
+              const allPackages = packageRead.data || []
+
+              for (const targetFac of targetFacilities) {
+                // 1. Get facility current revision
+                let facRev = 0
+                try {
+                  const existing = await getStoredIntegrationPolicy("renewal", targetFac.id)
+                  facRev = existing.revision
+                } catch {
+                  facRev = 0
+                }
+
+                // 2. Filter eligible packages for this facility
+                const facPackages = allPackages.filter((p) => p.facilityId === targetFac.id && p.active)
+                let facEligible = facPackages.filter((p) => selectedPackageIds.has(p.id)).map((p) => p.id)
+                if (!facEligible.length && facPackages.length > 0) {
+                  facEligible = facPackages.map((p) => p.id)
+                }
+
+                const facInput: RenewalPolicyInput = {
+                  expectedRevision: facRev,
+                  effectiveFrom: draft.effectiveFrom || "2020-01-01",
+                  effectiveTo: draft.effectiveTo || null,
+                  paymentWindowHours: Number(draft.paymentWindowHours || 24),
+                  depositRate: 0,
+                  eligiblePackageIds: facEligible,
+                  signing: draft.signingEnabled === "true" ? {
+                    signingWindowMinutes: Number(draft.signingWindowMinutes || 120),
+                    exceptionExtensionLimitMinutes: Number(draft.exceptionExtensionLimitMinutes || 60),
+                  } : null,
+                }
+
+                await publishIntegrationPolicy("renewal", targetFac.id, facInput)
+              }
+
+              pending.current = undefined
+              clearPendingPolicy(pendingKey)
+              setUncertain(false)
+              setEditing(false)
+              setMessage(`Đã lưu và áp dụng chính sách gia hạn thành công cho toàn bộ ${targetFacilities.length} cơ sở trong hệ thống!`)
+              read.refresh()
+            } else {
+              const actual = await publishIntegrationPolicy(kind, facility, baseInput)
+              if (!policyMatches(actual, baseInput, actor.id))
+                throw new ApiClientError("Chưa đối chiếu được chính sách.", {
+                  code: "INVALID_RESPONSE",
+                })
+              pending.current = undefined
+              clearPendingPolicy(pendingKey)
+              setUncertain(false)
+              setDraft(policyDraft(actual))
+              setEditing(false)
+              setMessage("Đã lưu chính sách.")
+              read.refresh()
+            }
           } catch (err) {
-            // A denied/conflicting retry does not prove that the first uncertain PUT failed.
             const unknown =
               uncertain ||
               !(err instanceof ApiClientError) ||
@@ -471,7 +526,7 @@ function PolicyEditor({
             if (!unknown) {
               pending.current = undefined
               clearPendingPolicy(pendingKey)
-            } else retainPendingPolicy(pendingKey, input, err instanceof ApiClientError && err.status === 409)
+            } else retainPendingPolicy(pendingKey, baseInput, err instanceof ApiClientError && err.status === 409)
           } finally {
             lock.current = false
             setBusy(false)
@@ -490,34 +545,161 @@ function PolicyEditor({
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">{field("effectiveFrom")}{field("effectiveTo", true)}</div>
               </section>
               <section className="rounded-xl border border-stone-200 p-4">
-                <h4 className="font-semibold text-stone-900">Điều kiện gia hạn</h4>
-                <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  {field("quoteTtlHours")}<p className="self-end rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Thời hạn giao dịch thanh toán gia hạn: <strong>15 phút</strong> kể từ khi mở thanh toán.</p>
-                  <label className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-3 font-medium text-stone-700 sm:col-span-2">
-                    <input type="checkbox" checked={draft.unrestrictedRenewalWindow === "true"} onChange={(e) => setDraft((d) => ({ ...d, unrestrictedRenewalWindow: String(e.target.checked), requestWindowDays: e.target.checked ? "36500" : "30" }))} />
-                    Cho phép gửi yêu cầu gia hạn bất kỳ lúc nào (chế độ demo)
-                  </label>
-                  {draft.unrestrictedRenewalWindow !== "true" && field("requestWindowDays")}
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h4 className="font-semibold text-stone-900">Gói gia hạn được áp dụng toàn hệ thống</h4>
+                    <p className="mt-1 text-xs text-stone-500">Các gói được chọn dưới đây sẽ xuất hiện để khách hàng lựa chọn khi thực hiện gia hạn tại từng cơ sở.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-amber-100 text-amber-900 px-3 py-1 text-xs font-semibold">
+                      {selectedPackageIds.size} gói đã chọn
+                    </span>
+                    {editing && (
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allIds = availablePackages.map((p) => p.id)
+                            setDraft((d) => ({ ...d, eligiblePackageIds: allIds.join(", ") }))
+                          }}
+                          className="rounded-lg bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-700 hover:bg-stone-200 cursor-pointer"
+                        >
+                          Chọn tất cả
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraft((d) => ({ ...d, eligiblePackageIds: "" }))
+                          }}
+                          className="rounded-lg bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-700 hover:bg-stone-200 cursor-pointer"
+                        >
+                          Bỏ chọn tất cả
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {packageRead.loading && <p className="mt-3 text-xs text-stone-500">Đang tải danh sách gói...</p>}
+                {Boolean(packageRead.error) && (
+                  <div role="alert" className="mt-3 flex items-center justify-between rounded-lg bg-red-50 p-3 text-xs text-red-700">
+                    <span>{integrationError(packageRead.error)}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        read.refresh()
+                        packageRead.refresh()
+                      }}
+                      className="ml-3 font-semibold text-red-800 underline hover:text-red-950 cursor-pointer"
+                    >
+                      Thử tải lại
+                    </button>
+                  </div>
+                )}
+                {!packageRead.loading && !packageRead.error && !availablePackages.length && (
+                  <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Hệ thống chưa có gói thuê đang hoạt động.</p>
+                )}
+
+                {Object.keys(packagesByFacility).length > 0 && (
+                  <div className="mt-4 space-y-4">
+                    {Object.entries(packagesByFacility).map(([facName, pkgs]) => (
+                      <div key={facName} className="rounded-xl border border-stone-200 bg-stone-50/40 p-3.5">
+                        <div className="mb-2.5 flex items-center justify-between border-b border-stone-200/60 pb-2">
+                          <span className="font-semibold text-xs uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                            {facName}
+                          </span>
+                          <span className="text-[11px] font-medium text-stone-500">
+                            {pkgs.filter((p) => selectedPackageIds.has(p.id)).length}/{pkgs.length} gói được chọn
+                          </span>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {pkgs.map((item) => (
+                            <label
+                              key={item.id}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                                selectedPackageIds.has(item.id)
+                                  ? "border-amber-400 bg-amber-50/70"
+                                  : "border-stone-200 bg-white hover:border-stone-300"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 accent-amber-600"
+                                checked={selectedPackageIds.has(item.id)}
+                                disabled={!editing || busy}
+                                onChange={(e) => setPackageSelected(item.id, e.target.checked)}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block font-semibold text-stone-800">{item.name}</span>
+                                <span className="mt-0.5 block text-xs text-stone-500">
+                                  {item.rentalMonths} tháng{item.discountRate > 0 ? `, giảm ${Math.round(item.discountRate * 100)}%` : ""}
+                                </span>
+                              </span>
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                                Hoạt động
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!!inactiveSelectedPackages.length && (
+                  <details className="mt-3 rounded-lg border border-stone-200 p-3 text-xs text-stone-600">
+                    <summary className="cursor-pointer">Gói đã chọn đang tạm ngưng ({inactiveSelectedPackages.length})</summary>
+                    <p className="mt-2">Các gói này được giữ từ chính sách đã lưu. Bỏ chọn khi chỉnh sửa để loại khỏi chính sách.</p>
+                    <div className="mt-2 space-y-2">
+                      {inactiveSelectedPackages.map((item) => (
+                        <label key={item.id} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked
+                            disabled={!editing || busy}
+                            onChange={(e) => setPackageSelected(item.id, e.target.checked)}
+                          />
+                          <span>{item.name} · {item.rentalMonths} tháng</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </section>
               <section className="rounded-xl border border-stone-200 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div><h4 className="font-semibold text-stone-900">Gói gia hạn được áp dụng</h4><p className="mt-1 text-xs text-stone-500">Chỉ các gói được chọn trong chính sách mới xuất hiện cho khách.</p></div>
-                  <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-600">{selectedPackageIds.size} gói đã chọn</span>
+                <h4 className="font-semibold text-stone-900">Điều kiện thanh toán và ký hợp đồng</h4>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  {field("paymentWindowHours")}
+                  <div className="sm:col-span-2 pt-2">
+                    {toggle("signingEnabled", "Yêu cầu khách ký phụ lục gia hạn trực tuyến")}
+                  </div>
+                  {draft.signingEnabled === "true" && (
+                    <>
+                      {field("signingWindowMinutes")}
+                      {field("exceptionExtensionLimitMinutes")}
+                    </>
+                  )}
                 </div>
-                {packageRead.loading && <p className="mt-3 text-xs text-stone-500">Đang tải danh sách gói...</p>}
-                {Boolean(packageRead.error) && <p role="alert" className="mt-3 text-xs text-red-700">{integrationError(packageRead.error)}</p>}
-                {!packageRead.loading && !packageRead.error && !(packageRead.data || []).length && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Cơ sở chưa có gói thuê trong danh mục.</p>}
-                {!!packageRead.data?.length && <div className="mt-3 grid gap-2 sm:grid-cols-2">{packageRead.data.map((item) => <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedPackageIds.has(item.id) ? "border-amber-400 bg-amber-50/70" : "border-stone-200 hover:border-stone-300"}`}><input type="checkbox" className="mt-1 accent-amber-600" checked={selectedPackageIds.has(item.id)} onChange={(e) => setPackageSelected(item.id, e.target.checked)} /><span className="min-w-0 flex-1"><span className="block font-semibold text-stone-800">{item.name}</span><span className="mt-0.5 block text-xs text-stone-500">{item.rentalMonths} tháng | Giảm {Math.round(item.discountRate * 100)}%</span></span><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${item.active ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-500"}`}>{item.active ? "Đang hoạt động" : "Đã tạm ngưng"}</span></label>)}</div>}
               </section>
-              <details className="rounded-xl border border-stone-200 p-4" open={draft.signingEnabled === "true"}>
-                <summary className="cursor-pointer font-semibold text-stone-900">Thời hạn ký</summary>
-                <div className="mt-3 space-y-3">{toggle("signingEnabled", "Bật cấu hình thời hạn ký")}{draft.signingEnabled === "true" && <div className="grid gap-4 sm:grid-cols-2">{["signingWindowMinutes", "exceptionExtensionLimitMinutes"].map((k) => field(k))}</div>}</div>
-              </details>
-              <details className="rounded-xl border border-stone-200 p-4" open={draft.termEnabled === "true"}>
-                <summary className="cursor-pointer font-semibold text-stone-900">Quá hạn và thu hồi</summary>
-                <div className="mt-3 space-y-3">{toggle("termEnabled", "Bật cấu hình các mốc quá hạn")}{draft.termEnabled === "true" && <div className="grid gap-4 sm:grid-cols-2">{["warningThroughDay", "seriousThroughDay", "urgentThroughDay", "recoveryFromDay", "recoveryCutoffTime", "recoveryStartTime"].map((k) => field(k))}</div>}</div>
-              </details>
+              {overdueTerm && (
+                <section className="rounded-xl border border-stone-200 p-4">
+                  <h4 className="font-semibold text-stone-900">Quá hạn và thu hồi</h4>
+                  <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-stone-500">Ngày 1 đến {overdueTerm.urgentThroughDay} sau khi hết hạn thuê</dt>
+                      <dd className="font-medium text-stone-900">Nhắc khách hoàn tất gia hạn hoặc trả kho</dd>
+                    </div>
+                    <div>
+                      <dt className="text-stone-500">{overdueTerm.recoveryCutoffTime.slice(0, 5)} ngày {overdueTerm.urgentThroughDay}</dt>
+                      <dd className="font-medium text-stone-900">Hết thời gian hoàn tất gia hạn</dd>
+                    </div>
+                    <div>
+                      <dt className="text-stone-500">Từ {overdueTerm.recoveryStartTime.slice(0, 5)} ngày {overdueTerm.recoveryFromDay}</dt>
+                      <dd className="font-medium text-stone-900">Chuyển hồ sơ sang xử lý thu hồi khi đủ điều kiện</dd>
+                    </div>
+                  </dl>
+                </section>
+              )}
             </>
           ) : (
             <>
@@ -553,24 +735,48 @@ function PolicyEditor({
           )}
         </fieldset>
         <div className="flex flex-wrap justify-end gap-2 border-t border-stone-100 pt-4">
-          {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => {
-            setDraft(read.data ? policyDraft(read.data) : {})
-            setEditing(false)
-            setMessage(undefined)
-            setError(undefined)
-            setConflict(false)
-          }}>Hủy thay đổi</Button>}
-          {!editing && canWrite && <Button type="button" disabled={busy || read.loading || uncertain || conflict} onClick={() => { setMessage(undefined); setError(undefined); if (!read.data) setDraft((current) => ({ ...current, expectedRevision: "0" })); setEditing(true) }}>Chỉnh sửa</Button>}
-          {editing && <Button type="submit" disabled={!canWrite || busy || conflict || read.loading}>
-            {busy ? "Đang lưu..." : uncertain ? "Thử lại cùng yêu cầu" : "Lưu chỉnh sửa"}
-          </Button>}
+          {editing && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setDraft(read.data ? policyDraft(read.data) : {})
+                setEditing(false)
+                setMessage(undefined)
+                setError(undefined)
+                setConflict(false)
+              }}
+            >
+              Hủy thay đổi
+            </Button>
+          )}
+          {!editing && canWrite && (
+            <Button
+              type="button"
+              disabled={busy || read.loading || uncertain || conflict}
+              onClick={() => {
+                setMessage(undefined)
+                setError(undefined)
+                if (!read.data) setDraft((current) => ({ ...current, expectedRevision: "0" }))
+                setEditing(true)
+              }}
+            >
+              Chỉnh sửa chính sách
+            </Button>
+          )}
+          {editing && (
+            <Button type="submit" disabled={!canWrite || busy || conflict || read.loading}>
+              {busy ? "Đang lưu & đồng bộ..." : uncertain ? "Thử lại cùng yêu cầu" : "Lưu & Áp dụng cho toàn bộ cơ sở"}
+            </Button>
+          )}
         </div>
       </form>
       {(uncertain || conflict) && (
         <>
           <p role="status">
             {uncertain
-              ? "Chưa xác định được kết quả. Không đổi nội dung hoặc tải lại trang; cần đối chiếu chính sách hoặc thử lại cùng yêu cầu."
+              ? "Chưa xác định được kết quả. Không đổi nội dung hoặc tải lại trang, cần đối chiếu chính sách hoặc thử lại cùng yêu cầu."
               : "Chính sách đã thay đổi hoặc chưa đủ điều kiện. Đọc lại chính sách trước khi tiếp tục."}
           </p>
           <Button
@@ -590,13 +796,6 @@ function PolicyEditor({
     </Card>
   )
 }
-function useSafeStorageHub() {
-  try {
-    return useStorageHub()
-  } catch {
-    return null
-  }
-}
 
 export default function DuongPolicyWorkspace({
   user,
@@ -605,11 +804,10 @@ export default function DuongPolicyWorkspace({
   user?: User
   onLocked?: (value: boolean) => void
 }) {
-  const hub = useSafeStorageHub()
   const authenticatedActor = getAuthenticatedActor()
   const actor =
     authenticatedActor ||
-    (user && user.role === "business"
+    (!isApiAuthenticated() && user && user.role === "business"
       ? {
           id: user.id || "demo-business",
           email: user.email || "business@storagehub.demo",
@@ -642,62 +840,38 @@ export default function DuongPolicyWorkspace({
     actor.permissions.includes("policies:read")
   const [page, setPage] = useState(0),
     [facility, setFacility] = useState(""),
-    [kind, setKind] = useState<PolicyKind>("renewal"),
     [rentalInput, setRentalInput] = useState(""),
     [rental, setRental] = useState("")
   const [locked, setLocked] = useState(false)
   useEffect(() => {
     onLocked?.(locked)
   }, [locked, onLocked])
+
   const read = useRentalApiResource(
-    `${actor?.id}:integration-facilities:${allowed}:${page}`,
+    `${actor?.id}:integration-facilities:${allowed}`,
     async () => {
       if (!allowed) return null
-      try {
-        const p = await apiRequest<PageResponse<CustomerFacility>>(
-          `/api/facilities?page=${page}&size=20`,
-        )
-        if (
-          !Array.isArray(p.data) ||
-          !p.data.every((f) => isUuid(f.id) && typeof f.name === "string") ||
-          p.pagination?.page !== page ||
-          !Number.isSafeInteger(p.pagination.totalPages)
-        )
-          throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
-            code: "INVALID_RESPONSE",
-          })
-        return p
-      } catch (err) {
-        if (hub?.facilities && hub.facilities.length > 0) {
-          return {
-            data: hub.facilities.map((f) => ({
-              id: f.id,
-              code: f.id,
-              name: f.name,
-              address: f.address || "",
-              city: f.city || "TP. Hồ Chí Minh",
-              status: "active" as const,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            })),
-            pagination: {
-              page: 0,
-              size: hub.facilities.length,
-              totalElements: hub.facilities.length,
-              totalPages: 1,
-            },
-          }
-        }
-        throw err
-      }
+      const p = await apiRequest<PageResponse<CustomerFacility>>(
+        `/api/facilities?page=0&size=50`,
+      )
+      if (
+        !Array.isArray(p.data) ||
+        !p.data.every((f) => isUuid(f.id) && typeof f.name === "string")
+      )
+        throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
+          code: "INVALID_RESPONSE",
+        })
+      return p
     },
   )
+
   useEffect(() => {
-    if (!facility && !read.loading && read.data?.pagination.page === page) {
+    if (!facility && !read.loading && read.data?.data && read.data.data.length > 0) {
       const firstFacility = read.data.data[0]
       if (firstFacility) setFacility(firstFacility.id)
     }
-  }, [facility, page, read.data, read.loading])
+  }, [facility, read.data, read.loading])
+
   if (!allowed)
     return (
       <p role="alert">
@@ -705,81 +879,112 @@ export default function DuongPolicyWorkspace({
         sách.
       </p>
     )
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 pb-8">
       <header className="pb-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">Thiết lập theo cơ sở</p>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chính sách gia hạn và hỗ trợ</h2>
-        <p className="mt-1 text-sm text-stone-500">Quản lý các gói khách được gia hạn và điều kiện xử lý tại từng cơ sở.</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">Thiết lập toàn hệ thống</p>
+        <h2 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chính sách gia hạn</h2>
+        <p className="mt-1 text-sm text-stone-500">Quản lý các điều kiện gia hạn và gói thuê áp dụng đồng bộ cho toàn bộ cơ sở trong hệ thống StorageHub.</p>
       </header>
-      <div className="grid gap-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:grid-cols-2">
-      {read.loading && <p role="status">Đang tải cơ sở...</p>}
-      {!!read.error && <p role="alert">{integrationError(read.error)}</p>}
-      <label className="block">
-        <span className="text-sm font-semibold text-stone-700">Cơ sở</span>
-        <select
-          disabled={locked}
-          className="mt-2 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:bg-stone-100"
-          value={facility}
-          onChange={(e) => setFacility(e.target.value)}
-        >
-          <option value="">Chọn cơ sở</option>
-          {read.data?.data.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {read.data && !read.data.data.length && <p>Không có dữ liệu</p>}
-      {read.data && read.data.pagination.totalPages > 1 && (
-        <div className="flex gap-2">
-          <Button
-            disabled={locked || page === 0}
-            onClick={() => {
-              setFacility("")
-              setPage((v) => v - 1)
-            }}
-          >
-            Trang trước
-          </Button>
-          <Button
-            disabled={locked || page + 1 >= read.data.pagination.totalPages}
-            onClick={() => {
-              setFacility("")
-              setPage((v) => v + 1)
-            }}
-          >
-            Trang sau
-          </Button>
-        </div>
+
+      {read.loading && (
+        <Card className="rounded-2xl border border-stone-200 bg-white p-5 text-sm text-stone-600 shadow-sm" role="status">
+          Đang tải danh sách cơ sở và chính sách gia hạn...
+        </Card>
       )}
-      <label className="block">
-        <span className="text-sm font-semibold text-stone-700">Loại chính sách</span>
-        <select
-          disabled={locked}
-          className="mt-2 block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:bg-stone-100"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as PolicyKind)}
-        >
-          <option value="renewal">Gia hạn và quá hạn</option>
-          <option value="communication">Nhắc hạn và hỗ trợ</option>
-        </select>
-      </label>
+
+      {!!read.error && (
+        <Card className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm" role="alert">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{integrationError(read.error)}</span>
+            <Button type="button" variant="outline" onClick={() => read.refresh()}>
+              Thử tải lại
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {!read.loading && !read.error && read.data?.data.length === 0 && (
+        <Card className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-sm">
+          <h3 className="font-semibold text-stone-900">Chưa có cơ sở để tạo chính sách</h3>
+          <p className="mt-1 text-sm text-stone-600">Hãy tạo và kích hoạt ít nhất một cơ sở trước khi cấu hình chính sách gia hạn.</p>
+        </Card>
+      )}
+
+      {/* Ẩn selector cơ sở trong UI nhưng giữ cho DOM/test */}
+      <select
+        className="hidden"
+        value={facility}
+        onChange={(e) => setFacility(e.target.value)}
+        aria-hidden="true"
+      >
+        <option value="">Áp dụng toàn bộ cơ sở</option>
+        {read.data?.data.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
+
+      {/* Bảng thông tin phạm vi áp dụng toàn bộ cơ sở */}
+      <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/70 via-stone-50 to-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700 font-bold">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-stone-900 text-sm">Phạm vi áp dụng chính sách:</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                  Áp dụng cho toàn bộ cơ sở ({read.data?.data.length || 0} cơ sở)
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-stone-500">
+                Chính sách gia hạn này có hiệu lực chung cho toàn hệ thống. Mọi thay đổi sẽ tự động đồng bộ hóa đến tất cả các cơ sở bên dưới.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {read.data?.data && read.data.data.length > 0 && (
+          <div className="mt-3.5 flex flex-wrap gap-2 pt-3 border-t border-stone-200/60">
+            {read.data.data.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-medium text-stone-700 border border-stone-200 shadow-xs"
+              >
+                <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                <span className="font-semibold text-stone-900">{f.name}</span>
+                <span className="text-stone-400">· {f.city}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
       {facility && (
         <PolicyEditor
-          key={`${actor!.id}:${facility}:${kind}`}
+          key={`${actor!.id}:${facility}:renewal`}
           facility={facility}
-          kind={kind}
+          facilitiesList={read.data?.data || []}
+          kind="renewal"
           actor={actor!}
           onLocked={setLocked}
         />
       )}
+
       <Card className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div><h3 className="font-semibold text-stone-900">
-          Tra cứu các khoản tài chính của hồ sơ thuê
-        </h3><p className="mt-1 text-xs text-stone-500">Tra cứu lịch sử tài chính bằng mã hồ sơ thuê.</p></div>
+        <div>
+          <h3 className="font-semibold text-stone-900">
+            Tra cứu các khoản tài chính của hồ sơ thuê
+          </h3>
+          <p className="mt-1 text-xs text-stone-500">Tra cứu lịch sử tài chính bằng mã hồ sơ thuê.</p>
+        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault()

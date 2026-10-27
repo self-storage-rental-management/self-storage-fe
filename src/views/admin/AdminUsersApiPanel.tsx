@@ -18,6 +18,7 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
+import { clearAuthTokens } from '../../services/apiClient'
 import type { Role, User } from '../../types'
 import {
   createAdminUser,
@@ -679,7 +680,10 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       {error && (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <span>{error}</span>
-          <Button variant="outline" size="sm" onClick={() => setRefreshKey(v => v + 1)}>
+          <Button variant="outline" size="sm" onClick={() => {
+            clearAuthTokens()
+            setRefreshKey(v => v + 1)
+          }}>
             Thử lại
           </Button>
         </div>
@@ -1169,7 +1173,8 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 <strong className="text-red-900">{confirmDeleteModal.fullName}</strong> ({confirmDeleteModal.email}).
               </p>
               <p className="mt-2 text-xs text-red-700 leading-relaxed">
-                Toàn bộ dữ liệu phiên làm việc, lịch sử đăng nhập và phân quyền của tài khoản này sẽ bị xóa khỏi hệ thống.
+                Tài khoản, phiên đăng nhập, role, facility scope và dữ liệu xác thực sẽ bị xóa khỏi hệ thống.
+                Nếu tài khoản còn hồ sơ thuê, thanh toán, bằng chứng hoặc dữ liệu nghiệp vụ, hệ thống sẽ từ chối để bảo toàn lịch sử.
               </p>
             </div>
 

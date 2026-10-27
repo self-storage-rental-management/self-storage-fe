@@ -1,6 +1,8 @@
 import { apiRequest } from './apiClient'
+import type { ApiRentalStatus } from '../types/statusContracts'
+import { checkedRental, checkedStatusPage } from './statusContractValidation'
 
-export type CustomerRentalStatus = 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
+export type CustomerRentalStatus = ApiRentalStatus
 
 export interface CustomerRental {
   id: string
@@ -27,6 +29,12 @@ export interface CustomerRental {
   status: CustomerRentalStatus
   startDate?: string
   contractEndDate?: string | null
+  setupStartedAt?: string | null
+  setupEndsAt?: string | null
+  inventoryDueAt?: string | null
+  inventoryPending?: boolean
+  moveInCompletedAt?: string | null
+  setupExitReviewRequired?: boolean
   monthlyPrice?: number
   currency?: string
   actualReturnedAt?: string | null
@@ -50,7 +58,7 @@ interface CustomerRentalPage {
 export async function listCustomerRentals(status?: CustomerRentalStatus, page = 0, size = 100) {
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   if (status) params.set('status', status)
-  return apiRequest<CustomerRentalPage>(`/api/customer/rentals?${params.toString()}`)
+  return checkedStatusPage(await apiRequest<CustomerRentalPage>(`/api/customer/rentals?${params.toString()}`), checkedRental)
 }
 
 export async function listAllCustomerRentals() {

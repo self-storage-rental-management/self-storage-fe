@@ -40,6 +40,12 @@ beforeEach(() => {
 })
 
 describe("D5 role and lifecycle boundaries", () => {
+  it('enables Staff submission with a saved file and no required text', () => {
+    session.actor = supportActor('staff')
+    const html = renderToStaticMarkup(<SupportActionForm role="staff" ticket={supportActive} command={command} mode="message" draft={{ body: '', files: [supportIds.foreign] }} />)
+    expect(html).not.toMatch(/<textarea[^>]*required=""/)
+    expect(html).not.toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>/)
+  })
   it("labels an unassigned Customer ticket as awaiting Staff reception", () => {
     const html = renderToStaticMarkup(<SupportTicketSummary ticket={supportTicket} role="customer" />)
     expect(html).toContain("Chờ nhân viên tiếp nhận")
@@ -66,7 +72,7 @@ describe("D5 role and lifecycle boundaries", () => {
       ...supportActive, status: "resolved", resolvedAt: "2026-10-08T03:00:00Z",
       resolvedBy: supportIds.staff,
     }} />)
-    expect(html).toContain("Đã xử lý - chờ xác nhận")
+    expect(html).toContain("Đã xử lý")
     expect(html).not.toContain("Đã xử lý xong, chờ khách hàng xác nhận")
     expect(html).not.toContain("notification")
     expect(html).not.toContain("Tự đóng sau 7 ngày")
@@ -112,7 +118,7 @@ describe("D5 role and lifecycle boundaries", () => {
     ).toEqual(["accept"])
     expect(
       supportActions(supportActor("staff"), "staff", supportActive),
-    ).toEqual(["message", "information", "resolve", "escalate"])
+    ).toEqual(["message", "information", "resolve"])
     expect(
       supportActions(supportActor("staff"), "staff", {
         ...supportActive,
@@ -127,13 +133,13 @@ describe("D5 role and lifecycle boundaries", () => {
     )
     expect(supportActions(supportActor("staff"), "staff", ticket)).toEqual([])
   })
-  it("waiting Customer allows accepted Staff conversation, not another resolution", () => {
+  it("waiting Customer allows accepted Staff conversation and status-only completion", () => {
     expect(
       supportActions(supportActor("staff"), "staff", {
         ...supportActive,
         status: "waiting_customer",
       }),
-    ).toEqual(["message"])
+    ).toEqual(["message", "resolve"])
   })
   it.each(["resolved", "closed"] as const)(
     "Staff cannot mutate %s tickets",
@@ -212,7 +218,8 @@ describe("D5 presentation and additive integration (server-rendered checks)", ()
         ticket={{ ...supportTicket, subject: "<script>alert(1)</script>" }}
       />,
     )
-    expect(html).toContain("Chưa đủ thông tin để xác định hạn xử lý và mức ưu tiên")
+    expect(html).not.toContain("Tự đóng sau 7 ngày")
+    expect(html).not.toMatch(/Hạn xử lý[^<]*\d{2}:\d{2}/)
     expect(html).toContain("8/10/2026")
     expect(html).toContain("&lt;script&gt;")
     expect(html).not.toContain("<script>")

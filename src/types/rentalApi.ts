@@ -1,5 +1,6 @@
-export type RentalApiRole = "customer" | "manager"
-export type RentalApiStatus = "active" | "return_requested" | "return_inspection" | "closing" | "completed"
+import type { RentalStatus, PaymentStatus } from './statusContracts'
+export type RentalApiRole = "customer" | "manager" | "staff"
+export type RentalApiStatus = RentalStatus
 export interface RentalApiPage<T> {
   data: T[]
   pagination: {
@@ -46,6 +47,12 @@ export interface RentalApiRecord {
     field: string
     reason: string
   }[]
+  inventoryPending?: boolean
+  inventoryDueAt?: string | null
+  setupStartedAt?: string | null
+  setupEndsAt?: string | null
+  moveInCompletedAt?: string | null
+  setupExitReviewRequired?: boolean
 }
 export interface RentalApiDetail extends RentalApiRecord {
   bookingEvidence?: RentalBookingEvidence | null
@@ -83,10 +90,13 @@ export interface RentalBookingEvidence {
   payments: {
     id: string
     purpose: "RESERVATION_DEPOSIT" | "RENTAL_BALANCE" | "MONTHLY_RENT" | "RENEWAL" | "DAMAGE_FEE" | "OTHER"
-    status: "PENDING" | "PROCESSING" | "PAID" | "NOT_RECEIVED" | "FAILED" | "CANCELLED"
+    status: PaymentStatus
     amount: number
     processedAt: string | null
     verification: "SIMULATED" | "UNVERIFIED" | "VERIFIED" | "SANDBOX" | "DISPUTED" | "ATTEMPT"
+    invoiceNumber: string | null
+    invoiceStatus: "DRAFT" | "PAID" | "VOID" | "REFUNDED"
+    invoiceIssuedAt: string | null
     projectRecognition?: { environment: string; enabled: boolean; eligibleForReconciliation: boolean; reason: string }
   }[]
   paymentsTruncated: boolean

@@ -13,7 +13,7 @@ const labels: Record<string, string> = {
   MAINTENANCE: 'Đang bảo trì', COMPLETE: 'Đã kiểm tra đầy đủ', PARTIAL: 'Chưa đủ thông tin', UNKNOWN: 'Chưa có thông tin',
   RENTAL: 'Hồ sơ thuê', PAYMENT: 'Thanh toán', RESERVATION: 'Đặt chỗ',
   LOW: 'Thấp', NORMAL: 'Trung bình', MEDIUM: 'Trung bình', HIGH: 'Cao', URGENT: 'Khẩn cấp',
-  CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', MANAGER: 'Quản lý cơ sở',
+  CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', MANAGER: 'Quản lý cơ sở', BUSINESS: 'Quản lý vận hành kinh doanh',
   PENDING: 'Đang chờ', COMPLETED: 'Đã hoàn tất', REJECTED: 'Đã từ chối', ROUTED: 'Đã chuyển xử lý',
   'Small Storage': 'Gian kho nhỏ', 'Medium Storage': 'Gian kho vừa', 'Large Storage': 'Gian kho lớn',
   'Extra Large Storage': 'Gian kho rất lớn',
@@ -95,31 +95,19 @@ export function managerDisplayExplanation(value: string): string {
 export function managerDisplayError(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === 'FEATURE_DISABLED') return 'Chức năng này chưa được bật trên hệ thống.'
-    if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu phản hồi chưa đúng định dạng. Vui lòng tải lại; nếu vẫn lỗi, cần kiểm tra Backend.'
+    if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu nhận được chưa đúng định dạng. Vui lòng tải lại trang.'
     if (error.code === 'DEFERRED_SOURCE' || error.message.includes('DEFERRED_SOURCE'))
       return 'Chưa đủ dữ liệu hoặc chính sách để thực hiện thao tác này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 403) return 'Bạn không có quyền xử lý hồ sơ này.'
-    if (error.status === 404) return 'Không tìm thấy hồ sơ trong phạm vi cơ sở được phép truy cập.'
-      if (error.status === 400 || error.status === 409 || error.status === 422) {
-        if (error.code === 'VALIDATION_ERROR' && error.details && typeof error.details === 'object') {
-          const details = error.details as Record<string, unknown>
-          const imageError = details.imageUrl ?? details.detailImageUrl
-          if (typeof imageError === 'string') {
-            return /[À-ỹ]/u.test(imageError) ? imageError
-              : 'Ảnh bị Backend từ chối do giới hạn dữ liệu. Nếu ảnh không quá 2 MB, cần khởi động lại Backend đã cập nhật.'
-          }
-        }
-        if (/[À-ỹ]/u.test(error.message)) return error.message
-      }
-    if (error.status === 409) return 'Hồ sơ đã thay đổi hoặc chưa đủ điều kiện xử lý. Hãy mở lại hồ sơ trước khi tiếp tục.'
+    if (error.status === 404) return 'Không tìm thấy dữ liệu cần thao tác. Vui lòng tải lại trang.'
+    if (error.status === 400 || error.status === 422) return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các mục đã nhập.'
+    if (error.status === 409) return 'Dữ liệu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng tải lại trước khi tiếp tục.'
     if (error.status != null && error.status >= 500) return 'Hệ thống gặp lỗi khi tải hoặc xử lý dữ liệu. Vui lòng thử lại.'
     if (error.status === null) return 'Không kết nối được hệ thống hoặc yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'
     return 'Không thể thực hiện yêu cầu. Vui lòng kiểm tra thông tin và điều kiện xử lý.'
   }
-  return error instanceof Error && /[À-ỹ]/u.test(error.message)
-    ? managerDisplayText(error.message)
-    : 'Không thể thực hiện yêu cầu. Vui lòng thử lại.'
+  return 'Không thể thực hiện yêu cầu. Vui lòng thử lại.'
 }
 
 export function useManagerPresentation() {

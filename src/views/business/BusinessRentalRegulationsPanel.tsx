@@ -1,34 +1,15 @@
-import { useState, useMemo } from 'react'
-import { Card, Badge, Button, Input } from '../../components/ui'
+import { useState } from 'react'
+import { Card, Badge, Button } from '../../components/ui'
 import type { User } from '../../types'
+import { REGULATIONS } from '../../data/rentalRegulationsData'
 
 interface Props {
   user?: User
   lang?: string
 }
 
-import { REGULATIONS, type RegulationArticle } from '../../data/rentalRegulationsData'
-
-
 export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeCategory, setActiveCategory] = useState<'all' | 'scope' | 'finance' | 'safety' | 'operations'>('all')
   const [copied, setCopied] = useState(false)
-
-  const filteredRegulations = useMemo(() => {
-    return REGULATIONS.filter((item) => {
-      if (activeCategory !== 'all' && item.category !== activeCategory) {
-        return false
-      }
-      if (!searchQuery.trim()) return true
-      const q = searchQuery.toLowerCase().trim()
-      const inTitle = item.title.toLowerCase().includes(q)
-      const inArt = item.articleNumber.toLowerCase().includes(q)
-      const inClauses = item.clauses.some((c) => c.toLowerCase().includes(q))
-      const inNote = item.importantNote ? item.importantNote.toLowerCase().includes(q) : false
-      return inTitle || inArt || inClauses || inNote
-    })
-  }, [searchQuery, activeCategory])
 
   const handleCopyAll = () => {
     const fullText = `QUY ĐỊNH CHO THUÊ KHO STORAGEHUB\n\n` +
@@ -68,7 +49,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
             <Button
               type="button"
               variant="outline"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs px-3.5 py-2"
+              className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs px-3.5 py-2 cursor-pointer"
               onClick={handleCopyAll}
             >
               {copied ? '✓ Đã sao chép toàn văn' : 'Sao chép toàn văn'}
@@ -76,7 +57,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
             <Button
               type="button"
               variant="primary"
-              className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3.5 py-2 font-semibold shadow-sm"
+              className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3.5 py-2 font-semibold shadow-sm cursor-pointer"
               onClick={handlePrint}
             >
               In / Xuất bản PDF
@@ -85,187 +66,153 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
         </div>
       </div>
 
-      {/* ── HIGHLIGHT METRICS / PILLARS ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 border border-stone-200/80 bg-white shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-800 flex items-center justify-center font-bold text-sm">
-              01
+      {/* ── KHỐI 1: QUY CHUẨN VẬN HÀNH CỐT LÕI & ĐIỀU KHOẢN HỢP ĐỒNG ── */}
+      <Card className="p-6 border border-stone-200/90 shadow-sm bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200/70 pb-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                {lang === "vi" ? "Quy định pháp lý & Vận hành chuẩn hóa" : "Legal & Operations"}
+              </span>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                {lang === "vi" ? "Hiển thị bên Customer" : "Hiển thị bên Customer"}
+              </span>
             </div>
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Phạm vi & Thời hạn</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">Điều 1 & Điều 2</p>
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 mt-2.5">
-            Mục đích lưu trữ tài sản, thời điểm bắt đầu/kết thúc và cấm chuyển nhượng trái phép.
-          </p>
-        </Card>
-
-        <Card className="p-4 border border-stone-200/80 bg-white shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-800 flex items-center justify-center font-bold text-sm">
-              02
-            </div>
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Giá thuê & Gia hạn</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">Điều 3 & Điều 4</p>
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 mt-2.5">
-            Minh bạch biểu giá, phí dịch vụ, tiền đặt cọc và cơ chế gia hạn trước hạn.
-          </p>
-        </Card>
-
-        <Card className="p-4 border border-stone-200/80 bg-white shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-800 flex items-center justify-center font-bold text-sm">
-              03
-            </div>
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">An toàn & Bảo quản</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">Điều 5 & Điều 6</p>
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 mt-2.5">
-            Danh mục hàng cấm nghiêm ngặt, trách nhiệm đóng gói và lập biên bản hiện trạng.
-          </p>
-        </Card>
-
-        <Card className="p-4 border border-stone-200/80 bg-white shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold text-sm">
-              04
-            </div>
-            <div>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Vận hành & Pháp lý</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">Điều 7, 8 & 9</p>
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 mt-2.5">
-            Xử lý sự cố hạ tầng, bàn giao trả kho hợp lệ và giải quyết khiếu nại tranh chấp.
-          </p>
-        </Card>
-      </div>
-
-      {/* ── FILTER & SEARCH TOOLBAR ── */}
-      <Card className="p-4 border border-stone-200/80 bg-white shadow-2xs space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Quick Categories */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {[
-              { id: 'all', label: 'Tất cả 9 Điều' },
-              { id: 'scope', label: 'Phạm vi & Thời hạn' },
-              { id: 'finance', label: 'Giá thuê & Gia hạn' },
-              { id: 'safety', label: 'An toàn & Tài sản' },
-              { id: 'operations', label: 'Sự cố & Bàn giao' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveCategory(tab.id as any)}
-                className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
-                  activeCategory === tab.id
-                    ? 'bg-amber-800 text-white shadow-2xs'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            <h3 className="font-bold text-slate-900 text-base">
+              {lang === "vi" ? "Chính Sách & Quy Định Áp Dụng Đi Kèm Biểu Giá" : "Policies & Regulations Applicable to Pricing"}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+              {lang === "vi"
+                ? "Các thông số này được công bố trực tiếp cho khách hàng khi xem chi tiết loại kho, đặt giữ chỗ và thanh lý hợp đồng trên Customer Portal."
+                : "These parameters are published directly to customers when viewing units, reserving, and settling agreements on the Customer Portal."}
+            </p>
           </div>
 
-          {/* Search */}
-          <div className="w-full md:w-72">
-            <Input
-              placeholder="Tìm kiếm điều khoản, từ khóa..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="text-xs"
-            />
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            className="bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs px-4 py-2 self-start md:self-auto shrink-0 shadow-sm flex items-center gap-1.5 cursor-pointer"
+            onClick={() => {
+              const el = document.getElementById('regulations-articles')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }}
+          >
+            <span>{lang === "vi" ? "Xem Toàn Văn 12 Điều Khoản" : "View Full 12 Articles"}</span>
+            <span>↓</span>
+          </Button>
+        </div>
+
+        {/* 5 Chỉ Số Vận Hành Cốt Lõi */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-4">
+          <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
+            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">50% / ngày</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Cọc Giữ Chỗ</span>
+            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">10% – 30%</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Cấu hình theo từng gói thuê (mặc định 20%). Trừ trực tiếp vào tiền thuê khi nhận kho.</p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Cọc Đảm Bảo Kho</span>
+            <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">Theo loại kho</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Thu khi nhận kho; hoàn trả lại sau kiểm tra nghiệm thu trả kho, vệ sinh và công nợ.</p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Hạn Thuê Tối Thiểu</span>
+            <div className="text-base font-extrabold text-slate-900 font-mono mt-1">01 Tháng</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Kỳ thuê sử dụng trọn tháng. Chi tiết xác nhận trên báo giá hợp đồng.</p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
+            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">Tối Đa 7 Ngày</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.</p>
           </div>
         </div>
 
-        {searchQuery.trim() && (
-          <div className="text-xs text-slate-500 flex items-center justify-between pt-1 border-t border-stone-100">
-            <span>
-              Tìm thấy <strong>{filteredRegulations.length}</strong> / 9 điều khoản khớp với từ khóa "{searchQuery}"
+        {/* Quy Định Trả Kho & Gia Hạn Mẫu Hiển Thị Khách Hàng */}
+        <div className="mt-4 pt-4 border-t border-stone-200/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-rose-900 text-sm">Quy định trả kho và gia hạn (Công bố khách hàng)</h4>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
+              Hiển thị tại Customer Portal
             </span>
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="text-amber-800 hover:underline font-semibold cursor-pointer"
-            >
-              Xóa bộ lọc tìm kiếm
-            </button>
           </div>
-        )}
+          <div className="grid gap-3 sm:grid-cols-2 text-xs">
+            <article className="rounded-xl border border-rose-200 bg-white p-3.5">
+              <b className="text-slate-800 text-sm">Trả kho sau ngày hết hạn</b>
+              <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
+                <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
+                <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
+                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo kho được đưa vào quyết toán.</li>
+              </ul>
+            </article>
+            <article className="rounded-xl border border-amber-200 bg-white p-3.5">
+              <b className="text-slate-800 text-sm">Gia hạn kỳ thuê</b>
+              <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
+                <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
+                <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
+              </ul>
+            </article>
+          </div>
+          <p className="rounded-lg bg-rose-50 border border-rose-200/70 p-3 text-xs leading-5 text-rose-900 font-medium">
+            Ví dụ tính phạt mẫu (giá kho 3.000.000 đ/tháng): 3.000.000 đ ÷ 30 × 50% = 50.000 đ/ngày. Trễ 4 ngày tương ứng 200.000 đ (khấu trừ trực tiếp vào tiền cọc đảm bảo kho khi quyết toán).
+          </p>
+        </div>
       </Card>
 
       {/* ── ARTICLES GRID / LIST ── */}
-      <div className="space-y-4">
-        {filteredRegulations.length === 0 ? (
-          <Card className="p-12 text-center border border-dashed border-stone-300 bg-white">
-            <p className="text-sm font-semibold text-slate-700">Không tìm thấy điều khoản phù hợp</p>
-            <p className="text-xs text-slate-400 mt-1">Hãy thử tìm kiếm với từ khóa khác hoặc chuyển nhóm danh mục.</p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-4"
-              onClick={() => {
-                setSearchQuery('')
-                setActiveCategory('all')
-              }}
-            >
-              Xem lại tất cả điều khoản
-            </Button>
-          </Card>
-        ) : (
-          filteredRegulations.map((art) => (
-            <Card
-              key={art.id}
-              className="p-5 sm:p-6 border border-stone-200/90 shadow-2xs bg-white hover:border-amber-300 transition-all duration-200"
-            >
-              {/* Article Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-stone-100">
-                <div className="flex items-center gap-3">
-                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${art.iconBg}`}>
-                    {art.articleNumber}
+      <div id="regulations-articles" className="space-y-4">
+        {REGULATIONS.map((art) => (
+          <Card
+            key={art.id}
+            className="p-5 sm:p-6 border border-stone-200/90 shadow-2xs bg-white hover:border-amber-300 transition-all duration-200"
+          >
+            {/* Article Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-4 border-b border-stone-100">
+              <div className="flex items-center gap-3">
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${art.iconBg}`}>
+                  {art.articleNumber}
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                  {art.title}
+                </h2>
+              </div>
+              <div className="self-start sm:self-auto">
+                <Badge variant={art.badgeVariant}>
+                  {art.categoryLabel}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Clauses List */}
+            <div className="mt-4 space-y-3">
+              {art.clauses.map((clause, idx) => (
+                <div key={idx} className="flex items-start gap-3 text-sm text-slate-700 leading-relaxed">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 text-stone-600 font-bold text-xs shrink-0 mt-0.5 border border-stone-200">
+                    {idx + 1}
                   </span>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
-                    {art.title}
-                  </h2>
+                  <span className="flex-1">{clause}</span>
                 </div>
-                <div className="self-start sm:self-auto">
-                  <Badge variant={art.badgeVariant}>
-                    {art.categoryLabel}
-                  </Badge>
-                </div>
-              </div>
+              ))}
+            </div>
 
-              {/* Clauses List */}
-              <div className="mt-4 space-y-3">
-                {art.clauses.map((clause, idx) => (
-                  <div key={idx} className="flex items-start gap-3 text-sm text-slate-700 leading-relaxed">
-                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 text-stone-600 font-bold text-xs shrink-0 mt-0.5 border border-stone-200">
-                      {idx + 1}
-                    </span>
-                    <span className="flex-1">{clause}</span>
-                  </div>
-                ))}
+            {/* Important Note (if any) */}
+            {art.importantNote && (
+              <div className="mt-4 p-3.5 rounded-xl bg-rose-50/80 border border-rose-200/90 flex items-start gap-3">
+                <span className="text-rose-600 font-bold text-sm shrink-0">⚠️ Lưu ý quan trọng:</span>
+                <p className="text-xs text-rose-800 leading-relaxed font-medium">{art.importantNote}</p>
               </div>
-
-              {/* Important Note (if any) */}
-              {art.importantNote && (
-                <div className="mt-4 p-3.5 rounded-xl bg-rose-50/80 border border-rose-200/90 flex items-start gap-3">
-                  <span className="text-rose-600 font-bold text-sm shrink-0">⚠️ Lưu ý quan trọng:</span>
-                  <p className="text-xs text-rose-800 leading-relaxed font-medium">{art.importantNote}</p>
-                </div>
-              )}
-            </Card>
-          ))
-        )}
+            )}
+          </Card>
+        ))}
       </div>
 
       {/* ── FOOTER LEGAL NOTICE ── */}

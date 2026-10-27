@@ -52,7 +52,7 @@ Gói ngắn nhất API cung cấp là 3 tháng. Không tự tạo gói 1 tháng,
 | Tạo đặt chỗ | POST `/api/customer/reservations`, Idempotency-Key | PASS, HTTP 200, AWAITING_EMAIL |
 | Lấy mã phát triển và xác minh | POST email-verification/resend, email-verification | PASS, HTTP 200, AWAITING_PAYMENT |
 | Thanh toán mô phỏng | POST simulated-payment, Idempotency-Key | PASS, HTTP 200, CONFIRMED |
-| Manager phân gian | GET available-units, POST `/api/staff/unit-assignments/{reservationId}` | PASS, HTTP 200, UNIT_RESERVED |
+| Manager phân gian | GET available-units, POST `/api/manager/unit-assignments/{reservationId}` | PASS, HTTP 200, UNIT_RESERVED |
 | Staff lên lịch | POST `/api/staff/check-ins/reservations/{reservationId}/schedule` | PASS, HTTP 200, READY_FOR_CHECKIN |
 | Upload fixture | POST `/api/files`, multipart CHECK_IN | PASS, HTTP 200, file gắn đúng check-in |
 | Staff hoàn tất bàn giao | POST `/api/staff/check-ins/{checkInId}/complete` | PASS, HTTP 200, AWAITING_CUSTOMER_RECEIPT |

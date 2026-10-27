@@ -3,6 +3,7 @@ import { STAFF_ROSTER } from '../data/demoDatabase'
 import type { User } from '../types'
 import type { StorageHold } from '../types/storageHub'
 import { DEMO_DATA_ENABLED } from '../config/runtime'
+import { PUBLIC_SUPPORT_UNKNOWN } from './supportPublicKnowledgeApi'
 
 export interface CustomerRentalRecord {
   id: string
@@ -31,7 +32,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Mã PIN không hoạt động / Bị lỗi bàn phím',
     category: 'Access & Entry',
     keywords: ['pin', 'mã pin', 'mã số', 'bàn phím', 'mã truy cập', 'passcode', 'keypad', 'cổng', 'khóa số'],
-    answer: 'Mã PIN cá nhân reset tự động lúc 00:00 hằng ngày để bảo mật. Bạn vui lòng vào mục "Hồ sơ thuê của tôi → Mã truy cập" để lấy mã đồng bộ mới nhất trước khi nhập tại trụ kiểm soát.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Vào Hồ sơ thuê → Mã truy cập'
   },
@@ -40,7 +41,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Cổng ra vào không phản hồi / Kẹt cửa cuốn',
     category: 'Access & Entry',
     keywords: ['cổng không mở', 'kẹt cổng', 'không vào được', 'cửa cuốn', 'kẹt cửa', 'không mở được', 'gate', 'stuck', 'không phản hồi', 'lỗi cổng'],
-    answer: 'Đây là sự cố cơ điện/phần cứng tại cơ sở cần nhân viên kỹ thuật kiểm tra và xử lý trực tiếp. Trợ lý sẽ chuyển ngay phiếu khẩn cấp cho nhân viên đang trực ca tại cơ sở của bạn.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: false,
     isUrgent: true,
     actionHint: 'Chuyển nhân viên kỹ thuật trực ca ngay'
@@ -50,7 +51,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Cách gia hạn hợp đồng thuê kho',
     category: 'Hợp đồng',
     keywords: ['gia hạn', 'thêm tháng', 'kéo dài', 'tiếp tục thuê', 'hợp đồng', 'renew', 'extension'],
-    answer: 'Bạn vào mục "Hồ sơ thuê của tôi", chọn yêu cầu gia hạn đã được xác nhận và bấm "Thanh toán toàn kỳ" khi hệ thống mở thanh toán. Renewal mới không thu cọc riêng; khách thanh toán một lần toàn bộ tiền thuê sau giảm giá qua VNPay Sandbox. Nếu chưa thấy nút thanh toán, hệ thống chưa xác nhận đủ điều kiện tài chính, hạn xử lý và giữ chỗ.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Vào Hồ sơ thuê → Gia hạn'
   },
@@ -59,16 +60,16 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Muốn đổi sang gian kho lớn/nhỏ hơn',
     category: 'Hợp đồng',
     keywords: ['đổi kho', 'kho lớn hơn', 'kho nhỏ hơn', 'chuyển kho', 'đổi phòng', 'nâng cấp kho', 'upgrade'],
-    answer: 'Bạn có thể xem các cỡ kho trống ở mục "Cỡ kho khả dụng". Khi chọn được gian kho mới, vui lòng tạo yêu cầu chuyển đổi trong mục Hỗ trợ để nhân viên kết chuyển hợp đồng và tiền cọc sang kho mới.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Xem Cỡ kho khả dụng hoặc Tạo yêu cầu đổi kho'
   },
   {
     id: 'faq-payment-method',
-    question: 'Cách thanh toán phí thuê kho định kỳ',
+    question: 'Thanh toán và xem giao dịch ở đâu?',
     category: 'Thanh toán',
     keywords: ['thanh toán', 'chuyển khoản', 'nộp tiền', 'trả tiền', 'hóa đơn', 'payment', 'bill', 'banking', 'momo', 'qr'],
-    answer: 'Vào mục "Lịch sử thanh toán", chọn kỳ cước chưa thanh toán và bấm "Thanh toán ngay". Hệ thống hỗ trợ quét mã QR chuyển khoản liên ngân hàng 24/7 (tự động gạch nợ sau 30 giây) hoặc thẻ thanh toán quốc tế.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Vào Lịch sử thanh toán'
   },
@@ -77,7 +78,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Phí phạt trễ hạn thanh toán tính như thế nào',
     category: 'Thanh toán',
     keywords: ['phí trễ', 'phạt trễ', 'quá hạn', 'trễ tiền', 'late fee', 'quá ngày'],
-    answer: 'Khoản quá hạn không có thời gian ân hạn. Từ ngày liền kề sau ngày đến hạn, phí phụ thu mỗi ngày bằng 50% đơn giá thuê ngày theo hợp đồng. Chi tiết số tiền trễ hạn hiển thị trực tiếp trên hóa đơn kỳ đó.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Kiểm tra hóa đơn tại Lịch sử thanh toán'
   },
@@ -86,7 +87,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Quên mật khẩu / Cần đặt lại mật khẩu',
     category: 'Tài khoản',
     keywords: ['mật khẩu', 'quên mật khẩu', 'password', 'đổi pass', 'reset pass', 'đăng nhập'],
-    answer: 'Bạn bấm "Quên mật khẩu" tại màn hình đăng nhập hoặc vào mục "Hồ sơ cá nhân → Đổi mật khẩu". Mã xác minh OTP sẽ được gửi về thư điện tử đã đăng ký.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Vào Hồ sơ cá nhân → Đổi mật khẩu'
   },
@@ -95,7 +96,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Tư vấn chọn kích thước kho phù hợp với đồ đạc',
     category: 'Tư vấn kho',
     keywords: ['kích thước', 'chọn kho', 'diện tích', 'sức chứa', 'chứa được bao nhiêu', 'kho s', 'kho m', 'kho l', 'kho xl', 'cỡ kho'],
-    answer: 'Kho S (8 m² - 400 m³) phù hợp đồ gia đình 1-2 phòng; Kho M (12.6 m²) cho căn hộ 3 phòng; Kho L & XL cho doanh nghiệp lưu trữ tài liệu, pallet và hàng thương mại điện tử. Bạn có thể dùng tính năng tính thể tích trong tab "Tìm gian kho".',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Khám phá Cỡ kho khả dụng'
   },
@@ -104,7 +105,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Sự cố đồ đạc trong kho bị hư hỏng / thấm dột',
     category: 'Khiếu nại & Sự cố',
     keywords: ['hư hỏng', 'mất đồ', 'thấm dột', 'ngập nước', 'mốc', 'cháy', 'bể', 'rách', 'chuột', 'côn trùng', 'sự cố', 'bồi thường'],
-    answer: 'Đây là trường hợp khẩn cấp liên quan đến bảo toàn tài sản và bảo hiểm kho bãi. Trợ lý sẽ gửi thông báo khẩn cấp đến Quản lý ca trực và nhân viên cơ sở để có mặt niêm phong, lập biên bản hiện trường với bạn ngay lập tức.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: false,
     isUrgent: true,
     actionHint: 'Khẩn cấp - Kích hoạt hỗ trợ tại chỗ'
@@ -114,7 +115,7 @@ export const SUPPORT_FAQS: FAQItem[] = [
     question: 'Quy trình trả kho và hoàn tiền đảm bảo (tiền cọc)',
     category: 'Hợp đồng',
     keywords: ['trả kho', 'thanh lý', 'nghiệm thu', 'lấy lại cọc', 'hoàn cọc', 'chấm dứt hợp đồng', 'dọn kho'],
-    answer: 'Bạn vào "Hồ sơ thuê của tôi", chọn hợp đồng và bấm "Yêu cầu trả kho", sau đó chọn ngày hẹn bàn giao. Sau khi nhân viên nghiệm thu gian kho sạch sẽ và không hư hại, số tiền đảm bảo sẽ được hoàn trả qua tài khoản ngân hàng trong 12 giờ.',
+    answer: PUBLIC_SUPPORT_UNKNOWN,
     solved: true,
     actionHint: 'Vào Hồ sơ thuê → Yêu cầu trả kho'
   }
@@ -271,8 +272,8 @@ export function assignStaffWithWorkloadAndUrgency(params: {
       priority: isUrgent ? 'high' : 'medium',
       estimatedWaitMinutes: isUrgent ? 5 : 480,
       estimatedWaitLabel: isUrgent
-        ? '🚨 Kênh khẩn cấp 24/7 — Quản lý trực ca xử lý ngay trong 5-10 phút'
-        : '🌙 Đầu ca sáng mai (08:00)',
+        ? 'Kênh khẩn cấp 24/7 — Quản lý trực ca xử lý ngay trong 5-10 phút'
+        : 'Đầu ca sáng mai (08:00)',
       queuePosition: 1,
       emergencyHotline: '1900 8820',
       emergencyManagerName: dutyManager.name,
@@ -365,24 +366,8 @@ export function matchQueryAgainstFAQ(query: string): FAQItem | null {
   const exact = SUPPORT_FAQS.find(f => f.question.toLowerCase() === normalized)
   if (exact) return exact
 
-  // 2. Keyword match with scoring
-  let bestMatch: FAQItem | null = null
-  let highestScore = 0
-
-  for (const faq of SUPPORT_FAQS) {
-    let score = 0
-    for (const kw of faq.keywords) {
-      if (normalized.includes(kw)) {
-        score += kw.length // longer matching keyword gives higher confidence
-      }
-    }
-    if (score > highestScore && score >= 3) {
-      highestScore = score
-      bestMatch = faq
-    }
-  }
-
-  return bestMatch
+  // A shared word does not establish that an out-of-scope question is covered.
+  return null
 }
 
 /**

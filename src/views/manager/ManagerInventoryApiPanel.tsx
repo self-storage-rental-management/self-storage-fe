@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import ManagerWarehouseImageField from "./ManagerWarehouseImageField"
 import {
   Badge,
@@ -15,6 +15,7 @@ import {
   Tr,
 } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
+import { ApiClientError } from "../../services/apiClient"
 import { Icon } from "../../components/Layout"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { formatVndAmount } from "../../i18n/currency"
@@ -42,8 +43,12 @@ import {
   type InventoryFilters,
   type InventoryUnit,
 } from "./managerInventoryApi"
-import { createManagerUnitType, updateManagerUnitType, deleteManagerUnitType } from "../../services/managerUnitTypeApi"
+import { archiveManagerUnitType, createManagerUnitType, updateManagerUnitType } from "../../services/managerUnitTypeApi"
 import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
+import { generateUnitTypeCode, previewPhysicalUnitCodes } from "./managerUnitCodeHelpers"
+import ManagerGoodsCatalogPanel from "./ManagerGoodsCatalogPanel"
+import { getManagerGoodsCatalog } from "../../services/managerGoodsCatalogApi"
+import type { GoodsCatalog } from "../../services/customerReservationApi"
 
 const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
@@ -52,6 +57,8 @@ const statusLabels: Record<InventoryUnit["status"], string> = {
   assigned: "Đã phân gian",
   held: "Đang giữ tạm thời",
   maintenance: "Đang bảo trì",
+  inactive: "Tạm ngưng",
+  archived: "Đã lưu trữ",
 }
 const statusClasses: Record<InventoryUnit["status"], string> = {
   available: "bg-green-100 text-green-700",
@@ -60,6 +67,8 @@ const statusClasses: Record<InventoryUnit["status"], string> = {
   assigned: "bg-violet-50 text-violet-700",
   held: "bg-amber-50 text-amber-800",
   maintenance: "bg-red-50 text-red-700",
+  inactive: "bg-stone-100 text-stone-700",
+  archived: "bg-stone-200 text-stone-600",
 }
 const inputClass =
   "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -76,15 +85,16 @@ const dimensions = (u: InventoryUnit) =>
     ? missing
     : `${u.definition.lengthM?.toLocaleString("vi-VN")} × ${u.definition.widthM?.toLocaleString("vi-VN")} × ${u.definition.heightM?.toLocaleString("vi-VN")} m`
 
-export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenance }: {
+export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenance, view = 'info' }: {
   onOpenRental?: (rentalId: string) => void
   onOpenMaintenance?: (unitId: string, unitCode: string) => void
+  view?: 'info' | 'assignment'
 } = {}) {
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const identity = `${actor?.id}:${actor?.status}:${JSON.stringify(actor?.roles)}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${facilityId}`
   return (
-    <div className="fade-in space-y-6">
+    <div className="fade-in min-w-0 max-w-full space-y-6">
       {!actor ||
       actor.status !== "ACTIVE" ||
       !actor.roles.includes("MANAGER") ? (
@@ -103,6 +113,7 @@ export default function ManagerInventoryApiPanel({ onOpenRental, onOpenMaintenan
             facilityId={facilityId}
             onOpenRental={onOpenRental}
             onOpenMaintenance={onOpenMaintenance}
+            view={view}
           />
         </>
       )}
@@ -115,24 +126,32 @@ function InventoryRead({
   facilityId,
   onOpenRental,
   onOpenMaintenance,
+  view,
 }: {
   identity: string
   facilityId: string
   onOpenRental?: (rentalId: string) => void
   onOpenMaintenance?: (unitId: string, unitCode: string) => void
+  view: 'info' | 'assignment'
 }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [editingType, setEditingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
   const [reviewNotice, setReviewNotice] = useState('')
-  const [viewingType, setViewingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
   const [deletingType, setDeletingType] = useState<{ id: string; name: string }>()
   const [actionError, setActionError] = useState<string>()
   const [actionBusy, setActionBusy] = useState(false)
-  const read = useRentalApiResource(identity, () =>
-    loadManagerInventory(facilityId),
-  )
+  const read = useRentalApiResource(identity, async () => {
+    try { return await loadManagerInventory(facilityId) }
+    catch (error) {
+      if (view === 'assignment' && error instanceof ApiClientError && error.status === 404) return { catalog: [], units: [] }
+      throw error
+    }
+  })
   const rentals = useRentalApiResource(`${identity}:rentals`, () =>
     loadInventoryRentals(facilityId),
+  )
+  const unitTypes = useRentalApiResource(`${identity}:unit-types`, async () =>
+    (await listAccessibleUnitTypes(facilityId, 0, 100)).data,
   )
   const actor = getAuthenticatedActor()
   const facilityName = (facilityId && actor?.facilityNames?.[facilityId]) || Object.values(actor?.facilityNames || {})[0] || 'Cơ sở được phân công'
@@ -154,12 +173,13 @@ function InventoryRead({
     )
   return read.data ? (
     <>
+      {view === 'assignment' ? <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} showCatalog={false} title="Danh sách gian kho để phân" /> : <>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-stone-200 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-purple-700">Cơ sở phụ trách</span>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-800">
-              🏢 {facilityName}
+              {facilityName}
             </span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-stone-900 mt-1">Quản lý gian kho thực tế</h2>
@@ -170,34 +190,44 @@ function InventoryRead({
         </Button>
       </div>
       {actionError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
-      <Card className="p-4 space-y-3">
-        <h3 className="font-bold">Quản lý loại kho thực tế</h3>
-        {read.data.catalog.map(type => <div key={type.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3">
-          <div><b>{type.code} · {type.name}</b><p className="text-xs text-stone-500">{type.total} gian kho</p></div>
-          <div className="flex gap-2">
+      <Card className="space-y-4 p-5">
+        <div><h3 className="text-lg font-bold">Thông tin các loại kho</h3><p className="mt-1 text-sm text-stone-500">Thông số, sức chứa và tình trạng khai thác của từng loại kho tại cơ sở.</p></div>
+        <div className="grid grid-cols-1 gap-4">
+        {read.data.catalog.map(type => {
+          const detail = unitTypes.data?.find(item => item.id === type.id)
+          const unit = read.data?.units.find(item => item.unitTypeId === type.id)
+          return <article key={type.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 p-4">
+              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4><Badge variant={detail?.status === 'active' ? 'success' : 'muted'}>{detail ? (({ active: 'Đang khai thác', awaiting_pricing: 'Chờ định giá', draft: 'Đang thiết lập', inactive: 'Tạm ngưng', archived: 'Đã lưu trữ' } as Record<string, string>)[detail.status] || 'Chưa xác định') : 'Đang tải'}</Badge></div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · {type.total} gian · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
+              <div className="flex gap-2">
             <Button variant="outline" disabled={actionBusy} onClick={async () => {
               setActionBusy(true); setActionError(undefined)
               try {
-                const response = await listAccessibleUnitTypes(facilityId)
-                const detail = response.data.find(item => item.id === type.id)
-                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
-                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
-                setViewingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
-              } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
-            }}>Thông tin loại kho</Button>
-            <Button variant="outline" disabled={actionBusy} onClick={async () => {
-              setActionBusy(true); setActionError(undefined)
-              try {
-                const response = await listAccessibleUnitTypes(facilityId)
-                const detail = response.data.find(item => item.id === type.id)
-                if (!detail) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
-                const unit = read.data?.units.find(item => item.unitTypeId === type.id)
-                setEditingType({ ...detail, floor: unit?.floor || '', zone: unit?.zone || '' })
+                const loaded = detail || (await listAccessibleUnitTypes(facilityId, 0, 100)).data.find(item => item.id === type.id)
+                if (!loaded) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
+                setEditingType({ ...loaded, floor: unit?.floor || '', zone: unit?.zone || '' })
               } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
             }}>Chỉnh sửa</Button>
-            <Button variant="outline" disabled={actionBusy} onClick={() => { setActionError(undefined); setDeletingType(type) }}>Xóa loại kho</Button>
-          </div>
-        </div>)}
+            <Button variant="outline" disabled={actionBusy} onClick={() => { setActionError(undefined); setDeletingType(type) }}>Lưu trữ loại kho</Button>
+              </div>
+            </div>
+            {detail ? <div className="space-y-4 p-4">
+              <div className="flex gap-4">{detail.imageUrl ? <img src={detail.imageUrl} alt={detail.name} className="h-24 w-32 shrink-0 rounded-xl object-cover" /> : <div className="grid h-24 w-32 shrink-0 place-items-center rounded-xl bg-stone-100 text-xs text-stone-500">Chưa có ảnh</div>}<p className="line-clamp-4 text-sm leading-6 text-stone-600">{detail.description || 'Chưa có mô tả cho loại kho này.'}</p></div>
+              <dl className="grid grid-cols-2 gap-3 rounded-xl bg-stone-50 p-3 sm:grid-cols-4">
+                {([['Diện tích', `${detail.areaM2} m²`], ['Thể tích', `${detail.volumeM3} m³`], ['Tải trọng', `${detail.maxLoadKg} kg`], ['Giá mỗi tháng', Number(detail.monthlyPrice) > 0 ? formatVndAmount(detail.monthlyPrice) : 'Chờ định giá']] as [string, string][]).map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 text-sm font-bold text-stone-900">{value}</dd></div>)}
+              </dl>
+              <dl className="grid gap-x-5 gap-y-3 text-sm sm:grid-cols-2">
+                <div><dt className="text-xs text-stone-500">Kích thước kho</dt><dd className="mt-1 font-medium">{detail.lengthM} × {detail.widthM} × {detail.heightM} m</dd></div>
+                <div><dt className="text-xs text-stone-500">Tình trạng sử dụng</dt><dd className="mt-1 font-medium">{detail.availableCount ?? 0} còn trống · {detail.occupiedCount ?? 0} đang dùng</dd></div>
+                <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
+                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '—'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
+                <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
+                <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo kho</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
+              </dl>
+            </div> : <p className="p-4 text-sm text-stone-500">Đang tải thông tin chi tiết loại kho...</p>}
+          </article>
+        })}
+        </div>
         {read.data.catalog.length === 0 && (
           <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50/80 p-6 text-center space-y-2">
             <p className="text-sm font-semibold text-stone-700">Cơ sở {facilityName} chưa có loại gian kho thực tế nào</p>
@@ -213,70 +243,38 @@ function InventoryRead({
         )}
       </Card>
       <InventoryContent inventory={read.data} rentals={rentals} identity={identity} onOpenRental={onOpenRental} onOpenMaintenance={onOpenMaintenance} />
-      <Modal open={!!viewingType} onClose={() => setViewingType(undefined)} title="Thông tin loại kho thực tế" size="xl">
-        {viewingType && <div className="space-y-4">
-          <div className="flex flex-col gap-4 rounded-xl bg-stone-50 p-4 sm:flex-row">
-            {viewingType.imageUrl && <img src={viewingType.imageUrl} alt={viewingType.name} className="h-32 w-full rounded-lg object-cover sm:w-44" />}
-            <div className="min-w-0"><h3 className="font-semibold">{viewingType.code} · {viewingType.name}</h3><p className="mt-2 whitespace-pre-wrap break-words text-stone-600">{viewingType.description || 'Chưa có mô tả'}</p></div>
-          </div>
-          {viewingType.detailImageUrl && <figure className="rounded-xl border border-stone-200 p-4">
-            <figcaption className="mb-2 text-sm font-semibold">Ảnh chi tiết / sơ đồ bố trí</figcaption>
-            <img src={viewingType.detailImageUrl} alt={`Sơ đồ ${viewingType.name}`} className="max-h-72 w-full object-contain" />
-          </figure>}
-          {(() => {
-            const fields = [
-              ['Kích thước kho (D × R × C)', `${viewingType.lengthM} × ${viewingType.widthM} × ${viewingType.heightM} m`],
-              ['Diện tích', `${viewingType.areaM2} m²`],
-              ['Thể tích', `${viewingType.volumeM3} m³`],
-              ['Tải trọng tối đa', `${viewingType.maxLoadKg} kg`],
-              ['Số khung kệ', viewingType.rackCount],
-              ['Kích thước khung (D × R × C)', `${viewingType.rackLengthM} × ${viewingType.rackWidthM} × ${viewingType.rackHeightM} m`],
-              ['Chiều rộng lối đi (m)', viewingType.aisleWidthM],
-              ['Xe đẩy hỗ trợ', viewingType.trolleyType],
-              ['Sức chứa thùng nhỏ', viewingType.smallBoxCapacity],
-              ['Sức chứa thùng lớn', viewingType.largeBoxCapacity],
-              ['Tổng số gian', viewingType.totalCount],
-              ['Đang sử dụng', viewingType.occupiedCount],
-              ['Còn trống', viewingType.availableCount],
-              ['Giá thuê / tháng', Number(viewingType.monthlyPrice) > 0 ? formatVndAmount(viewingType.monthlyPrice) : 'Chờ BO định giá'],
-              ['Tiền duy trì CSVC', formatVndAmount(viewingType.securityDepositAmount)],
-              ['Trạng thái', ({ active: 'Đã công bố', awaiting_pricing: 'Chờ BO định giá', draft: 'Đang thiết lập', inactive: 'Ngừng hoạt động' } as Record<string, string>)[viewingType.status] || viewingType.status],
-            ]
-            const groups = [
-              { title: 'Kích thước và tải trọng', items: fields.slice(0, 4) },
-              { title: 'Khung kệ và thiết bị hỗ trợ', items: fields.slice(4, 8) },
-              { title: 'Sức chứa thùng', items: fields.slice(8, 10) },
-              { title: 'Số lượng và giá thuê', items: fields.slice(10) },
-            ]
-            return <div className="grid gap-4 lg:grid-cols-2">
-              {groups.map((group, index) => <section key={group.title} className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 ${index >= 2 ? 'lg:col-span-2' : ''}`}>
-                <h4 className="border-b border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800">{group.title}</h4>
-                <dl className={index >= 2 ? `grid gap-px bg-stone-200 sm:grid-cols-2 ${index === 3 ? 'lg:grid-cols-3' : ''}` : 'divide-y divide-stone-100 px-4'}>
-                  {group.items.map(([label, value]) => <div key={String(label)} className={index >= 2 ? 'min-w-0 bg-white px-4 py-3' : 'grid grid-cols-1 gap-1 py-3 sm:grid-cols-2 sm:gap-3'}>
-                    <dt className={index >= 2 ? 'mb-1 text-xs text-stone-500' : 'text-sm text-stone-500'}>{label}</dt>
-                    <dd className={`min-w-0 whitespace-pre-wrap break-words font-medium text-stone-900 ${index >= 2 ? 'text-base' : 'text-sm'}`}>{value == null || value === '' ? 'Chưa khai báo' : value}</dd>
-                  </div>)}
-                </dl>
-              </section>)}
-            </div>
-          })()}
-          <div className="flex justify-end border-t border-stone-200 pt-4"><Button variant="outline" onClick={() => setViewingType(undefined)}>Đóng</Button></div>
-        </div>}
-      </Modal>
-      <CreateUnitTypeModal open={createOpen} facilityId={facilityId} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); read.refresh() }} />
+      <ManagerGoodsCatalogPanel />
+      <CreateUnitTypeModal
+        open={createOpen}
+        facilityId={facilityId}
+        existingCodes={read.data.catalog.map(c => c.code)}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => { setCreateOpen(false); read.refresh() }}
+      />
       {reviewNotice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{reviewNotice}</p>}
-      {editingType && <CreateUnitTypeModal key={editingType.id} open facilityId={facilityId} initial={editingType} onClose={() => setEditingType(undefined)} onCreated={() => { setEditingType(undefined); setReviewNotice('Đã gửi thay đổi cho BO duyệt. Customer vẫn thấy thông tin đã được duyệt trước đó.'); read.refresh() }} />}
-      <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Xóa loại kho">
-        <div className="space-y-4"><p>Xóa loại kho <b>{deletingType?.name}</b> và các gian trống thuộc loại này? Loại kho có đơn đặt hoặc hồ sơ liên quan không được xóa.</p>
+      {editingType && (
+        <CreateUnitTypeModal
+          key={editingType.id}
+          open
+          facilityId={facilityId}
+          initial={editingType}
+          existingCodes={read.data.catalog.map(c => c.code)}
+          onClose={() => setEditingType(undefined)}
+          onCreated={() => { setEditingType(undefined); setReviewNotice('Đã lưu thay đổi loại kho và cập nhật số lượng gian kho thành công.'); read.refresh() }}
+        />
+      )}
+      <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Lưu trữ loại kho">
+        <div className="space-y-4"><p>Chuyển loại kho <b>{deletingType?.name}</b> sang trạng thái lưu trữ? Dữ liệu lịch sử và các đơn đặt chỗ cũ vẫn được giữ nguyên.</p>
           {actionError && <p role="alert" className="text-sm text-red-700">{actionError}</p>}
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={actionBusy} onClick={() => setDeletingType(undefined)}>Hủy</Button><Button disabled={actionBusy} onClick={async () => {
             if (!deletingType) return
             setActionBusy(true); setActionError(undefined)
-            try { await deleteManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh() }
+            try { await archiveManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh() }
             catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
-          }}>{actionBusy ? 'Đang xóa...' : 'Xác nhận xóa'}</Button></div>
+          }}>{actionBusy ? 'Đang lưu trữ...' : 'Xác nhận lưu trữ'}</Button></div>
         </div>
       </Modal>
+      </>}
     </>
   ) : (
     <Card className="p-5" role="alert">
@@ -285,9 +283,10 @@ function InventoryRead({
   )
 }
 
-function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: {
+function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, onCreated, initial }: {
   open: boolean
   facilityId: string
+  existingCodes?: string[]
   onClose: () => void
   onCreated: () => void
   initial?: CustomerUnitType & { floor?: string; zone?: string }
@@ -300,18 +299,62 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     ...(initial ? Object.fromEntries(Object.entries(initial).filter(([key]) => ['code', 'name', 'description', 'lengthM', 'widthM', 'heightM', 'maxLoadKg', 'rackCount', 'rackLengthM', 'rackWidthM', 'rackHeightM', 'aisleWidthM', 'trolleyType', 'smallBoxCapacity', 'largeBoxCapacity', 'floor', 'zone', 'imageUrl'].includes(key)).map(([key, value]) => [key, value == null ? '' : String(value)])) : {}),
     ...(initial ? { physicalUnitCount: String(initial.totalCount ?? 0) } : {}),
   })
+  const [isAutoCode, setIsAutoCode] = useState(!initial)
   const [busy, setBusy] = useState(false)
   const [imageReading, setImageReading] = useState(false)
   const [error, setError] = useState<string>()
+  const [goodsCatalog, setGoodsCatalog] = useState<GoodsCatalog>()
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(initial?.acceptedGoodsCategoryIds || [])
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>(initial?.acceptedGoodsMaterialIds || [])
 
+  useEffect(() => {
+    if (!open) return
+    setSelectedCategories(initial?.acceptedGoodsCategoryIds || [])
+    setSelectedMaterials(initial?.acceptedGoodsMaterialIds || [])
+    getManagerGoodsCatalog().then(setGoodsCatalog).catch(cause => setError(managerDisplayError(cause)))
+  }, [open, initial?.id])
+
+  const handleNameChange = (newName: string) => {
+    setForm(current => {
+      const next = { ...current, name: newName }
+      if (isAutoCode && !initial) {
+        next.code = newName.trim() ? generateUnitTypeCode(newName, existingCodes) : ''
+      }
+      return next
+    })
+  }
+
+  const toggleAutoCode = () => {
+    if (isAutoCode) {
+      setIsAutoCode(false)
+    } else {
+      setIsAutoCode(true)
+      const nextCode = form.name.trim() ? generateUnitTypeCode(form.name, existingCodes) : ''
+      setForm(current => ({ ...current, code: nextCode }))
+    }
+  }
+
+  const isDuplicateCode = useMemo(() => {
+    const code = form.code.trim().toUpperCase()
+    if (!code) return false
+    return existingCodes.some(
+      c => c.trim().toUpperCase() === code && (!initial || c.trim().toUpperCase() !== initial.code.trim().toUpperCase())
+    )
+  }, [form.code, existingCodes, initial])
 
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
-      <input className={`${inputClass} mt-1 disabled:bg-stone-100`} disabled={busy || (!!initial && ['code', 'physicalUnitCount', 'floor', 'zone'].includes(key))} type={type} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />
+      <input
+        className={`${inputClass} mt-1 disabled:bg-stone-100`}
+        disabled={busy || (!!initial && key === 'code')}
+        type={type}
+        value={form[key]}
+        onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))}
+      />
     </label>
   )
   const submit = async () => {
-    if (imageReading) return
+    if (imageReading || isDuplicateCode) return
     setBusy(true); setError(undefined)
     try {
       const input = {
@@ -324,6 +367,8 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
         physicalUnitCount: Number(form.physicalUnitCount), floor: form.floor.trim(), zone: form.zone.trim(),
         imageUrl: form.imageUrl.trim() || null,
         detailImageUrl: form.detailImageUrl.trim() || null,
+        acceptedGoodsCategoryIds: selectedCategories,
+        acceptedGoodsMaterialIds: selectedMaterials,
       }
       if (initial) await updateManagerUnitType(initial.id, input)
       else await createManagerUnitType(facilityId, input)
@@ -336,7 +381,81 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
     <div className="space-y-5">
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Thông tin loại kho</h3>
-        <div className="grid gap-4 sm:grid-cols-2">{field('code', 'Mã loại kho')}{field('name', 'Tên loại kho')}</div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Tên loại kho */}
+          <label className="block text-sm font-medium text-stone-700">
+            Tên loại kho *
+            <input
+              className={`${inputClass} mt-1`}
+              disabled={busy}
+              type="text"
+              placeholder="VD: Kho Đồ Gia Đình, Kho Mini..."
+              value={form.name}
+              onChange={event => handleNameChange(event.target.value)}
+            />
+          </label>
+
+          {/* Mã loại kho (Phương án 2) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5">
+                <label className="text-sm font-medium text-stone-700">Mã loại kho *</label>
+                {isAutoCode && !initial && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    <svg className="w-2.5 h-2.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Tự động tạo
+                  </span>
+                )}
+              </div>
+
+              {!initial && (
+                <button
+                  type="button"
+                  onClick={toggleAutoCode}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:text-amber-900 transition-colors cursor-pointer"
+                  title={isAutoCode ? "Mở khóa để sửa mã thủ công" : "Khóa để tự động sinh mã theo tên loại kho"}
+                >
+                  {isAutoCode ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-stone-500 hover:text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <span>Sửa tay</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span className="text-emerald-700 font-semibold">Tự động</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            <input
+              type="text"
+              readOnly={isAutoCode || !!initial}
+              disabled={busy}
+              className={`${inputClass} font-mono font-bold uppercase ${
+                isAutoCode || !!initial
+                  ? 'border-stone-300 bg-stone-100 text-stone-700 cursor-not-allowed select-all'
+                  : isDuplicateCode || !form.code.trim()
+                    ? 'border-red-400 bg-red-50/40 text-red-900 focus:ring-red-500'
+                    : 'border-stone-300 bg-white text-stone-900 focus:ring-amber-500'
+              }`}
+              placeholder={isAutoCode ? "Tự động sinh khi nhập tên (VD: KDGD-T01)" : "VD: VIP-01, MINI-A"}
+              value={form.code}
+              onChange={event => setForm(current => ({ ...current, code: event.target.value.toUpperCase() }))}
+            />
+            {isDuplicateCode && (
+              <p className="mt-1 text-xs text-red-600 font-medium">⚠️ Mã loại kho này đã tồn tại trong cơ sở.</p>
+            )}
+          </div>
+        </div>
         <label className="block text-sm font-medium text-stone-700">Mô tả loại kho
           <textarea className={`${inputClass} mt-1`} rows={3} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} />
         </label>
@@ -364,10 +483,91 @@ function CreateUnitTypeModal({ open, facilityId, onClose, onCreated, initial }: 
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Số lượng và vị trí gian kho</h3>
-        <div className="grid gap-4 sm:grid-cols-3">{field('physicalUnitCount', 'Số gian kho', 'number')}{field('floor', 'Tầng')}{field('zone', 'Khu vực')}</div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {field('physicalUnitCount', 'Số gian kho', 'number')}
+          {field('floor', 'Tầng')}
+          {field('zone', 'Khu vực')}
+        </div>
+
+        {/* Preview mã gian kho vật lý (Cách B) */}
+        {!initial ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-950 space-y-2">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-900">
+              <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <span>Quy tắc sinh mã gian kho vật lý (Chuẩn Tòa nhà / Khách sạn):</span>
+            </div>
+            <p className="text-stone-600">
+              Định dạng: <span className="font-semibold font-mono text-stone-800">[Khu vực]-[Tầng][Số thứ tự]</span>
+              {' '}(VD: Khu A, Tầng 1 → <span className="font-mono font-semibold text-amber-800">A-101, A-102...</span>)
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/60 font-mono">
+              <span className="font-semibold text-stone-700 font-sans">Mã gian kho sinh ra:</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded bg-white border border-amber-300 font-bold text-amber-800 shadow-xs">
+                {previewPhysicalUnitCodes(form.zone, form.floor, Number(form.physicalUnitCount) || 1)}
+              </span>
+              <span className="text-xs text-stone-500 font-sans">
+                ({Number(form.physicalUnitCount) || 1} gian kho vật lý tự động tạo sẵn)
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-3.5 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-stone-800 flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Điều chỉnh số lượng gian kho:
+              </span>
+              <span className="text-stone-500">
+                Hiện có: <b className="text-stone-800">{initial.totalCount ?? 0}</b> gian
+              </span>
+            </div>
+            {(() => {
+              const current = initial.totalCount ?? 0
+              const target = Math.max(0, Number(form.physicalUnitCount) || 0)
+              const diff = target - current
+              if (diff > 0) {
+                return (
+                  <p className="text-emerald-700 font-medium">
+                    Tăng thêm <b>+{diff}</b> gian kho vật lý mới (tổng thành <b>{target}</b> gian). Hệ thống tự sinh mã mới và bỏ qua mọi mã đã từng tồn tại, kể cả mã của gian đã lưu trữ.
+                  </p>
+                )
+              }
+              if (diff < 0) {
+                return (
+                  <p className="text-amber-700 font-medium">
+                    Giảm <b>{Math.abs(diff)}</b> gian kho trống (từ <b>{current}</b> xuống <b>{target}</b> gian). Các gian được chuyển sang trạng thái Đã lưu trữ, không bị xóa và mã cũ không được tái sử dụng.
+                  </p>
+                )
+              }
+              return (
+                <p className="text-stone-600">
+                  Số lượng gian kho giữ nguyên (<b>{current}</b> gian). Bạn có thể thay đổi số lượng ở ô trên để thêm hoặc giảm gian kho.
+                </p>
+              )
+            })()}
+          </div>
+        )}
+      </section>
+      <section className="rounded-xl border border-stone-200 p-4 space-y-3">
+        <div><h3 className="font-semibold text-stone-900">Loại hàng được nhận</h3><p className="mt-1 text-sm text-stone-500">Chọn loại hàng trước, sau đó chọn các vật liệu được phép lưu trong loại kho này. Thay đổi phạm vi này cần BO xác nhận lại giá.</p></div>
+        {!goodsCatalog ? <p className="text-sm text-stone-500">Đang tải danh mục hàng hóa…</p> : goodsCatalog.categories.filter(category => category.status === 'ACTIVE').map(category => {
+          const checked = selectedCategories.includes(category.id)
+          const materials = category.materials.filter(material => material.status === 'ACTIVE')
+          return <div key={category.id} className="rounded-lg border border-stone-200 p-3">
+            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={checked} onChange={event => {
+              setSelectedCategories(current => event.target.checked ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id))
+              if (!event.target.checked) setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id)))
+            }} />{category.label}</label>
+            {checked && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{materials.map(material => <label key={material.id} className="flex items-center gap-2 rounded bg-stone-50 px-3 py-2 text-sm"><input type="checkbox" checked={selectedMaterials.includes(material.id)} onChange={event => setSelectedMaterials(current => event.target.checked ? [...new Set([...current, material.id])] : current.filter(id => id !== material.id))} />{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</label>)}</div>}
+          </div>
+        })}
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim()} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim() || isDuplicateCode || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
@@ -379,6 +579,8 @@ export function InventoryContent({
   onCreateUnitType,
   onOpenRental,
   onOpenMaintenance,
+  showCatalog = true,
+  title = "Quản lý gian kho",
 }: {
   inventory: Awaited<ReturnType<typeof loadManagerInventory>>
   rentals?: InventorySourceRead<RentalApiRecord[]>
@@ -386,6 +588,8 @@ export function InventoryContent({
   onCreateUnitType?: () => void
   onOpenRental?: (rentalId: string) => void
   onOpenMaintenance?: (unitId: string, unitCode: string) => void
+  showCatalog?: boolean
+  title?: string
 }) {
   const [filters, setFilters] = useState<InventoryFilters>(
     emptyInventoryFilters,
@@ -418,10 +622,14 @@ export function InventoryContent({
   ].sort((a, b) => a.localeCompare(b, "vi", { numeric: true }))
   const count = (status: InventoryUnit["status"]) =>
     units.filter((u) => u.status === status).length
+  const operationalCount = units.filter((u) => u.status !== "inactive" && u.status !== "archived").length
   const occupied = count("occupied")
   const change = (patch: Partial<InventoryFilters>) => {
     setFilters((f) => ({ ...f, ...patch }))
     setPage(1)
+  }
+  if (units.length === 0) {
+    return <Card className="p-6 text-center"><h3 className="font-bold text-stone-900">Chưa có gian kho</h3><p className="mt-1 text-sm text-stone-500">Cơ sở chưa có gian kho để hiển thị hoặc phân cho khách hàng.</p></Card>
   }
   const filter = (
     label: string,
@@ -446,7 +654,7 @@ export function InventoryContent({
   return (
     <>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <StatCard title="Tổng số gian" value={units.length} icon={Icon.box} />
+        <StatCard title="Tổng số gian" value={operationalCount} icon={Icon.box} />
         <StatCard
           title="Còn trống"
           value={count("available")}
@@ -464,7 +672,7 @@ export function InventoryContent({
           icon={Icon.tasks}
         />
       </div>
-      <SectionHeader title="Quản lý gian kho" action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
+      <SectionHeader title={title} action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
       <Card className="p-4">
         <div className="grid items-end gap-3 md:grid-cols-2 2xl:grid-cols-6">
           <label className="block min-w-0 text-sm font-medium text-stone-700 md:col-span-2">
@@ -483,6 +691,8 @@ export function InventoryContent({
             ["allocated", "Đã phân gian / giữ chỗ"],
             ["held", statusLabels.held],
             ["maintenance", statusLabels.maintenance],
+            ["inactive", statusLabels.inactive],
+            ["archived", statusLabels.archived],
           ])}
           {filter("Loại gian kho", "type", [
             ["all", "Tất cả loại gian kho"],
@@ -524,16 +734,16 @@ export function InventoryContent({
             ["price-desc", "Giá từ cao đến thấp"],
           ])}</div>
         </div>
-      <Card>
-        <Table tableClassName="min-w-[1100px] table-fixed">
+      <Card className="min-w-0 max-w-full overflow-hidden">
+        <Table className="max-w-full" tableClassName="min-w-[900px] table-fixed [&_th]:px-3 [&_td]:px-3">
           <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
           <colgroup>
             <col className="w-[22%]" />
-            <col className="w-[22%]" />
-            <col className="w-[15%]" />
+            <col className="w-[21%]" />
+            <col className="w-[14%]" />
             <col className="w-[15%]" />
             <col className="w-[16%]" />
-            <col className="w-[10%]" />
+            <col className="w-[12%]" />
           </colgroup>
           <Thead>
             <tr>
@@ -542,14 +752,14 @@ export function InventoryContent({
               <Th className="text-left align-middle">Vị trí</Th>
               <Th className="whitespace-nowrap text-left align-middle">Trạng thái</Th>
               <Th className="whitespace-nowrap text-right align-middle">Giá niêm yết</Th>
-              <Th className="whitespace-nowrap text-right align-middle">Thao tác</Th>
+              <Th className="whitespace-nowrap text-center align-middle">Thao tác</Th>
             </tr>
           </Thead>
           <Tbody>
             {pagination.items.map((u) => (
               <Tr key={u.id} className="odd:bg-white even:bg-stone-50/50">
                 <Td className="align-middle">
-                  <p className="break-all font-mono text-sm font-bold leading-5">{u.code}</p>
+                  <p className="break-words font-mono text-sm font-bold leading-5 [overflow-wrap:anywhere]" title={u.code}>{u.code}</p>
                 </Td>
                 <Td className="align-middle">
                   <p className="font-semibold leading-5">{typeLabel(u)}</p>
@@ -561,8 +771,8 @@ export function InventoryContent({
                 </Td>
                 <Td className="min-w-0 align-middle">
                   <div className="space-y-1">
-                    <p className="break-words [overflow-wrap:anywhere]" title={u.floor ?? undefined}>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
-                    <p className="break-words text-sm text-stone-500 [overflow-wrap:anywhere]" title={u.zone ?? undefined}>{location(u.zone)}</p>
+                    <p className="truncate" title={u.floor?.trim() ? `Tầng ${u.floor}` : missing}>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
+                    <p className="truncate text-xs text-stone-500" title={location(u.zone)}>{location(u.zone)}</p>
                   </div>
                 </Td>
                 <Td className="align-middle">
@@ -570,9 +780,9 @@ export function InventoryContent({
                     {statusLabels[u.status]}
                   </span>
                 </Td>
-                <Td className="text-right align-middle">
+                <Td className="text-right align-middle tabular-nums">
                   {u.definition.monthlyPrice == null || u.definition.monthlyPrice <= 0 ? (
-                    <p className="text-sm text-stone-500">Chờ BO định giá</p>
+                    <p className="text-sm text-stone-500">Chờ quản lý vận hành định giá</p>
                   ) : (
                     <div className="whitespace-nowrap">
                       <p className="font-semibold text-stone-800">
@@ -582,7 +792,7 @@ export function InventoryContent({
                     </div>
                   )}
                 </Td>
-                <Td className="text-right align-middle">
+                <Td className="text-center align-middle">
                   <Button
                     size="sm"
                     variant="outline"
@@ -618,46 +828,13 @@ export function InventoryContent({
           }}
         />
       </Card>
-      <div>
-        <Card>
-          <h2 className="border-b border-stone-200 p-4 font-bold">
-            Phân bổ theo khu vực
-          </h2>
-          <div className="grid gap-3 p-4 sm:grid-cols-2 2xl:grid-cols-1">
-            {[...new Set(units.map((u) => u.zone))].map((zone) => {
-              const inZone = units.filter((u) => u.zone === zone)
-              return (
-                <div
-                  key={zone ?? "no-zone"}
-                  className="rounded-xl border border-stone-200 p-4"
-                >
-                  <div className="flex justify-between gap-3">
-                    <b>{location(zone)}</b>
-                    <Badge variant="muted">{inZone.length} gian</Badge>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {Object.entries(statusLabels).map(([status, text]) => (
-                      <p key={status} className="text-xs text-stone-600">
-                        {text}:{" "}
-                        <b>
-                          {inZone.filter((u) => u.status === status).length}
-                        </b>
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-            {units.length === 0 && <p>Không có dữ liệu</p>}
-          </div>
-        </Card>
-      </div>
-      <Card>
+      {showCatalog && <><Card>
         <h2 className="border-b border-stone-200 p-4 font-bold">
           Loại gian kho tại cơ sở
         </h2>
         <FacilityCatalogTable rows={inventory.catalog} />
       </Card>
+      <ManagerGoodsCatalogPanel /></>}
       <Modal
         open={!!selected}
         onClose={() => setSelectedId(undefined)}
@@ -667,7 +844,7 @@ export function InventoryContent({
             <h2 id="modal-title" className="text-lg font-bold text-slate-900">Chi tiết gian kho · <span className="font-mono">{selected.code}</span></h2>
             <span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${statusClasses[selected.status]}`}>{statusLabels[selected.status]}</span>
           </div>
-          <button type="button" aria-label="Đóng chi tiết gian kho" className="shrink-0 rounded p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900" onClick={() => setSelectedId(undefined)}>✕</button>
+          <button type="button" aria-label="Đóng chi tiết gian kho" className="shrink-0 rounded px-2 py-1 text-sm text-stone-500 hover:bg-stone-100 hover:text-stone-900" onClick={() => setSelectedId(undefined)}>Đóng</button>
         </div>}
         contentClassName="max-h-[calc(90vh-76px)] overflow-y-auto p-4 sm:p-6"
       >
@@ -682,7 +859,7 @@ export function InventoryContent({
                 ["Diện tích", measure(selected.definition.areaM2, "m²")],
                 ["Thể tích", measure(selected.definition.volumeM3, "m³")],
                 ["Tải trọng tối đa", measure(selected.definition.maxLoadKg, "kg")],
-                ["Giá niêm yết", selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0 ? "Chờ BO định giá" : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`],
+                ["Giá niêm yết", selected.definition.monthlyPrice == null || selected.definition.monthlyPrice <= 0 ? "Chờ quản lý vận hành định giá" : `${formatVndAmount(selected.definition.monthlyPrice)}/tháng`],
               ] as [string, string][]).map(([label, value]) => <div key={label} className="min-w-0">
                 <dt className="text-xs font-medium text-slate-500">{label}</dt>
                 <dd className="mt-1 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">{value}</dd>

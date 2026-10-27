@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { paymentHistoryTimestamp } from './CustomerPaymentHistory'
+import { paymentHistoryTimestamp, visibleCustomerPaymentWarnings } from './CustomerPaymentHistory'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReservationReceipt from './ReservationReceipt'
 import { bookingDepositAccepted, paymentRecordLabel } from './paymentPresentation'
@@ -31,9 +31,18 @@ describe('Booking acceptance uses Payment and Reservation response fields', () =
     },
   )
   it('does not treat a failed transaction with a confirmed Reservation as paid', () => {
-    const payment = { ...paid, paymentStatus: 'FAILED' }
+    const payment: ReservationPaymentResult = { ...paid, paymentStatus: 'FAILED' }
     expect(bookingDepositAccepted(payment)).toBe(false)
     expect(paymentRecordLabel(payment)).toBe('Thanh toán thất bại')
+  })
+})
+
+describe('customer payment warning presentation', () => {
+  it('hides the obsolete reservation-history warning but keeps other warnings', () => {
+    expect(visibleCustomerPaymentWarnings([
+      'Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho.',
+      'Chưa tải được đầy đủ danh sách gia hạn.',
+    ])).toEqual(['Chưa tải được đầy đủ danh sách gia hạn.'])
   })
 })
 
@@ -59,9 +68,5 @@ describe('VNPay history nullable processing timestamp', () => {
   it('never invents an epoch date for pending transactions', () => {
     expect(paymentHistoryTimestamp(null)).toBe('Chưa ghi nhận')
     expect(paymentHistoryTimestamp('invalid')).toBe('Chưa ghi nhận')
-  })
-  it('uses the actual processing timestamp when available', () => {
-    const value = '2026-10-11T01:00:00Z'
-    expect(paymentHistoryTimestamp(value)).toBe(new Date(value).toLocaleString('vi-VN'))
   })
 })

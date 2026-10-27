@@ -9,26 +9,30 @@ import { activityPermissionLabel } from './adminActivityLocalization'
 
 type InternalRoleCode = Exclude<ApiRoleCode, 'CUSTOMER'>
 type DraftPermissions = Partial<Record<InternalRoleCode, string[]>>
-type PermissionModule = 'Kho bãi & vận hành' | 'Hợp đồng & dịch vụ' | 'Tài chính & báo cáo' | 'Hỗ trợ & quản trị'
+type PermissionModule = 'Tổng quan & điều hướng' | 'Kho bãi & vận hành' | 'Hợp đồng & dịch vụ' | 'Tài chính & báo cáo' | 'Hỗ trợ & quản trị'
 
 const INTERNAL_ROLE_CODES: InternalRoleCode[] = ['ADMIN', 'MANAGER', 'STAFF', 'BUSINESS']
-const MODULES: PermissionModule[] = ['Kho bãi & vận hành', 'Hợp đồng & dịch vụ', 'Tài chính & báo cáo', 'Hỗ trợ & quản trị']
-const MANAGER_REQUIRED = new Set(['reservations:approve', 'policies:update', 'staff_tasks:update', 'reports:read'])
-const STAFF_RESTRICTED = new Set(['payments:collect', 'policies:update', 'staff_tasks:update'])
-const BUSINESS_RESTRICTED = new Set(['policies:update', 'settings:manage', 'payments:collect', 'reservations:approve'])
+const MODULES: PermissionModule[] = ['Tổng quan & điều hướng', 'Kho bãi & vận hành', 'Hợp đồng & dịch vụ', 'Tài chính & báo cáo', 'Hỗ trợ & quản trị']
+const MANAGER_REQUIRED = new Set(['reservations:approve', 'storage_units:assign', 'rentals:update', 'policies:read', 'payments:read', 'payments:collect', 'payments:confirm', 'refunds:approve', 'fees:waive', 'staff_tasks:update', 'reports:read'])
+const MANAGER_RESTRICTED = new Set(['checkins:process', 'returns:process', 'refunds:execute', 'renewals:operate', 'support:update', 'policies:update'])
+const STAFF_REQUIRED = new Set(['reservations:approve', 'checkins:process', 'returns:process', 'payments:read', 'payments:collect', 'refunds:execute', 'renewals:operate', 'support:read', 'support:update'])
+const STAFF_RESTRICTED = new Set(['storage_units:assign', 'rentals:update', 'payments:confirm', 'refunds:approve', 'fees:waive', 'policies:update', 'staff_tasks:update'])
+const BUSINESS_REQUIRED = new Set(['policies:read', 'policies:update', 'refunds:approve', 'fees:waive'])
+const BUSINESS_RESTRICTED = new Set(['settings:manage', 'payments:collect', 'payments:confirm', 'reservations:approve', 'returns:process', 'rentals:update', 'checkins:process', 'storage_units:assign', 'support:update', 'renewals:operate', 'refunds:execute', 'inventory:update', 'staff_tasks:update'])
 
 const roleKey = (code: InternalRoleCode) => code.toLowerCase() as Role
 const roleDescription: Record<InternalRoleCode, string> = {
-  ADMIN: 'Quản trị tài khoản, vai trò, cài đặt và kiểm toán.',
+  ADMIN: 'Quản trị tài khoản, vai trò, cài đặt, kiểm toán và tổng quan toàn hệ thống.',
   MANAGER: 'Phê duyệt, điều phối vận hành, chính sách và báo cáo.',
-  STAFF: 'Rà soát đặt chỗ, phân kho, check-in và bàn giao cho khách hàng.',
+  STAFF: 'Rà soát đặt chỗ, check-in và bàn giao cho khách hàng.',
   BUSINESS: 'Theo dõi cơ hội, hợp đồng và thông tin thương mại.',
 }
 
 const permissionModule = (key: PermissionKey): PermissionModule => {
+  if (key === 'dashboard:read') return 'Tổng quan & điều hướng'
   if (['facilities:read', 'storage_units:read', 'reservations:read', 'storage_units:assign', 'checkins:process', 'returns:process', 'inventory:update'].includes(key)) return 'Kho bãi & vận hành'
-  if (['contracts:read', 'checkins:read', 'rentals:read', 'rentals:update'].includes(key)) return 'Hợp đồng & dịch vụ'
-  if (['payments:read', 'payments:collect', 'policies:read', 'policies:update', 'reports:read'].includes(key)) return 'Tài chính & báo cáo'
+  if (['contracts:read', 'checkins:read', 'rentals:read', 'rentals:update', 'renewals:operate'].includes(key)) return 'Hợp đồng & dịch vụ'
+  if (['payments:read', 'payments:collect', 'payments:confirm', 'refunds:approve', 'refunds:execute', 'fees:waive', 'policies:read', 'policies:update', 'reports:read'].includes(key)) return 'Tài chính & báo cáo'
   return 'Hỗ trợ & quản trị'
 }
 
@@ -42,22 +46,24 @@ const defaultPermissions = (code: InternalRoleCode) => Object.entries(DEFAULT_RO
   .map(([permission]) => permission)
 
 const directRoleDefaults: Partial<Record<InternalRoleCode, string[]>> = {
-  MANAGER: ['reservations:approve', 'storage_units:assign', 'payments:read', 'policies:read', 'payments:collect', 'inventory:update', 'policies:update', 'staff_tasks:update', 'reports:read'],
 }
 
 const isProtectedPermission = (role: InternalRoleCode, permission: string) => {
   if (role === 'ADMIN') return true
-  if (role === 'MANAGER') return MANAGER_REQUIRED.has(permission)
-  if (role === 'STAFF') return STAFF_RESTRICTED.has(permission)
-  return BUSINESS_RESTRICTED.has(permission)
+  if (role === 'MANAGER') return MANAGER_REQUIRED.has(permission) || MANAGER_RESTRICTED.has(permission)
+  if (role === 'STAFF') return STAFF_REQUIRED.has(permission) || STAFF_RESTRICTED.has(permission)
+  return BUSINESS_REQUIRED.has(permission) || BUSINESS_RESTRICTED.has(permission)
 }
 
 const permissionStateLabel = (role: InternalRoleCode, permission: string, enabled: boolean, inherited: boolean) => {
   if (inherited) return 'Kế thừa'
-  if (role === 'ADMIN') return 'Bắt buộc'
+  if (role === 'ADMIN') return enabled ? 'Đã cấp' : 'Không áp dụng'
   if (role === 'STAFF' && STAFF_RESTRICTED.has(permission)) return 'Không áp dụng'
+  if (role === 'MANAGER' && MANAGER_RESTRICTED.has(permission)) return 'Không áp dụng'
   if (role === 'BUSINESS' && BUSINESS_RESTRICTED.has(permission)) return 'Không áp dụng'
-  if (role === 'MANAGER' && MANAGER_REQUIRED.has(permission)) return 'Bắt buộc'
+  if ((role === 'MANAGER' && MANAGER_REQUIRED.has(permission))
+    || (role === 'STAFF' && STAFF_REQUIRED.has(permission))
+    || (role === 'BUSINESS' && BUSINESS_REQUIRED.has(permission))) return 'Bắt buộc'
   return enabled ? 'Đã cấp' : 'Chưa cấp'
 }
 
@@ -69,7 +75,7 @@ export default function AdminRolesApiPanel({ user: _user, showToast }: { user: U
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
-  const [activeModule, setActiveModule] = useState<PermissionModule>('Kho bãi & vận hành')
+  const [activeModule, setActiveModule] = useState<PermissionModule>('Tổng quan & điều hướng')
   const [error, setError] = useState<string | null>(null)
 
   const loadRoles = () => {
@@ -161,6 +167,9 @@ export default function AdminRolesApiPanel({ user: _user, showToast }: { user: U
     permissions: PERMISSION_DEFINITIONS.filter(permission => permissionModule(permission.key) === module && (!search.trim() || permission.label.toLowerCase().includes(search.trim().toLowerCase()) || permission.key.includes(search.trim().toLowerCase()))),
   }))
   const activePermissions = visibleModules.find(item => item.module === activeModule)?.permissions ?? []
+  const canEditActiveModule = selectedRole
+    ? selectedRole.code !== 'ADMIN' && activePermissions.some(permission => !selectedRole.inheritedPermissions.includes(permission.key) && !isProtectedPermission(selectedRole.code, permission.key))
+    : false
 
   return <div className="fade-in space-y-6">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -175,10 +184,10 @@ export default function AdminRolesApiPanel({ user: _user, showToast }: { user: U
       </Card>
       <div className="min-w-0 space-y-4">
         {selectedRole && <>
-          <Card className="p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-3"><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${roleColors[roleKey(selectedRole.code)]}`}>{roleLabels[roleKey(selectedRole.code)]}</span><span className="text-sm text-slate-500">{selectedRole.userCount ?? 0} tài khoản đang sử dụng</span></div><h2 className="mt-3 text-xl font-semibold text-slate-900">Quyền của {roleLabels[roleKey(selectedRole.code)]}</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">{roleDescription[selectedRole.code]}</p><p className="mt-2 text-xs font-medium text-slate-500">{selectedRole.parentRole ? `Kế thừa từ ${roleLabels[roleKey(selectedRole.parentRole as InternalRoleCode)]}` : 'Không kế thừa từ vai trò khác'}</p></div><div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"><strong className="block text-slate-800">Phạm vi dữ liệu</strong><span>Theo cơ sở được gắn cho từng tài khoản</span></div></div></Card>
+          <Card className="p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-3"><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${roleColors[roleKey(selectedRole.code)]}`}>{roleLabels[roleKey(selectedRole.code)]}</span><span className="text-sm text-slate-500">{selectedRole.userCount ?? 0} tài khoản đang sử dụng</span></div><h2 className="mt-3 text-xl font-semibold text-slate-900">Quyền của {roleLabels[roleKey(selectedRole.code)]}</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">{roleDescription[selectedRole.code]}</p><p className="mt-2 text-xs font-medium text-slate-500">{selectedRole.parentRole ? `Kế thừa từ ${roleLabels[roleKey(selectedRole.parentRole as InternalRoleCode)]}` : 'Không kế thừa từ vai trò khác'}</p></div><div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"><strong className="block text-slate-800">Phạm vi dữ liệu</strong><span>{selectedRole.code === 'ADMIN' ? 'Toàn hệ thống, không giới hạn cơ sở' : selectedRole.code === 'BUSINESS' ? 'Toàn hệ thống theo nghiệp vụ thương mại' : 'Theo cơ sở được gắn cho từng tài khoản'}</span></div></div></Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="relative max-w-md flex-1"><input type="search" aria-label="Tìm quyền" placeholder="Tìm quyền theo nghiệp vụ…" value={search} onChange={event => setSearch(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white py-2 pr-4 text-sm text-slate-800 placeholder-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#e9a12c]" style={{ paddingLeft: '2.5rem' }} /><SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /></div><p className="text-xs text-slate-500">Quyền hiển thị: {selectedDraft.length}</p></div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{visibleModules.map(({ module, permissions }) => <button key={module} type="button" onClick={() => setActiveModule(module)} aria-pressed={activeModule === module} className={`rounded-xl border px-3 py-3 text-left transition ${activeModule === module ? 'border-[#e9a12c] bg-amber-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}><span className="block text-xs font-semibold text-slate-800">{module}</span><span className="mt-1 block text-[11px] text-slate-500">{permissions.length} quyền · {permissions.filter(permission => selectedDraft.includes(permission.key) || selectedRole.inheritedPermissions.includes(permission.key)).length} đang hiệu lực</span></button>)}</div>
-          <Card className="overflow-hidden"><div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-slate-800">{activeModule}</h3><p className="text-xs text-slate-500">Quyền kế thừa chỉ đọc; quyền trực tiếp có thể chỉnh sửa.</p></div><div className="flex gap-2"><button type="button" onClick={() => applyModulePreset(activeModule, 'readonly')} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100">Chỉ đọc</button><button type="button" onClick={() => applyModulePreset(activeModule, 'full')} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100">Toàn quyền module</button></div></div><div className="divide-y divide-slate-100">{activePermissions.length ? activePermissions.map(permission => { const inherited = selectedRole.inheritedPermissions.includes(permission.key); const enabled = inherited || selectedDraft.includes(permission.key); const protectedPermission = inherited || isProtectedPermission(selectedRole.code, permission.key); const stateLabel = permissionStateLabel(selectedRole.code, permission.key, enabled, inherited); return <div key={permission.key} className="flex items-center justify-between gap-4 px-4 py-3"><div className="min-w-0"><p className="font-medium text-slate-800">{permission.label}</p><p className="mt-0.5 font-mono text-[11px] text-slate-400">{permission.key}</p></div>{protectedPermission ? <span className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${inherited ? 'border border-blue-200 bg-blue-50 text-blue-700' : stateLabel === 'Không áp dụng' ? 'border border-slate-200 bg-slate-50 text-slate-400' : 'border border-amber-200 bg-amber-50 text-amber-700'}`}>{stateLabel === 'Bắt buộc' ? <LockIcon /> : <MinusIcon />}{stateLabel}</span> : <button type="button" aria-pressed={enabled} aria-label={`${enabled ? 'Thu hồi' : 'Cấp'} quyền ${permission.label}`} onClick={() => togglePermission(permission.key)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${enabled ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{enabled ? <><CheckIcon />Đã cấp</> : <><MinusIcon />Chưa cấp</>}</button>}</div> }) : <div className="px-4 py-8 text-center text-sm text-slate-500">Không tìm thấy quyền phù hợp trong nhóm này.</div>}</div></Card>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{visibleModules.map(({ module, permissions }) => <button key={module} type="button" onClick={() => setActiveModule(module)} aria-pressed={activeModule === module} className={`rounded-xl border px-3 py-3 text-left transition ${activeModule === module ? 'border-[#e9a12c] bg-amber-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}><span className="block text-xs font-semibold text-slate-800">{module}</span><span className="mt-1 block text-[11px] text-slate-500">{permissions.length} quyền · {permissions.filter(permission => selectedDraft.includes(permission.key) || selectedRole.inheritedPermissions.includes(permission.key)).length} đang hiệu lực</span></button>)}</div>
+          <Card className="overflow-hidden"><div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-slate-800">{activeModule}</h3><p className="text-xs text-slate-500">Quyền kế thừa chỉ đọc; quyền trực tiếp có thể chỉnh sửa.</p></div><div className="flex gap-2"><button type="button" onClick={() => applyModulePreset(activeModule, 'readonly')} disabled={!canEditActiveModule} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Chỉ đọc</button><button type="button" onClick={() => applyModulePreset(activeModule, 'full')} disabled={!canEditActiveModule} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Toàn quyền module</button></div></div><div className="divide-y divide-slate-100">{activePermissions.length ? activePermissions.map(permission => { const inherited = selectedRole.inheritedPermissions.includes(permission.key); const enabled = inherited || selectedDraft.includes(permission.key); const protectedPermission = inherited || isProtectedPermission(selectedRole.code, permission.key); const stateLabel = permissionStateLabel(selectedRole.code, permission.key, enabled, inherited); const stateIcon = inherited || stateLabel === 'Bắt buộc' ? <LockIcon /> : enabled ? <CheckIcon /> : <MinusIcon />; return <div key={permission.key} className="flex items-center justify-between gap-4 px-4 py-3"><div className="min-w-0"><p className="font-medium text-slate-800">{permission.label}</p><p className="mt-0.5 font-mono text-[11px] text-slate-400">{permission.key}</p></div>{protectedPermission ? <span className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${inherited ? 'border border-blue-200 bg-blue-50 text-blue-700' : stateLabel === 'Không áp dụng' ? 'border border-slate-200 bg-slate-50 text-slate-400' : enabled ? 'border border-emerald-200 bg-emerald-50 text-emerald-700' : 'border border-amber-200 bg-amber-50 text-amber-700'}`}>{stateIcon}{stateLabel}</span> : <button type="button" aria-pressed={enabled} aria-label={`${enabled ? 'Thu hồi' : 'Cấp'} quyền ${permission.label}`} onClick={() => togglePermission(permission.key)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${enabled ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{enabled ? <><CheckIcon />Đã cấp</> : <><MinusIcon />Chưa cấp</>}</button>}</div> }) : <div className="px-4 py-8 text-center text-sm text-slate-500">Không tìm thấy quyền phù hợp trong nhóm này.</div>}</div></Card>
         </>}
       </div>
     </div>}

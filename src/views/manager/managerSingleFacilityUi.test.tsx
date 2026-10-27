@@ -5,6 +5,7 @@ import { manager, page } from "../../../tests/rentalApiFixtures"
 import { Button } from "../../components/ui"
 import RentalApiWorkspace from "../rental-api/RentalApiWorkspace"
 import SupportApiWorkspace from "../support-api/SupportApiWorkspace"
+import StaffSupportInbox from '../support-api/StaffSupportInbox'
 import ApiPager from "../rental-api/ApiPager"
 import ManagerOverdueApiPanel from "./ManagerOverdueApiPanel"
 import ManagerFinancialApiPanel from "./ManagerFinancialApiPanel"
@@ -157,28 +158,25 @@ describe("Manager rental and renewal filters", () => {
     w.data(); await load()
     expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ page: 1, size: 10, facilityId: "f1" }))
   })
-  it("renames expiry labels while retaining endFrom/endTo and sort request fields", async () => {
+  it("keeps expiry dates in the 30-day count query and preserves the selected sort", async () => {
     const w = workspace()
     let tree = w.data()
     expect(text(tree)).toContain("Hết hạn trong 30 ngày")
     expect(text(tree)).not.toContain("kết thúc đã lưu")
-    control(label(tree, "Ngày hết hạn từ"), "input").props.onChange({ target: { value: "2026-11-01" } })
-    tree = w.data()
-    control(label(tree, "Ngày hết hạn đến"), "input").props.onChange({ target: { value: "2026-11-30" } })
-    tree = w.data()
+    expect(label(tree, "Ngày hết hạn từ")).toBeUndefined()
+    expect(label(tree, "Ngày hết hạn đến")).toBeUndefined()
     control(label(tree, "Sắp xếp"), "select").props.onChange({ target: { value: "contractEndDate,asc" } })
     w.data(); await load()
-    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ facilityId: "f1", size: 10,
-      endFrom: "2026-11-01", endTo: "2026-11-30", sort: "contractEndDate,asc" }))
+    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ facilityId: "f1", size: 10, sort: "contractEndDate,asc" }))
+    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ facilityId: "f1", size: 1,
+      status: "active", endFrom: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), endTo: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }))
   })
-  it("keeps the Customer page size and its selector unchanged", async () => {
+  it("loads all Customer rentals for the grouped view without exposing a page-size selector", async () => {
     h.actor = { ...manager, roles: ["CUSTOMER"], facilityScopes: {} }
     const w = workspace("customer"), tree = w.data()
     await load()
-    expect(h.rental).toHaveBeenCalledWith("customer", expect.objectContaining({ size: 20, facilityId: undefined }))
-    const pager = invoke(named(tree, "Pager"))
-    expect(named(tree, "Pager").props.fixedSize).toBe(false)
-    expect(nodes(pager).filter(n => n.type === "option").map(n => n.props.value)).toEqual([10, 20, 50])
+    expect(h.rental).toHaveBeenCalledWith("customer", expect.objectContaining({ page: 0, size: 100, facilityId: undefined }))
+    expect(named(tree, "Pager")).toBeUndefined()
   })
 })
 
@@ -195,24 +193,38 @@ describe("Support and overdue pagination", () => {
     expect(text(tree)).not.toContain("Số yêu cầu / trang")
     control(label(tree, "Trạng thái"), "select").props.onChange({ target: { value: "open" } })
     tree = renderSupport()
-    byText(tree, "Xóa bộ lọc").props.onClick()
+    byText(tree, "Đặt lại").props.onClick()
     tree = renderSupport(); await load()
     expect(h.support).toHaveBeenLastCalledWith("manager", { page: 0, size: 10, facilityId: "f1", sort: "createdAt,desc" })
     nodes(tree).find(n => n.type === ApiPager)!.props.onPage(1)
     renderSupport(); await load()
     expect(h.support).toHaveBeenLastCalledWith("manager", expect.objectContaining({ page: 1, size: 10, facilityId: "f1" }))
   })
-  it.each(["customer", "staff"] as const)("does not remove %s pagination options or force a Manager scope", async role => {
+  it.each(["customer"] as const)("keeps %s paging at 20 without forcing a Manager scope", async role => {
     h.actor = { ...h.actor!, roles: [role === "customer" ? "CUSTOMER" : "STAFF"], permissions: ["support:read", "support:update"] }
-    const tree = support(role)(); await load()
-    expect(text(tree)).toContain("Số yêu cầu / trang")
-    expect(h.support).toHaveBeenLastCalledWith(role, expect.objectContaining({ size: 20, facilityId: undefined }))
+    const rerender = support(role)
+    const tree = rerender(); await load()
+    expect(text(tree)).not.toContain("Số yêu cầu / trang")
+    expect(h.support).toHaveBeenLastCalledWith(role, expect.objectContaining({ size: 20 }))
+    expect(h.support.mock.lastCall?.[1].facilityId).toBeUndefined()
+    nodes(tree).find(n => n.type === ApiPager)!.props.onPage(1)
+    rerender(); await load()
+    expect(h.support).toHaveBeenLastCalledWith(role, expect.objectContaining({ page: 1, size: 20 }))
+    expect(h.support.mock.lastCall?.[1].facilityId).toBeUndefined()
+  })
+  it('delegates Staff paging to the grouped inbox instead of fetching the old ticket list', async () => {
+    h.actor = { ...h.actor!, roles: ['STAFF'], permissions: ['support:read', 'support:update'] }
+    const rerender = support('staff')
+    const tree = rerender(); await load()
+    expect(nodes(tree).some(node => node.type === StaffSupportInbox)).toBe(true)
+    expect(h.support).not.toHaveBeenCalled()
+    expect(h.queue).not.toHaveBeenCalled()
   })
   it("keeps overdue categories separate and preserves fixed scope on filtering and paging", async () => {
     const outer = render(() => ManagerOverdueApiPanel()), slots: unknown[] = []
-    const rerender = () => invoke(outer, slots)
+    const rerender = () => invoke(named(invoke(outer), "OverdueSession"), slots)
     let tree = rerender(); await load()
-    expect(h.overdue).toHaveBeenLastCalledWith(expect.objectContaining({ size: 10, facilityId: "f1", kind: "ALL" }))
+    expect(h.overdue).toHaveBeenLastCalledWith(expect.objectContaining({ size: 10, facilityId: "f1", kind: "RENTAL_TERM" }))
     expect(text(tree)).not.toContain("Các cơ sở được đọc")
     expect(text(tree)).not.toContain("Số hồ sơ")
     expect(text(tree)).toContain("Quá hạn thanh toán")

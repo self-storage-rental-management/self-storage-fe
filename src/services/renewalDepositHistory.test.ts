@@ -8,7 +8,7 @@ vi.mock("./authApi", () => ({ getAuthenticatedActor: () => ({ id: "customer" }) 
 vi.mock("./customerReservationApi", () => ({
   listCustomerPaymentHistory: vi.fn(async () => page([])),
 }))
-vi.mock("./renewalApi", () => ({ listRenewals: vi.fn(async () => page([{ id: renewalId }])) }))
+vi.mock("./renewalApi", () => ({ listRenewals: vi.fn(async () => page([{ id: renewalId, storageUnit: { code: "A1" }, facility: { name: "Q1" } }])) }))
 const renewalId = "c91aa45b-0320-4133-bff2-86e7d2d512c6"
 const event = {
   id: "11111111-1111-4111-8111-111111111111", kind: "DEPOSIT", actorId: null,
@@ -23,10 +23,10 @@ function page(data: unknown[]) { return { data, pagination: { page: 0, pageSize:
 beforeEach(() => {
   vi.mocked(apiRequest).mockReset().mockImplementation(async path => path.includes("/payments") ? page([event]) : page([]))
 })
-it("loads the existing VNPay deposit into history after a fresh page load", async () => {
+it("keeps an old VNPay event visible without certifying it before current reconciliation", async () => {
   const result = await loadCustomerPaymentHistory()
   expect(result.warnings).toEqual([])
-  expect(result.entries).toEqual([expect.objectContaining({ id: event.data.paymentRef, category: "renewal", amount: 6600000, status: "PAID", method: "VNPay" })])
+  expect(result.entries).toEqual([expect.objectContaining({ id: event.data.paymentRef, category: "renewal", amount: 6600000, status: "UNKNOWN", receiptAvailable: false, method: "VNPay" })])
 })
 it("also accepts deposits emitted with the corrected Renewal binding", async () => {
   vi.mocked(apiRequest).mockResolvedValue(page([{ ...event, data: { ...event.data, renewalId } }]))

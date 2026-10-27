@@ -1,5 +1,6 @@
 import { ApiClientError, apiRequest } from "./apiClient"
 import { isRentalBookingEvidence } from "./rentalBookingEvidence"
+import { isRentalStatus } from '../types/statusContracts'
 import type {
   RentalApiDetail,
   RentalApiPage,
@@ -114,13 +115,7 @@ export function isRentalRecord(value: unknown): boolean {
     !!r.unitType?.id &&
     typeof r.unitType.name === "string" &&
     typeof r.currency === "string" &&
-    [
-      "active",
-      "return_requested",
-      "return_inspection",
-      "closing",
-      "completed",
-    ].includes(r.status) &&
+    isRentalStatus(r.status) &&
     r.currency === "VND" &&
     validDateSemantics(r) &&
     (r.monthlyPrice === null || (Number.isFinite(r.monthlyPrice) && r.monthlyPrice >= 0)) &&

@@ -49,13 +49,12 @@ function CustomerMetricSession({ metric, identity, customerId }: { metric: Metri
   const read = useRentalApiResource(identity, () => loadCustomerApiCount(metric, customerId), { retainDataOnRefresh: true })
   return <div>
     <MetricValue metric={metric} value={read.loading && read.data == null ? "…" : read.error ? undefined : read.data} />
-    {!!read.error && <p role="status" className="mt-1 text-xs text-amber-800">Chưa tải được số liệu. <button className="underline" onClick={read.refresh}>Thử lại</button></p>}
   </div>
 }
 
 function MetricValue({ metric, value }: { metric: Metric; value?: number | string }) {
   const titles: Record<Metric, string> = { 'active-rentals': 'Hồ sơ thuê đang hoạt động', 'open-support': 'Yêu cầu hỗ trợ đang mở', reservations: 'Đơn đặt giữ kho', 'returning-rentals': 'Kho đang yêu cầu trả' }
-  return <StatCard title={titles[metric]} value={value ?? "Chưa xác minh"}
+  return <StatCard title={titles[metric]} value={value ?? 0}
     icon={metric === 'reservations' ? Icon.calendar : metric === 'returning-rentals' ? Icon.clock : metric === 'active-rentals' ? Icon.key : Icon.support} />
 }
 
@@ -95,7 +94,7 @@ function CustomerRentalOverviewSession({ identity, customerId, onOpen }: { ident
     {!read.loading && !read.error && read.data && read.data.data.length === 0 && <p className="p-6 text-center text-sm text-stone-500">Bạn chưa có hồ sơ thuê đang hoạt động.</p>}
     <div className="space-y-3 p-4">{visible.map(record => <CustomerRentalOverviewRow key={record.id} record={record} onOpen={onOpen} />)}</div>
     {total > 5 && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 px-4 py-3">
-      <p className="text-xs text-stone-500">{currentPage * 5 + 1}–{Math.min((currentPage + 1) * 5, total)} / {total} hồ sơ</p>
+      <p className="text-xs text-stone-500">{currentPage * 5 + 1} đến {Math.min((currentPage + 1) * 5, total)} / {total} hồ sơ</p>
       <div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Trước</Button><span className="text-xs text-stone-600">Trang {currentPage + 1}/{pages}</span><Button size="sm" variant="outline" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Sau</Button></div>
     </div>}
   </Card>

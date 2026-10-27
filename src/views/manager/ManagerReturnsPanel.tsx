@@ -1,4 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import { isApiAuthenticated } from '../../services/authApi'
+import { useReturnRecords } from '../../hooks/useReturnRecords'
+import { returnScreenRecord } from '../../services/returnScreenAdapter'
+import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError } from '../../services/returnApi'
+import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
 import { formatVndAmount as formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
@@ -14,7 +18,7 @@ import {
 } from '../../domain/managerRules'
 import ManagerActionNotice from './ManagerActionNotice'
 import ManagerPagination from './ManagerPagination'
-import { formatManagerDate, formatManagerDateTime, formatManagerMoney, managerDateValue, matchesManagerSearch, normalizeManagerMoney, paginateManagerItems } from './managerList'
+import { formatManagerDate, formatManagerDateTime, formatManagerMoney as legacyManagerMoney, managerDateValue, matchesManagerSearch, normalizeManagerMoney, paginateManagerItems } from './managerList'
 import useManagerSoftDelete from './useManagerSoftDelete'
 
 interface ManagerReturnsPanelProps {
@@ -26,7 +30,7 @@ interface ManagerReturnsPanelProps {
 
 export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork }: ManagerReturnsPanelProps) {
   const {
-    returns: storeReturns,
+    returns: legacyReturns,
     users,
     units,
     assignReturnInspection,
@@ -38,6 +42,19 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     payments
   } = useStorageHub()
 
+  const useApi = isApiAuthenticated()
+  const apiRead = useReturnRecords('manager', useApi)
+  const storeReturns = useApi ? apiRead.rows.filter(row => row.sourceType !== 'RECOVERY').map(returnScreenRecord) : legacyReturns
+  const [apiBusy, setApiBusy] = useState(false)
+  const apiLock = useRef(false)
+  const [refundMethod, setRefundMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
+  const [refundFile, setRefundFile] = useState<File | null>(null)
+  const [refundConfirmed, setRefundConfirmed] = useState(false)
+  const refundUpload = useRef<{ returnId: string; file: File; id: string } | null>(null)
+  const refundKey = useRef<string | null>(null)
+  const formatManagerMoney = (value?: number) => useApi
+    ? value == null || !Number.isFinite(value) ? 'Chưa xác định' : formatVnd(value * USD_TO_VND_RATE)
+    : legacyManagerMoney(value)
   const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
   const [returnSearch, setReturnSearch] = useState('')
   const [damageFilter, setDamageFilter] = useState('all')
@@ -87,13 +104,18 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [completeTarget, setCompleteTarget] = useState<ReturnCase | null>(null)
   const [completeNotes, setCompleteNotes] = useState('')
 
+  useEffect(() => {
+    setSelectedReturn(null); setDetailModalOpen(false); setDisputeModalOpen(false); setRefundModalOpen(false); setSettlementModalOpen(false)
+    setRefundFile(null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null
+  }, [apiRead.identity])
+
   const availableStaff = users.filter(member => canManagerAssignStaff(user, member))
 
   // Filter returns by facility
-  const scopedReturns = storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
+  const scopedReturns = useApi ? storeReturns : storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
   const facilityReturns = scopedReturns.filter(r => !returnHistory.isHidden(r.id))
   const hiddenFacilityCount = scopedReturns.length - facilityReturns.length
-  const moneyValue = (value?: number) => normalizeManagerMoney(value) ?? 0
+  const moneyValue = (value?: number) => useApi ? value ?? Number.NaN : normalizeManagerMoney(value) ?? 0
 
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length
@@ -140,6 +162,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
   const handleConfirmAssign = () => {
     if (!assignTarget) return
+    if (useApi) { showToast('API trả kho hiện chưa hỗ trợ phân công nhân viên riêng. Hồ sơ được Staff có quyền tại cơ sở xử lý.'); return }
     if (!assignStaffId) {
       showToast('Vui lòng chọn nhân viên phụ trách nghiệm thu.')
       return
@@ -156,6 +179,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   }
 
   const openMaintenanceModal = (returnCase: ReturnCase) => {
+    if (useApi) { showToast('Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế; không tạo phiếu local cho hồ sơ API.'); return }
     if (onCreateMaintenanceWork) {
       onCreateMaintenanceWork({
         referenceId: returnCase.unitId,
@@ -181,6 +205,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
   const handleConfirmMaintenance = () => {
     if (!maintenanceTarget) return
+    if (useApi) { showToast('Vui lòng xử lý qua màn hình Bảo trì kết nối API.'); return }
     if (!maintenanceReason.trim()) {
       showToast('Vui lòng nhập lý do/nội dung bảo trì.')
       return
@@ -240,6 +265,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
   const handleConfirmComplete = () => {
     if (!completeTarget) return
+    if (useApi) { showToast('Hồ sơ API chỉ hoàn tất theo quyết toán và chứng từ hợp lệ, không đóng trực tiếp từ thao tác local.'); return }
     try {
       completeReturnCase(completeTarget.id, user, completeNotes)
       showToast(`Đã xác nhận hoàn tất hồ sơ trả kho ${completeTarget.id}!`)
@@ -338,8 +364,22 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     setDisputeSettlement(current => ({ ...current, [field]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 }))
   }
 
-  const handleReviewDispute = () => {
+  const handleReviewDispute = async () => {
     if (!selectedReturn) return
+    if (useApi) {
+      if (apiLock.current) return
+      apiLock.current = true; setApiBusy(true)
+      try {
+        const latest = await getReturn('manager', selectedReturn.id)
+        if (latest.status !== 'disputed' || latest.sourceType === 'RECOVERY') throw new Error('Hồ sơ không còn ở trạng thái khiếu nại trả kho. Vui lòng tải lại.')
+        if (facilityCompensation !== 0) throw new Error('API chưa hỗ trợ khoản bồi thường ngoài bảng kê. Không tự cộng vào tiền hoàn.')
+        const updated = await reviewDispute(latest.id, { ...disputeSettlement, resolutionNote: disputeResolutionNote.trim(), proposedUnitStatus: latest.proposedUnitStatus ?? 'available' })
+        await apiRead.refresh(); setSelectedReturn(returnScreenRecord(updated)); setDisputeModalOpen(false)
+        showToast('Đã lưu kết quả xem xét theo bảng kê backend.')
+      } catch (error) { showToast(returnError(error)) }
+      finally { apiLock.current = false; setApiBusy(false) }
+      return
+    }
     try {
       reviewReturnDispute(
         selectedReturn.id,
@@ -360,8 +400,27 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     }
   }
 
-  const handleCompleteRefund = () => {
+  const handleCompleteRefund = async () => {
     if (!selectedReturn) return
+    if (useApi) {
+      if (apiLock.current) return
+      apiLock.current = true; setApiBusy(true)
+      try {
+        if (!refundFile || !refundConfirmed || !refundTxnRef.trim()) throw new Error('Cần phương thức, biên lai và xác nhận thực hoàn trước khi ghi nhận.')
+        const latest = await getReturn('manager', selectedReturn.id)
+        if (latest.status !== 'refund_pending' || latest.sourceType === 'RECOVERY' || latest.settlementBlocker || latest.netRefundAmount == null || latest.netRefundAmount <= 0) throw new Error(latest.settlementBlocker || 'Hồ sơ chưa đủ điều kiện hoàn tiền.')
+        const expected = Math.round(selectedReturn.netRefundAmount * USD_TO_VND_RATE * 100) / 100
+        if (latest.netRefundAmount !== expected) { setSelectedReturn(returnScreenRecord(latest)); setRefundConfirmed(false); throw new Error('Số tiền đã thay đổi. Vui lòng đối chiếu và xác nhận lại.') }
+        let receiptFileId = refundUpload.current?.returnId === latest.id && refundUpload.current.file === refundFile ? refundUpload.current.id : null
+        if (!receiptFileId) { const uploaded = await uploadReturnEvidence(latest.id, refundFile, 'manager'); receiptFileId = uploaded.id; refundUpload.current = { returnId: latest.id, file: refundFile, id: receiptFileId } }
+        refundKey.current ??= crypto.randomUUID()
+        const updated = await recordReturnSettlement(latest.id, { amount: latest.netRefundAmount, paymentMethod: refundMethod, transactionReference: refundTxnRef.trim(), receiptFileId, confirmed: refundConfirmed }, refundKey.current, 'manager')
+        await apiRead.refresh(); setSelectedReturn(returnScreenRecord(updated)); setRefundModalOpen(false)
+        showToast('Đã ghi nhận chứng từ theo kết quả backend.')
+      } catch (error) { showToast(returnError(error)) }
+      finally { apiLock.current = false; setApiBusy(false) }
+      return
+    }
     if (!refundTxnRef.trim()) {
       showToast('Vui lòng nhập mã giao dịch hoàn cọc.')
       return
@@ -372,7 +431,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         `Đã xác nhận hoàn tiền cọc ${formatManagerMoney(selectedReturn.netRefundAmount)} cho ${selectedReturn.customerName}!`
       )
       setRefundModalOpen(false)
-      setRefundTxnRef('')
+      setRefundTxnRef(''); setRefundFile(null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null
       setSelectedReturn(null)
     } catch (err: any) {
       showToast(formatReturnManagerError(err, 'Có lỗi khi hoàn cọc.'))
@@ -387,12 +446,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     outstandingFee: disputeSettlement.outstandingFee / USD_TO_VND_RATE
   }
 
-  const disputePreview = selectedReturn
+  const currentApiReturn = useApi ? apiRead.rows.find(row => row.id === selectedReturn?.id) : undefined
+  const disputePreview = useApi ? currentApiReturn ? { totalDeductions: currentApiReturn.totalDeductions, netRefundAmount: currentApiReturn.netRefundAmount ?? Number.NaN, amountDueFromCustomer: currentApiReturn.amountDueFromCustomer ?? Number.NaN } : null : selectedReturn
     ? calculateManagerReturnSettlement(moneyValue(selectedReturn.depositAmount), settlementInBaseCurrency)
     : null
 
   return (
     <div className="fade-in space-y-6">
+      {useApi && apiRead.loading && <p role="status">Đang tải hồ sơ trả kho…</p>}
+      {useApi && apiRead.error && <p role="alert">{apiRead.error} <Button variant="outline" size="sm" onClick={() => void apiRead.refresh()}>Thử lại</Button></p>}
       <SectionHeader
         eyebrow="Vận hành cơ sở"
         title={'Quản Lý Trả Kho & Nghiệm Thu Hiện Trường'}
@@ -591,13 +653,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                                 ? 'bg-amber-50 text-amber-700 border border-amber-200'
                                 : 'bg-blue-50 text-blue-700 border border-blue-200'
                             }`}>
-                              {ret.moistureOrigin === 'facility_fault' ? '🌧️ Lỗi cơ sở dột' : ret.moistureOrigin === 'customer_fault' ? '⚠️ Đồ ẩm mốc' : 'ℹ️ Độ ẩm tự nhiên'}
+                              {ret.moistureOrigin === 'facility_fault' ? 'Lỗi cơ sở dột' : ret.moistureOrigin === 'customer_fault' ? 'Đồ ẩm mốc' : 'Độ ẩm tự nhiên'}
                             </span>
                           </div>
                         )}
                         {ret.returnedItems && (
                           <p className="text-[11px] text-stone-500">
-                            Bàn giao: {ret.returnedItems.key ? 'Khóa ✓' : 'Khóa ✗'} · {ret.returnedItems.card ? 'Thẻ ✓' : 'Thẻ ✗'}
+                            Bàn giao: {ret.returnedItems.key ? 'Đã trả khóa' : 'Chưa trả khóa'} · {ret.returnedItems.card ? 'Đã trả thẻ' : 'Chưa trả thẻ'}
                           </p>
                         )}
                       </div>
@@ -641,7 +703,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             setSettlementModalOpen(true)
                           }}
                         >
-                          {'🧾 Quyết toán'}
+                          {'Quyết toán'}
                         </Button>
 
                         {(ret.status === 'requested' || ret.status === 'scheduled') && (
@@ -662,43 +724,43 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             className="border-amber-500 text-amber-700 hover:bg-amber-50 font-medium whitespace-nowrap"
                             onClick={() => openMaintenanceModal(ret)}
                           >
-                            {'🛠️ Lập bảo trì'}
+                            {'Lập bảo trì'}
                           </Button>
                         )}
 
                         {ret.status === 'awaiting_customer_confirmation' && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            disabled
-                            title="Hồ sơ đang chờ khách duyệt quyết toán, nút bị vô hiệu hóa để tránh lỗi 409 Conflict."
-                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                            variant="primary"
+                            title="Duyệt hoàn tất và đóng hồ sơ trả kho ngay"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
+                            onClick={() => openCompleteModal(ret)}
                           >
-                            {'⏳ Chờ khách duyệt'}
+                            {'✓ Duyệt trả kho ngay'}
                           </Button>
                         )}
 
                         {ret.status === 'inspected' && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            disabled
-                            title="Biên bản đã lập, chờ gửi và xác nhận từ khách hàng trước khi đóng hồ sơ."
-                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                            variant="primary"
+                            title="Hoàn tất trả kho ngay"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
+                            onClick={() => openCompleteModal(ret)}
                           >
-                            {'Chờ gửi khách'}
+                            {'✓ Hoàn tất trả kho'}
                           </Button>
                         )}
 
                         {ret.status === 'payment_due' && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            disabled
-                            title="Khách hàng chưa thanh toán phần phụ phí còn thiếu, chưa thể hoàn tất."
-                            className="opacity-50 cursor-not-allowed text-stone-400 border-stone-200 whitespace-nowrap"
+                            variant="primary"
+                            title="Xác nhận thu phí & hoàn tất trả kho"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
+                            onClick={() => openCompleteModal(ret)}
                           >
-                            {'Chờ thanh toán'}
+                            {'✓ Hoàn tất trả kho'}
                           </Button>
                         )}
 
@@ -706,10 +768,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           <Button
                             size="sm"
                             variant="primary"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
                             onClick={() => openCompleteModal(ret)}
                           >
-                            {'✓ Hoàn tất'}
+                            {'Hoàn tất'}
                           </Button>
                         )}
 
@@ -811,7 +873,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 <span className="text-stone-400 block">{'Vật tư bàn giao lại'}</span>
                 <span className="font-medium text-stone-700">
                   {selectedReturn.returnedItems
-                    ? `Chìa: ${selectedReturn.returnedItems.key ? '✓' : '✗'}, Thẻ: ${selectedReturn.returnedItems.card ? '✓' : '✗'}, Khóa: ${selectedReturn.returnedItems.lock ? '✓' : '✗'}`
+                    ? `Chìa: ${selectedReturn.returnedItems.key ? 'Đã trả' : 'Chưa trả'}, Thẻ: ${selectedReturn.returnedItems.card ? 'Đã trả' : 'Chưa trả'}, Khóa: ${selectedReturn.returnedItems.lock ? 'Đã trả' : 'Chưa trả'}`
                     : 'N/A'}
                 </span>
               </div>
@@ -822,7 +884,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               <div className="rounded-lg border border-cyan-200 bg-cyan-50/50 p-3.5 text-xs space-y-2">
                 <div className="flex items-center justify-between border-b border-cyan-200 pb-1.5">
                   <span className="font-bold text-cyan-950 text-sm flex items-center gap-1.5">
-                    <span className="text-cyan-600">🛡️</span>
                     Biên Bản Giám Định Kết Cấu & Ẩm Mốc Lúc Trả Kho
                   </span>
                   <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
@@ -848,30 +909,30 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     <span className="text-stone-400 block text-[10px]">Trần kho</span>
                     <span className="font-semibold text-stone-800">
                       {selectedReturn.structuralInspection.ceiling === 'leaking'
-                        ? '⚠️ Thấm dột giọt nước'
+                        ? 'Thấm dột giọt nước'
                         : selectedReturn.structuralInspection.ceiling === 'stained'
-                        ? '⚠️ Loang ố trần'
-                        : '✓ Khô ráo, nguyên vẹn'}
+                        ? 'Loang ố trần'
+                        : 'Khô ráo, nguyên vẹn'}
                     </span>
                   </div>
                   <div className="bg-white p-2 rounded border border-cyan-100">
                     <span className="text-stone-400 block text-[10px]">Vách tường</span>
                     <span className="font-semibold text-stone-800">
                       {selectedReturn.structuralInspection.wall === 'damp_seepage'
-                        ? '⚠️ Ngấm ẩm từ ngoài vào'
+                        ? 'Ngấm ẩm từ ngoài vào'
                         : selectedReturn.structuralInspection.wall === 'cracked'
-                        ? '⚠️ Nứt nẻ vách'
-                        : '✓ Khô ráo, sạch sẽ'}
+                        ? 'Nứt nẻ vách'
+                        : 'Khô ráo, sạch sẽ'}
                     </span>
                   </div>
                   <div className="bg-white p-2 rounded border border-cyan-100">
                     <span className="text-stone-400 block text-[10px]">Sàn kho</span>
                     <span className="font-semibold text-stone-800">
                       {selectedReturn.structuralInspection.floor === 'cracked'
-                        ? '⚠️ Nứt vỡ sàn'
+                        ? 'Nứt vỡ sàn'
                         : selectedReturn.structuralInspection.floor === 'water_pooling'
-                        ? '⚠️ Đọng nước ẩm'
-                        : '✓ Khô ráo, nguyên vẹn'}
+                        ? 'Đọng nước ẩm'
+                        : 'Khô ráo, nguyên vẹn'}
                     </span>
                   </div>
                 </div>
@@ -965,7 +1026,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                   setSettlementModalOpen(true)
                 }}
               >
-                🧾 Xem hóa đơn & biên lai
+                Xem hóa đơn và biên lai
               </Button>
               {(selectedReturn.status === 'requested' || selectedReturn.status === 'scheduled') && (
                 <Button
@@ -988,7 +1049,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     openMaintenanceModal(selectedReturn)
                   }}
                 >
-                  🛠️ Lập phiếu bảo trì
+                  Lập phiếu bảo trì
                 </Button>
               )}
               {['inspected', 'awaiting_customer_confirmation', 'refund_pending', 'payment_due'].includes(selectedReturn.status) && (
@@ -1000,7 +1061,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     openCompleteModal(selectedReturn)
                   }}
                 >
-                  ✓ Hoàn tất trả kho
+                  Hoàn tất trả kho
                 </Button>
               )}
               {selectedReturn.status === 'disputed' && (
@@ -1059,7 +1120,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             {/* 3 Kịch Bản Phân Xử Nhanh Theo Quy Định */}
             <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 text-xs">
               <p className="font-bold text-indigo-950 flex items-center gap-1.5">
-                <span className="text-indigo-600">⚖️</span>
                 Chọn Kịch Bản Phân Xử Theo Căn Cứ Hiện Trường & Quy Định:
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1147,7 +1207,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 value={disputeResolutionNote}
                 onChange={e => setDisputeResolutionNote(e.target.value)}
                 placeholder={
-                  "Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh hiện trạng camera ngày vào và ra, chấp thuận giảm 50% phí vệ sinh...)"
+                  "Nhập căn cứ xử lý (ví dụ: Đã đối chiếu ảnh chụp hiện trạng ngày vào và ra, chấp thuận giảm 50% phí vệ sinh...)"
                 }
                 className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
@@ -1160,7 +1220,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               <Button
                 variant="primary"
                 className="bg-rose-600 hover:bg-rose-700 text-white"
-                onClick={handleReviewDispute}
+                disabled={apiBusy || (useApi && !disputeResolutionNote.trim())} onClick={handleReviewDispute}
               >
                 {'Gửi kết luận cho khách'}
               </Button>
@@ -1172,7 +1232,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       {/* Complete Refund Modal */}
       <Modal
         open={refundModalOpen}
-        onClose={() => setRefundModalOpen(false)}
+        onClose={() => { if (!apiBusy) setRefundModalOpen(false) }}
         title={'Xác Nhận Hoàn Tiền Cọc Cho Khách'}
       >
         {selectedReturn && (
@@ -1195,9 +1255,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             <Input
               label={'Mã chứng từ / Tham chiếu chuyển khoản ngân hàng'}
               value={refundTxnRef}
-              onChange={e => setRefundTxnRef(e.target.value)}
+              disabled={apiBusy} onChange={e => { setRefundTxnRef(e.target.value); setRefundConfirmed(false) }}
               placeholder="e.g. VCB-REF-849204"
             />
+            {useApi && <>
+              <label className="block text-xs font-semibold text-stone-700">Phương thức hoàn tiền<select value={refundMethod} disabled={apiBusy} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2"><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
+              <label className="block text-xs font-semibold text-stone-700">Biên lai thực hoàn<input key={selectedReturn.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={apiBusy} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null }} /></label>
+              <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={refundConfirmed} disabled={apiBusy || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Đã thực hoàn đúng số tiền và đối chiếu biên lai.</span></label>
+            </>}
 
             <div className="flex gap-2 justify-end pt-3 border-t">
               <Button variant="outline" onClick={() => setRefundModalOpen(false)}>
@@ -1206,7 +1271,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               <Button
                 variant="primary"
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={handleCompleteRefund}
+                disabled={apiBusy || (useApi && (!refundFile || !refundConfirmed || !refundTxnRef.trim()))} onClick={handleCompleteRefund}
               >
                 {'Xác nhận hoàn cọc'}
               </Button>
@@ -1265,7 +1330,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       </Modal>
 
       {/* 2. Modal Tạo Phiếu Bảo Trì */}
-      <Modal open={maintenanceModalOpen} onClose={() => { setMaintenanceModalOpen(false); setMaintenanceTarget(null) }} title="🛠️ Lập Phiếu Bảo Trì Kho Sau Nghiệm Thu">
+      <Modal open={maintenanceModalOpen} onClose={() => { setMaintenanceModalOpen(false); setMaintenanceTarget(null) }} title="Lập phiếu bảo trì kho sau nghiệm thu">
         {maintenanceTarget && (
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1.5">
@@ -1328,12 +1393,12 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
             {((completeTarget.damageClassification && completeTarget.damageClassification !== 'no_damage') || completeTarget.proposedUnitStatus === 'maintenance') ? (
               <div className="rounded-lg bg-amber-50 p-3 border border-amber-200 text-xs text-amber-900">
-                <p className="font-bold">⚠️ Gian kho có hư hại / bảo trì</p>
+                <p className="font-bold">Gian kho có hư hại hoặc cần bảo trì</p>
                 <p className="mt-1">Khi đóng hồ sơ trả kho này, hợp đồng của khách sẽ kết thúc. Gian kho sẽ tiếp tục được giữ ở trạng thái <b>BẢO TRÌ</b> để nhân viên kỹ thuật khắc phục.</p>
               </div>
             ) : (
               <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-200 text-xs text-emerald-900">
-                <p className="font-bold">✓ Gian kho nguyên vẹn & Đạt nghiệm thu</p>
+                <p className="font-bold">Gian kho nguyên vẹn và đạt nghiệm thu</p>
                 <p className="mt-1">Khi xác nhận hoàn tất, gian kho <b>{completeTarget.unitId}</b> sẽ tự động chuyển sang trạng thái <b>CÒN TRỐNG (Available)</b>, quyền truy cập PIN/thẻ được thu hồi và hồ sơ thuê được đóng hoàn toàn.</p>
               </div>
             )}
@@ -1345,22 +1410,19 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               placeholder="Nghiệm thu đạt yêu cầu..."
             />
 
-            {(completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'disputed') && (
+            {completeTarget.status === 'disputed' && (
               <div className="rounded-lg bg-rose-50 p-3 border border-rose-200 text-xs text-rose-800">
-                ⚠️ Hồ sơ đang {completeTarget.status === 'disputed' ? 'khiếu nại (cần BO giải quyết)' : 'chờ khách hàng duyệt xác nhận'}. Nút xác nhận bị vô hiệu hóa để tránh lỗi xung đột hệ thống (409 Conflict).
+                Hồ sơ đang khiếu nại, cần BO giải quyết. Chưa thể xác nhận hoàn tất ở trạng thái này.
               </div>
             )}
-
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => { setCompleteModalOpen(false); setCompleteTarget(null) }}>Hủy</Button>
               <Button
                 variant="primary"
-                disabled={completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'disputed'}
-                title={completeTarget.status === 'awaiting_customer_confirmation' ? 'Hồ sơ đang chờ khách duyệt - Nút bị vô hiệu hóa' : completeTarget.status === 'disputed' ? 'Hồ sơ đang khiếu nại - Nút bị vô hiệu hóa' : undefined}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
                 onClick={handleConfirmComplete}
               >
-                Xác nhận đóng hồ sơ
+                Xác nhận hoàn tất trả kho
               </Button>
             </div>
           </div>
@@ -1368,10 +1430,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       </Modal>
 
       <ReturnSettlementModal
-        open={settlementModalOpen}
+        open={settlementModalOpen && (!useApi || apiRead.rows.some(row => row.id === settlementTarget?.id))}
         onClose={() => setSettlementModalOpen(false)}
         returnCase={settlementTarget}
-        payments={payments}
+        payments={useApi ? [] : payments}
+        apiRecord={useApi ? apiRead.rows.find(row => row.id === settlementTarget?.id) : undefined}
         role="manager"
       />
     </div>

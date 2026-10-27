@@ -96,7 +96,7 @@ interface LayoutProps {
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, roleColor, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
 }: LayoutProps) {
   const roleTaskbarColor: Record<Role, string> = {
     customer: '#F4C542',
@@ -114,8 +114,8 @@ export default function Layout({
   useEffect(() => {
     if (!notificationsOpen) return
     const closeOutside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !notificationAreaRef.current?.contains(event.target)) {
-        setNotificationsOpen(false)
+      if (event.target instanceof Node) {
+        if (!notificationAreaRef.current?.contains(event.target)) setNotificationsOpen(false)
       }
     }
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -239,7 +239,7 @@ export default function Layout({
       'overdue': 'Quản Lý Nợ Quá Hạn',
       'facilities': 'Quản Lý Cơ Sở',
       'performance': 'Hiệu Suất Mặt Bằng',
-      'policies': 'Gói Thuê Kỳ Hạn',
+      'policies': 'Gói Thuê',
       'pricing': 'Bảng Giá Loại Kho',
       'revenue': 'Báo Cáo Doanh Thu',
       'users': 'Quản Lý Người Dùng',
@@ -315,8 +315,8 @@ export default function Layout({
     const lower = roleLabel.toLowerCase()
     if (lower.includes('staff') || lower.includes('nhân viên')) return 'Nhân Viên'
     if (lower.includes('customer') || lower.includes('khách hàng')) return 'Khách Hàng'
+    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh') || lower.includes('thương mại')) return 'Quản Lý Vận Hành Kinh Doanh'
     if (lower.includes('manager') || lower.includes('quản lý')) return 'Quản Lý Cơ Sở'
-    if (lower.includes('business') || lower.includes('đối tác') || lower.includes('kinh doanh')) return 'Quản Lý Vận Hành Kinh Doanh'
     if (lower.includes('admin') || lower.includes('quản trị')) return 'Quản Trị Viên'
     return roleLabel
   }
@@ -393,7 +393,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex h-full bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -405,37 +405,37 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 border-t-4 bg-[#292a27] border-r border-[#44453f] text-white flex flex-col transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-[#44453f] flex items-center justify-between">
-          <BrandLogo light subtitle={'Lưu trữ an toàn'} />
+        <div className="shrink-0 px-5 py-4 border-b border-white/10 flex items-center justify-between">
+          <BrandLogo light subtitle={'Lưu trữ an toàn'} imgClassName="h-8 w-auto max-w-full object-contain" />
         </div>
 
         {/* Role & Facility badge */}
-        <div className="px-4 pt-4 pb-2 space-y-1.5">
+        <div className="shrink-0 px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className={`inline-flex items-center px-2.5 py-1 rounded text-[10px] uppercase tracking-[.08em] font-semibold border ${roleColor || 'bg-[#3a3933] text-[#f3c675] border-[#4b4940]'}`}>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-normal text-stone-300">
               {getTranslatedRole()}
             </span>
           </div>
           {(user.role === 'manager' || user.role === 'staff') && (
             user.facility ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#3a3933]/80 border border-[#4b4940] text-[11px] text-amber-300">
+              <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-stone-300">
                 <span>🏢</span>
-                <span className="truncate font-medium">{user.facility}</span>
+                <span className="truncate font-normal" title={user.facility}>{user.facility}</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/40 border border-amber-800/60 text-[11px] text-amber-400">
-                <span>⚠️ Chưa phân công cơ sở</span>
+                <span>Chưa phân công cơ sở</span>
               </div>
             )
           )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-2 overflow-y-auto" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
           {visibleNavItems.map((item, index) => {
             const groupText = getNavGroup(item.group)
             const prevGroupText = getNavGroup(visibleNavItems[index - 1]?.group)
@@ -448,6 +448,7 @@ export default function Layout({
                 )}
                 <button
                   onClick={() => { navigate(item.id); setSidebarOpen(false) }}
+                  aria-current={currentPage === item.id ? 'page' : undefined}
                   className={`sidebar-link w-full mb-0.5 ${currentPage === item.id ? 'active' : ''}`}
                 >
                   <span>{getNavLabel(item)}</span>
@@ -458,22 +459,22 @@ export default function Layout({
         </nav>
 
         {/* User section */}
-        <div className="px-4 py-4 border-t border-[#44453f]">
+        <div className="shrink-0 px-3 py-3 border-t border-white/10">
           <button
             type="button"
             onClick={() => { navigate('profile'); setSidebarOpen(false) }}
-            className={`w-full flex items-center gap-3 p-2 rounded-lg transition text-left mb-2.5 group ${currentPage === 'profile'
-                ? 'bg-[#3a3933] border border-[#4b4940] shadow-sm'
+            className={`w-full flex items-center gap-2.5 p-2 rounded-lg transition text-left mb-1 group ${currentPage === 'profile'
+                ? 'bg-white/10'
                 : 'hover:bg-white/5'
               }`}
             title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
           >
-            <Avatar name={user.name} size="md" imageUrl={user.avatar} />
+            <Avatar name={user.name} size="sm" imageUrl={user.avatar} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-stone-100 truncate group-hover:text-amber-200 transition">{user.name}</p>
+              <p className="text-sm font-medium text-stone-200 truncate group-hover:text-white transition">{user.name}</p>
               <p className="text-xs text-stone-400 truncate">{user.email}</p>
             </div>
-            <span className={`text-xs font-mono px-1.5 py-0.5 rounded transition ${currentPage === 'profile' ? 'bg-[#e9a12c] text-[#292a27] font-semibold' : 'text-stone-400 group-hover:text-stone-200'
+            <span className={`text-xs px-1.5 py-0.5 rounded transition ${currentPage === 'profile' ? 'text-white font-medium' : 'text-stone-400 group-hover:text-stone-200'
               }`}>
               {'Hồ sơ'}
             </span>
@@ -503,7 +504,7 @@ export default function Layout({
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Top bar */}
         <header className="bg-white border-b border-[#deddd2] h-16 flex items-center px-4 lg:px-7 gap-3 lg:gap-4 flex-shrink-0">
           <button
@@ -523,13 +524,12 @@ export default function Layout({
           {(user.role === 'manager' || user.role === 'staff') && (
             <div className="hidden sm:flex items-center ml-2">
               {user.facility ? (
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>🏢 Cơ sở: <strong className="font-bold text-emerald-950">{user.facility}</strong></span>
+                <div className="ui-badge inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium">
+                  <span>Cơ sở: <strong className="font-semibold">{user.facility}</strong></span>
                 </div>
               ) : (
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                  <span>⚠️ Chưa phân công cơ sở</span>
+                  <span>Chưa phân công cơ sở</span>
                 </div>
               )}
             </div>
@@ -619,8 +619,8 @@ export default function Layout({
         </header>
 
         {/* Content */}
-        <main ref={contentScrollRef} data-layout-scroll-container className="flex-1 overflow-y-auto p-4 lg:p-7 fade-in">
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+        <main ref={contentScrollRef} data-layout-scroll-container className="min-h-0 min-w-0 flex-1 basis-0 overflow-x-hidden overflow-y-auto overscroll-contain p-4 lg:p-7 fade-in">
+          <div className="mx-auto min-w-0 w-full max-w-[1600px]">{children}</div>
 
         </main>
       </div>

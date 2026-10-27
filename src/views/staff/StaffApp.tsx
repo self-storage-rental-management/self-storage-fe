@@ -1,3 +1,4 @@
+import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
 import { useEffect, useRef, useState } from "react"
 
 import Layout, {
@@ -35,16 +36,17 @@ import { SupportApiRoute } from "../support-api/SupportApiEntry"
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
-import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
-import UnitAssignmentPanel from "../UnitAssignmentPanel"
 import {
+  listCheckIns,
   listCredentialAlerts,
   revokeAccessCredential,
   type CredentialAlert,
 } from "../../services/checkInApi"
+import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { listStaffActiveReservations, type StaffReservationProgress } from "../../services/staffReservationApi"
 import {
   loadStaffDailyOperations,
   type StaffDailyOperation,
@@ -92,11 +94,12 @@ import {
   staffErrorMessage,
   type StaffTaskSort,
 } from "./staffPresentation"
+import type { ApiReservationStatus } from "../../types/statusContracts"
 
-type ReservationStatus = "CREATED" | "REVIEW_REQUIRED" | "AWAITING_DEPOSIT" | "DEPOSIT_PAID" | "UNIT_RESERVED" | "READY_FOR_CHECKIN" | "COMPLETED" | "CANCELLED" | "EXPIRED"
+type ReservationStatus = ApiReservationStatus
 
 type StaffReservation = Omit<typeof RESERVATIONS[number], "status"> & {
-  status: ReservationStatus
+  status: LegacyReservationStatus
 
   sizeCode?: string
 
@@ -240,7 +243,7 @@ const sortStaffList = <T,>(
   })
 
 const reservationDeadline = (reservation: StaffReservation) =>
-  reservation.status === "REVIEW_REQUIRED" && reservation.reviewDueAt
+  reservation.status === "AWAITING_REVIEW" && reservation.reviewDueAt
     ? reservation.reviewDueAt
     : reservation.checkInDeadline || reservation.appointmentDate
 
@@ -259,13 +262,13 @@ const staffTaskTypeLabel: Record<FacilityTask["type"], string> = {
 const sharedReservationStatus = (
   reservation: StorageReservation,
 ): ReservationStatus => {
-  if (reservation.status === "awaiting_review") return "REVIEW_REQUIRED"
+  if (reservation.status === "awaiting_review") return "AWAITING_REVIEW"
 
-  if (reservation.status === "awaiting_email") return "CREATED"
+  if (reservation.status === "awaiting_email") return "AWAITING_EMAIL"
 
-  if (reservation.status === "awaiting_payment") return "AWAITING_DEPOSIT"
+  if (reservation.status === "awaiting_payment") return "AWAITING_PAYMENT"
 
-  if (reservation.status === "DEPOSIT_PAID") return "DEPOSIT_PAID"
+  if (reservation.status === "DEPOSIT_PAID") return "CONFIRMED"
 
   if (reservation.status === "UNIT_RESERVED") return "UNIT_RESERVED"
 
@@ -277,7 +280,7 @@ const sharedReservationStatus = (
 
   if (reservation.status === "EXPIRED") return "EXPIRED"
 
-  return "CREATED"
+  return "AWAITING_EMAIL"
 }
 
 const mapSharedReservation = (
@@ -548,18 +551,18 @@ const mapSharedReturn = (
 const reservationSeed: StaffReservation[] = DEMO_DATA_ENABLED ? RESERVATIONS.map((item, index) => ({
   ...item,
 
-  // Keep one realistic exception in the Staff queue so the REVIEW_REQUIRED
+  // Keep one realistic exception in the Staff queue so the AWAITING_REVIEW
 
   // workflow can be exercised without changing the shared demo data.
 
   status:
     item.id === "RSV-2049"
-      ? "REVIEW_REQUIRED"
+      ? "AWAITING_REVIEW"
       : item.paid
         ? item.unit
           ? "UNIT_RESERVED"
-          : "DEPOSIT_PAID"
-        : "CREATED",
+          : "CONFIRMED"
+          : "AWAITING_EMAIL",
 
   appointmentDate: item.moveIn,
 
@@ -766,13 +769,13 @@ const statusLabelMap: Record<string, string> = {
 
   closed: "Đã đóng",
 
-  CREATED: "Chờ khách hàng xác minh thư điện tử",
+  AWAITING_EMAIL: "Chờ khách hàng xác minh thư điện tử",
 
-  REVIEW_REQUIRED: "Cần nhân viên rà soát ngoại lệ",
+  AWAITING_REVIEW: "Cần nhân viên rà soát ngoại lệ",
 
-  AWAITING_DEPOSIT: "Đã duyệt · Chờ thanh toán cọc",
+  AWAITING_PAYMENT: "Đã duyệt · Chờ thanh toán cọc",
 
-  DEPOSIT_PAID: "Đã cọc · Chờ nhận kho",
+  CONFIRMED: "Đã cọc · Chờ nhận kho",
 
   UNIT_RESERVED: "Đã giữ gian kho",
 
@@ -816,21 +819,9 @@ export default function StaffApp({
     {
       id: "dashboard",
 
-      label: "Tổng quan ca làm việc",
+      label: "Tổng quan & nhiệm vụ ca làm việc",
 
       icon: Icon.home,
-
-      group: "Ca làm việc",
-
-      permission: "dashboard:read",
-    },
-
-    {
-      id: "tasks",
-
-      label: "Nhiệm vụ được giao",
-
-      icon: Icon.tasks,
 
       group: "Ca làm việc",
 
@@ -861,7 +852,7 @@ export default function StaffApp({
       permission: "returns:read",
     },
 
-    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành" }] : []),
+    ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
 
     {
       id: "support",
@@ -879,6 +870,7 @@ export default function StaffApp({
   const [page, setPage] = useState(() => getInitialPage(nav, "dashboard"))
 
   const [backendNotifications, setBackendNotifications] = useState<ApiNotification[]>([])
+  const [supportOpenTicket, setSupportOpenTicket] = useState<{ id: string; request: number }>()
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
@@ -918,6 +910,14 @@ export default function StaffApp({
 
   const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
 
+  const [apiOverviewCounts, setApiOverviewCounts] = useState({
+    depositWaiting: 0,
+    upcomingCheckins: 0,
+    returnsToProcess: 0,
+  })
+
+  const [apiOverviewLoading, setApiOverviewLoading] = useState(false)
+
   const [credentialBusy, setCredentialBusy] = useState<string | null>(null)
 
   const [inspectModal, setInspectModal] = useState(false)
@@ -949,12 +949,6 @@ export default function StaffApp({
   const [reservationSort, setReservationSort] =
     useState<StaffListSort>("deadline-asc")
 
-  const [checkinStatusFilter, setCheckinStatusFilter] = useState("all")
-
-  const [checkinDateFilter, setCheckinDateFilter] = useState("")
-
-  const [checkinSort, setCheckinSort] = useState<StaffListSort>("deadline-asc")
-
   const [returnStatusFilter, setReturnStatusFilter] = useState("all")
 
   const [returnDateFilter, setReturnDateFilter] = useState("")
@@ -983,8 +977,6 @@ export default function StaffApp({
   const [taskEvidenceText, setTaskEvidenceText] = useState("")
 
   const [reservationsPage, setReservationsPage] = useState(1)
-
-  const [checkinsPage, setCheckinsPage] = useState(1)
 
   const [renewalsPage, setRenewalsPage] = useState(1)
 
@@ -1019,17 +1011,11 @@ export default function StaffApp({
   const [selectedRenewal, setSelectedRenewal] =
     useState<typeof hub.renewals[number] | null>(null)
 
-  const [renewalContractFile, setRenewalContractFile] = useState("")
 
-  const [renewalContractFileName, setRenewalContractFileName] = useState("")
 
-  const [renewalContractNumber, setRenewalContractNumber] = useState("")
 
-  const [renewalPaymentReference, setRenewalPaymentReference] = useState("")
 
-  const [renewalIdentityVerified, setRenewalIdentityVerified] = useState(false)
 
-  const [renewalTermsVerified, setRenewalTermsVerified] = useState(false)
 
   const [pendingCheckinCompletionId, setPendingCheckinCompletionId] =
     useState<string | null>(null)
@@ -1256,6 +1242,58 @@ export default function StaffApp({
       })
     return () => { active = false }
   }, [credentialAlerts, credentialError, operationalTaskDateFilter, user.facilityId, user.id, apiDailyOperationsRefresh])
+
+  useEffect(() => {
+    if (!isApiAuthenticated()) {
+      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0 })
+      setApiOverviewLoading(false)
+      return
+    }
+
+    let active = true
+    setApiOverviewLoading(true)
+
+    const loadOverview = async () => {
+      const results = await Promise.allSettled([
+        listStaffActiveReservations({ page: 0, size: 100 }),
+        listCheckIns({ page: 0, pageSize: 100 }),
+        listReturns("staff", 0, 100),
+      ])
+
+      if (!active) return
+
+      const reservations = results[0].status === "fulfilled"
+        ? results[0].value.data as StaffReservationProgress[]
+        : []
+      const checkIns = results[1].status === "fulfilled"
+        ? results[1].value.data
+        : []
+      const returns = results[2].status === "fulfilled"
+        ? results[2].value.data as ApiReturn[]
+        : []
+
+      const waitingStatuses = new Set([
+        "CONFIRMED",
+        "UNIT_RESERVED",
+        "READY_FOR_CHECKIN",
+        "AWAITING_CUSTOMER_RECEIPT",
+      ])
+
+      setApiOverviewCounts({
+        depositWaiting: reservations.filter((item) => waitingStatuses.has(item.status)).length,
+        upcomingCheckins: checkIns.filter((item) => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? "")).length,
+        returnsToProcess: returns.filter((item) => item.status !== "completed").length,
+      })
+      setApiOverviewLoading(false)
+    }
+
+    void loadOverview()
+    const timer = window.setInterval(() => void loadOverview(), 30_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [user.facilityId, user.id])
 
   const refreshCredentialAlerts = () => {
     if (!isApiAuthenticated()) return
@@ -1537,7 +1575,7 @@ export default function StaffApp({
     (r) => r.customer,
   )
 
-  const facilityTickets = hasFacilityScope
+  const facilityTickets = isApiAuthenticated() ? [] : hasFacilityScope
     ? hub.tickets.filter((ticket) =>
         isFacilityVisible(user, ticket.facilityId, ticket.facility),
       )
@@ -1653,23 +1691,25 @@ export default function StaffApp({
     )
   })
 
-  const displayedCheckins = sortStaffList(
-    eligibleCheckins.filter(
-      (checkin) =>
-        checkin.status !== "no-show" &&
-        (checkinStatusFilter === "all" ||
-          checkin.status === checkinStatusFilter) &&
-        (!checkinDateFilter ||
-          toDateInputValue(
-            checkin.checkInDeadline || checkin.appointmentDate,
-          ) === checkinDateFilter),
-    ),
+  const pendingRenewals = hub.renewals.filter(
+    (renewal) =>
+      renewal.status === "pending" &&
+      isFacilityVisible(
+        user,
+        renewal.facilityId,
+        hub.rentals.find((rental) => rental.id === renewal.rentalId)?.facilityName,
+      ),
+  )
 
-    checkinSort,
-
-    (checkin) => checkin.checkInDeadline || checkin.appointmentDate,
-
-    (checkin) => checkin.customer,
+  const scheduledRenewals = hub.renewals.filter(
+    (renewal) =>
+      renewal.status === "appointment_scheduled" &&
+      isFacilityVisible(
+        user,
+        renewal.facilityId,
+        hub.rentals.find((rental) => rental.id === renewal.rentalId)
+          ?.facilityName,
+      ),
   )
 
   const displayedReturns = sortStaffList(
@@ -1688,7 +1728,7 @@ export default function StaffApp({
     (returnItem) => returnItem.customer,
   )
 
-  const assignedFacilityTasks = hub.staffTasks
+  const assignedFacilityTasks = isApiAuthenticated() ? [] : hub.staffTasks
 
     .filter(
       (task) =>
@@ -1762,19 +1802,6 @@ export default function StaffApp({
     }
   }
 
-  const scheduledRenewals = hub.renewals.filter(
-    (renewal) =>
-      renewal.status === "appointment_scheduled" &&
-      isFacilityVisible(
-        user,
-
-        renewal.facilityId,
-
-        hub.rentals.find((rental) => rental.id === renewal.rentalId)
-          ?.facilityName,
-      ),
-  )
-
   const openCheckinRecord = (checkin: StaffCheckin) => {
     setSelectedCheckin(checkin)
 
@@ -1841,7 +1868,7 @@ export default function StaffApp({
 
     ...reservations
 
-      .filter((r) => r.status === "REVIEW_REQUIRED")
+      .filter((r) => r.status === "AWAITING_REVIEW")
 
       .map((r) => ({
         id: `review-${r.id}`,
@@ -1863,7 +1890,7 @@ export default function StaffApp({
 
     ...reservations
 
-      .filter((r) => r.status === "DEPOSIT_PAID")
+      .filter((r) => r.status === "CONFIRMED")
 
       .map((r) => ({
         id: `allocation-${r.id}`,
@@ -2021,15 +2048,12 @@ export default function StaffApp({
     reservationsPage,
   )
 
-  const checkinsPagination = paginateStaffItems(displayedCheckins, checkinsPage)
-
   const renewalsPagination = paginateStaffItems(
     [...scheduledRenewals].sort(
       (a, b) =>
         new Date(a.appointmentDate || "").getTime() -
         new Date(b.appointmentDate || "").getTime(),
     ),
-
     renewalsPage,
   )
 
@@ -2062,8 +2086,6 @@ export default function StaffApp({
         return
       }
       setPage(task.page)
-      if (task.id.startsWith("assignment-"))
-        showToast(`Đã mở danh sách đặt chỗ chờ phân kho cho ${task.customer}.`)
       if (task.id.startsWith("return-"))
         showToast(`Đã mở danh sách hồ sơ trả kho cho ${task.customer}.`)
       return
@@ -2162,7 +2184,7 @@ export default function StaffApp({
       task.status === "open" ? "Chờ nhận việc" : "Đang thực hiện"
     }`,
 
-    page: "tasks",
+    page: "dashboard",
   }))
 
   const notificationPage = (type: ApiNotification["type"]) => {
@@ -2170,7 +2192,7 @@ export default function StaffApp({
     if (type === "SUPPORT") return "support"
     if (type === "RETURN") return "return"
     if (type === "RENEWAL") return "renewal-signing"
-    if (type === "OVERDUE") return "tasks"
+    if (type === "OVERDUE") return "dashboard"
     if (type === "PAYMENT") return "payments"
     if (type === "RESERVATION") return "reservations"
     return "dashboard"
@@ -2215,6 +2237,9 @@ export default function StaffApp({
         if (notification.id.startsWith("api-notification-")) {
           const notificationId = notification.id.replace("api-notification-", "")
           setPage(notification.page)
+          if (notification.page === "support" && notification.targetId) {
+            setSupportOpenTicket(previous => ({ id: notification.targetId!, request: (previous?.request ?? 0) + 1 }))
+          }
           setBackendNotifications((current) => current.map((item) =>
             item.id === notificationId ? { ...item, isRead: true } : item
           ))
@@ -2229,7 +2254,7 @@ export default function StaffApp({
         }
 
         if (notification.id.startsWith("assigned-task-")) {
-          setPage("tasks")
+          setPage("dashboard")
 
           return
         }
@@ -2245,6 +2270,139 @@ export default function StaffApp({
       roleColor="bg-green-100 text-green-700"
     >
       {page === "renewal-signing" && isApiAuthenticated() && <StaffRenewalOperationsApiPanel key={user.id} />}
+      {page === "renewal-signing" && !isApiAuthenticated() && (
+        <div className="fade-in mt-4 space-y-6">
+          {/* 1. YÊU CẦU GIA HẠN CHỜ DUYỆT */}
+          <div className="space-y-3">
+            <SectionHeader
+              title={`Yêu cầu gia hạn chờ duyệt (${pendingRenewals.length})`}
+              subtitle="Khách hàng đã tạo đơn xin gia hạn; nhân viên kiểm tra và duyệt để hoàn tất gia hạn hợp đồng cho khách."
+            />
+            {pendingRenewals.length > 0 ? (
+              <div className="grid gap-3">
+                {pendingRenewals.map((renewal) => {
+                  const rental = hub.rentals.find((r) => r.id === renewal.rentalId)
+                  return (
+                    <Card key={renewal.id} className="p-5 border-amber-200 bg-amber-50/20">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-base">
+                              {renewal.unitId} · {renewal.customerName}
+                            </span>
+                            <Badge variant="warning">Chờ nhân viên duyệt</Badge>
+                          </div>
+                          <p className="text-xs text-slate-600">
+                            Kỳ hạn hiện tại hết hạn: <b>{renewal.oldEndDate}</b> → Đề xuất gia hạn đến: <b className="text-emerald-700">{renewal.newEndDate}</b> ({renewal.renewalMonths} tháng)
+                          </p>
+                          <p className="text-xs text-slate-600">
+                            Đơn giá: {formatMoney(renewal.originalMonthlyRate || rental?.monthlyRate || 0)}/tháng · Tổng tiền: <b className="text-slate-900">{formatMoney(renewal.totalAmount || renewal.renewalFee)}</b>
+                            {renewal.discountAmount ? ` (Ưu đãi giảm: ${formatMoney(renewal.discountAmount)})` : ""}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            Mã yêu cầu: <span className="font-mono">{renewal.id}</span> · Gửi lúc: {formatDate(renewal.requestedAt)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            onClick={async () => {
+                              try {
+                                if (isApiAuthenticated()) {
+                                  try { await approveRenewalTicket(renewal.id) } catch {}
+                                }
+                                hub.approveRenewal(renewal.id, user)
+                                showToast(`Đã duyệt gia hạn thành công cho hồ sơ ${renewal.id}! Hợp đồng thuê đã được tự động kéo dài đến ${renewal.newEndDate}.`)
+                              } catch (err: any) {
+                                showToast(err?.message || "Có lỗi khi duyệt gia hạn.")
+                              }
+                            }}
+                          >
+                            ✓ Duyệt gia hạn
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-300 text-red-700 hover:bg-red-50"
+                            onClick={async () => {
+                              const reason = prompt("Nhập lý do từ chối yêu cầu gia hạn:", "Cơ sở có kế hoạch bảo trì kho hoặc lịch không khả dụng.")
+                              if (reason && reason.trim()) {
+                                try {
+                                  if (isApiAuthenticated()) {
+                                    try { await rejectRenewalTicket(renewal.id, reason.trim()) } catch {}
+                                  }
+                                  hub.rejectRenewal(renewal.id, user, reason.trim())
+                                  showToast(`Đã từ chối yêu cầu gia hạn ${renewal.id}.`)
+                                } catch (err: any) {
+                                  showToast(err?.message || "Có lỗi khi từ chối gia hạn.")
+                                }
+                              }
+                            }}
+                          >
+                            ✕ Từ chối
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            ) : (
+              <Card className="p-6 text-center text-sm text-stone-500 bg-white">
+                Hiện không có yêu cầu gia hạn nào đang chờ duyệt.
+              </Card>
+            )}
+          </div>
+
+          {!isApiAuthenticated() && scheduledRenewals.length > 0 && (
+            <div className="space-y-3 pt-4 border-t border-stone-200">
+              <SectionHeader
+                title={`Lịch ký phụ lục gia hạn (${scheduledRenewals.length})`}
+                subtitle="Thu phần tiền còn lại, tải phụ lục đã ký và kích hoạt thời hạn mới"
+              />
+              {renewalsPagination.items.map((renewal) => (
+                <Card key={renewal.id} className="p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {renewal.unitId} · {renewal.customerName}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Hẹn {formatDate(renewal.appointmentDate)} lúc{" "}
+                        {formatTime(renewal.appointmentTime)} · Gia hạn đến{" "}
+                        {formatDate(renewal.newEndDate)}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-amber-800">
+                        Còn thu tại cơ sở: {formatMoney(renewal.remainingAmount ?? 0)}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedRenewal(renewal)
+                        setRenewalContractFile("")
+                        setRenewalContractFileName("")
+                        setRenewalContractNumber(`PL-${renewal.id}`)
+                        setRenewalPaymentReference("")
+                        setRenewalIdentityVerified(false)
+                        setRenewalTermsVerified(false)
+                      }}
+                    >
+                      Hoàn tất gia hạn
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+              <StaffPagination
+                {...renewalsPagination}
+                total={scheduledRenewals.length}
+                onPageChange={setRenewalsPage}
+              />
+            </div>
+          )}
+        </div>
+      )}
       {page === "dashboard" && (
         <div className="fade-in space-y-6">
           <SectionHeader
@@ -2255,25 +2413,27 @@ export default function StaffApp({
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
               title={"Đơn đã cọc · Chờ nhận kho"}
-              value={
-                reservations.filter((r) => r.status === "DEPOSIT_PAID").length
-              }
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
+                : reservations.filter((r) => r.status === "CONFIRMED").length}
               icon={Icon.alert}
               iconBg="bg-amber-50"
             />
             <StatCard
               title={"Nhận kho sắp tới"}
-              value={
-                eligibleCheckins.filter(
-                  (c) => c.status !== "completed" && c.status !== "no-show",
-                ).length
-              }
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
+                : eligibleCheckins.filter(
+                    (c) => c.status !== "completed" && c.status !== "no-show",
+                  ).length}
               icon={Icon.truck}
               iconBg="bg-blue-50"
             />
             <StatCard
               title={"Trả kho cần xử lý"}
-              value={returns.filter((r) => r.status !== "refunded").length}
+              value={isApiAuthenticated()
+                ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
+                : returns.filter((r) => r.status !== "refunded").length}
               icon={Icon.clipboard}
               iconBg="bg-purple-50"
             />
@@ -2293,164 +2453,24 @@ export default function StaffApp({
               iconBg="bg-red-50"
             />
           </div>
-          {openAssignedFacilityTasks.length > 0 && (
-            <Card>
-              <div className="flex items-center justify-between gap-3 border-b border-stone-200 p-4">
-                <div>
-                  <h3 className="font-bold">{"Nhiệm vụ quản lý giao"}</h3>
-                  <p className="text-xs text-stone-500">
-                    {"Nhận việc và cập nhật hoàn thành để quản lý theo dõi."}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage("tasks")}
-                >
-                  {"Xem toàn bộ"}
-                </Button>
-              </div>
-              <Table>
-                <Thead>
-                  <tr>
-                    <Th>{"Nhiệm vụ"}</Th>
-                    <Th>{"Loại"}</Th>
-                    <Th>{"Hạn xử lý"}</Th>
-                    <Th>{"Ưu tiên"}</Th>
-                    <Th>{"Trạng thái"}</Th>
-                    <Th />
-                  </tr>
-                </Thead>
-                <Tbody>
-                  {openAssignedFacilityTasks.slice(0, 5).map((task) => (
-                    <Tr key={task.id}>
-                      <Td>
-                        <p className="font-semibold text-stone-900">
-                          {task.title}
-                        </p>
-                        {task.notes && (
-                          <p className="mt-1 text-xs text-stone-500">
-                            {task.notes}
-                          </p>
-                        )}
-                      </Td>
-                      <Td>{staffTaskTypeLabel[task.type]}</Td>
-                      <Td className="text-xs">{formatDate(task.dueAt)}</Td>
-                      <Td>
-                        <Badge
-                          variant={
-                            task.priority === "high"
-                              ? "error"
-                              : task.priority === "medium"
-                                ? "warning"
-                                : "info"
-                          }
-                        >
-                          {statusLabelMap[task.priority]}
-                        </Badge>
-                      </Td>
-                      <Td>
-                        <Badge
-                          variant={
-                            task.status === "in_progress" ? "info" : "warning"
-                          }
-                        >
-                          {task.status === "in_progress"
-                            ? "Đang thực hiện"
-                            : "Chờ nhận việc"}
-                        </Badge>
-                      </Td>
-                      <Td className="text-right">
-                        {task.status === "open" ? (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              updateAssignedTaskStatus(task, "in_progress")
-                            }
-                          >
-                            {"Nhận việc"}
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              updateAssignedTaskStatus(task, "completed")
-                            }
-                          >
-                            {"Hoàn thành"}
-                          </Button>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </Card>
-          )}
-          <Card>
-            <div className="p-4 border-b border-stone-200 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-bold">
-                  {"Việc ưu tiên theo lịch vận hành"}
-                </h3>
-                <p className="text-xs text-stone-500">
-                  {"Lịch nhận/trả kho, hỗ trợ và hợp đồng sắp hết hạn."}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage("tasks")}
-              >
-                {"Xem toàn bộ"}
-              </Button>
-            </div>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{"Ưu tiên"}</Th>
-                  <Th>{"Nhiệm vụ"}</Th>
-                  <Th>{"Khách hàng"}</Th>
-                  <Th>{"Lịch / Thời hạn xử lý"}</Th>
-                  <Th></Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {operationalTasks.slice(0, 6).map((task) => (
-                  <Tr key={task.id}>
-                    <Td>
-                      {s(task.priority, {
-                        high: "error",
-
-                        medium: "warning",
-
-                        low: "muted",
-                      })}
-                    </Td>
-                    <Td>
-                      <b>{task.title}</b>
-                    </Td>
-                    <Td>{task.customer}</Td>
-                    <Td>
-                      <p className="text-xs">{task.time}</p>
-                      <p className="text-[11px] font-semibold text-amber-700">
-                        {task.sla}
-                      </p>
-                    </Td>
-                    <Td className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openOperationalTask(task)}
-                      >
-                        {"Xử lý"}
-                      </Button>
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Card>
+          <StaffDailyTaskQueue
+            assignedTasks={assignedFacilityTasks}
+            operationalTasks={operationalTasks}
+            dateFilter={operationalTaskDateFilter}
+            priorityFilter={operationalTaskPriorityFilter}
+            sort={operationalTaskSort}
+            onDateFilterChange={setOperationalTaskDateFilter}
+            onPriorityFilterChange={setOperationalTaskPriorityFilter}
+            onSortChange={setOperationalTaskSort}
+            onAssignedStatus={updateAssignedTaskStatus}
+            onOpenAssignedCompletion={(task) => {
+              setTaskCompletionTarget(task)
+              setTaskResultReport(task.resultReport || "")
+              setTaskEvidenceText((task.evidence || []).join("\n"))
+            }}
+            onOpenOperational={openOperationalTask}
+            showToast={showToast}
+          />
         </div>
       )}
 
@@ -2566,7 +2586,7 @@ export default function StaffApp({
                       <b>{task.title}</b>
                       {kind === "assigned" && task.referenceId && <p className="text-xs text-stone-500">{task.referenceId}</p>}
                     </Td>
-                    <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? staffTaskTypeLabel[task.type] : task.id.startsWith("maintenance-") ? "Bảo trì" : task.id.startsWith("support-") ? "Hỗ trợ" : task.id.startsWith("return-") ? "Trả kho" : task.id.startsWith("checkin-") ? "Nhận kho" : task.id.startsWith("assignment-") ? "Phân kho" : task.recoveryTask ? "Thu hồi" : "Vận hành"}</Td>
+                    <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? staffTaskTypeLabel[task.type] : task.id.startsWith("maintenance-") ? "Bảo trì" : task.id.startsWith("support-") ? "Hỗ trợ" : task.id.startsWith("return-") ? "Trả kho" : task.id.startsWith("checkin-") ? "Nhận kho" : task.recoveryTask ? "Thu hồi" : "Vận hành"}</Td>
                     <Td>{kind === "assigned" ? task.facilityName : task.customer}</Td>
                     <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? formatDate(task.dueAt) : isApiAuthenticated()
                       ? (/^\d{4}-\d{2}-\d{2}$/.test(task.time) ? formatDate(task.time) : formatExactDateTime(task.time))
@@ -2612,61 +2632,62 @@ export default function StaffApp({
             />
           </Card>
 
-          <Modal
-            open={Boolean(taskCompletionTarget)}
-            onClose={() => setTaskCompletionTarget(null)}
-            title="Hoàn thành nhiệm vụ được giao"
-          >
-            {taskCompletionTarget && (
-              <div className="space-y-4">
-                <div className="rounded-lg bg-stone-50 p-3 text-sm">
-                  <b>{taskCompletionTarget.title}</b>
-                  <p className="mt-1 text-stone-600">
-                    {taskCompletionTarget.id}
-                    {taskCompletionTarget.referenceId
-                      ? ` · ${taskCompletionTarget.referenceId}`
-                      : ""}
-                  </p>
-                </div>
-                <label className="block text-sm font-medium text-stone-700">
-                  Báo cáo kết quả
-                  <textarea
-                    className="mt-1 min-h-28 w-full rounded-lg border border-stone-300 p-3"
-                    value={taskResultReport}
-                    maxLength={2000}
-                    onChange={(event) => setTaskResultReport(event.target.value)}
-                    placeholder="Mô tả kết quả đã thực hiện để quản lý theo dõi…"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-stone-700">
-                  Minh chứng hoặc mã tệp (mỗi dòng một mục)
-                  <textarea
-                    className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 p-3"
-                    value={taskEvidenceText}
-                    maxLength={2000}
-                    onChange={(event) => setTaskEvidenceText(event.target.value)}
-                    placeholder="Ví dụ: anh-nghiem-thu-01.jpg"
-                  />
-                </label>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setTaskCompletionTarget(null)}
-                  >
-                    Đóng
-                  </Button>
-                  <Button
-                    disabled={!taskResultReport.trim()}
-                    onClick={completeAssignedTask}
-                  >
-                    Gửi báo cáo và hoàn thành
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Modal>
         </div>
       )}
+
+      <Modal
+        open={Boolean(taskCompletionTarget)}
+        onClose={() => setTaskCompletionTarget(null)}
+        title="Hoàn thành nhiệm vụ được giao"
+      >
+        {taskCompletionTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-stone-50 p-3 text-sm">
+              <b>{taskCompletionTarget.title}</b>
+              <p className="mt-1 text-stone-600">
+                {taskCompletionTarget.id}
+                {taskCompletionTarget.referenceId
+                  ? ` · ${taskCompletionTarget.referenceId}`
+                  : ""}
+              </p>
+            </div>
+            <label className="block text-sm font-medium text-stone-700">
+              Báo cáo kết quả
+              <textarea
+                className="mt-1 min-h-28 w-full rounded-lg border border-stone-300 p-3"
+                value={taskResultReport}
+                maxLength={2000}
+                onChange={(event) => setTaskResultReport(event.target.value)}
+                placeholder="Mô tả kết quả đã thực hiện để quản lý theo dõi…"
+              />
+            </label>
+            <label className="block text-sm font-medium text-stone-700">
+              Minh chứng hoặc mã tệp (mỗi dòng một mục)
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 p-3"
+                value={taskEvidenceText}
+                maxLength={2000}
+                onChange={(event) => setTaskEvidenceText(event.target.value)}
+                placeholder="Ví dụ: anh-nghiem-thu-01.jpg"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setTaskCompletionTarget(null)}
+              >
+                Đóng
+              </Button>
+              <Button
+                disabled={!taskResultReport.trim()}
+                onClick={completeAssignedTask}
+              >
+                Gửi báo cáo và hoàn thành
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* ── RESERVATIONS ──────────────────────────────────────── */}
       {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'reservations:approve')} facilityNames={user.facilityNames} />}
@@ -2695,13 +2716,13 @@ export default function StaffApp({
               >
                 <option value="all">{"Tất cả"}</option>
                 {([
-                  "CREATED",
+                  "AWAITING_EMAIL",
 
-                  "REVIEW_REQUIRED",
+                  "AWAITING_REVIEW",
 
-                  "AWAITING_DEPOSIT",
+                  "AWAITING_PAYMENT",
 
-                  "DEPOSIT_PAID",
+                  "CONFIRMED",
 
                   "UNIT_RESERVED",
 
@@ -2712,7 +2733,7 @@ export default function StaffApp({
                   "CANCELLED",
 
                   "EXPIRED",
-                ] as ReservationStatus[]).map((status) => (
+                ] as LegacyReservationStatus[]).map((status) => (
                   <option key={status} value={status}>
                     {statusLabelMap[status]}
                   </option>
@@ -2788,16 +2809,16 @@ export default function StaffApp({
                       </p>
                       <p
                         className={`text-[11px] ${
-                          r.status === "REVIEW_REQUIRED"
+                          r.status === "AWAITING_REVIEW"
                             ? "font-semibold text-red-700"
                             : "text-stone-500"
                         }`}
                       >
-                        {r.status === "REVIEW_REQUIRED"
-                          ? "Hạn duyệt hàng hóa trong 12 giờ"
+                        {r.status === "AWAITING_REVIEW"
+                          ? "Hạn duyệt hàng hóa trong 6 giờ"
                           : "Hạn cuối"}
                         :{" "}
-                        {r.status === "REVIEW_REQUIRED"
+                        {r.status === "AWAITING_REVIEW"
                           ? formatExactDateTime(r.reviewDueAt)
                           : formatDate(r.checkInDeadline)}
                       </p>
@@ -2816,13 +2837,13 @@ export default function StaffApp({
                     </Td>
                     <Td>
                       {s(r.status, {
-                        CREATED: "warning",
+                        AWAITING_EMAIL: "warning",
 
-                        REVIEW_REQUIRED: "error",
+                        AWAITING_REVIEW: "error",
 
-                        AWAITING_DEPOSIT: "warning",
+                        AWAITING_PAYMENT: "warning",
 
-                        DEPOSIT_PAID: "info",
+                        CONFIRMED: "info",
 
                         UNIT_RESERVED: "info",
 
@@ -2848,7 +2869,7 @@ export default function StaffApp({
                         >
                           {"Xem"}
                         </Button>
-                        {r.status === "REVIEW_REQUIRED" && (
+                        {r.status === "AWAITING_REVIEW" && (
                           <Button
                             variant="primary"
                             size="sm"
@@ -2861,17 +2882,17 @@ export default function StaffApp({
                             {"Rà soát ngoại lệ"}
                           </Button>
                         )}
-                        {r.status === "CREATED" && (
+                        {r.status === "AWAITING_EMAIL" && (
                           <Badge variant="warning">
                             {"Theo dõi · chờ cọc"}
                           </Badge>
                         )}
-                        {r.status === "AWAITING_DEPOSIT" && (
+                        {r.status === "AWAITING_PAYMENT" && (
                           <Badge variant="warning">
                             {"Chờ khách hàng thanh toán"}
                           </Badge>
                         )}
-                        {r.status === "DEPOSIT_PAID" && (
+                        {r.status === "CONFIRMED" && (
                           <Badge variant="info">
                             {"Đã cọc · Chờ nhận kho"}
                           </Badge>
@@ -2898,237 +2919,8 @@ export default function StaffApp({
         </div>
       )}
 
-      {page === "unit-assignments" && <UnitAssignmentPanel showToast={showToast} />}
-
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
-      {page === "checkin-legacy" && (
-        <div className="fade-in">
-          <SectionHeader
-            title={"Nhận kho và bàn giao"}
-            subtitle={
-              "Đối chiếu thông tin khách hàng đã khai báo trước khi nhận kho và bàn giao gian kho."
-            }
-          />
-          <Card className="mb-4 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Select
-                label={"Lọc theo trạng thái"}
-                value={checkinStatusFilter}
-                onChange={(event) => setCheckinStatusFilter(event.target.value)}
-              >
-                <option value="all">{"Tất cả trạng thái"}</option>
-                <option value="scheduled">{"Đã lên lịch"}</option>
-                <option value="pending-payment">{"Chờ thanh toán"}</option>
-                <option value="completed">{"Hoàn tất"}</option>
-              </Select>
-              <Input
-                label={"Ngày đến hạn"}
-                type="date"
-                value={checkinDateFilter}
-                onChange={(event) => setCheckinDateFilter(event.target.value)}
-              />
-              <Select
-                label={"Sắp xếp"}
-                value={checkinSort}
-                onChange={(event) =>
-                  setCheckinSort(event.target.value as StaffListSort)
-                }
-              >
-                <option value="deadline-asc">{"Sắp đến hạn trước"}</option>
-                <option value="deadline-desc">{"Hạn xa nhất trước"}</option>
-                <option value="name-asc">{"Tên khách hàng A–Z"}</option>
-              </Select>
-            </div>
-            <p className="mt-2 text-xs text-stone-500">
-              {displayedCheckins.length}/
-              {
-                eligibleCheckins.filter(
-                  (checkin) => checkin.status !== "no-show",
-                ).length
-              }{" "}
-              {"hồ sơ phù hợp"}
-            </p>
-          </Card>
-          <div className="space-y-3">
-            {checkinsPagination.items.map((c) => {
-              const appointmentAt = new Date(
-                `${c.appointmentDate} ${c.appointmentTime}`,
-              )
-
-              const deadlineAt = new Date(c.checkInDeadline)
-
-              const canMarkNoShow =
-                (!Number.isNaN(appointmentAt.getTime()) &&
-                  Date.now() > appointmentAt.getTime()) ||
-                (!Number.isNaN(deadlineAt.getTime()) &&
-                  Date.now() > deadlineAt.getTime())
-
-              return (
-                <Card key={c.id} className="p-5">
-                  <div className="flex flex-wrap items-center gap-4 justify-between">
-                    <div>
-                      <div className="flex items-center gap-3 mb-1">
-                        <Avatar name={c.customer} size="sm" />
-                        <div>
-                          <h3 className="font-semibold text-slate-900">
-                            {c.customer}
-                          </h3>
-                          <p className="text-xs text-slate-500">
-                            {c.phone} · {c.email}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {c.facility} · Kho {c.unit} ·{" "}
-                            {formatDate(c.appointmentDate)} lúc{" "}
-                            {formatTime(c.appointmentTime)}
-                          </p>
-                          <p className="text-[11px] text-slate-500">
-                            {"Hạn cuối nhận kho"}:{" "}
-                            {formatDate(c.checkInDeadline)}
-                          </p>
-                          {c.previousAppointment && (
-                            <p className="text-[11px] text-amber-700">
-                              {"Lịch cũ"}: {c.previousAppointment}
-                            </p>
-                          )}
-                          {c.scheduleChanged && (
-                            <Badge variant="warning">
-                              {"khách hàng đã đổi lịch"}
-                            </Badge>
-                          )}
-                          <p className="mt-1 text-xs font-medium text-slate-600">
-                            {c.goodsType} · {c.packageCount} kiện · {c.weightKg}{" "}
-                            kg · Khối lượng quy đổi {c.dimWeightKg} kg
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {s(c.status, {
-                        scheduled: "info",
-
-                        "pending-payment": "warning",
-
-                        completed: "success",
-
-                        "no-show": "error",
-                      })}
-                      {c.status === "completed" && (
-                        <Badge
-                          variant={
-                            c.customerHandoverStatus === "confirmed"
-                              ? "success"
-                              : "warning"
-                          }
-                        >
-                          {c.customerHandoverStatus === "confirmed"
-                            ? "Khách hàng đã xác nhận nhận kho"
-                            : "Chờ khách hàng xác nhận nhận kho"}
-                        </Badge>
-                      )}
-                      {c.status !== "completed" && (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => openCheckinRecord(c)}
-                        >
-                          {"Xử lý nhận kho"}
-                        </Button>
-                      )}
-                      {c.status !== "completed" && (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          disabled={!canMarkNoShow}
-                          onClick={() => {
-                            setNoShowTarget(c)
-
-                            setNoShowReason("")
-                          }}
-                        >
-                          {"Đánh dấu khách không đến"}
-                        </Button>
-                      )}
-                      {c.status === "completed" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            showToast(
-                              `Hồ sơ ${c.id}: đã kích hoạt hợp đồng thuê, đã lưu bằng chứng và đang chờ khách hàng xác nhận.`,
-                            )
-                          }
-                        >
-                          {"Xem hồ sơ"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-          <StaffPagination
-            {...checkinsPagination}
-            total={displayedCheckins.length}
-            onPageChange={setCheckinsPage}
-          />
-          {isApiAuthenticated() && <Button variant="outline" onClick={() => setPage("renewal-signing")}>Xem lịch ký gia hạn</Button>}
-          {!isApiAuthenticated() && scheduledRenewals.length > 0 && (
-            <div className="mt-8 space-y-3">
-              <SectionHeader
-                title="Lịch ký phụ lục gia hạn"
-                subtitle="Thu phần tiền còn lại, tải phụ lục đã ký và kích hoạt thời hạn mới"
-              />
-              {renewalsPagination.items.map((renewal) => (
-                <Card key={renewal.id} className="p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {renewal.unitId} · {renewal.customerName}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Hẹn {formatDate(renewal.appointmentDate)} lúc{" "}
-                        {formatTime(renewal.appointmentTime)} · Gia hạn đến{" "}
-                        {formatDate(renewal.newEndDate)}
-                      </p>
-                      <p className="mt-1 text-xs font-medium text-amber-800">
-                        Còn thu tại cơ sở:{" "}
-                        {formatMoney(renewal.remainingAmount ?? 0)}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setSelectedRenewal(renewal)
-
-                        setRenewalContractFile("")
-
-                        setRenewalContractFileName("")
-
-                        setRenewalContractNumber(`PL-${renewal.id}`)
-
-                        setRenewalPaymentReference("")
-
-                        setRenewalIdentityVerified(false)
-
-                        setRenewalTermsVerified(false)
-                      }}
-                    >
-                      Hoàn tất gia hạn
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-              <StaffPagination
-                {...renewalsPagination}
-                total={scheduledRenewals.length}
-                onPageChange={setRenewalsPage}
-              />
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
@@ -3484,7 +3276,7 @@ export default function StaffApp({
       {/* ── SUPPORT ───────────────────────────────────────────── */}
       {page === 'support' && (
         <div className="space-y-4">
-          <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff">
+          <SupportApiRoute apiAuthenticated={isApiAuthenticated()} role="staff" openTicket={supportOpenTicket} onTicketOpened={() => setSupportOpenTicket(undefined)}>
             <StaffSupportPanel
               user={user}
               tickets={hub.tickets}
@@ -3493,7 +3285,6 @@ export default function StaffApp({
               showToast={showToast}
             />
           </SupportApiRoute>
-          {isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
         </div>
       )}
 
@@ -3583,12 +3374,12 @@ export default function StaffApp({
                 </span>
                 <span>
                   <b>
-                    {selectedReservation.status === "REVIEW_REQUIRED"
-                      ? "Hạn duyệt 12 giờ"
+                    {selectedReservation.status === "AWAITING_REVIEW"
+                      ? "Hạn duyệt 6 giờ"
                       : "Hạn cuối"}
                     :
                   </b>{" "}
-                  {selectedReservation.status === "REVIEW_REQUIRED"
+                  {selectedReservation.status === "AWAITING_REVIEW"
                     ? formatExactDateTime(selectedReservation.reviewDueAt)
                     : formatDate(selectedReservation.checkInDeadline)}
                 </span>
@@ -3599,7 +3390,7 @@ export default function StaffApp({
                 }
               </p>
             </div>
-            {selectedReservation.status === "REVIEW_REQUIRED" && (
+            {selectedReservation.status === "AWAITING_REVIEW" && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
                 <p className="font-semibold">
                   {"Hồ sơ hàng hóa “Khác” cần nhân viên xác nhận trong 12 giờ"}
@@ -3629,7 +3420,7 @@ export default function StaffApp({
                         const updated = {
                           ...selectedReservation,
 
-                          status: "AWAITING_DEPOSIT" as ReservationStatus,
+                          status: "AWAITING_PAYMENT" as ReservationStatus,
                         }
 
                         setReservations((items) =>
@@ -3661,7 +3452,7 @@ export default function StaffApp({
                           const updated = {
                             ...selectedReservation,
 
-                            status: "CANCELLED" as ReservationStatus,
+                            status: "CANCELLED" as LegacyReservationStatus,
                           }
 
                           setReservations((items) =>
@@ -4785,113 +4576,17 @@ export default function StaffApp({
           </div>
         )}
       </Modal>
-
-      <Modal
-        closeLabel="Đóng hộp thoại"
-        open={Boolean(selectedRenewal) && !isApiAuthenticated()}
-        onClose={() => setSelectedRenewal(null)}
-        title="Hoàn tất gia hạn tại cơ sở"
-      >
-        {selectedRenewal && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-              <b>{selectedRenewal.unitId}</b> · {selectedRenewal.customerName}
-              <br />
-              Thời hạn mới: {selectedRenewal.newEndDate}
-            </div>
-            <Input
-              label="Số phụ lục / hợp đồng gia hạn"
-              value={renewalContractNumber}
-              onChange={(event) => setRenewalContractNumber(event.target.value)}
-            />
-            <Input
-              label="Mã phiếu thu phần còn lại"
-              value={renewalPaymentReference}
-              onChange={(event) =>
-                setRenewalPaymentReference(event.target.value)
-              }
-            />
-            <StaffFileUpload
-              key={selectedRenewal.id}
-              label="Bản chụp phụ lục đã ký"
-              value={renewalContractFile}
-              onChange={setRenewalContractFile}
-              onNameChange={setRenewalContractFileName}
-            />
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={renewalIdentityVerified}
-                onChange={(event) =>
-                  setRenewalIdentityVerified(event.target.checked)
-                }
-              />
-              Đã đối chiếu giấy tờ khách hàng
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={renewalTermsVerified}
-                onChange={(event) =>
-                  setRenewalTermsVerified(event.target.checked)
-                }
-              />
-              Đã đối chiếu gian kho và điều khoản gia hạn
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setSelectedRenewal(null)}
-              >
-                Hủy
-              </Button>
-              <Button
-                disabled={
-                  !renewalContractFile ||
-                  !renewalContractNumber.trim() ||
-                  !renewalPaymentReference.trim() ||
-                  !renewalIdentityVerified ||
-                  !renewalTermsVerified
-                }
-                onClick={() => {
-                  try {
-                    hub.completeRenewalAtFacility({
-                      renewalId: selectedRenewal.id,
-
-                      staffUser: user,
-
-                      transactionReference: renewalPaymentReference.trim(),
-
-                      identityVerified: renewalIdentityVerified,
-
-                      unitAndTermsVerified: renewalTermsVerified,
-
-                      contractNumber: renewalContractNumber.trim(),
-
-                      signedAt: new Date().toISOString(),
-
-                      scannedFileUrl: renewalContractFile,
-
-                      scannedFileName: renewalContractFileName,
-                    })
-
-                    setSelectedRenewal(null)
-
-                    showToast(
-                      "Đã hoàn tất gia hạn. Khách hàng đã nhận thời hạn hợp đồng và biên nhận mới.",
-                    )
-                  } catch (error) {
-                    showToast(staffErrorMessage(error, "Không thể hoàn tất gia hạn."))
-                  }
-                }}
-              >
-                Xác nhận hoàn tất
-              </Button>
-            </div>
-          </div>
-        )}
+      <Modal closeLabel="Đóng hộp thoại" open={Boolean(selectedRenewal) && !isApiAuthenticated()} onClose={() => setSelectedRenewal(null)} title="Hồ sơ gia hạn cũ">
+        <div className="space-y-4">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{LEGACY_RENEWAL_HISTORY_NOTICE} {LEGACY_RENEWAL_NOTICE}</p>
+          {selectedRenewal && <dl className="space-y-2 text-sm">
+            <div><dt>Hồ sơ</dt><dd>{selectedRenewal.unitId} · {selectedRenewal.customerName}</dd></div>
+            <div><dt>Phần còn lại đã lưu</dt><dd>{legacyRenewalMoney(selectedRenewal.remainingAmount)}</dd></div>
+            <div><dt>Phí quá hạn đã lưu</dt><dd>{legacyRenewalMoney(selectedRenewal.lateFeeAmount)}</dd></div>
+          </dl>}
+          <div className="flex justify-end"><Button variant="outline" onClick={() => setSelectedRenewal(null)}>Đóng</Button></div>
+        </div>
       </Modal>
-
       <Modal
         closeLabel="Đóng hộp thoại"
         open={Boolean(noShowTarget)}

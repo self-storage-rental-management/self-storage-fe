@@ -347,7 +347,7 @@ export const SUPPORT_TICKETS = TICKETS
 export const TASKS = [
   { id: 'task-1', title: 'Kiểm tra HCM-Q1-F01-S-001 trước bàn giao', time: '09:00 AM', priority: 'high', done: false },
   { id: 'task-2', title: 'Verify reservation R-2048', time: '10:30 AM', priority: 'medium', done: true },
-  { id: 'task-3', title: 'Check corridor cameras', time: '02:00 PM', priority: 'low', done: false }
+  { id: 'task-3', title: 'Kiểm tra hệ thống đèn hành lang', time: '02:00 PM', priority: 'low', done: false }
 ]
 
 export const RESERVATIONS = [
@@ -781,123 +781,6 @@ export const PRICING_TIERS: PricingTierItem[] = [
   }
 ];
 
-export interface PromotionItem {
-  id: string
-  code: string
-  name: string
-  description: string
-  value: string
-  discount: string
-  type: 'percentage' | 'fixed-amount' | 'first-month-free' | 'seasonal'
-  typeLabel: string
-  active: boolean
-  status: 'active' | 'paused' | 'expired'
-  uses: number
-  maxUses: number
-  minLeaseMonths: number
-  applicableFacility: string
-  applicableUnitType: string
-  startDate: string
-  expires: string
-}
-
-export const DISCOUNTS: PromotionItem[] = [
-  {
-    id: 'DSC-101',
-    code: 'WELCOME10',
-    name: 'New Tenant Welcome Offer',
-    description: '10% discount off the first 3 months of storage rental for first-time customers.',
-    value: '10% OFF',
-    discount: '10% off for 3 months',
-    type: 'percentage',
-    typeLabel: 'Percentage Off',
-    active: true,
-    status: 'active',
-    uses: 48,
-    maxUses: 100,
-    minLeaseMonths: 3,
-    applicableFacility: 'All facilities',
-    applicableUnitType: 'All Sizes',
-    startDate: 'Jan 01, 2026',
-    expires: 'Dec 31, 2026'
-  },
-  {
-    id: 'DSC-102',
-    code: 'FIRSTFREE',
-    name: '1st Month Free on Annual Lease',
-    description: 'Pay for 11 months upfront or sign a 12-month contract and receive the 1st full month completely free.',
-    value: '100% OFF M1',
-    discount: '1st Month 100% Free',
-    type: 'first-month-free',
-    typeLabel: 'Free Month',
-    active: true,
-    status: 'active',
-    uses: 22,
-    maxUses: 50,
-    minLeaseMonths: 12,
-    applicableFacility: 'Kho Việt – Cơ sở Quận 1',
-    applicableUnitType: 'Medium & Large',
-    startDate: 'Feb 15, 2026',
-    expires: 'Nov 30, 2026'
-  },
-  {
-    id: 'DSC-103',
-    code: 'FALLSTORAGE25',
-    name: 'Autumn Move-In Special',
-    description: 'Instant 650.000 ₫ deduction on the first month invoice for any new storage unit reservation.',
-    value: '650.000 ₫ OFF',
-    discount: '650.000 ₫ one-time adjustment',
-    type: 'fixed-amount',
-    typeLabel: 'Fixed Amount',
-    active: true,
-    status: 'active',
-    uses: 36,
-    maxUses: 80,
-    minLeaseMonths: 1,
-    applicableFacility: 'Kho Việt – Cơ sở Bình Dương',
-    applicableUnitType: 'Small & Medium',
-    startDate: 'Sep 01, 2026',
-    expires: 'Oct 31, 2026'
-  },
-  {
-    id: 'DSC-104',
-    code: 'BIZBULK15',
-    name: 'Corporate Bulk Lease Advantage',
-    description: '15% ongoing monthly discount for enterprise & B2B accounts renting 2 or more units simultaneously.',
-    value: '15% OFF',
-    discount: '15% recurring discount',
-    type: 'percentage',
-    typeLabel: 'Enterprise Bulk',
-    active: true,
-    status: 'active',
-    uses: 14,
-    maxUses: 30,
-    minLeaseMonths: 6,
-    applicableFacility: 'All facilities',
-    applicableUnitType: 'Large & Extra Large',
-    startDate: 'Mar 01, 2026',
-    expires: 'Dec 31, 2026'
-  },
-  {
-    id: 'DSC-105',
-    code: 'SUMMER2026',
-    name: 'Summer Flash Promotion (Expired)',
-    description: 'Summer seasonal campaign for student locker and mini storage.',
-    value: '390.000 ₫ OFF',
-    discount: '390.000 ₫ one-time off',
-    type: 'seasonal',
-    typeLabel: 'Seasonal Flash',
-    active: false,
-    status: 'expired',
-    uses: 60,
-    maxUses: 60,
-    minLeaseMonths: 2,
-    applicableFacility: 'All facilities',
-    applicableUnitType: 'Small',
-    startDate: 'Jun 01, 2026',
-    expires: 'Aug 31, 2026'
-  }
-]
 
 // export const POLICIES = [
 //   { id: 'pol-1', name: 'Standard monthly rental', description: 'Month-to-month rental with 30-day notice.', status: 'active' },
