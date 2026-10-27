@@ -36,6 +36,12 @@ function ShortCode({ value }: { value: string }) {
 const historyAmount = (amount: number | null) =>
   amount === null ? "Chưa có thông tin số tiền" : formatVnd(amount)
 
+const reservationHistoryWarning = "Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho."
+
+export function visibleCustomerPaymentWarnings(warnings: readonly string[]) {
+  return warnings.filter(warning => warning !== reservationHistoryWarning)
+}
+
 export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRentals?: (rentalId: string) => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -101,16 +107,16 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="p-4">
           <p className="text-xs text-stone-500">Giao dịch có biên lai</p>
-          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? "Chưa có" : entries.filter(canViewCustomerHistoryReceipt).length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? 0 : entries.filter(canViewCustomerHistoryReceipt).length}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Giao dịch gia hạn đã đối soát</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "Chưa có" : confirmedRenewals.length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? 0 : confirmedRenewals.length}</p>
           <p className="mt-1 text-xs text-stone-500">Xác nhận từng khoản thu; tổng phải trả xem trong hồ sơ gia hạn.</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Số giao dịch</p>
-          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? "Chưa có" : entries.length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? 0 : entries.length}</p>
         </Card>
       </div>
       {loading && (
@@ -126,7 +132,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
           {error}
         </p>
       )}
-      {warnings.map((warning) => (
+      {visibleCustomerPaymentWarnings(warnings).map((warning) => (
         <p
           key={warning}
           role="alert"

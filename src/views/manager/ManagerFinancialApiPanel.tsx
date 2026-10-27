@@ -83,6 +83,15 @@ function receiptFields(item: ManagerPaymentHistoryItem): [string, string][] {
   ]
 }
 
+function canReadReceipt(item: ManagerPaymentHistoryItem) {
+  const metadata = item as ManagerPaymentHistoryItem & {
+    transactionStatus?: string
+    receiptAvailable?: boolean
+  }
+  if (metadata.receiptAvailable === false || metadata.transactionStatus === 'RECONCILIATION_REQUIRED') return false
+  return item.status === 'PAID' || item.status === 'REFUNDED'
+}
+
 const receiptActionClass = 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300'
 
 export default function ManagerFinancialApiPanel() {
@@ -104,6 +113,8 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
   const [refundReason, setRefundReason] = useState('')
   const [refundBusy, setRefundBusy] = useState(false)
   const [refundFeedback, setRefundFeedback] = useState('')
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<unknown>(null)
   const identity = managerApiIdentity(actor)
   const read = useRentalApiResource(`${identity}:payment-history:${facilityId}:${page}:${search}`, () =>
     loadManagerPaymentHistory(actor, { facilityId, page, size: 10, search }))
@@ -119,6 +130,25 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
     setDraft('')
     setSearch('')
     setPage(0)
+  }
+
+  async function downloadReceipt(item: ManagerPaymentHistoryItem) {
+    setDownloading(item.id)
+    setDownloadError(null)
+    try {
+      if (item.renewalId) await getRenewalReceipt('manager', item.renewalId, item.id)
+      downloadPaymentReceipt({
+        title: item.type === 'RETURN_REFUND' ? 'Biên lai hoàn tiền' : 'Biên lai thanh toán',
+        reference: item.transactionReference || item.id,
+        status: statusLabels[item.status],
+        fields: receiptFields(item),
+        footer: 'Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở.',
+      })
+    } catch (error) {
+      setDownloadError(error)
+    } finally {
+      setDownloading(null)
+    }
   }
 
   async function submitRefund(event: FormEvent) {
