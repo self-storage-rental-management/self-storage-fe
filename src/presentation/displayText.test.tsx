@@ -5,6 +5,12 @@ import { userFacingError } from './userFacingError'
 import { ApiClientError } from '../services/apiClient'
 
 describe('câu hiển thị', () => {
+  it('giải mã các ký tự HTML thành nội dung hiển thị đúng', () => {
+    const html = renderToStaticMarkup(<p>Sách &amp; hồ sơ &gt; &quot;Gỗ&quot;</p>)
+    expect(html).toContain('Sách &amp; hồ sơ &gt; &quot;Gỗ&quot;')
+    expect(html).not.toContain('&amp;,')
+  })
+
   it('chuẩn hóa câu cố định, nội dung backend, fragment và thuộc tính hỗ trợ', () => {
     const backend = 'Đã cập nhật\u003b hãy kiểm tra lại.'
     const html = renderToStaticMarkup(<div title={backend}><p>Đã lưu&#59; thông tin mới</p><span>{backend}</span><p><>{backend}</></p><input placeholder={backend} /></div>)
@@ -21,6 +27,31 @@ describe('câu hiển thị', () => {
     expect(props.title).toBe('Ghi chú, nguyên bản')
     expect(original).toContain('\u003b')
     expect(displayText('Đã lưu.')).toBe('Đã lưu.')
+  })
+
+  it('loại dấu chấm phẩy trong thông báo, hộp thoại và dữ liệu đọc từ hệ thống', () => {
+    const backend = 'Nội thất\u003b cần kiểm tra'
+    const html = renderToStaticMarkup(<main>
+      <div role="alert">{backend}</div>
+      <div role="dialog" aria-label={backend}><p>{backend}</p></div>
+      <input readOnly value={backend} />
+      <input disabled defaultValue={backend} />
+      <textarea readOnly value={backend} />
+      <span aria-valuetext={backend} aria-roledescription={backend}>{backend}</span>
+    </main>)
+    expect(html).not.toContain('\u003b')
+    expect(html).toContain('Nội thất, cần kiểm tra')
+    expect(backend).toBe('Nội thất\u003b cần kiểm tra')
+  })
+
+  it('giữ nguyên mã lựa chọn và đường dẫn có dấu phân cách', () => {
+    const source = 'category\u003bmaterial'
+    const option = displayProps('option', { value: source, children: source }) as Record<string, string>
+    const link = displayProps('a', { href: `/details/${source}`, children: source }) as Record<string, string>
+    expect(option.value).toBe(source)
+    expect(option.children).toBe('category, material')
+    expect(link.href).toBe(`/details/${source}`)
+    expect(link.children).toBe('category, material')
   })
 
   it('không đưa chi tiết kỹ thuật hoặc lỗi tiếng Anh lên giao diện', () => {

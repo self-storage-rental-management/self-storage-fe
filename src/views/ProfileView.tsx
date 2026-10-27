@@ -769,7 +769,7 @@ setSavingProfile(true)
         ? 'Mật khẩu hiện tại không chính xác.'
         : message === 'The new password must be different from the current password'
           ? 'Mật khẩu mới phải khác mật khẩu hiện tại.'
-          : message || 'Không thể đổi mật khẩu.')
+          : userFacingError(error, 'Không thể đổi mật khẩu.'))
     }
   }
 

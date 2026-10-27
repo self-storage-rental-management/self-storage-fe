@@ -764,7 +764,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               <div className="relative pt-3.5 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-400">
                 <span className="flex items-center gap-1.5 text-stone-300 font-medium">
                   <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Bảo vệ &amp, Kiểm soát ra vào 24/7</span>
+                  <span>Bảo vệ &amp; Kiểm soát ra vào 24/7</span>
                 </span>
                 <span className="font-mono font-medium text-stone-400 bg-stone-800/90 px-2 py-0.5 rounded border border-stone-700/60 text-[10px] sm:text-[11px]">
                   {publicCatalogLoading ? '…' : facilityCodes || `${facilitiesList.length} cơ sở`}

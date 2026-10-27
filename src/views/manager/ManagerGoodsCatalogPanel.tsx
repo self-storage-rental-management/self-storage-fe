@@ -175,7 +175,7 @@ export default function ManagerGoodsCatalogPanel() {
       <p className="mt-1 text-sm text-stone-500">Giữ số thứ tự bên trái để nhấc dòng lên và kéo đến vị trí mới. Loại hàng cần duyệt luôn ở cuối.</p></div>
       <Button className="shrink-0" onClick={() => setEditor({ kind: 'category', label: '', status: 'ACTIVE' })}>Thêm loại hàng</Button>
     </div>
-    {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"><p>{error}</p><Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>Tải lại danh mục</Button></div>}
+    {error && !editor && !archiving && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"><p>{error}</p><Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>Tải lại danh mục</Button></div>}
     {busy && <p role="status" className="text-xs text-stone-500">Đang lưu thay đổi…</p>}
     {feedback && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{feedback}</p>}
     {floating && createPortal(<div aria-hidden="true" className="pointer-events-none fixed z-[9999] flex items-center gap-4 rounded-xl border border-amber-400 bg-white px-4 py-4 shadow-[0_18px_50px_-10px_rgba(0,0,0,0.35)] ring-4 ring-amber-100" style={{ left: floating.x, top: floating.y, width: floating.width, minHeight: floating.height, transform: 'rotate(-0.7deg) scale(1.015)' }}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-100 text-sm font-bold text-amber-900">{floating.number}</span><div><p className="font-semibold text-stone-900">{floating.label}</p><p className="mt-1 text-xs text-stone-500">Thả vào vị trí được đánh dấu</p></div></div>, document.body)}
@@ -221,8 +221,9 @@ export default function ManagerGoodsCatalogPanel() {
         </section>
       })}
     </div>}
-    <Modal open={Boolean(editor)} onClose={() => { if (!busy) setEditor(undefined) }} title={editor?.kind === 'category' ? (editor.category ? 'Chỉnh sửa loại hàng' : 'Thêm loại hàng') : editor?.material ? 'Chỉnh sửa vật liệu chính' : 'Thêm vật liệu chính'}>
+    <Modal open={Boolean(editor)} onClose={() => { if (!busy) { setEditor(undefined); setError(undefined) } }} title={editor?.kind === 'category' ? (editor.category ? 'Chỉnh sửa loại hàng' : 'Thêm loại hàng') : editor?.material ? 'Chỉnh sửa vật liệu chính' : 'Thêm vật liệu chính'}>
     {editor && <div className="space-y-4">
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 md:grid-cols-2">
         <label className="text-sm">Tên hiển thị<input className={`${inputClass} mt-1`} value={editor.label} onChange={event => setEditor({ ...editor, label: event.target.value })} /></label>
         <label className="text-sm">Trạng thái<select className={`${inputClass} mt-1`} value={editor.status} onChange={event => setEditor({ ...editor, status: event.target.value as GoodsCatalogStatus })}><option value="ACTIVE">Đang dùng</option><option value="INACTIVE">Tạm ẩn</option>{editor.status === 'ARCHIVED' && <option value="ARCHIVED">Ngừng sử dụng</option>}</select><span className="mt-1 block text-xs leading-5 text-stone-500">{editor.status === 'ACTIVE' ? 'Hiển thị cho khách hàng khi khai báo.' : editor.status === 'INACTIVE' ? 'Tạm thời ẩn khỏi khách hàng và có thể bật lại bất cứ lúc nào.' : 'Không dùng cho khai báo mới, dữ liệu lịch sử vẫn được giữ.'}</span></label>
@@ -230,11 +231,12 @@ export default function ManagerGoodsCatalogPanel() {
       </div>
       <div className="flex flex-col-reverse gap-3 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div>{(((editor.kind === 'category' && editor.category) || (editor.kind === 'material' && editor.material)) && editor.status !== 'ARCHIVED') && <Button variant="outline" disabled={busy} className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => { if (editor.kind === 'category' && editor.category) setArchiving({ category: editor.category }); else if (editor.kind === 'material' && editor.material) setArchiving({ category: editor.category, material: editor.material }); setEditor(undefined) }}>Ngừng sử dụng mục này</Button>}</div>
-        <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setEditor(undefined)}>Hủy</Button><Button disabled={busy || !editor.label.trim()} onClick={save}>{busy ? 'Đang lưu...' : 'Lưu thay đổi'}</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => { setEditor(undefined); setError(undefined) }}>Hủy</Button><Button disabled={busy || !editor.label.trim()} onClick={save}>{busy ? 'Đang lưu...' : 'Lưu thay đổi'}</Button></div>
       </div>
     </div>}
     </Modal>
     <Modal open={Boolean(archiving)} onClose={() => { if (!busy) setArchiving(undefined) }} title="Xác nhận ngừng sử dụng">
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {archiving && <div className="space-y-4"><p>Ngừng sử dụng <b>{archiving.material?.label || archiving.category.label}</b>? Mục này sẽ không còn xuất hiện khi khách hàng khai báo hàng hóa, nhưng dữ liệu cũ vẫn được giữ nguyên.</p><div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy} onClick={() => setArchiving(undefined)}>Hủy</Button><Button disabled={busy} onClick={archive}>{busy ? 'Đang lưu...' : 'Xác nhận ngừng sử dụng'}</Button></div></div>}
     </Modal>
   </Card>

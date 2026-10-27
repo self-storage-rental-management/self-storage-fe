@@ -5,6 +5,7 @@ import type { PermissionKey, User, Role } from '../types'
 import { isApiAuthenticated } from '../services/authApi'
 import { markAllNotificationsRead } from '../services/notificationApi'
 import { userFacingError } from '../presentation/userFacingError'
+import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
 
 export interface NavItem {
   id: string
@@ -105,6 +106,7 @@ export default function Layout({
   user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess,
   notificationError, notificationsLoading, hasMoreNotifications, onLoadMoreNotifications, onRetryNotifications
 }: LayoutProps) {
+  useDisplayPunctuation(user.role === 'customer' || user.role === 'manager')
   const roleTaskbarColor: Record<Role, string> = {
     customer: '#F4C542',
     staff: '#22C55E',
