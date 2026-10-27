@@ -1,5 +1,6 @@
 import type { RentalApiRecord } from "./rentalApi"
-import type { ApiRenewalStatus } from './statusContracts'
+import type { ApiRenewalStatus, PaymentStatus } from './statusContracts'
+import type { RenewalStatusSummary, RenewalTransactionStatus } from './renewalStatus'
 export type RenewalApiStatus = ApiRenewalStatus
 export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {

@@ -145,7 +145,7 @@ export default function RenewalDetail({
               <div className="min-w-0">
                 <p className="text-xl font-bold tracking-tight text-stone-900">{rentalMoney(payment.amount, payment.currency)}</p>
                 {payment.paidAt && <p className="mt-1 text-xs text-stone-500">Thanh toán lúc {rentalDate(payment.paidAt)}</p>}
-                {payment.invoiceNumber && <p className="mt-1 text-xs text-stone-500">Hóa đơn {payment.invoiceNumber} · {payment.invoiceStatus}</p>}
+                {payment.invoiceNumber && <p className="mt-1 text-xs text-stone-500">Hóa đơn {payment.invoiceNumber}, {payment.invoiceStatus}</p>}
               </div>
               {canViewReceipt && <Button type="button" size="sm" variant="outline" className="shrink-0 self-start sm:self-auto" onClick={() => setReceiptPaymentId(payment.paymentId)}>Xem biên lai</Button>}
             </div>

@@ -89,8 +89,16 @@ function canReadReceipt(item: ManagerPaymentHistoryItem) {
     transactionStatus?: string
     receiptAvailable?: boolean
   }
-  if (metadata.receiptAvailable === false || metadata.transactionStatus === 'RECONCILIATION_REQUIRED') return false
+  if (metadata.receiptAvailable === false || needsReconciliation(item)) return false
   return item.status === 'PAID' || item.status === 'REFUNDED'
+}
+
+function needsReconciliation(item: ManagerPaymentHistoryItem) {
+  return item.reconciliationRequired === true || item.transactionStatus === 'RECONCILIATION_REQUIRED'
+}
+
+function paymentDisplayLabel(item: ManagerPaymentHistoryItem) {
+  return needsReconciliation(item) ? 'Chờ đối soát' : statusLabels[item.status]
 }
 
 const receiptActionClass = 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300'
@@ -141,7 +149,7 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
       downloadPaymentReceipt({
         title: item.type === 'RETURN_REFUND' ? 'Biên lai hoàn tiền' : 'Biên lai thanh toán',
         reference: item.transactionReference || item.id,
-        status: statusLabels[item.status],
+        status: paymentDisplayLabel(item),
         fields: receiptFields(item),
         footer: 'Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở.',
       })
@@ -234,13 +242,13 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
             <Td className="!pl-1 !pr-2 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-stone-900">
               {item.type === 'RETURN_REFUND' ? `−${money(item.amount, item.currency)}` : money(item.amount, item.currency)}
             </Td>
-            <Td className="text-center"><span className="inline-flex whitespace-nowrap"><Badge variant={statusVariants[item.status]}>{statusLabels[item.status]}</Badge></span></Td>
+            <Td className="text-center"><span className="inline-flex whitespace-nowrap"><Badge variant={needsReconciliation(item) ? 'warning' : statusVariants[item.status]}>{paymentDisplayLabel(item)}</Badge></span></Td>
             <Td><PaymentTime value={item.occurredAt} /></Td>
             <Td className="text-center">
-              {item.paymentMethod === 'VNPAY' && item.status === 'PAID' && <Button type="button" size="sm" variant="outline" className="mb-2 whitespace-nowrap" onClick={() => { setRefundTarget(item); setRefundAmount(String(Math.max(0, item.amount - item.refundedAmount))); setRefundReason('Hoàn tiền theo quyết toán hồ sơ thuê.') }}>
+              {item.paymentMethod === 'VNPAY' && item.status === 'PAID' && canReadReceipt(item) && <Button type="button" size="sm" variant="outline" className="mb-2 whitespace-nowrap" onClick={() => { setRefundTarget(item); setRefundAmount(String(Math.max(0, item.amount - item.refundedAmount))); setRefundReason('Hoàn tiền theo quyết toán hồ sơ thuê.') }}>
                 Hoàn VNPay
               </Button>}
-              {item.receiptFileId
+              {canReadReceipt(item) && item.receiptFileId
                 ? <EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact />
                 : canReadReceipt(item)
                   ? <span className="inline-flex flex-nowrap items-center gap-1">
