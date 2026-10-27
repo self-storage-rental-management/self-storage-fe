@@ -1691,6 +1691,16 @@ export default function StaffApp({
     )
   })
 
+  const pendingRenewals = hub.renewals.filter(
+    (renewal) =>
+      renewal.status === "pending" &&
+      isFacilityVisible(
+        user,
+        renewal.facilityId,
+        hub.rentals.find((rental) => rental.id === renewal.rentalId)?.facilityName,
+      ),
+  )
+
   const scheduledRenewals = hub.renewals.filter(
     (renewal) =>
       renewal.status === "appointment_scheduled" &&
@@ -2338,13 +2348,59 @@ export default function StaffApp({
                   )
                 })}
               </div>
-            </Card>
-          ))}
-          <StaffPagination
-            {...renewalsPagination}
-            total={scheduledRenewals.length}
-            onPageChange={setRenewalsPage}
-          />
+            ) : (
+              <Card className="p-6 text-center text-sm text-stone-500 bg-white">
+                Hiện không có yêu cầu gia hạn nào đang chờ duyệt.
+              </Card>
+            )}
+          </div>
+
+          {!isApiAuthenticated() && scheduledRenewals.length > 0 && (
+            <div className="space-y-3 pt-4 border-t border-stone-200">
+              <SectionHeader
+                title={`Lịch ký phụ lục gia hạn (${scheduledRenewals.length})`}
+                subtitle="Thu phần tiền còn lại, tải phụ lục đã ký và kích hoạt thời hạn mới"
+              />
+              {renewalsPagination.items.map((renewal) => (
+                <Card key={renewal.id} className="p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {renewal.unitId} · {renewal.customerName}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Hẹn {formatDate(renewal.appointmentDate)} lúc{" "}
+                        {formatTime(renewal.appointmentTime)} · Gia hạn đến{" "}
+                        {formatDate(renewal.newEndDate)}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-amber-800">
+                        Còn thu tại cơ sở: {formatMoney(renewal.remainingAmount ?? 0)}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedRenewal(renewal)
+                        setRenewalContractFile("")
+                        setRenewalContractFileName("")
+                        setRenewalContractNumber(`PL-${renewal.id}`)
+                        setRenewalPaymentReference("")
+                        setRenewalIdentityVerified(false)
+                        setRenewalTermsVerified(false)
+                      }}
+                    >
+                      Hoàn tất gia hạn
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+              <StaffPagination
+                {...renewalsPagination}
+                total={scheduledRenewals.length}
+                onPageChange={setRenewalsPage}
+              />
+            </div>
+          )}
         </div>
       )}
       {page === "dashboard" && (
