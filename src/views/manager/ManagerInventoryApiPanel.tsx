@@ -853,7 +853,7 @@ export function InventoryContent({
         </h2>
         <FacilityCatalogTable rows={inventory.catalog} />
       </Card>
-      <ManagerGoodsCatalogPanel /></>}
+      </>}
       <Modal
         open={!!selected}
         onClose={() => setSelectedId(undefined)}

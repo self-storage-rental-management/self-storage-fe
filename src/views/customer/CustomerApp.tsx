@@ -31,7 +31,7 @@ import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
 import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
-import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
+import { firstCheckInMinute, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import { withinFacilityHours } from '../../domain/facilityAppointmentHours'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import CustomerSupportWidget from '../../components/support/CustomerSupportWidget'
@@ -870,8 +870,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     () => plannedCheckInWindow(bookingStartedAt, hasOtherGoods),
     [bookingStartedAt, hasOtherGoods],
   )
-  const earliestCheckInDate = policyDateInput(checkInWindow.availableAt)
-  const earliestCheckInTime = policyTimeInput(checkInWindow.availableAt)
+  const earliestAppointment = firstCheckInMinute(checkInWindow.availableAt)
+  const earliestCheckInDate = policyDateInput(earliestAppointment)
+  const earliestCheckInTime = policyTimeInput(earliestAppointment)
   const latestCheckInDate = policyDateInput(checkInWindow.deadlineAt)
   const latestCheckInTime = policyTimeInput(checkInWindow.deadlineAt)
   const previousReviewRequirement = useRef(hasOtherGoods)
@@ -920,7 +921,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (previousReviewRequirement.current === hasOtherGoods && previousBookingStart.current === bookingStartedAt) return
     previousBookingStart.current = bookingStartedAt
     const selectedAt = moveInDate && bookingAppointmentTime
-      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`)
+      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`)
       : null
     const invalid = !selectedAt || !isCheckInAppointmentAllowed(selectedAt, checkInWindow)
     if (invalid) {
@@ -1732,10 +1733,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!selectedUnit) return false
     const errors: Record<string, string> = {}
     const requestedAt = moveInDate && bookingAppointmentTime
-      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`)
+      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`)
       : null
     const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
-      ? new Date(`${moveInDate}T00:00:00`)
+      ? new Date(`${moveInDate}T00:00:00+07:00`)
       : null
 
     if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
@@ -1938,7 +1939,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
     setReservationSubmitting(true)
     try {
-      if (!bookingReview || !serverQuote) {
+      if (!bookingReview || !serverQuote || Date.parse(serverQuote.expiresAt) <= Date.now()) {
         const compatibility = await checkCompatibility(selection)
         setServerCompatibility(compatibility)
         if (compatibility.result === 'INCOMPATIBLE' || compatibility.availableUnitCount <= 0) {
@@ -1994,7 +1995,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | ') || null,
         goodsItems: quotedGoodsItems.current || apiGoodsItems,
         appointmentAt: bookingAppointmentTime
-          ? new Date(`${moveInDate}T${bookingAppointmentTime}:00`).toISOString()
+          ? new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`).toISOString()
           : undefined,
         acceptedTerms: termsAccepted,
       }, idempotencyKey)
@@ -3575,7 +3576,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 {goodsItems.map((item, index) => <div key={item.id} className="relative rounded-xl border border-stone-200 bg-stone-50 p-3 pr-10">
                   {catalogIssues[index] && <p role="alert" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{hasValidQuotedGoods
                     ? 'Danh mục hàng hóa đã thay đổi. Báo giá còn hạn vẫn giữ thông tin đã chốt. Nếu chỉnh sửa khai báo, bạn cần chọn mục đang được áp dụng và lấy báo giá mới.'
-                    : catalogIssues[index]}</p>}
+                    : catalogIssues[index]}{!hasValidQuotedGoods && <button type="button" className="ml-2 font-semibold underline" onClick={() => setGoodsItems(current => current.map(row => row.id === item.id
+                      ? { ...row, category: bookingCategories.some(category => category.code === row.category) ? row.category : '', materialName: '', catalogMaterialId: undefined, materialType: '' }
+                      : row))}>Chọn lại</button>}</p>}
                   <button type="button" aria-label={`Xóa loại hàng hóa ${index + 1}`} title="Xóa loại hàng hóa" className="absolute right-3 top-2 flex h-7 w-7 items-center justify-center bg-transparent p-0 text-2xl leading-none text-stone-400 transition hover:text-red-700" onClick={() => setGoodsItems(items => items.length === 1 ? [createGoodsDeclarationItem('goods-1')] : items.filter(row => row.id !== item.id))}>×</button>
                   <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
                     <div><Select label="Loại hàng hóa" value={item.category} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, category: e.target.value, materialType: '', materialName: '', catalogMaterialId: undefined } : row))}><option value="">Chọn loại hàng hóa</option>{item.category && !bookingCategories.some(category => category.code === item.category) && <option value={item.category} disabled>Loại hàng không còn được áp dụng</option>}{bookingCategoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{bookingErrors[`goodsCategory-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsCategory-${item.id}`]}</p>}</div>

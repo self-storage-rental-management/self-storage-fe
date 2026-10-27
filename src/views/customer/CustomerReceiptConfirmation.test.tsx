@@ -49,7 +49,8 @@ describe('merged Customer receipt command', () => {
   it('keeps rejection visible, refreshes state and allows retry only after failure finishes', async () => {
     state.confirm.mockRejectedValueOnce(new Error('Receipt conflict')).mockResolvedValue({})
     const refresh = vi.fn().mockResolvedValue(undefined); const click = command(refresh)
-    click(); await vi.waitFor(() => expect(state.messages).toContain('Receipt conflict'))
+    click(); await vi.waitFor(() => expect(state.messages).toContain('Không thể xác nhận nhận kho.'))
+    expect(state.messages).not.toContain('Receipt conflict')
     await vi.waitFor(() => expect(state.messages.at(-1)).toBe(false))
     expect(refresh).toHaveBeenCalledTimes(1)
     click(); await vi.waitFor(() => expect(state.confirm).toHaveBeenCalledTimes(2))

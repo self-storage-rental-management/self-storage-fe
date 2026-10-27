@@ -14,8 +14,15 @@ export function displayProps(type: unknown, props: unknown): unknown {
   const source = props as Record<string, unknown>
   const result = { ...source }
   result.children = childrenText(source.children)
-  for (const key of ['title', 'placeholder', 'alt', 'aria-label', 'aria-description']) {
+  for (const key of ['title', 'placeholder', 'alt', 'aria-label', 'aria-description', 'aria-valuetext', 'aria-roledescription']) {
     if (typeof source[key] === 'string') result[key] = displayText(source[key])
+  }
+  // Profile and detail screens also show backend text inside non-editable fields.
+  // Keep editable values, option identities and request data intact.
+  if ((type === 'input' || type === 'textarea') && (source.readOnly || source.disabled)) {
+    for (const key of ['value', 'defaultValue']) {
+      if (typeof source[key] === 'string') result[key] = displayText(source[key])
+    }
   }
   return result
 }
