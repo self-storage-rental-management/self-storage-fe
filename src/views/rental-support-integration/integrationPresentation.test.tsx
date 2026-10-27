@@ -36,6 +36,7 @@ it("requires explicit server Sandbox policy eligibility before exposing reconcil
 })
 vi.mock("../../services/authApi", () => ({
   getAuthenticatedActor: () => state.actor,
+  isApiAuthenticated: () => state.actor !== null,
 }))
 beforeEach(() => {
   state.actor = null

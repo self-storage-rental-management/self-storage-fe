@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
+import { firstCheckInMinute, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
 
 describe('reservation check in policy', () => {
+  it('chooses a selectable minute inside the allowed window including midnight rollover', () => {
+    const window = plannedCheckInWindow('2026-10-27T17:44:23.456+07:00', false)
+    const first = firstCheckInMinute(window.availableAt)
+    expect(policyDateInput(first)).toBe('2026-10-28')
+    expect(policyTimeInput(first)).toBe('00:00')
+    expect(isCheckInAppointmentAllowed(first, window)).toBe(true)
+    expect(firstCheckInMinute(first)).toEqual(first)
+  })
   it('formats appointment inputs in Vietnam time across the UTC date boundary', () => {
     const instant = new Date('2026-10-19T18:30:00Z')
     expect(policyDateInput(instant)).toBe('2026-10-20')

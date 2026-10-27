@@ -41,7 +41,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
               QUY ĐỊNH CHO THUÊ KHO STORAGEHUB
             </h1>
             <p className="text-stone-300 text-sm leading-relaxed">
-              Văn bản pháp quy chuẩn hóa quyền và nghĩa vụ của Khách hàng cùng StorageHub; quy định chi tiết về phạm vi sử dụng, thanh toán, điều kiện an toàn, quy trình xử lý sự cố và chấm dứt hợp đồng lưu trữ.
+              Văn bản pháp quy chuẩn hóa quyền và nghĩa vụ của Khách hàng cùng StorageHub, quy định chi tiết về phạm vi sử dụng, thanh toán, điều kiện an toàn, quy trình xử lý sự cố và chấm dứt hợp đồng lưu trữ.
             </p>
           </div>
 
@@ -121,7 +121,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Cọc Đảm Bảo Kho</span>
             <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">Theo loại kho</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Thu khi nhận kho; hoàn trả lại sau kiểm tra nghiệm thu trả kho, vệ sinh và công nợ.</p>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Thu khi nhận kho, hoàn trả lại sau kiểm tra nghiệm thu trả kho, vệ sinh và công nợ.</p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">

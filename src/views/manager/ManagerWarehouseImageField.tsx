@@ -14,7 +14,7 @@ export default function ManagerWarehouseImageField({ label, value, disabled, onC
         value={value.startsWith('data:') ? '' : value} className="mt-2 w-full rounded-lg border border-stone-300 p-3 font-normal"
         onChange={event => { clearFile(); onChange(event.target.value) }} />
     </label>
-    <label className="block text-sm text-stone-600">Hoặc chọn từ máy (JPG, PNG, WebP; tối đa 2 MB)
+    <label className="block text-sm text-stone-600">Hoặc chọn từ máy (JPG, PNG, WebP, tối đa 2 MB)
       <input ref={input} type="file" disabled={disabled} accept="image/jpeg,image/png,image/webp" className="mt-2 block w-full" onChange={event => {
         const file = event.target.files?.[0]
         if (!file) return

@@ -33,6 +33,9 @@ export interface ManagerPaymentHistoryItem {
   paymentMethod: string | null
   occurredAt: string
   renewalId?: string | null
+  transactionStatus?: RenewalTransactionStatus
+  reconciliationRequired?: boolean
+  receiptAvailable?: boolean
   receiptFileId?: string | null
   invoiceNumber?: string | null
   invoiceStatus?: InvoiceStatus

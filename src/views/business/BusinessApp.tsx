@@ -6441,7 +6441,7 @@ export default function BusinessApp({
                                 : "Theo biểu giá từng loại kho"}
                             </p>
                             <p className="text-xs leading-5 text-stone-600">
-                              {isApiAuthenticated() ? 'Số tiền cọc được lấy từ loại kho backend; điều kiện quyết toán hiển thị theo hồ sơ thực tế.' : 'Thu khi nhận kho; hoàn trả lại cho khách hàng sau khi nghiệm thu bàn giao trả kho (trừ công nợ, hư hại nếu có).'}
+                              {isApiAuthenticated() ? 'Số tiền cọc được lấy từ loại kho backend, điều kiện quyết toán hiển thị theo hồ sơ thực tế.' : 'Thu khi nhận kho, hoàn trả lại cho khách hàng sau khi nghiệm thu bàn giao trả kho (trừ công nợ, hư hại nếu có).'}
                             </p>
                           </article>
 

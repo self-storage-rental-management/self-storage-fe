@@ -74,7 +74,6 @@ export interface ApiReturn {
   returnedLock?: boolean
   inventoryMatch?: 'match' | 'missing' | 'excess' | null
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
-  settlementReceipt?: { direction: string; amount: number; paymentMethod: string; transactionReference: string; receiptFileId: string | null; recordedAt: string } | null
   status: typeof returnStatuses[number]; scheduledDate: string
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'EARLY_RETURN' | 'NORMAL'
   settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
@@ -91,9 +90,6 @@ export interface ApiReturn {
   recoveryTaskId?: string | null
   recoveryTaskStatus?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | null
   recoveryCompletedAt?: string | null
-  settlementPaymentId?: string | null
-  settlementPaidAt?: string | null
-  completedAt?: string | null
   setupExitReviewRequired?: boolean
   moveInCompletedAt?: string | null
   settlementReceipt?: ReturnSettlementReceiptView | null
@@ -113,6 +109,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
   const rawActivePolicy = object(v) ? v.activeReturnPolicy : undefined
   const activePolicy = object(rawActivePolicy) ? rawActivePolicy : null
   return object(v) && ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
+    ['rentalRefundCredit', 'earlyTerminationFee'].every(k => v[k] == null || money(v[k])) &&
     (v.returnType === undefined || ['CANCELLED_IN_SETUP', 'RETURN_IN_SETUP', 'EARLY_RETURN', 'NORMAL'].includes(String(v.returnType))) &&
     (v.settlementMode === undefined || ['AUTO', 'MANUAL_REVIEW'].includes(String(v.settlementMode))) &&
     (v.overdueSettlement == null || isOverdueSettlement(v.overdueSettlement)) &&

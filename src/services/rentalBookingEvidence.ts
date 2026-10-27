@@ -12,7 +12,7 @@ export const bookingPaymentStatuses: Record<RentalBookingEvidence["payments"][nu
 export const bookingPaymentVerification: Record<RentalBookingEvidence["payments"][number]["verification"], string> = {
   SIMULATED: "Thanh toán thử nghiệm - không thu tiền thật",
   SANDBOX: "Giao dịch cổng thanh toán thử nghiệm - không xác nhận thu tiền thật",
-  VERIFIED: "Giao dịch đã được cổng thanh toán xác thực; chưa xác nhận đầy đủ tài chính hồ sơ thuê",
+  VERIFIED: "Giao dịch đã được cổng thanh toán xác thực, chưa xác nhận đầy đủ tài chính hồ sơ thuê",
   DISPUTED: "Giao dịch đang có khiếu nại chưa được giải quyết",
   ATTEMPT: "Đang chờ kết quả xác thực từ cổng thanh toán",
   UNVERIFIED: "Chưa có bằng chứng xác minh tiền thực nhận",

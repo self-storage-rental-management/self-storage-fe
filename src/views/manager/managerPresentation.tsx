@@ -94,6 +94,8 @@ export function managerDisplayExplanation(value: string): string {
 
 export function managerDisplayError(error: unknown): string {
   if (error instanceof ApiClientError) {
+    if (error.status === 409 && error.message === 'Material already exists in this goods category')
+      return 'Vật liệu này đã có trong loại hàng hóa. Vui lòng nhập tên khác.'
     if (error.code === 'FEATURE_DISABLED') return 'Chức năng này chưa được bật trên hệ thống.'
     if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu nhận được chưa đúng định dạng. Vui lòng tải lại trang.'
     if (error.code === 'DEFERRED_SOURCE' || error.message.includes('DEFERRED_SOURCE'))
