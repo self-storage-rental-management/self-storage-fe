@@ -888,6 +888,30 @@ export default function DuongPolicyWorkspace({
         <p className="mt-1 text-sm text-stone-500">Quản lý các điều kiện gia hạn và gói thuê áp dụng đồng bộ cho toàn bộ cơ sở trong hệ thống StorageHub.</p>
       </header>
 
+      {read.loading && (
+        <Card className="rounded-2xl border border-stone-200 bg-white p-5 text-sm text-stone-600 shadow-sm" role="status">
+          Đang tải danh sách cơ sở và chính sách gia hạn...
+        </Card>
+      )}
+
+      {!!read.error && (
+        <Card className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm" role="alert">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{integrationError(read.error)}</span>
+            <Button type="button" variant="outline" onClick={() => read.refresh()}>
+              Thử tải lại
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {!read.loading && !read.error && read.data?.data.length === 0 && (
+        <Card className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-sm">
+          <h3 className="font-semibold text-stone-900">Chưa có cơ sở để tạo chính sách</h3>
+          <p className="mt-1 text-sm text-stone-600">Hãy tạo và kích hoạt ít nhất một cơ sở trước khi cấu hình chính sách gia hạn.</p>
+        </Card>
+      )}
+
       {/* Ẩn selector cơ sở trong UI nhưng giữ cho DOM/test */}
       <select
         className="hidden"

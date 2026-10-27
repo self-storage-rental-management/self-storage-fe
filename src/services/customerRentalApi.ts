@@ -1,5 +1,6 @@
 import { apiRequest } from './apiClient'
 import type { ApiRentalStatus } from '../types/statusContracts'
+import { checkedRental, checkedStatusPage } from './statusContractValidation'
 
 export type CustomerRentalStatus = ApiRentalStatus
 

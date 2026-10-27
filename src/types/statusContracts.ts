@@ -11,6 +11,46 @@ export type ApiRentalStatus = 'setup' | 'active' | 'return_requested' | 'return_
 export type ApiRenewalStatus = 'pending' | 'accepted' | 'deposit_paid' | 'full_rent_paid' | 'approved' | 'appointment_scheduled' | 'payment_processing' | 'payment_failed' | 'payment_expired' | 'rejected' | 'cancelled' | 'completed'
 export type ApiReturnStatus = 'requested' | 'scheduled' | 'inspected' | 'awaiting_business_review' | 'awaiting_customer_confirmation' | 'disputed' | 'payment_due' | 'refund_pending' | 'completed'
 
+export const invoiceStatusValues = ['NOT_ISSUED', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'CANCELLED', 'UNKNOWN'] as const
+export type InvoiceStatus = (typeof invoiceStatusValues)[number]
+
+export const invoiceRefundStatusValues = ['NONE', 'PENDING', 'PARTIALLY_REFUNDED', 'REFUNDED', 'UNKNOWN'] as const
+export type InvoiceRefundStatus = (typeof invoiceRefundStatusValues)[number]
+
+export const paymentTransactionStatusValues = [
+  'PENDING', 'PROCESSING', 'RECONCILIATION_REQUIRED', 'SUCCEEDED', 'FAILED',
+  'CANCELLED', 'EXPIRED', 'PARTIALLY_REFUNDED', 'REFUNDED',
+] as const
+export type PaymentTransactionStatus = (typeof paymentTransactionStatusValues)[number]
+
+export const renewalWorkflowStatusValues = [
+  'UNDER_REVIEW', 'AWAITING_PAYMENT', 'AWAITING_RECONCILIATION', 'AWAITING_SIGNING',
+  'SIGNING_IN_PROGRESS', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED', 'ON_HOLD',
+  'COMPLETED', 'CANCELLED', 'REJECTED',
+] as const
+export type RenewalWorkflowStatus = (typeof renewalWorkflowStatusValues)[number]
+
+/** Workflow values emitted by the backend check-in API. */
+export type CheckInStatus =
+  | 'scheduled' | 'identity_verified' | 'contract_signed' | 'payment_collected'
+  | 'setup_in_progress' | 'setup_completed' | 'completed' | 'rejected'
+  | 'no_show' | 'cancelled'
+
+/** Compatibility aliases used by the check-in service layer. */
+export type ReservationStatus = ApiReservationStatus
+export type PaymentStatus = ApiPaymentStatus
+
+const checkInStatusValues: readonly CheckInStatus[] = [
+  'scheduled', 'identity_verified', 'contract_signed', 'payment_collected',
+  'setup_in_progress', 'setup_completed', 'completed', 'rejected', 'no_show', 'cancelled',
+]
+
+const renewalStatusValues: readonly ApiRenewalStatus[] = [
+  'pending', 'accepted', 'deposit_paid', 'full_rent_paid', 'approved',
+  'appointment_scheduled', 'payment_processing', 'payment_failed', 'payment_expired',
+  'rejected', 'cancelled', 'completed',
+]
+
 const reservationAliases: Record<string, ApiReservationStatus> = {
   CREATED: 'AWAITING_PAYMENT',
   awaiting_email: 'AWAITING_EMAIL',
@@ -60,4 +100,24 @@ export function isPaymentStatus(value: unknown): value is ApiPaymentStatus {
 
 export function isRentalStatus(value: unknown): value is ApiRentalStatus {
   return normalizeRentalStatus(value) !== null
+}
+
+export function isCheckInStatus(value: unknown): value is CheckInStatus {
+  return typeof value === 'string' && checkInStatusValues.includes(value as CheckInStatus)
+}
+
+export const isInvoiceStatus = (value: unknown): value is InvoiceStatus =>
+  typeof value === 'string' && invoiceStatusValues.includes(value as InvoiceStatus)
+
+export const isInvoiceRefundStatus = (value: unknown): value is InvoiceRefundStatus =>
+  typeof value === 'string' && invoiceRefundStatusValues.includes(value as InvoiceRefundStatus)
+
+export const isPaymentTransactionStatus = (value: unknown): value is PaymentTransactionStatus =>
+  typeof value === 'string' && paymentTransactionStatusValues.includes(value as PaymentTransactionStatus)
+
+export const isRenewalWorkflowStatus = (value: unknown): value is RenewalWorkflowStatus =>
+  typeof value === 'string' && renewalWorkflowStatusValues.includes(value as RenewalWorkflowStatus)
+
+export function isRenewalStatus(value: unknown): value is ApiRenewalStatus {
+  return typeof value === 'string' && renewalStatusValues.includes(value as ApiRenewalStatus)
 }
