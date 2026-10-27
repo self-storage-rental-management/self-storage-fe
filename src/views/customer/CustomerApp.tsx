@@ -859,8 +859,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const cargoWidthNumber = Number(cargoWidth)
   const cargoHeightNumber = Number(cargoHeight)
   const goodsType = goodsItems.map(item => GOODS_CATEGORY_OPTIONS.find(option => option[0] === item.category)?.[1]).filter(Boolean).join(', ')
-  const goodsMaterial = goodsItems.map(item => item.category === 'OTHER' ? item.customMaterial : item.materialName).filter(Boolean).join(', ')
-  const hasOtherGoods = goodsItems.some(item => item.category === 'OTHER')
+  const goodsMaterial = goodsItems.map(item => catalogCategoryFor(item.category)?.custom || item.category === 'OTHER' ? item.customMaterial : item.materialName).filter(Boolean).join(', ')
+  const hasOtherGoods = goodsItems.some(item => catalogCategoryFor(item.category)?.custom || item.category === 'OTHER')
   const checkInWindow = useMemo(
     () => plannedCheckInWindow(bookingStartedAt, hasOtherGoods),
     [bookingStartedAt, hasOtherGoods],
@@ -875,9 +875,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const apiGoodsItems = useMemo<GoodsItemInput[]>(() => goodsItems.map(item => {
     const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
     const selectedGoodsCategory = catalogCategoryFor(item.category)
+    const selectedGoodsMaterial = selectedGoodsCategory?.materials.find(material => material.label === item.materialName)
     return {
       catalogCategoryId: selectedGoodsCategory?.id,
-      catalogMaterialId: selectedGoodsCategory?.materials.find(material => material.label === item.materialName)?.id || null,
+      catalogMaterialId: selectedGoodsMaterial?.id || null,
+      categoryCode: selectedGoodsCategory?.code || item.category || null,
+      categoryName: selectedGoodsCategory?.label || null,
+      materialCode: selectedGoodsMaterial?.code || null,
       category: selectedGoodsCategory?.reservationCategory || item.category as GoodsCategory,
       customGoodsName: item.customGoodsName.trim() || null,
       materialName: item.materialName.trim() || null,
@@ -1524,6 +1528,36 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const recommendedUnitType = warehouseRecommendation
     ? unitTypes.find(candidate => candidate.id === warehouseRecommendation.id)
     : undefined
+  const smallerWarehouseRecommendation = selectedTarget && warehouseRecommendation && recommendedUnitType
+    && warehouseRecommendation.id !== selectedTarget.unitType.id
+    && warehouseRecommendation.volumeM3 < selectedTarget.unitType.volumeM3
+    ? recommendedUnitType
+    : undefined
+  const largerWarehouseRecommendation = selectedTarget && warehouseRecommendation && recommendedUnitType
+    && warehouseRecommendation.id !== selectedTarget.unitType.id
+    && warehouseRecommendation.volumeM3 > selectedTarget.unitType.volumeM3
+    ? recommendedUnitType
+    : undefined
+  const availableLargerUnitTypes = selectedTarget
+    ? backendUnitTypes
+      .filter(candidate => candidate.facilityId === selectedTarget.facility.id)
+      .filter(candidate => candidate.volumeM3 > selectedTarget.unitType.volumeM3)
+      .filter(candidate => (availabilityByUnitType[candidate.id] ?? candidate.availableCount ?? 0) > 0)
+      .sort((left, right) => right.volumeM3 - left.volumeM3)
+    : []
+  const largestAvailableLargerUnitType = availableLargerUnitTypes[0]
+  const largestAvailableLargerUnitUsableVolumeM3 = largestAvailableLargerUnitType
+    ? largestAvailableLargerUnitType.rackLengthM * largestAvailableLargerUnitType.rackWidthM * largestAvailableLargerUnitType.rackHeightM * 0.8 * largestAvailableLargerUnitType.rackCount
+    : 0
+  const noValidLargerUnitAvailable = Boolean(
+    isApiAuthenticated()
+      && allPackageSamplesValid
+      && recommendationFormReady
+      && !recommendationError
+      && !warehouseRecommendation
+      && largestAvailableLargerUnitType
+      && (goodsWeightNumber > largestAvailableLargerUnitType.maxLoadKg || goodsVolumeM3 > largestAvailableLargerUnitUsableVolumeM3),
+  )
   const selectedUnitTypeIncompatible = Boolean(
     isApiAuthenticated()
       && selectedTarget?.unitType.id
@@ -1534,6 +1568,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   )
   const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
   const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
+  const selectedUnitCapacityFits = Boolean(selectedUnit && allPackageSamplesValid
+    && !hasUnplaceablePackage
+    && totalFramesRequired <= selectedRackCount
+    && goodsWeightNumber <= selectedUnit.maxLoadKg)
+  const selectedUnitNeedsAlternative = allPackageSamplesValid && (!selectedUnitCapacityFits || selectedUnitTypeIncompatible)
 
   // Active rental packages for the selected unit
   const selectedUnitActivePackages = useMemo(() => {
@@ -3541,12 +3580,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div className={`rounded-xl border p-4 text-sm ${selectedUnitTypeIncompatible ? 'border-red-300 bg-red-50 text-red-950' : warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-bold">{isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho — cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
+                    <p className="font-bold">{smallerWarehouseRecommendation ? 'Hệ thống đề xuất kho nhỏ hơn' : largerWarehouseRecommendation ? 'Hệ thống đề xuất kho lớn hơn' : isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho — cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
                     <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
                     {selectedUnitTypeIncompatible && <p className="mt-1 text-xs font-semibold text-red-800">Kho bạn tự chọn không còn phù hợp với hàng hóa hoặc không còn chỗ trong kỳ thuê này.</p>}
                     {warehouseRecommendation.id === selectedTarget?.unitType.id
                       ? <p className="mt-1 text-xs font-semibold">Kho bạn đang chọn cũng chính là kho hệ thống đề xuất.</p>
-                      : <p className="mt-1 text-xs">Kho hiện tại là lựa chọn của bạn; kho trên là lựa chọn hệ thống đề xuất.</p>}
+                      : largerWarehouseRecommendation
+                        ? <p className="mt-1 text-xs">Kho bạn đang chọn không đủ sức chứa; hãy chuyển sang kho lớn hơn được đề xuất.</p>
+                        : <p className="mt-1 text-xs">Kho hiện tại vẫn phù hợp; hệ thống đề xuất kho nhỏ hơn để tránh dư dung tích và chi phí.</p>}
                   </div>
                   {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && (
                     <Button
@@ -3558,7 +3599,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         showToast(`Đã chuyển sang cỡ kho gợi ý: ${unitTypeLabel(recommendedUnitType.name)}`)
                       }}
                     >
-                      Chọn cỡ kho được gợi ý
+                      {smallerWarehouseRecommendation ? 'Chuyển sang kho nhỏ hơn' : largerWarehouseRecommendation ? 'Chuyển sang kho lớn hơn' : 'Chọn cỡ kho được gợi ý'}
                     </Button>
                   )}
                 </div>
@@ -3573,7 +3614,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </Button>
               </div>
             )}
-            {allPackageSamplesValid && (!isApiAuthenticated() || recommendationFormReady) && !recommendationLoading && !recommendationError && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900"><b>Chưa có cỡ kho còn trống phù hợp</b><p className="mt-1 text-xs">{isApiAuthenticated() ? (serverRecommendation?.issues.join(' ') || 'Dữ liệu hàng hóa không phù hợp với các loại kho đang còn chỗ tại cơ sở này.') : 'Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.'}</p></div>}
+            {allPackageSamplesValid && (!isApiAuthenticated() || recommendationFormReady) && !recommendationLoading && !recommendationError && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
+              <b>Chưa có cỡ kho còn trống phù hợp</b>
+              <p className="mt-1 text-xs">
+                {noValidLargerUnitAvailable && largestAvailableLargerUnitType
+                  ? `Kho lớn nhất còn chỗ là ${unitTypeLabel(largestAvailableLargerUnitType.name)}, nhưng chỉ đáp ứng tối đa ${largestAvailableLargerUnitType.maxLoadKg.toLocaleString('vi-VN')} kg và khoảng ${largestAvailableLargerUnitUsableVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³ hữu dụng; hàng đang khai báo ${goodsWeightNumber.toLocaleString('vi-VN')} kg và ${goodsVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³. Vui lòng giảm số lượng, kích thước hoặc trọng lượng hàng hóa, hoặc chia thành nhiều kho.`
+                  : isApiAuthenticated() ? (serverRecommendation?.issues.join(' ') || 'Dữ liệu hàng hóa không phù hợp với các loại kho đang còn chỗ tại cơ sở này.') : 'Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.'}
+              </p>
+            </div>}
 
             {/* Check-in schedule is intentionally placed after goods declaration because OTHER goods add a review stage. */}
             </>}
@@ -3610,9 +3658,26 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <p className="text-xs leading-5 text-stone-600">Thể tích mỗi loại hàng (m³) = số lượng × dài × rộng × cao (cm) ÷ 1.000.000. Tổng thể tích là tổng của tất cả loại hàng; kích thước khai báo là kích thước mỗi kiện sau đóng gói.</p>
             {(() => {
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
-                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? 'Phù hợp' : 'Không phù hợp'}</span>}</div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'Phù hợp — có thể dùng kho nhỏ hơn' : 'Phù hợp' : 'Không phù hợp'}</span>}</div>
                 {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span></p><p><b>Sức chứa khung hữu dụng:</b> <span>{formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span></p><p><b>Khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
                 {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa 6 giờ kể từ khi bạn xác minh email. Sau khi chấp thuận, bạn có 15 phút để hoàn tất tiền cọc giữ chỗ.</p></div>}
+                {selectedUnitNeedsAlternative && smallerWarehouseRecommendation && selectedTarget && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                    <p className="font-bold">Kho đang chọn không phù hợp</p>
+                    <p className="mt-1 leading-5">Hệ thống tìm thấy kho nhỏ hơn vẫn đáp ứng kích thước, sức chứa và tải trọng của hàng hóa: <b>{unitTypeLabel(smallerWarehouseRecommendation.name)}</b>.</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => {
+                        handleStartReservation(selectedTarget.facility, smallerWarehouseRecommendation, undefined, 2)
+                        showToast(`Đã chuyển sang kho nhỏ hơn: ${unitTypeLabel(smallerWarehouseRecommendation.name)}`)
+                      }}
+                    >
+                      Chuyển sang kho nhỏ hơn
+                    </Button>
+                  </div>
+                )}
               </div>
               const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
               const totalTermValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
@@ -3629,7 +3694,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
                       <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Sức chứa hữu dụng tính tối đa 80% thể tích; hệ thống thử đủ 6 hướng xoay.</p>
                     </div>
-                    {capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
+                    {capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'border-amber-600 bg-amber-600 text-white' : 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'Kho chứa vừa — có thể dùng kho nhỏ hơn' : 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
                   </div>
 
                   {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">

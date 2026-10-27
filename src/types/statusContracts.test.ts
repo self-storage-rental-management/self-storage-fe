@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isCheckInStatus,
+  isInvoiceRefundStatus,
+  isInvoiceStatus,
   isPaymentStatus,
+  isPaymentTransactionStatus,
   isRentalStatus,
+  isRenewalStatus,
+  isRenewalWorkflowStatus,
   isReservationStatus,
   normalizePaymentStatus,
   normalizeRentalStatus,
@@ -26,5 +32,12 @@ describe('status contracts', () => {
     expect(isPaymentStatus('unknown')).toBe(false)
     expect(isReservationStatus('CONFIRMED')).toBe(true)
     expect(isRentalStatus('active')).toBe(true)
+    expect(isCheckInStatus('setup_completed')).toBe(true)
+    expect(isCheckInStatus('unknown')).toBe(false)
+    expect(isInvoiceStatus('PAID')).toBe(true)
+    expect(isInvoiceRefundStatus('REFUNDED')).toBe(true)
+    expect(isPaymentTransactionStatus('RECONCILIATION_REQUIRED')).toBe(true)
+    expect(isRenewalWorkflowStatus('AWAITING_PAYMENT')).toBe(true)
+    expect(isRenewalStatus('completed')).toBe(true)
   })
 })

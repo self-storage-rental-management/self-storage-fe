@@ -1,5 +1,6 @@
 import { apiDownload, apiRequest } from './apiClient'
 import type { ApiInvoiceStatus, ApiPaymentStatus, ApiReservationStatus } from '../types/statusContracts'
+import { checkedPayment, checkedReservation, checkedReservationDetail, checkedReservationState, checkedStatusPage } from './statusContractValidation'
 
 export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive' | 'archived'
