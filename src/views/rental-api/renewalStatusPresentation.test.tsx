@@ -15,7 +15,8 @@ export const summary: RenewalStatusSummary = {
 }
 const payment: RenewalVnpayPaymentResponse = { paymentId: 'p1', renewalId: renewal.id, acceptedRevisionId: 'v1', transactionReference: 'tx1',
   amount: 1000000, currency: 'VND', paymentStatus: 'PAID', paymentDeadline: null, paidAt: '2026-10-25T07:00:00Z', reconciliationRequired: true,
-  message: '', paymentUrl: null, settlementStage: 'VERIFIED_AWAITING_ALLOCATION', transactionStatus: 'RECONCILIATION_REQUIRED', receiptAvailable: false }
+  message: '', paymentUrl: null, invoiceNumber: null, invoiceStatus: 'DRAFT', invoiceIssuedAt: null,
+  settlementStage: 'VERIFIED_AWAITING_ALLOCATION', transactionStatus: 'RECONCILIATION_REQUIRED', receiptAvailable: false }
 
 describe('independent renewal states', () => {
   it('does not advance progress or expose a receipt based on PAID without reconciliation', () => {

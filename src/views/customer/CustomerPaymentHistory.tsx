@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
 import { Button, Card, Modal, SectionHeader, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
 import { formatVndAmount as formatVnd } from "../../i18n/currency"
@@ -72,9 +73,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       .catch((failure) => {
         if (!disposed)
           setError(
-            failure instanceof Error
-              ? failure.message
-              : "Không thể tải lịch sử thanh toán.",
+            userFacingError(failure, "Không thể tải lịch sử thanh toán."),
           )
       })
       .finally(() => {
@@ -112,7 +111,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         <Card className="p-4">
           <p className="text-xs text-stone-500">Giao dịch gia hạn đã đối soát</p>
           <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? 0 : confirmedRenewals.length}</p>
-          <p className="mt-1 text-xs text-stone-500">Xác nhận từng khoản thu; tổng phải trả xem trong hồ sơ gia hạn.</p>
+          <p className="mt-1 text-xs text-stone-500">Xác nhận từng khoản thu, tổng phải trả xem trong hồ sơ gia hạn.</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Số giao dịch</p>

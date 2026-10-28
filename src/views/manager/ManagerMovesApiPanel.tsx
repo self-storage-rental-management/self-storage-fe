@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { useCallback, useEffect, useState } from 'react'
 import { Badge, Button, Card, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { listCheckIns, type CheckInCase } from '../../services/checkInApi'
@@ -44,7 +45,7 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
       setCheckIns(checkInPage.data)
       setReturns(returnPage.data)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Không thể tải dữ liệu nhận/trả kho từ Backend.')
+      setError(userFacingError(reason, 'Không thể tải dữ liệu nhận/trả kho từ Backend.'))
     } finally {
       setLoading(false)
     }
@@ -55,7 +56,7 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
   return <div className="space-y-5">
     <SectionHeader
       title="Nhận kho & Trả kho"
-      subtitle="Dữ liệu lấy trực tiếp từ Backend. Manager chỉ theo dõi và giám sát; Staff thực hiện nghiệp vụ tại hiện trường."
+      subtitle="Dữ liệu lấy trực tiếp từ Backend. Manager chỉ theo dõi và giám sát, Staff thực hiện nghiệp vụ tại hiện trường."
       action={<Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>Làm mới</Button>}
     />
 

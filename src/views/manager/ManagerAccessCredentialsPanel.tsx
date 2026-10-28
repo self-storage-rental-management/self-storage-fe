@@ -23,7 +23,7 @@ export default function ManagerAccessCredentialsPanel({ facilityId }: { facility
   const typeLabel: Record<AccessCredential['type'], string> = { PIN: 'PIN / access code', CARD: 'Thẻ', KEY: 'Chìa khóa', LOCK: 'Khóa' }
 
   return <div className="space-y-5">
-    <SectionHeader title="Lịch sử quyền truy cập" subtitle="Manager chỉ theo dõi lịch sử cấp/thu hồi; Staff là actor duy nhất được thao tác credential." />
+    <SectionHeader title="Lịch sử quyền truy cập" subtitle="Manager chỉ theo dõi lịch sử cấp/thu hồi, Staff là actor duy nhất được thao tác credential." />
     <Card className="p-4">
       <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_220px]">
         <Input label="Tìm kiếm" placeholder="Đơn đặt kho, khách hàng, gian kho, số seri" value={query} onChange={event => setQuery(event.target.value)} />
