@@ -1,4 +1,4 @@
-import type { RentalStatus, PaymentStatus } from './statusContracts'
+import type { ApiRentalStatus as RentalStatus, PaymentStatus } from './statusContracts'
 export type RentalApiRole = "customer" | "manager" | "staff"
 export type RentalApiStatus = RentalStatus
 export interface RentalApiPage<T> {
@@ -94,6 +94,9 @@ export interface RentalBookingEvidence {
     amount: number
     processedAt: string | null
     verification: "SIMULATED" | "UNVERIFIED" | "VERIFIED" | "SANDBOX" | "DISPUTED" | "ATTEMPT"
+    invoiceNumber: string | null
+    invoiceStatus: "DRAFT" | "PAID" | "VOID" | "REFUNDED"
+    invoiceIssuedAt: string | null
     projectRecognition?: { environment: string; enabled: boolean; eligibleForReconciliation: boolean; reason: string }
   }[]
   paymentsTruncated: boolean

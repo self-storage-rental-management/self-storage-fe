@@ -356,7 +356,7 @@ export default function AdminLoginHistoryApiPanel({
       const revokedIds = new Set(others.filter((_, index) => results[index].status === 'fulfilled').map(session => session.id))
       setSessions(prev => prev.map(session => revokedIds.has(session.id) ? { ...session, active: false, revokedAt: new Date().toISOString() } : session))
       const failedCount = results.length - revokedIds.size
-      showToast(failedCount ? `Đã thu hồi ${revokedIds.size}/${others.length} phiên; còn ${failedCount} phiên chưa xử lý.` : `Đã thu hồi thành công ${others.length} phiên thiết bị khác.`)
+      showToast(failedCount ? `Đã thu hồi ${revokedIds.size}/${others.length} phiên, còn ${failedCount} phiên chưa xử lý.` : `Đã thu hồi thành công ${others.length} phiên thiết bị khác.`)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Không thể thu hồi các phiên thiết bị khác.')
     } finally {

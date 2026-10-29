@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { VIETNAM_TIME_ZONE, parseVietnamDate } from '../../utils/vietnamTime'
 import { useEffect, useState } from 'react'
 import type { User } from '../../types'
@@ -55,7 +56,7 @@ export default function CustomerSupportSection({
         }
       })
       .catch(error => {
-        if (mounted) setApiError(error instanceof Error ? error.message : 'Không tải được yêu cầu hỗ trợ từ backend.')
+        if (mounted) setApiError(userFacingError(error, 'Không tải được yêu cầu hỗ trợ từ backend.'))
       })
       .finally(() => {
         if (mounted) setApiLoading(false)
@@ -147,7 +148,7 @@ export default function CustomerSupportSection({
                 setApiCreateOpen(false)
                 setApiError(null)
               } catch (error) {
-                setApiError(error instanceof Error ? error.message : 'Không tạo được yêu cầu hỗ trợ.')
+                setApiError(userFacingError(error, 'Không tạo được yêu cầu hỗ trợ.'))
               } finally {
                 setApiSubmitting(false)
               }
@@ -199,7 +200,7 @@ export default function CustomerSupportSection({
                           setApiReply('')
                           setApiError(null)
                         } catch (error) {
-                          setApiError(error instanceof Error ? error.message : 'Không gửi được phản hồi.')
+                          setApiError(userFacingError(error, 'Không gửi được phản hồi.'))
                         } finally {
                           setApiSubmitting(false)
                         }

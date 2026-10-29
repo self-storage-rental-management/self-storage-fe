@@ -356,7 +356,7 @@ export const RESERVATIONS = [
 ]
 
 export const CHECKINS = [
-  { id: 'CHK-301', reservationId: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', date: 'Sep 20, 2026', time: '11:00 AM', status: 'scheduled', goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: 'Kho sạch, khóa hoạt động; 12 kiện nguyên niêm phong', evidence: ['Ảnh CCCD đã đối chiếu', 'Ảnh hiện trạng kho trước bàn giao', 'Phiếu cân & đo kích thước'] }
+  { id: 'CHK-301', reservationId: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', date: 'Sep 20, 2026', time: '11:00 AM', status: 'scheduled', goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: 'Kho sạch, khóa hoạt động, 12 kiện nguyên niêm phong', evidence: ['Ảnh CCCD đã đối chiếu', 'Ảnh hiện trạng kho trước bàn giao', 'Phiếu cân & đo kích thước'] }
 ]
 
 export const RETURNS: any[] = []

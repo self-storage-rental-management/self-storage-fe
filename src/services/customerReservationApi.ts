@@ -1,11 +1,13 @@
 import { apiDownload, apiRequest } from './apiClient'
-import type { PaymentStatus, ReservationStatus } from '../types/statusContracts'
-export type { PaymentStatus, ReservationStatus } from '../types/statusContracts'
-import { checkedReservation, checkedReservationDetail, checkedReservationState, checkedPayment, checkedStatusPage } from './statusContractValidation'
+import type { ApiInvoiceStatus, ApiPaymentStatus, ApiReservationStatus } from '../types/statusContracts'
+import { checkedPayment, checkedReservation, checkedReservationDetail, checkedReservationState, checkedStatusPage } from './statusContractValidation'
 
 export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive' | 'archived'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
+export type PaymentStatus = ApiPaymentStatus
+export type InvoiceStatus = ApiInvoiceStatus
+export type ReservationStatus = ApiReservationStatus
 
 export interface Pagination {
   page: number
@@ -94,7 +96,7 @@ export interface AvailabilityResult {
 }
 
 export type GoodsCategory =
-  | 'FURNITURE' | 'KITCHENWARE' | 'DECOR' | 'ELECTRONICS' | 'OFFICE'
+  | 'FURNITURE' | 'KITCHENWARE' | 'DECOR' | 'DOCUMENTS' | 'ELECTRONICS' | 'OFFICE'
   | 'TOYS' | 'SPORTS' | 'GIFTS' | 'MUSICAL_INSTRUMENTS' | 'CAMERA_EQUIPMENT'
   | 'EVENT_EQUIPMENT' | 'STORE_FIXTURES' | 'FINE_ART' | 'CERAMIC_GLASS'
   | 'MOVING_ITEMS' | 'OTHER'
@@ -154,6 +156,15 @@ export interface ReservationSelectionInput {
   goodsItems: GoodsItemInput[]
 }
 
+export interface ReservationRecommendationInput {
+  facilityId: string
+  startDate: string
+  endDate: string
+  pricingPackageCode: string
+  goodsCondition?: string | null
+  goodsItems: GoodsItemInput[]
+}
+
 export interface CompatibilityCheckResult {
   facilityId: string
   unitTypeId: string
@@ -170,6 +181,21 @@ export interface CompatibilityCheckResult {
   unitRackCount: number
   availableUnitCount: number
   staffReviewRequired: boolean
+  issues: string[]
+}
+
+export interface ReservationRecommendation {
+  facilityId: string
+  recommendedUnitTypeId: string | null
+  pricingPackageCode: string
+  policyVersion: string | null
+  rentalMonths: number
+  result: CompatibilityResult
+  totalGoodsVolumeM3: number | null
+  totalGoodsWeightKg: number | null
+  recommendedAvailableUnitCount: number
+  evaluatedUnitTypeIds: string[]
+  incompatibleUnitTypeIds: string[]
   issues: string[]
 }
 
@@ -207,6 +233,16 @@ export interface ReservationQuote {
   totalAfterDiscount: number
   reservationDepositRate?: number
   reservationDepositAmount: number
+  earlyTerminationFeeCapMonths?: number
+  earlyTerminationFeeCoefficient?: number
+  earlyTerminationNoticeDays?: number
+  earlyTerminationFee?: number
+  earlyTerminationNoticeBasis?: string
+  earlyTerminationTiers?: Array<{
+    rentalMonths: number
+    monthlyPrice: number
+    freeSetupDays: number
+  }>
   securityDepositAmount: number
   remainingRentalAmount: number
   dueAtCheckIn: number
@@ -228,6 +264,7 @@ export interface CreateReservationInput {
   notes?: string | null
   goodsItems: GoodsItemInput[]
   appointmentAt?: string | null
+  acceptedTerms: boolean
 }
 
 export interface CustomerReservation {
@@ -263,7 +300,11 @@ export interface CustomerReservation {
   totalInitialObligation: number | null
   pricingPackageCode?: string | null
   rentalMonths?: number
-  freeSetupDays?: number | null
+  freeSetupDays?: number
+  earlyTerminationFeeCapMonths?: number
+  earlyTerminationFeeCoefficient?: number
+  earlyTerminationNoticeDays?: number
+  earlyTerminationFee?: number
   setupExitReviewRequired?: boolean
   setupGoodsRevisionUsedAt?: string | null
   monthlyPrice?: number
@@ -363,6 +404,9 @@ export interface ReservationPaymentResult {
   initiatedByName?: string | null
   createdAt?: string | null
   reservationCode?: string
+  invoiceNumber?: string | null
+  invoiceStatus?: InvoiceStatus
+  invoiceIssuedAt?: string | null
 }
 
 export interface VnpayPaymentUrlResult {
@@ -541,6 +585,14 @@ export async function getAvailability(input: Omit<ReservationSelectionInput, 'go
 export async function checkCompatibility(input: ReservationSelectionInput) {
   const response = await apiRequest<ApiEnvelope<CompatibilityCheckResult>>(
     '/api/customer/reservations/compatibility-check',
+    { method: 'POST', body: JSON.stringify(input) },
+  )
+  return response.data
+}
+
+export async function recommendReservationUnitType(input: ReservationRecommendationInput) {
+  const response = await apiRequest<ApiEnvelope<ReservationRecommendation>>(
+    '/api/customer/reservations/recommendation',
     { method: 'POST', body: JSON.stringify(input) },
   )
   return response.data

@@ -331,7 +331,7 @@ function SupportTimeline({
               <MessageRow message={message} hideBody={repeatedOpeningMessage} />
             </div>
           )})}
-          {chatLayout && waitingForStaff && <p role="status" className="mr-auto max-w-[90%] rounded-2xl rounded-bl-md bg-[#f2f0ee] px-3.5 py-2.5 text-sm leading-6 text-stone-700">Yêu cầu đã được gửi đến cơ sở. Bạn vui lòng chờ nhân viên phản hồi; có thể nhắn thêm thông tin ngay bên dưới.</p>}
+          {chatLayout && waitingForStaff && <p role="status" className="mr-auto max-w-[90%] rounded-2xl rounded-bl-md bg-[#f2f0ee] px-3.5 py-2.5 text-sm leading-6 text-stone-700">Yêu cầu đã được gửi đến cơ sở. Bạn vui lòng chờ nhân viên phản hồi, có thể nhắn thêm thông tin ngay bên dưới.</p>}
           {!chatLayout && (read.data.data.length === 0 || (tab === "messages" && read.data.data.length === 1 &&
             isRepeatedOpeningMessage(read.data.data[0] as SupportMessage, 0) &&
             !(read.data.data[0] as SupportMessage).evidenceFileIds?.length &&

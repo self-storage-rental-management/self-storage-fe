@@ -67,6 +67,8 @@ export interface CheckInCase {
   rejectionDisposition: 'AVAILABLE' | 'MAINTENANCE' | null
   performedBy: string | null
   performedByName: string | null
+  assignedStaff: string | null
+  assignedStaffName: string | null
   reservationId: string
   reservationCode: string
   reservationStatus: CheckInReservationStatus
@@ -165,6 +167,7 @@ export interface CredentialAlert {
   reason: string
 }
 
+export type CredentialAccessEventType = 'ENTRY' | 'EXIT'
 export interface CredentialAccessResponse {
   credentialId: string
   rentalId: string | null
@@ -172,7 +175,16 @@ export interface CredentialAccessResponse {
   allowed: boolean
   duringSetup: boolean
   reason: string
-  accessHours: string | null
+  accessHours: string
+}
+export interface CredentialAccessEvent {
+  credentialId: string
+  rentalId: string | null
+  facilityId: string
+  eventType: CredentialAccessEventType
+  occurredAt: string
+  allowed: boolean
+  reason: string
 }
 
 function assertPage(payload: unknown): CheckInPage {
@@ -236,6 +248,7 @@ export async function scheduleCheckIn(
     contractVerified: boolean
     paymentVerified: boolean
     note: string
+    assignedStaffId?: string
   },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
@@ -304,6 +317,9 @@ export interface CheckInPayment {
   paidAt: string | null
   processedAt: string | null
   initiatedByName: string
+  invoiceNumber: string | null
+  invoiceStatus: 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'
+  invoiceIssuedAt: string | null
 }
 
 export async function recordCheckInRemainingPayment(checkInId: string, request: {
@@ -363,6 +379,27 @@ function assertCredentialEnvelope(payload: unknown): AccessCredential {
   return (payload as ApiEnvelope<AccessCredential>).data
 }
 
+function assertCredentialAccessEventEnvelope(payload: unknown): CredentialAccessEvent {
+  if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+    throw new ApiClientError('Backend trả về log truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return (payload as ApiEnvelope<CredentialAccessEvent>).data
+}
+
+export async function recordCredentialAccessEvent(
+  credentialId: string,
+  eventType: CredentialAccessEventType,
+  note?: string,
+) {
+  if (!credentialId.trim() || !['ENTRY', 'EXIT'].includes(eventType) || (note?.length ?? 0) > 500) {
+    throw new Error('Thông tin log truy cập không hợp lệ.')
+  }
+  return assertCredentialAccessEventEnvelope(await apiRequest<unknown>(
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access-events`,
+    { method: 'POST', body: JSON.stringify({ eventType, note: note?.trim() || undefined }) },
+  ))
+}
+
 export async function revokeAccessCredential(credentialId: string, reason: string) {
   return assertCredentialEnvelope(await apiRequest<unknown>(
     `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/revoke`,
@@ -376,7 +413,7 @@ export async function recordCredentialAccess(credentialId: string, request: {
   accessedAt?: string
 } = {}) {
   const payload = await apiRequest<unknown>(
-    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access-events`,
+    `/api/staff/access-credentials/${encodeURIComponent(credentialId)}/access`,
     { method: 'POST', body: JSON.stringify(request) },
   )
   if (!payload || typeof payload !== 'object' || !('data' in payload) ||

@@ -6,7 +6,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
-import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, accessStatusLabels } from "./presentation"
+import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 const labelClass = "text-xs font-normal text-slate-500"
 const valueClass = "mt-1 text-sm font-medium text-slate-900"
 export default function RentalDetail({
@@ -85,28 +85,25 @@ export default function RentalDetail({
             <dt>Thời hạn thuê</dt>
             <dd>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
           </div>
-          {(rental.setupStartedAt || rental.setupEndsAt) && <div>
-            <dt>Giai đoạn setup miễn phí</dt>
+          {rental.setupStartedAt && rental.setupEndsAt && <div>
+            <dt>Setup miễn phí</dt>
             <dd>
-              <Badge variant={rental.status === 'setup' ? 'warning' : 'success'}>{rental.status === 'setup' ? 'Đang setup' : 'Đã qua setup'}</Badge>
-              <div className="mt-2 grid gap-1 text-xs text-stone-600">
-                {rental.setupStartedAt && <p>Bắt đầu setup: <b>{new Date(rental.setupStartedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
-                {rental.setupEndsAt && <p>Setup kết thúc: <b>{new Date(rental.setupEndsAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
-                {rental.startDate && <p>Ngày bắt đầu tính tiền thuê: <b>{new Date(`${rental.startDate}T00:00:00+07:00`).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
-                {rental.inventoryDueAt && <p>Hạn kiểm kê: <b>{new Date(rental.inventoryDueAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</b></p>}
-              </div>
+              <p>Bắt đầu bàn giao: {rentalDate(rental.setupStartedAt)}</p>
+              <p>Setup đến hết: {rentalDate(new Date(new Date(rental.setupEndsAt).getTime() - 86_400_000).toISOString())}</p>
+              <p>Thời hạn thuê tính từ: {rentalDate(rental.startDate)}</p>
+              {rental.moveInCompletedAt && <p className="text-xs text-stone-500">Khách báo setup xong lúc: {rentalDate(rental.moveInCompletedAt)}</p>}
             </dd>
           </div>}
           {rental.inventoryPending && <div>
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="warning">Chưa kiểm kê</Badge>
-              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao; hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
+              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
               {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Hạn kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
             </dd>
           </div>}
           {rental.setupExitReviewRequired && <div>
             <dt>Xử lý hủy/trả trong setup</dt>
-            <dd><Badge variant="warning">Chờ Business quyết định</Badge><p className="mt-2 text-xs leading-5 text-stone-500">{rental.moveInCompletedAt ? 'Hàng đã chuyển vào: phải dọn hàng và kiểm tra trả kho trước khi quyết toán.' : 'Hàng chưa chuyển vào: xử lý như hủy sau check-in; không cần kiểm kê hàng.'} Không tự động hoàn tiền.</p></dd>
+            <dd><Badge variant="warning">Chờ Business quyết định</Badge><p className="mt-2 text-xs leading-5 text-stone-500">{rental.moveInCompletedAt ? 'Hàng đã chuyển vào: phải dọn hàng và kiểm tra trả kho trước khi quyết toán.' : 'Hàng chưa chuyển vào: xử lý như hủy sau check-in, không cần kiểm kê hàng.'} Không tự động hoàn tiền.</p></dd>
           </div>}
           <div>
             <dt>Giá thuê / tháng</dt>
@@ -165,6 +162,7 @@ export default function RentalDetail({
                   <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
                   <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
                   <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
+                  {payment.invoiceNumber && <p className="mt-1 text-sm"><strong>Hóa đơn:</strong> {payment.invoiceNumber} · {payment.invoiceStatus}</p>}
                   {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
                 </li>
               ))}

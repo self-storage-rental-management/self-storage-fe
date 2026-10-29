@@ -1,3 +1,4 @@
+import { userFacingError } from '../presentation/userFacingError'
 import { useEffect, useState } from 'react'
 import type { PermissionKey, Role, User } from '../types'
 import { Card, Button, Input, PasswordField, Badge, Modal } from '../components/ui'
@@ -582,7 +583,7 @@ setSavingProfile(true)
       }
       showToast('Đã cập nhật thông tin cá nhân.')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể cập nhật thông tin cá nhân.')
+      showToast(userFacingError(error, 'Không thể cập nhật thông tin cá nhân.'))
     } finally {
       setSavingProfile(false)
     }
@@ -768,7 +769,7 @@ setSavingProfile(true)
         ? 'Mật khẩu hiện tại không chính xác.'
         : message === 'The new password must be different from the current password'
           ? 'Mật khẩu mới phải khác mật khẩu hiện tại.'
-          : message || 'Không thể đổi mật khẩu.')
+          : userFacingError(error, 'Không thể đổi mật khẩu.'))
     }
   }
 
@@ -779,7 +780,7 @@ setSavingProfile(true)
       setRequestReason('')
       showToast('Đã gửi yêu cầu chỉnh sửa tới Admin/HR.')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể gửi yêu cầu chỉnh sửa.')
+      showToast(userFacingError(error, 'Không thể gửi yêu cầu chỉnh sửa.'))
     }
   }
 
@@ -802,7 +803,7 @@ setSavingProfile(true)
       const count = revokeAllUserSessions(user.id, user)
       if (count > 0) showToast(`Đã thu hồi ${count} phiên đăng nhập.`)
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên đăng nhập.')
+      showToast(userFacingError(error, 'Không thể thu hồi phiên đăng nhập.'))
     }
   }
 
@@ -828,7 +829,7 @@ setSavingProfile(true)
     .filter(([permission]) => user.permissions?.includes(permission))
     .map(([, label]) => label)
   const userRentals = rentals.filter(item => item.customerId === user.id || item.customerEmail === user.email)
-  const activeRentals = userRentals.filter(item => ['active', 'return_requested'].includes(item.status))
+  const activeRentals = userRentals.filter(item => ['setup', 'active', 'return_requested'].includes(item.status))
   const assignedTasks = staffTasks.filter(item => item.assignedStaffId === user.id || item.facilityId === user.facilityId)
   const openTasks = assignedTasks.filter(item => ['open', 'in_progress'].includes(item.status))
   const openApiTasks = apiMaintenanceTasks.filter(item => ['open', 'in_progress'].includes(item.status))
@@ -914,7 +915,7 @@ setSavingProfile(true)
                         {unitTypeName && <p className="text-xs text-stone-600 font-normal">{unitTypeName}</p>}
                       </div>
                       <Badge variant={rental.status === 'active' ? 'success' : 'warning'}>
-                        {rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
+                        {rental.status === 'setup' ? 'Đang setup miễn phí' : rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-stone-700">{facName}</p>
@@ -1380,7 +1381,7 @@ setSavingProfile(true)
                           try {
                             if (revokeSession(session.id, user)) showToast('Đã thu hồi phiên đăng nhập.')
                           } catch (error) {
-                            showToast(error instanceof Error ? error.message : 'Không thể thu hồi phiên đăng nhập.')
+                            showToast(userFacingError(error, 'Không thể thu hồi phiên đăng nhập.'))
                           }
                         }}
                       >
@@ -1543,7 +1544,7 @@ setSavingProfile(true)
               rows={3}
               value={requestReason}
               onChange={event => setRequestReason(event.target.value)}
-              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456; Điều chuyển cơ sở sang Kho Việt – Cơ sở Quận 1...)"
+              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456, Điều chuyển cơ sở sang Kho Việt – Cơ sở Quận 1...)"
               className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none transition"
             />
             <div className="flex justify-between items-center mt-1 text-[11px] text-stone-600">

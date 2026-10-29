@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { Button, Card } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { ApiClientError, apiRequest } from "../../services/apiClient"
-import { getAuthenticatedActor, type ApiActor } from "../../services/authApi"
+import { getAuthenticatedActor, isApiAuthenticated, type ApiActor } from "../../services/authApi"
 import type { User } from "../../types"
-import { useStorageHub } from "../../store/StorageHubContext"
 import type {
   CustomerFacility,
   PageResponse,
@@ -798,14 +797,6 @@ function PolicyEditor({
   )
 }
 
-function useSafeStorageHub() {
-  try {
-    return useStorageHub()
-  } catch {
-    return null
-  }
-}
-
 export default function DuongPolicyWorkspace({
   user,
   onLocked,
@@ -813,11 +804,10 @@ export default function DuongPolicyWorkspace({
   user?: User
   onLocked?: (value: boolean) => void
 }) {
-  const hub = useSafeStorageHub()
   const authenticatedActor = getAuthenticatedActor()
   const actor =
     authenticatedActor ||
-    (user && user.role === "business"
+    (!isApiAuthenticated() && user && user.role === "business"
       ? {
           id: user.id || "demo-business",
           email: user.email || "business@storagehub.demo",
@@ -861,41 +851,17 @@ export default function DuongPolicyWorkspace({
     `${actor?.id}:integration-facilities:${allowed}`,
     async () => {
       if (!allowed) return null
-      try {
-        const p = await apiRequest<PageResponse<CustomerFacility>>(
-          `/api/facilities?page=0&size=50`,
-        )
-        if (
-          !Array.isArray(p.data) ||
-          !p.data.every((f) => isUuid(f.id) && typeof f.name === "string")
-        )
-          throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
-            code: "INVALID_RESPONSE",
-          })
-        return p
-      } catch (err) {
-        if (hub?.facilities && hub.facilities.length > 0) {
-          return {
-            data: hub.facilities.map((f) => ({
-              id: f.id,
-              code: f.id,
-              name: f.name,
-              address: f.address || "",
-              city: f.city || "TP. Hồ Chí Minh",
-              status: "active" as const,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            })),
-            pagination: {
-              page: 0,
-              size: hub.facilities.length,
-              totalElements: hub.facilities.length,
-              totalPages: 1,
-            },
-          }
-        }
-        throw err
-      }
+      const p = await apiRequest<PageResponse<CustomerFacility>>(
+        `/api/facilities?page=0&size=50`,
+      )
+      if (
+        !Array.isArray(p.data) ||
+        !p.data.every((f) => isUuid(f.id) && typeof f.name === "string")
+      )
+        throw new ApiClientError("Danh sách cơ sở không hợp lệ.", {
+          code: "INVALID_RESPONSE",
+        })
+      return p
     },
   )
 
@@ -921,6 +887,30 @@ export default function DuongPolicyWorkspace({
         <h2 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chính sách gia hạn</h2>
         <p className="mt-1 text-sm text-stone-500">Quản lý các điều kiện gia hạn và gói thuê áp dụng đồng bộ cho toàn bộ cơ sở trong hệ thống StorageHub.</p>
       </header>
+
+      {read.loading && (
+        <Card className="rounded-2xl border border-stone-200 bg-white p-5 text-sm text-stone-600 shadow-sm" role="status">
+          Đang tải danh sách cơ sở và chính sách gia hạn...
+        </Card>
+      )}
+
+      {!!read.error && (
+        <Card className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm" role="alert">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{integrationError(read.error)}</span>
+            <Button type="button" variant="outline" onClick={() => read.refresh()}>
+              Thử tải lại
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {!read.loading && !read.error && read.data?.data.length === 0 && (
+        <Card className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-sm">
+          <h3 className="font-semibold text-stone-900">Chưa có cơ sở để tạo chính sách</h3>
+          <p className="mt-1 text-sm text-stone-600">Hãy tạo và kích hoạt ít nhất một cơ sở trước khi cấu hình chính sách gia hạn.</p>
+        </Card>
+      )}
 
       {/* Ẩn selector cơ sở trong UI nhưng giữ cho DOM/test */}
       <select

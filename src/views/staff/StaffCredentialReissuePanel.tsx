@@ -116,7 +116,7 @@ export default function StaffCredentialReissuePanel({ showToast }: { showToast: 
         <div className="mt-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <div className="flex flex-wrap items-center gap-2 text-sm"><b>{selected.customerName}</b><span>·</span><span>{selected.storageUnitCode}</span><Badge variant="warning">{typeLabel[selected.type]}</Badge><span className="font-mono text-xs">Cũ: {selected.reference}</span></div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-white/70 p-3 text-sm">
-            <div><b>Kiểm soát truy cập</b><p className="mt-1 text-xs text-amber-900">Ghi log mỗi lượt mở khóa trong setup; backend chỉ cho phép trong giờ mở cửa cơ sở.</p></div>
+            <div><b>Kiểm soát truy cập</b><p className="mt-1 text-xs text-amber-900">Ghi log mỗi lượt mở khóa trong setup, backend chỉ cho phép trong giờ mở cửa cơ sở.</p></div>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => {
               void recordCredentialAccess(selected.id, { source: 'STAFF_CREDENTIAL_PANEL' })
                 .then((result) => {
