@@ -142,7 +142,7 @@ function LedgerRead({ role, id }: {
       {!!read.error && <p role="alert">{ledgerReadError(read.error)}</p>}
       {read.data && <LedgerContent data={read.data} />}
       {error && <p role="alert">{error} Thử lại cùng yêu cầu để xác định kết quả, không tạo khoản thu mới.</p>}
-      {role === "manager" && read.data?.sandboxReconciliationEnabled === true && actor?.permissions.includes("payments:update") && read.data?.revision != null &&
+      {role === "manager" && read.data?.sandboxReconciliationEnabled === true && actor?.permissions.includes("payments:collect") && read.data?.revision != null &&
         read.data.coverageInventory?.payments.filter(canReconcileSandboxPayment).map(p => (
           <Button key={p.paymentId} disabled={busy || (!!pending && pending !== p.paymentId)} onClick={() => void reconcile(p.paymentId)}>
             {pending === p.paymentId ? "Thử lại đối soát Sandbox" : "Đối soát VNPay Sandbox"}

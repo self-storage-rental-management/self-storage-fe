@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
 import { Button, Card, Modal, SectionHeader, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
 import { formatVndAmount as formatVnd } from "../../i18n/currency"
@@ -36,6 +37,12 @@ function ShortCode({ value }: { value: string }) {
 const historyAmount = (amount: number | null) =>
   amount === null ? "Chưa có thông tin số tiền" : formatVnd(amount)
 
+const reservationHistoryWarning = "Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho."
+
+export function visibleCustomerPaymentWarnings(warnings: readonly string[]) {
+  return warnings.filter(warning => warning !== reservationHistoryWarning)
+}
+
 export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRentals?: (rentalId: string) => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,9 +73,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       .catch((failure) => {
         if (!disposed)
           setError(
-            failure instanceof Error
-              ? failure.message
-              : "Không thể tải lịch sử thanh toán.",
+            userFacingError(failure, "Không thể tải lịch sử thanh toán."),
           )
       })
       .finally(() => {
@@ -101,16 +106,16 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="p-4">
           <p className="text-xs text-stone-500">Giao dịch có biên lai</p>
-          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? "Chưa có" : entries.filter(canViewCustomerHistoryReceipt).length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? 0 : entries.filter(canViewCustomerHistoryReceipt).length}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Giao dịch gia hạn đã đối soát</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? "Chưa có" : confirmedRenewals.length}</p>
-          <p className="mt-1 text-xs text-stone-500">Xác nhận từng khoản thu; tổng phải trả xem trong hồ sơ gia hạn.</p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? 0 : confirmedRenewals.length}</p>
+          <p className="mt-1 text-xs text-stone-500">Xác nhận từng khoản thu, tổng phải trả xem trong hồ sơ gia hạn.</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-stone-500">Số giao dịch</p>
-          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? "Chưa có" : entries.length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? 0 : entries.length}</p>
         </Card>
       </div>
       {loading && (
@@ -126,7 +131,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
           {error}
         </p>
       )}
-      {warnings.map((warning) => (
+      {visibleCustomerPaymentWarnings(warnings).map((warning) => (
         <p
           key={warning}
           role="alert"
@@ -171,8 +176,9 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                   {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && <p className="mt-1 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>}
                 </Td>
                 <Td>
-                  <div className="flex justify-center">
-                    <span className={"flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-bold " + ((isRenewalHistoryEntry(entry) ? canViewCustomerHistoryReceipt(entry) : ["PAID", "REFUNDED", "SETTLED"].includes(entry.status)) ? "bg-emerald-100 text-emerald-800" : ["FAILED", "CANCELLED", "EXPIRED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                  <div className="space-y-2">
+                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (["PAID", "REFUNDED", "SETTLED"].includes(entry.status) ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
+                    {entry.reservationPayment?.invoiceNumber && <p className="font-mono text-[10px] text-stone-500">Hóa đơn: {entry.reservationPayment.invoiceNumber} · {entry.reservationPayment.invoiceStatus || "DRAFT"}</p>}
                   </div>
                 </Td>
                 <Td>{!loading && !error && canViewCustomerHistoryReceipt(entry) && <Button variant="outline" size="sm" onClick={() => setReceiptId(entry.id)}>Xem biên lai</Button>}</Td>

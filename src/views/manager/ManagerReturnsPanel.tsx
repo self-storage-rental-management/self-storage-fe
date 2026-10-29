@@ -179,7 +179,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   }
 
   const openMaintenanceModal = (returnCase: ReturnCase) => {
-    if (useApi) { showToast('Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế; không tạo phiếu local cho hồ sơ API.'); return }
+    if (useApi) { showToast('Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế, không tạo phiếu local cho hồ sơ API.'); return }
     if (onCreateMaintenanceWork) {
       onCreateMaintenanceWork({
         referenceId: returnCase.unitId,

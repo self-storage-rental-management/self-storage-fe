@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useRef, useState } from 'react'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { Button, Modal } from '../../components/ui'
@@ -59,7 +60,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       .then(value => { if (!disposed) setPayment(value) })
       .catch(error => {
         if (!disposed && !(error instanceof ApiClientError && error.status === 404)) {
-          onMessage(error instanceof Error ? error.message : 'Không thể tải biên lai.')
+          onMessage(userFacingError(error, 'Không thể tải biên lai.'))
         }
       })
     return () => { disposed = true }
@@ -120,7 +121,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       const result = await createVnpayPaymentUrl(reservation.id, paymentKey.current)
       window.location.assign(result.paymentUrl)
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : 'Không thể thanh toán cọc.')
+      onMessage(userFacingError(error, 'Không thể thanh toán cọc.'))
     } finally {
       setBusy(false)
     }

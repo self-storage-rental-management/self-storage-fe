@@ -43,10 +43,10 @@ describe("Customer Rental API integration", () => {
   it("preserves Return/receipt notifications but excludes demo D1/D2/D5 notifications from API sessions", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")
     expect(source).toContain("...(isApiAuthenticated() ? [] : contractExpiryNotifications),")
-    expect(source).toContain("...visibleMyRentals.filter")
+    expect(source).toContain("...(isApiAuthenticated() ? [] : visibleMyRentals.filter")
     expect(source).toContain("...(isApiAuthenticated() ? [] : renewals).filter")
     expect(source).toContain("...(isApiAuthenticated() ? [] : myTickets).flatMap")
-    expect(source).toContain("...myReturns.filter")
+    expect(source).toContain("...(isApiAuthenticated() ? [] : myReturns.filter")
   })
   it("mounts the API workspace once on the shared rental-records page", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")

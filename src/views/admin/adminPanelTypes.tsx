@@ -1,6 +1,6 @@
 import type { Role } from '../../types'
 
-export type AdminSection = 'users' | 'roles' | 'login-history' | 'activity' | 'settings'
+export type AdminSection = 'dashboard' | 'users' | 'roles' | 'login-history' | 'activity' | 'settings'
 export type AdminToast = (message: string) => void
 
 export const roleColors: Record<Role, string> = {

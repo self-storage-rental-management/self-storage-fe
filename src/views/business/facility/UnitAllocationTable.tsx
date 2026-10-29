@@ -257,7 +257,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
 
     const confirmMsg =
       lang === 'vi'
-        ? `Bạn có chắc muốn sao chép toàn bộ cấu hình gói thuê (${sourcePackages.length} kỳ hạn) của cỡ ${sourceSpec.sizeCode} sang ${otherSpecs.length} cỡ kho còn lại trong cơ sở này?\n\n(Tỷ lệ % chiết khấu và trạng thái mở bán sẽ được đồng bộ; giá trọn gói sẽ tự động tính theo giá niêm yết của từng cỡ kho)`
+        ? `Bạn có chắc muốn sao chép toàn bộ cấu hình gói thuê (${sourcePackages.length} kỳ hạn) của cỡ ${sourceSpec.sizeCode} sang ${otherSpecs.length} cỡ kho còn lại trong cơ sở này?\n\n(Tỷ lệ % chiết khấu và trạng thái mở bán sẽ được đồng bộ, giá trọn gói sẽ tự động tính theo giá niêm yết của từng cỡ kho)`
         : `Apply package settings of size ${sourceSpec.sizeCode} to all other ${otherSpecs.length} unit sizes?`
 
     if (!window.confirm(confirmMsg)) return

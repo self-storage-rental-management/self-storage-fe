@@ -49,7 +49,11 @@ describe('backend customer navigation and profile', () => {
     id: 'real-customer', email: 'customer@example.com', fullName: 'Customer', phone: null,
     permanentAddress: null, emergencyContactName: null, emergencyContactPhone: null,
     avatarUrl: 'https://example.com/avatar.png', status: 'ACTIVE', roles: ['CUSTOMER'],
-    facilityScopes: {}, mustChangePassword: false, permissions: [],
+    facilityScopes: {}, mustChangePassword: false,
+    permissions: [
+      'dashboard:read', 'facilities:read', 'storage_units:read',
+      'reservations:read', 'payments:read', 'support:read', 'policies:read',
+    ],
   }
 
   afterEach(() => {

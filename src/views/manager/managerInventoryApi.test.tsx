@@ -379,6 +379,7 @@ describe("Manager inventory filters and truthful read states", () => {
     h.read = { loading: false, data: { units: [], catalog: [] } }
     const html = renderToStaticMarkup(<ManagerInventoryApiPanel />)
     expect(html).toContain("chưa có loại gian kho thực tế nào")
+    expect(html.match(/Danh mục hàng hóa và vật liệu chính/g)).toHaveLength(1)
     expect(html).toContain("Khởi tạo loại kho đầu tiên")
     expect(html).not.toContain("Hiển thị 0 trên 0 gian kho")
     expect(html).not.toContain("Quản lý gian kho</h1>")

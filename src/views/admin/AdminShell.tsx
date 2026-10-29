@@ -5,6 +5,7 @@ import { useStorageHub } from '../../store/StorageHubContext'
 import { getAuthenticatedActor, isApiAuthenticated, normalizeApiPermissions } from '../../services/authApi'
 import ProfileView from '../ProfileView'
 import AdminActivityApiPanel from './AdminActivityApiPanel'
+import AdminDashboardApiPanel from './AdminDashboardApiPanel'
 import AdminLoginHistoryApiPanel from './AdminLoginHistoryApiPanel'
 import AdminRolesApiPanel from './AdminRolesApiPanel'
 import AdminSettingsApiPanel from './AdminSettingsApiPanel'
@@ -19,13 +20,14 @@ export default function AdminShell({ user, onLogout }: { user: User; onLogout: (
     ? apiPermissions.has(permission) || userPermissions.has(permission)
     : can(user, permission)
   const navItems: NavItem[] = [
+    { id: 'dashboard', label: 'Tổng quan toàn hệ thống', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' as PermissionKey },
     { id: 'users', label: 'Quản lý người dùng', icon: Icon.users, group: 'Quản trị', permission: 'users:manage' as PermissionKey },
     { id: 'roles', label: 'Vai trò & Phân quyền', icon: Icon.shield, group: 'Quản trị', permission: 'roles:manage' as PermissionKey },
     { id: 'login-history', label: 'Lịch sử đăng nhập', icon: Icon.login, group: 'Bảo mật & Giám sát', permission: 'audit_logs:read' as PermissionKey },
     { id: 'activity', label: 'Nhật ký hoạt động', icon: Icon.log, group: 'Bảo mật & Giám sát', permission: 'audit_logs:read' as PermissionKey },
     { id: 'settings', label: 'Cài đặt hệ thống', icon: Icon.cog, group: 'Hệ thống', permission: 'settings:manage' as PermissionKey },
   ]
-  const [page, setPage] = useState(() => getInitialPage(navItems, 'users'))
+  const [page, setPage] = useState(() => getInitialPage(navItems, 'dashboard'))
   const [toast, setToast] = useState<string | null>(null)
   const showToast = (message: string) => {
     setToast(message)
@@ -48,8 +50,9 @@ export default function AdminShell({ user, onLogout }: { user: User; onLogout: (
         header button[title*="Notification" i] svg,
         header button[aria-label*="thông báo" i] svg,
         header button[aria-label*="notification" i] svg,
-        header .relative > button > svg { display: block !important; }
+        header .relative > button > svg { display: block !important, }
       `}</style>
+      {page === 'dashboard' && hasPermission('dashboard:read') && <AdminDashboardApiPanel />}
       {page === 'users' && hasPermission('users:manage') && <AdminUsersApiPanel user={user} showToast={showToast} />}
       {page === 'roles' && hasPermission('roles:manage') && <AdminRolesApiPanel user={user} showToast={showToast} />}
       {page === 'login-history' && hasPermission('audit_logs:read') && <AdminLoginHistoryApiPanel user={user} showToast={showToast} />}

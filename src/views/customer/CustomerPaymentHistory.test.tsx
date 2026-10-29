@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { paymentHistoryTimestamp } from './CustomerPaymentHistory'
+import { paymentHistoryTimestamp, visibleCustomerPaymentWarnings } from './CustomerPaymentHistory'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReservationReceipt from './ReservationReceipt'
 import { bookingDepositAccepted, paymentRecordLabel } from './paymentPresentation'
@@ -34,6 +34,15 @@ describe('Booking acceptance uses Payment and Reservation response fields', () =
     const payment: ReservationPaymentResult = { ...paid, paymentStatus: 'FAILED' }
     expect(bookingDepositAccepted(payment)).toBe(false)
     expect(paymentRecordLabel(payment)).toBe('Thanh toán thất bại')
+  })
+})
+
+describe('customer payment warning presentation', () => {
+  it('hides the obsolete reservation-history warning but keeps other warnings', () => {
+    expect(visibleCustomerPaymentWarnings([
+      'Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho.',
+      'Chưa tải được đầy đủ danh sách gia hạn.',
+    ])).toEqual(['Chưa tải được đầy đủ danh sách gia hạn.'])
   })
 })
 

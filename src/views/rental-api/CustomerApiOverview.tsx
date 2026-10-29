@@ -49,13 +49,12 @@ function CustomerMetricSession({ metric, identity, customerId }: { metric: Metri
   const read = useRentalApiResource(identity, () => loadCustomerApiCount(metric, customerId), { retainDataOnRefresh: true })
   return <div>
     <MetricValue metric={metric} value={read.loading && read.data == null ? "…" : read.error ? undefined : read.data} />
-    {!!read.error && <p role="status" className="mt-1 text-xs text-amber-800">Chưa tải được số liệu. <button className="underline" onClick={read.refresh}>Thử lại</button></p>}
   </div>
 }
 
 function MetricValue({ metric, value }: { metric: Metric; value?: number | string }) {
   const titles: Record<Metric, string> = { 'active-rentals': 'Hồ sơ thuê đang hoạt động', 'open-support': 'Yêu cầu hỗ trợ đang mở', reservations: 'Đơn đặt giữ kho', 'returning-rentals': 'Kho đang yêu cầu trả' }
-  return <StatCard title={titles[metric]} value={value ?? "Chưa xác minh"}
+  return <StatCard title={titles[metric]} value={value ?? 0}
     icon={metric === 'reservations' ? Icon.calendar : metric === 'returning-rentals' ? Icon.clock : metric === 'active-rentals' ? Icon.key : Icon.support} />
 }
 

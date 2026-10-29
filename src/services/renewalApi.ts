@@ -261,6 +261,9 @@ function isRenewalPaymentResponse(value: unknown,renewalId: string): value is Re
     &&(result.paidAt===null||Number.isFinite(Date.parse(result.paidAt)))
     &&typeof result.reconciliationRequired==="boolean"&&typeof result.message==="string"
     &&(result.paymentUrl===null||typeof result.paymentUrl==="string")
+     &&(result.invoiceNumber===null||typeof result.invoiceNumber==="string")
+     &&["DRAFT","PAID","VOID","REFUNDED"].includes(result.invoiceStatus)
+     &&(result.invoiceIssuedAt===null||Number.isFinite(Date.parse(result.invoiceIssuedAt)))
     &&(result.settlementStage===undefined||["AWAITING_PAYMENT","VERIFIED_AWAITING_ALLOCATION","ALLOCATED_AWAITING_SIGNING","AWAITING_SIGNING","COMPLETED","RECONCILIATION_REQUIRED"].includes(result.settlementStage))
 }
 

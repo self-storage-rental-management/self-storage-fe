@@ -98,14 +98,16 @@ describe('Facility Manager business rules', () => {
     const permissions = normalizeRolePermissions({ manager: {
       'storage_units:assign': false,
       'policies:update': true,
-      'policies:read': false
+      'policies:read': false,
+      'support:update': true,
     } })
     expect(permissions.manager['storage_units:assign']).toBe(false)
     expect(normalizeRolePermissions(undefined).manager['storage_units:assign']).toBe(true)
     expect(permissions.manager['policies:update']).toBe(false)
     expect(permissions.manager['policies:read']).toBe(true)
     expect(permissions.manager['reservations:approve']).toBe(true)
-    expect(permissions.manager['support:update']).toBe(true)
+    expect(permissions.manager['support:read']).toBe(true)
+    expect(permissions.manager['support:update']).toBe(false)
   })
 
   it('keeps a unit locked throughout the return workflow', () => {

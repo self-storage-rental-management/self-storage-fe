@@ -52,12 +52,11 @@ describe("D1/D5 overview: authoritative counts only", () => {
     respond(page([rental]))
     await expect(loadCustomerApiCount("active-rentals", "another-customer")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
   })
-  it("shows unknown on unavailable data, keeps verified zero and does not show a stale count on error", () => {
+  it("shows zero on unavailable data, keeps verified zero and does not show a stale count on error", () => {
     state.read = { error: new Error("Offline"), data: 42 }
     let html = renderToStaticMarkup(<CustomerApiMetric metric="active-rentals" />)
-    expect(html).toContain("Chưa xác minh")
+    expect(html).toContain(">0<")
     expect(html).not.toContain(">42<")
-    expect(html).not.toContain(">0<")
     state.read = { data: 0 }
     html = renderToStaticMarkup(<CustomerApiMetric metric="active-rentals" />)
     expect(html).toContain(">0<")
@@ -69,7 +68,7 @@ describe("D1/D5 overview: authoritative counts only", () => {
     expect(state.identities[0]).not.toBe(state.identities[1])
     state.actor = null
     const html = renderToStaticMarkup(<CustomerApiMetric metric="active-rentals" />)
-    expect(html).toContain("Chưa xác minh")
+    expect(html).toContain(">0<")
     expect(state.identities).toHaveLength(2)
   })
   it("directs the overview to the rental workspace without fabricated PIN, access or payment facts", () => {

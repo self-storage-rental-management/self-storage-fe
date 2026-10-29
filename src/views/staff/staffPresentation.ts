@@ -1,20 +1,21 @@
 export const STAFF_GOODS_CATEGORY_LABELS: Record<string, string> = {
   FURNITURE: "Nội thất",
   KITCHENWARE: "Đồ dùng nhà bếp",
-  DECOR: "Đồ trang trí",
-  ELECTRONICS: "Thiết bị điện tử",
+  DECOR: "Vật dụng trang trí",
+  DOCUMENTS: "Sách & hồ sơ",
+  ELECTRONICS: "Đồ điện & điện tử",
   OFFICE: "Đồ dùng văn phòng",
   TOYS: "Đồ chơi",
   SPORTS: "Dụng cụ thể thao",
   GIFTS: "Quà tặng",
   MUSICAL_INSTRUMENTS: "Nhạc cụ",
-  CAMERA_EQUIPMENT: "Thiết bị máy ảnh",
+  CAMERA_EQUIPMENT: "Máy ảnh & máy quay",
   EVENT_EQUIPMENT: "Thiết bị sự kiện",
   STORE_FIXTURES: "Thiết bị cửa hàng",
-  FINE_ART: "Mỹ thuật",
+  FINE_ART: "Tranh & tượng",
   CERAMIC_GLASS: "Gốm, sứ và thủy tinh",
   MOVING_ITEMS: "Đồ chuyển nhà",
-  OTHER: "Khác",
+  OTHER: "Hàng hóa khác",
 }
 
 export type StaffTaskSort = "due-asc" | "priority"

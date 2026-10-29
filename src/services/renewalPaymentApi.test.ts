@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest"
 import { clearAuthTokens, setAccessToken, setRefreshToken } from "./apiClient"
 import { createRenewalVnpayPaymentIntent, getRenewalVnpayPayment } from "./renewalApi"
-const data={paymentId:"p1",renewalId:"n1",acceptedRevisionId:"r1",transactionReference:"t1",amount:100,currency:"VND",paymentStatus:"PENDING",paymentDeadline:"2026-10-13T00:00:00Z",paidAt:null,reconciliationRequired:false,message:"Pending",paymentUrl:null,settlementStage:"AWAITING_PAYMENT"}
+const data={paymentId:"p1",renewalId:"n1",acceptedRevisionId:"r1",transactionReference:"t1",amount:100,currency:"VND",paymentStatus:"PENDING",paymentDeadline:"2026-10-13T00:00:00Z",paidAt:null,reconciliationRequired:false,message:"Pending",paymentUrl:null,invoiceNumber:null,invoiceStatus:"DRAFT",invoiceIssuedAt:null,settlementStage:"AWAITING_PAYMENT"}
 const fetchMock=vi.fn()
 function response(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"Content-Type":"application/json"}})}
 beforeEach(()=>{clearAuthTokens();setAccessToken("test-only-access");fetchMock.mockReset();vi.stubGlobal("fetch",fetchMock)})

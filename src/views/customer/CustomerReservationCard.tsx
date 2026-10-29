@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
@@ -88,7 +89,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   useEffect(() => {
     let disposed = false
     void getCustomerReservation(r.id).then(value => { if (!disposed) setDetail(value) })
-      .catch(error => { if (!disposed) setMessage(error instanceof Error ? error.message : 'Không thể tải chi tiết đơn.') })
+      .catch(error => { if (!disposed) setMessage(userFacingError(error, 'Không thể tải chi tiết đơn.')) })
     return () => { disposed = true }
   }, [r.id, r.status])
   const countdown = paymentCountdown(detail?.paymentExpiresAt || r.holdExpiresAt, now)
@@ -136,7 +137,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       setSetupGoodsEditOpen(false)
       await onRefresh()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không thể cập nhật khai báo hàng trong setup.')
+      setMessage(userFacingError(error, 'Không thể cập nhật khai báo hàng trong setup.'))
     } finally { setBusy(false) }
   }
   const steps = [
@@ -160,7 +161,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       }
       setBookingDocument(result)
       setBookingDocumentOpen(true)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tạo phiếu xác nhận giữ kho.') }
+    } catch (error) { setMessage(userFacingError(error, 'Không thể tạo phiếu xác nhận giữ kho.')) }
     finally { setBusy(false) }
   }
   const viewBookingDocument = async () => {
@@ -174,7 +175,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) {
       preview?.close()
-      setMessage(error instanceof Error ? error.message : 'Không thể xem phiếu xác nhận giữ kho.')
+      setMessage(userFacingError(error, 'Không thể xem phiếu xác nhận giữ kho.'))
     }
   }
   const saveBookingDocument = async () => {
@@ -186,7 +187,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       link.download = file.fileName || bookingDocument?.fileName || `phieu-xac-nhan-giu-kho-${r.reservationCode}.pdf`
       document.body.appendChild(link); link.click(); link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải phiếu xác nhận giữ kho.') }
+    } catch (error) { setMessage(userFacingError(error, 'Không thể tải phiếu xác nhận giữ kho.')) }
   }
   const confirmReceipt = async () => {
     if (receiptLock.current) return
@@ -198,7 +199,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       try { await onRefresh() } catch { /* Receipt command has already succeeded. */ }
       onReceiptConfirmed?.(confirmed.reservation.assignedUnitId || r.assignedUnitId || '')
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không thể xác nhận nhận kho.')
+      setMessage(userFacingError(error, 'Không thể xác nhận nhận kho.'))
       try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
     }
     finally { receiptLock.current = false; setConfirmingReceipt(false) }
@@ -246,7 +247,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         return
       }
       setMessage('Đã lưu lịch nhận kho. Nhân viên tại cơ sở đã được thông báo về thay đổi này.')
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể lưu lịch hẹn.') }
+    } catch (error) { setMessage(userFacingError(error, 'Không thể lưu lịch hẹn.')) }
     finally { setBusy(false) }
   }
   const loadHandoverDocuments = async () => {
@@ -255,7 +256,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     try {
       setHandoverDocuments(await getCustomerCheckInDocuments(r.id))
       setHandoverDocumentsOpen(true)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải văn bản bàn giao.') }
+    } catch (error) { setMessage(userFacingError(error, 'Không thể tải văn bản bàn giao.')) }
     finally { setBusy(false) }
   }
   const viewHandoverDocument = async (document: CheckInDocument) => {
@@ -269,7 +270,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) {
       preview?.close()
-      setMessage(error instanceof Error ? error.message : 'Không thể mở văn bản bàn giao.')
+      setMessage(userFacingError(error, 'Không thể mở văn bản bàn giao.'))
     }
   }
   const viewGoodsImage = async (assetId: string) => {
@@ -283,7 +284,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) {
       preview?.close()
-      setMessage(error instanceof Error ? error.message : 'Không thể mở hình ảnh hàng hóa.')
+      setMessage(userFacingError(error, 'Không thể mở hình ảnh hàng hóa.'))
     }
   }
   const saveHandoverDocument = async (fileDocument: CheckInDocument) => {
@@ -293,7 +294,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       const link = window.document.createElement('a')
       link.href = url; link.download = file.fileName || fileDocument.originalName; window.document.body.appendChild(link); link.click(); link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể tải văn bản bàn giao.') }
+    } catch (error) { setMessage(userFacingError(error, 'Không thể tải văn bản bàn giao.')) }
   }
   return (
   <Card

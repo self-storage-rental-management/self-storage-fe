@@ -1,3 +1,4 @@
+import { userFacingError } from '../presentation/userFacingError'
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { User } from '../types'
 
@@ -108,7 +109,7 @@ export default function ProfileHeaderCard({
       await onAvatarChange(file)
       setSuccessMessage('Đã cập nhật ảnh đại diện.')
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Không thể cập nhật ảnh đại diện.')
+      setUploadError(userFacingError(error, 'Không thể cập nhật ảnh đại diện.'))
     }
   }
 

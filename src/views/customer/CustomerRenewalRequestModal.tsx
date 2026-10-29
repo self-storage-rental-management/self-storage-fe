@@ -136,7 +136,7 @@ export default function CustomerRenewalRequestModal({
                   </button>
                   <div hidden={!startInfoOpen} className="absolute right-0 top-full z-20 w-64 max-w-[calc(100vw-4rem)] pt-1">
                   <p id="renewal-start-policy" role="tooltip" className="rounded-lg border border-stone-200 bg-white p-3 text-sm leading-relaxed text-stone-600 shadow-md">
-                    Ngày do hệ thống xác định. Chưa quá hạn: nối tiếp kỳ cũ. Đã quá hạn: bắt đầu từ ngày hoàn tất ký; ngày trong báo giá là dự kiến.
+                    Ngày do hệ thống xác định. Chưa quá hạn: nối tiếp kỳ cũ. Đã quá hạn: bắt đầu từ ngày hoàn tất ký, ngày trong báo giá là dự kiến.
                   </p>
                   </div>
                 </div>

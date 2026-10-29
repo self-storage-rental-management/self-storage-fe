@@ -1186,7 +1186,7 @@ export default function StaffCheckInOperationsPanel({
                 <div><p className="font-semibold text-amber-950">Bàn giao kho trống và bắt đầu setup</p><p className="text-sm text-amber-800">Ổ khóa chỉ được kích hoạt sau khi backend xác nhận đã ký hợp đồng và thu tiền. Không lưu hoặc bàn giao mật khẩu.</p></div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input label="Mã ổ khóa / chìa khóa *" value={keyLockReference} disabled={isReviewingCompletedStep} onChange={(event) => setKeyLockReference(event.target.value)} placeholder="Ví dụ: LOCK-018" />
-                  <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"><span className="text-stone-600">Quyền lợi đã lưu cùng đơn</span><b className="mt-1 block">{handoverTarget.freeSetupDays} ngày setup miễn phí</b><span className="text-xs text-stone-500">Hệ thống tự tính từ ngày bàn giao thực tế; Staff không thể thay đổi.</span></div>
+                  <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"><span className="text-stone-600">Quyền lợi đã lưu cùng đơn</span><b className="mt-1 block">{handoverTarget.freeSetupDays} ngày setup miễn phí</b><span className="text-xs text-stone-500">Hệ thống tự tính từ ngày bàn giao thực tế, Staff không thể thay đổi.</span></div>
                 </div>
                 {handoverTarget.lockReference && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"><b>Ổ khóa đã được kích hoạt và bàn giao</b><p className="mt-1">Mã ổ khóa/chìa khóa: <b className="font-mono">{handoverTarget.lockReference}</b></p><p className="mt-1 text-xs">Credential được kích hoạt lúc {formatStaffDateTime(handoverTarget.setupStartedAt)}. Không có mật khẩu được lưu hoặc bàn giao.</p></div>}
               </div>
@@ -1233,7 +1233,7 @@ export default function StaffCheckInOperationsPanel({
             <div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
               <Button variant="outline" onClick={() => setHandoverTarget(null)} disabled={submitting}>Đóng</Button>
               {isReviewingCompletedStep ? (
-                <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu; không thể thay đổi bước này.</span>
+                <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
               ) : handoverStep < 6 ? (
                 <Button disabled={submitting ||
                   (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
@@ -1374,6 +1374,9 @@ export default function StaffCheckInOperationsPanel({
                 {detailTarget.performedByName ||
                   detailTarget.performedBy ||
                   "nhân viên cơ sở"}
+                {detailTarget.assignedStaffName && (
+                  <> · Phụ trách: {detailTarget.assignedStaffName}</>
+                )}
               </p>
             </div>
             <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 sm:grid-cols-3">

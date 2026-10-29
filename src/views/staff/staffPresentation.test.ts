@@ -10,10 +10,9 @@ import {
 
 describe("trình bày dữ liệu cho giao diện nhân viên", () => {
   it("dùng cùng tên loại hàng với giao diện khách hàng", () => {
-    expect(staffGoodsCategoryLabel("CERAMIC_GLASS")).toBe(
-      "Gốm, sứ và thủy tinh",
-    )
-    expect(staffGoodsCategoryLabel("OTHER")).toBe("Khác")
+    expect(staffGoodsCategoryLabel("DOCUMENTS")).toBe("Sách & hồ sơ")
+    expect(staffGoodsCategoryLabel("CAMERA_EQUIPMENT")).toBe("Máy ảnh & máy quay")
+    expect(staffGoodsCategoryLabel("OTHER")).toBe("Hàng hóa khác")
   })
 
   it("không hiển thị mã trạng thái của hệ thống", () => {

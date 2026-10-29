@@ -6,13 +6,14 @@ import path from 'node:path'
 // Standalone Vite configuration. The application does not depend on .figma.
 export default defineConfig(({ mode }) => ({
   base: '/',
-  plugins: [react(), tailwindcss()],
+  plugins: [react({ jsxImportSource: '@storagehub/presentation' }), tailwindcss()],
   test: {
     exclude: [...configDefaults.exclude, '**/.local/**'],
   },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
+      '@storagehub/presentation': path.resolve(import.meta.dirname, './src/presentation'),
     },
   },
   build: {

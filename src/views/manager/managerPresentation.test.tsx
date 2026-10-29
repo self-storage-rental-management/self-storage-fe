@@ -65,6 +65,7 @@ describe('Manager-only readable presentation', () => {
     expect(html).not.toContain('Trạng thái thao tác')
   })
   it('does not expose raw server diagnostics in Manager errors', () => {
+    expect(managerDisplayError(new ApiClientError('Material already exists in this goods category', { status: 409 }))).toBe('Vật liệu này đã có trong loại hàng hóa. Vui lòng nhập tên khác.')
     expect(managerDisplayError(new ApiClientError('English debug message FileAsset UUID', { status: 400 }))).not.toContain('UUID')
     expect(managerDisplayError(new ApiClientError('Conflict', { status: 409 }))).toBe('Dữ liệu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng tải lại trước khi tiếp tục.')
   })

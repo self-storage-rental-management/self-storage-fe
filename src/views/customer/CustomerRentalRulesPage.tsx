@@ -12,7 +12,7 @@ const returnRules = [
       "Gửi yêu cầu trả kho, dọn hết tài sản và bàn giao theo lịch đã xác nhận.",
       "Hai bên kiểm tra hiện trạng kho và đối chiếu các khoản phải thanh toán trước khi quyết toán.",
       "Tiền cọc đảm bảo kho được quyết toán sau khi khấu trừ công nợ và các khoản hư hại, vệ sinh hoặc phát sinh đã xác nhận. Khách hàng thanh toán phần còn thiếu nếu có.",
-      "Trả kho quá hạn được tính từ ngày kế tiếp ngày hết hạn đến ngày bàn giao và nghiệm thu thực tế. Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày); tổng phí = số ngày quá hạn × phí mỗi ngày."
+      "Trả kho quá hạn được tính từ ngày kế tiếp ngày hết hạn đến ngày bàn giao và nghiệm thu thực tế. Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày), tổng phí = số ngày quá hạn × phí mỗi ngày."
 ],
   },
   {

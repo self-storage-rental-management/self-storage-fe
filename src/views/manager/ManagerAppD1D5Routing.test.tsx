@@ -37,6 +37,10 @@ describe('Manager D1-D5 routing isolation', () => {
     state.api = false; render()
     expect(state.nav.find(item => item.id === 'payments')).toMatchObject({ permission: 'payments:collect' })
   })
+  it('does not expose check-in and handover operations to managers', () => {
+    render()
+    expect(state.nav.some(item => item.id === 'moves')).toBe(false)
+  })
   it('keeps new runtime readers free of demo/store/storage imports and payment command clients', () => {
     for (const file of ['managerD1D5Api.ts', 'ManagerDashboardApiPanel.tsx', 'ManagerFinancialApiPanel.tsx']) {
       const source = readFileSync(new URL(file, import.meta.url), 'utf8')

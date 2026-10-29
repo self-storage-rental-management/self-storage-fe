@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Modal } from '../../components/ui'
 import { ApiClientError } from '../../services/apiClient'
@@ -44,7 +45,7 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
       .then(value => { if (!disposed) setComplaint(value) })
       .catch(error => {
         if (!disposed && !(error instanceof ApiClientError && error.status === 404)) {
-          onMessage(error instanceof Error ? error.message : 'Không thể tải khiếu nại.')
+          onMessage(userFacingError(error, 'Không thể tải khiếu nại.'))
         }
       })
     return () => { disposed = true }
@@ -76,7 +77,7 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
     } catch (error) {
       setErrorMessage(error instanceof ApiClientError && error.status === 413
         ? 'Ảnh tải lên vượt quá dung lượng cho phép. Mỗi ảnh tối đa 10 MB.'
-        : error instanceof Error ? error.message : 'Không thể gửi khiếu nại.')
+        : userFacingError(error, 'Không thể gửi khiếu nại.'))
     } finally {
       setBusy(false)
     }
@@ -92,7 +93,7 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
       onMessage('Đã rút khiếu nại. Đơn giữ kho đã bị hủy và chưa ghi nhận thanh toán.')
       await onRefresh()
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : 'Không thể rút khiếu nại.')
+      onMessage(userFacingError(error, 'Không thể rút khiếu nại.'))
     } finally {
       setBusy(false)
     }

@@ -2,6 +2,7 @@ import { Button } from '../../components/ui'
 import { formatVndAmount } from '../../i18n/currency'
 import type { CustomerUnitType, ReservationRentalPackage } from '../../services/customerReservationApi'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
+import { isApiAuthenticated } from '../../services/authApi'
 import ReferenceBoxCapacity from './ReferenceBoxCapacity'
 import CustomerFacilityPackages from './CustomerFacilityPackages'
 
@@ -12,6 +13,7 @@ export interface CustomerUnitDetailsProps {
   address?: string
   availableCount: number
   rentalPackages?: ReservationRentalPackage[]
+  allowDefaultImage?: boolean
   isRecommended?: boolean
   isUserSelected?: boolean
   isIncompatible?: boolean
@@ -28,6 +30,7 @@ export default function CustomerUnitDetails({
   address,
   availableCount,
   rentalPackages = [],
+  allowDefaultImage = true,
   isRecommended = false,
   isUserSelected = false,
   isIncompatible = false,
@@ -38,8 +41,10 @@ export default function CustomerUnitDetails({
 }: CustomerUnitDetailsProps) {
   const size = t.code.match(/(?:^|[-_])(XL|S|M|L)(?:$|[-_])/i)?.[1]?.toUpperCase() || t.name.match(/\b(XL|S|M|L)\b/i)?.[1]?.toUpperCase()
     || ({ small: 'S', medium: 'M', large: 'L', 'extra large': 'XL' } as Record<string, string>)[t.name.toLowerCase()]
-  facilityName = customerFacilityName(facilityCode || '', facilityName)
-  address = customerFacilityAddress(facilityCode || '', facilityName, address || '')
+  if (!isApiAuthenticated()) {
+    facilityName = customerFacilityName(facilityCode || '', facilityName)
+    address = customerFacilityAddress(facilityCode || '', facilityName, address || '')
+  }
   return <div className="space-y-5">
     <div className="rounded-2xl bg-[#292a27] p-5 text-white">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -111,10 +116,10 @@ export default function CustomerUnitDetails({
       </div>
     )}
 
-    {(t.detailImageUrl || (size && `/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`)) ? (
+    {(t.detailImageUrl || (allowDefaultImage && size && `/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`)) ? (
       <figure className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
         <img
-          src={t.detailImageUrl || `/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png`}
+          src={t.detailImageUrl || (allowDefaultImage && size ? `/images/customer-units/details/kho-${size.toLowerCase()}-chi-tiet.png` : '')}
           alt={`Sơ đồ bố trí kho cỡ ${size || t.name}`}
           className="max-h-[520px] w-full object-contain"
         />

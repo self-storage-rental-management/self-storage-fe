@@ -21,7 +21,7 @@ export default function CustomerRentalRegulations({ facilityName }: Props) {
             QUY ĐỊNH CHO THUÊ KHO STORAGEHUB
           </h3>
           <p className="text-stone-300 text-sm leading-7">
-            Văn bản pháp quy chuẩn hóa quyền và nghĩa vụ của Khách hàng cùng StorageHub; quy định chi tiết về phạm vi sử dụng, giá thuê & thanh toán, điều kiện an toàn, xử lý sự cố và bàn giao kho.
+            Văn bản pháp quy chuẩn hóa quyền và nghĩa vụ của Khách hàng cùng StorageHub, quy định chi tiết về phạm vi sử dụng, giá thuê & thanh toán, điều kiện an toàn, xử lý sự cố và bàn giao kho.
           </p>
         </div>
       </div>

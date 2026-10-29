@@ -133,6 +133,7 @@ describe('customerReservationApi', () => {
         weightPerItemKg: 18,
         fragile: false,
       }],
+      acceptedTerms: true,
     }
 
     await createCustomerReservation(input, 'reservation-fe-test-001')

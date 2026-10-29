@@ -1,3 +1,4 @@
+import { userFacingError } from '../../presentation/userFacingError'
 import { Card, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
@@ -27,7 +28,7 @@ export function FacilityCatalogTable({ rows }: { rows: FacilityCatalogRow[] }) {
 function CatalogRead({ facilityId, identity }: { facilityId: string; identity: string }) {
   const read = useRentalApiResource(identity, () => loadManagerFacilityCatalog(facilityId))
   if (read.loading) return <p role="status" className="p-4 text-sm text-stone-500">Đang tải loại gian kho và số lượng tại cơ sở...</p>
-  if (read.error) return <p role="alert" className="p-4 text-sm text-red-700">{read.error instanceof ApiClientError && read.error.code === 'INVALID_RESPONSE' ? read.error.message : managerDisplayError(read.error)}</p>
+  if (read.error) return <p role="alert" className="p-4 text-sm text-red-700">{userFacingError(read.error)}</p>
   return read.data ? <FacilityCatalogTable rows={read.data} /> : <p className="p-4">Chưa xác minh được thông tin loại gian kho.</p>
 }
 

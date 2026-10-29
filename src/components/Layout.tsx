@@ -2,16 +2,10 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
 import type { PermissionKey, User, Role } from '../types'
-import { isApiAuthenticated, loginWithApi } from '../services/authApi'
+import { isApiAuthenticated } from '../services/authApi'
 import { markAllNotificationsRead } from '../services/notificationApi'
-
-const DEMO_SWITCHER_ROLES = [
-  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', icon: '👤' },
-  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', icon: '🛠️' },
-  { role: 'manager', label: 'Quản lý cơ sở', email: 'manager@storagehub.demo', password: 'Manager@1234!', icon: '🏢' },
-  { role: 'business', label: 'Ban điều hành (BO)', email: 'business@storagehub.demo', password: 'Business@1234!', icon: '📊' },
-  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', icon: '🛡️' },
-] as const
+import { userFacingError } from '../presentation/userFacingError'
+import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
 
 export interface NavItem {
   id: string
@@ -97,6 +91,11 @@ interface LayoutProps {
   roleLabel: string
   roleColor: string
   notifications?: LayoutNotification[]
+  notificationError?: string
+  notificationsLoading?: boolean
+  hasMoreNotifications?: boolean
+  onLoadMoreNotifications?: () => void
+  onRetryNotifications?: () => void
   additionalNotifications?: LayoutNotification[]
   onNotificationClick?: (notification: LayoutNotification) => void
   canAccess?: (permission: PermissionKey) => boolean
@@ -104,8 +103,10 @@ interface LayoutProps {
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess
+  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess,
+  notificationError, notificationsLoading, hasMoreNotifications, onLoadMoreNotifications, onRetryNotifications
 }: LayoutProps) {
+  useDisplayPunctuation(user.role === 'customer' || user.role === 'manager')
   const roleTaskbarColor: Record<Role, string> = {
     customer: '#F4C542',
     staff: '#22C55E',
@@ -117,24 +118,18 @@ export default function Layout({
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false)
-  const [switchingRole, setSwitchingRole] = useState(false)
+  const [notificationActionError, setNotificationActionError] = useState('')
   const notificationAreaRef = useRef<HTMLDivElement>(null)
-  const roleSwitcherAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
   useEffect(() => {
-    if (!notificationsOpen && !roleSwitcherOpen) return
+    if (!notificationsOpen) return
     const closeOutside = (event: PointerEvent) => {
       if (event.target instanceof Node) {
         if (!notificationAreaRef.current?.contains(event.target)) setNotificationsOpen(false)
-        if (!roleSwitcherAreaRef.current?.contains(event.target)) setRoleSwitcherOpen(false)
       }
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setNotificationsOpen(false)
-        setRoleSwitcherOpen(false)
-      }
+      if (event.key === 'Escape') setNotificationsOpen(false)
     }
     document.addEventListener('pointerdown', closeOutside, true)
     document.addEventListener('keydown', closeOnEscape)
@@ -389,7 +384,12 @@ export default function Layout({
     else navigate(notification.page, false)
   }
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    setNotificationActionError('')
+    if (isApiAuthenticated()) {
+      try { await markAllNotificationsRead() }
+      catch (reason) { setNotificationActionError(userFacingError(reason, 'Chưa lưu được trạng thái đã đọc. Vui lòng thử lại.')); return }
+    }
     const allIds = notifications.map(item => item.id)
     const nextReadIds = Array.from(new Set([...readNotificationIds, ...allIds]))
     setReadNotificationIds(nextReadIds)
@@ -402,7 +402,6 @@ export default function Layout({
       return updated
     })
     if (isApiAuthenticated()) {
-      void markAllNotificationsRead().catch(() => undefined)
       window.dispatchEvent(new Event('storagehub:notifications-refresh'))
     }
   }
@@ -595,6 +594,8 @@ export default function Layout({
                   </div>
                 </div>
                 <div className="max-h-96 overflow-y-auto divide-y divide-stone-100">
+                  {notificationError && <div role="alert" className="space-y-2 bg-amber-50 p-3 text-sm text-amber-900"><p>{notificationError}</p><button type="button" disabled={notificationsLoading} className="underline" onClick={onRetryNotifications}>Thử tải lại</button></div>}
+                  {notificationActionError && <p role="alert" className="bg-amber-50 p-3 text-sm text-amber-900">{notificationActionError}</p>}
                   {notifications.length ? notifications.map(item => (
                     <button
                       type="button"
@@ -619,59 +620,8 @@ export default function Layout({
                       <p className="text-xs text-stone-400 mt-1">{'Mọi thông báo vận hành và hệ thống sẽ xuất hiện tại đây.'}</p>
                     </div>
                   )}
+                  {hasMoreNotifications && <button type="button" className="w-full p-3 text-sm font-semibold text-amber-800" disabled={notificationsLoading} onClick={onLoadMoreNotifications}>{notificationsLoading ? 'Đang tải thông báo…' : 'Xem thông báo cũ hơn'}</button>}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* In-app Role Switcher */}
-          <div className="relative" ref={roleSwitcherAreaRef}>
-            <button
-              type="button"
-              onClick={() => setRoleSwitcherOpen(o => !o)}
-              disabled={switchingRole}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100 text-xs font-semibold text-stone-700 transition cursor-pointer shadow-2xs"
-              title="Chuyển đổi vai trò kiểm thử nhanh (API Token)"
-            >
-              <span className="text-amber-500 font-bold">⚡</span>
-              <span className="hidden sm:inline">Đổi vai trò</span>
-              <span className="text-[10px] text-stone-400">▼</span>
-            </button>
-            {roleSwitcherOpen && (
-              <div className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-stone-200 bg-white py-1.5 shadow-xl">
-                <div className="px-3 py-1.5 border-b border-stone-100 mb-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Chuyển sang vai trò (API Auth)</p>
-                </div>
-                {DEMO_SWITCHER_ROLES.map(acc => {
-                  const isCurrent = acc.role === user.role
-                  return (
-                    <button
-                      key={acc.role}
-                      type="button"
-                      disabled={switchingRole || isCurrent}
-                      onClick={async () => {
-                        setSwitchingRole(true)
-                        try {
-                          await loginWithApi(acc.email, acc.password)
-                          window.location.href = '/'
-                        } catch {
-                          setSwitchingRole(false)
-                        }
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-left text-xs transition cursor-pointer ${
-                        isCurrent
-                          ? 'bg-amber-50 font-bold text-amber-900 cursor-default'
-                          : 'text-stone-700 hover:bg-stone-50 hover:text-stone-900'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span>{acc.icon}</span>
-                        <span>{acc.label}</span>
-                      </span>
-                      {isCurrent && <span className="text-[10px] text-amber-600 font-mono">Hiện tại</span>}
-                    </button>
-                  )
-                })}
               </div>
             )}
           </div>

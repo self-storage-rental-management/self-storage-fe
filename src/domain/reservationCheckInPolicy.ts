@@ -28,6 +28,10 @@ export function isCheckInAppointmentAllowed(value: Date, window: ReturnType<type
   return !Number.isNaN(value.getTime()) && value >= window.availableAt && value <= window.deadlineAt
 }
 
+export function firstCheckInMinute(availableAt: Date) {
+  return new Date(Math.ceil(availableAt.getTime() / 60_000) * 60_000)
+}
+
 export function policyDateInput(value: Date) {
   const clock = policyClock(value)
   const year = clock.getUTCFullYear()

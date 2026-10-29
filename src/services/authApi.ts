@@ -1,5 +1,4 @@
 import { PERMISSION_KEYS, type PermissionKey, type Role, type User } from '../types'
-import { DEFAULT_ROLE_PERMISSIONS } from '../auth/rbac'
 import { ApiClientError, apiRequest, clearAuthTokens, getAccessToken, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
 import { waitForChatSessionSaves } from './chatSessionSaveQueue'
 
@@ -22,6 +21,7 @@ export interface ApiActor {
   facilityNames?: Record<string, string>
   mustChangePassword: boolean
   permissions: string[]
+  authzVersion?: number
 }
 
 interface ApiAuthResponse {
@@ -146,6 +146,7 @@ export function actorToUser(actor: ApiActor): User {
     facilityNames: actor.facilityNames,
     mustChangePassword: actor.mustChangePassword,
     permissions: normalizeApiPermissions(actor.permissions),
+    authzVersion: actor.authzVersion,
   }
 }
 
@@ -333,7 +334,7 @@ export function isApiAuthenticated() {
 export function canApiCustomerNavigate(user: User, permission: PermissionKey): boolean {
   return isApiAuthenticated() && currentActor?.id === user.id
     && currentActor.status === 'ACTIVE' && primaryRole(currentActor.roles) === 'customer'
-    && Boolean(DEFAULT_ROLE_PERMISSIONS.customer[permission])
+    && currentActor.permissions.includes(permission)
 }
 
 export function canApiActor(user: User, permission: PermissionKey): boolean {
