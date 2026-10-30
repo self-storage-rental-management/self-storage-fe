@@ -41,7 +41,7 @@ const phrases: [RegExp, string][] = [
   [/\breceiver\b/g, 'bộ phận tiếp nhận'], [/\bcooldown\b/g, 'thời gian chờ'],
   [/Correlation ID|Correlation/g, 'Mã đối chiếu'], [/\bID\b/g, 'Mã'],
   [/\bAPI\b/g, ''], [/\s*\(D[1-5]\s*\)/g, ''],
-  [/[—–]/g, '-'], [/;/g, ','],
+  [/[--]/g, '-'], [/;/g, ','],
 ]
 
 const descriptions: Record<string, string> = {
@@ -66,12 +66,12 @@ const descriptions: Record<string, string> = {
   'Minh chứng đã lưu (FileAsset UUID, nếu có)': 'Mã tệp minh chứng đã lưu (nếu có)',
   'FileAsset UUID của văn bản gia hạn đã ký': 'Mã tệp văn bản gia hạn đã ký',
   'Ký & thanh toán gia hạn (D3)': 'Ký và thanh toán gia hạn',
-  'Duyệt khoản hoàn — chờ thực thi': 'Duyệt hoàn tiền - chưa chuyển tiền',
+  'Duyệt khoản hoàn - chờ thực thi': 'Duyệt hoàn tiền - chưa chuyển tiền',
   'Chưa có Staff đủ điều kiện. BE yêu cầu ACTIVE, đúng cơ sở, view_support và manage_support; không tự cấp quyền hoặc so tên.': 'Chưa có nhân viên đang hoạt động, thuộc đúng cơ sở và có quyền xử lý yêu cầu hỗ trợ.',
   'BE kiểm tra policy và kết quả từ nguồn chung. Chuyển module không đồng nghĩa đã xử lý xong; ghi chú không thay thế kết quả thanh toán/refund/bảo trì. Thiếu nguồn sẽ bị chặn, không tự giả lập thành công.': 'Chuyển yêu cầu sang bộ phận phụ trách chưa có nghĩa đã xử lý xong. Kết quả thanh toán, hoàn tiền hoặc bảo trì phải được ghi nhận trước khi hoàn tất.',
   'Đã xử lý xong, chưa đóng. Customer có thể xác nhận kết quả hoặc yêu cầu mở lại; backend vẫn kiểm tra policy và quyền. Không mặc định ticket sẽ tự đóng: tự đóng còn cần policy chung và bằng chứng notification đúng lần xử lý này.': 'Đã xử lý xong, chờ khách hàng xác nhận. Khách hàng có thể yêu cầu xử lý lại nếu chưa hài lòng. Yêu cầu chưa được tự động đóng.',
   'Kết quả chưa xác định. Giữ nguyên nội dung, thử lại cùng key; không đổi yêu cầu hoặc đóng/tải lại.': 'Chưa xác nhận được kết quả. Giữ nguyên nội dung và bấm Kiểm tra lại, không đóng hoặc tải lại trang.',
-  'Đã chuyển module — chưa đồng nghĩa hoàn thành': 'Đã chuyển xử lý - chưa hoàn tất',
+  'Đã chuyển module - chưa đồng nghĩa hoàn thành': 'Đã chuyển xử lý - chưa hoàn tất',
   'Điều phối escalation': 'Xử lý yêu cầu chuyển bộ phận',
   'Chuyển tới module được phép': 'Chuyển tới bộ phận phụ trách',
   'Mã minh chứng được BE cho phép đọc; tải file chờ tích hợp quyền chung.': 'Đã có mã tệp minh chứng, chức năng tải tệp hiện chưa khả dụng.',

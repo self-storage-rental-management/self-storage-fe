@@ -157,8 +157,8 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           <div className="mt-2 space-y-1.5">
             {reservation.monthlyPrice != null && <div className="flex justify-between gap-4"><span>Đơn giá/tháng</span><b>{formatVnd(reservation.monthlyPrice)}</b></div>}
             <div className="flex justify-between gap-4"><span>Tiền thuê trước giảm</span><b>{formatVnd(grossRentalAmount)}</b></div>
-            <div className="flex justify-between gap-4 text-emerald-700"><span>Giảm giá kỳ hạn ({Math.round((reservation.discountRate ?? 0) * 100)}%)</span><b>− {formatVnd(discountAmount)}</b></div>
-            {reservation.voucherCode && <div className="flex justify-between gap-4 text-emerald-700"><span>Voucher {reservation.voucherCode}</span><b>− {formatVnd(voucherDiscountAmount)}</b></div>}
+            <div className="flex justify-between gap-4 text-emerald-700"><span>Giảm giá kỳ hạn ({Math.round((reservation.discountRate ?? 0) * 100)}%)</span><b>- {formatVnd(discountAmount)}</b></div>
+            {reservation.voucherCode && <div className="flex justify-between gap-4 text-emerald-700"><span>Voucher {reservation.voucherCode}</span><b>- {formatVnd(voucherDiscountAmount)}</b></div>}
             <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5"><b>Tiền thuê sau giảm</b><b>{formatVnd(snapshot.totalAfterDiscount)}</b></div>
             <div className="flex justify-between gap-4"><span>Cọc giữ chỗ</span><b className="text-amber-700">{formatVnd(snapshot.reservationDepositAmount)}</b></div>
             <div className="flex justify-between gap-4"><span>Tiền thuê còn lại</span><b>{formatVnd(snapshot.remainingRentalAmount)}</b></div>

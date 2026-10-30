@@ -15,13 +15,13 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
     address="Quan 1" availableCount={2} rentalPackages={[
       { code: 'FAC-6M', name: 'Gói 6 tháng cơ sở', rentalMonths: 6, discountRate: 0.10, policyVersion: 'v1' },
     ]} onReserve={() => {}} onClose={() => {}} />)
-  for (const text of ['Kho Việt – Cơ sở Quận 1', '125 Nguyễn Bỉnh Khiêm', 'kho-s-chi-tiet.png',
+  for (const text of ['Kho Việt - Cơ sở Quận 1', '125 Nguyễn Bỉnh Khiêm', 'kho-s-chi-tiet.png',
     'Ưu đãi và báo giá theo kỳ thuê',
     'Gói 6 tháng cơ sở', 'Giảm 10% tiền thuê',
     '3. Quy trình đặt kho và thanh toán', '5.500.000', 'Tiền cọc đảm bảo kho',
     'Xác nhận hồ sơ', 'Thanh toán cọc', 'Nhận kho']) expect(html).toContain(text)
   for (const text of ['Số kho trống theo kỳ thuê', 'Theo báo giá kỳ thuê', 'Chiều rộng làn xe đẩy',
-    '(hồ sơ bố trí)', '– phù hợp thùng carton và đồ gia dụng nhẹ', 'Kiểm tra hàng hóa',
+    '(hồ sơ bố trí)', '- phù hợp thùng carton và đồ gia dụng nhẹ', 'Kiểm tra hàng hóa',
     'Kích thước từng kiện, tổng thể tích và tổng trọng lượng',
     'Kiểm tra theo khung kệ', 'Đối chiếu kích thước từng kiện với 4 khung kệ',
     'Kiểm tra cân nặng', 'Tổng trọng lượng hàng không vượt quá 1.000 kg',

@@ -152,7 +152,7 @@ export default function CustomerRenewalRequestModal({
               />
             </div>
           </div>
-          {quote && <div className="mt-3 px-2"><QuoteLine label="Thời gian gia hạn" value={<>{rentalDate(quote.extensionStartDate)} – {rentalDate(quote.newEndDate)}</>} /></div>}
+          {quote && <div className="mt-3 px-2"><QuoteLine label="Thời gian gia hạn" value={<>{rentalDate(quote.extensionStartDate)} - {rentalDate(quote.newEndDate)}</>} /></div>}
           </section>
         )}
         {options.data?.length === 0 && (

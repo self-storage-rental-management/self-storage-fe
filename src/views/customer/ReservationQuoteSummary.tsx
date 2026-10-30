@@ -30,7 +30,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
               )}
             </div>
             <p className="mt-0.5 text-xs text-stone-500">
-              {q.facilityName ? `${q.facilityName} · ` : ''}{formatDisplayDate(q.startDate)}–{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng
+              {q.facilityName ? `${q.facilityName} · ` : ''}{formatDisplayDate(q.startDate)}-{formatDisplayDate(q.endDate)} · {q.rentalMonths} tháng
             </p>
             <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
               <b>{q.freeSetupDays ?? 0} ngày setup miễn phí</b> tính từ ngày bàn giao thực tế, không cộng thêm khi gia hạn. Mốc này được lưu cùng đơn đặt kho.
@@ -46,8 +46,8 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           <div className="space-y-2">
             <p className="text-xs font-bold uppercase tracking-wide text-stone-500">Cách tính tiền thuê</p>
             <div className="flex justify-between gap-3"><span>Tiền thuê trước giảm</span><b className="tabular-nums">{formatVndAmount(q.subtotal)}</b></div>
-            {q.discountAmount > 0 && <div className="flex justify-between gap-3 text-emerald-700"><span>Giảm kỳ hạn ({Math.round(q.discountRate * 100)}%)</span><b className="tabular-nums">− {formatVndAmount(q.discountAmount)}</b></div>}
-            {q.voucherCode && (q.voucherDiscountAmount ?? 0) > 0 && <div className="flex justify-between gap-3 text-emerald-700"><span>Voucher {q.voucherCode}</span><b className="tabular-nums">− {formatVndAmount(q.voucherDiscountAmount!)}</b></div>}
+            {q.discountAmount > 0 && <div className="flex justify-between gap-3 text-emerald-700"><span>Giảm kỳ hạn ({Math.round(q.discountRate * 100)}%)</span><b className="tabular-nums">- {formatVndAmount(q.discountAmount)}</b></div>}
+            {q.voucherCode && (q.voucherDiscountAmount ?? 0) > 0 && <div className="flex justify-between gap-3 text-emerald-700"><span>Voucher {q.voucherCode}</span><b className="tabular-nums">- {formatVndAmount(q.voucherDiscountAmount!)}</b></div>}
             <div className="flex justify-between gap-3 border-t border-stone-200 pt-2"><b>Tiền thuê sau giảm</b><b className="tabular-nums text-amber-700">{formatVndAmount(q.totalAfterDiscount)}</b></div>
           </div>
 
@@ -115,7 +115,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
         {(q.discountAmount > 0 || q.discountRate > 0) ? (
           <div className="flex items-center justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
             <span className="font-semibold">Giảm giá kỳ hạn ({Math.round(q.discountRate * 100)}%)</span>
-            <span className={deductionAmountClass}>− {formatVndAmount(q.discountAmount)}</span>
+            <span className={deductionAmountClass}>- {formatVndAmount(q.discountAmount)}</span>
           </div>
         ) : (
           <div className="flex justify-between gap-4 border-t border-stone-100 pt-2.5 text-xs text-stone-500 sm:text-sm">
@@ -128,7 +128,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
         {q.voucherCode && (q.voucherDiscountAmount ?? 0) > 0 && (
           <div className="flex items-center justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
             <span className="font-semibold">Mã ưu đãi [{q.voucherCode}]</span>
-            <span className={deductionAmountClass}>− {formatVndAmount(q.voucherDiscountAmount!)}</span>
+            <span className={deductionAmountClass}>- {formatVndAmount(q.voucherDiscountAmount!)}</span>
           </div>
         )}
 

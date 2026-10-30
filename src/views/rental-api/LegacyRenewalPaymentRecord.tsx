@@ -12,8 +12,8 @@ export default function LegacyRenewalPaymentRecord({ payment }: { payment: Stora
       <div><dt className="text-stone-500">Số tiền đã lưu</dt><dd>{legacyRenewalMoney(payment.amount)}</dd></div>
       <div><dt className="text-stone-500">Trạng thái gốc chưa đối soát</dt><dd>{payment.status}</dd></div>
       <div><dt className="text-stone-500">Thời điểm đã lưu</dt><dd>{rentalDate(payment.paidAt || payment.receivedAt)}</dd></div>
-      <div><dt className="text-stone-500">Mã chứng từ cũ</dt><dd>{payment.invoiceNumber || '—'}</dd></div>
-      <div><dt className="text-stone-500">Tham chiếu đã lưu</dt><dd>{payment.transactionReference || '—'}</dd></div>
+      <div><dt className="text-stone-500">Mã chứng từ cũ</dt><dd>{payment.invoiceNumber || '-'}</dd></div>
+      <div><dt className="text-stone-500">Tham chiếu đã lưu</dt><dd>{payment.transactionReference || '-'}</dd></div>
     </dl>
   </article>
 }

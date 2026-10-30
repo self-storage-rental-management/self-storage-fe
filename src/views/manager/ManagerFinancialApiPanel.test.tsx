@@ -100,7 +100,7 @@ describe('Manager payment history screen', () => {
     let html = render()
     expect(html).toContain('Hoàn cọc')
     expect(html).toContain('Đã hoàn tiền')
-    expect(html).toContain('−6.600.000')
+    expect(html).toContain('-6.600.000')
     expect(html).toContain('Xem trước')
     state.list = { data: paymentPage([{ ...item, status: 'PENDING', paymentMethod: null }]) }
     html = render()

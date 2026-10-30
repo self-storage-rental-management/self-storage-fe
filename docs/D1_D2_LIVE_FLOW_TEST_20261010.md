@@ -1,8 +1,8 @@
-# Kiểm thử luồng D1–D2 trên môi trường local
+# Kiểm thử luồng D1-D2 trên môi trường local
 
-> Cập nhật phiên 22:50: migration ledger/outbox đã áp dụng và module đã bật, giữ validate. Xem [báo cáo rollout](RENTAL_LEDGER_LOCAL_ROLLOUT_20261010.md) cùng runner opt-in cho lần khởi động tiếp theo. Bằng chứng luồng 21:28–21:38 bên dưới được giữ nguyên như lịch sử; chưa chứng nhận toàn bộ D2 E2E thành công.
+> Cập nhật phiên 22:50: migration ledger/outbox đã áp dụng và module đã bật, giữ validate. Xem [báo cáo rollout](RENTAL_LEDGER_LOCAL_ROLLOUT_20261010.md) cùng runner opt-in cho lần khởi động tiếp theo. Bằng chứng luồng 21:28-21:38 bên dưới được giữ nguyên như lịch sử; chưa chứng nhận toàn bộ D2 E2E thành công.
 
-Thời điểm: 10/10/2026, khoảng 21:28–21:38, múi giờ Asia/Ho_Chi_Minh.
+Thời điểm: 10/10/2026, khoảng 21:28-21:38, múi giờ Asia/Ho_Chi_Minh.
 
 ## 1. Môi trường thực sự đã chạy
 
@@ -31,7 +31,7 @@ npm run dev
 
 ## 2. Fixture tạo qua flow, không chèn Rental bằng SQL
 
-- Cơ sở: `HCM-Q1-F01`, Kho Việt – Cơ sở Quận 1.
+- Cơ sở: `HCM-Q1-F01`, Kho Việt - Cơ sở Quận 1.
 - Gian: `HCM-Q1-F01-S-002`.
 - Gói lấy từ API/DB: `DEMO_3M`, 3 tháng, `policyVersion=demo-v1`.
 - Kỳ thuê: `2026-10-10` đến `2027-01-10`, theo convention Booking `[startDate, endDate)`.
@@ -115,7 +115,7 @@ Không bật thêm adapter, sửa seed/RBAC, thay ngày thuê hoặc tạo quote
 
 ## 5. Đối chiếu DB thật sau kiểm thử
 
-Truy vấn SELECT join Rental–Reservation–StorageUnit–CheckIn–UnitAssignment xác nhận:
+Truy vấn SELECT join Rental-Reservation-StorageUnit-CheckIn-UnitAssignment xác nhận:
 
 ```text
 Rental 1031d4d6-1b84-481f-a706-7e76bd368d69: active
@@ -148,4 +148,4 @@ PASS: 4 file, 88 test. Đây là kiểm thử tự động trong repo, không ph
 
 Không sửa source FE/BE, shared security, schema hoặc migration; không SQL INSERT/UPDATE/DELETE. BE chạy cấu hình startup hiện hữu của người dùng. Chỉ thêm báo cáo này; mọi thay đổi worktree có sẵn được giữ nguyên, chưa commit/push.
 
-Để hoàn thành happy path D2 cần một lượt riêng xác minh/bật các integration adapter phù hợp, giải quyết nguồn đang UNKNOWN và quyền D2 Manager, rồi chuẩn bị Rental đủ điều kiện cửa sổ gia hạn qua flow hợp lệ. Không thể gọi kết quả hiện tại là E2E D1–D2 đầy đủ.
+Để hoàn thành happy path D2 cần một lượt riêng xác minh/bật các integration adapter phù hợp, giải quyết nguồn đang UNKNOWN và quyền D2 Manager, rồi chuẩn bị Rental đủ điều kiện cửa sổ gia hạn qua flow hợp lệ. Không thể gọi kết quả hiện tại là E2E D1-D2 đầy đủ.

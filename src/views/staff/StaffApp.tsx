@@ -335,7 +335,7 @@ const mapSharedReservation = (
 
     facility: reservation.facilityName,
 
-    facilityAddress: facility?.address || "—",
+    facilityAddress: facility?.address || "-",
 
     size: assignedUnit?.areaM2 || matchingTypeUnit?.areaM2 || 0,
 
@@ -418,11 +418,11 @@ const mapSharedCheckin = (
 
     customer: record.customerName,
 
-    email: reservation?.customerEmail || "—",
+    email: reservation?.customerEmail || "-",
 
-    phone: reservation?.customerPhone || "—",
+    phone: reservation?.customerPhone || "-",
 
-    identityId: reservation?.identityId || "—",
+    identityId: reservation?.identityId || "-",
 
     unit: unit?.code || record.unitId,
 
@@ -439,7 +439,7 @@ const mapSharedCheckin = (
       record.goodsHandover?.category ||
       "Hàng hóa đã khai báo",
 
-    material: reservation?.goods.material || "—",
+    material: reservation?.goods.material || "-",
 
     packageCount:
       reservation?.goods.packageCount ||
@@ -2583,7 +2583,7 @@ export default function StaffApp({
                       ? (/^\d{4}-\d{2}-\d{2}$/.test(task.time) ? formatDate(task.time) : formatExactDateTime(task.time))
                       : task.time}</Td>
                     <Td className="text-xs font-semibold text-amber-700">
-                      {kind === "assigned" ? task.notes || "—" : task.sla}
+                      {kind === "assigned" ? task.notes || "-" : task.sla}
                     </Td>
                     <Td>
                       {s(task.priority, {
@@ -2599,7 +2599,7 @@ export default function StaffApp({
                       {kind === "assigned" ? (
                         task.status === "open" ? <Button size="sm" onClick={() => updateAssignedTaskStatus(task, "in_progress")}>Nhận việc</Button>
                         : task.status === "in_progress" ? <Button size="sm" onClick={() => { setTaskCompletionTarget(task); setTaskResultReport(task.resultReport || ""); setTaskEvidenceText((task.evidence || []).join("\n")) }}>Hoàn thành</Button>
-                        : <span className="text-xs text-stone-500">—</span>
+                        : <span className="text-xs text-stone-500">-</span>
                       ) : <Button size="sm" variant="outline" onClick={() => task.id.startsWith("maintenance-") ? setSelectedMaintenanceTaskId(task.id.replace("maintenance-", "")) : openOperationalTask(task)}>Mở hồ sơ</Button>}
                     </Td>
                   </Tr>
@@ -2747,7 +2747,7 @@ export default function StaffApp({
               >
                 <option value="deadline-asc">{"Sắp đến hạn trước"}</option>
                 <option value="deadline-desc">{"Hạn xa nhất trước"}</option>
-                <option value="name-asc">{"Tên khách hàng A–Z"}</option>
+                <option value="name-asc">{"Tên khách hàng A-Z"}</option>
               </Select>
             </div>
             <p className="mt-2 text-xs text-stone-500">
@@ -2934,7 +2934,7 @@ export default function StaffApp({
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
             title={"Nghiệm thu trả kho"}
             subtitle={
-              "Đối chiếu hiện trạng trước–sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
+              "Đối chiếu hiện trạng trước-sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
             }
           />
           <Card className="mb-4 p-4">
@@ -2973,7 +2973,7 @@ export default function StaffApp({
               >
                 <option value="deadline-asc">{"Sắp đến hạn trước"}</option>
                 <option value="deadline-desc">{"Hạn xa nhất trước"}</option>
-                <option value="name-asc">{"Tên khách hàng A–Z"}</option>
+                <option value="name-asc">{"Tên khách hàng A-Z"}</option>
               </Select>
             </div>
             <p className="mt-2 text-xs text-stone-500">
@@ -3235,7 +3235,7 @@ export default function StaffApp({
                     <Td>
                       <Badge variant="warning">Chờ thu hồi quyền truy cập</Badge>
                     </Td>
-                    <Td>—</Td>
+                    <Td>-</Td>
                     <Td>Chờ xử lý</Td>
                     <Td>
                       <Button
@@ -3606,7 +3606,7 @@ export default function StaffApp({
             )}
             <div className="rounded-lg border border-slate-200 p-3 text-sm">
               <p className="mb-2 font-semibold">
-                Đối chiếu giao dịch trước – sau
+                Đối chiếu giao dịch trước - sau
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -3707,7 +3707,7 @@ export default function StaffApp({
             <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  {"Kiểm tra kết cấu cơ sở (Trần — Vách — Sàn)"}
+                  {"Kiểm tra kết cấu cơ sở (Trần - Vách - Sàn)"}
                 </h4>
                 <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-stone-200 text-stone-700">
                   {"Căn cứ pháp lý đối chứng"}
@@ -3800,7 +3800,7 @@ export default function StaffApp({
                   <option value="none">{"🟢 Không phát sinh ẩm mốc / Hàng hóa & kho bình thường"}</option>
                   <option value="facility_fault">{"🔴 Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)"}</option>
                   <option value="customer_fault">{"🟠 Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)"}</option>
-                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn — Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)"}</option>
+                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn - Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)"}</option>
                 </select>
               </div>
 
@@ -3949,7 +3949,7 @@ export default function StaffApp({
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3 border-t border-stone-200 pt-2">
-                  <dt>Tiền cọc hoàn lại = tiền cọc − khấu trừ (tối thiểu 0)</dt>
+                  <dt>Tiền cọc hoàn lại = tiền cọc - khấu trừ (tối thiểu 0)</dt>
                   <dd className="font-bold text-emerald-700">
                     {formatMoney(returnRefund)}
                   </dd>
@@ -4333,7 +4333,7 @@ export default function StaffApp({
                     {"Tải trọng tối đa"}: {fitEvaluation.spec.maxWeight} kg
                   </span>
                   <span>
-                    {"Kích thước kiện lớn nhất"}: {actualDimensions || "—"} cm
+                    {"Kích thước kiện lớn nhất"}: {actualDimensions || "-"} cm
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">

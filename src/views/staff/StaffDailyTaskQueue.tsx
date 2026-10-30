@@ -290,7 +290,7 @@ export default function StaffDailyTaskQueue({
               <Tr key={row.id}>
                 <Td><p className="font-semibold text-stone-900">{row.title}</p><p className="text-xs text-stone-400">{assigned?.id || maintenance?.id || operational?.id}</p></Td>
                 <Td><Badge variant="muted">{row.sourceLabel}</Badge></Td>
-                <Td className="max-w-xs text-xs"><p>{row.customer}</p><p className="mt-1 text-stone-500">{row.notes || "—"}</p></Td>
+                <Td className="max-w-xs text-xs"><p>{row.customer}</p><p className="mt-1 text-stone-500">{row.notes || "-"}</p></Td>
                 <Td className={`text-xs ${!isFinished(row.status) && new Date(row.dueAt).getTime() < Date.now() ? "font-semibold text-red-700" : ""}`}>{row.dueAt ? formatStaffDate(row.dueAt) : "Không đặt hạn"}</Td>
                 <Td><Badge variant={priorityVariant(row.priority)}>{priorityLabels[row.priority]}</Badge></Td>
                 <Td><Badge variant={queueStatusVariant(row.status)}>{queueStatusLabel(row.status)}</Badge></Td>

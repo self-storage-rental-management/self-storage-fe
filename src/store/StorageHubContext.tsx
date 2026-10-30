@@ -246,8 +246,8 @@ const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
 }))
 
 const LEGACY_FACILITY_NAMES: Record<string, string> = {
-  'Downtown Storage': 'Kho Việt – Cơ sở Quận 1',
-  'Riverside Storage': 'Kho Việt – Cơ sở Bình Dương'
+  'Downtown Storage': 'Kho Việt - Cơ sở Quận 1',
+  'Riverside Storage': 'Kho Việt - Cơ sở Bình Dương'
 }
 
 export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address?: string; city?: string }> = {
@@ -257,22 +257,22 @@ export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address
     city: 'TP. Hồ Chí Minh'
   },
   'HCM-Q1-F01': {
-    name: 'Kho Việt – Cơ sở Quận 1',
+    name: 'Kho Việt - Cơ sở Quận 1',
     address: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
     city: 'TP. Hồ Chí Minh'
   },
   'HCM-Q7-F01': {
-    name: 'Kho Việt – Cơ sở Quận 7 (Phú Mỹ Hưng)',
+    name: 'Kho Việt - Cơ sở Quận 7 (Phú Mỹ Hưng)',
     address: '105 Nguyễn Lương Bằng, Phường Tân Phú, Quận 7, TP. Hồ Chí Minh',
     city: 'TP. Hồ Chí Minh'
   },
   'BD-F01': {
-    name: 'Kho Việt – Cơ sở Bình Dương',
+    name: 'Kho Việt - Cơ sở Bình Dương',
     address: '468 Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
     city: 'Bình Dương'
   },
   'HCM-TD-F01': {
-    name: 'Kho Việt – Cơ sở Thủ Đức',
+    name: 'Kho Việt - Cơ sở Thủ Đức',
     address: 'Số 1 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức',
     city: 'TP. Hồ Chí Minh'
   }
@@ -426,9 +426,9 @@ const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
 
 const normalizeStoredTickets = (tickets: TicketItem[]): TicketItem[] => tickets.filter(t => !isExcludedRelated(t)).map(ticket => {
   const facility = ticket.facility === 'Downtown Storage'
-    ? 'Kho Việt – Cơ sở Quận 1'
+    ? 'Kho Việt - Cơ sở Quận 1'
     : ticket.facility === 'Riverside Storage'
-      ? 'Kho Việt – Cơ sở Bình Dương'
+      ? 'Kho Việt - Cơ sở Bình Dương'
       : ticket.facility
   const canonicalFacility = findCanonicalFacility(ticket.facilityId, facility)
   return {
@@ -574,7 +574,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     customerPhone: '090 123 4567',
     identityId: '079203001234',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     unitId: 'A-104',
     unitTypeId: 'small',
     unitTypeName: 'Small Storage',
@@ -643,7 +643,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     customerPhone: '091 999 8811',
     identityId: '079198004567',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     unitId: 'B-112',
     unitTypeId: 'medium',
     unitTypeName: 'Medium Storage',
@@ -801,7 +801,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     holdId: 'RSV-TEST-RENEW-BEFORE-2D',
     unitId: 'HCM-Q1-F01-M-003',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     customerId: 'demo-customer',
     customerName: 'Demo Customer',
     customerEmail: 'customer@storagehub.demo',
@@ -828,7 +828,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     holdId: 'RSV-TEST-RENEW-AFTER-2D',
     unitId: 'HCM-Q1-F01-M-004',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     customerId: 'demo-customer',
     customerName: 'Demo Customer',
     customerEmail: 'customer@storagehub.demo',
@@ -851,7 +851,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
   },
   {
     id: 'RNT-CUSTOMER-UPCOMING-02', holdId: 'RSV-CUSTOMER-UPCOMING-02', unitId: 'B-112',
-    facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer',
+    facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer',
     customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
     unitType: 'Medium Storage', areaM2: 6, volumeM3: 15,
     startDate: demoDateOffset(-28), endDate: demoDateOffset(2), nextDue: demoDateOffset(2),
@@ -862,7 +862,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
   },
   {
     id: 'RNT-CUSTOMER-OVERDUE-02', holdId: 'RSV-CUSTOMER-OVERDUE-02', unitId: 'A-115',
-    facilityId: 'fac-002', facilityName: 'Kho Việt – Cơ sở Bình Dương', customerId: 'demo-customer',
+    facilityId: 'fac-002', facilityName: 'Kho Việt - Cơ sở Bình Dương', customerId: 'demo-customer',
     customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
     unitType: 'Small Storage', areaM2: 2.25, volumeM3: 6.3,
     startDate: demoDateOffset(-32), endDate: demoDateOffset(-2), nextDue: demoDateOffset(-2),
@@ -892,7 +892,7 @@ const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(renta
       deposit: 5500000,
       securityDeposit: 5500000,
       facilityId: 'fac-001',
-      facilityName: 'Kho Việt – Cơ sở Quận 1'
+      facilityName: 'Kho Việt - Cơ sở Quận 1'
     }
   }
   if (rental.id === 'RNT-2026-002' && (rental.unitId === 'D-402' || rental.monthlyRate === 349)) {
@@ -906,7 +906,7 @@ const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(renta
       deposit: 9500000,
       securityDeposit: 9500000,
       facilityId: 'fac-001',
-      facilityName: 'Kho Việt – Cơ sở Quận 1'
+      facilityName: 'Kho Việt - Cơ sở Quận 1'
     }
   }
   if (rental.id === 'RNT-INIT-PREV' && (rental.unitId === 'C-301' || rental.monthlyRate === 269)) {
@@ -920,7 +920,7 @@ const normalizeRentalFacilities = (rentals: RentalRecord[]) => rentals.map(renta
       deposit: 15000000,
       securityDeposit: 15000000,
       facilityId: 'fac-001',
-      facilityName: 'Kho Việt – Cơ sở Quận 1'
+      facilityName: 'Kho Việt - Cơ sở Quận 1'
     }
   }
   const unit = INITIAL_UNITS.find(item => item.id === rental.unitId || item.code === rental.unitId)
@@ -935,7 +935,7 @@ const INITIAL_RENTALS: RentalRecord[] = [
     holdId: 'RSV-INIT-PREV',
     unitId: 'HCM-Q1-F01-L-001',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     customerId: 'cust-ha-pham',
     customerName: 'Pham Thu Ha',
     customerEmail: 'ha.pham@gmail.com',
@@ -961,7 +961,7 @@ const INITIAL_RENTALS: RentalRecord[] = [
     holdId: 'RSV-INIT-001',
     unitId: 'HCM-Q1-F01-S-001',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     customerId: 'demo-customer',
     customerName: 'Demo Customer',
     customerEmail: 'customer@storagehub.demo',
@@ -987,7 +987,7 @@ const INITIAL_RENTALS: RentalRecord[] = [
     holdId: 'RSV-INIT-002',
     unitId: 'HCM-Q1-F01-M-001',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     customerId: 'demo-customer-2',
     customerName: 'Saigon Logistics Co.',
     customerEmail: 'contact@sg-logistics.vn',
@@ -1011,8 +1011,8 @@ const INITIAL_RENTALS: RentalRecord[] = [
 ]
 
 const RETURN_TEST_CASES: ReturnCase[] = [
-  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
-  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
+  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
+  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
 ]
 
 const mergeReturnTestCases = (returns: ReturnCase[]) => [...RETURN_TEST_CASES.filter(sample => !returns.some(item => item.id === sample.id)), ...returns]
@@ -1024,7 +1024,7 @@ const INITIAL_RETURNS: ReturnCase[] = [
     rentalId: 'RNT-INIT-PREV',
     unitId: 'HCM-Q1-F01-L-001',
     facilityId: 'fac-001',
-    facilityName: 'Kho Việt – Cơ sở Quận 1',
+    facilityName: 'Kho Việt - Cơ sở Quận 1',
     customerId: 'cust-ha-pham',
     customerName: 'Pham Thu Ha',
     customerEmail: 'ha.pham@gmail.com',
@@ -4156,7 +4156,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const newFacility: Facility = {
       id,
       code,
-      name: data.name?.trim() || `Kho Việt – Cơ sở ${code}`,
+      name: data.name?.trim() || `Kho Việt - Cơ sở ${code}`,
       address: data.address?.trim() || 'TP. Hồ Chí Minh',
       city: data.city?.trim() || 'TP. Hồ Chí Minh',
       rating: data.rating ?? 5.0,
