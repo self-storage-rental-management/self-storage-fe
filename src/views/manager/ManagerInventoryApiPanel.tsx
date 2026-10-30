@@ -199,7 +199,7 @@ function InventoryRead({
           const unit = read.data?.units.find(item => item.unitTypeId === type.id)
           return <article key={type.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 p-4">
-              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4><Badge variant={detail?.status === 'active' ? 'success' : 'muted'}>{detail ? (({ active: 'Đang khai thác', awaiting_pricing: 'Chờ định giá', draft: 'Đang thiết lập', inactive: 'Tạm ngưng', archived: 'Đã lưu trữ' } as Record<string, string>)[detail.status] || 'Chưa xác định') : 'Đang tải'}</Badge></div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · {type.total} gian · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
+              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4><Badge variant={detail?.status === 'active' ? 'success' : 'muted'}>{detail ? (({ active: 'Đang khai thác', awaiting_pricing: 'Chờ định giá', draft: 'Đang thiết lập', inactive: 'Tạm ngưng', archived: 'Đã lưu trữ' } as Record<string, string>)[detail.status] || 'Chưa xác định') : 'Đang tải'}</Badge></div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · {type.total} gian · Tầng {unit?.floor || '-'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
               <div className="flex gap-2">
             <Button variant="outline" disabled={actionBusy} onClick={async () => {
               setActionBusy(true); setActionError(undefined)
@@ -221,7 +221,7 @@ function InventoryRead({
                 <div><dt className="text-xs text-stone-500">Kích thước kho</dt><dd className="mt-1 font-medium">{detail.lengthM} × {detail.widthM} × {detail.heightM} m</dd></div>
                 <div><dt className="text-xs text-stone-500">Tình trạng sử dụng</dt><dd className="mt-1 font-medium">{detail.availableCount ?? 0} còn trống · {detail.occupiedCount ?? 0} đang dùng</dd></div>
                 <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
-                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '—'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
+                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '-'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
                 <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
                 <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo kho</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
               </dl>

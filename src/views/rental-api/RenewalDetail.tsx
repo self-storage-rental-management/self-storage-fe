@@ -97,7 +97,7 @@ export default function RenewalDetail({
         <div>
           <p className="font-semibold text-stone-900">{r.storageUnit.code}</p>
           {r.displayCode && <p className="mt-1 font-mono text-xs text-stone-500">{r.displayCode}</p>}
-          <p className="text-sm text-stone-600">{r.facility.name.replace(/[–—]/g, "-")}, {r.customer.fullName}</p>
+          <p className="text-sm text-stone-600">{r.facility.name.replace(/[--]/g, "-")}, {r.customer.fullName}</p>
         </div>
         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800" aria-label="Trạng thái hồ sơ gia hạn">{workflowStatusLabel}</span>
       </div>

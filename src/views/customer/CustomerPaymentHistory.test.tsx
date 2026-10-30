@@ -52,8 +52,8 @@ describe('VNPay history nullable processing timestamp', () => {
     expect(html).toContain('Phương thức thanh toán')
     expect(html).not.toContain('Hệ thống tự động qua VNPay')
     expect(html).not.toContain('>VNPay<')
-    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>—<\/dd>/)
-    expect(html).toMatch(/Người ghi nhận<\/dt><dd[^>]*>—<\/dd>/)
+    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>-<\/dd>/)
+    expect(html).toMatch(/Người ghi nhận<\/dt><dd[^>]*>-<\/dd>/)
   })
   it('shows the bank returned by VNPay', () => {
     const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, paymentMethod: 'NCB' }} reservationCode="RSV-TEST" />)

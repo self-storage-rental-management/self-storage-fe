@@ -77,7 +77,7 @@ const toUiStatus = (status: ApiUserStatus): AccountStatus =>
 
 function formatDate(value: string) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('vi-VN')
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('vi-VN')
 }
 
 function formatRelativeTime(dateStr: string | null | undefined): string {
@@ -854,7 +854,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             <span className="font-semibold text-stone-800">
               {accounts.length === 0 ? 0 : page * pageSize + 1}
             </span>{' '}
-            –{' '}
+            -{' '}
             <span className="font-semibold text-stone-800">
               {Math.min((page + 1) * pageSize, totalItems)}
             </span>{' '}
@@ -904,7 +904,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         onClose={() => setModalOpen(false)}
         title={
           selected
-            ? `Chỉnh Sửa Người Dùng – ${selected.fullName}`
+            ? `Chỉnh Sửa Người Dùng - ${selected.fullName}`
             : mode === 'customer-support'
               ? 'Tạo hộ tài khoản khách thuê kho'
               : 'Tạo tài khoản nội bộ'

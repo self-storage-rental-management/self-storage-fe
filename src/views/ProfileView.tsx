@@ -1244,7 +1244,7 @@ setSavingProfile(true)
                         placeholder="0901234567"
                         inputMode="tel"
                       />
-                      <p className="mt-1 text-[11px] text-stone-600">Nhập 10–11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
+                      <p className="mt-1 text-[11px] text-stone-600">Nhập 10-11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
                     </div>
                   </div>
 
@@ -1544,7 +1544,7 @@ setSavingProfile(true)
               rows={3}
               value={requestReason}
               onChange={event => setRequestReason(event.target.value)}
-              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456, Điều chuyển cơ sở sang Kho Việt – Cơ sở Quận 1...)"
+              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456, Điều chuyển cơ sở sang Kho Việt - Cơ sở Quận 1...)"
               className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none transition"
             />
             <div className="flex justify-between items-center mt-1 text-[11px] text-stone-600">

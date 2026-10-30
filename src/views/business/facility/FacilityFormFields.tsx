@@ -436,7 +436,7 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
             disabled={statusReadOnly}
             onChange={(e) => onChangeStatus(e.target.value as FacilityOperationsProps['status'])}
           >
-            <option value="setup">Đang thiết lập — chưa có loại kho/giá</option>
+            <option value="setup">Đang thiết lập - chưa có loại kho/giá</option>
             <option value="active">Đang hoạt động</option>
             <option value="maintenance">Bảo trì</option>
             <option value="inactive">Ngừng hoạt động</option>

@@ -1,4 +1,4 @@
-# Tên nghiệp vụ và schema ledger/outbox — 10/10/2026
+# Tên nghiệp vụ và schema ledger/outbox - 10/10/2026
 
 > Cập nhật lúc 22:50: đã rollout migration vào storagehub_local, bật ledger/communication và validate PASS. Xem [báo cáo rollout](RENTAL_LEDGER_LOCAL_ROLLOUT_20261010.md). Nội dung bên dưới là kết quả lượt chuẩn bị trước rollout, không phải trạng thái DB hiện tại.
 

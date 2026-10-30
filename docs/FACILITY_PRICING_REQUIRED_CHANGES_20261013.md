@@ -61,14 +61,14 @@ Customer nhìn thấy loại kho có giá đang hiệu lực
 
 Không được thay đổi thứ tự trách nhiệm bằng cách để BO tự tạo sẵn UnitType kỹ thuật, tự sinh gian kho thay Manager hoặc để Customer nhìn thấy UnitType trước khi BO công bố giá.
 
-### 2.1 Bước 1 — BO tạo cơ sở
+### 2.1 Bước 1 - BO tạo cơ sở
 
 - BO chỉ tạo thông tin cấp Facility.
 - Facility ở trạng thái `SETUP`, chưa xuất hiện với Customer.
 - Không tự sinh S/M/L/XL, UnitType, StorageUnit, giá hoặc package mặc định.
 - Sau khi tạo, BO/Admin gán Manager hoặc facility scope phù hợp.
 
-### 2.2 Bước 2 — Manager khai báo loại kho thực tế
+### 2.2 Bước 2 - Manager khai báo loại kho thực tế
 
 - Manager chỉ thao tác trong Facility có scope `MANAGE`.
 - Manager tạo UnitType và thông số kỹ thuật thực tế.
@@ -76,14 +76,14 @@ Không được thay đổi thứ tự trách nhiệm bằng cách để BO tự
 - UnitType sau khi hoàn tất kỹ thuật chuyển sang `AWAITING_PRICING`.
 - Manager không nhập giá, tiền cọc, package hoặc discount.
 
-### 2.3 Bước 3 — BO nhận danh sách loại kho đã tồn tại
+### 2.3 Bước 3 - BO nhận danh sách loại kho đã tồn tại
 
 - Màn hình pricing của BO phải tải UnitType từ backend theo `facilityId`.
 - BO chỉ được cấu hình giá cho `unitTypeId` có thật và thuộc đúng Facility.
 - Nếu Manager chưa tạo UnitType, BO thấy trạng thái “Chờ Manager khai báo loại kho”; không dùng dữ liệu S/M/L/XL hard-code.
 - Khi Manager thêm hoặc sửa UnitType, danh sách của BO phải được refresh/invalidate.
 
-### 2.4 Bước 4 — BO cấu hình giá và gói thuê
+### 2.4 Bước 4 - BO cấu hình giá và gói thuê
 
 - BO cấu hình `monthlyPrice` và `securityDepositAmount` theo UnitType.
 - BO tạo/gán bộ giảm giá theo Facility.
@@ -91,7 +91,7 @@ Không được thay đổi thứ tự trách nhiệm bằng cách để BO tự
 - Bộ có `unitTypeScope=SELECTED` chỉ chọn các `unitTypeId` đã tồn tại.
 - Giá, package và assignment đều phải có version và khoảng hiệu lực.
 
-### 2.5 Bước 5 — BO công bố
+### 2.5 Bước 5 - BO công bố
 
 Backend chỉ cho công bố khi:
 
@@ -104,7 +104,7 @@ Backend chỉ cho công bố khi:
 
 Thao tác công bố phải thực hiện trong transaction. Nếu một điều kiện thất bại, không được công bố một phần.
 
-### 2.6 Bước 6 — Customer nhìn thấy dữ liệu đã công bố
+### 2.6 Bước 6 - Customer nhìn thấy dữ liệu đã công bố
 
 - Customer chỉ nhận Facility `ACTIVE/PUBLISHED`.
 - Customer chỉ nhận UnitType `ACTIVE/PUBLISHED` có pricing đang hiệu lực.

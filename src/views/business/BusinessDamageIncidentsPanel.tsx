@@ -554,7 +554,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
         <Modal
           open={statusModalOpen}
           onClose={() => setStatusModalOpen(false)}
-          title={`${isVi ? 'Cập Nhật Trạng Thái' : 'Update Status'} — ${activeIncident.incidentCode}`}
+          title={`${isVi ? 'Cập Nhật Trạng Thái' : 'Update Status'} - ${activeIncident.incidentCode}`}
         >
           <div className="space-y-4 text-xs">
             <div className="bg-stone-50 p-3 rounded-lg border border-stone-200 space-y-1">
@@ -626,7 +626,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
         <Modal
           open={detailModalOpen}
           onClose={() => setDetailModalOpen(false)}
-          title={`${isVi ? 'Chi Tiết Sự Cố' : 'Incident Details'} — ${activeIncident.incidentCode}`}
+          title={`${isVi ? 'Chi Tiết Sự Cố' : 'Incident Details'} - ${activeIncident.incidentCode}`}
         >
           <div className="space-y-3 text-xs">
             <div className="grid grid-cols-2 gap-2 bg-stone-50 p-3 rounded-lg border border-stone-200">

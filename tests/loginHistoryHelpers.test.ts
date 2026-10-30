@@ -169,8 +169,8 @@ describe('loginHistoryHelpers', () => {
   describe('date formatters', () => {
     it('formats date and time properly', () => {
       const iso = '2026-10-09T08:30:00.000Z'
-      expect(formatFullDateTime(iso)).not.toBe('—')
-      expect(formatDateOnly(iso)).not.toBe('—')
+      expect(formatFullDateTime(iso)).not.toBe('-')
+      expect(formatDateOnly(iso)).not.toBe('-')
       expect(formatTimeAgo(iso)).toBeDefined()
     })
   })

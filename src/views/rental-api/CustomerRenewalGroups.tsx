@@ -33,7 +33,7 @@ export default function CustomerRenewalGroups({ rows, onDetail }: {
         <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${group.active ? 'bg-amber-50 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>{group.rows.length} hồ sơ</span>
       </header>
       {group.rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[920px] text-left text-sm">
-        <caption className="sr-only">Yêu cầu gia hạn — {group.title}</caption>
+        <caption className="sr-only">Yêu cầu gia hạn - {group.title}</caption>
         <thead className="bg-stone-50 text-xs text-stone-500"><tr>
           {['Mã hồ sơ', 'Trạng thái', 'Gian kho / Cơ sở', 'Thời hạn', 'Hợp đồng', 'Thao tác'].map(label => <th key={label} className={`px-4 py-3 font-medium ${label === 'Trạng thái' || label === 'Hợp đồng' ? 'text-center' : ''} ${label === 'Thao tác' ? 'text-right' : ''}`}>{label}</th>)}
         </tr></thead>
