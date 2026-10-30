@@ -591,7 +591,6 @@ export default function BusinessApp({
   )
 
   const lang = "vi"
-  const USD_TO_VND_RATE = 26000
 
   const formatCurrency = (amount: number): string => {
     if (amount >= 10000) {
@@ -1687,7 +1686,7 @@ export default function BusinessApp({
   >(() => {
     if (isApiAuthenticated()) return {}
     try {
-      const stored = localStorage.getItem("storagehub:facility-pricing")
+      const stored = localStorage.getItem("storagehub:vnd:facility-pricing")
       if (stored) return JSON.parse(stored)
     } catch { }
     return {}
@@ -1822,7 +1821,7 @@ export default function BusinessApp({
     }
     setFacilityPricingOverrides(nextOverrides)
     try {
-      localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+      localStorage.setItem("storagehub:vnd:facility-pricing", JSON.stringify(nextOverrides))
     } catch { }
 
     const sizes: Array<"S" | "M" | "L" | "XL"> = ["S", "M", "L", "XL"]
@@ -1860,7 +1859,7 @@ export default function BusinessApp({
     delete nextOverrides[facId]
     setFacilityPricingOverrides(nextOverrides)
     try {
-      localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+      localStorage.setItem("storagehub:vnd:facility-pricing", JSON.stringify(nextOverrides))
     } catch { }
     setFacilityPriceModalOpen(false)
     showToast(
@@ -1993,7 +1992,7 @@ export default function BusinessApp({
       )
       if (matchingUnits.length > 0 && matchingUnits[0].price) {
         const rawP = matchingUnits[0].price
-        return rawP > 10000 ? rawP : Math.round(rawP * USD_TO_VND_RATE)
+        return rawP
       }
 
       // 4. Nếu cơ sở chỉ có 1 phân loại kho duy nhất (ví dụ toàn bộ 25 kho là XL),
@@ -2052,7 +2051,7 @@ export default function BusinessApp({
       }
       setFacilityPricingOverrides(nextOverrides)
       try {
-        localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+        localStorage.setItem("storagehub:vnd:facility-pricing", JSON.stringify(nextOverrides))
       } catch { }
 
       // Cập nhật giá gian kho của cơ sở được chọn trong context
@@ -2732,7 +2731,7 @@ export default function BusinessApp({
     if (!isApiAuthenticated()) {
       setFacilityPricingOverrides(nextOverrides)
       try {
-        localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+        localStorage.setItem("storagehub:vnd:facility-pricing", JSON.stringify(nextOverrides))
       } catch { }
     }
 
@@ -3328,7 +3327,7 @@ export default function BusinessApp({
     if (!isApiAuthenticated()) {
       setFacilityPricingOverrides(nextOverrides)
       try {
-        localStorage.setItem("storagehub:facility-pricing", JSON.stringify(nextOverrides))
+        localStorage.setItem("storagehub:vnd:facility-pricing", JSON.stringify(nextOverrides))
       } catch { }
     }
 
@@ -3351,7 +3350,7 @@ export default function BusinessApp({
                 : "XL")) as "S" | "M" | "L" | "XL"
         const pVnd = updatedUnitPrices[s]
         if (pVnd && pVnd > 0) {
-          const normP = pVnd > 10000 ? pVnd / USD_TO_VND_RATE : pVnd
+          const normP = pVnd
           try {
             updateUnit(u.id, { price: normP, deposit: normP }, user)
           } catch { }
@@ -4090,7 +4089,7 @@ export default function BusinessApp({
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
-                          <span className="text-[11px] text-slate-600 font-medium">Cọc giữ chỗ:</span>
+                          <span className="text-[11px] text-slate-600 font-medium">Phí giữ chỗ:</span>
                           <span className="font-mono font-bold text-amber-800">
                             {item.depositPercent ?? 20}%
                           </span>
@@ -5038,7 +5037,7 @@ export default function BusinessApp({
               onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
             />
             <Input
-              label={lang === "vi" ? "Cọc giữ chỗ (%)" : "Deposit (%)"}
+              label={lang === "vi" ? "Phí giữ chỗ (%)" : "Deposit (%)"}
               type="number"
               min={5}
               max={50}
@@ -5284,7 +5283,7 @@ export default function BusinessApp({
               />
 
               <Input
-                label="Cọc giữ chỗ (%)"
+                label="Phí giữ chỗ (%)"
                 type="number"
                 min={5}
                 max={50}

@@ -1,3 +1,4 @@
+import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Modal } from '../../components/ui'
@@ -110,7 +111,7 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
     {complaint && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
       <p className="font-bold">Khiếu nại: {complaintStatusLabels[complaint.status]}</p>
       <p className="mt-1">{complaint.reason}</p>
-      {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Dự kiến xử lý trước: <b>{new Date(complaint.reviewDueAt).toLocaleString('vi-VN')}</b></p>}
+      {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Dự kiến xử lý trước: <b>{formatCustomerDateTime(new Date(complaint.reviewDueAt))}</b></p>}
       {complaint.decisionReason && <p className="mt-1"><b>Phản hồi:</b> {complaint.decisionReason}</p>}
       {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => setWithdrawConfirmOpen(true)}>Rút khiếu nại</Button>}
     </div>}

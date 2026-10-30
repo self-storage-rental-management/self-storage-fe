@@ -7,6 +7,10 @@ import path from 'node:path'
 export default defineConfig(({ mode }) => ({
   base: '/',
   plugins: [react({ jsxImportSource: '@storagehub/presentation' }), tailwindcss()],
+  optimizeDeps: {
+    // Scan the application entry only, excluding generated HTML test reports.
+    entries: ['index.html'],
+  },
   test: {
     exclude: [...configDefaults.exclude, '**/.local/**'],
   },

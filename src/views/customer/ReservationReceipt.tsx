@@ -1,3 +1,4 @@
+import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import type { ReservationPaymentResult } from '../../services/customerReservationApi'
 import { bookingDepositAccepted } from './paymentPresentation'
@@ -26,19 +27,19 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       ? `VNPay (${payment.paymentMethod})`
       : 'VNPay'
   return <PaymentReceiptCard
-    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai cọc giữ chỗ' : 'Chi tiết giao dịch cần đối soát'}
+    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai phí giữ chỗ' : 'Chi tiết giao dịch cần đối soát'}
     reference={reservationCode} confirmed={accepted || isRemainingRental}
     status={isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc' : 'Đơn chưa xác nhận'}
     fields={[
       ['Mã giao dịch StorageHub', payment.paymentId], [isRemainingRental ? 'Mã tham chiếu thanh toán' : 'Mã tham chiếu VNPay', payment.transactionReference],
       [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : 'Mã giao dịch VNPay', payment.gatewayTransactionNo || '—'], ['Đơn giữ kho', reservationCode],
-      [isRemainingRental ? 'Thời điểm ghi nhận tại quầy' : 'Thời điểm VNPay ghi nhận', gatewayPaidAt || (payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—')],
-      ['Thời điểm StorageHub xử lý', payment.processedAt ? new Date(payment.processedAt).toLocaleString('vi-VN') : '—'],
+      [isRemainingRental ? 'Thời điểm ghi nhận tại quầy' : 'Thời điểm VNPay ghi nhận', gatewayPaidAt || (payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—')],
+      ['Thời điểm StorageHub xử lý', payment.processedAt ? formatCustomerDateTime(new Date(payment.processedAt)) : '—'],
       ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod)],
       ['Người ghi nhận', payment.initiatedByName || '—'],
-      ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Cọc giữ chỗ đã được đơn xác nhận' : 'Giao dịch cọc giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
+      ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Phí giữ chỗ đã được đơn xác nhận' : 'Giao dịch phí giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
       ['Số hóa đơn', payment.invoiceNumber || '—'], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
-      ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? new Date(payment.invoiceIssuedAt).toLocaleString('vi-VN') : '—'],
+      ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? formatCustomerDateTime(new Date(payment.invoiceIssuedAt)) : '—'],
     ]}
     footer={isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là cọc được chấp nhận.'} />
 }

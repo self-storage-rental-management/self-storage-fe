@@ -51,12 +51,13 @@ import {
   unitHasAllocationConflict,
   type ManagerReturnSettlementFees
 } from '../domain/managerRules'
-import { formatVnd, USD_TO_VND_RATE } from '../i18n/currency'
+import { formatVnd } from '../i18n/currency'
 import { normalizeRolePermissions } from '../auth/rbac'
 import { storageSizeCode, unitTypeMatches } from '../domain/facilityRules'
 import { DEMO_DATA_ENABLED } from '../config/runtime'
 
-const STORAGE_KEY = 'storagehub:v5:released-orphan-holds'
+// VND-only demo schema. Previous demo keys remain untouched for recovery.
+const STORAGE_KEY = 'storagehub:v6:vnd'
 
 const createRecordId = (prefix: string) => {
   const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -112,7 +113,7 @@ function normalizeUsers(value: unknown): StoredUser[] {
 export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   dimDivisor: 5000,
   gracePeriodDays: 3,
-  lateFeeAmount: 25,
+  lateFeeAmount: 650000,
   defaultDepositRatio: 0.2,
   holdExpiryHours: 1 / 6
 }
@@ -127,8 +128,8 @@ export const UNIT_TYPES: UnitType[] = [
     heightM: 5,
     areaM2: 80,
     volumeM3: 400,
-    pricePerM3: (5_500_000 / 26_000) / 400,
-    monthlyPrice: 5_500_000 / 26_000,
+    pricePerM3: (5_500_000) / 400,
+    monthlyPrice: 5_500_000,
     maxLoadKg: 1000,
     descriptionVi: 'Phù hợp: đồ gia dụng, thiết bị văn phòng và hàng hóa đóng kiện (80 m²)',
     descriptionEn: 'Fits household goods, office equipment and boxed inventory (80 m²)'
@@ -141,8 +142,8 @@ export const UNIT_TYPES: UnitType[] = [
     heightM: 5,
     areaM2: 131.04,
     volumeM3: 655.2,
-    pricePerM3: (9_500_000 / 26_000) / 655.2,
-    monthlyPrice: 9_500_000 / 26_000,
+    pricePerM3: (9_500_000) / 655.2,
+    monthlyPrice: 9_500_000,
     maxLoadKg: 1600,
     descriptionVi: 'Phù hợp: đồ đạc gia đình, thiết bị văn phòng và hàng kinh doanh (131,04 m²)',
     descriptionEn: 'Fits household furniture, office equipment and business inventory (131.04 m²)'
@@ -155,8 +156,8 @@ export const UNIT_TYPES: UnitType[] = [
     heightM: 5,
     areaM2: 197.64,
     volumeM3: 988.2,
-    pricePerM3: (15_000_000 / 26_000) / 988.2,
-    monthlyPrice: 15_000_000 / 26_000,
+    pricePerM3: (15_000_000) / 988.2,
+    monthlyPrice: 15_000_000,
     maxLoadKg: 2800,
     descriptionVi: 'Phù hợp: đồ chuyển nhà, pallet và tồn kho kinh doanh (197,64 m²)',
     descriptionEn: 'Fits relocation goods, pallets and business inventory (197.64 m²)'
@@ -169,8 +170,8 @@ export const UNIT_TYPES: UnitType[] = [
     heightM: 5,
     areaM2: 280,
     volumeM3: 1400,
-    pricePerM3: (22_500_000 / 26_000) / 1400,
-    monthlyPrice: 22_500_000 / 26_000,
+    pricePerM3: (22_500_000) / 1400,
+    monthlyPrice: 22_500_000,
     maxLoadKg: 4000,
     descriptionVi: 'Phù hợp: kho thương mại, pallet số lượng lớn và máy móc (280 m²)',
     descriptionEn: 'Fits commercial pallets, high-volume inventory and machinery (280 m²)'
@@ -445,19 +446,18 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
   let widthM = u.dimensionsM?.[1] ?? 1.5
   let heightM = u.dimensionsM?.[2] ?? 2.8
   let volumeM3 = u.volumeM3 ?? 6.3
-  let price = u.price ?? 89
+  let price = u.price ?? 5_500_000
   let maxLoadKg = u.maxLoadKg ?? 600
   let areaM2 = u.areaM2 ?? 2.25
   if (u.type === 'Medium') {
-    lengthM = u.dimensionsM?.[0] ?? 3.0; widthM = u.dimensionsM?.[1] ?? 2.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 15.0; price = u.price ?? 150; maxLoadKg = u.maxLoadKg ?? 1200; areaM2 = u.areaM2 ?? 6.0
+    lengthM = u.dimensionsM?.[0] ?? 3.0; widthM = u.dimensionsM?.[1] ?? 2.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 15.0; price = u.price ?? 9_500_000; maxLoadKg = u.maxLoadKg ?? 1200; areaM2 = u.areaM2 ?? 6.0
   } else if (u.type === 'Large') {
-    lengthM = u.dimensionsM?.[0] ?? 4.0; widthM = u.dimensionsM?.[1] ?? 3.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 30.0; price = u.price ?? 270; maxLoadKg = u.maxLoadKg ?? 2400; areaM2 = u.areaM2 ?? 12.0
+    lengthM = u.dimensionsM?.[0] ?? 4.0; widthM = u.dimensionsM?.[1] ?? 3.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 30.0; price = u.price ?? 15_000_000; maxLoadKg = u.maxLoadKg ?? 2400; areaM2 = u.areaM2 ?? 12.0
   } else if (u.type === 'Extra Large') {
-    lengthM = u.dimensionsM?.[0] ?? 6.0; widthM = u.dimensionsM?.[1] ?? 3.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 45.0; price = u.price ?? 360; maxLoadKg = u.maxLoadKg ?? 3600; areaM2 = u.areaM2 ?? 18.0
+    lengthM = u.dimensionsM?.[0] ?? 6.0; widthM = u.dimensionsM?.[1] ?? 3.0; heightM = u.dimensionsM?.[2] ?? 2.5; volumeM3 = u.volumeM3 ?? 45.0; price = u.price ?? 22_500_000; maxLoadKg = u.maxLoadKg ?? 3600; areaM2 = u.areaM2 ?? 18.0
   }
 
-  // Customer catalog is normalized from the approved spreadsheet. Keep the
-  // monetary state in base currency because formatVnd performs the conversion.
+  // Customer catalog prices and all stored monetary values are VND.
   const canonicalTypeId = u.type === 'Small' ? 'small' : u.type === 'Medium' ? 'medium' : u.type === 'Large' ? 'large' : 'xlarge'
   const canonicalType = UNIT_TYPES.find(item => item.id === canonicalTypeId)!
   lengthM = canonicalType.lengthM
@@ -585,7 +585,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     moveInDate: '2026-09-20',
     status: 'READY_FOR_CHECKIN',
     approvalType: 'AUTO',
-    reservationDepositAmount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
+    reservationDepositAmount: Math.round(DEMO_SMALL_MONTHLY * 7 * 0.2 * 100) / 100,
     securityDepositAmount: DEMO_SMALL_MONTHLY,
     depositConvertedAt: '2026-09-17T10:00:00Z',
     remainingAmount: 0,
@@ -621,7 +621,7 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: '2026-09-21T08:30:00Z'
     },
     payment: {
-      amount: Math.round(DEMO_SMALL_MONTHLY * 6 * 0.2 * 100) / 100,
+      amount: Math.round(DEMO_SMALL_MONTHLY * 7 * 0.2 * 100) / 100,
       status: 'paid',
       method: 'Chuyển khoản VietQR',
       transactionId: 'VNPAY-204899',
@@ -654,9 +654,9 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     moveInDate: '2026-09-22',
     status: 'DEPOSIT_PAID',
     approvalType: 'AUTO',
-    reservationDepositAmount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
+    reservationDepositAmount: Math.round(DEMO_MEDIUM_MONTHLY * 4 * 0.2 * 100) / 100,
     securityDepositAmount: DEMO_MEDIUM_MONTHLY,
-    remainingAmount: Math.round((DEMO_MEDIUM_MONTHLY * 3 * 0.8 + DEMO_MEDIUM_MONTHLY) * 100) / 100,
+    remainingAmount: Math.round((DEMO_MEDIUM_MONTHLY * 4 * 0.8) * 100) / 100,
     firstMonthRent: DEMO_MEDIUM_MONTHLY,
     totalInitialAmount: DEMO_MEDIUM_MONTHLY * 4,
     paymentExpiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString(),
@@ -689,14 +689,14 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
       expiresAt: new Date(Date.now() + 11 * 60 * 1000).toISOString()
     },
     payment: {
-      amount: Math.round(DEMO_MEDIUM_MONTHLY * 3 * 0.2 * 100) / 100,
+      amount: Math.round(DEMO_MEDIUM_MONTHLY * 4 * 0.2 * 100) / 100,
       status: 'paid',
-      method: 'Cọc giữ chỗ qua VietQR',
+      method: 'Phí giữ chỗ qua VietQR',
       transactionId: 'TX-DEP-2049',
       paidAt: new Date().toISOString()
     },
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    evidence: ['RSV-2049 · Đã cọc giữ chỗ 20%, gian kho đã được xác định từ lúc đặt'],
+    evidence: ['RSV-2049 · Đã phí giữ chỗ 20%, gian kho đã được xác định từ lúc đặt'],
     createdAt: new Date().toISOString()
   }
 ]
@@ -812,9 +812,9 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     startDate: demoDateOffset(-28),
     endDate: demoDateOffset(2),
     nextDue: demoDateOffset(2),
-    monthlyRate: 149,
-    deposit: 149,
-    securityDeposit: 149,
+    monthlyRate: 3874000,
+    deposit: 3874000,
+    securityDeposit: 3874000,
     status: 'active',
     paymentStatus: 'paid',
     autoRenew: false,
@@ -839,9 +839,9 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     startDate: demoDateOffset(-32),
     endDate: demoDateOffset(-2),
     nextDue: demoDateOffset(-2),
-    monthlyRate: 149,
-    deposit: 149,
-    securityDeposit: 149,
+    monthlyRate: 3874000,
+    deposit: 3874000,
+    securityDeposit: 3874000,
     status: 'active',
     paymentStatus: 'overdue',
     autoRenew: false,
@@ -855,7 +855,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
     unitType: 'Medium Storage', areaM2: 6, volumeM3: 15,
     startDate: demoDateOffset(-28), endDate: demoDateOffset(2), nextDue: demoDateOffset(2),
-    monthlyRate: 2200000 / 26000, deposit: 2200000 / 26000, securityDeposit: 2200000 / 26000,
+    monthlyRate: 2200000, deposit: 2200000, securityDeposit: 2200000,
     status: 'active', paymentStatus: 'paid', autoRenew: false, gateCode: '4202#',
     initialCondition: 'Hồ sơ kiểm thử: hợp đồng còn đúng 2 ngày.', evidencePhotos: ['TEST · Sắp hết hạn sau 2 ngày'],
     receiptConfirmedAt: new Date().toISOString(), receiptConfirmedBy: 'demo-customer'
@@ -866,7 +866,7 @@ const RENEWAL_TEST_RENTALS: RentalRecord[] = [
     customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456',
     unitType: 'Small Storage', areaM2: 2.25, volumeM3: 6.3,
     startDate: demoDateOffset(-32), endDate: demoDateOffset(-2), nextDue: demoDateOffset(-2),
-    monthlyRate: 850000 / 26000, deposit: 850000 / 26000, securityDeposit: 850000 / 26000,
+    monthlyRate: 850000, deposit: 850000, securityDeposit: 850000,
     status: 'active', paymentStatus: 'overdue', autoRenew: false, gateCode: '5202#',
     initialCondition: 'Hồ sơ kiểm thử: hợp đồng đã hết hạn đúng 2 ngày.', evidencePhotos: ['TEST · Đã hết hạn 2 ngày'],
     receiptConfirmedAt: new Date().toISOString(), receiptConfirmedBy: 'demo-customer'
@@ -1011,8 +1011,8 @@ const INITIAL_RENTALS: RentalRecord[] = [
 ]
 
 const RETURN_TEST_CASES: ReturnCase[] = [
-  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
-  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 89, netRefundAmount: 89, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
+  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 2314000, netRefundAmount: 2314000, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
+  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 2314000, netRefundAmount: 2314000, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
 ]
 
 const mergeReturnTestCases = (returns: ReturnCase[]) => [...RETURN_TEST_CASES.filter(sample => !returns.some(item => item.id === sample.id)), ...returns]
@@ -1089,7 +1089,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'hold',
     entityId: 'RSV-2048',
-    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 20% (${formatVnd(36)}) thành công.`,
+    notes: `Khách hàng đặt cỡ kho Small Storage, phí giữ chỗ 20% (${formatVnd(936000)}) thành công.`,
     timestamp: '2026-09-17 08:30:00'
   },
   {
@@ -1418,7 +1418,7 @@ const normalizeReservationPricing = (hold: StorageReservation): StorageReservati
   const expectedTotal = rentalTermAmount + securityDepositAmount
   if (!shouldReprice && (normalizedHold.remainingAmount <= 0 || Math.abs((normalizedHold.totalInitialAmount || 0) - expectedTotal) <= 0.01)) return normalizedHold
 
-  const calculatedBookingDeposit = Math.round(rentalTermAmount * 0.2 * 100) / 100
+  const calculatedBookingDeposit = Math.round((rentalTermAmount + securityDepositAmount) * 0.2 * 100) / 100
   const bookingDeposit = shouldReprice || normalizedHold.payment.status !== 'paid' ? calculatedBookingDeposit : normalizedHold.reservationDepositAmount
   const isPaidInFull = normalizedHold.payment.status === 'paid' && normalizedHold.remainingAmount <= 0
   return {
@@ -1470,15 +1470,15 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StorageHubState>(() => {
     try {
       if (!DEMO_DATA_ENABLED) {
-        localStorage.removeItem('storagehub:facilities')
-        localStorage.removeItem('storagehub:units')
-        localStorage.removeItem('storagehub:rentals')
-        localStorage.removeItem('storagehub:holds')
-        localStorage.removeItem('storagehub:contracts')
-        localStorage.removeItem('storagehub:payments')
-        localStorage.removeItem('storagehub:returns')
+        localStorage.removeItem('storagehub:vnd:facilities')
+        localStorage.removeItem('storagehub:vnd:units')
+        localStorage.removeItem('storagehub:vnd:rentals')
+        localStorage.removeItem('storagehub:vnd:holds')
+        localStorage.removeItem('storagehub:vnd:contracts')
+        localStorage.removeItem('storagehub:vnd:payments')
+        localStorage.removeItem('storagehub:vnd:returns')
         localStorage.removeItem('storagehub:durationDiscounts')
-        localStorage.removeItem('storagehub:facility-pricing')
+        localStorage.removeItem('storagehub:vnd:facility-pricing')
         localStorage.removeItem(STORAGE_KEY)
       }
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -1496,7 +1496,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           }) : INITIAL_RESERVATIONS
         let rawFacilities = Array.isArray(parsed.facilities) && parsed.facilities.length ? [...parsed.facilities] : []
         try {
-          const directFacsStr = localStorage.getItem('storagehub:facilities')
+          const directFacsStr = localStorage.getItem('storagehub:vnd:facilities')
           if (DEMO_DATA_ENABLED && directFacsStr) {
             const directFacs = JSON.parse(directFacsStr)
             if (Array.isArray(directFacs)) {
@@ -1515,7 +1515,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
         let rawUnits = Array.isArray(parsed.units) && parsed.units.length ? [...parsed.units] : []
         try {
-          const directUnitsStr = localStorage.getItem('storagehub:units')
+          const directUnitsStr = localStorage.getItem('storagehub:vnd:units')
           if (DEMO_DATA_ENABLED && directUnitsStr) {
             const directUnits = JSON.parse(directUnitsStr)
             if (Array.isArray(directUnits)) {
@@ -1585,14 +1585,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     let fallbackFacilities = DEMO_DATA_ENABLED ? INITIAL_FACILITIES : []
     let fallbackUnits = DEMO_DATA_ENABLED ? INITIAL_UNITS : []
     try {
-      const directFacsStr = localStorage.getItem('storagehub:facilities')
+      const directFacsStr = localStorage.getItem('storagehub:vnd:facilities')
       if (DEMO_DATA_ENABLED && directFacsStr) {
         const directFacs = JSON.parse(directFacsStr)
         if (Array.isArray(directFacs) && directFacs.length > 0) {
           fallbackFacilities = normalizeStoredFacilities(directFacs)
         }
       }
-      const directUnitsStr = localStorage.getItem('storagehub:units')
+      const directUnitsStr = localStorage.getItem('storagehub:vnd:units')
       if (DEMO_DATA_ENABLED && directUnitsStr) {
         const directUnits = JSON.parse(directUnitsStr)
         if (Array.isArray(directUnits) && directUnits.length > 0) {
@@ -1924,8 +1924,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!DEMO_DATA_ENABLED) {
       localStorage.removeItem(STORAGE_KEY)
-      localStorage.removeItem('storagehub:facilities')
-      localStorage.removeItem('storagehub:units')
+      localStorage.removeItem('storagehub:vnd:facilities')
+      localStorage.removeItem('storagehub:vnd:units')
       return
     }
     try {
@@ -2218,7 +2218,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const discountAmount = Math.min(grossRentalTermAmount, Math.max(0, params.discountAmount || 0))
     const rentalTermAmount = grossRentalTermAmount - discountAmount
     const securityDepositAmount = effectiveMonthlyPrice
-    const reservationDepositAmount = Math.round(rentalTermAmount * 0.2 * 100) / 100
+    const reservationDepositAmount = Math.round((rentalTermAmount + securityDepositAmount) * 0.2 * 100) / 100
     const remainingAmount = rentalTermAmount - reservationDepositAmount + securityDepositAmount
     const totalInitialAmount = rentalTermAmount + securityDepositAmount
 
@@ -2364,7 +2364,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     }
     const nextStatus = isGoodsReview ? 'awaiting_payment' : transitionReservation(reservation.status as LegacyReservationStatus, 'APPROVE')
     const paymentExpiresAt = isGoodsReview ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : reservation.paymentExpiresAt
-    const reservationDepositAmount = isGoodsReview ? Math.round(((reservation.totalInitialAmount || 0) - reservation.securityDepositAmount) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
+    const reservationDepositAmount = isGoodsReview ? Math.round((reservation.totalInitialAmount || 0) * 0.2 * 100) / 100 : reservation.reservationDepositAmount
     setState(prev => ({
       ...prev,
       units: prev.units,
@@ -2438,7 +2438,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!['DEPOSIT_PAID', 'UNIT_RESERVED'].includes(reservation.status)) {
       throw new Error('Chỉ đơn đã thanh toán cọc và còn hiệu lực mới được phân kho.')
     }
-    if (reservation.payment.status !== 'paid') throw new Error('Đơn chưa thanh toán cọc giữ chỗ.')
+    if (reservation.payment.status !== 'paid') throw new Error('Đơn chưa thanh toán phí giữ chỗ.')
     if (unit.facilityId !== reservation.facilityId) throw new Error('Gian kho không thuộc cơ sở của đơn đặt.')
     if (!unitMatchesReservation(unit, reservation)) throw new Error('Loại gian kho không khớp với loại khách đã đặt.')
     if (reservation.assignedUnitId !== unit.id && unit.status !== 'available') {
@@ -4058,8 +4058,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!DEMO_DATA_ENABLED) throw new Error('Dữ liệu demo đang tắt, dữ liệu phải được đọc từ backend.')
     localStorage.removeItem(STORAGE_KEY)
     try {
-      localStorage.removeItem('storagehub:facilities')
-      localStorage.removeItem('storagehub:units')
+      localStorage.removeItem('storagehub:vnd:facilities')
+      localStorage.removeItem('storagehub:vnd:units')
     } catch {}
     setState({
       users: USERS,
@@ -4256,7 +4256,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         monthlyPriceVnd = parsedStartingPrice
       }
       if (!monthlyPriceVnd) monthlyPriceVnd = spec?.priceMonthly ?? 5500000
-      const normPrice = monthlyPriceVnd > 10000 ? monthlyPriceVnd / USD_TO_VND_RATE : monthlyPriceVnd
+      const normPrice = monthlyPriceVnd
 
       const defaultLoad = size === 'S' ? 1000 : size === 'M' ? 1600 : size === 'L' ? 2800 : 4000
       const configuredLoad = customLoad ?? data.unitLoadLimits?.[size] ?? spec?.maxLoadKg ?? defaultLoad
@@ -4317,8 +4317,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const nextFacilities = [newFacility, ...prev.facilities]
       const nextUnits = [...prev.units, ...newUnits]
       try {
-        localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
-        localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
+        localStorage.setItem('storagehub:vnd:facilities', JSON.stringify(nextFacilities))
+        localStorage.setItem('storagehub:vnd:units', JSON.stringify(nextUnits))
       } catch {}
       return {
         ...prev,
@@ -4402,7 +4402,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               monthlyPriceVnd = parsedStartingPrice
             }
             if (!monthlyPriceVnd) monthlyPriceVnd = spec?.priceMonthly ?? 5500000
-            const normUnitP = monthlyPriceVnd > 10000 ? monthlyPriceVnd / USD_TO_VND_RATE : monthlyPriceVnd
+            const normUnitP = monthlyPriceVnd
 
             const lengthM = customLen ?? updates.unitDimensions?.[size]?.lengthM ?? targetFac.unitDimensions?.[size]?.lengthM ?? spec?.lengthM ?? 8
             const widthM = customWid ?? updates.unitDimensions?.[size]?.widthM ?? targetFac.unitDimensions?.[size]?.widthM ?? spec?.widthM ?? 10
@@ -4498,7 +4498,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               newPriceVnd = parsedStartingPrice
             }
             if (newPriceVnd && newPriceVnd > 0) {
-              const normPrice = newPriceVnd > 10000 ? newPriceVnd / USD_TO_VND_RATE : newPriceVnd
+              const normPrice = newPriceVnd
               return { ...u, price: normPrice, deposit: normPrice }
             }
           }
@@ -4573,8 +4573,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       })
 
       try {
-        localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
-        if (nextUnits !== prev.units) localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
+        localStorage.setItem('storagehub:vnd:facilities', JSON.stringify(nextFacilities))
+        if (nextUnits !== prev.units) localStorage.setItem('storagehub:vnd:units', JSON.stringify(nextUnits))
       } catch {}
 
       return {
@@ -4604,8 +4604,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const nextFacilities = prev.facilities.filter(f => f.id !== facilityId && f.code !== facilityId)
       const nextUnits = prev.units.filter(u => u.facilityId !== facilityId && (!targetFac?.code || u.facilityId !== targetFac.code) && (!targetFac?.id || u.facilityId !== targetFac.id))
       try {
-        localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
-        localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
+        localStorage.setItem('storagehub:vnd:facilities', JSON.stringify(nextFacilities))
+        localStorage.setItem('storagehub:vnd:units', JSON.stringify(nextUnits))
       } catch {}
       return {
         ...prev,
@@ -4648,10 +4648,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const volumeM3 = actor.role === 'manager' ? canonicalType!.volumeM3 : data.volumeM3 ?? Math.round(lengthM * widthM * heightM * 100) / 100
     const maxLoadKg = actor.role === 'manager' ? canonicalType!.maxLoadKg : data.maxLoadKg ?? (type === 'Medium' ? 1200 : type === 'Large' ? 2400 : type === 'Extra Large' ? 3600 : 600)
     
-    let basePrice = data.price ?? (type === 'Medium' ? 9_500_000 / USD_TO_VND_RATE : type === 'Large' ? 15_000_000 / USD_TO_VND_RATE : type === 'Extra Large' ? 22_500_000 / USD_TO_VND_RATE : 5_500_000 / USD_TO_VND_RATE)
-    if (basePrice > 10000) {
-      basePrice = basePrice / USD_TO_VND_RATE
-    }
+    let basePrice = data.price ?? (type === 'Medium' ? 9_500_000 : type === 'Large' ? 15_000_000 : type === 'Extra Large' ? 22_500_000 : 5_500_000)
 
     const newUnit: StorageUnit = {
       id: code,
@@ -4669,7 +4666,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       allowedGoods: actor.role === 'manager' ? [...policyTemplate!.allowedGoods] : data.allowedGoods || ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
       prohibitedGoods: actor.role === 'manager' ? [...policyTemplate!.prohibitedGoods] : data.prohibitedGoods || ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
       price: actor.role === 'manager' ? canonicalType!.monthlyPrice : basePrice,
-      deposit: actor.role === 'manager' ? policyTemplate!.deposit : data.deposit ? (data.deposit > 10000 ? data.deposit / USD_TO_VND_RATE : data.deposit) : basePrice,
+      deposit: actor.role === 'manager' ? policyTemplate!.deposit : data.deposit ? (data.deposit) : basePrice,
       climate: data.climate ?? (targetFacility?.climate ?? true),
       status: actor.role === 'manager' ? 'available' : data.status || 'available',
       reservedPeriods: [],
@@ -4691,8 +4688,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         return f
       })
       try {
-        localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
-        localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
+        localStorage.setItem('storagehub:vnd:units', JSON.stringify(nextUnits))
+        localStorage.setItem('storagehub:vnd:facilities', JSON.stringify(nextFacilities))
       } catch {}
       return {
         ...prev,
@@ -4759,9 +4756,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const nextUnits = prev.units.map(u => {
         if (u.id !== unitId && u.code !== unitId) return u
         let price = permittedUpdates.price !== undefined ? permittedUpdates.price : u.price
-        if (price > 10000) price = price / USD_TO_VND_RATE
         let deposit = permittedUpdates.deposit !== undefined ? permittedUpdates.deposit : u.deposit
-        if (deposit > 10000) deposit = deposit / USD_TO_VND_RATE
         return {
           ...u,
           ...permittedUpdates,
@@ -4784,8 +4779,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         return f
       })
       try {
-        localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
-        localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
+        localStorage.setItem('storagehub:vnd:units', JSON.stringify(nextUnits))
+        localStorage.setItem('storagehub:vnd:facilities', JSON.stringify(nextFacilities))
       } catch {}
       return {
         ...prev,
@@ -4854,8 +4849,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         return f
       })
       try {
-        localStorage.setItem('storagehub:units', JSON.stringify(nextUnits))
-        localStorage.setItem('storagehub:facilities', JSON.stringify(nextFacilities))
+        localStorage.setItem('storagehub:vnd:units', JSON.stringify(nextUnits))
+        localStorage.setItem('storagehub:vnd:facilities', JSON.stringify(nextFacilities))
       } catch {}
       return {
         ...prev,

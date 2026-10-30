@@ -37,7 +37,7 @@ describe('customer reservation layout regression', () => {
       responseCode: '00', transactionStatus: '00', gatewayPayDate: '20261101165500', message: '',
       processedAt: '2026-11-01T09:55:00Z', lastReconciledAt: null }
     const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode={base.reservationCode} />)
-    for (const text of ['Biên lai cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
+    for (const text of ['Biên lai phí giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
     expect(html).toContain('6.402.000 ₫')
     expect(html).not.toContain('166.452.000.000')
     for (const paymentStatus of ['FAILED', 'NOT_RECEIVED'] as const) {
@@ -50,21 +50,21 @@ describe('customer reservation layout regression', () => {
   it('shows countdown rather than only the expiry date', () => {
     const html = render('AWAITING_PAYMENT')
     expect(html).toContain('role="timer"')
-    expect(html).toContain('Thời gian thanh toán cọc còn lại')
+    expect(html).toContain('Thời gian thanh toán phí giữ chỗ còn lại')
     expect(html).not.toContain('Thanh toán mô phỏng')
   })
   it('restores the amber card, financial breakdown and six-step progress for real reservations', () => {
     const html = render('AWAITING_EMAIL')
-    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Tiền thuê và cọc giữ chỗ', 'Khoản thu khi nhận kho', 'Tiến trình đơn đặt kho', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
+    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Báo giá đặt kho', 'Khoản thu khi nhận kho', 'Tiến trình đơn đặt kho', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
       expect(html).toContain(text)
     }
     expect(html).toContain('aria-current="step"')
     expect(html).not.toContain('Chưa có đơn')
   })
   it('opens payment only for backend AWAITING_PAYMENT, not for email/review/confirmed', () => {
-    expect(render('AWAITING_PAYMENT')).toContain('>Thanh toán cọc</button>')
+    expect(render('AWAITING_PAYMENT')).toContain('>Thanh toán phí giữ chỗ</button>')
     for (const status of ['AWAITING_EMAIL', 'AWAITING_REVIEW', 'CONFIRMED', 'EXPIRED'] as const) {
-      expect(render(status)).not.toContain('>Thanh toán cọc</button>')
+      expect(render(status)).not.toContain('>Thanh toán phí giữ chỗ</button>')
     }
   })
   it('shows hold confirmation only after the reservation deposit is confirmed', () => {
@@ -99,4 +99,12 @@ describe('customer reservation layout regression', () => {
   ] as const)('maps backend status %s to progress %s', (status, step) => {
     expect(reservationProgress(status)).toBe(step)
   })
+})
+
+it('pre-handover reservation shows setup-adjusted estimated dates without repricing', () => {
+ const html = renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, rentalPeriodConfirmed: false, appointmentAt: '2026-10-30T03:00:00Z', freeSetupDays: 6 }} facilityName="Kho HCM" unitTypeName="Kho nhỏ" onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
+ expect(html).toContain('05/11/2026')
+ expect(html).toContain('Kỳ thuê dự kiến sau setup')
+ expect(html).toContain('4.000.000 ₫')
+ expect(html).not.toContain('Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất')
 })

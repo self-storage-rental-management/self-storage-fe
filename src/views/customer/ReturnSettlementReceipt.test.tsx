@@ -18,7 +18,7 @@ describe('setup return settlement receipt', () => {
     const html = renderToStaticMarkup(<ReturnSettlementReceipt entry={entry} />)
     expect(html).toContain('Biên lai quyết toán trả kho')
     expect(html).toContain('Tiền thuê thực thu được quyết toán')
-    expect(html).toContain('Phí chấm dứt sớm một lần')
+    expect(html).not.toContain('Phí chấm dứt sớm một lần')
     expect(html).toContain('6.000.000')
     expect(html).toContain('2.300.000')
     expect(html).toContain('5.700.000')

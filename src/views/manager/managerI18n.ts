@@ -82,7 +82,7 @@ const unitTypes: Record<string, BilingualLabel> = {
 }
 
 const paymentTypes: Record<string, BilingualLabel> = {
-  RESERVATION_DEPOSIT: labels('Reservation deposit', 'Cọc giữ chỗ'),
+  RESERVATION_DEPOSIT: labels('Reservation deposit', 'Phí giữ chỗ'),
   INITIAL_RENT: labels('Initial rent', 'Tiền thuê ban đầu'),
   RENT: labels('Rent', 'Tiền thuê định kỳ'),
   RENTAL_PAYMENT: labels('Rental payment', 'Thanh toán tiền thuê'),

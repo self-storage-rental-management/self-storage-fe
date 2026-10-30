@@ -26,7 +26,7 @@ describe('Booking acceptance uses Payment and Reservation response fields', () =
       const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode="RSV-TEST" />)
       expect(html).toContain('Chi tiết giao dịch cần đối soát')
       expect(html).toContain('Đơn chưa xác nhận')
-      expect(html).not.toContain('Biên lai cọc giữ chỗ')
+      expect(html).not.toContain('Biên lai phí giữ chỗ')
       expect(html).not.toContain('Đơn đã xác nhận cọc')
     },
   )

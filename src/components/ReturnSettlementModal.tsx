@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Badge, Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from './ui'
-import { formatVnd as legacyMoney, USD_TO_VND_RATE } from '../i18n/currency'
+import { formatVnd as legacyMoney } from '../i18n/currency'
 import type { ApiReturn } from '../services/returnApi'
 import { EvidenceDownload } from '../views/rental-support-integration/EvidenceControls'
 import type { ReturnCase, StoragePayment } from '../types/storageHub'
@@ -30,15 +30,15 @@ export default function ReturnSettlementModal({
   const isCompleted = returnCase.status === 'completed'
   const isRefundPending = returnCase.status === 'refund_pending'
   const isPaymentDue = returnCase.status === 'payment_due'
-  const netRefund = apiRecord ? apiRecord.netRefundAmount == null ? Number.NaN : apiRecord.netRefundAmount / USD_TO_VND_RATE : returnCase.netRefundAmount || 0
-  const amountDue = apiRecord ? apiRecord.amountDueFromCustomer == null ? Number.NaN : apiRecord.amountDueFromCustomer / USD_TO_VND_RATE : returnCase.amountDueFromCustomer || 0
-  const deposit = apiRecord ? apiRecord.depositAmount == null ? Number.NaN : apiRecord.depositAmount / USD_TO_VND_RATE : returnCase.depositAmount || 0
+  const netRefund = apiRecord ? apiRecord.netRefundAmount == null ? Number.NaN : apiRecord.netRefundAmount : returnCase.netRefundAmount || 0
+  const amountDue = apiRecord ? apiRecord.amountDueFromCustomer == null ? Number.NaN : apiRecord.amountDueFromCustomer : returnCase.amountDueFromCustomer || 0
+  const deposit = apiRecord ? apiRecord.depositAmount == null ? Number.NaN : apiRecord.depositAmount : returnCase.depositAmount || 0
   const damageFee = returnCase.damageFee || 0
   const cleaningFee = returnCase.cleaningFee || 0
   const overdueFee = returnCase.overdueFee || 0
   const lostItemFee = returnCase.lostItemFee || 0
   const outstandingFee = returnCase.outstandingFee || 0
-  const totalDeductions = apiRecord ? apiRecord.totalDeductions / USD_TO_VND_RATE : damageFee + cleaningFee + overdueFee + lostItemFee + outstandingFee
+  const totalDeductions = apiRecord ? apiRecord.totalDeductions : damageFee + cleaningFee + overdueFee + lostItemFee + outstandingFee
 
   // Lọc các giao dịch liên quan đến hồ sơ thuê này
   const relatedPayments = apiRecord ? [] : payments.filter(p => p.rentalId === returnCase.rentalId)
@@ -168,8 +168,8 @@ export default function ReturnSettlementModal({
                       </Td>
                     </Tr>
                     {apiRecord?.setupEarlyExit && <>
-                      <Tr><Td className="font-semibold">Tiền thuê thực thu được quyết toán</Td><Td className="text-xs text-stone-500">Theo bảng kê backend</Td><Td className="text-right font-bold">{apiRecord.rentalRefundCredit == null ? 'Chưa xác định' : formatVnd(apiRecord.rentalRefundCredit / USD_TO_VND_RATE)}</Td></Tr>
-                      <Tr><Td className="font-semibold">Phí chấm dứt sớm một lần</Td><Td className="text-xs text-stone-500">Theo điều khoản đã chấp nhận</Td><Td className="text-right font-bold">{apiRecord.earlyTerminationFee == null ? 'Chưa xác định' : formatVnd(apiRecord.earlyTerminationFee / USD_TO_VND_RATE)}</Td></Tr>
+                      <Tr><Td className="font-semibold">Tiền thuê thực thu được quyết toán</Td><Td className="text-xs text-stone-500">Theo bảng kê backend</Td><Td className="text-right font-bold">{apiRecord.rentalRefundCredit == null ? 'Chưa xác định' : formatVnd(apiRecord.rentalRefundCredit)}</Td></Tr>
+                      {role !== 'customer' && <Tr><Td className="font-semibold">Phí chấm dứt sớm một lần</Td><Td className="text-xs text-stone-500">Theo điều khoản đã chấp nhận</Td><Td className="text-right font-bold">{apiRecord.earlyTerminationFee == null ? 'Chưa xác định' : formatVnd(apiRecord.earlyTerminationFee)}</Td></Tr>}
                     </>}
                     {damageFee > 0 && (
                       <Tr>
@@ -342,7 +342,7 @@ export default function ReturnSettlementModal({
                   <div>
                     <p className="text-xs font-semibold text-stone-600">Số tiền chứng từ:</p>
                     <p className="text-xl font-black text-stone-900">
-                      {apiRecord ? receipt ? formatVnd(receipt.amount / USD_TO_VND_RATE) : "Chưa có chứng từ" : formatVnd(netRefund > 0 ? netRefund : amountDue > 0 ? amountDue : deposit)}
+                      {apiRecord ? receipt ? formatVnd(receipt.amount) : "Chưa có chứng từ" : formatVnd(netRefund > 0 ? netRefund : amountDue > 0 ? amountDue : deposit)}
                     </p>
                   </div>
                   <div className="text-right">
@@ -432,7 +432,7 @@ export default function ReturnSettlementModal({
                       </Td>
                       <Td className="text-xs">{apiRecord ? receiptMethod : 'Chuyển khoản'}</Td>
                       <Td className={`text-right font-bold ${netRefund > 0 ? 'text-emerald-700' : amountDue > 0 ? 'text-rose-700' : 'text-stone-800'}`}>
-                        {apiRecord ? receipt ? formatVnd(receipt.amount / USD_TO_VND_RATE) : 'Chưa ghi nhận' : netRefund > 0 ? `-${formatVnd(netRefund)}` : amountDue > 0 ? `+${formatVnd(amountDue)}` : '0 ₫'}
+                        {apiRecord ? receipt ? formatVnd(receipt.amount) : 'Chưa ghi nhận' : netRefund > 0 ? `-${formatVnd(netRefund)}` : amountDue > 0 ? `+${formatVnd(amountDue)}` : '0 ₫'}
                       </Td>
                       <Td>
                         <Badge variant={isCompleted ? 'success' : 'warning'}>
