@@ -215,6 +215,8 @@ export interface ReservationRentalPackage {
 }
 
 export interface ReservationQuote {
+  pricingPackageCode?: string
+  rentalPeriodConfirmed?: boolean
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   quoteId: string
@@ -268,6 +270,7 @@ export interface CreateReservationInput {
 }
 
 export interface CustomerReservation {
+  rentalPeriodConfirmed?: boolean
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null

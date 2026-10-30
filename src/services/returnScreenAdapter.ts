@@ -1,11 +1,9 @@
 import type { ReturnCase } from '../types/storageHub'
-import { USD_TO_VND_RATE } from '../i18n/currency'
 import type { ApiReturn } from './returnApi'
 
-// Existing Manager templates use legacy base units. Convert for display only;
-// API commands always use the original VND amounts, never inferred totals.
+// Manager screens and API commands both use the original VND amounts.
 export function returnScreenRecord(record: ApiReturn): ReturnCase {
-  const base = (value: number | null) => value == null ? Number.NaN : value / USD_TO_VND_RATE
+  const vnd = (value: number | null) => value == null ? Number.NaN : value
   return {
     id: record.id, rentalId: record.rentalId, unitId: record.unitNumber,
     facilityId: record.facilityId, facilityName: record.facilityName,
@@ -15,10 +13,10 @@ export function returnScreenRecord(record: ApiReturn): ReturnCase {
     initialConditionSnapshot: 'Chưa có thông tin bàn giao trong phản hồi trả kho',
     packageCount: Number.NaN, initialWeightKg: Number.NaN,
     inventoryMatch: record.inventoryMatch ?? undefined, damageClassification: record.damageClassification ?? undefined,
-    damageFee: base(record.damageFee), cleaningFee: base(record.cleaningFee),
-    lostItemFee: base(record.lostItemFee), overdueFee: base(record.overdueFee), outstandingFee: base(record.outstandingFee),
-    depositAmount: base(record.depositAmount), netRefundAmount: base(record.netRefundAmount),
-    amountDueFromCustomer: base(record.amountDueFromCustomer),
+    damageFee: vnd(record.damageFee), cleaningFee: vnd(record.cleaningFee),
+    lostItemFee: vnd(record.lostItemFee), overdueFee: vnd(record.overdueFee), outstandingFee: vnd(record.outstandingFee),
+    depositAmount: vnd(record.depositAmount), netRefundAmount: vnd(record.netRefundAmount),
+    amountDueFromCustomer: vnd(record.amountDueFromCustomer),
     staffNotes: record.inspectionNotes ?? undefined, evidence: record.evidencePhotos ?? [],
     customerConfirmed: record.customerConfirmed, customerDecisionNote: record.customerDecisionNote ?? undefined,
     proposedUnitStatus: record.proposedUnitStatus ?? undefined, inspectedAt: record.inspectedAt ?? undefined,

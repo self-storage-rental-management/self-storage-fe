@@ -1,7 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { firstCheckInMinute, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
+import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
 
 describe('reservation check in policy', () => {
+  it.each([false, true])('rechecks an appointment after time spent filling the form, review=%s', reviewRequired => {
+    const openedAt = Date.parse('2026-10-30T10:00:00+07:00')
+    const previousSelection = firstCheckInMinute(plannedCheckInWindow(openedAt, reviewRequired).availableAt)
+    const submittedAt = openedAt + 5 * 60_000
+    const window = submissionCheckInWindow(submittedAt, reviewRequired)
+    expect(isCheckInAppointmentAllowed(previousSelection, window)).toBe(false)
+    const suggested = firstBookableCheckInMinute(window)!
+    // Still valid after the server receives the request 30 seconds later.
+    expect(isCheckInAppointmentAllowed(suggested, plannedCheckInWindow(submittedAt + 30_000, reviewRequired))).toBe(true)
+    expect(isCheckInAppointmentAllowed(new Date('2026-11-02T10:00:00+07:00'), window)).toBe(true)
+  })
+
+  it('allows the earliest appointment at night without shifting to facility opening hours', () => {
+    const window = submissionCheckInWindow(Date.parse('2026-10-30T13:07:00+07:00'), false)
+    const suggested = firstBookableCheckInMinute(window)!
+    expect(policyDateInput(suggested)).toBe('2026-10-30')
+    expect(policyTimeInput(suggested)).toBe('19:23')
+  })
+
+  it('does not extend the seven-day deadline when allowing for request transit', () => {
+    const now = Date.parse('2026-10-30T10:00:00+07:00')
+    const window = submissionCheckInWindow(now, false)
+    expect(window.deadlineAt).toEqual(plannedCheckInWindow(now, false).deadlineAt)
+    expect(firstBookableCheckInMinute({ ...window, availableAt: new Date(window.deadlineAt.getTime() + 1) })).toBeNull()
+  })
   it('chooses a selectable minute inside the allowed window including midnight rollover', () => {
     const window = plannedCheckInWindow('2026-10-27T17:44:23.456+07:00', false)
     const first = firstCheckInMinute(window.availableAt)
