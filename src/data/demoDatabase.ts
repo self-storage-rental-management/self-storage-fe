@@ -627,9 +627,9 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 912 345 678',
     unit: 'A-210',
     facility: 'Kho Việt – Cơ sở Quận 1',
-    amount: 89,
-    baseAmount: 89,
-    lateFee: 25,
+    amount: 2314000,
+    baseAmount: 2314000,
+    lateFee: 650000,
     days: 13,
     overdueDays: 13,
     stage: 'notice',
@@ -648,9 +648,9 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 909 888 222',
     unit: 'B-108',
     facility: 'Kho Việt – Cơ sở Bình Dương',
-    amount: 135,
-    baseAmount: 135,
-    lateFee: 35,
+    amount: 3510000,
+    baseAmount: 3510000,
+    lateFee: 910000,
     days: 17,
     overdueDays: 17,
     stage: 'overlocked',
@@ -669,9 +669,9 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 902 119 922',
     unit: 'C-105',
     facility: 'Kho Việt – Cơ sở Quận 1',
-    amount: 220,
-    baseAmount: 220,
-    lateFee: 50,
+    amount: 5720000,
+    baseAmount: 5720000,
+    lateFee: 1300000,
     days: 34,
     overdueDays: 34,
     stage: 'lien',
@@ -690,8 +690,8 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 938 445 566',
     unit: 'A-304',
     facility: 'Kho Việt – Cơ sở Quận 1',
-    amount: 89,
-    baseAmount: 89,
+    amount: 2314000,
+    baseAmount: 2314000,
     lateFee: 0,
     days: 4,
     overdueDays: 4,
@@ -727,9 +727,6 @@ export const CONVERSION_DATA = [
 ]
 
 // export const PRICING_TIERS = [
-//   { id: 'tier-1', name: 'Small Unit', size: '5 ft (25 sq ft)', basePrice: 89, climateAdder: 20, highDemandMultiplier: 1.15, facility: 'All facilities' },
-//   { id: 'tier-2', name: 'Medium Unit', size: '10 ft (100 sq ft)', basePrice: 149, climateAdder: 30, highDemandMultiplier: 1.2, facility: 'All facilities' },
-//   { id: 'tier-3', name: 'Large Unit', size: '20 ft (400 sq ft)', basePrice: 269, climateAdder: 45, highDemandMultiplier: 1.25, facility: 'All facilities' }
 // ]
 
 export interface PricingTierItem {

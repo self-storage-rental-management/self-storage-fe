@@ -143,11 +143,11 @@ export default function RentalDetail({
             <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-stone-200 [&>div]:bg-stone-50 [&>div]:p-4">
               {([
                 ["Tiền thuê toàn kỳ", agreed.netRentalAmount],
-                ["Cọc giữ chỗ (trừ vào tiền thuê)", agreed.reservationDepositAmount],
-                ["Tiền thuê còn lại sau cọc giữ chỗ", agreed.remainingRentalAmount],
+                ["Phí giữ chỗ (trừ vào tiền thuê)", agreed.reservationDepositAmount],
+                ["Tiền thuê còn lại sau phí giữ chỗ", agreed.remainingRentalAmount],
                 ["Cọc bảo đảm kho", agreed.securityDepositAmount],
                 ["Thanh toán khi nhận kho (tiền thuê còn lại + cọc bảo đảm)", agreed.dueAtCheckIn],
-                ["Tổng tiền thuê + cọc bảo đảm (không cộng cọc giữ chỗ lần nữa)", agreed.totalInitialObligation],
+                ["Tổng tiền thuê + cọc bảo đảm (không cộng phí giữ chỗ lần nữa)", agreed.totalInitialObligation],
               ] as const).map(([label, amount]) => (
                 <div key={label} className={label.startsWith('Tổng') ? '!border-emerald-200 !bg-emerald-50' : label.startsWith('Thanh toán') ? '!border-amber-200 !bg-amber-50' : ''}><dt>{label}</dt><dd className="!mt-2 !text-lg !font-bold">{rentalMoney(amount, evidence.currency)}</dd></div>
               ))}

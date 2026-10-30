@@ -1,3 +1,4 @@
+import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { useEffect, useRef, useState } from 'react'
@@ -105,7 +106,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const calculatedGoodsVolumeM3 = totalGoodsVolumeM3(goodsItems)
   const calculatedGoodsWeightKg = goodsItems.reduce((total, item) => total + item.quantity * item.weightPerItemKg, 0)
   const formatMeasurement = formatGoodsVolume
-  const savedQuote = savedReservationQuote(r)
+  const savedQuote = savedReservationQuote(detail?.reservation ?? r)
   const beginSetupGoodsEdit = () => {
     setSetupGoodsDraft(goodsItems.map(item => ({
       catalogCategoryId: item.catalogCategoryId,
@@ -143,7 +144,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const steps = [
     { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
     { label: 'Phê duyệt hồ sơ', detail: r.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa' : 'Hồ sơ được duyệt tự động' },
-    { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán cọc', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất cọc giữ chỗ' },
+    { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán phí giữ chỗ', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất phí giữ chỗ' },
     { label: 'Quản lý phân kho', detail: r.assignedUnitCode ? `Đã phân ${r.assignedUnitCode}` : 'Chờ phân gian kho cụ thể' },
     { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
     { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' },
@@ -217,14 +218,14 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)) {
       errors.date = 'Vui lòng chọn ngày nhận kho hợp lệ.'
     } else if (appointmentDate < earliestDate || appointmentDate > latestDate) {
-      errors.date = `Ngày nhận kho phải từ ${appointmentWindow.availableAt.toLocaleDateString('vi-VN')} đến ${appointmentWindow.deadlineAt.toLocaleDateString('vi-VN')}.`
+      errors.date = `Ngày nhận kho phải từ ${formatCustomerDate(appointmentWindow.availableAt)} đến ${formatCustomerDate(appointmentWindow.deadlineAt)}.`
     }
 
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(appointmentTime)) {
       errors.time = 'Vui lòng chọn giờ nhận kho hợp lệ.'
     } else {
       if (!errors.date && appointmentDate === earliestDate && appointment < appointmentWindow.availableAt) {
-        errors.time = `Trong ngày ${appointmentWindow.availableAt.toLocaleDateString('vi-VN')}, giờ nhận kho sớm nhất là ${policyTimeInput(appointmentWindow.availableAt)}.`
+        errors.time = `Trong ngày ${formatCustomerDate(appointmentWindow.availableAt)}, giờ nhận kho sớm nhất là ${policyTimeInput(appointmentWindow.availableAt)}.`
       }
     }
 
@@ -314,8 +315,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
         <div className="mt-3 space-y-2">
-          <p className="text-xs leading-5 text-stone-600">Lịch thuê: <b className="text-stone-900">{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
-          <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? new Date(savedAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa đặt lịch'}</b></p>
+          <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Lịch thuê đã chốt:' : 'Lịch thuê dự kiến sau setup:'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(savedQuote?.endDate || r.endDate)}</b></p>
+          <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
         </div>
         <div className="mt-3 grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs text-stone-700 md:grid-cols-2">
           <section>
@@ -336,7 +337,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
               onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
           </div>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
-          <span className="basis-full text-[11px]">Lịch hợp lệ từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
+          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau số ngày setup miễn phí, tính từ ngày bàn giao thực tế. Trước bàn giao, ngày bắt đầu và kết thúc chỉ là dự kiến. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
           {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
         </div>}
         <div className="mt-3 space-y-4">
@@ -393,7 +394,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             </>}
           </section>
 
-          {savedQuote ? <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
+          {savedQuote ? <ReservationQuoteSummary quote={{ ...savedQuote, facilityName: savedQuote.facilityName || facilityName, unitTypeName: savedQuote.unitTypeName || unitTypeName }} needsReview={false} context="reservation" /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
             {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Business quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian setup không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
@@ -407,7 +408,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             const completed = index < progress
             const current = index === progress
             return <div key={step.label} aria-current={current ? 'step' : undefined} className={`relative rounded-xl border p-3 transition ${completed ? 'border-emerald-600 bg-emerald-50 text-emerald-950' : current ? 'border-amber-500 bg-amber-500 text-white shadow-lg ring-2 ring-amber-200' : 'border-stone-200 bg-stone-50 text-stone-400'}`}>
-              <div className="mb-2 flex items-center justify-between gap-1"><span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-extrabold ${completed ? 'bg-emerald-600 text-white' : current ? 'bg-white text-amber-700' : 'bg-stone-200 text-stone-500'}`}>{completed ? '✓' : index + 1}</span><span className="text-[9px] font-bold">{completed ? 'Đã xong' : current ? 'Hiện tại' : 'Sắp tới'}</span></div><p className="text-[11px] font-bold leading-4">{step.label}</p><p className="mt-1 text-[10px] leading-4">{step.detail}</p>
+              <div className="mb-2 flex items-center justify-between gap-1"><span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-extrabold ${completed ? 'bg-emerald-600 text-white' : current ? 'bg-white text-amber-700' : 'bg-stone-200 text-stone-500'}`}>{index + 1}</span><span className="text-[9px] font-bold">{completed ? 'Đã xong' : current ? 'Hiện tại' : 'Sắp tới'}</span></div><p className="text-[11px] font-bold leading-4">{step.label}</p><p className="mt-1 text-[10px] leading-4">{step.detail}</p>
             </div>
           })}</div>
         </div>}
@@ -431,9 +432,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <p className="font-bold">Phiếu xác nhận giữ kho đã được phát hành</p>
           <p className="mt-2">Đơn giữ kho: <b>{bookingDocument.reservationCode}</b></p>
           <p>Tệp: <b>{bookingDocument.fileName}</b></p>
-          <p>Ngày phát hành: <b>{new Date(bookingDocument.issuedAt).toLocaleString('vi-VN')}</b></p>
+          <p>Ngày phát hành: <b>{formatCustomerDateTime(new Date(bookingDocument.issuedAt))}</b></p>
         </div>
-        <p className="text-sm text-stone-600">Phiếu ghi nhận loại kho đã giữ và khoản cọc giữ chỗ đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.</p>
+        <p className="text-sm text-stone-600">Phiếu ghi nhận loại kho đã giữ và khoản phí giữ chỗ đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Button variant="outline" onClick={() => void viewBookingDocument()}>Xem PDF</Button>
           <Button onClick={() => void saveBookingDocument()}>Tải PDF</Button>
@@ -457,7 +458,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       <div className="space-y-5">
         <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
           {progress !== null && progress >= 3
-            ? `Đơn ${r.reservationCode} đã được xác nhận thanh toán cọc. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
+            ? `Đơn ${r.reservationCode} đã được xác nhận thanh toán phí giữ chỗ. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
             : `Bạn có chắc muốn hủy ${r.reservationCode}? Suất kho đang giữ sẽ được giải phóng.`}
         </p>
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4">
