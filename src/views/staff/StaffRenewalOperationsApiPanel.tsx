@@ -133,14 +133,19 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
           <p>{rentalError(read.error)}</p>
         </div>
       )}
-      {read.data && (
-        <Card className="overflow-hidden">
+      {read.data && <>
+        {[
+          { id: 'ongoing', title: 'Đang diễn ra', empty: 'Không có lịch ký đang diễn ra.', rows: read.data.data.filter(s => !['COMPLETED', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
+          { id: 'finished', title: 'Đã kết thúc', empty: 'Chưa có lịch ký đã kết thúc.', rows: read.data.data.filter(s => ['COMPLETED', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
+        ].map(group => (
+        <Card key={group.id} className="overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
-            <h2 className="text-sm font-semibold text-stone-900">Danh sách lịch ký</h2>
-            <span className="text-xs text-stone-500">{read.data.pagination.totalItems} hồ sơ</span>
+            <h2 className="text-sm font-semibold text-stone-900">{group.title}</h2>
+            <span className="text-xs text-stone-500">{group.rows.length} hồ sơ</span>
           </div>
-          {read.data.data.length > 0 ? <div className="overflow-x-auto">
+          {group.rows.length > 0 ? <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
+              <caption className="sr-only">Lịch ký gia hạn — {group.title}</caption>
               <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-600">
                 <tr>
                   <th scope="col" className="px-4 py-3 font-semibold">Hồ sơ gia hạn</th>
@@ -151,7 +156,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {read.data.data.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
+                {group.rows.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
                   <td className="px-4 py-4 align-middle">
                     <span className="font-semibold text-stone-900" title={s.renewalId}>{s.displayCode || `#${s.renewalId.slice(0, 8)}`}</span>
                   </td>
@@ -177,15 +182,18 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
                 </tr>)}
               </tbody>
             </table>
-          </div> : <p className="px-4 py-8 text-center text-sm text-stone-500">Không có lịch ký phù hợp với bộ lọc.</p>}
+          </div> : <p className="px-4 py-8 text-center text-sm text-stone-500">{group.empty}</p>}
+        </Card>
+        ))}
+        {read.data.pagination.totalPages > 1 && <Card>
           <div className="border-t border-stone-200 px-4 py-3">
             <ApiPager
               pagination={read.data.pagination}
               onPage={(page) => { if (!lockRef.current) setQuery((q) => ({ ...q, page })) }}
             />
           </div>
-        </Card>
-      )}
+        </Card>}
+      </>}
       {selected && (
         <Modal
           open
