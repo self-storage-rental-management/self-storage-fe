@@ -5,7 +5,7 @@ import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence,
 import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
-import { formatVndAmount as formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
+import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import type { ReturnCase, DamageClassification } from '../../types/storageHub'
@@ -53,7 +53,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const refundUpload = useRef<{ returnId: string; file: File; id: string } | null>(null)
   const refundKey = useRef<string | null>(null)
   const formatManagerMoney = (value?: number) => useApi
-    ? value == null || !Number.isFinite(value) ? 'Chưa xác định' : formatVnd(value * USD_TO_VND_RATE)
+    ? value == null || !Number.isFinite(value) ? 'Chưa xác định' : formatVnd(value)
     : legacyManagerMoney(value)
   const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
   const [returnSearch, setReturnSearch] = useState('')
@@ -307,9 +307,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       setDisputeSettlement({
         damageFee: 0,
         cleaningFee: 0,
-        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee) * USD_TO_VND_RATE),
+        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee)),
         overdueFee: 0,
-        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee) * USD_TO_VND_RATE)
+        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee))
       })
       setFacilityCompensation(500000)
       setDisputeResolutionNote(
@@ -318,11 +318,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     } else if (preset === 'customer_fault_deduct') {
       const standardSanitization = 1500000 // 1.500.000 VND
       setDisputeSettlement({
-        damageFee: Math.round(moneyValue(selectedReturn.damageFee) * USD_TO_VND_RATE),
+        damageFee: Math.round(moneyValue(selectedReturn.damageFee)),
         cleaningFee: standardSanitization,
-        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee) * USD_TO_VND_RATE),
-        overdueFee: Math.round(moneyValue(selectedReturn.overdueFee) * USD_TO_VND_RATE),
-        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee) * USD_TO_VND_RATE)
+        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee)),
+        overdueFee: Math.round(moneyValue(selectedReturn.overdueFee)),
+        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee))
       })
       setFacilityCompensation(0)
       setDisputeResolutionNote(
@@ -331,11 +331,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     } else if (preset === 'mutual_settlement') {
       const reducedFee = 750000 // 50% của 1.500.000 VND
       setDisputeSettlement({
-        damageFee: Math.round(moneyValue(selectedReturn.damageFee) * USD_TO_VND_RATE),
+        damageFee: Math.round(moneyValue(selectedReturn.damageFee)),
         cleaningFee: reducedFee,
-        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee) * USD_TO_VND_RATE),
-        overdueFee: Math.round(moneyValue(selectedReturn.overdueFee) * USD_TO_VND_RATE),
-        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee) * USD_TO_VND_RATE)
+        lostItemFee: Math.round(moneyValue(selectedReturn.lostItemFee)),
+        overdueFee: Math.round(moneyValue(selectedReturn.overdueFee)),
+        outstandingFee: Math.round(moneyValue(selectedReturn.outstandingFee))
       })
       setFacilityCompensation(0)
       setDisputeResolutionNote(
@@ -348,13 +348,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     setSelectedReturn(returnCase)
     setDisputeResolutionNote(returnCase.staffNotes || '')
     setDisputePreset(returnCase.disputeResolutionPreset || (returnCase.moistureOrigin === 'facility_fault' ? 'facility_fault_full_refund' : returnCase.moistureOrigin === 'customer_fault' ? 'customer_fault_deduct' : undefined))
-    setFacilityCompensation(Math.round(moneyValue(returnCase.facilityCompensationAmount || 0) * USD_TO_VND_RATE))
+    setFacilityCompensation(Math.round(moneyValue(returnCase.facilityCompensationAmount || 0)))
     setDisputeSettlement({
-      damageFee: Math.round(moneyValue(returnCase.damageFee) * USD_TO_VND_RATE),
-      cleaningFee: Math.round(moneyValue(returnCase.cleaningFee) * USD_TO_VND_RATE),
-      lostItemFee: Math.round(moneyValue(returnCase.lostItemFee) * USD_TO_VND_RATE),
-      overdueFee: Math.round(moneyValue(returnCase.overdueFee) * USD_TO_VND_RATE),
-      outstandingFee: Math.round(moneyValue(returnCase.outstandingFee) * USD_TO_VND_RATE)
+      damageFee: Math.round(moneyValue(returnCase.damageFee)),
+      cleaningFee: Math.round(moneyValue(returnCase.cleaningFee)),
+      lostItemFee: Math.round(moneyValue(returnCase.lostItemFee)),
+      overdueFee: Math.round(moneyValue(returnCase.overdueFee)),
+      outstandingFee: Math.round(moneyValue(returnCase.outstandingFee))
     })
     setDisputeModalOpen(true)
   }
@@ -385,9 +385,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         selectedReturn.id,
         user,
         disputeResolutionNote,
-        settlementInBaseCurrency,
+        settlementInVnd,
         disputePreset,
-        facilityCompensation > 0 ? facilityCompensation / USD_TO_VND_RATE : undefined
+        facilityCompensation > 0 ? facilityCompensation : undefined
       )
       showToast(
         `Đã rà soát khiếu nại cho đơn ${selectedReturn.id} thành công!`
@@ -409,7 +409,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         if (!refundFile || !refundConfirmed || !refundTxnRef.trim()) throw new Error('Cần phương thức, biên lai và xác nhận thực hoàn trước khi ghi nhận.')
         const latest = await getReturn('manager', selectedReturn.id)
         if (latest.status !== 'refund_pending' || latest.sourceType === 'RECOVERY' || latest.settlementBlocker || latest.netRefundAmount == null || latest.netRefundAmount <= 0) throw new Error(latest.settlementBlocker || 'Hồ sơ chưa đủ điều kiện hoàn tiền.')
-        const expected = Math.round(selectedReturn.netRefundAmount * USD_TO_VND_RATE * 100) / 100
+        const expected = Math.round(selectedReturn.netRefundAmount * 100) / 100
         if (latest.netRefundAmount !== expected) { setSelectedReturn(returnScreenRecord(latest)); setRefundConfirmed(false); throw new Error('Số tiền đã thay đổi. Vui lòng đối chiếu và xác nhận lại.') }
         let receiptFileId = refundUpload.current?.returnId === latest.id && refundUpload.current.file === refundFile ? refundUpload.current.id : null
         if (!receiptFileId) { const uploaded = await uploadReturnEvidence(latest.id, refundFile, 'manager'); receiptFileId = uploaded.id; refundUpload.current = { returnId: latest.id, file: refundFile, id: receiptFileId } }
@@ -438,17 +438,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     }
   }
 
-  const settlementInBaseCurrency: ManagerReturnSettlementFees = {
-    damageFee: disputeSettlement.damageFee / USD_TO_VND_RATE,
-    cleaningFee: disputeSettlement.cleaningFee / USD_TO_VND_RATE,
-    lostItemFee: disputeSettlement.lostItemFee / USD_TO_VND_RATE,
-    overdueFee: disputeSettlement.overdueFee / USD_TO_VND_RATE,
-    outstandingFee: disputeSettlement.outstandingFee / USD_TO_VND_RATE
+  const settlementInVnd: ManagerReturnSettlementFees = {
+    damageFee: disputeSettlement.damageFee,
+    cleaningFee: disputeSettlement.cleaningFee,
+    lostItemFee: disputeSettlement.lostItemFee,
+    overdueFee: disputeSettlement.overdueFee,
+    outstandingFee: disputeSettlement.outstandingFee
   }
 
   const currentApiReturn = useApi ? apiRead.rows.find(row => row.id === selectedReturn?.id) : undefined
   const disputePreview = useApi ? currentApiReturn ? { totalDeductions: currentApiReturn.totalDeductions, netRefundAmount: currentApiReturn.netRefundAmount ?? Number.NaN, amountDueFromCustomer: currentApiReturn.amountDueFromCustomer ?? Number.NaN } : null : selectedReturn
-    ? calculateManagerReturnSettlement(moneyValue(selectedReturn.depositAmount), settlementInBaseCurrency)
+    ? calculateManagerReturnSettlement(moneyValue(selectedReturn.depositAmount), settlementInVnd)
     : null
 
   return (

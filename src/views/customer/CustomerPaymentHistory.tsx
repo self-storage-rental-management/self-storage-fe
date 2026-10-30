@@ -1,3 +1,4 @@
+import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
 import { Button, Card, Modal, SectionHeader, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
@@ -19,7 +20,7 @@ import {
 
 export function paymentHistoryTimestamp(value: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Chưa ghi nhận"
-  return new Date(value).toLocaleString("vi-VN")
+  return formatCustomerDateTime(new Date(value))
 }
 
 function ShortCode({ value }: { value: string }) {
@@ -30,7 +31,7 @@ function ShortCode({ value }: { value: string }) {
     <button type="button" className="rounded p-0.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100" aria-label={`Sao chép mã ${value}`} title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"} onClick={async () => {
       try { await navigator.clipboard.writeText(value); setCopied(true) }
       catch { setCopied(false) }
-    }}>{copied ? "✓" : "⧉"}</button>
+    }}>{copied ? "Đã chép" : "Sao chép"}</button>
   </span>
 }
 
@@ -194,7 +195,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         open={Boolean(receipt)}
         onClose={() => setReceiptId(null)}
         title="Chi tiết giao dịch"
-        size={receipt?.returnSettlement ? 'lg' : 'md'}
+        size={receipt?.returnSettlement ? 'lg' : '2xl'}
         className={receipt?.returnSettlement ? 'flex min-h-0 flex-col !overflow-hidden' : undefined}
         contentClassName={receipt?.returnSettlement ? 'min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5' : undefined}
         customHeader={receipt?.returnSettlement ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 sm:px-5">
