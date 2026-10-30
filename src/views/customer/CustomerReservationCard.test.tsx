@@ -108,3 +108,16 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
  expect(html).toContain('4.000.000 ₫')
  expect(html).not.toContain('Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất')
 })
+
+ it('separates booking information from the invoice without duplicating customer details', () => {
+   const html = render('AWAITING_PAYMENT')
+   expect(html).toContain('role="tab" id="reservation-info-tab-reservation-1"')
+   expect(html).toContain('aria-selected="true"')
+   expect(html).toContain('role="tab" id="reservation-quote-tab-reservation-1"')
+   expect(html).toContain('aria-labelledby="reservation-quote-tab-reservation-1" hidden=""')
+   const invoice = html.slice(html.indexOf('role="tabpanel" id="reservation-quote-reservation-1"'))
+   expect(invoice).toContain('Tổng nghĩa vụ tài chính')
+   expect(html).toContain('Thanh toán phí giữ chỗ')
+   expect(invoice).not.toContain('Thông tin hàng hóa đã khai báo')
+   expect(html.split('>Thông tin khách hàng</h3>')).toHaveLength(2)
+ })
