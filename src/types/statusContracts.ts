@@ -1,9 +1,11 @@
 /** Values emitted by the backend API. Demo/local-store aliases are normalized here. */
-export type ApiReservationStatus =
-  | 'AWAITING_EMAIL' | 'AWAITING_REVIEW' | 'AWAITING_PAYMENT'
-  | 'PAYMENT_GRACE' | 'PAYMENT_REVIEW' | 'CONFIRMED' | 'UNIT_RESERVED'
-  | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED'
-  | 'CANCELLED' | 'EXPIRED' | 'REJECTED'
+export const reservationStatusValues = [
+  'AWAITING_EMAIL', 'AWAITING_REVIEW', 'AWAITING_PAYMENT',
+  'PAYMENT_GRACE', 'PAYMENT_REVIEW', 'CONFIRMED', 'UNIT_RESERVED',
+  'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED',
+  'CANCELLED', 'EXPIRED', 'REJECTED',
+] as const
+export type ApiReservationStatus = (typeof reservationStatusValues)[number]
 
 export type ApiPaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
 export type ApiInvoiceStatus = 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'
@@ -71,7 +73,7 @@ const reservationAliases: Record<string, ApiReservationStatus> = {
 
 export function normalizeReservationStatus(value: unknown): ApiReservationStatus | null {
   if (typeof value !== 'string') return null
-  return reservationAliases[value] ?? (Object.values(reservationAliases).includes(value as ApiReservationStatus)
+  return reservationAliases[value] ?? ((reservationStatusValues as readonly string[]).includes(value)
     ? value as ApiReservationStatus : null)
 }
 

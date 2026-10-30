@@ -10,6 +10,7 @@ import { useRenewalCommand } from "../../hooks/useRenewalCommand"
 import { getAuthenticatedActor } from "../../services/authApi"
 import {
   getRenewalOperations,
+  getRenewalCustomerIdentity,
   getRenewalExceptionProposal,
   getRenewalPayableStatement,
   isUuid,
@@ -156,9 +157,9 @@ export function OperationEventCard({
         <p>{d.facilityFault ? "Xác nhận lỗi từ cơ sở" : "Không xác nhận lỗi từ cơ sở"}</p>
       )}
       {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận hoàn tiền thuê trả trước Sandbox theo chứng từ." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
-      <p className="break-all">
+      {e.kind !== 'ARRIVAL' && <p className="break-all">
         Mã sự kiện: {e.id}
-      </p>
+      </p>}
       {["outcome", "status", "action"].map((key) =>
         field(key) ? (
           <p key={key}>{copy(statusLabels[field(key)!] || "Chưa rõ trạng thái")}</p>
@@ -193,7 +194,7 @@ export function OperationEventCard({
           </p>
         ) : null,
       )}
-      {[
+      {e.kind !== 'ARRIVAL' && [
         "paymentRef",
         "reference",
         "statementRef",
@@ -661,6 +662,10 @@ function OperationForm({
   onSuccess: (event: RenewalOperationEvent) => void
 }) {
   const { copy, errorText } = useManagerPresentation()
+  const customerIdentity = useRentalApiResource(
+    `${s.renewalId}:${s.expectedVersion}:${action}:customer-identity`,
+    () => action === 'arrival' ? getRenewalCustomerIdentity(s.renewalId) : Promise.resolve(null),
+  )
 
   const command = useRenewalCommand()
   const pendingPayload = useRef<RenewalOperationCommand | undefined>(undefined)
@@ -854,6 +859,15 @@ function OperationForm({
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon mt-1 h-5 w-5 shrink-0 text-stone-500"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </header> : <h4 className="font-semibold">{copy(operationLabels[action])}</h4>}
       <fieldset disabled={locked} className="space-y-3">
+        {action === 'arrival' && <section aria-label="Thông tin khách để đối chiếu CCCD" className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+          <ApiReadState {...customerIdentity} retry={customerIdentity.refresh} />
+          {customerIdentity.data && <>
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-xs text-stone-600">Khách hàng</dt><dd className="mt-1 font-semibold text-stone-900">{customerIdentity.data.fullName || 'Chưa có tên khách'}</dd></div>
+              <div><dt className="text-xs text-stone-600">Số CCCD / Hộ chiếu đã lưu</dt><dd className="mt-1 break-all font-semibold tabular-nums text-stone-900">{customerIdentity.data.identityDocumentNumber || 'Chưa có CCCD / Hộ chiếu trong hồ sơ gốc'}</dd></div>
+            </dl>
+          </>}
+        </section>}
         {action === "confirmation" && <>
           {proposal && <RenewalExceptionProposalCard proposal={proposal} />}
           <label><input type="checkbox" checked={attested} onChange={e => setAttested(e.target.checked)} />{" "}
@@ -989,7 +1003,6 @@ function OperationForm({
                     {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
                   </dl>
                 </div>
-                <p className="text-xs text-stone-500">Số tiền theo bảng kê đã trừ khoản thanh toán được xác nhận và phân bổ. Không trừ giảm giá hoặc tiền thuê trả trước lần nữa. Bảng kê có hiệu lực đến {rentalDate(cash.data.expiresAt)}</p>
                 <details className="rounded-lg border border-stone-200 px-3 py-2 text-xs text-stone-500">
                   <summary className="cursor-pointer font-medium text-stone-600">Thông tin đối soát</summary>
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2">
